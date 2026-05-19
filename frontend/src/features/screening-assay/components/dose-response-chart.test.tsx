@@ -703,3 +703,161 @@ describe("<DoseResponseChart /> — auto-3σ suggestion markers", () => {
     expect(suggestionTrace).toBeUndefined();
   });
 });
+
+// ─── FE↔BE idx-domain alignment (post-save bug fix) ─────────────────────────
+// The BE's build_points_with_exclusions merges curve.raw_data +
+// curve.excluded_points and sorts by concentration; the excluded_indices
+// the FE sends index INTO THAT MERGED SET. After any save with manual
+// exclusions the BE's curve fitter writes raw_data = active-only, so
+// raw_data shrinks while the captured set stays full. Pre-fix the FE
+// computed "position in raw_data" for click-targets, which silently
+// diverged from the BE's domain after the first save. The chart now uses
+// the captured set everywhere — these tests cover the post-save path.
+
+describe("<DoseResponseChart /> — captured-set idx domain (post-save)", () => {
+  it("inventory rows render in concentration-sorted order across raw_data + excluded_points", () => {
+    reset();
+    // Mimic the post-save shape: raw_data has 3 points (the 0.1 was
+    // excluded on a prior save and removed from the active set), and
+    // excluded_points carries the missing point with its coords.
+    const curve = makeCurve({
+      raw_data: [
+        { x: 0.001, y: 2 },
+        { x: 0.01, y: 5 },
+        { x: 1.0, y: 50 },
+      ],
+      excluded_points: [
+        {
+          idx: 2,
+          source: "manual",
+          excluded: true,
+          reason: "outlier",
+          note: null,
+          author_id: "u1",
+          ts: "2026-05-19T10:00:00Z",
+          concentration: 0.1,
+          response: 99,
+        },
+      ],
+    });
+    renderWithQuery(
+      <DoseResponseChart curves={[curve]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+
+    // Inventory has 4 rows (header + 4 data rows in captured-sorted order).
+    const rows = screen.getAllByRole("row");
+    expect(rows).toHaveLength(5);
+    // Row 1 = 0.001 M, row 2 = 0.01 M, row 3 = 0.1 M (the excluded one),
+    // row 4 = 1.0 M. The 0.1 M row appears in the middle — sorted by
+    // concentration across raw_data + excluded_points, NOT raw_data-only
+    // order (which would put 0.1 anywhere or not at all).
+    const inventoryTable = screen.getByLabelText(/point inventory/i);
+    const tableText = inventoryTable.textContent ?? "";
+    // The 0.1 M point's coordinates should be visible inside the inventory.
+    // formatConcentration uses toPrecision(3) for values ≥ 1e-3.
+    expect(tableText).toMatch(/0\.100 M/);
+    // The excluded (manual) status pill should appear once (for the 0.1 M row).
+    expect(screen.getByText(/excluded \(manual\)/i)).toBeInTheDocument();
+    // Sanity-check the row ORDER: row 3 (0-indexed 2 after header) should
+    // be the 0.1 M point — proving the inventory renders in captured-sorted
+    // order (across raw_data + excluded_points) rather than raw-data-only
+    // order (where 0.1 wouldn't appear at all).
+    expect(rows[3].textContent ?? "").toMatch(/0\.100 M/);
+    expect(rows[3].textContent ?? "").toMatch(/excluded \(manual\)/i);
+  });
+
+  it("after a prior save, clicking the inventory row for 1.0 sends captured-set idx=3 (not raw_data idx=2)", () => {
+    reset();
+    // Post-save shape: 3 active points + 1 excluded (the 0.1 point).
+    // Captured-sorted order: [0.001, 0.01, 0.1(excl), 1.0]. The 1.0 point
+    // sits at capturedIdx=3 (last) while its raw_data position is 2 (3rd).
+    // Pre-fix the FE would send idx=2 here, and the BE would interpret
+    // that as "exclude the 0.1 point" (the 3rd in captured-sorted order).
+    const curve = makeCurve({
+      raw_data: [
+        { x: 0.001, y: 2 },
+        { x: 0.01, y: 5 },
+        { x: 1.0, y: 50 },
+      ],
+      excluded_points: [
+        {
+          idx: 2,
+          source: "manual",
+          excluded: true,
+          reason: "outlier",
+          note: null,
+          author_id: "u1",
+          ts: "2026-05-19T10:00:00Z",
+          concentration: 0.1,
+          response: 99,
+        },
+      ],
+    });
+    renderWithQuery(
+      <DoseResponseChart curves={[curve]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+
+    // Click the LAST inventory row (the 1.0 point — capturedIdx=3).
+    const rows = screen.getAllByRole("row");
+    // rows = [header, 0.001, 0.01, 0.1(excl), 1.0]
+    fireEvent.click(rows[4]);
+
+    // The new draft exclusion should reflect capturedIdx=3. The chart's
+    // SummaryCard counter renders "N excluded" — after this toggle the
+    // count should be 2 (the prior 0.1 exclusion + the new 1.0 exclusion).
+    // Pre-fix the FE would have toggled idx=2 → which collides with the
+    // existing 0.1 exclusion → removing it → counter would say 0 excluded.
+    expect(screen.getByText(/2 excluded/i)).toBeInTheDocument();
+  });
+
+  it("after a prior save, the included-trace markers carry the correct captured-set idxs", () => {
+    reset();
+    const curve = makeCurve({
+      raw_data: [
+        { x: 0.001, y: 2 },
+        { x: 0.01, y: 5 },
+        { x: 1.0, y: 50 },
+      ],
+      excluded_points: [
+        {
+          idx: 2,
+          source: "manual",
+          excluded: true,
+          reason: "outlier",
+          note: null,
+          author_id: "u1",
+          ts: "2026-05-19T10:00:00Z",
+          concentration: 0.1,
+          response: 99,
+        },
+      ],
+    });
+    renderWithQuery(<DoseResponseChart curves={[curve]} isInteractive />);
+
+    const traces = plotCalls[plotCalls.length - 1].data as Trace[];
+    // Included-trace marker positions must reflect raw_data points in
+    // concentration-sorted order: 0.001, 0.01, 1.0.
+    const includedTrace = traces.find(
+      (t) =>
+        t.mode === "markers" &&
+        t.marker?.symbol === "circle" &&
+        typeof t.name === "string" &&
+        !/excluded|suggested|replicates|fit$/i.test(t.name),
+    );
+    expect(includedTrace).toBeDefined();
+    expect(includedTrace?.x).toEqual([0.001, 0.01, 1.0]);
+    // Manual-excluded trace renders the 0.1 point (which is NOT in raw_data
+    // anymore — it lives only in excluded_points).
+    const excludedTrace = traces.find(
+      (t) =>
+        t.mode === "markers" &&
+        t.marker?.symbol === "x" &&
+        /\(excluded\)$/i.test(t.name ?? ""),
+    );
+    expect(excludedTrace).toBeDefined();
+    expect(excludedTrace?.x).toEqual([0.1]);
+    expect(excludedTrace?.y).toEqual([99]);
+  });
+});

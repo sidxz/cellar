@@ -45,7 +45,6 @@ import {
 import { interceptLabel } from "../lib/intercept-label";
 import {
   computeReplicateStats,
-  extractPoints,
   generate4PLCurve,
   isDegenerateFit,
   rSquaredColor,
@@ -103,6 +102,161 @@ type PreviewFnOverride = NonNullable<
 const TRACE_COLORS = GROUP_PALETTE.slice(0, 8);
 
 const CURVE_CLASS_OPTIONS: CurveClass[] = ["full", "partial", "bell_shaped", "inactive"];
+
+// ─── Captured-point domain ───────────────────────────────────────────────────
+// The BE's `build_points_with_exclusions` merges `curve.raw_data +
+// curve.excluded_points`, sorts by concentration, then interprets the
+// FE-sent `excluded_indices` as positions IN THAT MERGED SORTED LIST. The
+// curve fitter, in turn, writes `raw_data = active-only` (excluded points
+// move OUT of raw_data and into excluded_points). So after any save with
+// manual exclusions, `raw_data` is SHORTER than the captured set — and the
+// chart cannot use "position in raw_data" as its idx domain anymore, or
+// click handling silently mutates the wrong point on subsequent edits.
+//
+// The fix: compute a `capturedPoints` array (raw_data + excluded_points,
+// concentration-sorted) and use IT as the idx domain everywhere — click
+// handler, inventory rows, toggleExclusion calls. This mirrors the BE's
+// view of the world exactly.
+
+/** A point in the merged + concentration-sorted captured set. */
+interface CapturedPoint {
+  concentration: number;
+  response: number;
+  /** Position in the merged + sorted captured set. This is the value sent
+   *  to the BE as part of `excluded_indices`. */
+  capturedIdx: number;
+  /** True when the point currently lives in `curve.raw_data` (i.e. is in
+   *  the active fit set as of the last save). False when it lives only in
+   *  `curve.excluded_points`. */
+  isInRawData: boolean;
+  /** When this point originated from an `excluded_points` entry with a
+   *  numeric idx, the entry is attached here so the trace builder can
+   *  classify it (manual / auto_3sigma / suggestion). */
+  exclusionEntry: Record<string, unknown> | null;
+}
+
+/** Pull a number from one of two field names; undefined / null / non-number → undefined. */
+function pickNum(
+  obj: Record<string, unknown>,
+  a: string,
+  b?: string,
+): number | undefined {
+  const v = obj[a] ?? (b ? obj[b] : undefined);
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+
+/**
+ * Build the merged + concentration-sorted captured set for a curve. This
+ * is the single source of truth for the idx domain consumed by the BE's
+ * `build_points_with_exclusions`.
+ *
+ * Legacy `excluded_points` entries (idx=null + only-coords) are NOT
+ * included here — they render via a separate read-only bucket because
+ * they have no toggleable idx. Pre-041 entries with `idx` but no coords
+ * resolve their coords from `raw_data[idx]` (works in the pre-save state
+ * where the entry's idx is still a valid raw_data position).
+ */
+function buildCapturedPoints(
+  rawData: Array<Record<string, unknown>> | null | undefined,
+  excludedPoints: Array<Record<string, unknown>> | null | undefined,
+): CapturedPoint[] {
+  type Pending = {
+    concentration: number;
+    response: number;
+    isInRawData: boolean;
+    exclusionEntry: Record<string, unknown> | null;
+    /** Position in the input raw_data array — only used for resolving
+     *  numeric-idx excluded entries that lack coords (pre-041 wire). */
+    rawIdx: number | null;
+  };
+  const pending: Pending[] = [];
+
+  // 1. Every raw_data point goes in.
+  const rd = rawData ?? [];
+  for (let i = 0; i < rd.length; i++) {
+    const pt = rd[i];
+    const conc = pickNum(pt, "concentration", "x");
+    const resp = pickNum(pt, "response", "y");
+    if (conc === undefined || resp === undefined) continue;
+    pending.push({
+      concentration: conc,
+      response: resp,
+      isInRawData: true,
+      exclusionEntry: null,
+      rawIdx: i,
+    });
+  }
+
+  // 2. excluded_points entries — three shapes to handle:
+  //    a. {idx: number, concentration, response} — post-041; coords on the
+  //       entry. If `idx` is also a valid raw_data position pointing to the
+  //       same point (pre-save state, edit-in-progress), DON'T duplicate.
+  //    b. {idx: number, concentration: null, response: null} — pre-041 wire.
+  //       Resolve coords by looking up `rawData[idx]` and ATTACH the entry
+  //       to that pending row instead of inserting a synthetic one.
+  //    c. {idx: null, concentration, response} — legacy backfill. SKIP here;
+  //       the chart's existing legacyManualExcludedXY / legacyAutoExcludedXY
+  //       buckets handle them and the inventory shows them in a read-only
+  //       section.
+  const ep = excludedPoints ?? [];
+  for (const entry of ep) {
+    const idx = entry.idx as number | null | undefined;
+    const conc = pickNum(entry, "concentration", "x");
+    const resp = pickNum(entry, "response", "y");
+
+    if (typeof idx !== "number") {
+      // Case (c) — legacy idx=null. Not part of the captured idx domain.
+      continue;
+    }
+
+    if (conc !== undefined && resp !== undefined) {
+      // Case (a) — entry has its own coords. If a raw_data point at the
+      // same idx already represents this concentration (pre-save edit
+      // state), prefer attaching to that pending row instead of inserting
+      // a duplicate.
+      const overlap = pending.find(
+        (p) =>
+          p.isInRawData &&
+          p.rawIdx === idx &&
+          Math.abs(p.concentration - conc) < 1e-12,
+      );
+      if (overlap) {
+        overlap.exclusionEntry = entry;
+        continue;
+      }
+      pending.push({
+        concentration: conc,
+        response: resp,
+        isInRawData: false,
+        exclusionEntry: entry,
+        rawIdx: null,
+      });
+      continue;
+    }
+
+    // Case (b) — entry has idx only, no coords. Resolve via rawData[idx].
+    const match = pending.find(
+      (p) => p.isInRawData && p.rawIdx === idx,
+    );
+    if (match) {
+      match.exclusionEntry = entry;
+    }
+    // If the idx is out-of-bounds AND no coords, we can't render this
+    // entry. That's the unrecoverable shape — log nothing, drop quietly.
+  }
+
+  // 3. Sort by concentration ascending — matches BE's
+  //    build_points_with_exclusions semantics exactly.
+  pending.sort((a, b) => a.concentration - b.concentration);
+
+  return pending.map((p, capturedIdx) => ({
+    concentration: p.concentration,
+    response: p.response,
+    capturedIdx,
+    isInRawData: p.isInRawData,
+    exclusionEntry: p.exclusionEntry,
+  }));
+}
 
 // ─── Summary card with interactive curve class badge ─────────────────────────
 
@@ -340,6 +494,29 @@ export function DoseResponseChart({
   });
   const refitPreview = useRefitPreview({ previewFn });
 
+  // Captured-set view of the edit curve — keyed by capturedIdx. Used by
+  // the inventory side panel + the mutation handler (which enriches
+  // outgoing exclusions with concentration/response so the BE persists
+  // them on excluded_points; otherwise the BE writes null coords and the
+  // next reload has nothing to render the X marker from). Other curves
+  // re-derive this inline in the trace loop below — only editCurve needs
+  // a stable reference because its captured set drives BE round-trips.
+  const editCurveCaptured = useMemo<CapturedPoint[]>(() => {
+    if (!editCurve) return [];
+    return buildCapturedPoints(
+      editCurve.raw_data as Array<Record<string, unknown>> | null | undefined,
+      editCurve.excluded_points as
+        | Array<Record<string, unknown>>
+        | null
+        | undefined,
+    );
+  }, [editCurve]);
+  const editCurveCapturedByIdx = useMemo<Map<number, CapturedPoint>>(() => {
+    const m = new Map<number, CapturedPoint>();
+    for (const p of editCurveCaptured) m.set(p.capturedIdx, p);
+    return m;
+  }, [editCurveCaptured]);
+
   // Audit-trail of prior point-exclusion edits for the curve under edit.
   // Hook is unconditionally invoked (React rules), but the query is gated
   // on `enabled: !!editCurve?.id` so non-interactive renders never fetch.
@@ -378,13 +555,24 @@ export function DoseResponseChart({
       refitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPost(curveId, {
         exclusions: exclusions
           .filter((e) => e.idx !== null)
-          .map((e) => ({
-            idx: e.idx,
-            source: e.source,
-            excluded: e.excluded,
-            reason: e.reason,
-            note: e.note,
-          })),
+          .map((e) => {
+            // Enrich each entry with concentration/response from the
+            // captured-set lookup so the BE persists coords on the
+            // excluded_points entry. Without this the next reload has
+            // raw_data = active-only AND an excluded entry with null
+            // coords — the chart can't reconstruct where the X marker
+            // should sit. e.idx is now a capturedIdx (post-fix).
+            const cp = editCurveCapturedByIdx.get(e.idx as number);
+            return {
+              idx: e.idx,
+              source: e.source,
+              excluded: e.excluded,
+              reason: e.reason,
+              note: e.note,
+              concentration: e.concentration ?? cp?.concentration ?? null,
+              response: e.response ?? cp?.response ?? null,
+            };
+          }),
         save_reason: saveReason,
         save_note: saveNote,
       }),
@@ -554,13 +742,21 @@ export function DoseResponseChart({
   // Each clickable trace gets a traceIndex so we can map clicks back.
   // "suggestion" is treated like "included" for click handling because the
   // session toggle preserves source=auto_3sigma when it flips excluded.
+  //
+  // Post-fix: `capturedIdxOrder` carries the captured-set idx for each
+  // marker in the emitted trace, in render order. This is the value the
+  // click handler sends to `editSession.toggleExclusion(idx)` — which the
+  // BE then reads as a position in its merged + sorted captured set
+  // (`build_points_with_exclusions`). Previously the FE used "position in
+  // raw_data" for click-targets, which silently diverged from the BE's
+  // domain after any save that removed points from raw_data.
   const traceIndexToCurve: Array<{
     curveId: string;
     type: "included" | "excluded" | "suggestion";
-    /** Raw_data indices in the order they were emitted into the trace.
-     *  Used to map a Plotly pointIndex back to the underlying raw_data idx
-     *  when the trace doesn't include every raw_data point (suggestion). */
-    rawIdxOrder?: number[];
+    /** Captured-set indices in the order they were emitted into the
+     *  trace. Used to map a Plotly pointIndex back to the captured-set
+     *  idx — the exact value the BE consumes as `excluded_indices`. */
+    capturedIdxOrder?: number[];
   }> = [];
 
   for (let i = 0; i < curves.length; i++) {
@@ -574,33 +770,87 @@ export function DoseResponseChart({
     const compoundLabel = curve.registration_number ?? curve.molecule_name ?? null;
     const label = compoundLabel ? `${compoundLabel} (${curveTypeLabel})` : curveTypeLabel;
 
-    // Merge server excluded_points back into raw_data for interactive mode:
-    // In interactive mode we manage exclusions locally.
-    // Displayed included = raw_data filtered by local excludedMap + suggestions
-    // Displayed excluded = server excluded_points + locally excluded from raw_data
-    //
-    // Post Task 2.7 the wire shape for `excluded_points` carries three categories:
-    //   { idx, source: "auto_3sigma", excluded: false } → SUGGESTION (yellow halo)
-    //   { idx, source: "auto_3sigma", excluded: true  } → accepted auto-exclusion (X)
-    //   { idx, source: "manual",      excluded: true  } → manual exclusion (X)
-    // Legacy rows (pre-migration 041 backfill) carry `concentration`+`response`
-    // with `idx: null`; they're rendered from those scalars and treated as
-    // accepted auto-exclusions.
-    const serverIncluded = extractPoints(curve.raw_data);
+    // Build the merged + concentration-sorted captured set. This is the
+    // FE's mirror of the BE's `build_points_with_exclusions` — every idx
+    // we emit (for click handling, draft toggles, BE round-trip) is a
+    // position IN THIS SET, not in raw_data. See `buildCapturedPoints`
+    // for the merge / dedup semantics.
+    const captured = buildCapturedPoints(
+      curve.raw_data as Array<Record<string, unknown>> | null | undefined,
+      curve.excluded_points as
+        | Array<Record<string, unknown>>
+        | null
+        | undefined,
+    );
     const localExcluded = getExcluded(curve.id);
 
-    // Partition the server's excluded_points payload into the three buckets
-    // by walking the raw entries (extractPoints flattens away the source +
-    // excluded fields, so we look at the dicts directly here).
-    const rawExclusionEntries = curve.excluded_points ?? [];
-    const suggestionIdxs = new Set<number>();
-    const acceptedAutoExcludedIdxs = new Set<number>();
-    const manualExcludedIdxs = new Set<number>();
-    // Legacy entries (idx=null) — keep their concentration/response so we
-    // can still draw them as X markers even though we can't toggle them.
+    // Classify each captured point. Localexcluded entries (in-session
+    // drafts) get a synthesized "manual + excluded" classification and
+    // override whatever the server-persisted entry says, so the chemist
+    // sees their pending toggle reflected in the trace immediately.
+    type Bucket = "included" | "suggestion" | "manualExcluded" | "autoExcluded";
+    const classify = (cp: CapturedPoint): Bucket => {
+      // Draft override — chemist clicked this point this session.
+      if (localExcluded.has(cp.capturedIdx)) return "manualExcluded";
+      const e = cp.exclusionEntry;
+      if (!e) return "included";
+      const source =
+        (e.source as string | undefined) ??
+        (e.reason === "auto_3sigma" ? "auto_3sigma" : "manual");
+      const excluded =
+        typeof e.excluded === "boolean" ? (e.excluded as boolean) : true;
+      if (source === "auto_3sigma" && !excluded) return "suggestion";
+      if (source === "auto_3sigma" && excluded) return "autoExcluded";
+      if (excluded) return "manualExcluded";
+      return "included";
+    };
+
+    // Build per-bucket parallel arrays. `capturedIdxOrder` lets the click
+    // handler map a Plotly pointIndex straight to the captured-set idx
+    // without re-walking — single source of truth for click targets.
+    const includedX: number[] = [];
+    const includedY: number[] = [];
+    const includedCapturedIdxOrder: number[] = [];
+    const suggestionX: number[] = [];
+    const suggestionY: number[] = [];
+    const suggestionCapturedIdxOrder: number[] = [];
+    const manualExcludedX: number[] = [];
+    const manualExcludedY: number[] = [];
+    const manualExcludedCapturedIdxOrder: number[] = [];
+    const autoExcludedX: number[] = [];
+    const autoExcludedY: number[] = [];
+
+    for (const cp of captured) {
+      const bucket = classify(cp);
+      switch (bucket) {
+        case "included":
+          includedX.push(cp.concentration);
+          includedY.push(cp.response);
+          includedCapturedIdxOrder.push(cp.capturedIdx);
+          break;
+        case "suggestion":
+          suggestionX.push(cp.concentration);
+          suggestionY.push(cp.response);
+          suggestionCapturedIdxOrder.push(cp.capturedIdx);
+          break;
+        case "manualExcluded":
+          manualExcludedX.push(cp.concentration);
+          manualExcludedY.push(cp.response);
+          manualExcludedCapturedIdxOrder.push(cp.capturedIdx);
+          break;
+        case "autoExcluded":
+          autoExcludedX.push(cp.concentration);
+          autoExcludedY.push(cp.response);
+          break;
+      }
+    }
+
+    // Legacy idx=null entries — separate render path because they have no
+    // toggleable capturedIdx. They appear as X markers (manual) or
+    // diamonds (auto_3sigma) but are non-interactive even in edit mode.
     const legacyAutoExcludedXY: Array<{ x: number; y: number }> = [];
     const legacyManualExcludedXY: Array<{ x: number; y: number }> = [];
-    for (const rawPt of rawExclusionEntries) {
+    for (const rawPt of curve.excluded_points ?? []) {
       const e = rawPt as {
         idx?: number | null;
         source?: string | null;
@@ -611,109 +861,38 @@ export function DoseResponseChart({
         x?: number | null;
         y?: number | null;
       };
+      if (typeof e.idx === "number") continue; // numeric-idx → already in captured
       const source = e.source ?? (e.reason === "auto_3sigma" ? "auto_3sigma" : "manual");
-      // Default `excluded` to true when missing — that's the legacy wire shape
-      // (every excluded_points entry was an exclusion pre Task 2.7).
-      const excluded = typeof e.excluded === "boolean" ? e.excluded : true;
-      if (typeof e.idx === "number") {
-        if (!excluded && source === "auto_3sigma") {
-          suggestionIdxs.add(e.idx);
-        } else if (excluded && source === "auto_3sigma") {
-          acceptedAutoExcludedIdxs.add(e.idx);
-        } else if (excluded) {
-          manualExcludedIdxs.add(e.idx);
-        }
-      } else {
-        // No idx → legacy backfilled row. Render from its scalar coords.
-        const conc = (e.concentration ?? e.x) as number | null | undefined;
-        const resp = (e.response ?? e.y) as number | null | undefined;
-        if (typeof conc === "number" && typeof resp === "number") {
-          if (source === "auto_3sigma") {
-            legacyAutoExcludedXY.push({ x: conc, y: resp });
-          } else {
-            legacyManualExcludedXY.push({ x: conc, y: resp });
-          }
+      const conc = (e.concentration ?? e.x) as number | null | undefined;
+      const resp = (e.response ?? e.y) as number | null | undefined;
+      if (typeof conc === "number" && typeof resp === "number") {
+        if (source === "auto_3sigma") {
+          legacyAutoExcludedXY.push({ x: conc, y: resp });
+        } else {
+          legacyManualExcludedXY.push({ x: conc, y: resp });
         }
       }
     }
-
-    // Suggestion points (yellow halo) — pulled from raw_data by idx. They
-    // sit OUTSIDE the "included" trace so the halo marker can render
-    // distinctly (open amber circle) rather than as a regular dot. The
-    // underlying point still contributes to the fit on the BE because
-    // `excluded=false`; on the FE we just visually call attention to it.
-    // Preserve a parallel idx array so click handling can map a Plotly
-    // pointIndex back to the original raw_data idx.
-    const suggestionX: number[] = [];
-    const suggestionY: number[] = [];
-    const suggestionRawIdxOrder: number[] = [];
-    for (const idx of suggestionIdxs) {
-      const x = serverIncluded.x[idx];
-      const y = serverIncluded.y[idx];
-      if (typeof x === "number" && typeof y === "number") {
-        suggestionX.push(x);
-        suggestionY.push(y);
-        suggestionRawIdxOrder.push(idx);
-      }
+    // Legacy rows ride along in the existing X/diamond markers — flatten
+    // into the same arrays so a single trace renders the whole bucket.
+    for (const lp of legacyManualExcludedXY) {
+      manualExcludedX.push(lp.x);
+      manualExcludedY.push(lp.y);
+      // No capturedIdxOrder entry — legacy rows are non-clickable. The
+      // click handler short-circuits if pointIndex >= capturedIdxOrder.length.
+    }
+    for (const lp of legacyAutoExcludedXY) {
+      autoExcludedX.push(lp.x);
+      autoExcludedY.push(lp.y);
     }
 
-    let includedX: number[];
-    let includedY: number[];
-    let manualExcludedX: number[];
-    let manualExcludedY: number[];
-    let autoExcludedX: number[];
-    let autoExcludedY: number[];
-
-    // Builders shared across interactive + read-only modes. The "included"
-    // trace skips suggestions + already-excluded indices; the "excluded"
-    // buckets pick up the remainder from raw_data plus the legacy scalar
-    // rows that have no idx.
-    const isHiddenFromIncluded = (idx: number) =>
-      localExcluded.has(idx) ||
-      suggestionIdxs.has(idx) ||
-      acceptedAutoExcludedIdxs.has(idx) ||
-      manualExcludedIdxs.has(idx);
-    const pickFromRaw = (idxSet: Set<number>) => {
-      const xs: number[] = [];
-      const ys: number[] = [];
-      for (const idx of idxSet) {
-        const x = serverIncluded.x[idx];
-        const y = serverIncluded.y[idx];
-        if (typeof x === "number" && typeof y === "number") {
-          xs.push(x);
-          ys.push(y);
-        }
-      }
-      return { xs, ys };
+    // Compatibility shim for downstream code that still reads
+    // `serverIncluded.x`/`.y` (axis-range computation only). The captured
+    // set is the full domain — every X coord the chart cares about.
+    const serverIncluded = {
+      x: captured.map((p) => p.concentration),
+      y: captured.map((p) => p.response),
     };
-
-    if (isInteractive) {
-      includedX = serverIncluded.x.filter((_, idx) => !isHiddenFromIncluded(idx));
-      includedY = serverIncluded.y.filter((_, idx) => !isHiddenFromIncluded(idx));
-      // locally excluded from raw_data -> treat as manual
-      const locallyExcluded = serverIncluded.x
-        .map((_, idx) => idx)
-        .filter((idx) => localExcluded.has(idx));
-      manualExcludedX = locallyExcluded.map((idx) => serverIncluded.x[idx]);
-      manualExcludedY = locallyExcluded.map((idx) => serverIncluded.y[idx]);
-      // server-side manual exclusions (raw + legacy scalar)
-      const { xs: manRawX, ys: manRawY } = pickFromRaw(manualExcludedIdxs);
-      manualExcludedX = [...manualExcludedX, ...manRawX, ...legacyManualExcludedXY.map((p) => p.x)];
-      manualExcludedY = [...manualExcludedY, ...manRawY, ...legacyManualExcludedXY.map((p) => p.y)];
-      // accepted-auto exclusions (raw + legacy scalar)
-      const { xs: autoRawX, ys: autoRawY } = pickFromRaw(acceptedAutoExcludedIdxs);
-      autoExcludedX = [...autoRawX, ...legacyAutoExcludedXY.map((p) => p.x)];
-      autoExcludedY = [...autoRawY, ...legacyAutoExcludedXY.map((p) => p.y)];
-    } else {
-      includedX = serverIncluded.x.filter((_, idx) => !isHiddenFromIncluded(idx));
-      includedY = serverIncluded.y.filter((_, idx) => !isHiddenFromIncluded(idx));
-      const { xs: manRawX, ys: manRawY } = pickFromRaw(manualExcludedIdxs);
-      manualExcludedX = [...manRawX, ...legacyManualExcludedXY.map((p) => p.x)];
-      manualExcludedY = [...manRawY, ...legacyManualExcludedXY.map((p) => p.y)];
-      const { xs: autoRawX, ys: autoRawY } = pickFromRaw(acceptedAutoExcludedIdxs);
-      autoExcludedX = [...autoRawX, ...legacyAutoExcludedXY.map((p) => p.x)];
-      autoExcludedY = [...autoRawY, ...legacyAutoExcludedXY.map((p) => p.y)];
-    }
 
     // Filter out NaN/non-positive values: log10 explodes on them and
     // `fitted_value` may be NaN/0 for degenerate fits. Aggregate-mode
@@ -797,7 +976,16 @@ export function DoseResponseChart({
 
     if (displayX.length > 0) {
       const traceIdx = traces.length;
-      traceIndexToCurve[traceIdx] = { curveId: curve.id, type: "included" };
+      // capturedIdxOrder only applies when we render the raw points
+      // (no replicate aggregation). When `hasReplicates` is true the
+      // markers are MEAN positions and a single click doesn't map to a
+      // single captured-set entry — fall back to no order (click handler
+      // short-circuits). This matches pre-fix behavior for replicated runs.
+      traceIndexToCurve[traceIdx] = {
+        curveId: curve.id,
+        type: "included",
+        capturedIdxOrder: hasReplicates ? undefined : includedCapturedIdxOrder,
+      };
       traces.push({
         type: "scatter",
         mode: "markers",
@@ -841,7 +1029,7 @@ export function DoseResponseChart({
       traceIndexToCurve[traceIdx] = {
         curveId: curve.id,
         type: "suggestion",
-        rawIdxOrder: suggestionRawIdxOrder,
+        capturedIdxOrder: suggestionCapturedIdxOrder,
       };
       traces.push({
         type: "scatter",
@@ -866,7 +1054,11 @@ export function DoseResponseChart({
     // Manually excluded points (x marker)
     if (manualExcludedX.length > 0) {
       const traceIdx = traces.length;
-      traceIndexToCurve[traceIdx] = { curveId: curve.id, type: "excluded" };
+      traceIndexToCurve[traceIdx] = {
+        curveId: curve.id,
+        type: "excluded",
+        capturedIdxOrder: manualExcludedCapturedIdxOrder,
+      };
       traces.push({
         type: "scatter",
         mode: "markers",
@@ -1123,8 +1315,12 @@ export function DoseResponseChart({
 
   // ── Plotly click handler ────────────────────────────────────────────────────
   // In edit mode, clicks toggle a point's draft exclusion via the session.
-  // Re-mapping the clicked display index back to the raw_data idx mirrors
-  // the pre-existing trace-index machinery — see traceIndexToCurve build above.
+  // Every clickable trace now carries `capturedIdxOrder` (built alongside the
+  // trace's x/y arrays), so the Plotly pointIndex maps straight to a
+  // captured-set idx — the exact value the BE expects in `excluded_indices`.
+  // Pre-fix this code walked raw_data with isHiddenFromIncluded counting,
+  // which silently diverged from the BE's domain after any save that
+  // shortened raw_data.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlePlotClick = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1138,57 +1334,19 @@ export function DoseResponseChart({
       const traceInfo = traceIndexToCurve[traceIdx];
       if (!traceInfo) return;
 
-      const { curveId, type } = traceInfo;
+      const { curveId, capturedIdxOrder } = traceInfo;
       // Only the active edit curve is mutable in Sprint 2.
       if (curveId !== editCurve.id) return;
-      const curve = editCurve;
-      const localExcluded = getExcluded(curveId);
 
-      if (type === "suggestion") {
-        // Suggestion trace was built from `suggestionRawIdxOrder` — direct
-        // lookup gives us the raw_data idx without walking past hidden
-        // entries. Toggling flips excluded → true while preserving
-        // source=auto_3sigma on the existing session entry.
-        const originalIdx = traceInfo.rawIdxOrder?.[pointIdx];
-        if (typeof originalIdx === "number" && originalIdx >= 0) {
-          editSession.toggleExclusion(originalIdx);
-        }
-      } else if (type === "included") {
-        // Find the actual index in raw_data accounting for currently-draft
-        // exclusions + suggestions + server-side excluded entries shifting
-        // the display index. The "included" trace only contains points that
-        // pass `isHiddenFromIncluded`, so we walk raw_data and count those.
-        const rawExclusionEntries = curve.excluded_points ?? [];
-        const excludedRawIdxs = new Set<number>();
-        for (const rawPt of rawExclusionEntries) {
-          const e = rawPt as { idx?: number | null };
-          if (typeof e.idx === "number") excludedRawIdxs.add(e.idx);
-        }
-        let displayIdx = 0;
-        let originalIdx = -1;
-        for (let k = 0; k < (curve.raw_data?.length ?? 0); k++) {
-          // Mirror `isHiddenFromIncluded` from the trace builder.
-          if (localExcluded.has(k) || excludedRawIdxs.has(k)) continue;
-          if (displayIdx === pointIdx) {
-            originalIdx = k;
-            break;
-          }
-          displayIdx++;
-        }
-        if (originalIdx >= 0) {
-          editSession.toggleExclusion(originalIdx);
-        }
-      } else {
-        // excluded trace — only the user's current-draft exclusions are
-        // toggleable. Server-excluded points (legacy / persisted) come
-        // before draft exclusions in the trace; ignore those clicks.
-        const locallyExcludedIndices = Array.from(localExcluded);
-        if (pointIdx < locallyExcludedIndices.length) {
-          editSession.toggleExclusion(locallyExcludedIndices[pointIdx]);
-        }
-      }
+      // No capturedIdxOrder → click is on a legacy idx=null marker (non-
+      // toggleable) or a replicate-aggregated mean marker (no 1:1 mapping).
+      // Either way, ignore.
+      if (!capturedIdxOrder) return;
+      const capturedIdx = capturedIdxOrder[pointIdx];
+      if (typeof capturedIdx !== "number") return;
+      editSession.toggleExclusion(capturedIdx);
     },
-    [isInteractive, editMode, editCurve, getExcluded, editSession, traceIndexToCurve],
+    [isInteractive, editMode, editCurve, editSession, traceIndexToCurve],
   );
 
   // Build overlay shapes and annotations based on toggle state
@@ -1649,19 +1807,17 @@ export function DoseResponseChart({
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={35} minSize={20} maxSize={60}>
             <div className="h-full overflow-auto p-3" aria-label="Point inventory">
+              {/* Inventory rows are keyed by capturedIdx — the same domain
+                  the BE consumes. Row positions match the BE's
+                  build_points_with_exclusions ordering (concentration
+                  ascending across the merged raw_data + excluded_points set),
+                  NOT the position-in-raw_data ordering. This is what fixes
+                  the post-save click-handling drift. */}
               <DoseResponsePointInventory
-                rawData={(editCurve.raw_data ?? []).map((pt) => {
-                  const conc =
-                    (pt as { concentration?: number; x?: number }).concentration ??
-                    (pt as { x?: number }).x ?? 0;
-                  const resp =
-                    (pt as { response?: number; y?: number }).response ??
-                    (pt as { y?: number }).y ?? 0;
-                  return {
-                    concentration: typeof conc === "number" ? conc : 0,
-                    response: typeof resp === "number" ? resp : 0,
-                  };
-                })}
+                rawData={editCurveCaptured.map((p) => ({
+                  concentration: p.concentration,
+                  response: p.response,
+                }))}
                 exclusions={editSession.draft.exclusions}
                 onToggle={editSession.toggleExclusion}
               />
