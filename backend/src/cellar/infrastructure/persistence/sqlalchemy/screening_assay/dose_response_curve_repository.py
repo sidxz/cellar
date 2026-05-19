@@ -18,6 +18,7 @@ from cellar.domain.screening_assay.enums import (
     InterceptBasis,
     InterceptKind,
 )
+from cellar.domain.screening_assay.excluded_point_detail import ExcludedPointDetail
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
@@ -92,6 +93,52 @@ def _hydrate_intercept_values(
         )
         for d in raw
     ]
+
+
+def _serialize_excluded_points(
+    points: list[ExcludedPointDetail] | list[dict] | None,
+) -> list[dict] | None:
+    """Serialize the domain's excluded_points to JSONB.
+
+    Accepts either typed ``ExcludedPointDetail`` instances or raw dicts.
+    The raw-dict branch is temporary back-compat for legacy producers
+    (notably ``curve_fitter.py``) that still emit dicts pre-Task 2.7;
+    those callers will be refactored to typed VOs in a follow-up.
+    """
+    if not points:
+        return None
+    out: list[dict] = []
+    for entry in points:
+        if isinstance(entry, ExcludedPointDetail):
+            out.append(entry.to_jsonb())
+        else:
+            # Legacy dict producer — pass through unchanged.
+            out.append(entry)
+    return out
+
+
+def _hydrate_excluded_points(
+    raw: list[dict] | None,
+) -> list[ExcludedPointDetail] | None:
+    """Hydrate JSONB excluded_points entries into typed ``ExcludedPointDetail``.
+
+    Post-migration-041 the JSONB shape is uniform across legacy and Sprint-2
+    entries (idx optional, audit metadata always present). If a malformed
+    entry slips through, we tolerate it by skipping rather than failing the
+    read — defensive against any pre-migration row that escaped backfill.
+    """
+    if not raw:
+        return None
+    out: list[ExcludedPointDetail] = []
+    for entry in raw:
+        try:
+            out.append(ExcludedPointDetail.from_jsonb(entry))
+        except (KeyError, ValueError, TypeError):
+            # Should not occur on a migrated DB; if it does, dropping the
+            # malformed entry is safer than crashing every query that
+            # touches the curve.
+            continue
+    return out or None
 
 
 class SQLAlchemyDoseResponseCurveRepository:
@@ -363,7 +410,7 @@ class SQLAlchemyDoseResponseCurveRepository:
         model.num_points = entity.num_points
         model.curve_class = entity.curve_class.value if entity.curve_class else None
         model.raw_data = entity.raw_data
-        model.excluded_points = entity.excluded_points
+        model.excluded_points = _serialize_excluded_points(entity.excluded_points)
         model.fit_quality_warnings = entity.fit_quality_warnings
         model.intercept_values = _serialize_intercept_values(entity.intercept_values)
         model.dose_response_config_snapshot = entity.dose_response_config_snapshot
@@ -408,7 +455,7 @@ class SQLAlchemyDoseResponseCurveRepository:
             num_points=model.num_points,
             curve_class=CurveClass(model.curve_class) if model.curve_class else None,
             raw_data=model.raw_data,
-            excluded_points=model.excluded_points,
+            excluded_points=_hydrate_excluded_points(model.excluded_points),
             fit_quality_warnings=model.fit_quality_warnings or [],
             intercept_values=_hydrate_intercept_values(
                 model.intercept_values,
@@ -443,7 +490,7 @@ class SQLAlchemyDoseResponseCurveRepository:
             num_points=entity.num_points,
             curve_class=entity.curve_class.value if entity.curve_class else None,
             raw_data=entity.raw_data,
-            excluded_points=entity.excluded_points,
+            excluded_points=_serialize_excluded_points(entity.excluded_points),
             fit_quality_warnings=entity.fit_quality_warnings,
             intercept_values=_serialize_intercept_values(entity.intercept_values),
             dose_response_config_snapshot=entity.dose_response_config_snapshot,
