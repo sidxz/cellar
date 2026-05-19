@@ -24,6 +24,9 @@ from dataclasses import dataclass, field
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
+from cellar.application.screening._dr_point_reconstruction import (
+    build_points_with_exclusions,
+)
 from cellar.application.shared.command import Command
 from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
@@ -96,10 +99,10 @@ class RefitDoseResponseCurvePreview:
         if curve is None:
             return Failure(NotFoundError("DoseResponseCurve", str(input.curve_id)))
 
-        # Point reconstruction mirrors RefitDoseResponseCurve exactly — ascending
-        # by concentration so client-supplied indices line up with the UI's
-        # display order. Task 2.7 may lift this helper to a shared module.
-        points = _build_points_with_exclusions(curve, input.excluded_point_indices)
+        # Point reconstruction mirrors RefitDoseResponseCurve exactly — both
+        # paths delegate to the shared helper so preview and commit can never
+        # drift on index→dose semantics.
+        points = build_points_with_exclusions(curve, input.excluded_point_indices)
 
         config = await self._build_preview_config(curve)
 
@@ -153,30 +156,6 @@ class RefitDoseResponseCurvePreview:
             # CRITICAL: never run auto-outlier detection during preview.
             outlier_sigma=None,
         )
-
-
-def _build_points_with_exclusions(
-    curve: DoseResponseCurve, excluded_indices: list[int]
-) -> list[ConcentrationResponsePoint]:
-    """Reconstruct ascending-by-concentration points from raw_data + flag exclusions.
-
-    Duplicated from ``RefitDoseResponseCurve.__call__`` body for Sprint 2; Task
-    2.7 may lift this to a shared module. Keep the two in sync — index→dose
-    semantics must match between preview and commit or the FE will see a
-    different fit on Save than during edit.
-    """
-    all_points_raw = list(curve.raw_data or []) + list(curve.excluded_points or [])
-    all_points_raw.sort(key=lambda p: p.get("concentration", 0))
-
-    excluded_set = set(excluded_indices)
-    return [
-        ConcentrationResponsePoint(
-            concentration=pt["concentration"],
-            response=pt["response"],
-            is_excluded=(i in excluded_set),
-        )
-        for i, pt in enumerate(all_points_raw)
-    ]
 
 
 def _to_preview_result(
