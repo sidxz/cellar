@@ -71,8 +71,15 @@ const CURVE_CLASS_OPTIONS: CurveClass[] = ["full", "partial", "bell_shaped", "in
 
 interface SummaryCardProps {
   curve: DoseResponseCurve;
+  /** Points contributing to the fit right now (captured total minus
+   *  server-persisted exclusions minus in-session draft exclusions). */
+  inFitCount: number;
+  /** Total points captured for this curve — server's view of raw_data
+   *  plus excluded_points. Stable across reloads + draft toggles. */
+  capturedTotal: number;
+  /** Server-persisted + in-session draft exclusions combined. Drives the
+   *  "{N} excluded" sub-line when > 0. */
   excludedCount: number;
-  totalPoints: number;
   isInteractive: boolean;
   onClassify: (curveId: string, curveClass: string) => void;
   isClassifying: boolean;
@@ -87,14 +94,14 @@ const FIT_WARNING_LABELS: Record<string, string> = {
 
 function SummaryCard({
   curve,
+  inFitCount,
+  capturedTotal,
   excludedCount,
-  totalPoints,
   isInteractive,
   onClassify,
   isClassifying,
 }: SummaryCardProps) {
   const [showClassify, setShowClassify] = useState(false);
-  const includedCount = totalPoints - excludedCount;
 
   const warnings = curve.fit_quality_warnings ?? [];
   const isExtrapolated = warnings.includes("ec50_at_bound");
@@ -164,9 +171,12 @@ function SummaryCard({
               {curve.confidence_interval_high.toPrecision(3)} {curve.fitted_unit}
             </span>
           )}
-          {isInteractive && (
+          {capturedTotal > 0 && (
             <span className="text-muted-foreground">
-              {includedCount}/{totalPoints} pts
+              {inFitCount} of {capturedTotal} points in fit
+              {excludedCount > 0 && (
+                <span className="ml-1.5 opacity-70">· {excludedCount} excluded</span>
+              )}
             </span>
           )}
           {curve.curve_class && !isInteractive && (
@@ -1160,14 +1170,24 @@ export function DoseResponseChart({
         )}
       >
         {curves.map((curve) => {
-          const totalPoints = (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
+          // Counter must reflect ALL exclusion sources, not just the in-session
+          // draft. On reload localExcluded is empty but excluded_points carries
+          // anything the server already persisted — pre-fix this hid every
+          // server-side exclusion behind "10/10".
+          const capturedTotal =
+            (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
+          const serverExcludedCount = curve.excluded_points?.length ?? 0;
           const localExcluded = getExcluded(curve.id);
+          const draftExcludedCount = localExcluded.size;
+          const excludedCount = serverExcludedCount + draftExcludedCount;
+          const inFitCount = Math.max(0, capturedTotal - excludedCount);
           return (
             <SummaryCard
               key={curve.id}
               curve={curve}
-              excludedCount={localExcluded.size}
-              totalPoints={totalPoints}
+              inFitCount={inFitCount}
+              capturedTotal={capturedTotal}
+              excludedCount={excludedCount}
               isInteractive={isInteractive}
               onClassify={handleClassify}
               isClassifying={isClassifying}

@@ -30,7 +30,7 @@ vi.mock("../hooks/use-refit-dose-response", () => ({
   useClassifyDoseResponse: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { DoseResponseChart } from "./dose-response-chart";
 import type { DoseResponseCurve } from "../types";
 
@@ -272,5 +272,30 @@ describe("<DoseResponseChart /> — aggregate-mode overlay", () => {
       (s) => s.line?.dash === "longdash",
     );
     expect(longdash).toHaveLength(0);
+  });
+});
+
+describe("<DoseResponseChart /> — point counter", () => {
+  it("counter reflects server-excluded points even with empty local draft", () => {
+    reset();
+    const curve = makeCurve({
+      raw_data: Array(8).fill({ x: 1, y: 0 }),
+      excluded_points: [{ idx: 5 }, { idx: 7 }],
+    });
+    render(<DoseResponseChart curves={[curve]} />);
+    expect(screen.getByText(/8 of 10 points in fit/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 excluded/i)).toBeInTheDocument();
+  });
+
+  it("counter shows full denominator when no points are excluded", () => {
+    reset();
+    const curve = makeCurve({
+      raw_data: Array(10).fill({ x: 1, y: 0 }),
+      excluded_points: [],
+    });
+    render(<DoseResponseChart curves={[curve]} />);
+    expect(screen.getByText(/10 of 10 points in fit/i)).toBeInTheDocument();
+    // No exclusions → no "N excluded" sub-line.
+    expect(screen.queryByText(/excluded/i)).not.toBeInTheDocument();
   });
 });
