@@ -49,6 +49,12 @@ class RefitDoseResponseCurveCommand(Command):
     override_hill: bool = False
     hill_slope_min: float | None = None
     hill_slope_max: float | None = None
+    # When True, the use case forces ``DoseResponseConfig.outlier_sigma=None``
+    # so the fitter does NOT run its auto-3σ outlier pass on top of the
+    # user-supplied ``excluded_point_indices``. The FE sets this during
+    # point-editing sessions to prevent the cascade where excluding one point
+    # by hand triggers additional auto-exclusions.
+    disable_auto_outliers: bool = False
 
 
 class RefitDoseResponseCurve:
@@ -202,6 +208,8 @@ class RefitDoseResponseCurve:
             hill_min = base_config.hill_slope_min
             hill_max = base_config.hill_slope_max
 
+        outlier_sigma = None if input.disable_auto_outliers else base_config.outlier_sigma
+
         return DoseResponseConfig(
             curve_type=base_config.curve_type,
             x_readout_name=base_config.x_readout_name,
@@ -217,5 +225,5 @@ class RefitDoseResponseCurve:
             bottom_constraint_max=bottom_max,
             hill_slope_min=hill_min,
             hill_slope_max=hill_max,
-            outlier_sigma=base_config.outlier_sigma,
+            outlier_sigma=outlier_sigma,
         )

@@ -276,6 +276,9 @@ class RefitDoseResponseCurveRequest(BaseModel):
     override_hill: bool = False
     hill_slope_min: float | None = None
     hill_slope_max: float | None = None
+    # When True, the use case suppresses the fitter's auto-3σ outlier pass so
+    # user-driven point edits don't cascade into additional auto-exclusions.
+    disable_auto_outliers: bool = False
 
 
 class ClassifyDoseResponseCurveRequest(BaseModel):
@@ -452,6 +455,7 @@ async def refit_dose_response_curve(
             override_hill=body.override_hill,
             hill_slope_min=body.hill_slope_min,
             hill_slope_max=body.hill_slope_max,
+            disable_auto_outliers=body.disable_auto_outliers,
         ),
         auth=auth,
     )

@@ -59,9 +59,11 @@ class _FakeUow:
 class _RecordingFitter:
     def __init__(self) -> None:
         self.last_points: list[ConcentrationResponsePoint] = []
+        self.last_config: DoseResponseConfig | None = None
 
     def fit(self, points, config):
         self.last_points = list(points)
+        self.last_config = config
         return Success(
             FittedCurveResult(
                 fitted_value=1.0,
@@ -184,3 +186,78 @@ async def test_excluded_index_maps_to_ascending_dose_order():
     # Final guard: with descending sort (the bug), index 1 would land on 1000.0.
     # Make sure that's not what happened.
     assert excluded[0].concentration != pytest.approx(1000.0)
+
+
+@pytest.mark.asyncio
+async def test_refit_with_disable_auto_outliers_passes_none_sigma_to_fitter():
+    """When the user is editing points by hand, ``disable_auto_outliers=True``
+    must force ``outlier_sigma=None`` in the fit config so the fitter does not
+    cascade additional 3σ exclusions on top of the user's choice."""
+    pairs = [(1.0, 5.0), (10.0, 20.0), (100.0, 50.0)]
+    curve = _make_curve_with_points(pairs)
+
+    curve_repo = AsyncMock()
+    curve_repo.find_by_id_in_workspace = AsyncMock(return_value=curve)
+    curve_repo.save = AsyncMock()
+    protocol_repo = AsyncMock()
+    protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=_make_protocol())
+    fitter = _RecordingFitter()
+
+    guard = AsyncMock()
+    guard.guard_write = AsyncMock()
+    use_case = RefitDoseResponseCurve(
+        uow=_FakeUow(),
+        curve_repo=curve_repo,
+        protocol_repo=protocol_repo,
+        curve_fitter=fitter,
+        guard=guard,
+    )
+
+    cmd = RefitDoseResponseCurveCommand(
+        workspace_id=WS,
+        curve_id=curve.id,
+        excluded_point_indices=[0],
+        disable_auto_outliers=True,
+    )
+    result = await use_case(cmd, auth=_make_auth())
+    assert isinstance(result, Success)
+    assert fitter.last_config is not None
+    assert fitter.last_config.outlier_sigma is None
+
+
+@pytest.mark.asyncio
+async def test_refit_without_disable_auto_outliers_preserves_protocol_sigma():
+    """Sanity: default behavior (flag False) must NOT clobber the protocol's
+    configured ``outlier_sigma`` — the fitter still does its auto-3σ pass."""
+    pairs = [(1.0, 5.0), (10.0, 20.0), (100.0, 50.0)]
+    curve = _make_curve_with_points(pairs)
+
+    curve_repo = AsyncMock()
+    curve_repo.find_by_id_in_workspace = AsyncMock(return_value=curve)
+    curve_repo.save = AsyncMock()
+    protocol_repo = AsyncMock()
+    protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=_make_protocol())
+    fitter = _RecordingFitter()
+
+    guard = AsyncMock()
+    guard.guard_write = AsyncMock()
+    use_case = RefitDoseResponseCurve(
+        uow=_FakeUow(),
+        curve_repo=curve_repo,
+        protocol_repo=protocol_repo,
+        curve_fitter=fitter,
+        guard=guard,
+    )
+
+    cmd = RefitDoseResponseCurveCommand(
+        workspace_id=WS,
+        curve_id=curve.id,
+        excluded_point_indices=[],
+    )
+    result = await use_case(cmd, auth=_make_auth())
+    assert isinstance(result, Success)
+    assert fitter.last_config is not None
+    # Protocol default sigma is whatever ``DoseResponseConfig`` ships as the
+    # default (currently 3.0 via ``DEFAULT_OUTLIER_SIGMA``); the key assertion
+    # is that the use case did not silently swap it to None.
+    assert fitter.last_config.outlier_sigma is not None
