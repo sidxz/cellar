@@ -8,6 +8,7 @@ from typing import Any
 
 from cellar.domain.screening_assay.curve_fitting import InterceptValue
 from cellar.domain.screening_assay.enums import CurveClass, CurveType
+from cellar.domain.screening_assay.excluded_point_detail import ExcludedPointDetail
 from cellar.domain.shared.entity import Entity
 from cellar.domain.shared.errors import ValidationError
 
@@ -45,7 +46,7 @@ class DoseResponseCurve(Entity):
         num_points: int,
         curve_class: CurveClass | None = None,
         raw_data: list[dict[str, Any]] | None = None,
-        excluded_points: list[dict[str, Any]] | None = None,
+        excluded_points: list[ExcludedPointDetail] | None = None,
         fit_quality_warnings: list[str] | None = None,
         intercept_values: list[InterceptValue] | None = None,
         dose_response_config_snapshot: dict[str, Any] | None = None,
@@ -109,7 +110,7 @@ class DoseResponseCurve(Entity):
         num_points: int,
         curve_class: CurveClass | None,
         raw_data: list[dict[str, Any]],
-        excluded_points: list[dict[str, Any]] | None,
+        excluded_points: list[ExcludedPointDetail] | None,
         fit_quality_warnings: list[str] | None,
         intercept_values: list[InterceptValue] | None,
         dose_response_config_snapshot: dict[str, Any] | None = None,
