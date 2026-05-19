@@ -528,9 +528,18 @@ export function DoseResponseChart({
   type PlotAnnotation = Record<string, unknown>;
   const traces: PlotTrace[] = [];
 
-  // Track trace index → (curveId, pointIndex within included array) for click handling
-  // Each included-points trace gets a traceIndex so we can map clicks back.
-  const traceIndexToCurve: Array<{ curveId: string; type: "included" | "excluded" }> = [];
+  // Track trace index → (curveId, pointIndex within included array) for click handling.
+  // Each clickable trace gets a traceIndex so we can map clicks back.
+  // "suggestion" is treated like "included" for click handling because the
+  // session toggle preserves source=auto_3sigma when it flips excluded.
+  const traceIndexToCurve: Array<{
+    curveId: string;
+    type: "included" | "excluded" | "suggestion";
+    /** Raw_data indices in the order they were emitted into the trace.
+     *  Used to map a Plotly pointIndex back to the underlying raw_data idx
+     *  when the trace doesn't include every raw_data point (suggestion). */
+    rawIdxOrder?: number[];
+  }> = [];
 
   for (let i = 0; i < curves.length; i++) {
     const curve = curves[i];
@@ -545,11 +554,86 @@ export function DoseResponseChart({
 
     // Merge server excluded_points back into raw_data for interactive mode:
     // In interactive mode we manage exclusions locally.
-    // Displayed included = raw_data filtered by local excludedMap
+    // Displayed included = raw_data filtered by local excludedMap + suggestions
     // Displayed excluded = server excluded_points + locally excluded from raw_data
+    //
+    // Post Task 2.7 the wire shape for `excluded_points` carries three categories:
+    //   { idx, source: "auto_3sigma", excluded: false } → SUGGESTION (yellow halo)
+    //   { idx, source: "auto_3sigma", excluded: true  } → accepted auto-exclusion (X)
+    //   { idx, source: "manual",      excluded: true  } → manual exclusion (X)
+    // Legacy rows (pre-migration 041 backfill) carry `concentration`+`response`
+    // with `idx: null`; they're rendered from those scalars and treated as
+    // accepted auto-exclusions.
     const serverIncluded = extractPoints(curve.raw_data);
-    const serverExcluded = extractPoints(curve.excluded_points);
     const localExcluded = getExcluded(curve.id);
+
+    // Partition the server's excluded_points payload into the three buckets
+    // by walking the raw entries (extractPoints flattens away the source +
+    // excluded fields, so we look at the dicts directly here).
+    const rawExclusionEntries = curve.excluded_points ?? [];
+    const suggestionIdxs = new Set<number>();
+    const acceptedAutoExcludedIdxs = new Set<number>();
+    const manualExcludedIdxs = new Set<number>();
+    // Legacy entries (idx=null) — keep their concentration/response so we
+    // can still draw them as X markers even though we can't toggle them.
+    const legacyAutoExcludedXY: Array<{ x: number; y: number }> = [];
+    const legacyManualExcludedXY: Array<{ x: number; y: number }> = [];
+    for (const rawPt of rawExclusionEntries) {
+      const e = rawPt as {
+        idx?: number | null;
+        source?: string | null;
+        excluded?: boolean | null;
+        reason?: string | null;
+        concentration?: number | null;
+        response?: number | null;
+        x?: number | null;
+        y?: number | null;
+      };
+      const source = e.source ?? (e.reason === "auto_3sigma" ? "auto_3sigma" : "manual");
+      // Default `excluded` to true when missing — that's the legacy wire shape
+      // (every excluded_points entry was an exclusion pre Task 2.7).
+      const excluded = typeof e.excluded === "boolean" ? e.excluded : true;
+      if (typeof e.idx === "number") {
+        if (!excluded && source === "auto_3sigma") {
+          suggestionIdxs.add(e.idx);
+        } else if (excluded && source === "auto_3sigma") {
+          acceptedAutoExcludedIdxs.add(e.idx);
+        } else if (excluded) {
+          manualExcludedIdxs.add(e.idx);
+        }
+      } else {
+        // No idx → legacy backfilled row. Render from its scalar coords.
+        const conc = (e.concentration ?? e.x) as number | null | undefined;
+        const resp = (e.response ?? e.y) as number | null | undefined;
+        if (typeof conc === "number" && typeof resp === "number") {
+          if (source === "auto_3sigma") {
+            legacyAutoExcludedXY.push({ x: conc, y: resp });
+          } else {
+            legacyManualExcludedXY.push({ x: conc, y: resp });
+          }
+        }
+      }
+    }
+
+    // Suggestion points (yellow halo) — pulled from raw_data by idx. They
+    // sit OUTSIDE the "included" trace so the halo marker can render
+    // distinctly (open amber circle) rather than as a regular dot. The
+    // underlying point still contributes to the fit on the BE because
+    // `excluded=false`; on the FE we just visually call attention to it.
+    // Preserve a parallel idx array so click handling can map a Plotly
+    // pointIndex back to the original raw_data idx.
+    const suggestionX: number[] = [];
+    const suggestionY: number[] = [];
+    const suggestionRawIdxOrder: number[] = [];
+    for (const idx of suggestionIdxs) {
+      const x = serverIncluded.x[idx];
+      const y = serverIncluded.y[idx];
+      if (typeof x === "number" && typeof y === "number") {
+        suggestionX.push(x);
+        suggestionY.push(y);
+        suggestionRawIdxOrder.push(idx);
+      }
+    }
 
     let includedX: number[];
     let includedY: number[];
@@ -558,42 +642,55 @@ export function DoseResponseChart({
     let autoExcludedX: number[];
     let autoExcludedY: number[];
 
+    // Builders shared across interactive + read-only modes. The "included"
+    // trace skips suggestions + already-excluded indices; the "excluded"
+    // buckets pick up the remainder from raw_data plus the legacy scalar
+    // rows that have no idx.
+    const isHiddenFromIncluded = (idx: number) =>
+      localExcluded.has(idx) ||
+      suggestionIdxs.has(idx) ||
+      acceptedAutoExcludedIdxs.has(idx) ||
+      manualExcludedIdxs.has(idx);
+    const pickFromRaw = (idxSet: Set<number>) => {
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (const idx of idxSet) {
+        const x = serverIncluded.x[idx];
+        const y = serverIncluded.y[idx];
+        if (typeof x === "number" && typeof y === "number") {
+          xs.push(x);
+          ys.push(y);
+        }
+      }
+      return { xs, ys };
+    };
+
     if (isInteractive) {
-      includedX = serverIncluded.x.filter((_, idx) => !localExcluded.has(idx));
-      includedY = serverIncluded.y.filter((_, idx) => !localExcluded.has(idx));
+      includedX = serverIncluded.x.filter((_, idx) => !isHiddenFromIncluded(idx));
+      includedY = serverIncluded.y.filter((_, idx) => !isHiddenFromIncluded(idx));
       // locally excluded from raw_data -> treat as manual
-      manualExcludedX = serverIncluded.x.filter((_, idx) => localExcluded.has(idx));
-      manualExcludedY = serverIncluded.y.filter((_, idx) => localExcluded.has(idx));
-      // server excluded -> split by reason
-      autoExcludedX = serverExcluded.x.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
-      );
-      autoExcludedY = serverExcluded.y.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
-      );
-      manualExcludedX = [
-        ...manualExcludedX,
-        ...serverExcluded.x.filter((_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"),
-      ];
-      manualExcludedY = [
-        ...manualExcludedY,
-        ...serverExcluded.y.filter((_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma"),
-      ];
+      const locallyExcluded = serverIncluded.x
+        .map((_, idx) => idx)
+        .filter((idx) => localExcluded.has(idx));
+      manualExcludedX = locallyExcluded.map((idx) => serverIncluded.x[idx]);
+      manualExcludedY = locallyExcluded.map((idx) => serverIncluded.y[idx]);
+      // server-side manual exclusions (raw + legacy scalar)
+      const { xs: manRawX, ys: manRawY } = pickFromRaw(manualExcludedIdxs);
+      manualExcludedX = [...manualExcludedX, ...manRawX, ...legacyManualExcludedXY.map((p) => p.x)];
+      manualExcludedY = [...manualExcludedY, ...manRawY, ...legacyManualExcludedXY.map((p) => p.y)];
+      // accepted-auto exclusions (raw + legacy scalar)
+      const { xs: autoRawX, ys: autoRawY } = pickFromRaw(acceptedAutoExcludedIdxs);
+      autoExcludedX = [...autoRawX, ...legacyAutoExcludedXY.map((p) => p.x)];
+      autoExcludedY = [...autoRawY, ...legacyAutoExcludedXY.map((p) => p.y)];
     } else {
-      includedX = serverIncluded.x;
-      includedY = serverIncluded.y;
-      autoExcludedX = serverExcluded.x.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
-      );
-      autoExcludedY = serverExcluded.y.filter(
-        (_, idx) => serverExcluded.reasons[idx] === "auto_3sigma",
-      );
-      manualExcludedX = serverExcluded.x.filter(
-        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma",
-      );
-      manualExcludedY = serverExcluded.y.filter(
-        (_, idx) => serverExcluded.reasons[idx] !== "auto_3sigma",
-      );
+      includedX = serverIncluded.x.filter((_, idx) => !isHiddenFromIncluded(idx));
+      includedY = serverIncluded.y.filter((_, idx) => !isHiddenFromIncluded(idx));
+      const { xs: manRawX, ys: manRawY } = pickFromRaw(manualExcludedIdxs);
+      manualExcludedX = [...manRawX, ...legacyManualExcludedXY.map((p) => p.x)];
+      manualExcludedY = [...manRawY, ...legacyManualExcludedXY.map((p) => p.y)];
+      const { xs: autoRawX, ys: autoRawY } = pickFromRaw(acceptedAutoExcludedIdxs);
+      autoExcludedX = [...autoRawX, ...legacyAutoExcludedXY.map((p) => p.x)];
+      autoExcludedY = [...autoRawY, ...legacyAutoExcludedXY.map((p) => p.y)];
     }
 
     // Filter out NaN/non-positive values: log10 explodes on them and
@@ -620,8 +717,13 @@ export function DoseResponseChart({
       }
     }
     const allX = [
+      // raw_data already covers every idx-keyed exclusion (manual + auto +
+      // suggestion) since post Task 2.7 nothing gets stripped from
+      // raw_data; legacy scalar-only rows (no idx) still need explicit
+      // inclusion so their X coords contribute to the axis range.
       ...serverIncluded.x,
-      ...serverExcluded.x,
+      ...legacyAutoExcludedXY.map((p) => p.x),
+      ...legacyManualExcludedXY.map((p) => p.x),
       ...(finiteFitted ? [curve.fitted_value] : []),
       ...additionalXs,
     ].filter((v) => Number.isFinite(v) && v > 0);
@@ -701,6 +803,41 @@ export function DoseResponseChart({
         hovertemplate: editMode
           ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to exclude</i><extra></extra>"
           : "x: %{x:.4g}<br>y: %{y:.4g}<extra></extra>",
+      });
+    }
+
+    // Auto-3σ suggestions (yellow halo, open circle).
+    // Per Task 2.7 these are points the fitter flagged as outliers but
+    // does NOT silently remove — they stay in the fit until a chemist
+    // accepts them. The amber open circle calls attention to "the system
+    // suggests excluding this point" without removing it from the
+    // sigmoid the chemist sees.
+    if (suggestionX.length > 0) {
+      const traceIdx = traces.length;
+      // "suggestion" reuses the "included" click path so the toggle flips
+      // excluded → true on the existing entry (preserving source=auto_3sigma).
+      traceIndexToCurve[traceIdx] = {
+        curveId: curve.id,
+        type: "suggestion",
+        rawIdxOrder: suggestionRawIdxOrder,
+      };
+      traces.push({
+        type: "scatter",
+        mode: "markers",
+        name: `${label} (suggested 3σ)`,
+        legendgroup: group,
+        x: suggestionX,
+        y: suggestionY,
+        marker: {
+          color: CHART_COLORS.warning,
+          size: 14,
+          symbol: "circle-open",
+          line: { color: CHART_COLORS.warning, width: 2.5 },
+        },
+        showlegend: false,
+        hovertemplate: editMode
+          ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>Suggested 3σ outlier — click to exclude</i><extra></extra>"
+          : "x: %{x:.4g}<br>y: %{y:.4g}<br><i>Suggested 3σ outlier</i><extra></extra>",
       });
     }
 
@@ -946,19 +1083,36 @@ export function DoseResponseChart({
       const curve = editCurve;
       const localExcluded = getExcluded(curveId);
 
-      if (type === "included") {
+      if (type === "suggestion") {
+        // Suggestion trace was built from `suggestionRawIdxOrder` — direct
+        // lookup gives us the raw_data idx without walking past hidden
+        // entries. Toggling flips excluded → true while preserving
+        // source=auto_3sigma on the existing session entry.
+        const originalIdx = traceInfo.rawIdxOrder?.[pointIdx];
+        if (typeof originalIdx === "number" && originalIdx >= 0) {
+          editSession.toggleExclusion(originalIdx);
+        }
+      } else if (type === "included") {
         // Find the actual index in raw_data accounting for currently-draft
-        // exclusions shifting the display index.
+        // exclusions + suggestions + server-side excluded entries shifting
+        // the display index. The "included" trace only contains points that
+        // pass `isHiddenFromIncluded`, so we walk raw_data and count those.
+        const rawExclusionEntries = curve.excluded_points ?? [];
+        const excludedRawIdxs = new Set<number>();
+        for (const rawPt of rawExclusionEntries) {
+          const e = rawPt as { idx?: number | null };
+          if (typeof e.idx === "number") excludedRawIdxs.add(e.idx);
+        }
         let displayIdx = 0;
         let originalIdx = -1;
         for (let k = 0; k < (curve.raw_data?.length ?? 0); k++) {
-          if (!localExcluded.has(k)) {
-            if (displayIdx === pointIdx) {
-              originalIdx = k;
-              break;
-            }
-            displayIdx++;
+          // Mirror `isHiddenFromIncluded` from the trace builder.
+          if (localExcluded.has(k) || excludedRawIdxs.has(k)) continue;
+          if (displayIdx === pointIdx) {
+            originalIdx = k;
+            break;
           }
+          displayIdx++;
         }
         if (originalIdx >= 0) {
           editSession.toggleExclusion(originalIdx);

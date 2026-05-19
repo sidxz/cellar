@@ -118,6 +118,15 @@ interface Trace {
   name?: string;
   opacity?: number;
   line?: { dash?: string; width?: number; color?: string };
+  marker?: {
+    symbol?: string;
+    color?: string;
+    size?: number;
+    line?: { color?: string; width?: number };
+    opacity?: number;
+  };
+  x?: number[];
+  y?: number[];
 }
 
 interface ShapeRecord {
@@ -417,5 +426,158 @@ describe("<DoseResponseChart /> — edit-session integration", () => {
     expect(
       screen.getByText(/save 1 exclusion change\??/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe("<DoseResponseChart /> — auto-3σ suggestion markers", () => {
+  it("renders auto-3σ suggestions as yellow-halo markers, distinct from manual exclusions", () => {
+    reset();
+    const curve = makeCurve({
+      raw_data: [
+        { x: 0.01, y: 5 },
+        { x: 0.1, y: 30 },
+        { x: 1, y: 80 },
+        { x: 10, y: 95 },
+      ],
+      excluded_points: [
+        {
+          idx: 1,
+          source: "auto_3sigma",
+          excluded: false,
+          reason: "auto_3sigma",
+          note: null,
+          author_id: null,
+          ts: "2026-05-19T10:00:00Z",
+          concentration: null,
+          response: null,
+        },
+        {
+          idx: 2,
+          source: "manual",
+          excluded: true,
+          reason: "outlier",
+          note: null,
+          author_id: "u1",
+          ts: "2026-05-19T10:00:00Z",
+          concentration: null,
+          response: null,
+        },
+      ],
+    });
+    renderWithQuery(<DoseResponseChart curves={[curve]} />);
+
+    const traces = plotCalls[0].data as Trace[];
+    // Suggestion trace: amber open circle.
+    const suggestionTrace = traces.find((t) => /suggested 3σ/i.test(t.name ?? ""));
+    expect(suggestionTrace).toBeDefined();
+    expect(suggestionTrace?.marker?.symbol).toBe("circle-open");
+    // Color matches the warning token (amber-500 / #f59e0b).
+    expect(suggestionTrace?.marker?.color).toBe("#f59e0b");
+    expect(suggestionTrace?.x).toEqual([0.1]);
+    expect(suggestionTrace?.y).toEqual([30]);
+
+    // Manual exclusion remains an X marker — separate trace.
+    const manualTrace = traces.find(
+      (t) => /\(excluded\)$/i.test(t.name ?? "") && t.marker?.symbol === "x",
+    );
+    expect(manualTrace).toBeDefined();
+    expect(manualTrace?.x).toEqual([1]);
+    expect(manualTrace?.y).toEqual([80]);
+  });
+
+  it("hides suggestion idxs from the included-points trace so the halo isn't drawn over a filled dot", () => {
+    reset();
+    const curve = makeCurve({
+      raw_data: [
+        { x: 0.01, y: 5 },
+        { x: 0.1, y: 30 },
+        { x: 1, y: 80 },
+        { x: 10, y: 95 },
+      ],
+      excluded_points: [
+        {
+          idx: 2,
+          source: "auto_3sigma",
+          excluded: false,
+          reason: "auto_3sigma",
+          note: null,
+          author_id: null,
+          ts: "2026-05-19T10:00:00Z",
+        },
+      ],
+    });
+    renderWithQuery(<DoseResponseChart curves={[curve]} />);
+
+    const traces = plotCalls[0].data as Trace[];
+    // Find the primary "included" markers trace — it's the marker trace
+    // whose name carries the curve-type label (e.g. "CV-00001 (IC50)")
+    // and no "(excluded)" / "(auto-excluded)" / "(suggested 3σ)" suffix.
+    const includedTrace = traces.find(
+      (t) =>
+        t.mode === "markers" &&
+        t.marker?.symbol === "circle" &&
+        typeof t.name === "string" &&
+        !/excluded|suggested|replicates|fit$/i.test(t.name),
+    );
+    expect(includedTrace).toBeDefined();
+    // 4 raw_data points minus 1 suggestion → 3 in the included trace.
+    expect(includedTrace?.x).toHaveLength(3);
+    // The suggestion was at idx=2 → raw_data[2] = (1, 80); confirm those
+    // coords don't show up in the included trace.
+    expect(includedTrace?.x).not.toContain(1);
+    expect(includedTrace?.y).not.toContain(80);
+  });
+
+  it("legacy excluded_points (idx=null + concentration/response) still render as X markers", () => {
+    reset();
+    const curve = makeCurve({
+      raw_data: [
+        { x: 0.01, y: 5 },
+        { x: 0.1, y: 30 },
+      ],
+      excluded_points: [
+        // Legacy backfilled row: no idx, only scalar coords. Treated as
+        // accepted auto-exclusion.
+        {
+          idx: null,
+          source: "auto_3sigma",
+          excluded: true,
+          reason: "auto_3sigma",
+          concentration: 5.0,
+          response: 88,
+        },
+      ],
+    });
+    renderWithQuery(<DoseResponseChart curves={[curve]} />);
+
+    const traces = plotCalls[0].data as Trace[];
+    const autoTrace = traces.find(
+      (t) => /\(auto-excluded\)$/i.test(t.name ?? "") && t.marker?.symbol === "diamond",
+    );
+    expect(autoTrace).toBeDefined();
+    expect(autoTrace?.x).toEqual([5.0]);
+    expect(autoTrace?.y).toEqual([88]);
+  });
+
+  it("entries with the legacy wire shape (reason only, no source/excluded) keep rendering as accepted exclusions", () => {
+    reset();
+    const curve = makeCurve({
+      raw_data: [{ x: 0.01, y: 5 }],
+      excluded_points: [
+        // Pre-Task-2.7 shape: reason-only, no source / excluded fields.
+        { idx: null, reason: "auto_3sigma", concentration: 5.0, response: 88 },
+      ],
+    });
+    renderWithQuery(<DoseResponseChart curves={[curve]} />);
+
+    const traces = plotCalls[0].data as Trace[];
+    // Legacy reason="auto_3sigma" → still rendered as diamond auto-exclude.
+    const autoTrace = traces.find(
+      (t) => /\(auto-excluded\)$/i.test(t.name ?? "") && t.marker?.symbol === "diamond",
+    );
+    expect(autoTrace).toBeDefined();
+    // No suggestion trace — legacy entries default to excluded=true.
+    const suggestionTrace = traces.find((t) => /suggested 3σ/i.test(t.name ?? ""));
+    expect(suggestionTrace).toBeUndefined();
   });
 });
