@@ -433,6 +433,31 @@ describe("<DoseResponseChart /> — edit-session integration", () => {
   });
 });
 
+describe("<DoseResponseChart /> — locked-run guard", () => {
+  it("disables Edit Points and shows Locked badge when runIsLocked is true", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive runIsLocked />,
+    );
+    const editBtn = screen.getByRole("button", { name: /edit points/i });
+    expect(editBtn).toBeDisabled();
+    expect(editBtn).toHaveAttribute("title", "Unapprove run to edit curves");
+    expect(screen.getByText(/^locked$/i)).toBeInTheDocument();
+  });
+
+  it("Edit Points stays enabled when runIsLocked is false or undefined", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    expect(
+      screen.getByRole("button", { name: /edit points/i }),
+    ).toBeEnabled();
+    // No "Locked" badge when the run isn't locked.
+    expect(screen.queryByText(/^locked$/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("<DoseResponseChart /> — auto-3σ suggestion markers", () => {
   it("renders auto-3σ suggestions as yellow-halo markers, distinct from manual exclusions", () => {
     reset();

@@ -295,7 +295,8 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                     return (
                       <DoseResponseChart
                         curves={viewingCurves}
-                        isInteractive={!run.is_locked}
+                        isInteractive
+                        runIsLocked={run.is_locked}
                         protocolConfig={drDef?.dose_response_config ?? null}
                         yReadoutNormalization={
                           drDef?.dose_response_config?.y_normalization ??

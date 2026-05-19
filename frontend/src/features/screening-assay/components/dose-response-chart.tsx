@@ -82,6 +82,14 @@ interface DoseResponseChartProps {
    *  defaults makes sense — those bounds are only meaningful for
    *  percent-scale readouts. Pass null/undefined to disable seeding. */
   yReadoutNormalization?: string | null;
+  /** When the parent Run is approved / locked, BE write paths (commit-refit
+   *  + classify) will return Failure on submit. Surfacing the lock as a
+   *  disabled Edit-Points button + a "Locked" badge avoids the chemist
+   *  entering edit mode, making changes, then eating a 4xx on save. Pass
+   *  `undefined` from callers that don't have run state (campaign expand
+   *  dialog, search compound drawer) — those callers are already
+   *  non-interactive so the lock UI never renders. */
+  runIsLocked?: boolean;
   /** Test-only override for the /refit-preview call. Production callers
    *  rely on the orval-generated default inside ``useRefitPreview``. */
   previewFn?: PreviewFnOverride;
@@ -283,6 +291,7 @@ export function DoseResponseChart({
   isInteractive = false,
   protocolConfig = null,
   yReadoutNormalization = null,
+  runIsLocked = false,
   previewFn,
 }: DoseResponseChartProps) {
   // ── Interactive state ───────────────────────────────────────────────────────
@@ -1431,9 +1440,28 @@ export function DoseResponseChart({
         <div className="flex items-center gap-4 flex-wrap">
           {isInteractive && (
             <>
-              <Button variant="outline" size="sm" onClick={handleEnterEdit}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEnterEdit}
+                disabled={runIsLocked}
+                title={
+                  runIsLocked
+                    ? "Unapprove run to edit curves"
+                    : undefined
+                }
+              >
                 Edit Points
               </Button>
+              {runIsLocked && (
+                <Badge
+                  variant="outline"
+                  className="text-xs"
+                  title="Run is approved — DR curves are read-only. Unapprove the run to edit."
+                >
+                  Locked
+                </Badge>
+              )}
               <CurveEditHistory
                 events={editHistoryQuery.data?.events ?? []}
                 isLoading={editHistoryQuery.isLoading}
