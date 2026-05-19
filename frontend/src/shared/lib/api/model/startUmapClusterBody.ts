@@ -14,7 +14,12 @@ import type { StartUmapClusterBodyThreshold } from './startUmapClusterBodyThresh
 
 ``picker`` controls the representative-selection algorithm:
 - ``maxmin``: MaxMin diversity picker; ``n`` (required) sets the output count.
-- ``butina``: Butina cluster medoids; ``threshold`` (required) controls cluster size.
+- ``butina``: Butina cluster medoids; ``threshold`` drives the picks AND the coloring.
+
+``threshold`` is the Butina cluster threshold (Tanimoto distance) that always
+drives the per-compound cluster coloring on the scatter, regardless of picker.
+Defaults to 0.4 when omitted. When ``picker=butina``, this same threshold
+also drives the medoid picks (single source of truth).
  */
 export interface StartUmapClusterBody {
   collection_id?: StartUmapClusterBodyCollectionId;

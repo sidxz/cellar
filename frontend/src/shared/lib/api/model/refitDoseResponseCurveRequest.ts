@@ -13,6 +13,9 @@ import type { RefitDoseResponseCurveRequestBottomConstraintMin } from './refitDo
 import type { RefitDoseResponseCurveRequestBottomConstraintMax } from './refitDoseResponseCurveRequestBottomConstraintMax';
 import type { RefitDoseResponseCurveRequestHillSlopeMin } from './refitDoseResponseCurveRequestHillSlopeMin';
 import type { RefitDoseResponseCurveRequestHillSlopeMax } from './refitDoseResponseCurveRequestHillSlopeMax';
+import type { RefitDoseResponseCurveRequestExclusions } from './refitDoseResponseCurveRequestExclusions';
+import type { RefitDoseResponseCurveRequestSaveReason } from './refitDoseResponseCurveRequestSaveReason';
+import type { RefitDoseResponseCurveRequestSaveNote } from './refitDoseResponseCurveRequestSaveNote';
 
 export interface RefitDoseResponseCurveRequest {
   excluded_point_indices?: number[];
@@ -28,4 +31,8 @@ export interface RefitDoseResponseCurveRequest {
   override_hill?: boolean;
   hill_slope_min?: RefitDoseResponseCurveRequestHillSlopeMin;
   hill_slope_max?: RefitDoseResponseCurveRequestHillSlopeMax;
+  disable_auto_outliers?: boolean;
+  exclusions?: RefitDoseResponseCurveRequestExclusions;
+  save_reason?: RefitDoseResponseCurveRequestSaveReason;
+  save_note?: RefitDoseResponseCurveRequestSaveNote;
 }

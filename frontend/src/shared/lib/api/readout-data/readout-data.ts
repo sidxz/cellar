@@ -34,7 +34,9 @@ import type {
   ListDoseResponseCurvesApiV1DoseResponseCurvesGetParams,
   ListReadoutDataApiV1ReadoutDataGetParams,
   ReadoutDataResponse,
-  RefitDoseResponseCurveRequest
+  RefitDoseResponseCurveRequest,
+  RefitPreviewRequest,
+  RefitPreviewResponse
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
@@ -482,6 +484,76 @@ export const useRefitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPost = 
       > => {
 
       const mutationOptions = getRefitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Compute-only preview refit.
+
+The FE calls this on every draft toggle during point editing; never
+persists, never audits, never auto-excludes. The existing /refit endpoint
+handles commit on Save.
+ * @summary Preview a dose-response refit without persisting (compute-only).
+ */
+export const refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost = (
+    curveId: string,
+    refitPreviewRequest: RefitPreviewRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<RefitPreviewResponse>(
+      {url: `/api/v1/dose-response-curves/${curveId}/refit-preview`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: refitPreviewRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getRefitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost>>, TError,{curveId: string;data: RefitPreviewRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost>>, TError,{curveId: string;data: RefitPreviewRequest}, TContext> => {
+
+const mutationKey = ['refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost>>, {curveId: string;data: RefitPreviewRequest}> = (props) => {
+          const {curveId,data} = props ?? {};
+
+          return  refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost(curveId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPostMutationResult = NonNullable<Awaited<ReturnType<typeof refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost>>>
+    export type RefitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPostMutationBody = RefitPreviewRequest
+    export type RefitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Preview a dose-response refit without persisting (compute-only).
+ */
+export const useRefitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost>>, TError,{curveId: string;data: RefitPreviewRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost>>,
+        TError,
+        {curveId: string;data: RefitPreviewRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getRefitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

@@ -202,6 +202,9 @@ export function useGetUmapClusterJobApiV1SarUmapClusterJobsJobIdGet<TData = Awai
 
 /**
  * Request cancellation of a pending or running UMAP cluster job.
+
+Result is unwrapped to convert a NotFoundError to a 404 via the standard
+error handler. The 204 response body stays empty regardless.
  * @summary Cancel Umap Cluster Job
  */
 export const cancelUmapClusterJobApiV1SarUmapClusterJobsJobIdCancelPost = (

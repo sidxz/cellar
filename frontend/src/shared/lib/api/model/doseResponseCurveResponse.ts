@@ -13,7 +13,7 @@ import type { DoseResponseCurveResponseConfidenceIntervalHigh } from './doseResp
 import type { DoseResponseCurveResponseCurveClass } from './doseResponseCurveResponseCurveClass';
 import type { DoseResponseCurveResponseRawData } from './doseResponseCurveResponseRawData';
 import type { DoseResponseCurveResponseExcludedPoints } from './doseResponseCurveResponseExcludedPoints';
-import type { InterceptValueModel } from './interceptValueModel';
+import type { InterceptValueResponse } from './interceptValueResponse';
 
 export interface DoseResponseCurveResponse {
   id: string;
@@ -42,5 +42,5 @@ export interface DoseResponseCurveResponse {
   raw_data?: DoseResponseCurveResponseRawData;
   excluded_points?: DoseResponseCurveResponseExcludedPoints;
   fit_quality_warnings?: string[];
-  intercept_values?: InterceptValueModel[];
+  intercept_values?: InterceptValueResponse[];
 }
