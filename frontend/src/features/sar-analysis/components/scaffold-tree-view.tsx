@@ -26,6 +26,7 @@ import {
   rootNodes,
 } from "../lib/scaffold-tree-math";
 import { collectSubtreeScaffolds } from "../lib/collect-subtree-scaffolds";
+import { NO_SCAFFOLD_SENTINEL } from "../types/scaffold-tree";
 import {
   classifyActivity,
   medianPic50ForMols,
@@ -229,6 +230,13 @@ export function ScaffoldTreeView({
   // set (no collectionId), fall through to the existing in-memory path.
   const selectedScaffolds = useMemo<string[]>(() => {
     if (!tree || selectedScaffold == null) return [];
+    // NO_SCAFFOLD_SENTINEL is not a real SMILES — RDKit can't parse it and
+    // the BE `exact_match_in` clause silently drops unparseable inputs,
+    // yielding zero rows. Acyclic mols belong to a different criterion
+    // path (mode='acyclic_only'). For this bucket, fall through to the
+    // in-memory filter — the acyclic set is bounded by the same 10K cap
+    // as the "show all" pane and is typically <100 mols in practice.
+    if (selectedScaffold === NO_SCAFFOLD_SENTINEL) return [];
     if (subMode === "groups") return [selectedScaffold];
     return collectSubtreeScaffolds(selectedScaffold, tree);
   }, [tree, selectedScaffold, subMode]);

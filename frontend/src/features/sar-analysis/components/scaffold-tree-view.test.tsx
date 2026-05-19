@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { UseScaffoldTreeReturn } from "../hooks/use-scaffold-tree";
 
 import { ScaffoldTreeView, SCAFFOLD_TREE_TOAST_ID } from "./scaffold-tree-view";
+import { NO_SCAFFOLD_SENTINEL } from "../types/scaffold-tree";
 
 // ---------------------------------------------------------------------------
 // customInstance mock — used by useCollectionScaffoldSearch (V4 Path A tests)
@@ -491,6 +492,58 @@ describe("ScaffoldTreeView — V4 Path A server-side scaffold filter", () => {
     // Wait a tick to ensure no async call was scheduled.
     await new Promise((r) => setTimeout(r, 50));
     expect(mockCustomInstance).not.toHaveBeenCalled();
+  });
+
+  it("does NOT invoke customInstance when the NO_SCAFFOLD bucket is selected (acyclic mols use in-memory filter)", async () => {
+    // Tree fixture WITH a NO_SCAFFOLD bucket row.
+    mockUseScaffoldTree.mockReturnValue({
+      tree: {
+        nodes: [
+          ...fixtureTree.nodes,
+          {
+            scaffold_smiles: NO_SCAFFOLD_SENTINEL,
+            molecule_ids: ["m4", "m5"],
+            molecule_count: 2,
+            subtree_molecule_count: 2,
+          },
+        ],
+        edges: fixtureTree.edges,
+        stats: fixtureTree.stats,
+      },
+      jobId: null,
+      isStarting: false,
+      isPolling: false,
+      error: null,
+    });
+
+    const acyclicMols = [
+      ...molecules,
+      { id: "m4", bemis_murcko_smiles: "", structure: { smiles: "CCCC" } } as any,
+      { id: "m5", bemis_murcko_smiles: "", structure: { smiles: "CCO" } } as any,
+    ];
+
+    render(
+      <ScaffoldTreeView
+        molecules={acyclicMols}
+        activityData={{}}
+        collectionId="col-acyclic"
+      />,
+      { wrapper },
+    );
+
+    const bucket = await screen.findByTestId(
+      `scaffold-group-${NO_SCAFFOLD_SENTINEL}`,
+    );
+    fireEvent.click(bucket);
+
+    // No server call: the sentinel is not a real SMILES; BE `exact_match_in`
+    // would silently drop it and return zero rows. The in-memory fallback
+    // handles the bucket correctly.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockCustomInstance).not.toHaveBeenCalled();
+
+    // Right pane should show the 2 acyclic cards (m4 + m5), not "0 cards".
+    expect(screen.getByTestId("card-grid")).toHaveTextContent("2 cards");
   });
 
   it("includes all subtree scaffold SMILES in the criterion body for Hierarchy mode", async () => {
