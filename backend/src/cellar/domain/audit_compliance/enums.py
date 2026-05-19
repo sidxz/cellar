@@ -30,6 +30,7 @@ class OperationType(StrEnum):
     STABILITY_RECORDING = "stability_recording"
     MARKUSH_DEFINITION = "markush_definition"
     ADMIN_HARD_DELETE = "admin_hard_delete"
+    CURVE_POINT_EXCLUSION = "curve_point_exclusion"
 
 
 class ActorType(StrEnum):
