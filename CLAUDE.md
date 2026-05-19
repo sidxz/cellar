@@ -183,6 +183,78 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-19 — DR edit-points redesign (Sprints 1+2+3) shipped on prot-2
+
+**Branch:** `prot-2`, 28 new commits since `bcdaf070`. Nothing pushed. **Browser smoke pending.** BE 2440/2440 unit pass; FE 534/534 across 64 files; `pnpm exec tsc --noEmit` clean.
+
+**Plan:** `docs/superpowers/plans/2026-05-19-dr-edit-points-redesign.md` (22 tasks shipped via subagent-driven execution with two-stage review per task + a final integration review).
+
+**What this batch is:** chemist reported the DR-curve "Edit Points" UX is broken — clicking one point silently eliminates more (cascade), counter says "10/10" even with X markers on screen, no save/cancel/undo. Investigation confirmed three FE/BE bugs + an entire missing edit-session model. Redesigned end-to-end: explicit edit session with draft state, preview-refit endpoint (compute-only), commit-refit with audit trail, auto-3σ becomes suggestion (no more cascade), side-panel inventory, save dialog with reason field, edit history popover, locked-curve guard, keyboard shortcuts.
+
+**Big behavioral change to flag for the user:** Auto-3σ outlier detection NO LONGER silently excludes points. From now on every newly-imported run will include all captured points in the fit, with yellow-halo "suggested for exclusion" markers on outliers. Chemists explicitly accept or reject. This is industry alignment (CDD, Prism, Genedata) and the right behavior under 21 CFR Part 11, but: **chemists who knew the old fits will now see different fitted_value / r_squared / top / bottom on the same data**. PR description should call this out.
+
+**Locked design decisions** (in the plan file):
+- Refit-preview is server-side (parity with commit refit; 50ms latency acceptable).
+- Exclusion reasons: hardcoded enum for V1 — `outlier`, `instrument_artifact`, `concentration_error`, `contamination`, `qc_failure`, `other`. ControlledVocabulary integration deferred.
+- Approved/locked curves: edit mode disabled with "Unapprove run to edit" banner. Curve versioning deferred.
+- Auto-3σ: emitted as suggestions, never silently excluded.
+- Schema: enriched the existing `excluded_points` JSONB shape; no new column. Legacy entries backfilled as `source=auto_3sigma, excluded=true` with `idx=null`.
+- Side panel: split-pane desktop. Drawer on narrow screens (V1 uses fixed widths).
+- Audit op type: new `OperationType.CURVE_POINT_EXCLUSION`.
+
+**28 commits (oldest → newest):** `2efe6242 · 995d078a · 373b6852 · d2285552 · 0c795e48 · a54b525f · 31a75484 · ae2c2753 · 7d327ae7 · 99f277fb · b697058f · 1d5dfdfe · 833554ba · e4126a91 · 37151f53 · 9d7a349d · 111fed91 · c98e6262 · e2a32025 · 8c0c98e7 · e03a1e48 · 0c44539c · 7a4b0221 · f42176c8 · b975038f · 748709df · 3f040d42 · 1862226e`. See `git log bcdaf070..HEAD --oneline` for titles.
+
+**Critical post-deploy step — RUN BEFORE CHEMISTS USE THE NEW UI:**
+
+The bulk-refit script `backend/scripts/refit_all_dose_response.py` MUST be re-run after migration 041 lands on each environment. Without it:
+- Existing curves keep their legacy excluded_points shape (post-041 backfilled, but with idx=null AND no auto-3σ suggestions because Task 2.7's behavior change only fires on new fits).
+- Chemists opening an old curve will NOT see yellow-halo suggestions.
+
+The script reads each curve's raw_data + excluded_points, reconstructs the merged set, runs the new fitter (which emits suggestions instead of silently excluding), writes back. Curves with strong outliers will show LOWER R² + shifted EC50 — the outliers are back in the fit. The old "clean" fits were hiding silent data manipulation. After that, also rerun `backend/scripts/rebuild_campaign_curve_snapshots.py --include-closed` (campaign snapshots derived from those curves are stale).
+
+**Top-priority smoke checklist before push:**
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | Open a DR run with auto-excluded points pre-deploy → hard-reload | Counter reads "N of M" honestly (e.g. "8 of 10"), NOT "10/10" |
+| 2 | Edit Points → click one included point | Only that one point gains an X marker. Refresh; no new auto-exclusions appeared |
+| 3 | Edit Points → click a point → Save → dialog → pick reason + note → Save | Curve updates. `SELECT * FROM audit_operations WHERE operation_type='curve_point_exclusion' ORDER BY started_at DESC LIMIT 3;` shows the event |
+| 4 | In edit mode, click points | Dashed indigo "preview fit" line updates (debounced ~300ms) |
+| 5 | Open a curve where the run-import detected an auto-3σ outlier | Amber `circle-open` halo, NOT an X marker |
+| 6 | Click "History" button next to "Edit Points" | Popover shows prior saves with relative timestamps + reasons |
+| 7 | Approve a run → open one of its curves | "Edit Points" disabled, "Locked" badge visible |
+| 8 | Edit mode: Cmd+Z / Cmd+Shift+Z / Esc (dirty / clean) | Undo, redo, confirm-then-exit / exit |
+| 9 | Save with one manual exclusion → re-open → click another point | BE excludes the point you actually clicked (final integration review caught this; commit `1862226e` fixed it) |
+| 10 | Open a curve that existed pre-migration | Legacy X markers still render. "Legacy exclusions (read-only)" section in side panel lists them |
+
+**Diagnostic anchors:**
+
+- `backend/src/cellar/application/screening/_dr_point_reconstruction.py` — single source of truth for "merge raw_data + excluded_points, sort by concentration, mark excluded indices." The FE's `capturedPoints` memo in `dose-response-chart.tsx` MUST mirror this exactly.
+- `backend/src/cellar/application/screening/refit_dose_response.py:268` — Sprint 2 vs Sprint 1 branch in commit refit. `exclusions` provided → audit + outlier_sigma=None + auth required. Bare `excluded_indices` → Sprint 1 contract.
+- `backend/src/cellar/infrastructure/lmfit/curve_fitter.py:241-285` — auto-3σ suggestion emission (no cascade). `outlier_sigma=None` short-circuits suggestions.
+- `backend/src/cellar/domain/screening_assay/excluded_point_detail.py` — domain VO + `to_jsonb`/`from_jsonb`. Match the FE `DraftExclusion` shape field-for-field.
+- `frontend/src/features/screening-assay/components/dose-response-chart.tsx::capturedPoints` (~line 480) — merged-sorted captured set. ALL click indexing goes through this.
+- `frontend/src/features/screening-assay/hooks/use-edit-session.ts` — draft state machine. Re-seeds on curveId change; preserves edits across parent re-renders within the same curve.
+- `frontend/src/features/screening-assay/hooks/use-refit-preview.ts` — debounced (300ms) preview call. Cancels in-flight via AbortController. Preserves prior `data` on error.
+
+**Open caveats (deferred, not blockers):**
+
+- `compound_curves_reader.py` still returns raw dicts for `excluded_points` (intentional — reader's wire shape IS the on-disk JSONB shape). Consumers should treat as JSON.
+- Multi-curve editing on the run-page comparison view is single-curve-only in V1. Chart's edit mode operates on `curves[0]`.
+- Radix `DialogContent` a11y warning ("Missing 'Description'") fires from `SaveExclusionsDialog` + sibling dialogs — pre-existing pattern in this codebase.
+- `useEditSession` sources `authorId` from `useAuthz()` in `@sentinel-auth/nextjs`. BE re-stamps `author_id` from `auth.user_id` server-side, so FE value is advisory.
+- Pre-existing FE working-tree files `frontend/src/features/research-organization/components/search/results-grid.tsx` and `frontend/src/shared/components/data-grid/data-grid.tsx` remain modified-but-unstaged from before this session — never touched by this batch.
+
+**How to resume:**
+
+1. **DB migrations:** `cd backend && uv run alembic upgrade head` (only migration 041 is new; idempotent on dev where applied).
+2. **Bulk refit:** `cd backend && uv run python scripts/refit_all_dose_response.py` then `uv run python scripts/rebuild_campaign_curve_snapshots.py --include-closed`.
+3. **Browser smoke:** walk the 10-step checklist above on the dev stack.
+4. **Push + PR:** if all smokes pass, push `prot-2`, open a PR against `main`. This batch rides on top of un-pushed V1/V1.5/V2 collections + scaffold-tree work. Title: "DR edit-points redesign (Sprints 1+2+3)". Description should call out the auto-3σ behavior change + the bulk-refit prerequisite.
+5. **V3 (UMAP cluster map) next:** brainstorm in a fresh conversation per the prior session's resume plan.
+
+---
+
 ### 2026-05-18 — Roadmap: V1 ✓ · V2 ✓ (push pending) · V3 next · V4 deferred
 
 | | Phase | Status |
