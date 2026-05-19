@@ -54,6 +54,10 @@ vi.mock("@/shared/lib/api/readout-data/readout-data", () => ({
       points_total: 4,
     }),
   ),
+  useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet: () => ({
+    data: { events: [] },
+    isLoading: false,
+  }),
 }));
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

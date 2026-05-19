@@ -29,6 +29,7 @@ import type {
   ClassifyDoseResponseCurveRequest,
   CreateDoseResponseCurveRequest,
   CreateReadoutDataRequest,
+  CurveEditHistoryResponse,
   DoseResponseCurveResponse,
   HTTPValidationError,
   ListDoseResponseCurvesApiV1DoseResponseCurvesGetParams,
@@ -621,4 +622,101 @@ export const useClassifyDoseResponseCurveApiV1DoseResponseCurvesCurveIdClassifyP
 
       return useMutation(mutationOptions, queryClient);
     }
+    /**
+ * Return audit operations recorded against this curve, newest-first.
+
+Currently the only operation type emitted against ``DoseResponseCurve``
+is ``CURVE_POINT_EXCLUSION`` (written by ``RefitDoseResponseCurve`` on
+every commit-save), but the response is shaped generically so future
+audit types ride along automatically.
+ * @summary Audit trail of point-exclusion edits for a DR curve
+ */
+export const getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet = (
+    curveId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CurveEditHistoryResponse>(
+      {url: `/api/v1/dose-response-curves/${curveId}/edit-history`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGetQueryKey = (curveId?: string,) => {
+    return [
+    `/api/v1/dose-response-curves/${curveId}/edit-history`
+    ] as const;
+    }
+
     
+export const getGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGetQueryOptions = <TData = Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError = HTTPValidationError>(curveId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGetQueryKey(curveId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>> = ({ signal }) => getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet(curveId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(curveId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGetQueryResult = NonNullable<Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>>
+export type GetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGetQueryError = HTTPValidationError
+
+
+export function useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet<TData = Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError = HTTPValidationError>(
+ curveId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>,
+          TError,
+          Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet<TData = Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError = HTTPValidationError>(
+ curveId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>,
+          TError,
+          Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet<TData = Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError = HTTPValidationError>(
+ curveId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Audit trail of point-exclusion edits for a DR curve
+ */
+
+export function useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet<TData = Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError = HTTPValidationError>(
+ curveId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGetQueryOptions(curveId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+

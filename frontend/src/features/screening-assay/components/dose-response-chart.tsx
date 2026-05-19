@@ -9,7 +9,10 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/shared/components/ui/resizable";
-import { refitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPost } from "@/shared/lib/api/readout-data/readout-data";
+import {
+  refitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPost,
+  useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet,
+} from "@/shared/lib/api/readout-data/readout-data";
 import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { cn } from "@/shared/lib/utils";
@@ -24,6 +27,7 @@ import {
 import { useRefitPreview } from "../hooks/use-refit-preview";
 import { useClassifyDoseResponse, useRefitDoseResponse } from "../hooks/use-refit-dose-response";
 import { CurveControls } from "./curve-controls";
+import { CurveEditHistory } from "./curve-edit-history";
 import { DoseResponsePointInventory } from "./dose-response-point-inventory";
 import {
   type ExclusionReason as SaveExclusionReason,
@@ -326,6 +330,15 @@ export function DoseResponseChart({
     curveId: editCurve?.id,
   });
   const refitPreview = useRefitPreview({ previewFn });
+
+  // Audit-trail of prior point-exclusion edits for the curve under edit.
+  // Hook is unconditionally invoked (React rules), but the query is gated
+  // on `enabled: !!editCurve?.id` so non-interactive renders never fetch.
+  const editHistoryQuery =
+    useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet(
+      editCurve?.id ?? "",
+      { query: { enabled: !!editCurve?.id } },
+    );
 
   // constraints per curve id
   const [constraintsMap, setConstraintsMap] = useState<Record<string, CurveConstraints>>({});
@@ -1417,9 +1430,15 @@ export function DoseResponseChart({
       {!editMode && (
         <div className="flex items-center gap-4 flex-wrap">
           {isInteractive && (
-            <Button variant="outline" size="sm" onClick={handleEnterEdit}>
-              Edit Points
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={handleEnterEdit}>
+                Edit Points
+              </Button>
+              <CurveEditHistory
+                events={editHistoryQuery.data?.events ?? []}
+                isLoading={editHistoryQuery.isLoading}
+              />
+            </>
           )}
           <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
             <label className="flex items-center gap-1.5 cursor-pointer">
