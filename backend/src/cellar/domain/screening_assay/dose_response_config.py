@@ -112,12 +112,15 @@ class DoseResponseConfig:
     bottom_constraint_max: float | None = None
     hill_slope_min: float | None = None
     hill_slope_max: float | None = None
-    # Auto-outlier removal: during the second-pass refit, points with
-    # residual > ``outlier_sigma`` × SD of the other residuals are excluded.
-    # ``None`` disables outlier removal entirely; a positive float sets the
-    # threshold (CDD-equivalent default is 3.0). Below the minimum-points
-    # floor (~6 points) the fitter doesn't have enough degrees of freedom
-    # to estimate residual SD, so detection is skipped regardless.
+    # Outlier-suggestion threshold: when set (default 3.0), candidate
+    # outliers with ``|residual| > N × SD`` are EMITTED AS SUGGESTIONS on
+    # the ``FittedCurveResult.outlier_suggestions`` for the chemist to
+    # accept or reject during edit mode. Suggestions are never silently
+    # excluded from the fit. ``None`` disables suggestion detection
+    # entirely (used by preview/commit-refit paths where the chemist owns
+    # the selection). Below the minimum-points floor (~6 points) the
+    # fitter doesn't have enough degrees of freedom to estimate residual
+    # SD, so detection is skipped regardless.
     outlier_sigma: float | None = DEFAULT_OUTLIER_SIGMA
     # Curve classification thresholds. Defaults assume a normalized (%) Y axis;
     # raw-signal protocols (fluorescence, luminescence) should override.

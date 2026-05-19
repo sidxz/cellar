@@ -264,8 +264,12 @@ class LmfitCurveFitter:
             outlier_mask = _detect_outliers(residuals, sigma=config.outlier_sigma)
             if np.any(outlier_mask):
                 # SD of the full residual set; used to report per-point
-                # severity (residual_sigma) so the FE can rank suggestions.
-                # ddof=1 matches _detect_outliers' leave-one-out SD style.
+                # severity (residual_z_full_sd) so the FE can rank
+                # suggestions. This is a presentation-time hint distinct
+                # from the per-point leave-one-out SD inside
+                # ``_detect_outliers`` that actually flagged the candidate
+                # — the docstring on ``OutlierSuggestion.residual_z_full_sd``
+                # spells out the distinction.
                 if len(residuals) >= 2:
                     full_sd = float(np.std(residuals, ddof=1))
                 else:  # pragma: no cover — guarded by min-points check above
@@ -275,7 +279,7 @@ class LmfitCurveFitter:
                     if not is_outlier:
                         continue
                     pt = active_points[i]
-                    residual_sigma = (
+                    residual_z_full_sd = (
                         abs(float(residuals[i])) / full_sd if full_sd > 0 else 0.0
                     )
                     suggestions.append(
@@ -283,7 +287,7 @@ class LmfitCurveFitter:
                             idx=i,
                             concentration=float(pt.concentration),
                             response=float(pt.response),
-                            residual_sigma=residual_sigma,
+                            residual_z_full_sd=residual_z_full_sd,
                         )
                     )
                 outlier_suggestions = tuple(suggestions)

@@ -621,7 +621,7 @@ class _FitterWithOneSuggestion:
             idx=suggestion_idx,
             concentration=conc,
             response=response,
-            residual_sigma=4.2,
+            residual_z_full_sd=4.2,
         )
         self.calls: list[list[ConcentrationResponsePoint]] = []
 

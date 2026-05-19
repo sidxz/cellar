@@ -633,7 +633,7 @@ class TestOutlierSuggestionAlignment:
         # match the original offending point.
         assert suggestion.idx == bad_idx
         assert suggestion.concentration == pytest.approx(original_bad_conc, rel=1e-9)
-        assert suggestion.residual_sigma > 0
+        assert suggestion.residual_z_full_sd > 0
         # Nothing silently moved to excluded_data.
         auto_excluded = [
             p for p in fitted.excluded_points if p.get("reason") == "auto_3sigma"
@@ -703,7 +703,32 @@ class TestOutlierSuggestionContract:
         fitted = self.fitter.fit(points, cfg).unwrap()
         assert len(fitted.outlier_suggestions) >= 1
         s = fitted.outlier_suggestions[0]
-        assert s.residual_sigma > 0
+        assert s.residual_z_full_sd > 0
+
+    def test_first_pass_fit_quality_bounded_when_outlier_present(self):
+        """A single severe outlier degrades but does not destroy the first-pass fit.
+
+        Guards against a future change where suggestion emission silently
+        allows catastrophic fit failure (e.g. R² < 0.7) without the chemist
+        noticing on first load. Empirically the fitter produces R² ≈ 0.83
+        on an 11-point clean sigmoid with one ~5σ outlier; the floor 0.7
+        leaves some headroom but is tight enough to catch a real
+        regression in fit robustness."""
+        points = self._points_with_clear_outlier_at(idx=3)
+        cfg = _config_with_ranges()
+        result = self.fitter.fit(points, cfg)
+        assert isinstance(result, Success)
+        fitted = result.unwrap()
+        # The outlier WAS surfaced as a suggestion.
+        assert any(s.idx == 3 for s in fitted.outlier_suggestions)
+        # The outlier STAYED in the fit (no silent exclusion).
+        assert fitted.num_points == len(points)
+        # Chemistry-truth: fit quality is degraded but bounded.
+        assert fitted.r_squared > 0.7, (
+            f"first-pass R²={fitted.r_squared} with a single outlier is "
+            "unexpectedly low — check that the fit isn't being destabilized "
+            "by outliers in a way users would notice"
+        )
 
 
 class TestProtocolDrivenClassification:

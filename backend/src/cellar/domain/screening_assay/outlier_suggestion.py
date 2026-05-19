@@ -25,11 +25,14 @@ class OutlierSuggestion:
     directly to index into ``raw_data``. Callers that mix excluded points
     into the input must remap if they care about post-active indexing.
 
-    ``residual_sigma`` is ``|residual| / fit-residual-stdev``, always
-    positive. Used by the FE to rank suggestions when multiple are surfaced.
+    ``residual_z_full_sd``: ``|residual|`` divided by the sample standard
+    deviation of ALL residuals (full-set, ``ddof=1``). Always positive.
+    Note: this is a presentation-time severity hint; the leave-one-out
+    test that flagged the point as a candidate uses a per-point SD and
+    may report slightly different magnitudes for the same residual.
     """
 
     idx: int
     concentration: float
     response: float
-    residual_sigma: float
+    residual_z_full_sd: float
