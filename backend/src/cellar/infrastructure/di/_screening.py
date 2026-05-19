@@ -9,6 +9,7 @@ from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.attachment.upload_attachment import UploadAttachment
+from cellar.application.audit.audit_recording_service import AuditRecordingService
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.registered_plates import (
@@ -503,6 +504,7 @@ def register_screening(container: Container) -> None:
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             curve_fitter=c[CurveFittingService],
             guard=DataLockGuard(run_repo),
+            audit=c[AuditRecordingService],
         )
 
     container.define(RefitDoseResponseCurve, _refit_dose_response_curve)
