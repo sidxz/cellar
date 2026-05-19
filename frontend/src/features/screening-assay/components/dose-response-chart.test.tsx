@@ -30,9 +30,44 @@ vi.mock("../hooks/use-refit-dose-response", () => ({
   useClassifyDoseResponse: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-import { render, screen } from "@testing-library/react";
+// Auth hook is only used for the editor's authorId. Tests don't need a real
+// session; an empty string flows through without breaking the local draft state.
+vi.mock("@sentinel-auth/nextjs", () => ({
+  useAuthz: () => ({ user: { userId: "test-user" } }),
+}));
+
+// The orval-generated commit-refit call is hit by the React Query mutation
+// when the save dialog is submitted. Stub to avoid network.
+vi.mock("@/shared/lib/api/readout-data/readout-data", () => ({
+  refitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPost: vi.fn(
+    async () => ({}),
+  ),
+  refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost: vi.fn(
+    async () => ({
+      fitted_value: 1.0,
+      hill_slope: -1,
+      top: 100,
+      bottom: 0,
+      r_squared: 0.95,
+      curve_class: "full",
+      points_in_fit: 4,
+      points_total: 4,
+    }),
+  ),
+}));
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { DoseResponseChart } from "./dose-response-chart";
 import type { DoseResponseCurve } from "../types";
+
+// React Query wrapper — the chart hosts a useMutation for the commit refit.
+function renderWithQuery(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>{ui}</QueryClientProvider>,
+  );
+}
 
 function reset() {
   plotCalls.length = 0;
@@ -96,7 +131,7 @@ interface ShapeRecord {
 describe("<DoseResponseChart /> — aggregate-mode overlay", () => {
   it("renders unchanged when additional_curves + aggregate are absent (LATEST behavior)", () => {
     reset();
-    render(<DoseResponseChart curves={[makeCurve()]} />);
+    renderWithQuery(<DoseResponseChart curves={[makeCurve()]} />);
 
     const traces = plotCalls[0].data as Trace[];
     // Exactly one fit line — no muted contributing-run overlays.
@@ -115,7 +150,7 @@ describe("<DoseResponseChart /> — aggregate-mode overlay", () => {
 
   it("aggregate snapshot adds one muted dashed fit trace per active additional curve", () => {
     reset();
-    render(
+    renderWithQuery(
       <DoseResponseChart
         curves={[
           makeCurve({
@@ -158,7 +193,7 @@ describe("<DoseResponseChart /> — aggregate-mode overlay", () => {
 
   it("skips inactive contributors in the overlay", () => {
     reset();
-    render(
+    renderWithQuery(
       <DoseResponseChart
         curves={[
           makeCurve({
@@ -201,7 +236,7 @@ describe("<DoseResponseChart /> — aggregate-mode overlay", () => {
 
   it("replaces per-curve cross-hair with a single solid amber marker at marker_x", () => {
     reset();
-    render(
+    renderWithQuery(
       <DoseResponseChart
         curves={[
           makeCurve({
@@ -228,7 +263,7 @@ describe("<DoseResponseChart /> — aggregate-mode overlay", () => {
 
   it("suppresses additional-intercept dashed lines in aggregate mode", () => {
     reset();
-    render(
+    renderWithQuery(
       <DoseResponseChart
         curves={[
           makeCurve({
@@ -282,7 +317,7 @@ describe("<DoseResponseChart /> — point counter", () => {
       raw_data: Array(8).fill({ x: 1, y: 0 }),
       excluded_points: [{ idx: 5 }, { idx: 7 }],
     });
-    render(<DoseResponseChart curves={[curve]} />);
+    renderWithQuery(<DoseResponseChart curves={[curve]} />);
     expect(screen.getByText(/8 of 10 points in fit/i)).toBeInTheDocument();
     expect(screen.getByText(/2 excluded/i)).toBeInTheDocument();
   });
@@ -293,9 +328,94 @@ describe("<DoseResponseChart /> — point counter", () => {
       raw_data: Array(10).fill({ x: 1, y: 0 }),
       excluded_points: [],
     });
-    render(<DoseResponseChart curves={[curve]} />);
+    renderWithQuery(<DoseResponseChart curves={[curve]} />);
     expect(screen.getByText(/10 of 10 points in fit/i)).toBeInTheDocument();
     // No exclusions → no "N excluded" sub-line.
     expect(screen.queryByText(/excluded/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("<DoseResponseChart /> — edit-session integration", () => {
+  it("Edit Points opens a session with side panel and banner", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+    // Banner appears with the unsaved-count.
+    expect(
+      screen.getByText(/editing — 0 unsaved changes/i),
+    ).toBeInTheDocument();
+    // Save button starts disabled (no draft changes yet).
+    expect(
+      screen.getByRole("button", { name: /^save$/i }),
+    ).toBeDisabled();
+    // Inventory side panel renders — it carries an aria-label on the wrapper.
+    expect(screen.getByLabelText(/point inventory/i)).toBeInTheDocument();
+  });
+
+  it("toggling a point in the inventory updates the banner count", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+
+    // Click the first data row in the inventory (row 0 is the header).
+    const rows = screen.getAllByRole("row");
+    fireEvent.click(rows[1]);
+
+    expect(
+      screen.getByText(/editing — 1 unsaved change(?!s)/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /save 1/i }),
+    ).toBeEnabled();
+  });
+
+  it("Cancel with no draft exits cleanly", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByText(/editing/i)).not.toBeInTheDocument();
+    // Edit Points button is back.
+    expect(
+      screen.getByRole("button", { name: /edit points/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("Cancel with dirty draft confirms before exit (window.confirm = no)", () => {
+    reset();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+    fireEvent.click(screen.getAllByRole("row")[1]);
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    // User declined → still in edit mode.
+    expect(screen.getByText(/editing/i)).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it("Save opens the save dialog with the dirty count", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[makeCurve()]} isInteractive />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /edit points/i }));
+    fireEvent.click(screen.getAllByRole("row")[1]);
+    fireEvent.click(screen.getByRole("button", { name: /save 1/i }));
+
+    // Dialog title carries the dirty count.
+    expect(
+      screen.getByText(/save 1 exclusion change\??/i),
+    ).toBeInTheDocument();
   });
 });

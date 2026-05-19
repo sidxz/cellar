@@ -4,13 +4,31 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Checkbox } from "@/shared/components/ui/checkbox";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/shared/components/ui/resizable";
+import { refitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPost } from "@/shared/lib/api/readout-data/readout-data";
 import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { cn } from "@/shared/lib/utils";
-import { Download, ImageIcon } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuthz } from "@sentinel-auth/nextjs";
+import { Download, ImageIcon, Redo2, RotateCcw, Undo2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type DraftExclusion,
+  useEditSession,
+} from "../hooks/use-edit-session";
+import { useRefitPreview } from "../hooks/use-refit-preview";
 import { useClassifyDoseResponse, useRefitDoseResponse } from "../hooks/use-refit-dose-response";
 import { CurveControls } from "./curve-controls";
+import { DoseResponsePointInventory } from "./dose-response-point-inventory";
+import {
+  type ExclusionReason as SaveExclusionReason,
+  SaveExclusionsDialog,
+} from "./save-exclusions-dialog";
 import {
   PLOT_MARKER,
   X_AXIS_FALLBACK_MAX_RATIO,
@@ -60,7 +78,14 @@ interface DoseResponseChartProps {
    *  defaults makes sense — those bounds are only meaningful for
    *  percent-scale readouts. Pass null/undefined to disable seeding. */
   yReadoutNormalization?: string | null;
+  /** Test-only override for the /refit-preview call. Production callers
+   *  rely on the orval-generated default inside ``useRefitPreview``. */
+  previewFn?: PreviewFnOverride;
 }
+
+type PreviewFnOverride = NonNullable<
+  Parameters<typeof useRefitPreview>[0]
+>["previewFn"];
 
 
 const TRACE_COLORS = GROUP_PALETTE.slice(0, 8);
@@ -254,10 +279,17 @@ export function DoseResponseChart({
   isInteractive = false,
   protocolConfig = null,
   yReadoutNormalization = null,
+  previewFn,
 }: DoseResponseChartProps) {
   // ── Interactive state ───────────────────────────────────────────────────────
   const { mutate: refit, isPending: isRefitting } = useRefitDoseResponse();
   const { mutate: classify, isPending: isClassifying } = useClassifyDoseResponse();
+
+  // Auth: needed for the edit-session's authorId field. Falls back to
+  // empty string in non-authenticated test renders — the session's draft
+  // toggle still works locally; only the BE rejects empty authors at save.
+  const { user } = useAuthz();
+  const authorId = user?.userId ?? "";
 
   // Edit mode toggle — prevents accidental point exclusion
   const [editMode, setEditMode] = useState(false);
@@ -267,9 +299,33 @@ export function DoseResponseChart({
   const [showCrossHair, setShowCrossHair] = useState(true);
   const [showPlateaus, setShowPlateaus] = useState(false);
 
-  // excluded indices per curve id — tracked separately from curve.excluded_points
-  // so local UI state stays until query invalidation refreshes the curve
-  const [excludedMap, setExcludedMap] = useState<Record<string, Set<number>>>({});
+  // Save dialog state (opened from the edit-mode banner's Save button)
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+
+  // ── Edit-session state (replaces the legacy excludedMap) ──────────────────
+  // For Sprint 2, edit mode only operates on the FIRST curve — multi-curve
+  // editing is a follow-up. The run-page comparison view + the search detail
+  // drawer both pass a single curve in the common interactive case.
+  const editCurve = curves[0];
+  // The wire type for `excluded_points` is a loose Record<string, unknown>[]
+  // so per-bounded-context (search-grid, campaign, etc.) consumers can re-shape;
+  // the BE owns the canonical `DraftExclusion` JSONB shape (migration 041) and
+  // the FE seeds the session by trusting that shape.
+  const editSeed = useMemo(
+    () =>
+      editCurve
+        ? ({
+            excluded_points:
+              (editCurve.excluded_points as DraftExclusion[] | null) ?? null,
+          })
+        : null,
+    [editCurve],
+  );
+  const editSession = useEditSession(editSeed, {
+    authorId,
+    curveId: editCurve?.id,
+  });
+  const refitPreview = useRefitPreview({ previewFn });
 
   // constraints per curve id
   const [constraintsMap, setConstraintsMap] = useState<Record<string, CurveConstraints>>({});
@@ -279,6 +335,79 @@ export function DoseResponseChart({
 
   // ref for Plotly export (downloadImage)
   const plotContainerRef = useRef<HTMLDivElement>(null);
+
+  // ── React Query: commit-path mutation for /refit ──────────────────────────
+  // Uses the orval-generated client directly (rich payload — exclusions[] +
+  // save_reason + save_note). The legacy useRefitDoseResponse hook stays
+  // available for the constraint-edit flow below.
+  const queryClient = useQueryClient();
+  const refitCommitMutation = useMutation({
+    mutationFn: ({
+      curveId,
+      exclusions,
+      saveReason,
+      saveNote,
+    }: {
+      curveId: string;
+      exclusions: DraftExclusion[];
+      saveReason: SaveExclusionReason;
+      saveNote: string | null;
+    }) =>
+      refitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPost(curveId, {
+        exclusions: exclusions
+          .filter((e) => e.idx !== null)
+          .map((e) => ({
+            idx: e.idx,
+            source: e.source,
+            excluded: e.excluded,
+            reason: e.reason,
+            note: e.note,
+          })),
+        save_reason: saveReason,
+        save_note: saveNote,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dose-response-curves"] });
+      setSaveDialogOpen(false);
+      setEditMode(false);
+      refitPreview.reset();
+      editSession.resetToSaved();
+    },
+  });
+
+  // ── Live preview wiring ────────────────────────────────────────────────────
+  // Whenever the draft changes (in edit mode for the active curve), fire a
+  // debounced preview request. The hook collapses bursts into a single call;
+  // an `AbortController` cancels stale flights.
+  const draftExcludedIndices = useMemo(
+    () =>
+      editSession.draft.exclusions
+        .filter((e) => e.excluded && e.idx !== null)
+        .map((e) => e.idx as number),
+    [editSession.draft.exclusions],
+  );
+
+  useEffect(() => {
+    if (!editMode || !editCurve) return;
+    refitPreview.requestPreview(editCurve.id, draftExcludedIndices);
+    // refitPreview.requestPreview is stable across renders (useCallback);
+    // depending on `editMode + editCurve.id + draftExcludedIndices` is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMode, editCurve?.id, draftExcludedIndices]);
+
+  // The preview-fit overlay: when the hook has data, build a synthetic
+  // ``DoseResponseCurve`` with the previewed parameters so generate4PLCurve
+  // can draw a dashed preview sigmoid. The original curve's fit line stays
+  // visible underneath so the chemist sees "before vs after".
+  const previewCurveOverlay = useMemo(() => {
+    if (!editMode || !editCurve || !refitPreview.data) return null;
+    return {
+      top: refitPreview.data.top,
+      bottom: refitPreview.data.bottom,
+      fitted_value: refitPreview.data.fitted_value,
+      hill_slope: refitPreview.data.hill_slope,
+    };
+  }, [editMode, editCurve, refitPreview.data]);
 
   // Seed per-curve UI from the protocol's config when provided so the
   // accordion reflects what the protocol is actually doing — a user who
@@ -297,9 +426,20 @@ export function DoseResponseChart({
     [constraintsMap, protocolConfig, yReadoutNormalization],
   );
 
+  // Returns the set of currently-draft-excluded raw_data indices for the
+  // given curve. Outside edit mode (or for non-edit curves) this is empty —
+  // the server already has the persisted exclusions, no need to round-trip
+  // them on a constraint refit.
   const getExcluded = useCallback(
-    (curveId: string): Set<number> => excludedMap[curveId] ?? new Set(),
-    [excludedMap],
+    (curveId: string): Set<number> => {
+      if (!editMode || curveId !== editCurve?.id) return new Set();
+      const ids = new Set<number>();
+      for (const e of editSession.draft.exclusions) {
+        if (e.excluded && e.idx !== null) ids.add(e.idx);
+      }
+      return ids;
+    },
+    [editMode, editCurve?.id, editSession.draft.exclusions],
   );
 
   const callRefit = useCallback(
@@ -352,7 +492,6 @@ export function DoseResponseChart({
 
   const handleReset = useCallback(
     (curve: DoseResponseCurve) => {
-      setExcludedMap((prev) => ({ ...prev, [curve.id]: new Set() }));
       setConstraintsMap((prev) => ({
         ...prev,
         [curve.id]: defaultConstraintsFor(curve, protocolConfig, yReadoutNormalization),
@@ -716,14 +855,83 @@ export function DoseResponseChart({
         hovertemplate: `${runLabel}<br>fitted_value=${ac.fitted_value.toPrecision(3)}<extra></extra>`,
       });
     }
+
+    // ── Preview-fit overlay (edit mode only) ──────────────────────────────
+    // When the chemist is editing the active curve AND the /refit-preview
+    // hook has returned a fresh fit, overlay it as a dashed indigo line so
+    // they can see how dropping/keeping a point would shift the sigmoid
+    // BEFORE committing. The original (committed) fit stays visible
+    // underneath for direct comparison.
+    if (
+      previewCurveOverlay &&
+      editCurve &&
+      curve.id === editCurve.id &&
+      Number.isFinite(previewCurveOverlay.fitted_value) &&
+      previewCurveOverlay.fitted_value > 0
+    ) {
+      const { x: pvX, y: pvY } = generate4PLPoints(
+        previewCurveOverlay,
+        xMin,
+        xMax,
+      );
+      traces.push({
+        type: "scatter",
+        mode: "lines",
+        name: "Preview fit",
+        legendgroup: group,
+        x: pvX,
+        y: pvY,
+        line: { color: CHART_COLORS.success, width: 2, dash: "dash" },
+        opacity: 0.85,
+        showlegend: true,
+        hovertemplate: `Preview fit<br>fitted_value=${previewCurveOverlay.fitted_value.toPrecision(3)}<extra></extra>`,
+      });
+    }
   }
 
+  // ── Edit-mode lifecycle helpers ─────────────────────────────────────────
+  const handleEnterEdit = useCallback(() => {
+    setEditMode(true);
+  }, []);
+
+  const handleCancelEdit = useCallback(() => {
+    if (editSession.dirtyCount > 0) {
+      // V1 simplicity — window.confirm is keyboard-accessible and free.
+      // A custom dialog can replace this in Sprint 3 if chemists request it.
+      const ok = typeof window === "undefined"
+        ? true
+        : window.confirm(
+            `You have ${editSession.dirtyCount} unsaved change${editSession.dirtyCount === 1 ? "" : "s"}. Discard them?`,
+          );
+      if (!ok) return;
+    }
+    editSession.resetToSaved();
+    refitPreview.reset();
+    setEditMode(false);
+  }, [editSession, refitPreview]);
+
+  const handleSaveSubmit = useCallback(
+    ({ reason, note }: { reason: SaveExclusionReason; note: string | null }) => {
+      if (!editCurve) return;
+      refitCommitMutation.mutate({
+        curveId: editCurve.id,
+        exclusions: editSession.draft.exclusions,
+        saveReason: reason,
+        saveNote: note,
+      });
+    },
+    [editCurve, editSession.draft.exclusions, refitCommitMutation],
+  );
+
   // ── Plotly click handler ────────────────────────────────────────────────────
+  // In edit mode, clicks toggle a point's draft exclusion via the session.
+  // Re-mapping the clicked display index back to the raw_data idx mirrors
+  // the pre-existing trace-index machinery — see traceIndexToCurve build above.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlePlotClick = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (event: any) => {
-      if (!isInteractive || !editMode) return;
+      if (!isInteractive || !editMode || !editCurve) return;
       const pt = event?.points?.[0];
       if (!pt) return;
 
@@ -733,15 +941,14 @@ export function DoseResponseChart({
       if (!traceInfo) return;
 
       const { curveId, type } = traceInfo;
-      const curve = curves.find((c) => c.id === curveId);
-      if (!curve) return;
-
-      const currentExcluded = new Set(getExcluded(curveId));
+      // Only the active edit curve is mutable in Sprint 2.
+      if (curveId !== editCurve.id) return;
+      const curve = editCurve;
+      const localExcluded = getExcluded(curveId);
 
       if (type === "included") {
-        // Find the actual index in the original raw_data array
-        // (accounting for already-excluded points shifting display indices)
-        const localExcluded = getExcluded(curveId);
+        // Find the actual index in raw_data accounting for currently-draft
+        // exclusions shifting the display index.
         let displayIdx = 0;
         let originalIdx = -1;
         for (let k = 0; k < (curve.raw_data?.length ?? 0); k++) {
@@ -754,26 +961,19 @@ export function DoseResponseChart({
           }
         }
         if (originalIdx >= 0) {
-          currentExcluded.add(originalIdx);
+          editSession.toggleExclusion(originalIdx);
         }
       } else {
-        // excluded trace — find the original index in the raw_data that maps to this display point
-        // The excluded trace shows: locally excluded from raw_data first, then server excluded_points.
-        // We only support toggling locally excluded points back (server excluded_points are read-only in UI).
-        const localExcluded = getExcluded(curveId);
+        // excluded trace — only the user's current-draft exclusions are
+        // toggleable. Server-excluded points (legacy / persisted) come
+        // before draft exclusions in the trace; ignore those clicks.
         const locallyExcludedIndices = Array.from(localExcluded);
         if (pointIdx < locallyExcludedIndices.length) {
-          const originalIdx = locallyExcludedIndices[pointIdx];
-          currentExcluded.delete(originalIdx);
+          editSession.toggleExclusion(locallyExcludedIndices[pointIdx]);
         }
-        // If pointIdx >= locallyExcludedIndices.length → server-excluded point, ignore click
       }
-
-      setExcludedMap((prev) => ({ ...prev, [curveId]: currentExcluded }));
-      const constraints = getConstraints(curve);
-      callRefit(curve, currentExcluded, constraints);
     },
-    [isInteractive, editMode, curves, getExcluded, getConstraints, callRefit, traceIndexToCurve],
+    [isInteractive, editMode, editCurve, getExcluded, editSession, traceIndexToCurve],
   );
 
   // Build overlay shapes and annotations based on toggle state
@@ -1039,108 +1239,208 @@ export function DoseResponseChart({
     modeBarButtonsToRemove: ["lasso2d", "select2d"] as string[],
   };
 
+  const dirtyCount = editSession.dirtyCount;
+  const isSaving = refitCommitMutation.isPending;
+
+  // Pre-render the Plot block — the same chart appears whether or not the
+  // side panel is open, so we factor it out to keep the JSX legible.
+  const plotBlock = (
+    <div ref={plotContainerRef} className="min-w-0 overflow-hidden h-full">
+      <Plot
+        data={traces}
+        layout={layout}
+        config={config}
+        style={{ width: "100%" }}
+        useResizeHandler
+        onClick={editMode ? handlePlotClick : undefined}
+      />
+    </div>
+  );
+
   return (
     <div className={cn("space-y-4", className)}>
-      {/* Controls bar */}
-      <div className="flex items-center gap-4 flex-wrap">
-        {isInteractive && (
-          <Button
-            variant={editMode ? "default" : "outline"}
-            size="sm"
-            onClick={() => setEditMode((v) => !v)}
-          >
-            {editMode ? "Done Editing" : "Edit Points"}
-          </Button>
-        )}
-        {editMode && (
-          <span className="text-xs text-muted-foreground">
-            Click data points to exclude/include them.
-          </span>
-        )}
-        {!editMode && (
-          <>
-            <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <Checkbox
-                  checked={showCrossHair}
-                  onCheckedChange={(v) => setShowCrossHair(v === true)}
-                />
-                {CURVE_TYPE_LABELS[curves[0]?.curve_type as CurveType] ?? "Fitted"} marker
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <Checkbox checked={showCI} onCheckedChange={(v) => setShowCI(v === true)} />
-                95% CI band
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <Checkbox
-                  checked={showPlateaus}
-                  onCheckedChange={(v) => setShowPlateaus(v === true)}
-                />
-                Top/Bottom
-              </label>
-            </div>
-            <div className="flex items-center gap-1.5 ml-4 border-l pl-4 border-border">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  const plotEl = plotContainerRef.current?.querySelector(
-                    ".js-plotly-plot",
-                  ) as HTMLElement | null;
-                  if (plotEl) {
-                    getPlotlyGlobal()?.downloadImage?.(plotEl, {
-                      format: "png",
-                      width: 1200,
-                      height: 600,
-                      filename: "dose-response",
-                    });
-                  }
-                }}
-              >
-                <ImageIcon className="mr-1 h-3.5 w-3.5" />
-                PNG
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  const plotEl = plotContainerRef.current?.querySelector(
-                    ".js-plotly-plot",
-                  ) as HTMLElement | null;
-                  if (plotEl) {
-                    getPlotlyGlobal()?.downloadImage?.(plotEl, {
-                      format: "svg",
-                      width: 1200,
-                      height: 600,
-                      filename: "dose-response",
-                    });
-                  }
-                }}
-              >
-                <Download className="mr-1 h-3.5 w-3.5" />
-                SVG
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
+      {/* Controls bar — toggles to an edit banner in edit mode */}
+      {!editMode && (
+        <div className="flex items-center gap-4 flex-wrap">
+          {isInteractive && (
+            <Button variant="outline" size="sm" onClick={handleEnterEdit}>
+              Edit Points
+            </Button>
+          )}
+          <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Checkbox
+                checked={showCrossHair}
+                onCheckedChange={(v) => setShowCrossHair(v === true)}
+              />
+              {CURVE_TYPE_LABELS[curves[0]?.curve_type as CurveType] ?? "Fitted"} marker
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Checkbox checked={showCI} onCheckedChange={(v) => setShowCI(v === true)} />
+              95% CI band
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Checkbox
+                checked={showPlateaus}
+                onCheckedChange={(v) => setShowPlateaus(v === true)}
+              />
+              Top/Bottom
+            </label>
+          </div>
+          <div className="flex items-center gap-1.5 ml-4 border-l pl-4 border-border">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => {
+                const plotEl = plotContainerRef.current?.querySelector(
+                  ".js-plotly-plot",
+                ) as HTMLElement | null;
+                if (plotEl) {
+                  getPlotlyGlobal()?.downloadImage?.(plotEl, {
+                    format: "png",
+                    width: 1200,
+                    height: 600,
+                    filename: "dose-response",
+                  });
+                }
+              }}
+            >
+              <ImageIcon className="mr-1 h-3.5 w-3.5" />
+              PNG
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => {
+                const plotEl = plotContainerRef.current?.querySelector(
+                  ".js-plotly-plot",
+                ) as HTMLElement | null;
+                if (plotEl) {
+                  getPlotlyGlobal()?.downloadImage?.(plotEl, {
+                    format: "svg",
+                    width: 1200,
+                    height: 600,
+                    filename: "dose-response",
+                  });
+                }
+              }}
+            >
+              <Download className="mr-1 h-3.5 w-3.5" />
+              SVG
+            </Button>
+          </div>
+        </div>
+      )}
 
-      {/* `min-w-0` lets the chart shrink inside flex/grid parents (side
-          panels, sheets) instead of forcing horizontal overflow.
-          `overflow-hidden` clips any residual canvas width Plotly's
-          resize-handler hasn't caught up with after a sheet animation. */}
-      <div ref={plotContainerRef} className="min-w-0 overflow-hidden">
-        <Plot
-          data={traces}
-          layout={layout}
-          config={config}
-          style={{ width: "100%" }}
-          useResizeHandler
-          onClick={editMode ? handlePlotClick : undefined}
+      {editMode && (
+        <div className="flex items-center gap-2 flex-wrap rounded-md border border-primary/40 bg-primary/5 px-3 py-2">
+          <span className="text-sm font-medium">
+            Editing — {dirtyCount} unsaved change{dirtyCount === 1 ? "" : "s"}
+          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={editSession.undo}
+              disabled={!editSession.canUndo || isSaving}
+              title="Undo (Cmd+Z)"
+              aria-label="Undo"
+            >
+              <Undo2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={editSession.redo}
+              disabled={!editSession.canRedo || isSaving}
+              title="Redo (Cmd+Shift+Z)"
+              aria-label="Redo"
+            >
+              <Redo2 className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={editSession.resetToSaved}
+              disabled={dirtyCount === 0 || isSaving}
+              title="Reset to saved"
+            >
+              <RotateCcw className="mr-1 h-3.5 w-3.5" />
+              Reset
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-3 text-xs"
+              onClick={handleCancelEdit}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              className="h-7 px-3 text-xs"
+              onClick={() => setSaveDialogOpen(true)}
+              disabled={dirtyCount === 0 || isSaving}
+            >
+              Save{dirtyCount > 0 ? ` ${dirtyCount}` : ""}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Chart + (in edit mode) side panel.
+          `min-w-0` lets the chart shrink inside flex/grid parents (side
+          panels, sheets) instead of forcing horizontal overflow. */}
+      {editMode && editCurve ? (
+        <ResizablePanelGroup
+          orientation="horizontal"
+          className="h-[420px] rounded-md border"
+        >
+          <ResizablePanel defaultSize={65} minSize={40} maxSize={80}>
+            {plotBlock}
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={35} minSize={20} maxSize={60}>
+            <div className="h-full overflow-auto p-3" aria-label="Point inventory">
+              <DoseResponsePointInventory
+                rawData={(editCurve.raw_data ?? []).map((pt) => {
+                  const conc =
+                    (pt as { concentration?: number; x?: number }).concentration ??
+                    (pt as { x?: number }).x ?? 0;
+                  const resp =
+                    (pt as { response?: number; y?: number }).response ??
+                    (pt as { y?: number }).y ?? 0;
+                  return {
+                    concentration: typeof conc === "number" ? conc : 0,
+                    response: typeof resp === "number" ? resp : 0,
+                  };
+                })}
+                exclusions={editSession.draft.exclusions}
+                onToggle={editSession.toggleExclusion}
+              />
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      ) : (
+        plotBlock
+      )}
+
+      {editCurve && (
+        <SaveExclusionsDialog
+          open={saveDialogOpen}
+          onClose={() => setSaveDialogOpen(false)}
+          onSave={handleSaveSubmit}
+          dirtyCount={dirtyCount}
+          isSaving={isSaving}
         />
-      </div>
+      )}
 
       {/* Per-curve constraint controls (interactive only) */}
       {isInteractive && curves.length > 0 && (
@@ -1177,9 +1477,18 @@ export function DoseResponseChart({
           const capturedTotal =
             (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
           const serverExcludedCount = curve.excluded_points?.length ?? 0;
-          const localExcluded = getExcluded(curve.id);
-          const draftExcludedCount = localExcluded.size;
-          const excludedCount = serverExcludedCount + draftExcludedCount;
+          // For the active edit curve, the draft IS the source of truth — it
+          // was seeded from server's excluded_points so adding both would
+          // double-count. For non-edit curves, fall back to the legacy combo.
+          let excludedCount: number;
+          if (editMode && curve.id === editCurve?.id) {
+            excludedCount = editSession.draft.exclusions.filter(
+              (e) => e.excluded,
+            ).length;
+          } else {
+            const localExcluded = getExcluded(curve.id);
+            excludedCount = serverExcludedCount + localExcluded.size;
+          }
           const inFitCount = Math.max(0, capturedTotal - excludedCount);
           return (
             <SummaryCard
