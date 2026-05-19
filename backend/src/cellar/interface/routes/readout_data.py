@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
@@ -31,6 +31,7 @@ from cellar.application.screening.list_readout_data_enriched import (
 )
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.excluded_point_detail import ExcludedPointDetail
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.interface.dependencies import (
     AuthDep,
@@ -179,7 +180,11 @@ class DoseResponseCurveResponse(BaseModel):
             num_points=c.num_points,
             curve_class=c.curve_class.value if c.curve_class else None,
             raw_data=c.raw_data or None,
-            excluded_points=c.excluded_points,
+            excluded_points=[
+                ep.to_jsonb() if isinstance(ep, ExcludedPointDetail) else ep
+                for ep in (c.excluded_points or [])
+            ]
+            or None,
             fit_quality_warnings=list(getattr(c, "fit_quality_warnings", []) or []),
             intercept_values=[
                 InterceptValueModel.from_domain(iv)
@@ -260,6 +265,30 @@ class CreateDoseResponseCurveRequest(BaseModel):
     excluded_points: list[dict[str, Any]] | None = None
 
 
+class ExclusionPayloadEntryBody(BaseModel):
+    """One entry in the Sprint 2 rich exclusion payload.
+
+    Mirrors the application-layer ``ExclusionPayloadEntry`` dataclass — the
+    route is a pure pass-through; the use case owns branching/validation.
+    """
+
+    idx: int | None
+    source: Literal["manual", "auto_3sigma"]
+    excluded: bool
+    reason: Literal[
+        "outlier",
+        "instrument_artifact",
+        "concentration_error",
+        "contamination",
+        "qc_failure",
+        "other",
+        "auto_3sigma",
+    ]
+    note: str | None = None
+    concentration: float | None = None
+    response: float | None = None
+
+
 class RefitDoseResponseCurveRequest(BaseModel):
     excluded_point_indices: list[int] = Field(default_factory=list)
     hill_slope_constraint: str | None = None
@@ -280,6 +309,22 @@ class RefitDoseResponseCurveRequest(BaseModel):
     # When True, the use case suppresses the fitter's auto-3σ outlier pass so
     # user-driven point edits don't cascade into additional auto-exclusions.
     disable_auto_outliers: bool = False
+    # ---- Sprint 2 rich payload + audit context --------------------------
+    # When ``exclusions`` is provided the use case runs the Sprint 2 path:
+    # persists rich ``ExcludedPointDetail`` entries, forces auto-outliers off
+    # unconditionally, and writes a ``CURVE_POINT_EXCLUSION`` AuditOperation.
+    # ``save_reason`` is REQUIRED by the use case when ``exclusions`` is set;
+    # the use case raises ValidationError otherwise — the route just forwards.
+    exclusions: list[ExclusionPayloadEntryBody] | None = None
+    save_reason: Literal[
+        "outlier",
+        "instrument_artifact",
+        "concentration_error",
+        "contamination",
+        "qc_failure",
+        "other",
+    ] | None = None
+    save_note: str | None = None
 
 
 class RefitPreviewRequest(BaseModel):
@@ -464,7 +509,32 @@ async def refit_dose_response_curve(
     auth: AuthDep,
     uc: RefitDoseResponseCurveDep,
 ) -> DoseResponseCurveResponse:
-    from cellar.application.screening.refit_dose_response import RefitDoseResponseCurveCommand
+    from cellar.application.screening.refit_dose_response import (
+        ExclusionPayloadEntry,
+        RefitDoseResponseCurveCommand,
+    )
+    from cellar.domain.screening_assay.excluded_point_detail import (
+        ExclusionReason,
+        ExclusionSource,
+    )
+
+    exclusions: list[ExclusionPayloadEntry] | None = None
+    if body.exclusions is not None:
+        exclusions = [
+            ExclusionPayloadEntry(
+                idx=e.idx,
+                source=ExclusionSource(e.source),
+                excluded=e.excluded,
+                reason=ExclusionReason(e.reason),
+                note=e.note,
+                concentration=e.concentration,
+                response=e.response,
+            )
+            for e in body.exclusions
+        ]
+    save_reason = (
+        ExclusionReason(body.save_reason) if body.save_reason is not None else None
+    )
 
     result = await uc(
         RefitDoseResponseCurveCommand(
@@ -484,6 +554,9 @@ async def refit_dose_response_curve(
             hill_slope_min=body.hill_slope_min,
             hill_slope_max=body.hill_slope_max,
             disable_auto_outliers=body.disable_auto_outliers,
+            exclusions=exclusions,
+            save_reason=save_reason,
+            save_note=body.save_note,
         ),
         auth=auth,
     )
