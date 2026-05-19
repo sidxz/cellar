@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.attachment.upload_attachment import UploadAttachment
 from cellar.application.audit.audit_recording_service import AuditRecordingService
+from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.registered_plates import (
@@ -122,6 +123,7 @@ from cellar.application.screening.protocol_stats_reader import ProtocolStatsRead
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.readout_data_enriched_reader import ReadoutDataEnrichedReader
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
+from cellar.application.screening.get_curve_edit_history import GetCurveEditHistory
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
@@ -528,6 +530,11 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(ClassifyDoseResponseCurve, _classify_dose_response_curve)
+
+    def _get_curve_edit_history(c: Container):
+        return GetCurveEditHistory(audit_repository=c[AuditRepository])
+
+    container.define(GetCurveEditHistory, _get_curve_edit_history)
 
     # --- Plate Map + Fit Curves for Run ---
     container.define(

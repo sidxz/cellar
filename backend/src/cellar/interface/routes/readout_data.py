@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query
@@ -20,6 +21,11 @@ from cellar.application.screening.create_dose_response import (
 from cellar.application.screening.create_readout_data import (
     CreateReadoutData,
     CreateReadoutDataCommand,
+)
+from cellar.application.screening.get_curve_edit_history import (
+    CurveEditHistoryEvent,
+    GetCurveEditHistoryQuery,
+    GetCurveEditHistoryResult,
 )
 from cellar.application.screening.list_dose_response_enriched import (
     ListDoseResponseEnriched,
@@ -39,6 +45,7 @@ from cellar.interface.dependencies import (
     ClassifyDoseResponseCurveDep,
     CreateDoseResponseCurveDep,
     CreateReadoutDataDep,
+    GetCurveEditHistoryDep,
     ListDoseResponseEnrichedDep,
     ListReadoutDataEnrichedDep,
     ReadoutCalculationEngineDep,
@@ -358,6 +365,49 @@ class ClassifyDoseResponseCurveRequest(BaseModel):
     curve_class: str
 
 
+class CurveEditHistoryEntryBody(BaseModel):
+    field_name: str
+    old_value: str | None = None
+    new_value: str | None = None
+
+
+class CurveEditHistoryEventBody(BaseModel):
+    id: uuid.UUID
+    operation_type: str
+    user_id: uuid.UUID | None = None
+    timestamp: datetime
+    reason: str | None = None
+    entries: list[CurveEditHistoryEntryBody] = Field(default_factory=list)
+
+    @classmethod
+    def from_domain(cls, event: CurveEditHistoryEvent) -> CurveEditHistoryEventBody:
+        return cls(
+            id=event.id,
+            operation_type=event.operation_type,
+            user_id=event.user_id,
+            timestamp=event.timestamp,
+            reason=event.reason,
+            entries=[
+                CurveEditHistoryEntryBody(
+                    field_name=e.field_name,
+                    old_value=e.old_value,
+                    new_value=e.new_value,
+                )
+                for e in event.entries
+            ],
+        )
+
+
+class CurveEditHistoryResponse(BaseModel):
+    events: list[CurveEditHistoryEventBody] = Field(default_factory=list)
+
+    @classmethod
+    def from_result(cls, result: GetCurveEditHistoryResult) -> CurveEditHistoryResponse:
+        return cls(
+            events=[CurveEditHistoryEventBody.from_domain(e) for e in result.events]
+        )
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -629,3 +679,27 @@ async def classify_dose_response_curve(
         auth=auth,
     )
     return DoseResponseCurveResponse.from_domain(result_to_response(result))
+
+
+@router.get(
+    "/dose-response-curves/{curve_id}/edit-history",
+    response_model=CurveEditHistoryResponse,
+    summary="Audit trail of point-exclusion edits for a DR curve",
+)
+async def get_curve_edit_history(
+    curve_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetCurveEditHistoryDep,
+) -> CurveEditHistoryResponse:
+    """Return audit operations recorded against this curve, newest-first.
+
+    Currently the only operation type emitted against ``DoseResponseCurve``
+    is ``CURVE_POINT_EXCLUSION`` (written by ``RefitDoseResponseCurve`` on
+    every commit-save), but the response is shaped generically so future
+    audit types ride along automatically.
+    """
+    result = await uc(
+        GetCurveEditHistoryQuery(workspace_id=auth.workspace_id, curve_id=curve_id),
+        auth=auth,
+    )
+    return CurveEditHistoryResponse.from_result(result_to_response(result))

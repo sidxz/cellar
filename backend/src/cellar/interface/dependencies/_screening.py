@@ -20,6 +20,7 @@ from cellar.application.screening.delete_run import DeleteRun
 from cellar.application.screening.delete_target import DeleteTarget
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.application.screening.get_compound_curves import GetCompoundCurves
+from cellar.application.screening.get_curve_edit_history import GetCurveEditHistory
 from cellar.application.screening.get_dose_response import ListDoseResponseByRun
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
@@ -141,6 +142,7 @@ __all__ = [
     "RefitDoseResponseCurveDep",
     "RefitDoseResponseCurvePreviewDep",
     "ClassifyDoseResponseCurveDep",
+    "GetCurveEditHistoryDep",
     "MoleculeActivityServiceDep",
     "GetMoleculeActivityDetailDep",
     "GetMoleculeTestCountsDep",
@@ -256,6 +258,9 @@ RefitDoseResponseCurvePreviewDep = Annotated[
 ]
 ClassifyDoseResponseCurveDep = Annotated[
     ClassifyDoseResponseCurve, Depends(_get_use_case(ClassifyDoseResponseCurve))
+]
+GetCurveEditHistoryDep = Annotated[
+    GetCurveEditHistory, Depends(_get_use_case(GetCurveEditHistory))
 ]
 MoleculeActivityServiceDep = Annotated[
     MoleculeActivityService, Depends(_get_use_case(MoleculeActivityService))
