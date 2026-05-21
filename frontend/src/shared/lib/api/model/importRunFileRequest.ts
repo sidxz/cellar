@@ -11,4 +11,5 @@ export interface ImportRunFileRequest {
   preview_id: string;
   mapping: ColumnMappingRequest;
   compound_batch_overrides?: CompoundBatchOverrideRequest[];
+  auto_create_unmatched_batches?: boolean;
 }

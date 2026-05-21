@@ -1,6 +1,13 @@
 import type { BatchIdentifierResponse } from "@/shared/lib/api/model/batchIdentifierResponse";
 export type { BatchIdentifierResponse };
 
+export type {
+  BulkAddBatchIdentifiersRequest,
+  BulkAddBatchIdentifiersResponse,
+  BulkIdentifierRowBody,
+  RowOutcomeResponse,
+} from "@/shared/lib/api/model";
+
 export type BatchSource = "synthesized" | "purchased" | "donated" | "natural_extract";
 
 export const BATCH_SOURCE_LABELS: Record<BatchSource, string> = {

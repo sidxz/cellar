@@ -27,6 +27,8 @@ import type {
   AddBatchIdentifierBody,
   BatchIdentifierResponse,
   BatchResponse,
+  BulkAddBatchIdentifiersRequest,
+  BulkAddBatchIdentifiersResponse,
   CreateBatchRequest,
   HTTPValidationError,
   UpdateBatchRequest
@@ -568,6 +570,136 @@ export const useRemoveBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdD
       > => {
 
       const mutationOptions = getRemoveBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Dry-run a bulk batch-identifier import. Returns per-row outcomes without committing.
+ * @summary Preview Bulk Add Batch Identifiers
+ */
+export const previewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost = (
+    bulkAddBatchIdentifiersRequest: BulkAddBatchIdentifiersRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<BulkAddBatchIdentifiersResponse>(
+      {url: `/api/v1/batches/identifiers/preview-bulk`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: bulkAddBatchIdentifiersRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getPreviewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost>>, TError,{data: BulkAddBatchIdentifiersRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof previewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost>>, TError,{data: BulkAddBatchIdentifiersRequest}, TContext> => {
+
+const mutationKey = ['previewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost>>, {data: BulkAddBatchIdentifiersRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPostMutationResult = NonNullable<Awaited<ReturnType<typeof previewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost>>>
+    export type PreviewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPostMutationBody = BulkAddBatchIdentifiersRequest
+    export type PreviewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Preview Bulk Add Batch Identifiers
+ */
+export const usePreviewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost>>, TError,{data: BulkAddBatchIdentifiersRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof previewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPost>>,
+        TError,
+        {data: BulkAddBatchIdentifiersRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getPreviewBulkAddBatchIdentifiersApiV1BatchesIdentifiersPreviewBulkPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Commit a bulk batch-identifier import. Only `resolved` rows are persisted.
+ * @summary Bulk Add Batch Identifiers
+ */
+export const bulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost = (
+    bulkAddBatchIdentifiersRequest: BulkAddBatchIdentifiersRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<BulkAddBatchIdentifiersResponse>(
+      {url: `/api/v1/batches/identifiers/bulk`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: bulkAddBatchIdentifiersRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getBulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost>>, TError,{data: BulkAddBatchIdentifiersRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof bulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost>>, TError,{data: BulkAddBatchIdentifiersRequest}, TContext> => {
+
+const mutationKey = ['bulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost>>, {data: BulkAddBatchIdentifiersRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPostMutationResult = NonNullable<Awaited<ReturnType<typeof bulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost>>>
+    export type BulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPostMutationBody = BulkAddBatchIdentifiersRequest
+    export type BulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Bulk Add Batch Identifiers
+ */
+export const useBulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost>>, TError,{data: BulkAddBatchIdentifiersRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof bulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPost>>,
+        TError,
+        {data: BulkAddBatchIdentifiersRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getBulkAddBatchIdentifiersApiV1BatchesIdentifiersBulkPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

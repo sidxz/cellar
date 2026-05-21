@@ -31,4 +31,5 @@ export interface PreviewRunFileResponse {
   unmatched_compound_refs?: string[];
   ambiguous_compounds?: AmbiguousCompoundModel[];
   row_conflicts?: string[];
+  auto_created_batches?: number;
 }

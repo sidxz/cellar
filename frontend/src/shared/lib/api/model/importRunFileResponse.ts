@@ -26,4 +26,5 @@ export interface ImportRunFileResponse {
   compute_warning?: ImportRunFileResponseComputeWarning;
   attachment_warning?: ImportRunFileResponseAttachmentWarning;
   fit_warnings?: string[];
+  auto_created_batches?: number;
 }
