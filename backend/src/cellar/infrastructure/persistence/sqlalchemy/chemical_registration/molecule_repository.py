@@ -394,14 +394,20 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars()]
 
-    async def next_registration_number(self, workspace_id: uuid.UUID) -> RegistrationNumber:
-        # Extract numeric suffix from "CV-NNNNN" and find the max.
-        # Handles tombstones correctly (they keep their numbers).
+    async def next_registration_number(
+        self, workspace_id: uuid.UUID, *, prefix: str, width: int
+    ) -> RegistrationNumber:
+        # Extract the trailing integer from each registration_number via regex,
+        # take MAX, +1, zero-pad to `width`, prefix with `prefix`.
+        # Robust to mixed prefix lengths and zero-pad widths across history.
         stmt = select(
             func.coalesce(
                 func.max(
                     func.cast(
-                        func.substr(MoleculeModel.registration_number, 4),
+                        func.substring(
+                            MoleculeModel.registration_number,
+                            sa.literal(r"[0-9]+$"),
+                        ),
                         sa.Integer,
                     )
                 ),
@@ -410,7 +416,7 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         ).where(MoleculeModel.workspace_id == workspace_id)
         result = await self._session.execute(stmt)
         max_num: int = result.scalar_one()
-        return RegistrationNumber(value=f"CV-{max_num + 1:05d}")
+        return RegistrationNumber(value=f"{prefix}{max_num + 1:0{width}d}")
 
     # ------------------------------------------------------------------
     # Project association methods

@@ -200,3 +200,60 @@ class TestFindUndisclosedByIdentifiers:
             repo = SQLAlchemyMoleculeRepository(uow)
             result = await repo.find_undisclosed_by_identifiers(ws_id, set())
             assert result is None
+
+
+@pytest.mark.integration
+class TestNextRegistrationNumber:
+
+    async def test_empty_workspace_starts_at_one(self, uow: AsyncUnitOfWork) -> None:
+        ws = uuid.uuid4()
+        async with uow:
+            repo = SQLAlchemyMoleculeRepository(uow)
+            reg = await repo.next_registration_number(ws, prefix="CC-", width=6)
+        assert reg.value == "CC-000001"
+
+    async def test_continues_global_counter_across_prefixes(
+        self, uow: AsyncUnitOfWork
+    ) -> None:
+        ws = uuid.uuid4()
+        async with uow:
+            for n in (1, 982):
+                await _insert_molecule_raw(uow, uuid.uuid4(), ws, f"CV-{n:05d}")
+            repo = SQLAlchemyMoleculeRepository(uow)
+            reg = await repo.next_registration_number(ws, prefix="CC-", width=6)
+        assert reg.value == "CC-000983"
+
+    async def test_handles_mixed_prefix_lengths(self, uow: AsyncUnitOfWork) -> None:
+        ws = uuid.uuid4()
+        async with uow:
+            await _insert_molecule_raw(uow, uuid.uuid4(), ws, "CV-00100")
+            await _insert_molecule_raw(uow, uuid.uuid4(), ws, "LAB-000050")
+            await _insert_molecule_raw(uow, uuid.uuid4(), ws, "MTBLEAD-000007")
+            repo = SQLAlchemyMoleculeRepository(uow)
+            reg = await repo.next_registration_number(ws, prefix="CC-", width=6)
+        assert reg.value == "CC-000101"
+
+    async def test_handles_mixed_widths(self, uow: AsyncUnitOfWork) -> None:
+        ws = uuid.uuid4()
+        async with uow:
+            await _insert_molecule_raw(uow, uuid.uuid4(), ws, "CV-00500")    # width 5
+            await _insert_molecule_raw(uow, uuid.uuid4(), ws, "CC-000600")  # width 6
+            repo = SQLAlchemyMoleculeRepository(uow)
+            reg = await repo.next_registration_number(ws, prefix="CC-", width=6)
+        assert reg.value == "CC-000601"
+
+    async def test_respects_workspace_scope(self, uow: AsyncUnitOfWork) -> None:
+        ws_a = uuid.uuid4()
+        ws_b = uuid.uuid4()
+        async with uow:
+            await _insert_molecule_raw(uow, uuid.uuid4(), ws_a, "CC-000999")
+            repo = SQLAlchemyMoleculeRepository(uow)
+            reg = await repo.next_registration_number(ws_b, prefix="CC-", width=6)
+        assert reg.value == "CC-000001"
+
+    async def test_zero_pad_width_seven(self, uow: AsyncUnitOfWork) -> None:
+        ws = uuid.uuid4()
+        async with uow:
+            repo = SQLAlchemyMoleculeRepository(uow)
+            reg = await repo.next_registration_number(ws, prefix="MTB-", width=7)
+        assert reg.value == "MTB-0000001"
