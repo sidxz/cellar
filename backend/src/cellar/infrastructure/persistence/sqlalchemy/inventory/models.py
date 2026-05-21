@@ -18,7 +18,7 @@ from sqlalchemy import (
     Uuid,
 )
 from sqlalchemy.dialects.postgresql import JSON, JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from cellar.infrastructure.persistence.sqlalchemy.base import (
     Base,
@@ -67,9 +67,34 @@ class BatchModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     synthesis_step_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     synthesis_request_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
 
+    identifiers: Mapped[list["BatchIdentifierModel"]] = relationship(
+        "BatchIdentifierModel",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
     __table_args__ = (
         UniqueConstraint("workspace_id", "batch_number", name="uq_batch_ws_number"),
         Index("ix_batch_molecule", "molecule_id"),
+    )
+
+
+class BatchIdentifierModel(Base, EntityModelMixin):
+    """External/foreign identifiers mapped to a batch."""
+
+    __tablename__ = "batch_identifiers"
+
+    batch_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("batches.id", ondelete="CASCADE"), nullable=False
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
+    identifier: Mapped[str] = mapped_column(String(255), nullable=False)
+    identifier_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    source: Mapped[str] = mapped_column(String(255), nullable=False)
+    registered_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "identifier", name="uq_batch_ws_identifier"),
     )
 
 
