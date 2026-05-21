@@ -35,7 +35,7 @@ class BatchRepository(Protocol):
         self, workspace_id: uuid.UUID, batch_number: str
     ) -> Batch | None: ...
     async def next_batch_number(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, *, width: int
     ) -> BatchNumber: ...
     async def list_global(
         self,

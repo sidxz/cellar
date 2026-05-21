@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, timedelta
 
+import sqlalchemy as sa
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.sql import expression
 
@@ -67,29 +68,38 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
         return self._to_domain_tracked(model) if model else None
 
     async def next_batch_number(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, *, width: int
     ) -> BatchNumber:
-        # Batch number = {molecule_reg_number}-{seq} (e.g., CV-00001-001).
-        # Count existing batches for this molecule to determine the next seq.
-
-        # 1. Get molecule registration number
+        # Batch number = {molecule_reg_number}-{seq}, where seq is one more than
+        # MAX(trailing_int) across this molecule's existing batches. Using MAX
+        # not COUNT means a deleted batch sequence number is never re-issued —
+        # avoids unique-constraint collisions on the (workspace, batch_number)
+        # index after deletions.
         mol_stmt = select(MoleculeModel.registration_number).where(MoleculeModel.id == molecule_id)
         mol_result = await self._session.execute(mol_stmt)
         reg_number = mol_result.scalar_one()
 
-        # 2. Count existing batches for this molecule
-        count_stmt = (
-            select(func.count())
-            .select_from(BatchModel)
-            .where(
-                BatchModel.workspace_id == workspace_id,
-                BatchModel.molecule_id == molecule_id,
+        max_stmt = select(
+            func.coalesce(
+                func.max(
+                    func.cast(
+                        func.substring(
+                            BatchModel.batch_number,
+                            sa.literal(r"[0-9]+$"),
+                        ),
+                        sa.Integer,
+                    )
+                ),
+                0,
             )
+        ).where(
+            BatchModel.workspace_id == workspace_id,
+            BatchModel.molecule_id == molecule_id,
         )
-        count_result = await self._session.execute(count_stmt)
-        count = count_result.scalar() or 0
+        max_result = await self._session.execute(max_stmt)
+        max_seq: int = max_result.scalar_one()
 
-        return BatchNumber(value=f"{reg_number}-{count + 1:03d}")
+        return BatchNumber(value=f"{reg_number}-{max_seq + 1:0{width}d}")
 
     # ------------------------------------------------------------------
     # Global list (read-model query — returns flat dicts, not aggregates)
