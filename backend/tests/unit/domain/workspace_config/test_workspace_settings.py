@@ -169,3 +169,49 @@ class TestUpdateValidation:
         })
         assert s.create_batch_on_duplicate is True
         assert s.registration_number_prefix == "CC-"
+
+
+class TestBatchSequenceWidth:
+    def test_default_is_three(self) -> None:
+        s = _make()
+        assert s.batch_sequence_width == 3
+
+    def test_override_via_registration_rules(self) -> None:
+        s = _make({"batch_sequence_width": 5})
+        assert s.batch_sequence_width == 5
+
+    def test_non_int_falls_back_to_default(self) -> None:
+        s = _make({"batch_sequence_width": "abc"})
+        assert s.batch_sequence_width == 3
+
+    def test_bool_falls_back_to_default(self) -> None:
+        # bool is an int subclass — guard against silently accepting True
+        s = _make({"batch_sequence_width": True})
+        assert s.batch_sequence_width == 3
+
+
+class TestBatchSequenceWidthValidation:
+    def test_rejects_below_two(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="batch_sequence_width"):
+            s.update(registration_rules={"batch_sequence_width": 1})
+
+    def test_rejects_above_six(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="batch_sequence_width"):
+            s.update(registration_rules={"batch_sequence_width": 7})
+
+    def test_rejects_non_int(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="batch_sequence_width"):
+            s.update(registration_rules={"batch_sequence_width": "4"})
+
+    def test_rejects_bool(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="batch_sequence_width"):
+            s.update(registration_rules={"batch_sequence_width": True})
+
+    def test_accepts_valid_width(self) -> None:
+        s = _make()
+        s.update(registration_rules={"batch_sequence_width": 4})
+        assert s.batch_sequence_width == 4

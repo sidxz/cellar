@@ -16,6 +16,9 @@ _DEFAULT_PREFIX = "CC-"
 _DEFAULT_WIDTH = 6
 _WIDTH_MIN = 4
 _WIDTH_MAX = 8
+_DEFAULT_BATCH_WIDTH = 3
+_BATCH_WIDTH_MIN = 2
+_BATCH_WIDTH_MAX = 6
 
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.workspace_config.events import WorkspaceSettingsUpdated
@@ -96,6 +99,17 @@ class WorkspaceSettings(AggregateRoot):
             return raw
         return _DEFAULT_WIDTH
 
+    @property
+    def batch_sequence_width(self) -> int:
+        """Zero-pad width for the per-compound batch sequence.
+
+        Defaults to 3 (``{reg}-001`` .. ``{reg}-999``). Bounded ``[2, 6]``.
+        """
+        raw = self.registration_rules.get("batch_sequence_width")
+        if isinstance(raw, int) and not isinstance(raw, bool):
+            return raw
+        return _DEFAULT_BATCH_WIDTH
+
     @classmethod
     def create_default(cls, *, workspace_id: uuid.UUID) -> WorkspaceSettings:
         """Factory for a new workspace with all default settings."""
@@ -129,6 +143,17 @@ class WorkspaceSettings(AggregateRoot):
                         raise ValueError(
                             f"registration_number_width must be in [{_WIDTH_MIN}, {_WIDTH_MAX}] "
                             f"(got: {w})"
+                        )
+                if "batch_sequence_width" in rules:
+                    bw = rules["batch_sequence_width"]
+                    if not isinstance(bw, int) or isinstance(bw, bool):
+                        raise ValueError(
+                            f"batch_sequence_width must be int (got: {type(bw).__name__})"
+                        )
+                    if not (_BATCH_WIDTH_MIN <= bw <= _BATCH_WIDTH_MAX):
+                        raise ValueError(
+                            f"batch_sequence_width must be in [{_BATCH_WIDTH_MIN}, {_BATCH_WIDTH_MAX}] "
+                            f"(got: {bw})"
                         )
 
         for key in (
