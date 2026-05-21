@@ -47,6 +47,8 @@ export interface CustomFieldDefinition {
 
 export interface RegistrationRules {
   create_batch_on_duplicate?: boolean;
+  registration_number_prefix?: string;
+  registration_number_width?: number;
 }
 
 export interface WorkspaceSettings {
