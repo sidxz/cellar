@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from returns.result import Result, Success
 
 from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.inventory.resolve_batch_ref import resolve_batch_ref
 from cellar.application.shared.amount_parser import parse_amount
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -241,9 +242,9 @@ class PreviewShipmentImport:
     async def _resolve_batch(
         self, workspace_id: uuid.UUID, raw: str, resolved: ResolvedRow
     ) -> object | None:
-        """Try to find batch by batch_number. Case-insensitive."""
-        # Try exact
-        batch = await self._batch_repo.find_by_batch_number(workspace_id, raw)
+        """Try to find batch by batch_number or alias. Case-insensitive."""
+        # Try exact (includes alias lookup)
+        batch = await resolve_batch_ref(self._batch_repo, workspace_id, raw)
         if batch:
             resolved.batch_id = str(batch.id)
             bn = (
@@ -254,8 +255,8 @@ class PreviewShipmentImport:
             resolved.batch_display = bn
             return batch
 
-        # Try uppercase
-        batch = await self._batch_repo.find_by_batch_number(workspace_id, raw.upper())
+        # Try uppercase (includes alias lookup)
+        batch = await resolve_batch_ref(self._batch_repo, workspace_id, raw.upper())
         if batch:
             resolved.batch_id = str(batch.id)
             bn = (
