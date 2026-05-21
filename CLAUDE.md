@@ -183,6 +183,85 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-21 — Bulk batch-identifier CSV import wizard shipped on prot-2
+
+**Branch:** `prot-2`, +10 commits on top of the per-batch identifiers + import-alias batch shipped earlier today. Nothing pushed. **Browser smoke pending.**
+
+**Plan:** `docs/superpowers/plans/2026-05-21-bulk-batch-identifier-import.md` (10 tasks shipped via subagent-driven execution).
+
+**What this is:** chemist's recurring pain — when they get a partner spreadsheet / paper supplementary / vendor catalog referencing batches by external lot ID, the per-batch "Add Identifier" UI is exhausting (1000s of clicks). This batch adds a CSV upload wizard that bulk-creates `BatchIdentifier` rows in one workflow with preview/commit/rollback semantics. Builds purely on top of the BatchIdentifier infrastructure shipped earlier — no schema change, no new migration.
+
+**10 commits (oldest → newest):**
+
+| # | Hash | Title |
+|---|---|---|
+| 1 | `862b2f8f` | feat(inventory): BulkAddBatchIdentifiers use case (preview + commit) |
+| 2 | `c327f00d` | chore(di): wire BulkAddBatchIdentifiers |
+| 3 | `57ac0e2b` | feat(inventory): /api/v1/batches/identifiers/{preview-bulk,bulk} endpoints |
+| 4 | `72177c43` | chore(frontend): orval regen for bulk batch-identifier endpoints |
+| 5 | `03776d4c` | feat(frontend): CSV parser + template generator for bulk batch-identifier import |
+| 6 | `1bee6cad` | feat(frontend): bulk batch-identifier preview + commit hooks |
+| 7 | `7d7e17f4` | feat(frontend): bulk identifier import — upload step |
+| 8 | `aebcae1a` | feat(frontend): bulk identifier import — preview step |
+| 9 | `3f7ac6f2` | feat(frontend): bulk batch-identifier import wizard + nav link |
+
+**Locked design decisions:**
+
+- **CSV format** (downloadable template at the wizard's first step):
+  ```csv
+  cellar_batch_number,cellar_molecule_reg_number,cellar_batch_sequence,external_identifier,identifier_type,source
+  CC-000001-001,,,SACC-0001-001,external_lot,
+  ,CC-000002,1,SACC-0002-A,external_lot,
+  ```
+- **Row locator:** either `cellar_batch_number` (direct lookup) OR (`cellar_molecule_reg_number` + `cellar_batch_sequence`) which the BE composes via `f"{reg}-{seq:0{width}d}"` using the workspace's `batch_sequence_width` (default 3). Both columns set → uses `cellar_batch_number` (the simpler path).
+- **Per-row outcomes** (5 statuses): `resolved` / `not_found` / `conflict` / `already_mapped` / `error`. Counts surface on the preview screen as colored badges (emerald/destructive/amber/muted/destructive).
+- **Two endpoints, one use case:** `POST /api/v1/batches/identifiers/preview-bulk` is dry-run (returns outcomes, no save). `POST /api/v1/batches/identifiers/bulk` is commit (saves only `resolved` rows, skips others). Same request shape, same response shape. No rollback on partial failure — chemist sees the outcomes and decides what to do with the skipped rows.
+- **Defaults applied at parse/commit time:** missing `identifier_type` → `"external_lot"`. Missing `source` → `"CSV import YYYY-MM-DD"` (the upload date).
+- **No suffix heuristic** — explicit per-row data only. Chemist owns the mapping.
+
+**Smoke checklist (pending — please run before push):**
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | Open `/inventory#batches` → click "Bulk import identifiers" header button | Wizard page opens at `/inventory/batch-identifiers/import` |
+| 2 | Click "Download template" | `batch-identifiers-template.csv` downloads with 6-column header + 2 example rows |
+| 3 | Open the template, replace example rows with 5 real rows referencing existing batches; include one row pointing at a non-existent batch (`CC-099999-099`) and one row with an external_identifier that already exists on another batch | save the file |
+| 4 | Upload the CSV | Auto-advances to preview step; spinner; then colored counts: ✓ ready (3) · ✗ not_found (1) · ⚠ conflict (1) |
+| 5 | Scroll the per-row table | All 5 rows visible with status badges + drill-down notes ("Already on CC-XXX-XXX" for conflict row) |
+| 6 | Click "Commit 3 rows" | Confirm step renders, success card "3 batch identifiers added", "2 rows skipped" |
+| 7 | `SELECT * FROM batch_identifiers WHERE source LIKE 'CSV import 2026-05-21%' ORDER BY created_at DESC LIMIT 5` | Returns the 3 newly-created rows with the correct source label |
+| 8 | Open one of the imported batches' detail page | New alias visible in the Identifiers card |
+| 9 | Re-upload the same CSV | All 5 rows now show `already_mapped` for the 3 that committed (others still not_found / conflict); commit button is DISABLED (no resolved rows) |
+| 10 | Upload a CSV missing the `external_identifier` column | Parse-error banner appears; auto-advance does not fire |
+| 11 | Upload a CSV with `cellar_molecule_reg_number=CC-000002, cellar_batch_sequence=1` row | BE composes `CC-000002-001`, resolves correctly, commits |
+| 12 | Upload a CSV row with neither locator set | Status = `error` with message "Row missing batch locator..." |
+
+**Diagnostic anchors:**
+
+- `backend/src/cellar/application/inventory/bulk_add_batch_identifiers.py` — single use case, `BulkAddBatchIdentifiersCommand` carries `dry_run: bool` + `rows: list[BulkIdentifierRow]`. Per-row resolution in `_process_row` returns a `RowOutcome` with one of 5 statuses. Save happens inline per-resolved-row in the commit path.
+- `backend/src/cellar/interface/routes/batches.py` — both bulk endpoints share the `BulkAddBatchIdentifiersRequest` Pydantic model; only differ in `dry_run=True` vs `False` on the command they construct.
+- `frontend/src/features/inventory/lib/parse-bulk-identifier-csv.ts` — papaparse-based CSV parsing + template generator. Validates required columns, type-converts `cellar_batch_sequence`, surfaces parse errors as strings.
+- `frontend/src/features/inventory/components/bulk-identifier-import-wizard/index.tsx` — 3-step state machine (upload → preview → confirm). Source default is computed once on mount as `"CSV import <YYYY-MM-DD>"`.
+- `frontend/src/features/inventory/hooks/use-bulk-identifier-import.ts` — `usePreviewBulkIdentifiers` / `useCommitBulkIdentifiers`. Commit invalidates `["batch-identifiers"]`, `["batch"]`, `["batches"]` query keys on success.
+
+**Open caveats:**
+
+- **No row-level skip / edit in preview.** Chemist sees the outcomes but can't edit individual rows in the wizard. If a row is `conflict` or `not_found`, they need to edit the CSV externally and re-upload. Could add inline editing as a follow-up.
+- **No undo on commit.** Once `resolved` rows are saved, removal requires clicking through each batch's Identifiers card. A "Bulk Remove Identifiers" wizard would be the symmetric tool — defer until requested.
+- **No conflict-resolution shortcut.** When a row says "already on CC-XXX-XXX", there's no one-click way to either (a) skip silently or (b) reassign the alias to the new batch. Both would be follow-up features.
+- **CSV file size limit not enforced.** A chemist uploading a 10 MB CSV with 100K rows would send a 100K-row payload to the BE. The use case processes rows sequentially (no concurrency), so this could time out. Reasonable upper bound for V1 is probably 5K rows per upload; add a frontend file-size warning + BE row-count cap if chemists ever push past it.
+- **Source default is per-upload, not per-row.** All rows in one CSV upload get the same source label (`"CSV import 2026-05-21"` unless a row explicitly sets a `source` value). For chemists importing from multiple distinct sources in one session, they should upload separate CSVs.
+
+**How to resume:**
+
+1. Walk the 12-step smoke checklist on the dev stack (`docker compose up -d && cd frontend && pnpm dev`).
+2. If smokes pass, push `prot-2` and open a PR against `main`. This batch joins the already-piled-up: DR edit-points redesign + CC- prefix rewrite + batch-width config + Synonym/Identifier consolidation + batch identifiers + import alias resolution + bulk batch-identifier import. PR title suggestion: "Batch identity infrastructure: aliases, configurable prefixes, bulk import". Description should call out:
+   - Auto-3σ DR behavior change (from earlier session)
+   - CV-→CC- compound number rewrite (migration 042)
+   - New EXTERNAL_REFERENCE placeholder batches (auto-create on screening import opt-in)
+   - **NEW:** Bulk batch-identifier CSV upload wizard at `/inventory/batch-identifiers/import`
+3. The PR is now ~120 commits. Consider splitting if review burden is unmanageable — but the changes are layered cleanly so a single PR is also defensible.
+
 ### 2026-05-21 — Batch identifiers + import alias resolution shipped on prot-2
 
 **Branch:** `prot-2`, +20 commits on top of the configurable-reg-number-prefix + batch-width + identifier-consolidation batches from earlier today. Nothing pushed. **Browser smoke pending.**
