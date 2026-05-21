@@ -2,8 +2,9 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
-import { Boxes, Package, MapPin, Plus } from "lucide-react";
+import { Boxes, Package, MapPin, Plus, Upload } from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -71,6 +72,12 @@ export function InventoryDashboard() {
         title="Inventory"
         subtitle="Manage batches, samples, and storage locations."
       >
+        <Button variant="outline" asChild>
+          <Link href="/inventory/batch-identifiers/import">
+            <Upload className="mr-2 h-4 w-4" />
+            Bulk import identifiers
+          </Link>
+        </Button>
         <Button variant="outline" onClick={() => setCreateBatchOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Batch
