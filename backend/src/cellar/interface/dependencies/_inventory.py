@@ -53,6 +53,7 @@ from cellar.application.inventory.batch_identifiers import (
     ListBatchIdentifiers,
     RemoveBatchIdentifier,
 )
+from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
 from cellar.application.inventory.update_batch import UpdateBatch
 from cellar.application.inventory.update_storage_location import UpdateStorageLocation
 
@@ -68,6 +69,7 @@ __all__ = [
     "AddBatchIdentifierDep",
     "RemoveBatchIdentifierDep",
     "ListBatchIdentifiersDep",
+    "BulkAddBatchIdentifiersDep",
     "CreateSampleDep",
     "GetSampleDep",
     "ListSamplesByBatchDep",
@@ -118,6 +120,9 @@ RemoveBatchIdentifierDep = Annotated[
 ]
 ListBatchIdentifiersDep = Annotated[
     ListBatchIdentifiers, Depends(_get_use_case(ListBatchIdentifiers))
+]
+BulkAddBatchIdentifiersDep = Annotated[
+    BulkAddBatchIdentifiers, Depends(_get_use_case(BulkAddBatchIdentifiers))
 ]
 CreateSampleDep = Annotated[CreateSample, Depends(_get_use_case(CreateSample))]
 GetSampleDep = Annotated[GetSample, Depends(_get_use_case(GetSample))]

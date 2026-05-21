@@ -13,6 +13,10 @@ from cellar.application.inventory.batch_identifiers import (
     ListBatchIdentifiersQuery,
     RemoveBatchIdentifierCommand,
 )
+from cellar.application.inventory.bulk_add_batch_identifiers import (
+    BulkAddBatchIdentifiersCommand,
+    BulkIdentifierRow,
+)
 from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from cellar.application.inventory.get_batch import (
     GetBatch,
@@ -26,6 +30,7 @@ from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.interface.dependencies import (
     AddBatchIdentifierDep,
     AuthDep,
+    BulkAddBatchIdentifiersDep,
     CreateBatchDep,
     GetBatchDep,
     ListBatchesByMoleculeDep,
@@ -315,3 +320,113 @@ async def remove_batch_identifier(
         identifier_id=identifier_id,
     )
     result_to_response(await use_case(command, auth=auth))
+
+
+# ---------------------------------------------------------------------------
+# Bulk batch-identifier import endpoints
+# ---------------------------------------------------------------------------
+
+
+class BulkIdentifierRowBody(BaseModel):
+    row_index: int
+    cellar_batch_number: str | None = None
+    cellar_molecule_reg_number: str | None = None
+    cellar_batch_sequence: int | None = None
+    external_identifier: str
+    identifier_type: str = "external_lot"
+    source: str | None = None
+
+
+class BulkAddBatchIdentifiersRequest(BaseModel):
+    source_default: str
+    rows: list[BulkIdentifierRowBody]
+
+
+class RowOutcomeResponse(BaseModel):
+    row_index: int
+    status: str
+    external_identifier: str
+    batch_id: uuid.UUID | None = None
+    resolved_batch_number: str | None = None
+    created: bool = False
+    conflict_batch_id: uuid.UUID | None = None
+    conflict_batch_number: str | None = None
+    message: str | None = None
+
+
+class BulkAddBatchIdentifiersResponse(BaseModel):
+    outcomes: list[RowOutcomeResponse]
+    counts: dict[str, int]
+
+
+@router.post(
+    "/batches/identifiers/preview-bulk",
+    response_model=BulkAddBatchIdentifiersResponse,
+)
+async def preview_bulk_add_batch_identifiers(
+    body: BulkAddBatchIdentifiersRequest,
+    auth: AuthDep,
+    use_case: BulkAddBatchIdentifiersDep,
+) -> BulkAddBatchIdentifiersResponse:
+    """Dry-run a bulk batch-identifier import. Returns per-row outcomes without committing."""
+    rows = [
+        BulkIdentifierRow(
+            row_index=r.row_index,
+            cellar_batch_number=r.cellar_batch_number,
+            cellar_molecule_reg_number=r.cellar_molecule_reg_number,
+            cellar_batch_sequence=r.cellar_batch_sequence,
+            external_identifier=r.external_identifier,
+            identifier_type=r.identifier_type,
+            source=r.source,
+        )
+        for r in body.rows
+    ]
+    command = BulkAddBatchIdentifiersCommand(
+        workspace_id=auth.workspace_id,
+        importing_user_id=auth.user_id,
+        source_default=body.source_default,
+        dry_run=True,
+        rows=rows,
+    )
+    result = result_to_response(await use_case(command))
+    return BulkAddBatchIdentifiersResponse(
+        outcomes=[RowOutcomeResponse(**o.__dict__) for o in result.outcomes],
+        counts=result.counts,
+    )
+
+
+@router.post(
+    "/batches/identifiers/bulk",
+    response_model=BulkAddBatchIdentifiersResponse,
+    status_code=201,
+)
+async def bulk_add_batch_identifiers(
+    body: BulkAddBatchIdentifiersRequest,
+    auth: AuthDep,
+    use_case: BulkAddBatchIdentifiersDep,
+) -> BulkAddBatchIdentifiersResponse:
+    """Commit a bulk batch-identifier import. Only `resolved` rows are persisted."""
+    rows = [
+        BulkIdentifierRow(
+            row_index=r.row_index,
+            cellar_batch_number=r.cellar_batch_number,
+            cellar_molecule_reg_number=r.cellar_molecule_reg_number,
+            cellar_batch_sequence=r.cellar_batch_sequence,
+            external_identifier=r.external_identifier,
+            identifier_type=r.identifier_type,
+            source=r.source,
+        )
+        for r in body.rows
+    ]
+    command = BulkAddBatchIdentifiersCommand(
+        workspace_id=auth.workspace_id,
+        importing_user_id=auth.user_id,
+        source_default=body.source_default,
+        dry_run=False,
+        rows=rows,
+    )
+    result = result_to_response(await use_case(command))
+    return BulkAddBatchIdentifiersResponse(
+        outcomes=[RowOutcomeResponse(**o.__dict__) for o in result.outcomes],
+        counts=result.counts,
+    )
