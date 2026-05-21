@@ -198,6 +198,9 @@ def _build_preview_uc(
         return (batches_by_ref or {}).get(ref)
 
     batch_repo.find_by_batch_number = _find
+    # resolve_batch_ref falls back to find_by_external_identifier; return None
+    # for refs not in batches_by_ref so unmatched refs stay unmatched.
+    batch_repo.find_by_external_identifier = AsyncMock(return_value=None)
 
     molecule_repo = AsyncMock()
 
@@ -265,6 +268,9 @@ def _build_import_uc(
         return batches_by_ref.get(ref)
 
     batch_repo.find_by_batch_number = _find
+    # resolve_batch_ref falls back to find_by_external_identifier; return None
+    # for refs not in batches_by_ref so unmatched refs stay unmatched.
+    batch_repo.find_by_external_identifier = AsyncMock(return_value=None)
 
     molecule_repo = AsyncMock()
 

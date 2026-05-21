@@ -69,18 +69,20 @@ async def _build_batch_lookup(
 ) -> dict[str, tuple[uuid.UUID, uuid.UUID]]:
     """Resolve every distinct ``batch_ref`` to ``(batch_id, molecule_id)``.
 
-    Strict batch-number lookup. Compound-level resolution is the
-    Compound Ref role's job; this helper used to do hidden compound-name
-    fallback via ``<name>-<seq>``, but that fallback was retired when
-    Compound Ref shipped.
+    Lookup order per ref:
+      1. canonical batch_number (find_by_batch_number)
+      2. external alias (find_by_external_identifier)
+      3. unmatched (omitted from dict)
     """
+    from cellar.application.inventory.resolve_batch_ref import resolve_batch_ref
+
     out: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
     seen: set[str] = set()
     for r in rows:
         if not r.batch_ref or r.batch_ref in seen:
             continue
         seen.add(r.batch_ref)
-        batch = await batch_repo.find_by_batch_number(workspace_id, r.batch_ref)
+        batch = await resolve_batch_ref(batch_repo, workspace_id, r.batch_ref)
         if batch is not None:
             out[r.batch_ref] = (batch.id, batch.molecule_id)
     return out
