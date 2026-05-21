@@ -107,6 +107,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.sample_repository im
 from cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_repository import (
     SQLAlchemySampleRequestRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
+    SQLAlchemyWorkspaceSettingsRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.shipment_repository import (
     SQLAlchemyShipmentRepository,
 )
@@ -137,6 +140,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyMoleculeRepository(uow),
             c[EventDispatcher],
             validator,
+            workspace_settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
         )
 
     def _batch_query(uc_cls: type):
