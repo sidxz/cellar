@@ -9,7 +9,6 @@ import {
   FlaskConical,
   Copy,
   Check,
-  X,
 } from "lucide-react";
 import { StructureRenderer } from "@/shared/components/chemistry";
 import { COPY_FEEDBACK_MS } from "@/shared/lib/timing";
@@ -55,7 +54,7 @@ const IDENTIFIER_TYPES = [
   { value: "cas_number", label: "CAS Number" },
   { value: "chembl_id", label: "ChEMBL ID" },
   { value: "pubchem_cid", label: "PubChem CID" },
-  { value: "custom", label: "Custom" },
+  { value: "custom", label: "Synonym" },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -279,35 +278,13 @@ interface OverviewTabProps {
 export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
   const router = useRouter();
   const [showAddId, setShowAddId] = useState(false);
-  const [newSynonym, setNewSynonym] = useState("");
   const removeMutation = useRemoveIdentifier(compoundId);
-  const addMutation = useAddIdentifier(compoundId);
 
   const isDisclosed = molecule.structure_status === "disclosed";
   const isTombstone = !!molecule.merged_into_id;
   const descriptors = molecule.descriptors;
 
-  // Split identifiers into synonyms (custom type) and structured identifiers
-  const synonyms = molecule.identifiers.filter(
-    (id) => id.identifier_type === "custom"
-  );
-  const structuredIdentifiers = molecule.identifiers.filter(
-    (id) => id.identifier_type !== "custom"
-  );
-
-  const handleAddSynonym = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = newSynonym.trim();
-    if (!trimmed) return;
-    addMutation.mutate(
-      {
-        identifier: trimmed,
-        identifier_type: "custom",
-        source: "User added",
-      },
-      { onSuccess: () => setNewSynonym("") }
-    );
-  };
+  const identifiers = molecule.identifiers;
 
   return (
     <div className="space-y-6">
@@ -360,50 +337,6 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
               description="This compound's structure has not been disclosed."
             />
           )}
-        </CardContent>
-      </Card>
-
-      {/* Synonyms */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Synonyms</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {synonyms.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {synonyms.map((syn) => (
-                <Badge key={syn.id} variant="secondary" className="text-sm pr-1">
-                  {syn.identifier}
-                  <button
-                    type="button"
-                    onClick={() => removeMutation.mutate(syn.id)}
-                    disabled={removeMutation.isPending}
-                    className="ml-1 rounded hover:text-destructive transition-colors"
-                    aria-label={`Remove synonym ${syn.identifier}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          )}
-          <form onSubmit={handleAddSynonym} className="flex gap-2">
-            <Input
-              placeholder="Add synonym..."
-              value={newSynonym}
-              onChange={(e) => setNewSynonym(e.target.value)}
-              className="h-8 w-48"
-            />
-            <Button
-              type="submit"
-              size="sm"
-              variant="ghost"
-              disabled={!newSynonym.trim() || addMutation.isPending}
-              className="h-8"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </form>
         </CardContent>
       </Card>
 
@@ -460,9 +393,9 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
             />
           )}
 
-          {structuredIdentifiers.length === 0 ? (
+          {identifiers.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No external identifiers registered.
+              No identifiers registered.
             </p>
           ) : (
             <div className="rounded-lg border">
@@ -476,7 +409,7 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {structuredIdentifiers.map((ident) => (
+                  {identifiers.map((ident) => (
                     <TableRow key={ident.id}>
                       <TableCell>
                         <Badge variant="outline">
