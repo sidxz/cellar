@@ -12,6 +12,7 @@ from cellar.application.attachment.upload_attachment import UploadAttachment
 from cellar.application.audit.audit_recording_service import AuditRecordingService
 from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
+from cellar.application.inventory.ensure_batch_exists import EnsureBatchExists
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.registered_plates import (
     ChangeStatus,
@@ -630,6 +631,7 @@ def register_screening(container: Container) -> None:
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             plate_template_repo=SQLAlchemyPlateTemplateRepository(uow),
             parser=c[TabularParser],
+            ensure_batch_exists=c[EnsureBatchExists],
         )
 
     container.define(PreviewRunFile, _preview_run_file)
@@ -663,6 +665,7 @@ def register_screening(container: Container) -> None:
             upload_attachment=c[UploadAttachment],
             dispatcher=c[EventDispatcher],
             calculation_engine=c[ReadoutCalculationEngine],
+            ensure_batch_exists=c[EnsureBatchExists],
         )
 
     container.define(ImportRunFile, _import_run_file)

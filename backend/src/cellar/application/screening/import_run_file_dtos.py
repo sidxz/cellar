@@ -34,6 +34,10 @@ class PreviewRunFileQuery(Command):
     file_content: bytes
     filename: str = ""
     content_type: str = ""
+    # When True and EnsureBatchExists is wired, the preview phase will
+    # auto-create placeholder batches for unmatched refs whose compound
+    # resolves to a known molecule. No-op when False (default).
+    auto_create_unmatched_batches: bool = False
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,9 @@ class PreviewRunFileResult:
     unmatched_compound_refs: tuple[str, ...] = ()
     ambiguous_compounds: tuple[AmbiguousCompoundDTO, ...] = ()
     row_conflicts: tuple[str, ...] = ()
+    # Number of placeholder batches auto-created during this preview pass.
+    # Always 0 when auto_create_unmatched_batches=False on the query.
+    auto_created_batches: int = 0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -120,6 +127,10 @@ class ImportRunFileCommand(Command):
     # User's per-molecule batch picks from the disambiguation panel.
     # ``molecule_id → batch_id``. Empty when no disambiguation was needed.
     compound_batch_overrides: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
+    # When True and EnsureBatchExists is wired, the import phase will
+    # auto-create placeholder batches for unmatched refs whose compound
+    # resolves to a known molecule. No-op when False (default).
+    auto_create_unmatched_batches: bool = False
 
 
 @dataclass
@@ -144,3 +155,6 @@ class ImportRunFileResult:
     attachment_warning: str | None = None
     # Per-compound dose-response fit warnings surfaced from the calc engine.
     fit_warnings: list[str] = field(default_factory=list)
+    # Number of placeholder batches auto-created during this import.
+    # Always 0 when auto_create_unmatched_batches=False on the command.
+    auto_created_batches: int = 0

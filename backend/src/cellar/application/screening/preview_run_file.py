@@ -33,6 +33,7 @@ from cellar.application.screening.import_run_file_dtos import (
     RepreviewRunFileQuery,
 )
 from cellar.application.screening.import_run_file_mapper import (
+    _auto_create_missing_batches,
     _build_batch_lookup,
     _build_compound_index,
     _build_guess_mapping,
@@ -88,6 +89,7 @@ class PreviewRunFile:
         protocol_repo: ProtocolRepository,
         plate_template_repo: PlateTemplateRepository,
         parser: TabularParser,
+        ensure_batch_exists=None,  # EnsureBatchExists | None; optional for back-compat
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -98,6 +100,7 @@ class PreviewRunFile:
         self._protocol_repo = protocol_repo
         self._plate_template_repo = plate_template_repo
         self._parser = parser
+        self._ensure_batch_exists = ensure_batch_exists
 
     async def __call__(
         self,
@@ -107,10 +110,10 @@ class PreviewRunFile:
         require_editor(auth)
 
         async with self._uow:
-            return await self._execute(input)
+            return await self._execute(input, auth)
 
     async def _execute(
-        self, input: PreviewRunFileQuery
+        self, input: PreviewRunFileQuery, auth: AuthContext | None = None
     ) -> Result[PreviewRunFileResult, DomainError]:
         run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
         if run is None:
@@ -165,6 +168,7 @@ class PreviewRunFile:
         will_create_readouts = 0
         well_conflicts: list[WellConflict] = []
         readout_conflicts: list[ReadoutConflict] = []
+        auto_created_batches = 0
 
         if guessed is not None:
             normalized = normalize(table, guessed)
@@ -188,6 +192,34 @@ class PreviewRunFile:
                     batch_index=batch_index,
                     compound_index=compound_index,
                 )
+
+                # Opt-in: auto-create placeholder batches for unmatched
+                # refs whose compound is known, then re-resolve so the
+                # preview reflects the newly-created batches.
+                if (
+                    input.auto_create_unmatched_batches
+                    and self._ensure_batch_exists is not None
+                    and resolutions.unmatched_batch_refs
+                    and auth is not None
+                ):
+                    auto_created_batches = await _auto_create_missing_batches(
+                        norm.rows,
+                        resolutions.unmatched_batch_refs,
+                        batch_index,
+                        compound_index,
+                        self._ensure_batch_exists,
+                        workspace_id=input.workspace_id,
+                        importing_user_id=auth.user_id,
+                        source_label=f"screening import: {input.filename or 'run file'}",
+                    )
+                    if auto_created_batches > 0:
+                        # Re-resolve with the expanded batch_index.
+                        resolutions = resolve_rows(
+                            norm.rows,
+                            batch_index=batch_index,
+                            compound_index=compound_index,
+                        )
+
                 # `matched_batches` is *distinct* batch refs that
                 # resolved (matches the original `_resolve_batches`
                 # contract — the wire format documents it as a count
@@ -275,6 +307,7 @@ class PreviewRunFile:
                 unmatched_compound_refs=tuple(sorted(unmatched_compound_set)),
                 ambiguous_compounds=ambiguous_dto,
                 row_conflicts=row_conflict_strings,
+                auto_created_batches=auto_created_batches,
             )
         )
 

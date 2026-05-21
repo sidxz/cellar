@@ -62,6 +62,7 @@ from cellar.application.screening.import_run_file_dtos import (
     RepreviewRunFileQuery,
 )
 from cellar.application.screening.import_run_file_mapper import (
+    _auto_create_missing_batches,
     _build_batch_lookup,
     _build_compound_index,
 )
@@ -169,6 +170,7 @@ class ImportRunFile:
         upload_attachment: UploadAttachment,
         dispatcher: EventDispatcherProtocol | None = None,
         calculation_engine: ReadoutCalculationEngine | None = None,
+        ensure_batch_exists=None,  # EnsureBatchExists | None; optional for back-compat
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -181,6 +183,7 @@ class ImportRunFile:
         self._upload_attachment = upload_attachment
         self._dispatcher = dispatcher
         self._calc_engine = calculation_engine
+        self._ensure_batch_exists = ensure_batch_exists
 
     async def __call__(
         self,
@@ -299,7 +302,35 @@ class ImportRunFile:
             overrides=cmd.compound_batch_overrides,
         )
 
-        # 6b. Re-validate the FE-provided picks. If anything is still
+        # 6b. Opt-in: auto-create placeholder batches for unmatched refs
+        # whose compound is known, then re-resolve so the import picks up
+        # the newly-created batches.
+        auto_created_batches = 0
+        if (
+            cmd.auto_create_unmatched_batches
+            and self._ensure_batch_exists is not None
+            and resolutions.unmatched_batch_refs
+            and auth is not None
+        ):
+            auto_created_batches = await _auto_create_missing_batches(
+                normalized.rows,
+                resolutions.unmatched_batch_refs,
+                batch_index,
+                compound_index,
+                self._ensure_batch_exists,
+                workspace_id=cmd.workspace_id,
+                importing_user_id=auth.user_id,
+                source_label=f"screening import: {preview.filename or 'run file'}",
+            )
+            if auto_created_batches > 0:
+                resolutions = resolve_rows(
+                    normalized.rows,
+                    batch_index=batch_index,
+                    compound_index=compound_index,
+                    overrides=cmd.compound_batch_overrides,
+                )
+
+        # 6d. Re-validate the FE-provided picks. If anything is still
         # ambiguous after applying overrides, the chemist's submission
         # was incomplete; refuse the write.
         if resolutions.ambiguous_compounds:
@@ -372,6 +403,7 @@ class ImportRunFile:
             controls_unclassified=plan.controls_unclassified,
             unmatched_batches=sorted(resolutions.unmatched_batch_refs),
             unmatched_compound_refs=sorted(resolutions.unmatched_compound_refs),
+            auto_created_batches=auto_created_batches,
         )
 
         # Track new plates first so we can emit creation counters.

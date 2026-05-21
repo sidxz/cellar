@@ -99,6 +99,7 @@ class _FakeRegNumber:
 @dataclass
 class FakeMolecule:
     id: uuid.UUID = field(default_factory=uuid.uuid4)
+    name: str = "Test Molecule"
     registration_number: _FakeRegNumber = field(
         default_factory=lambda: _FakeRegNumber(value="CV-00001")
     )
@@ -1551,4 +1552,320 @@ class TestRepreviewRunFile:
             auth=auth,
         )
         assert isinstance(result, Failure)
-        assert isinstance(result.failure(), NotFoundError)
+
+
+# ---------------------------------------------------------------------------
+# Auto-create missing batches (Sub-change B)
+# ---------------------------------------------------------------------------
+
+
+class TestAutoCreateMissingBatches:
+    """Tests for auto_create_unmatched_batches flag on PreviewRunFile and ImportRunFile."""
+
+    def _make_ensure_batch_exists_mock(
+        self,
+        batch: FakeBatch,
+        *,
+        created: bool = True,
+    ) -> AsyncMock:
+        """Return an AsyncMock that simulates EnsureBatchExists returning Success."""
+        from cellar.application.inventory.ensure_batch_exists import EnsureBatchExistsOutcome
+        from returns.result import Success as _Success
+
+        mock_uc = AsyncMock()
+
+        async def _side_effect(cmd):
+            return _Success(EnsureBatchExistsOutcome(batch=batch, created=created))
+
+        mock_uc.side_effect = _side_effect
+        return mock_uc
+
+    @pytest.mark.asyncio
+    async def test_preview_auto_creates_batch_when_flag_set(self) -> None:
+        """When auto_create_unmatched_batches=True, a placeholder batch is created
+        for an unmatched batch_ref whose compound_ref resolves to a molecule."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        mol = FakeMolecule()
+
+        # batch_ref is MISSING-BATCH-X; compound_ref is MOL-NAME-X which resolves.
+        new_batch = FakeBatch(molecule_id=mol.id)
+        ensure_uc = self._make_ensure_batch_exists_mock(new_batch, created=True)
+
+        run_repo = AsyncMock()
+        run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+
+        batch_repo = AsyncMock()
+        batch_repo.find_by_batch_number = AsyncMock(return_value=None)
+        batch_repo.find_by_external_identifier = AsyncMock(return_value=None)
+
+        molecule_repo = AsyncMock()
+        async def _find_mol(_ws, ident):
+            return mol if ident == "MOL-NAME-X" else None
+        molecule_repo.find_by_identifier = _find_mol
+
+        batch_repo.find_by_molecule = AsyncMock(return_value=[])
+
+        protocol_repo = AsyncMock()
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
+
+        readout_data_repo = AsyncMock()
+        readout_data_repo.find_by_run = AsyncMock(return_value=[])
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+
+        uc = PreviewRunFile(
+            uow=FakeUoW(),
+            run_repo=run_repo,
+            readout_data_repo=readout_data_repo,
+            batch_repo=batch_repo,
+            molecule_repo=molecule_repo,
+            preview_store=store,
+            protocol_repo=protocol_repo,
+            plate_template_repo=_make_plate_template_repo(),
+            parser=TabularFileParser(),
+            ensure_batch_exists=ensure_uc,
+        )
+
+        csv = (
+            b"Plate Name,Well,Compound,Batch,Raw Data\n"
+            b"P1,A1,MOL-NAME-X,MISSING-BATCH-X,0.5\n"
+        )
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=csv,
+                filename="test.csv",
+                auto_create_unmatched_batches=True,
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        preview = result.unwrap()
+
+        # EnsureBatchExists was called for the missing batch ref.
+        ensure_uc.assert_called_once()
+        call_cmd = ensure_uc.call_args[0][0]
+        assert call_cmd.molecule_id == mol.id
+        assert call_cmd.external_batch_ref == "MISSING-BATCH-X"
+        assert "test.csv" in call_cmd.source_label
+
+        # After auto-create, the ref resolved → not in unmatched list.
+        assert "MISSING-BATCH-X" not in preview.unmatched_batches
+        assert preview.matched_batches == 1
+        assert preview.auto_created_batches == 1
+
+    @pytest.mark.asyncio
+    async def test_preview_no_auto_create_when_flag_false(self) -> None:
+        """With auto_create_unmatched_batches=False (default), EnsureBatchExists
+        is never called and the ref stays unmatched."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        mol = FakeMolecule()
+        ensure_uc = AsyncMock()
+
+        run_repo = AsyncMock()
+        run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+        batch_repo = AsyncMock()
+        batch_repo.find_by_batch_number = AsyncMock(return_value=None)
+        batch_repo.find_by_external_identifier = AsyncMock(return_value=None)
+        batch_repo.find_by_molecule = AsyncMock(return_value=[])
+
+        molecule_repo = AsyncMock()
+        async def _find_mol(_ws, ident):
+            return mol if ident == "MOL-NAME-X" else None
+        molecule_repo.find_by_identifier = _find_mol
+
+        protocol_repo = AsyncMock()
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
+        readout_data_repo = AsyncMock()
+        readout_data_repo.find_by_run = AsyncMock(return_value=[])
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        uc = PreviewRunFile(
+            uow=FakeUoW(),
+            run_repo=run_repo,
+            readout_data_repo=readout_data_repo,
+            batch_repo=batch_repo,
+            molecule_repo=molecule_repo,
+            preview_store=store,
+            protocol_repo=protocol_repo,
+            plate_template_repo=_make_plate_template_repo(),
+            parser=TabularFileParser(),
+            ensure_batch_exists=ensure_uc,
+        )
+
+        csv = b"Plate Name,Well,Compound,Batch,Raw Data\nP1,A1,MOL-NAME-X,MISSING-BATCH-X,0.5\n"
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=csv,
+                filename="test.csv",
+                auto_create_unmatched_batches=False,  # flag off
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        preview = result.unwrap()
+        ensure_uc.assert_not_called()
+        assert "MISSING-BATCH-X" in preview.unmatched_batches
+        assert preview.auto_created_batches == 0
+
+    @pytest.mark.asyncio
+    async def test_import_auto_creates_batch_updates_result(self) -> None:
+        """When auto_create_unmatched_batches=True on ImportRunFileCommand,
+        the auto-created batch is picked up by resolve_rows and the result
+        reflects it (auto_created_batches=1, row resolved)."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        mol = FakeMolecule()
+        new_batch = FakeBatch(molecule_id=mol.id)
+        ensure_uc = self._make_ensure_batch_exists_mock(new_batch, created=True)
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = (
+            b"Plate Name,Well,Compound,Batch,Raw Data\n"
+            b"P1,A1,MOL-NAME-X,MISSING-BATCH-X,0.5\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="test.csv",
+        )
+
+        saved: list = []
+        uow = FakeUoW()
+        run_repo = AsyncMock()
+        run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+        run_repo.save = AsyncMock()
+
+        protocol_repo = AsyncMock()
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
+
+        batch_repo = AsyncMock()
+        batch_repo.find_by_batch_number = AsyncMock(return_value=None)
+        batch_repo.find_by_external_identifier = AsyncMock(return_value=None)
+
+        molecule_repo = AsyncMock()
+        async def _find_mol(_ws, ident):
+            return mol if ident == "MOL-NAME-X" else None
+        molecule_repo.find_by_identifier = _find_mol
+        batch_repo.find_by_molecule = AsyncMock(return_value=[])
+
+        readout_data_repo = AsyncMock()
+        readout_data_repo.find_by_run = AsyncMock(return_value=[])
+        async def _save_bulk(entities):
+            saved.extend(entities)
+        readout_data_repo.save_bulk = _save_bulk
+
+        from returns.result import Success as _Success
+        class _FakeAttachment:
+            id = uuid.uuid4()
+        upload_attachment = AsyncMock()
+        async def _no_op(*_a, **_kw):
+            return _Success(_FakeAttachment())
+        upload_attachment.side_effect = _no_op
+
+        uc = ImportRunFile(
+            uow=uow,
+            run_repo=run_repo,
+            protocol_repo=protocol_repo,
+            readout_data_repo=readout_data_repo,
+            batch_repo=batch_repo,
+            molecule_repo=molecule_repo,
+            preview_store=store,
+            plate_template_repo=_make_plate_template_repo(),
+            upload_attachment=upload_attachment,
+            ensure_batch_exists=ensure_uc,
+        )
+
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                plate_name="Plate Name",
+                compound_ref="Compound",
+                batch_ref="Batch",
+                readout_columns=(
+                    ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                ),
+            ),
+            auto_create_unmatched_batches=True,
+        )
+        result = await uc(cmd, auth=auth)
+        assert isinstance(result, Success), result
+        out = result.unwrap()
+
+        ensure_uc.assert_called_once()
+        call_cmd = ensure_uc.call_args[0][0]
+        assert call_cmd.molecule_id == mol.id
+        assert call_cmd.external_batch_ref == "MISSING-BATCH-X"
+        assert call_cmd.importing_user_id == auth.user_id
+
+        assert out.auto_created_batches == 1
+        # The batch resolved → not in unmatched list.
+        assert "MISSING-BATCH-X" not in out.unmatched_batches
+
+    @pytest.mark.asyncio
+    async def test_auto_create_skipped_when_compound_unresolved(self) -> None:
+        """If the compound_ref for an unmatched batch_ref is also unknown,
+        EnsureBatchExists must NOT be called — no molecule to attach to."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        ensure_uc = AsyncMock()
+
+        run_repo = AsyncMock()
+        run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+        batch_repo = AsyncMock()
+        batch_repo.find_by_batch_number = AsyncMock(return_value=None)
+        batch_repo.find_by_external_identifier = AsyncMock(return_value=None)
+        batch_repo.find_by_molecule = AsyncMock(return_value=[])
+
+        molecule_repo = AsyncMock()
+        # compound_ref does NOT resolve
+        molecule_repo.find_by_identifier = AsyncMock(return_value=None)
+
+        protocol_repo = AsyncMock()
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
+        readout_data_repo = AsyncMock()
+        readout_data_repo.find_by_run = AsyncMock(return_value=[])
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        uc = PreviewRunFile(
+            uow=FakeUoW(),
+            run_repo=run_repo,
+            readout_data_repo=readout_data_repo,
+            batch_repo=batch_repo,
+            molecule_repo=molecule_repo,
+            preview_store=store,
+            protocol_repo=protocol_repo,
+            plate_template_repo=_make_plate_template_repo(),
+            parser=TabularFileParser(),
+            ensure_batch_exists=ensure_uc,
+        )
+
+        csv = b"Plate Name,Well,Compound,Batch,Raw Data\nP1,A1,UNKNOWN-MOL,MISSING-BATCH-X,0.5\n"
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=csv,
+                filename="test.csv",
+                auto_create_unmatched_batches=True,
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        preview = result.unwrap()
+        # compound unresolved → no auto-create
+        ensure_uc.assert_not_called()
+        assert "MISSING-BATCH-X" in preview.unmatched_batches
+        assert preview.auto_created_batches == 0

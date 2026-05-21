@@ -13,6 +13,9 @@ Specifically:
 - ``_build_batch_lookup`` — strict batch-number resolution.
 - ``_build_compound_index`` — compound-ref → ``CompoundCandidate``
   lookup, threading molecule batches in via ``BatchSummary``.
+- ``_auto_create_missing_batches`` — opt-in auto-create placeholder
+  batches for unmatched batch_refs whose compound is known. Mutates
+  ``batch_index`` in place and returns the creation count.
 - ``_summarize_plates`` — per-plate well/sample/blank counts for the
   preview panel.
 - ``_to_ambiguous_dto`` — resolver internal → wire DTO shape.
@@ -86,6 +89,64 @@ async def _build_batch_lookup(
         if batch is not None:
             out[r.batch_ref] = (batch.id, batch.molecule_id)
     return out
+
+
+async def _auto_create_missing_batches(
+    rows: Iterable[LongFormatRow],
+    unmatched_batch_refs: frozenset[str],
+    batch_index: dict[str, tuple[uuid.UUID, uuid.UUID]],
+    compound_index: dict[str, CompoundCandidate],
+    ensure_batch_exists,  # EnsureBatchExists use case (type-annotated loosely to avoid circular import)
+    workspace_id: uuid.UUID,
+    importing_user_id: uuid.UUID,
+    source_label: str,
+) -> int:
+    """Auto-create placeholder batches for unmatched refs whose compound is known.
+
+    Iterates over ``unmatched_batch_refs``. For each ref, finds the first
+    row in ``rows`` that uses it and looks up its ``compound_ref`` in
+    ``compound_index``. If the compound resolves to a molecule,
+    ``EnsureBatchExists`` is called to create (or find) the batch and the
+    result is inserted into ``batch_index`` so ``resolve_rows`` can pick
+    it up on the next call.
+
+    Refs whose compound_ref is empty or unresolved are left unmatched.
+    Returns the count of batches actually created (not found-existing).
+    """
+    from cellar.application.inventory.ensure_batch_exists import EnsureBatchExistsCommand
+
+    # Build a map: batch_ref → compound_ref for the first matching row.
+    ref_to_compound: dict[str, str] = {}
+    for r in rows:
+        if r.batch_ref and r.batch_ref in unmatched_batch_refs:
+            if r.batch_ref not in ref_to_compound and r.compound_ref:
+                ref_to_compound[r.batch_ref] = r.compound_ref
+
+    from returns.result import Success
+
+    created_count = 0
+    for batch_ref, compound_ref in ref_to_compound.items():
+        candidate = compound_index.get(compound_ref)
+        if candidate is None:
+            # Compound didn't resolve — can't auto-create.
+            continue
+
+        outcome = await ensure_batch_exists(
+            EnsureBatchExistsCommand(
+                workspace_id=workspace_id,
+                molecule_id=candidate.molecule_id,
+                external_batch_ref=batch_ref,
+                importing_user_id=importing_user_id,
+                source_label=source_label,
+            )
+        )
+        if isinstance(outcome, Success):
+            result = outcome.unwrap()
+            batch_index[batch_ref] = (result.batch.id, result.batch.molecule_id)
+            if result.created:
+                created_count += 1
+
+    return created_count
 
 
 async def _build_compound_index(
