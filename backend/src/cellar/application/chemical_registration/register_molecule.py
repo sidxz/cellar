@@ -28,6 +28,8 @@ from cellar.domain.chemical_registration.repository import (
 )
 from cellar.domain.shared.errors import ConflictError, DomainError, ValidationError
 from cellar.domain.workspace_config.enums import FieldTarget
+from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
+from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 
 if TYPE_CHECKING:
     from cellar.application.chemical_registration.disclosure_service import DisclosureService
@@ -94,6 +96,7 @@ class RegisterMolecule:
         custom_field_validator: CustomFieldValidator | None = None,
         disclosure_repo: DisclosureRequestRepository | None = None,
         disclosure_service: DisclosureService | None = None,
+        workspace_settings_repo: WorkspaceSettingsRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -102,6 +105,7 @@ class RegisterMolecule:
         self._custom_field_validator = custom_field_validator
         self._disclosure_repo = disclosure_repo
         self._disclosure_service = disclosure_service
+        self._workspace_settings_repo = workspace_settings_repo
 
     async def __call__(
         self,
@@ -120,6 +124,20 @@ class RegisterMolecule:
         if input.name and input.promote_name_as_identifier:
             ids.add(input.name)
         return ids
+
+    async def _resolve_reg_number_config(
+        self, workspace_id: uuid.UUID
+    ) -> tuple[str, int]:
+        """Read prefix + width from WorkspaceSettings; fall back to defaults."""
+        if self._workspace_settings_repo is None:
+            settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
+        else:
+            settings = await self._workspace_settings_repo.find_by_workspace_id(
+                workspace_id
+            )
+            if settings is None:
+                settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
+        return settings.registration_number_prefix, settings.registration_number_width
 
     async def _check_identifier_conflicts(
         self,
@@ -319,7 +337,10 @@ class RegisterMolecule:
                 # 6b. New molecule — same transaction as the conflict check, so
                 # the unique InChIKey + identifier constraints are enforced
                 # against the same snapshot we read above.
-                reg_number = await self._repo.next_registration_number(input.workspace_id)
+                prefix, width = await self._resolve_reg_number_config(input.workspace_id)
+                reg_number = await self._repo.next_registration_number(
+                    input.workspace_id, prefix=prefix, width=width
+                )
                 mol = Molecule.register_disclosed(
                     workspace_id=input.workspace_id,
                     registration_number=reg_number,
@@ -457,7 +478,10 @@ class RegisterMolecule:
                 return Failure(validation.failure())
 
         async with self._uow:
-            reg_number = await self._repo.next_registration_number(input.workspace_id)
+            prefix, width = await self._resolve_reg_number_config(input.workspace_id)
+            reg_number = await self._repo.next_registration_number(
+                input.workspace_id, prefix=prefix, width=width
+            )
             mol = Molecule.register_undisclosed(
                 workspace_id=input.workspace_id,
                 registration_number=reg_number,

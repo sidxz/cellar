@@ -473,3 +473,97 @@ class TestStereochemistryWiring:
         assert repo.save.await_count == 1
         saved_mol = repo.save.await_args.args[0]
         assert saved_mol.stereochemistry == Stereochemistry.ACHIRAL
+
+
+# ---------------------------------------------------------------------------
+# Tests — Registration Number Config (prefix + width from WorkspaceSettings)
+# ---------------------------------------------------------------------------
+
+
+def _make_settings_repo(*, settings: "WorkspaceSettings | None") -> AsyncMock:
+    """Create a mock WorkspaceSettingsRepository."""
+    repo = AsyncMock()
+    repo.find_by_workspace_id = AsyncMock(return_value=settings)
+    return repo
+
+
+class TestRegistrationNumberConfig:
+    """RegisterMolecule reads prefix/width from WorkspaceSettings and plumbs
+    them into MoleculeRepository.next_registration_number."""
+
+    async def test_reads_settings_and_passes_prefix_and_width(self) -> None:
+        """When WorkspaceSettings has explicit prefix+width, both are forwarded
+        to next_registration_number on the disclosed-branch path."""
+        from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
+
+        settings = WorkspaceSettings(
+            id=WS_ID,
+            registration_rules={
+                "registration_number_prefix": "CC-",
+                "registration_number_width": 6,
+            },
+        )
+        repo = _make_repo()
+        settings_repo = _make_settings_repo(settings=settings)
+
+        uc = RegisterMolecule(
+            uow=FakeUnitOfWork(),
+            repo=repo,
+            dispatcher=FakeEventDispatcher(),
+            structure_processor=_make_processor(),
+            workspace_settings_repo=settings_repo,
+        )
+        cmd = _make_command()  # smiles provided → disclosed branch
+
+        result = await uc(cmd, auth=FakeAuth())
+
+        assert isinstance(result, Success)
+        repo.next_registration_number.assert_awaited_once_with(WS_ID, prefix="CC-", width=6)
+
+    async def test_uses_defaults_when_settings_missing(self) -> None:
+        """When WorkspaceSettings row doesn't exist, defaults (CC-, 6) are used."""
+        repo = _make_repo()
+        settings_repo = _make_settings_repo(settings=None)
+
+        uc = RegisterMolecule(
+            uow=FakeUnitOfWork(),
+            repo=repo,
+            dispatcher=FakeEventDispatcher(),
+            structure_processor=_make_processor(),
+            workspace_settings_repo=settings_repo,
+        )
+        cmd = _make_command()  # smiles provided → disclosed branch
+
+        result = await uc(cmd, auth=FakeAuth())
+
+        assert isinstance(result, Success)
+        repo.next_registration_number.assert_awaited_once_with(WS_ID, prefix="CC-", width=6)
+
+    async def test_uses_workspace_override(self) -> None:
+        """When WorkspaceSettings has a non-default prefix+width, the override
+        values are passed through to next_registration_number."""
+        from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
+
+        settings = WorkspaceSettings(
+            id=WS_ID,
+            registration_rules={
+                "registration_number_prefix": "MTB-",
+                "registration_number_width": 7,
+            },
+        )
+        repo = _make_repo()
+        settings_repo = _make_settings_repo(settings=settings)
+
+        uc = RegisterMolecule(
+            uow=FakeUnitOfWork(),
+            repo=repo,
+            dispatcher=FakeEventDispatcher(),
+            structure_processor=_make_processor(),
+            workspace_settings_repo=settings_repo,
+        )
+        cmd = _make_command()  # smiles provided → disclosed branch
+
+        result = await uc(cmd, auth=FakeAuth())
+
+        assert isinstance(result, Success)
+        repo.next_registration_number.assert_awaited_once_with(WS_ID, prefix="MTB-", width=7)
