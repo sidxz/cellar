@@ -2,6 +2,8 @@
 
 import uuid
 
+import pytest
+
 from cellar.domain.workspace_config.events import WorkspaceSettingsUpdated
 from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 
@@ -83,3 +85,87 @@ class TestCreateBatchOnDuplicate:
             registration_rules={"create_batch_on_duplicate": False, "foo": True},
         )
         assert ws.create_batch_on_duplicate is False
+
+
+def _make(rules: dict | None = None) -> WorkspaceSettings:
+    return WorkspaceSettings(id=uuid.uuid4(), registration_rules=rules)
+
+
+class TestRegistrationNumberPrefix:
+    def test_default_is_cc_dash(self) -> None:
+        s = _make()
+        assert s.registration_number_prefix == "CC-"
+
+    def test_override_via_registration_rules(self) -> None:
+        s = _make({"registration_number_prefix": "LAB-"})
+        assert s.registration_number_prefix == "LAB-"
+
+    def test_falsy_value_falls_back_to_default(self) -> None:
+        # Empty string / None / missing key → default
+        s = _make({"registration_number_prefix": ""})
+        assert s.registration_number_prefix == "CC-"
+
+
+class TestRegistrationNumberWidth:
+    def test_default_is_six(self) -> None:
+        s = _make()
+        assert s.registration_number_width == 6
+
+    def test_override_via_registration_rules(self) -> None:
+        s = _make({"registration_number_width": 8})
+        assert s.registration_number_width == 8
+
+    def test_non_int_falls_back_to_default(self) -> None:
+        s = _make({"registration_number_width": "abc"})
+        assert s.registration_number_width == 6
+
+
+class TestUpdateValidation:
+    def test_rejects_prefix_lowercase(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="registration_number_prefix"):
+            s.update(registration_rules={"registration_number_prefix": "cc-"})
+
+    def test_rejects_prefix_without_dash(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="registration_number_prefix"):
+            s.update(registration_rules={"registration_number_prefix": "CC"})
+
+    def test_rejects_prefix_too_short(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="registration_number_prefix"):
+            s.update(registration_rules={"registration_number_prefix": "C-"})
+
+    def test_rejects_prefix_too_long(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="registration_number_prefix"):
+            s.update(registration_rules={"registration_number_prefix": "TOOLONGPREFIX-"})
+
+    def test_accepts_valid_prefix(self) -> None:
+        s = _make()
+        s.update(registration_rules={"registration_number_prefix": "MTBLEAD-"})
+        assert s.registration_number_prefix == "MTBLEAD-"
+
+    def test_rejects_width_below_four(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="registration_number_width"):
+            s.update(registration_rules={"registration_number_width": 3})
+
+    def test_rejects_width_above_eight(self) -> None:
+        s = _make()
+        with pytest.raises(ValueError, match="registration_number_width"):
+            s.update(registration_rules={"registration_number_width": 9})
+
+    def test_accepts_valid_width(self) -> None:
+        s = _make()
+        s.update(registration_rules={"registration_number_width": 7})
+        assert s.registration_number_width == 7
+
+    def test_preserves_other_registration_rules_on_update(self) -> None:
+        s = _make({"create_batch_on_duplicate": True})
+        s.update(registration_rules={
+            "create_batch_on_duplicate": True,
+            "registration_number_prefix": "CC-",
+        })
+        assert s.create_batch_on_duplicate is True
+        assert s.registration_number_prefix == "CC-"

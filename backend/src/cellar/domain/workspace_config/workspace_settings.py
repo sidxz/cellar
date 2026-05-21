@@ -6,9 +6,16 @@ Sentinel owns workspace identity; Cellar stores domain-specific config only.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
+
+_PREFIX_PATTERN = re.compile(r"^[A-Z]{2,8}-$")
+_DEFAULT_PREFIX = "CC-"
+_DEFAULT_WIDTH = 6
+_WIDTH_MIN = 4
+_WIDTH_MAX = 8
 
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.workspace_config.events import WorkspaceSettingsUpdated
@@ -67,6 +74,28 @@ class WorkspaceSettings(AggregateRoot):
         """
         return bool(self.registration_rules.get("create_batch_on_duplicate", False))
 
+    @property
+    def registration_number_prefix(self) -> str:
+        """Per-workspace prefix for newly-generated molecule reg numbers.
+
+        Defaults to ``CC-`` when unset or empty. Pattern: ``^[A-Z]{2,8}-$``.
+        """
+        raw = self.registration_rules.get("registration_number_prefix")
+        if isinstance(raw, str) and raw:
+            return raw
+        return _DEFAULT_PREFIX
+
+    @property
+    def registration_number_width(self) -> int:
+        """Zero-pad width for the numeric tail of newly-generated reg numbers.
+
+        Defaults to 6 (CC-000001 .. CC-999999). Bounded ``[4, 8]``.
+        """
+        raw = self.registration_rules.get("registration_number_width")
+        if isinstance(raw, int) and not isinstance(raw, bool):
+            return raw
+        return _DEFAULT_WIDTH
+
     @classmethod
     def create_default(cls, *, workspace_id: uuid.UUID) -> WorkspaceSettings:
         """Factory for a new workspace with all default settings."""
@@ -79,6 +108,29 @@ class WorkspaceSettings(AggregateRoot):
         default_molecule_type, audit_reason_policy, signature_required_for,
         audit_retention_days, formulation_number_scheme.
         """
+        # Validate registration-number config if present in the new rules
+        if "registration_rules" in fields:
+            rules = fields["registration_rules"]
+            if isinstance(rules, dict):
+                if "registration_number_prefix" in rules:
+                    pfx = rules["registration_number_prefix"]
+                    if not isinstance(pfx, str) or not _PREFIX_PATTERN.match(pfx):
+                        raise ValueError(
+                            "registration_number_prefix must match ^[A-Z]{2,8}-$ "
+                            f"(got: {pfx!r})"
+                        )
+                if "registration_number_width" in rules:
+                    w = rules["registration_number_width"]
+                    if not isinstance(w, int) or isinstance(w, bool):
+                        raise ValueError(
+                            f"registration_number_width must be int (got: {type(w).__name__})"
+                        )
+                    if not (_WIDTH_MIN <= w <= _WIDTH_MAX):
+                        raise ValueError(
+                            f"registration_number_width must be in [{_WIDTH_MIN}, {_WIDTH_MAX}] "
+                            f"(got: {w})"
+                        )
+
         for key in (
             "registration_rules",
             "custom_field_definitions",
