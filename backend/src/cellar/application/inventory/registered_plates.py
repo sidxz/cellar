@@ -9,6 +9,7 @@ from typing import Any
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_workspace_role
+from cellar.application.inventory.resolve_batch_ref import resolve_batch_ref
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
@@ -306,7 +307,7 @@ class MapWells:
                     batch = await self._batch_repo.find_by_id_in_workspace(input.workspace_id, bid)
                 except ValueError:
                     # Not a UUID — resolve as batch number
-                    batch = await self._batch_repo.find_by_batch_number(input.workspace_id, raw)
+                    batch = await resolve_batch_ref(self._batch_repo, input.workspace_id, raw)
                 if batch is None:
                     return Failure(ValidationError(f"Batch '{raw}' not found"))
                 entry["batch_id"] = str(batch.id)
