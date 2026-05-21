@@ -28,6 +28,10 @@ from cellar.application.chemical_registration.register_molecule import (
     RegisterMoleculeCommand,
     RegistrationOutcome,
 )
+from cellar.application.inventory.batch_identifiers import (
+    AddBatchIdentifier,
+    AddBatchIdentifierCommand,
+)
 from cellar.application.inventory.batch_policy import should_create_batch
 from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from cellar.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
@@ -333,6 +337,14 @@ async def _create_batch(
         dispatcher=dispatcher,
     )
 
+    # Separate UoW for the alias-capture step; AddBatchIdentifier manages its own txn.
+    alias_uow = AsyncUnitOfWork(session_factory)
+    add_batch_alias = AddBatchIdentifier(
+        uow=alias_uow,
+        repo=SQLAlchemyBatchRepository(alias_uow),
+        dispatcher=dispatcher,
+    )
+
     # Merge CDD batch ID into custom_fields for plate well resolution
     custom_fields = None
     if item.cdd_batch_id is not None:
@@ -368,4 +380,31 @@ async def _create_batch(
         return None, None, False
 
     batch = batch_result.unwrap()
+
+    # Capture the CDD batch id as a BatchIdentifier so future imports + plate
+    # lookups can resolve via find_by_external_identifier (mirror of how
+    # MoleculeIdentifier captures CDD molecule id). The custom_fields write
+    # above stays as the existing plate-well-resolution mechanism for now.
+    if item.cdd_batch_id is not None:
+        alias_result = await add_batch_alias(
+            AddBatchIdentifierCommand(
+                workspace_id=workspace_id,
+                batch_id=batch.id,
+                identifier=str(item.cdd_batch_id),
+                identifier_type="cdd_batch_id",
+                source="CDD import",
+                registered_by=submitted_by,
+            ),
+            auth=None,  # Temporal activities run as system; auth=None bypasses guard
+        )
+        if isinstance(alias_result, Failure):
+            # Conflict on re-import is expected (identifier already exists for this
+            # batch); log and continue. Other failures are also non-fatal: the batch
+            # exists, only the alias capture failed.
+            logger.warning(
+                "Capturing CDD batch alias for cdd_batch_id=%s failed: %s",
+                item.cdd_batch_id,
+                alias_result.failure(),
+            )
+
     return batch.id, batch.batch_number.value, salt_matched
