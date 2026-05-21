@@ -183,6 +183,99 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-21 — Batch identifiers + import alias resolution shipped on prot-2
+
+**Branch:** `prot-2`, +20 commits on top of the configurable-reg-number-prefix + batch-width + identifier-consolidation batches from earlier today. Nothing pushed. **Browser smoke pending.**
+
+**Plan:** `docs/superpowers/plans/2026-05-21-batch-identifiers-and-import-resolution.md` (20 tasks shipped via subagent-driven execution).
+
+**What this is:** chemist surfaced a recurring import pain — imports referring to batches by external/foreign identifiers (e.g. `SACC-009999-001` from a CDD vault, partner spreadsheet, paper supplementary, etc.) failed because Cellar batches only had a single canonical `batch_number` column with literal-match lookup. The molecule side already had `molecule_identifiers` (a rich 1:N alias table) so molecule resolution worked through any external ID; the batch side did not — asymmetric architecture. This batch makes them symmetric: new `batch_identifiers` table mirrors `molecule_identifiers` shape-for-shape. Plus an `EnsureBatchExists` use case auto-creates placeholder batches when an import references a batch that doesn't exist yet but whose molecule does (always-on for CDD sync, opt-in checkbox for ad-hoc imports per the locked design).
+
+**Big behavioral change to flag for the user:** With the auto-create flag ON, screening-run imports will now silently materialize placeholder batches (source=`EXTERNAL_REFERENCE`, amount=0 mg, chemist=importing user). These placeholders are CORRECT — they preserve the chemist's reference structure — but they're NOT real lab batches. Chemists should review them on the Inventory page and fill in real provenance when they get the physical material.
+
+**Locked design decisions** (all in the plan file):
+
+- **`BatchSource.EXTERNAL_REFERENCE`** new enum value — placeholder batches are queryable as a distinct class (`WHERE source = 'external_reference'`). Honest about what they are.
+- **Placeholder defaults:** `amount = 0 mg`, `chemist = importing_user_id`, all other optional fields `NULL`. Preserves NOT NULL constraints without schema relaxation.
+- **Auto-create policy:** CDD sync = always-on (chemist isn't there to approve each batch); ad-hoc imports (screening run-files, plate maps) = opt-in checkbox `auto_create_unmatched_batches`, default OFF. Shipment import has neither alias auto-create nor the flag — V1 chemist mental model is "you know what you're shipping."
+- **Resolution order:** every import path now uses `resolve_batch_ref(repo, ws, ref)` which tries canonical batch_number FIRST, then alias. Robust to any future workspace switching prefix schemes.
+- **CDD batch IDs** are now captured as aliases on the Batch (in addition to the existing `custom_fields["cdd_batch_id"]` which `plate_registration.py` still reads — that's the existing mechanism; alias capture is purely additive). Re-running CDD sync is idempotent — the alias unique constraint catches duplicate inserts and logs a warning.
+
+**20 commits shipped this batch (oldest → newest):**
+
+| # | Hash | Title |
+|---|---|---|
+| 1 | `c1e14485` | feat(inventory): BatchSource.EXTERNAL_REFERENCE for placeholder batches |
+| 2 | `a1acd1e1` | feat(inventory): BatchIdentifier domain entity (mirror of MoleculeIdentifier) |
+| 3 | `4d7d1330` | feat(inventory): Batch aggregate carries N BatchIdentifiers |
+| 4 | `efdac6c9` | feat(migration): 043 — batch_identifiers table |
+| 5 | `52b75c00` | feat(inventory): BatchIdentifierModel + cascade relationship on BatchModel |
+| 6 | `e0d51d94` | feat(inventory): batch identifiers persistence + find_by_external_identifier |
+| 7 | `01e61aef` | feat(inventory): AddBatchIdentifier / RemoveBatchIdentifier / ListBatchIdentifiers |
+| 8 | `cf0d0646` | feat(inventory): resolve_batch_ref — canonical or alias lookup helper |
+| 9 | `72c6eb63` | feat(inventory): EnsureBatchExists — resolve-or-create-with-alias |
+| 10 | `d9223149` | chore(di): wire AddBatchIdentifier / RemoveBatchIdentifier / ListBatchIdentifiers / EnsureBatchExists |
+| 11 | `a927e36c` | feat(inventory): /api/v1/batches/{id}/identifiers endpoints |
+| 12 | `3cdce8db` | feat(screening): import resolves batch aliases via resolve_batch_ref |
+| 13 | `ad180631` | feat(screening): opt-in auto-create missing batches via EnsureBatchExists |
+| 14 | `26c21789` | feat(inventory): shipment import resolves batch aliases |
+| 15 | `17f87f0a` | feat(inventory): plate registration resolves batch aliases |
+| 16 | `1a6def3b` | feat(cdd_import): capture CDD batch_id as BatchIdentifier alias on import |
+| 17 | `9389d2c0` | chore(frontend): orval regen for batch identifiers + Batch.identifiers type |
+| 18 | `90cfa501` | feat(inventory): Identifiers card on batch detail (CRUD) |
+| 19 | `90c9136f` | feat(screening): opt-in 'auto-create missing batches' on run-file import |
+| 20 | `79049664` | feat(import): surface auto-created batch count in run-import summary |
+
+**Test totals at HEAD:** BE 2492 unit pass (was 2467 — +25 new); 11 integration tests for batch identifiers + 6 pre-existing batch-width = 17/17 integration; 209/209 screening unit; FE 534/534 across 64 files; `pnpm exec tsc --noEmit` clean. DB smoke: `batch_identifiers` table exists, empty (no data migration). No existing batch (`CC-000001-001` etc.) is touched.
+
+**Smoke checklist (pending — please run before push):**
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | Open a batch detail page (`/inventory/batches/<any>`) | New "Identifiers" card visible with empty state "No identifiers registered" |
+| 2 | Click "Add Identifier" → pick "External Lot", value `TEST-LOT-A1`, leave Source blank → save | Row appears with Source = "User added" |
+| 3 | `SELECT * FROM batch_identifiers WHERE identifier = 'TEST-LOT-A1'` | Returns one row, type=`external_lot`, source=`User added` |
+| 4 | Add another identifier on a DIFFERENT batch with value `TEST-LOT-A1` | Get a 409 Conflict (workspace-unique constraint) |
+| 5 | Delete the test identifier via the X button | Row gone; row count = 0 |
+| 6 | Open screening run-file import wizard. Use a CSV referencing batch `MISSING-LOT-9` for a molecule that DOES exist (compound_ref resolves) | Preview screen: `MISSING-LOT-9` shows as unmatched batch_ref (no auto-create flag set) |
+| 7 | Tick the "Auto-create missing batches" checkbox → re-preview | Preview now shows the batch resolved; counter at top reads "1 placeholder batch will be created" (or similar wording) |
+| 8 | Run the import | Summary screen shows amber callout "1 placeholder batch was auto-created from external references" |
+| 9 | `SELECT * FROM batches WHERE source = 'external_reference' ORDER BY created_at DESC LIMIT 1` | Returns the placeholder. amount_value=0, chemist=your user_id, source='external_reference' |
+| 10 | `SELECT * FROM batch_identifiers WHERE identifier = 'MISSING-LOT-9'` | Returns the auto-captured alias pointing at the placeholder |
+| 11 | Re-import the same CSV WITHOUT the auto-create flag | Preview now resolves `MISSING-LOT-9` automatically (it's an alias now); no auto-create needed |
+| 12 | Open the placeholder batch's detail page | Identifiers card shows `MISSING-LOT-9 (external_lot)`, source labeled like "screening import: ..." |
+| 13 | Re-run a CDD sync that includes any batch | New batches get a `cdd_batch_id` alias automatically; `SELECT * FROM batch_identifiers WHERE identifier_type='cdd_batch_id' LIMIT 5` shows recent ones |
+| 14 | Trigger a re-import that would create duplicate CDD aliases | No error surfaces to the chemist (logged warning only); batches still created normally |
+| 15 | Existing CDD-imported batch should still resolve in plate-well lookup (uses `custom_fields["cdd_batch_id"]`) | Existing mechanism untouched — plate registration still works |
+
+**Diagnostic anchors:**
+
+- `backend/src/cellar/application/inventory/resolve_batch_ref.py::resolve_batch_ref` — single source of truth for batch ref resolution. Every importer (screening, shipment, plate) goes through this. Order: canonical → alias.
+- `backend/src/cellar/application/inventory/ensure_batch_exists.py::EnsureBatchExists` — auto-create flow. Called from screening import (gated on flag) + CDD import (always — but via direct `AddBatchIdentifier` post-`CreateBatch`, see `registration.py:373+`).
+- `backend/src/cellar/domain/inventory/batch.py::Batch.add_identifier` / `.remove_identifier` / `.clear_identifiers` — aggregate methods; mirror `Molecule.*`. No event firing (matches molecule pattern).
+- `backend/src/cellar/infrastructure/persistence/sqlalchemy/inventory/batch_repository.py::find_by_external_identifier` — JOIN-based lookup. `_to_model` / `_update_model` round-trip the `identifiers` collection on save (replace-strategy: clears + re-extends model.identifiers).
+- `backend/src/cellar/application/screening/import_run_file_mapper.py::_auto_create_missing_batches` — the per-row iteration that drives auto-create when the flag is set. Updates `batch_index` in-place; returns count for the response.
+- `frontend/src/features/inventory/components/batch-identifiers-card.tsx` — FE Identifiers card mirroring molecule pattern. Type dropdown: External Lot / CDD Batch ID / Vendor Lot / Custom (not labeled "Synonym" — batches don't have that chemist concept).
+- `frontend/src/features/screening-assay/components/run-import-wizard.tsx` — opt-in checkbox lives in step 3 (Preview). Threaded through `useRunImportWizard.autoCreateUnmatchedBatches`.
+
+**Open caveats:**
+
+- **Plate import has alias resolution but NO auto-create** (deferred to follow-up). If a plate CSV references batch `X` that doesn't exist, it'll still error rather than creating a placeholder. Chemists rarely import plate maps for compounds they don't have — usually plate import happens after compounds + batches are registered. Add the flag + EnsureBatchExists wiring if chemists ask.
+- **CDD plate registration still queries `custom_fields["cdd_batch_id"]`** (not the new `batch_identifiers` table) — this is intentional for V1 to avoid touching the existing plate-resolution path. Future cleanup: migrate `plate_registration.py:182+` to use `find_by_external_identifier`, and the `custom_fields["cdd_batch_id"]` write can eventually be retired. For now both mechanisms coexist; the alias is purely additive.
+- **CDD import alias capture is best-effort.** If the alias-add transaction fails (e.g. unique-constraint conflict on re-import), the batch still gets created and a warning is logged. No retry, no rollback. Chemists won't see this; it surfaces only in the structured log.
+- **Workspace-unique constraint on alias** means re-importing different files that reference the SAME external lot id will succeed once and conflict on subsequent attempts. Behavior is correct (the lot id IS unique per workspace by definition), but if chemists have data quality issues with duplicate lot ids across batches, surface as a hard error in the import preview rather than silently dropping. Currently the conflict is logged at the BE and propagates up as a Failure result; the screening import correctly handles it as a no-op on the auto-create path.
+- **No backfill for existing batches.** Batches already in the DB (~50,667 from CDD imports) have NO aliases captured. Future imports will populate as they reference them. If chemists want CDD batch ids backfilled for all existing batches, a one-shot script reading `batches.custom_fields["cdd_batch_id"]` → writing `BatchIdentifier` rows would do it.
+- **The auto-create flag default is OFF** in the screening importer. If chemists never tick it, behavior is exactly today's behavior (unmatched batch refs surface in the unmatched panel). Opt-in is intentional — chemist explicitly accepts the responsibility of "placeholder batches I'll fill in later."
+
+**How to resume:**
+
+1. Walk the 15-step browser smoke checklist on the dev stack (`docker compose up -d && cd frontend && pnpm dev`).
+2. If smokes pass, push `prot-2` and open a PR against `main`. This batch rides on top of: DR edit-points redesign + CC- prefix migration + batch-width config + Identifier consolidation + Source-optional refactor. PR title: "Batch identifiers + import alias resolution". Description should call out:
+   - Auto-3σ DR behavior change (carried from prior session)
+   - CV-→CC- compound number rewrite (carried from prior session)
+   - **NEW:** Placeholder batches with source=external_reference can now appear in inventory if the auto-create flag is used on imports. Chemists should review them and fill in real provenance.
+3. After deploy: if chemists hit the workspace-unique conflict on duplicate external lot ids during real imports, decide whether to (a) loosen the constraint to allow same-id-different-batch (probably wrong — breaks lookup), or (b) surface the conflict more loudly in the preview UI so chemists can resolve it before import.
+
 ### 2026-05-21 — Configurable reg-number prefix (CV-NNNNN → CC-NNNNNN) shipped on prot-2
 
 **Branch:** `prot-2`, +8 commits on top of the DR edit-points batch. Nothing pushed. **Browser smoke pending** (BE end-to-end smoke ran live — next reg = `CC-050668`; settings round-trip verified).
