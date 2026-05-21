@@ -213,6 +213,8 @@ def register_chemical_registration(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
+        ws_settings_repo = SQLAlchemyWorkspaceSettingsRepository(uow)
+
         return RegisterMolecule(
             uow=uow,
             repo=mol_repo,
@@ -220,6 +222,7 @@ def register_chemical_registration(container: Container) -> None:
             structure_processor=c[StructureProcessorProtocol],
             custom_field_validator=validator,
             disclosure_service=ds,
+            workspace_settings_repo=ws_settings_repo,
         )
 
     container.define(RegisterMolecule, _register_molecule)
