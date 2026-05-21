@@ -31,6 +31,7 @@ import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { FileUploadZone, AttachmentList } from "@/features/attachment";
 import { useBatch, useUpdateBatch } from "../hooks/use-batches";
 import { SampleList } from "./sample-list";
+import { BatchIdentifiersCard } from "./batch-identifiers-card";
 import { BATCH_SOURCE_LABELS, type Batch, type BatchSource } from "../types";
 
 interface BatchDetailProps {
@@ -135,6 +136,9 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
                   )}
                 </div>
               </Card>
+
+              {/* Identifiers */}
+              <BatchIdentifiersCard batchId={batchId} />
 
               {/* Samples */}
               <div>
