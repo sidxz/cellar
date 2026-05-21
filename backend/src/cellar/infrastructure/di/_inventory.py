@@ -12,6 +12,7 @@ from cellar.application.inventory.batch_identifiers import (
     ListBatchIdentifiers,
     RemoveBatchIdentifier,
 )
+from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
 from cellar.application.inventory.create_batch import CreateBatch
 from cellar.application.inventory.create_sample import CreateSample
 from cellar.application.inventory.delete_storage_location import DeleteStorageLocation
@@ -187,10 +188,19 @@ def register_inventory(container: Container) -> None:
             settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
         )
 
+    def _bulk_add_batch_identifiers(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return BulkAddBatchIdentifiers(
+            uow=uow,
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+        )
+
     container.define(AddBatchIdentifier, _add_batch_identifier)
     container.define(RemoveBatchIdentifier, _remove_batch_identifier)
     container.define(ListBatchIdentifiers, _list_batch_identifiers)
     container.define(EnsureBatchExists, _ensure_batch_exists)
+    container.define(BulkAddBatchIdentifiers, _bulk_add_batch_identifiers)
 
     # --- Samples ---
     def _sample_create(c: Container):
