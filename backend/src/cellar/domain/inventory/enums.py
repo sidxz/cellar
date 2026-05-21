@@ -10,6 +10,7 @@ class BatchSource(StrEnum):
     PURCHASED = "purchased"
     DONATED = "donated"
     NATURAL_EXTRACT = "natural_extract"
+    EXTERNAL_REFERENCE = "external_reference"
 
 
 class ContainerType(StrEnum):

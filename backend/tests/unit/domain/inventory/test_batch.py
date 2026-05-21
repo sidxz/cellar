@@ -164,3 +164,8 @@ class TestBatchUpdates:
         batch = _make_batch(workspace_id, molecule_id, chemist_id)
         with pytest.raises(ValidationError, match="Purity"):
             batch.update_purity(0)
+
+
+def test_external_reference_source_exists() -> None:
+    """Auto-created placeholder batches use this source."""
+    assert BatchSource.EXTERNAL_REFERENCE.value == "external_reference"
