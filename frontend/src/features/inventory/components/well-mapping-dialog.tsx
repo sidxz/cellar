@@ -41,7 +41,7 @@ function rowLabels(count: number): string[] {
 /**
  * Parse CSV text with well mappings.
  * Expected format: Well,BatchNumber,Concentration,Unit
- * e.g.: A1,CV-00001-001,10,mM
+ * e.g.: A1,CC-000001-001,10,mM
  */
 function parseCsvWellMap(text: string): Record<string, WellMapping> {
   const map: Record<string, WellMapping> = {};
@@ -277,9 +277,9 @@ export function WellMappingDialog({
   const handleDownloadTemplate = () => {
     const header = "Well,Batch Number,Concentration,Unit";
     const examples = [
-      "A1,CV-00001-001,10,mM",
-      "A2,CV-00002-001,10,mM",
-      "B1,CV-00003-001,5,mM",
+      "A1,CC-000001-001,10,mM",
+      "A2,CC-000002-001,10,mM",
+      "B1,CC-000003-001,5,mM",
     ];
     const csv = [header, ...examples].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -359,7 +359,7 @@ export function WellMappingDialog({
                       <Label htmlFor="batch-id">Batch #</Label>
                       <Input
                         id="batch-id"
-                        placeholder="e.g. CV-00001-001"
+                        placeholder="e.g. CC-000001-001"
                         value={batchId}
                         onChange={(e) => setBatchId(e.target.value)}
                         onKeyDown={(e) => {
@@ -420,7 +420,7 @@ export function WellMappingDialog({
                     Paste CSV data or upload a file. Format: <code className="text-xs bg-muted px-1 py-0.5 rounded">Well, Batch#, Concentration, Unit</code>
                   </p>
                   <Textarea
-                    placeholder={"A1,CV-00001-001,10,mM\nA2,CV-00002-001,10,mM\nB1,CV-00003-001,5,mM"}
+                    placeholder={"A1,CC-000001-001,10,mM\nA2,CC-000002-001,10,mM\nB1,CC-000003-001,5,mM"}
                     rows={8}
                     value={csvText}
                     onChange={(e) => setCsvText(e.target.value)}

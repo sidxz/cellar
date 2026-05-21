@@ -199,7 +199,7 @@ export function ImportWizard() {
     const readoutDefs = selectedProtocol?.readout_definitions ?? [];
 
     const baseHeaders = ["plate_barcode", "well_position", "molecule_identifier", "qualifier"];
-    const baseExample = ["PLT-001", "A01", "CV-000001", "="];
+    const baseExample = ["PLT-001", "A01", "CC-000001", "="];
 
     const readoutHeaders = readoutDefs.map((rd) =>
       rd.unit ? `${rd.name} (${rd.unit})` : rd.name

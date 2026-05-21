@@ -122,7 +122,7 @@ function MembershipResultDisplay({ result }: { result: MembershipResult }) {
 
 function downloadTemplate() {
   const header = "identifier,type";
-  const row1 = "CV-00001,registration_number";
+  const row1 = "CC-000001,registration_number";
   const row2 = "aspirin,name";
   const csv = [header, row1, row2].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });

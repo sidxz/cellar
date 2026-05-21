@@ -126,7 +126,7 @@ export function CompoundSearchBar() {
           <Input
             placeholder={
               isTextMode
-                ? "e.g., CV-00001, Aspirin, C9H8O4, CHEMBL25..."
+                ? "e.g., CC-000001, Aspirin, C9H8O4, CHEMBL25..."
                 : searchType === "substructure"
                   ? "e.g., c1ccccc1 (aromatic ring)"
                   : "e.g., CC(=O)Oc1ccccc1C(=O)O"

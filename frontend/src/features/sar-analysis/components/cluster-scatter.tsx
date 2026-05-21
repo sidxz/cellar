@@ -23,7 +23,7 @@ interface ClusterScatterProps {
   colorMode: ColorOption;
   activityPic50: Record<string, number | null>;
   scaffoldByMol: Record<string, string | null>;
-  /** Chemist-readable hover label per molecule id, e.g. "CV-00984 · SACC-0460144". */
+  /** Chemist-readable hover label per molecule id, e.g. "CC-000984 · SACC-0460144". */
   labelByMolId?: Record<string, string>;
   /** IDs currently lassoed — when non-empty, non-lassoed points dim to 0.35
    *  opacity so the chemist can see what they selected on the map. */

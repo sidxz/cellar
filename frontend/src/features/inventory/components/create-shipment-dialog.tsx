@@ -77,7 +77,7 @@ const EMPTY_ITEM: ItemRowState = {
 
 function downloadTemplate() {
   const header = "compound,batch,sample,amount";
-  const row1 = "CV-00001,B-001,SMP-001,5mg";
+  const row1 = "CC-000001,B-001,SMP-001,5mg";
   const row2 = "Aspirin,B-002,SMP-005,2.5 g";
   const csv = [header, row1, row2].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
@@ -661,7 +661,7 @@ export function CreateShipmentDialog({
                   </Label>
                   <Textarea
                     placeholder={
-                      "compound,batch,sample,amount\nCV-00001,B-001,SMP-001,5mg"
+                      "compound,batch,sample,amount\nCC-000001,B-001,SMP-001,5mg"
                     }
                     rows={5}
                     className="font-mono text-xs"

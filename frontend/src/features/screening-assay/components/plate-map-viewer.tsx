@@ -326,7 +326,7 @@ export function PlateMapViewer({
       </TooltipProvider>
 
       {/* Compound legend — table form. Sorted by reg id so the analyst can
-          locate any compound by its CV-NNNNN. Aliases column truncates to
+          locate any compound by its CC-NNNNNN. Aliases column truncates to
           keep rows scannable. */}
       {compoundEntries.length > 0 && (
         <div className="rounded-md border">

@@ -415,7 +415,7 @@ export interface DoseResponseCurve {
   id: string;
   workspace_id: string;
   molecule_id: string;
-  /** Canonical reg ID (e.g. "CV-00602") — primary label in DR table. */
+  /** Canonical reg ID (e.g. "CC-000602") — primary label in DR table. */
   registration_number: string | null;
   molecule_name: string | null;
   /** Vendor / external aliases — shown next to the reg id. */
