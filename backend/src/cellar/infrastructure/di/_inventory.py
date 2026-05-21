@@ -7,9 +7,15 @@ from __future__ import annotations
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from cellar.application.inventory.batch_identifiers import (
+    AddBatchIdentifier,
+    ListBatchIdentifiers,
+    RemoveBatchIdentifier,
+)
 from cellar.application.inventory.create_batch import CreateBatch
 from cellar.application.inventory.create_sample import CreateSample
 from cellar.application.inventory.delete_storage_location import DeleteStorageLocation
+from cellar.application.inventory.ensure_batch_exists import EnsureBatchExists
 from cellar.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from cellar.application.inventory.get_inventory_summary import GetInventorySummary
 from cellar.application.inventory.get_sample import GetSample, ListSamplesByBatch
@@ -160,6 +166,31 @@ def register_inventory(container: Container) -> None:
     container.define(GetBatch, _batch_query(GetBatch))
     container.define(ListBatchesByMolecule, _batch_query(ListBatchesByMolecule))
     container.define(ListBatchesGlobal, _batch_query(ListBatchesGlobal))
+
+    def _add_batch_identifier(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddBatchIdentifier(uow, SQLAlchemyBatchRepository(uow), c[EventDispatcher])
+
+    def _remove_batch_identifier(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemoveBatchIdentifier(uow, SQLAlchemyBatchRepository(uow), c[EventDispatcher])
+
+    def _list_batch_identifiers(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListBatchIdentifiers(uow, SQLAlchemyBatchRepository(uow))
+
+    def _ensure_batch_exists(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return EnsureBatchExists(
+            uow=uow,
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+        )
+
+    container.define(AddBatchIdentifier, _add_batch_identifier)
+    container.define(RemoveBatchIdentifier, _remove_batch_identifier)
+    container.define(ListBatchIdentifiers, _list_batch_identifiers)
+    container.define(EnsureBatchExists, _ensure_batch_exists)
 
     # --- Samples ---
     def _sample_create(c: Container):
