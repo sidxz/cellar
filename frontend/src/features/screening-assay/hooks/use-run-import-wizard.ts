@@ -40,6 +40,7 @@ export interface UseRunImportWizardResult {
   appliedTemplate: RunImportTemplate | null;
   saveAsTemplate: boolean;
   templateName: string;
+  autoCreateUnmatchedBatches: boolean;
   compoundPicks: Record<string, string>;
   isDragging: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -66,6 +67,7 @@ export interface UseRunImportWizardResult {
   setAppliedTemplate: (t: RunImportTemplate | null) => void;
   setSaveAsTemplate: (v: boolean) => void;
   setTemplateName: (v: string) => void;
+  setAutoCreateUnmatchedBatches: (v: boolean) => void;
   setCompoundPicks: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   reset: () => void;
   handleOpenChange: (next: boolean) => void;
@@ -91,6 +93,7 @@ export function useRunImportWizard({
   const [appliedTemplate, setAppliedTemplate] = useState<RunImportTemplate | null>(null);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  const [autoCreateUnmatchedBatches, setAutoCreateUnmatchedBatches] = useState(false);
   // Per-molecule batch picks from the disambiguation panel. Cleared when
   // the wizard resets. ``molecule_id -> batch_id``.
   const [compoundPicks, setCompoundPicks] = useState<Record<string, string>>({});
@@ -126,6 +129,7 @@ export function useRunImportWizard({
     setAppliedTemplate(null);
     setSaveAsTemplate(false);
     setTemplateName("");
+    setAutoCreateUnmatchedBatches(false);
     setCompoundPicks({});
     previewMutationRef.current.reset();
     importMutationRef.current.reset();
@@ -305,6 +309,7 @@ export function useRunImportWizard({
         compound_batch_overrides: Object.entries(compoundPicks).map(
           ([molecule_id, batch_id]) => ({ molecule_id, batch_id }),
         ),
+        auto_create_unmatched_batches: autoCreateUnmatchedBatches,
       },
       {
         onSuccess: (data) => {
@@ -330,7 +335,7 @@ export function useRunImportWizard({
         onError: () => showError("Import failed"),
       },
     );
-  }, [preview, buildMapping, compoundPicks, importMutation, saveAsTemplate, templateName, createTemplate]);
+  }, [preview, buildMapping, compoundPicks, autoCreateUnmatchedBatches, importMutation, saveAsTemplate, templateName, createTemplate]);
 
   // ─── Return ──────────────────────────────────────────────────────────────────
   return {
@@ -342,6 +347,7 @@ export function useRunImportWizard({
     appliedTemplate,
     saveAsTemplate,
     templateName,
+    autoCreateUnmatchedBatches,
     compoundPicks,
     isDragging,
     fileInputRef,
@@ -360,6 +366,7 @@ export function useRunImportWizard({
     setAppliedTemplate,
     setSaveAsTemplate,
     setTemplateName,
+    setAutoCreateUnmatchedBatches,
     setCompoundPicks,
     reset,
     handleOpenChange,

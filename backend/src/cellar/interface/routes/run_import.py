@@ -376,6 +376,10 @@ class ImportRunFileRequest(BaseModel):
     preview_id: uuid.UUID
     mapping: ColumnMappingRequest
     compound_batch_overrides: list[CompoundBatchOverrideRequest] = Field(default_factory=list)
+    # When True, auto-create placeholder batches for unmatched batch refs
+    # whose compound resolves to a known molecule. Defaults to False so the
+    # chemist must explicitly opt in.
+    auto_create_unmatched_batches: bool = False
 
 
 class ImportRunFileResponse(BaseModel):
@@ -426,6 +430,7 @@ async def import_run_file(
         preview_id=body.preview_id,
         mapping=mapping,
         compound_batch_overrides=overrides,
+        auto_create_unmatched_batches=body.auto_create_unmatched_batches,
     )
     result = await uc(cmd, auth=auth)
     out: ImportRunFileResult = result_to_response(result)

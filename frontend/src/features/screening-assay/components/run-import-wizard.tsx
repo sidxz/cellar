@@ -91,6 +91,8 @@ export function RunImportWizard({
     setSaveAsTemplate,
     templateName,
     setTemplateName,
+    autoCreateUnmatchedBatches,
+    setAutoCreateUnmatchedBatches,
     compoundPicks,
     setCompoundPicks,
     isDragging,
@@ -164,6 +166,8 @@ export function RunImportWizard({
             onCompoundPick={(moleculeId, batchId) =>
               setCompoundPicks((p) => ({ ...p, [moleculeId]: batchId }))
             }
+            autoCreateUnmatchedBatches={autoCreateUnmatchedBatches}
+            onAutoCreateUnmatchedBatches={setAutoCreateUnmatchedBatches}
           />
         )}
 
@@ -481,10 +485,14 @@ function PreviewStep({
   preview,
   compoundPicks,
   onCompoundPick,
+  autoCreateUnmatchedBatches,
+  onAutoCreateUnmatchedBatches,
 }: {
   preview: PreviewRunFileResponse;
   compoundPicks: Record<string, string>;
   onCompoundPick: (moleculeId: string, batchId: string) => void;
+  autoCreateUnmatchedBatches: boolean;
+  onAutoCreateUnmatchedBatches: (v: boolean) => void;
 }) {
   const willCreateTotal =
     preview.will_create_plates +
@@ -604,6 +612,22 @@ function PreviewStep({
           </p>
         </div>
       )}
+
+      <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
+        <Checkbox
+          checked={autoCreateUnmatchedBatches}
+          onCheckedChange={(v) => onAutoCreateUnmatchedBatches(!!v)}
+          className="mt-0.5"
+        />
+        <div>
+          <span className="font-medium">Auto-create missing batches</span>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            When a row&apos;s batch identifier doesn&apos;t match any existing batch in
+            Cellar AND the compound resolves, create a placeholder batch
+            automatically and capture the imported identifier as an alias.
+          </p>
+        </div>
+      </label>
 
       {preview.unmatched_compound_refs.length > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">

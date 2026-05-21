@@ -121,6 +121,9 @@ export interface ImportRunFilePayload {
   preview_id: string;
   mapping: ColumnMappingPayload;
   compound_batch_overrides: CompoundBatchOverride[];
+  /** When true, auto-create placeholder batches for unmatched batch refs
+   *  whose compound resolves to a known molecule. Default false. */
+  auto_create_unmatched_batches?: boolean;
 }
 
 export interface ImportRunFileResponse {
