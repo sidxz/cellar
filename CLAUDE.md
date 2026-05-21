@@ -183,6 +183,86 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-21 — Configurable reg-number prefix (CV-NNNNN → CC-NNNNNN) shipped on prot-2
+
+**Branch:** `prot-2`, +8 commits on top of the DR edit-points batch. Nothing pushed. **Browser smoke pending** (BE end-to-end smoke ran live — next reg = `CC-050668`; settings round-trip verified).
+
+**Plan:** `docs/superpowers/plans/2026-05-21-configurable-reg-number-prefix.md` (10 tasks shipped via subagent-driven execution).
+
+**What this is:** registration-number prefix + zero-pad width are now per-workspace settings (`registration_number_prefix` + `registration_number_width` in `workspace_settings.registration_rules` JSONB). Defaults `CC-` / `6` (1M-compound capacity). The repo's `next_registration_number` is regex-based now (`SUBSTRING ... FROM '[0-9]+$'`), tolerant of mixed prefix lengths + widths across history. Migration 042 rewrote ALL existing molecules + batches + bulk-registration items from `CV-NNNNN` to `CC-NNNNNN` (50,667 molecules — way more than the ~982 from prior handoffs, because CDD imports populated the DB).
+
+**8 commits (oldest → newest on prot-2 after `50802aed`):**
+
+| # | Hash | Title |
+|---|---|---|
+| 1 | `d3ca580b` | feat(workspace_config): per-workspace registration-number prefix + width |
+| 2 | `0a5b5751` | feat(chemical_registration): regex-based reg-number lookup; signature takes prefix/width |
+| 3 | `1c3b7026` | feat(chemical_registration): RegisterMolecule plumbs workspace prefix/width |
+| 4 | `54bf053a` | chore(di): wire WorkspaceSettingsRepository into RegisterMolecule factory |
+| 5 | `54313903` | feat(workspace_config): FE types for registration_number_prefix + width |
+| 6 | `389b2137` | feat(workspace_config): UI inputs for registration_number_prefix + width |
+| 7 | `be795cb5` | feat(migration): 042 — rewrite reg/batch numbers from CV-NNNNN to CC-NNNNNN |
+| 8 | `88fc8b6b` | chore(frontend): update placeholders/CSV templates to CC-NNNNNN |
+
+**Locked design decisions:**
+
+- Identity is per-workspace (mirrors the existing `WHERE workspace_id = ?` scope of the next-number lookup). Two new keys in `registration_rules`: `registration_number_prefix` (default `"CC-"`, validated `^[A-Z]{2,8}-$`) + `registration_number_width` (default `6`, bounded `[4, 8]`).
+- Counter is GLOBAL per-workspace, not per-prefix. After migration, max = 50667, next = `CC-050668`. If a workspace later switches to `MTB-`, next would be `MTB-050669`. Continuous monotonic counter avoids dedup logic complexity and prevents accidental collision.
+- The lookup query uses regex `SUBSTRING(col FROM '[0-9]+$')` instead of the old `substr(col, 4)` so it tolerates any prefix length + any pad width going forward.
+- `RegisterMolecule` reads settings inside the use case and passes them through; if `WorkspaceSettings` doesn't exist for a workspace (brand-new), it falls back to `WorkspaceSettings.create_default()` which surfaces the new defaults from the property getters.
+- Existing data was REWRITTEN (user explicitly chose this over keep-historical), so the dev DB now has `CC-000001..CC-050667` and `CC-000001-001..` batch numbers; bulk-registration item snapshots also rewritten.
+- Migration 042 downgrade has a guard that refuses to run when 5-digit projection would collide — at 50K molecules the dev DB cannot downgrade. The intended end-state is forward-only.
+- `workspace_settings.registration_rules` column is typed `JSON` (not `JSONB`), so the migration uses explicit `::jsonb` casts for the `||` merge and `-` key-deletion operators. Worth noting if anyone writes a future migration on the same column.
+
+**Important deviation from plan:** `WorkspaceSettings.update()` validation rejects `registration_number_width` being a `bool` (because `True`/`False` are int subclasses in Python). Property getter also has the `not isinstance(raw, bool)` guard. Caught during TDD on Task 1.
+
+**Smoke checklist (pending — please run before push):**
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | Open `/settings` → Registration card | Two new inputs: "Compound Number Prefix" (CC-) + "Compound Number Width" (6) above the existing "Create batch on re-registration" switch. |
+| 2 | Change prefix to `LAB-`, width to `7`, click Save | Success toast. Refresh → values persist. |
+| 3 | Open compound registration wizard, register a new compound | New compound's reg number is `LAB-0000NNN` (7-digit, LAB- prefix). |
+| 4 | Reset prefix to `CC-`, width to `6` | Settings save. |
+| 5 | Register another new compound | Reg number is `CC-050669` (the prior LAB- one bumped the counter; new compound continues the global counter regardless of prefix change). |
+| 6 | Type lowercase `cc-` in prefix field, try to save | Zod error: "Prefix must be 2–8 uppercase letters followed by a dash". |
+| 7 | Try width `3` or `9` | Zod blocks (input has min/max 4/8 + Zod validation). |
+| 8 | Open `/compounds/CC-000001` (lowest in DB) | Page renders normally. Aliases column shows whatever the import created. |
+| 9 | Open bulk-import wizard's CSV template download | Example rows use `CC-000001` (not `CV-00001`). |
+| 10 | Inventory plate-import wizard's CSV template | Example uses `CC-000001-001` for batch. |
+| 11 | Compound search bar | Placeholder reads `e.g., CC-000001, Aspirin, ...`. |
+| 12 | Open any existing compound page (e.g. `/compounds/CC-050667`) | Renders. Batch numbers display as `CC-050667-NNN`. |
+
+**Diagnostic anchors:**
+
+- `backend/src/cellar/domain/workspace_config/workspace_settings.py` — `registration_number_prefix` / `registration_number_width` properties (read from `registration_rules` JSONB with defaults `CC-` / `6`) + validation in `update()`. Single source of truth for the defaults.
+- `backend/src/cellar/infrastructure/persistence/sqlalchemy/chemical_registration/molecule_repository.py::next_registration_number` — `SUBSTRING(registration_number FROM '[0-9]+$')` + `LPAD`. Robust to any prefix and width.
+- `backend/src/cellar/application/chemical_registration/register_molecule.py::_resolve_reg_number_config` — single helper called from both call sites (disclosed + undisclosed branches). Falls back to `WorkspaceSettings.create_default()` if no settings row.
+- `backend/alembic/versions/042_configurable_reg_prefix.py` — one-way data rewrite + workspace_settings seed. Downgrade guard refuses on collision-producing datasets.
+- `frontend/src/features/workspace-config/components/workspace-settings-form.tsx` — Registration card now has prefix + width inputs with mirrored Zod validation.
+
+**Open caveats:**
+
+- Migration 042 downgrade cannot run on the dev DB (50K molecules → 5-digit projection collisions). This is by design — the migration is forward-only on real datasets. If we ever need to test the downgrade, it works on a database with ≤ 9999 molecules per workspace AND no projection collisions.
+- The `workspace_settings.registration_rules` column is typed `JSON` (not `JSONB`) in the ORM model — any future migration touching this column needs the same `::jsonb` round-trip pattern used in 042.
+- The bool-subclass guard on `registration_number_width` was added defensively because `isinstance(True, int) == True` in Python and we don't want `True` to be silently accepted as width 1 (which would also fail the `[4,8]` bound, but defensively rejected earlier).
+- FE Zod has `regex(/^[A-Z]{2,8}-$/)` on the prefix input but uses CSS `textTransform: uppercase` only for display — if a user pastes lowercase, Zod blocks submission with a clear message. An onChange-uppercase transformer could be added as a follow-up if friction is reported.
+- After downgrade-to-041 (not possible on this DB but hypothetically), the FE inputs would still show; they'd just read `undefined` from `registration_rules` and fall back to displayed defaults. No crash, no data corruption.
+
+**Test totals at HEAD:**
+- Backend unit suite: 2458 passed (`uv run pytest tests/unit -q`)
+- Backend integration: TestNextRegistrationNumber 6/6 passed against real Postgres testcontainer
+- Frontend: 534/534 passed across 64 files
+- `pnpm exec tsc --noEmit`: clean
+
+**How to resume:**
+
+1. Walk the 12-step browser smoke checklist on the dev stack (`docker compose up -d && cd frontend && pnpm dev`).
+2. If smokes pass, push `prot-2` and open a PR against `main`. This batch rides on the DR edit-points redesign batch from 2026-05-19. PR title: "DR edit-points redesign + configurable reg-number prefix (CV-→CC-)". Description should call out BOTH:
+   - The DR auto-3σ behavior change (existing curves will fit differently)
+   - The CV-→CC- rewrite: every compound reg number was rewritten in migration 042. Bookmarks/links using CV-NNNNN are dead. External references (CDD vault, paper notebooks) referencing CV-NNNNN won't auto-resolve. Chemists should be informed of the new identifier scheme.
+3. After deploy: existing chemists need to be informed of the CV-→CC- rename. CV-00001 → CC-000001, CV-00982 → CC-000982, etc. The numeric tail is preserved exactly.
+
 ### 2026-05-19 — DR edit-points redesign (Sprints 1+2+3) shipped on prot-2
 
 **Branch:** `prot-2`, 28 new commits since `bcdaf070`. Nothing pushed. **Browser smoke pending.** BE 2440/2440 unit pass; FE 534/534 across 64 files; `pnpm exec tsc --noEmit` clean.
