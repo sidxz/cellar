@@ -23,6 +23,8 @@ from cellar.domain.shared.enums import AmountUnit, ConcentrationUnit
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from cellar.domain.shared.value_objects import Amount, Concentration
 from cellar.domain.workspace_config.enums import FieldTarget
+from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
+from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -59,12 +61,25 @@ class CreateBatch:
         molecule_repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
         custom_field_validator: CustomFieldValidator | None = None,
+        workspace_settings_repo: WorkspaceSettingsRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._molecule_repo = molecule_repo
         self._dispatcher = dispatcher
         self._custom_field_validator = custom_field_validator
+        self._workspace_settings_repo = workspace_settings_repo
+
+    async def _resolve_batch_width(self, workspace_id: uuid.UUID) -> int:
+        if self._workspace_settings_repo is None:
+            settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
+        else:
+            settings = await self._workspace_settings_repo.find_by_workspace_id(
+                workspace_id
+            )
+            if settings is None:
+                settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
+        return settings.batch_sequence_width
 
     async def __call__(
         self, input: CreateBatchCommand, auth: AuthContext | None = None
@@ -81,8 +96,9 @@ class CreateBatch:
             if molecule.is_tombstone:
                 return Failure(ConflictError("Cannot create batch for a merged molecule"))
 
+            width = await self._resolve_batch_width(input.workspace_id)
             batch_number = await self._repo.next_batch_number(
-                input.workspace_id, input.molecule_id
+                input.workspace_id, input.molecule_id, width=width
             )
             concentration = None
             if input.concentration_value is not None and input.concentration_unit is not None:
