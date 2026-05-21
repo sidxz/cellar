@@ -114,6 +114,10 @@ class PreviewRunFileResponse(BaseModel):
     unmatched_compound_refs: list[str] = Field(default_factory=list)
     ambiguous_compounds: list[AmbiguousCompoundModel] = Field(default_factory=list)
     row_conflicts: list[str] = Field(default_factory=list)
+    # Number of placeholder batches that would be auto-created if
+    # auto_create_unmatched_batches=True is passed to the import step.
+    # Always 0 when the preview query doesn't set that flag.
+    auto_created_batches: int = 0
 
 
 @router.post(
@@ -218,6 +222,7 @@ async def preview_run_file(
             for a in preview.ambiguous_compounds
         ],
         row_conflicts=list(preview.row_conflicts),
+        auto_created_batches=preview.auto_created_batches,
     )
 
 
@@ -317,6 +322,7 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
             for a in preview.ambiguous_compounds
         ],
         row_conflicts=list(preview.row_conflicts),
+        auto_created_batches=preview.auto_created_batches,
     )
 
 
@@ -398,6 +404,9 @@ class ImportRunFileResponse(BaseModel):
     compute_warning: str | None = None
     attachment_warning: str | None = None
     fit_warnings: list[str] = Field(default_factory=list)
+    # Number of placeholder batches auto-created during this import.
+    # Always 0 when auto_create_unmatched_batches=False on the request.
+    auto_created_batches: int = 0
 
 
 @router.post(
@@ -465,6 +474,7 @@ async def import_run_file(
         compute_warning=out.compute_warning,
         attachment_warning=out.attachment_warning,
         fit_warnings=out.fit_warnings,
+        auto_created_batches=out.auto_created_batches,
     )
 
 

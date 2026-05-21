@@ -145,6 +145,10 @@ export interface ImportRunFileResponse {
   /** Per-compound fit failure messages from the post-import curve fit. Optional
    *  for back-compat with deployments that haven't been upgraded. */
   fit_warnings?: string[];
+  /** Number of placeholder batches auto-created during this import.
+   *  Always 0 (or absent on older deployments) when
+   *  auto_create_unmatched_batches was false on the request. */
+  auto_created_batches?: number;
 }
 
 export interface RunImportTemplate {

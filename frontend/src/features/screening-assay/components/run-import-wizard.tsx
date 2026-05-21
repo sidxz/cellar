@@ -940,6 +940,21 @@ function ConfirmStep({
         </div>
       </div>
 
+      {(result.auto_created_batches ?? 0) > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950">
+          <p className="font-medium text-amber-900 dark:text-amber-200">
+            {result.auto_created_batches}{" "}
+            placeholder{" "}
+            {result.auto_created_batches === 1 ? "batch was" : "batches were"}{" "}
+            auto-created from external references.
+          </p>
+          <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">
+            Review them on the Inventory page and fill in real provenance
+            (amount, source, chemist).
+          </p>
+        </div>
+      )}
+
       {result.compute_warning && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
           <div className="mb-1 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
