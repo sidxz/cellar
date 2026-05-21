@@ -46,6 +46,7 @@ const schema = z.object({
     .string()
     .regex(/^[A-Z]{2,8}-$/, "Prefix must be 2–8 uppercase letters followed by a dash"),
   regWidth: z.coerce.number().int().min(4).max(8),
+  batchWidth: z.coerce.number().int().min(2).max(6),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -90,6 +91,7 @@ export function WorkspaceSettingsForm() {
       createBatchOnDup: false,
       regPrefix: "CC-",
       regWidth: 6,
+      batchWidth: 3,
     },
   });
 
@@ -108,6 +110,7 @@ export function WorkspaceSettingsForm() {
         createBatchOnDup: !!settings.registration_rules?.create_batch_on_duplicate,
         regPrefix: settings.registration_rules?.registration_number_prefix ?? "CC-",
         regWidth: settings.registration_rules?.registration_number_width ?? 6,
+        batchWidth: settings.registration_rules?.batch_sequence_width ?? 3,
       });
     }
   }, [settings, reset]);
@@ -134,6 +137,7 @@ export function WorkspaceSettingsForm() {
         create_batch_on_duplicate: values.createBatchOnDup,
         registration_number_prefix: values.regPrefix,
         registration_number_width: values.regWidth,
+        batch_sequence_width: values.batchWidth,
       },
     });
   };
@@ -225,6 +229,21 @@ export function WorkspaceSettingsForm() {
               <p className="text-xs text-muted-foreground">
                 Zero-pad width for the numeric tail. 6 gives <code>CC-000001</code> ..{" "}
                 <code>CC-999999</code> (1M compounds).
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="batchWidth">Batch Sequence Width</Label>
+              <Input
+                id="batchWidth"
+                type="number"
+                min={2}
+                max={6}
+                {...register("batchWidth")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Zero-pad width for the per-compound batch sequence. 3 gives{" "}
+                <code>CC-000001-001</code> .. <code>CC-000001-999</code> per compound.
               </p>
             </div>
 
