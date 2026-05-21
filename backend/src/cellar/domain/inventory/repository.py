@@ -34,6 +34,15 @@ class BatchRepository(Protocol):
     async def find_by_batch_number(
         self, workspace_id: uuid.UUID, batch_number: str
     ) -> Batch | None: ...
+    async def find_by_external_identifier(
+        self, workspace_id: uuid.UUID, identifier: str
+    ) -> Batch | None:
+        """Find a batch by any of its external/foreign identifiers (aliases).
+
+        Returns None if no batch has this identifier registered.
+        """
+        ...
+
     async def next_batch_number(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, *, width: int
     ) -> BatchNumber: ...

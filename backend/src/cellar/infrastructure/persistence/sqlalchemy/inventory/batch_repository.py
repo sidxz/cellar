@@ -11,6 +11,7 @@ from sqlalchemy.sql import expression
 
 from cellar.domain.shared.pagination import PageResult
 from cellar.domain.inventory.batch import Batch
+from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.domain.inventory.enums import BatchSource
 from cellar.domain.shared.value_objects import BatchNumber
 from cellar.infrastructure.persistence.sqlalchemy.inventory._vo_mappers import (
@@ -25,7 +26,11 @@ from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
-from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel, SampleModel
+from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
+    BatchIdentifierModel,
+    BatchModel,
+    SampleModel,
+)
 
 
 class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
@@ -219,6 +224,19 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
     # ------------------------------------------------------------------
 
     def _to_domain(self, model: BatchModel) -> Batch:
+        identifiers = [
+            BatchIdentifier(
+                id=im.id,
+                batch_id=im.batch_id,
+                identifier=im.identifier,
+                identifier_type=im.identifier_type,
+                source=im.source,
+                registered_by=im.registered_by,
+                created_at=im.created_at,
+                updated_at=im.updated_at,
+            )
+            for im in (model.identifiers or [])
+        ]
         return Batch(
             id=model.id,
             workspace_id=model.workspace_id,
@@ -250,10 +268,11 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
+            identifiers=identifiers,
         )
 
     def _to_model(self, aggregate: Batch) -> BatchModel:
-        return BatchModel(
+        model = BatchModel(
             id=aggregate.id,
             workspace_id=aggregate.workspace_id,
             molecule_id=aggregate.molecule_id,
@@ -283,6 +302,10 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             synthesis_request_id=aggregate.synthesis_request_id,
             version=aggregate.version,
         )
+        model.identifiers = [
+            self._ident_to_model(i, aggregate.workspace_id) for i in aggregate.identifiers
+        ]
+        return model
 
     def _update_model(self, model: BatchModel, aggregate: Batch) -> None:
         model.batch_number = aggregate.batch_number.value
@@ -323,3 +346,48 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             model.storage_temperature_celsius = None
             model.storage_humidity_percent = None
             model.storage_light_condition = None
+        # Sync identifiers — replace strategy mirrors molecule repo
+        model.identifiers.clear()
+        model.identifiers.extend(
+            self._ident_to_model(i, aggregate.workspace_id) for i in aggregate.identifiers
+        )
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _ident_to_model(ident: BatchIdentifier, workspace_id: uuid.UUID) -> BatchIdentifierModel:
+        return BatchIdentifierModel(
+            id=ident.id,
+            batch_id=ident.batch_id,
+            workspace_id=workspace_id,
+            identifier=ident.identifier,
+            identifier_type=ident.identifier_type,
+            source=ident.source,
+            registered_by=ident.registered_by,
+        )
+
+    # ------------------------------------------------------------------
+    # External identifier lookup
+    # ------------------------------------------------------------------
+
+    async def find_by_external_identifier(
+        self, workspace_id: uuid.UUID, identifier: str
+    ) -> Batch | None:
+        """Find a batch by any of its external/foreign identifiers (aliases)."""
+        stmt = (
+            select(BatchModel)
+            .join(
+                BatchIdentifierModel,
+                BatchIdentifierModel.batch_id == BatchModel.id,
+            )
+            .where(
+                BatchIdentifierModel.workspace_id == workspace_id,
+                BatchIdentifierModel.identifier == identifier,
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return self._to_domain_tracked(model) if model else None
