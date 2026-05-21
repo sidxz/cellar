@@ -8,6 +8,11 @@ from datetime import date
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from cellar.application.inventory.batch_identifiers import (
+    AddBatchIdentifierCommand,
+    ListBatchIdentifiersQuery,
+    RemoveBatchIdentifierCommand,
+)
 from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from cellar.application.inventory.get_batch import (
     GetBatch,
@@ -17,11 +22,15 @@ from cellar.application.inventory.get_batch import (
 )
 from cellar.application.inventory.update_batch import UpdateBatch, UpdateBatchCommand
 from cellar.domain.inventory.batch import Batch
+from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.interface.dependencies import (
+    AddBatchIdentifierDep,
     AuthDep,
     CreateBatchDep,
     GetBatchDep,
     ListBatchesByMoleculeDep,
+    ListBatchIdentifiersDep,
+    RemoveBatchIdentifierDep,
     UpdateBatchDep,
 )
 from cellar.interface.error_handlers import result_to_response
@@ -119,6 +128,28 @@ class UpdateBatchRequest(BaseModel):
     notebook_reference: str | None = None
     storage_conditions_notes: str | None = None
     custom_fields: dict | None = None
+
+
+class BatchIdentifierResponse(BaseModel):
+    id: uuid.UUID
+    identifier: str
+    identifier_type: str
+    source: str
+
+    @classmethod
+    def from_domain(cls, i: BatchIdentifier) -> "BatchIdentifierResponse":
+        return cls(
+            id=i.id,
+            identifier=i.identifier,
+            identifier_type=i.identifier_type,
+            source=i.source,
+        )
+
+
+class AddBatchIdentifierBody(BaseModel):
+    identifier: str
+    identifier_type: str
+    source: str
 
 
 @router.post("/batches", response_model=BatchResponse, status_code=201)
@@ -221,3 +252,66 @@ async def update_batch(
     )
     result = await uc(cmd, auth=auth)
     return BatchResponse.from_domain(result_to_response(result))
+
+
+# ---------------------------------------------------------------------------
+# Batch identifier sub-resource endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/batches/{batch_id}/identifiers",
+    response_model=list[BatchIdentifierResponse],
+)
+async def list_batch_identifiers(
+    batch_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListBatchIdentifiersDep,
+) -> list[BatchIdentifierResponse]:
+    """List all external identifiers on a batch."""
+    query = ListBatchIdentifiersQuery(workspace_id=auth.workspace_id, batch_id=batch_id)
+    identifiers = result_to_response(await use_case(query, auth=auth))
+    return [BatchIdentifierResponse.from_domain(i) for i in identifiers]
+
+
+@router.post(
+    "/batches/{batch_id}/identifiers",
+    response_model=list[BatchIdentifierResponse],
+    status_code=201,
+)
+async def add_batch_identifier(
+    batch_id: uuid.UUID,
+    body: AddBatchIdentifierBody,
+    auth: AuthDep,
+    use_case: AddBatchIdentifierDep,
+) -> list[BatchIdentifierResponse]:
+    """Add an external identifier to a batch. Returns the updated list."""
+    command = AddBatchIdentifierCommand(
+        workspace_id=auth.workspace_id,
+        batch_id=batch_id,
+        identifier=body.identifier,
+        identifier_type=body.identifier_type,
+        source=body.source,
+        registered_by=auth.user_id,
+    )
+    batch = result_to_response(await use_case(command, auth=auth))
+    return [BatchIdentifierResponse.from_domain(i) for i in batch.identifiers]
+
+
+@router.delete(
+    "/batches/{batch_id}/identifiers/{identifier_id}",
+    status_code=204,
+)
+async def remove_batch_identifier(
+    batch_id: uuid.UUID,
+    identifier_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: RemoveBatchIdentifierDep,
+) -> None:
+    """Remove an external identifier from a batch."""
+    command = RemoveBatchIdentifierCommand(
+        workspace_id=auth.workspace_id,
+        batch_id=batch_id,
+        identifier_id=identifier_id,
+    )
+    result_to_response(await use_case(command, auth=auth))

@@ -48,6 +48,11 @@ from cellar.application.inventory.registered_plates import (
     RegisterPlate,
     UpdatePlate,
 )
+from cellar.application.inventory.batch_identifiers import (
+    AddBatchIdentifier,
+    ListBatchIdentifiers,
+    RemoveBatchIdentifier,
+)
 from cellar.application.inventory.update_batch import UpdateBatch
 from cellar.application.inventory.update_storage_location import UpdateStorageLocation
 
@@ -60,6 +65,9 @@ __all__ = [
     "ListBatchesByMoleculeDep",
     "ListBatchesGlobalDep",
     "UpdateBatchDep",
+    "AddBatchIdentifierDep",
+    "RemoveBatchIdentifierDep",
+    "ListBatchIdentifiersDep",
     "CreateSampleDep",
     "GetSampleDep",
     "ListSamplesByBatchDep",
@@ -102,6 +110,15 @@ ListBatchesByMoleculeDep = Annotated[
 ]
 ListBatchesGlobalDep = Annotated[ListBatchesGlobal, Depends(_get_use_case(ListBatchesGlobal))]
 UpdateBatchDep = Annotated[UpdateBatch, Depends(_get_use_case(UpdateBatch))]
+AddBatchIdentifierDep = Annotated[
+    AddBatchIdentifier, Depends(_get_use_case(AddBatchIdentifier))
+]
+RemoveBatchIdentifierDep = Annotated[
+    RemoveBatchIdentifier, Depends(_get_use_case(RemoveBatchIdentifier))
+]
+ListBatchIdentifiersDep = Annotated[
+    ListBatchIdentifiers, Depends(_get_use_case(ListBatchIdentifiers))
+]
 CreateSampleDep = Annotated[CreateSample, Depends(_get_use_case(CreateSample))]
 GetSampleDep = Annotated[GetSample, Depends(_get_use_case(GetSample))]
 ListSamplesByBatchDep = Annotated[ListSamplesByBatch, Depends(_get_use_case(ListSamplesByBatch))]
