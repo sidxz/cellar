@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import Any
 
+from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.domain.inventory.enums import BatchSource
 from cellar.domain.inventory.events import BatchCreated, BatchReassigned
 from cellar.domain.shared.entity import AggregateRoot
@@ -52,6 +53,7 @@ class Batch(AggregateRoot):
         synthesis_route_id: uuid.UUID | None = None,
         synthesis_step_id: uuid.UUID | None = None,
         synthesis_request_id: uuid.UUID | None = None,
+        identifiers: list[BatchIdentifier] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -87,6 +89,7 @@ class Batch(AggregateRoot):
         self.synthesis_route_id = synthesis_route_id
         self.synthesis_step_id = synthesis_step_id
         self.synthesis_request_id = synthesis_request_id
+        self.identifiers: list[BatchIdentifier] = list(identifiers) if identifiers else []
 
     @property
     def batch_number(self) -> BatchNumber:
@@ -247,4 +250,26 @@ class Batch(AggregateRoot):
             self.storage_conditions_notes = storage_conditions_notes
         if custom_fields is not ...:
             self.custom_fields = custom_fields
+        self.updated_at = datetime.now(UTC)
+
+    # ------------------------------------------------------------------
+    # Mutations — identifiers
+    # ------------------------------------------------------------------
+
+    def add_identifier(self, identifier: BatchIdentifier) -> None:
+        """Append an external identifier. Caller enforces workspace uniqueness."""
+        self.identifiers.append(identifier)
+        self.updated_at = datetime.now(UTC)
+
+    def remove_identifier(self, identifier_id: uuid.UUID) -> None:
+        """Remove an identifier by its id. Raises ValidationError if not found."""
+        original_count = len(self.identifiers)
+        self.identifiers = [i for i in self.identifiers if i.id != identifier_id]
+        if len(self.identifiers) == original_count:
+            raise ValidationError(f"BatchIdentifier {identifier_id} not found on this batch")
+        self.updated_at = datetime.now(UTC)
+
+    def clear_identifiers(self) -> None:
+        """Remove all identifiers. Used during merge."""
+        self.identifiers.clear()
         self.updated_at = datetime.now(UTC)

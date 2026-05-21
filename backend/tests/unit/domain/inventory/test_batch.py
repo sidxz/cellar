@@ -169,3 +169,72 @@ class TestBatchUpdates:
 def test_external_reference_source_exists() -> None:
     """Auto-created placeholder batches use this source."""
     assert BatchSource.EXTERNAL_REFERENCE.value == "external_reference"
+
+
+# ---------------------------------------------------------------------------
+# BatchIdentifier collection on Batch
+# ---------------------------------------------------------------------------
+
+from cellar.domain.inventory.batch_identifier import BatchIdentifier  # noqa: E402
+
+
+class TestBatchIdentifiers:
+    def test_new_batch_has_empty_identifiers(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
+    ) -> None:
+        b = _make_batch(workspace_id, molecule_id, chemist_id)
+        assert b.identifiers == []
+
+    def test_add_identifier_appends(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
+    ) -> None:
+        b = _make_batch(workspace_id, molecule_id, chemist_id)
+        ident = BatchIdentifier.create(
+            batch_id=b.id,
+            identifier="SACC-001-A",
+            identifier_type="external_lot",
+            source="CDD",
+            registered_by=uuid.uuid4(),
+        )
+        b.add_identifier(ident)
+        assert len(b.identifiers) == 1
+        assert b.identifiers[0].identifier == "SACC-001-A"
+
+    def test_remove_identifier_removes(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
+    ) -> None:
+        b = _make_batch(workspace_id, molecule_id, chemist_id)
+        ident = BatchIdentifier.create(
+            batch_id=b.id,
+            identifier="ABC",
+            identifier_type="custom",
+            source="user",
+            registered_by=uuid.uuid4(),
+        )
+        b.add_identifier(ident)
+        b.remove_identifier(ident.id)
+        assert b.identifiers == []
+
+    def test_remove_identifier_unknown_raises(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
+    ) -> None:
+        b = _make_batch(workspace_id, molecule_id, chemist_id)
+        with pytest.raises(ValidationError, match="not found"):
+            b.remove_identifier(uuid.uuid4())
+
+    def test_clear_identifiers(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
+    ) -> None:
+        b = _make_batch(workspace_id, molecule_id, chemist_id)
+        for v in ("A", "B", "C"):
+            b.add_identifier(
+                BatchIdentifier.create(
+                    batch_id=b.id,
+                    identifier=v,
+                    identifier_type="custom",
+                    source="user",
+                    registered_by=uuid.uuid4(),
+                )
+            )
+        b.clear_identifiers()
+        assert b.identifiers == []
