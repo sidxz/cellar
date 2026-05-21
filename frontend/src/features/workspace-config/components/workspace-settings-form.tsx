@@ -42,6 +42,10 @@ const schema = z.object({
     }),
   ),
   createBatchOnDup: z.boolean(),
+  regPrefix: z
+    .string()
+    .regex(/^[A-Z]{2,8}-$/, "Prefix must be 2–8 uppercase letters followed by a dash"),
+  regWidth: z.coerce.number().int().min(4).max(8),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -84,6 +88,8 @@ export function WorkspaceSettingsForm() {
       formulationScheme: "",
       customFields: [],
       createBatchOnDup: false,
+      regPrefix: "CC-",
+      regWidth: 6,
     },
   });
 
@@ -100,6 +106,8 @@ export function WorkspaceSettingsForm() {
           ? (settings.custom_field_definitions as CustomFieldDefinition[])
           : [],
         createBatchOnDup: !!settings.registration_rules?.create_batch_on_duplicate,
+        regPrefix: settings.registration_rules?.registration_number_prefix ?? "CC-",
+        regWidth: settings.registration_rules?.registration_number_width ?? 6,
       });
     }
   }, [settings, reset]);
@@ -124,6 +132,8 @@ export function WorkspaceSettingsForm() {
       registration_rules: {
         ...(settings?.registration_rules ?? {}),
         create_batch_on_duplicate: values.createBatchOnDup,
+        registration_number_prefix: values.regPrefix,
+        registration_number_width: values.regWidth,
       },
     });
   };
@@ -188,6 +198,38 @@ export function WorkspaceSettingsForm() {
         <Card className="p-6">
           <h2 className="text-lg font-semibold">Registration</h2>
           <div className="mt-4 grid gap-6 max-w-lg">
+            <div className="grid gap-2">
+              <Label htmlFor="regPrefix">Compound Number Prefix</Label>
+              <Input
+                id="regPrefix"
+                {...register("regPrefix")}
+                placeholder="CC-"
+                maxLength={9}
+                style={{ textTransform: "uppercase" }}
+              />
+              <p className="text-xs text-muted-foreground">
+                2–8 uppercase letters + dash (e.g. <code>CC-</code>, <code>MTB-</code>).
+                Applies to newly-registered compounds; existing IDs are not renamed.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="regWidth">Compound Number Width</Label>
+              <Input
+                id="regWidth"
+                type="number"
+                min={4}
+                max={8}
+                {...register("regWidth")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Zero-pad width for the numeric tail. 6 gives <code>CC-000001</code> ..{" "}
+                <code>CC-999999</code> (1M compounds).
+              </p>
+            </div>
+
+            <div className="border-t pt-4" />
+
             <div className="flex items-start justify-between gap-4">
               <div>
                 <Label htmlFor="cbod">Create batch on re-registration</Label>
