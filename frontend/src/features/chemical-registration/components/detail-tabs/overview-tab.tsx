@@ -132,7 +132,7 @@ function AddIdentifierForm({
   const [source, setSource] = useState("");
   const addMutation = useAddIdentifier(moleculeId);
 
-  const canSubmit = identifier.trim() && identifierType && source.trim();
+  const canSubmit = identifier.trim() && identifierType;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -140,7 +140,7 @@ function AddIdentifierForm({
       {
         identifier: identifier.trim(),
         identifier_type: identifierType,
-        source: source.trim(),
+        source: source.trim() || "User added",
       },
       {
         onSuccess: () => {
@@ -180,7 +180,9 @@ function AddIdentifierForm({
         </Select>
       </div>
       <div className="w-36 space-y-1">
-        <label className="text-xs text-muted-foreground">Source</label>
+        <label className="text-xs text-muted-foreground">
+          Source <span className="text-muted-foreground/60">(optional)</span>
+        </label>
         <Input
           placeholder="e.g. ChEMBL"
           value={source}
