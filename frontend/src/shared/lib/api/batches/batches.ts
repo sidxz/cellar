@@ -24,6 +24,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AddBatchIdentifierBody,
+  BatchIdentifierResponse,
   BatchResponse,
   CreateBatchRequest,
   HTTPValidationError,
@@ -347,3 +349,226 @@ export function useListBatchesByMoleculeApiV1MoleculesMoleculeIdBatchesGet<TData
 
 
 
+/**
+ * List all external identifiers on a batch.
+ * @summary List Batch Identifiers
+ */
+export const listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet = (
+    batchId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<BatchIdentifierResponse[]>(
+      {url: `/api/v1/batches/${batchId}/identifiers`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGetQueryKey = (batchId?: string,) => {
+    return [
+    `/api/v1/batches/${batchId}/identifiers`
+    ] as const;
+    }
+
+    
+export const getListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGetQueryOptions = <TData = Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError = HTTPValidationError>(batchId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGetQueryKey(batchId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>> = ({ signal }) => listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet(batchId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(batchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGetQueryResult = NonNullable<Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>>
+export type ListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGetQueryError = HTTPValidationError
+
+
+export function useListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet<TData = Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError = HTTPValidationError>(
+ batchId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>,
+          TError,
+          Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet<TData = Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError = HTTPValidationError>(
+ batchId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>,
+          TError,
+          Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet<TData = Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError = HTTPValidationError>(
+ batchId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Batch Identifiers
+ */
+
+export function useListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet<TData = Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError = HTTPValidationError>(
+ batchId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBatchIdentifiersApiV1BatchesBatchIdIdentifiersGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGetQueryOptions(batchId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Add an external identifier to a batch. Returns the updated list.
+ * @summary Add Batch Identifier
+ */
+export const addBatchIdentifierApiV1BatchesBatchIdIdentifiersPost = (
+    batchId: string,
+    addBatchIdentifierBody: AddBatchIdentifierBody,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<BatchIdentifierResponse[]>(
+      {url: `/api/v1/batches/${batchId}/identifiers`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: addBatchIdentifierBody, signal
+    },
+      );
+    }
+  
+
+
+export const getAddBatchIdentifierApiV1BatchesBatchIdIdentifiersPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addBatchIdentifierApiV1BatchesBatchIdIdentifiersPost>>, TError,{batchId: string;data: AddBatchIdentifierBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addBatchIdentifierApiV1BatchesBatchIdIdentifiersPost>>, TError,{batchId: string;data: AddBatchIdentifierBody}, TContext> => {
+
+const mutationKey = ['addBatchIdentifierApiV1BatchesBatchIdIdentifiersPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addBatchIdentifierApiV1BatchesBatchIdIdentifiersPost>>, {batchId: string;data: AddBatchIdentifierBody}> = (props) => {
+          const {batchId,data} = props ?? {};
+
+          return  addBatchIdentifierApiV1BatchesBatchIdIdentifiersPost(batchId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddBatchIdentifierApiV1BatchesBatchIdIdentifiersPostMutationResult = NonNullable<Awaited<ReturnType<typeof addBatchIdentifierApiV1BatchesBatchIdIdentifiersPost>>>
+    export type AddBatchIdentifierApiV1BatchesBatchIdIdentifiersPostMutationBody = AddBatchIdentifierBody
+    export type AddBatchIdentifierApiV1BatchesBatchIdIdentifiersPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Add Batch Identifier
+ */
+export const useAddBatchIdentifierApiV1BatchesBatchIdIdentifiersPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addBatchIdentifierApiV1BatchesBatchIdIdentifiersPost>>, TError,{batchId: string;data: AddBatchIdentifierBody}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addBatchIdentifierApiV1BatchesBatchIdIdentifiersPost>>,
+        TError,
+        {batchId: string;data: AddBatchIdentifierBody},
+        TContext
+      > => {
+
+      const mutationOptions = getAddBatchIdentifierApiV1BatchesBatchIdIdentifiersPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Remove an external identifier from a batch.
+ * @summary Remove Batch Identifier
+ */
+export const removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete = (
+    batchId: string,
+    identifierId: string,
+ ) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/batches/${batchId}/identifiers/${identifierId}`, method: 'DELETE'
+    },
+      );
+    }
+  
+
+
+export const getRemoveBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDeleteMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete>>, TError,{batchId: string;identifierId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete>>, TError,{batchId: string;identifierId: string}, TContext> => {
+
+const mutationKey = ['removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete>>, {batchId: string;identifierId: string}> = (props) => {
+          const {batchId,identifierId} = props ?? {};
+
+          return  removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete(batchId,identifierId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete>>>
+    
+    export type RemoveBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDeleteMutationError = HTTPValidationError
+
+    /**
+ * @summary Remove Batch Identifier
+ */
+export const useRemoveBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete>>, TError,{batchId: string;identifierId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete>>,
+        TError,
+        {batchId: string;identifierId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getRemoveBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    

@@ -1,3 +1,6 @@
+import type { BatchIdentifierResponse } from "@/shared/lib/api/model/batchIdentifierResponse";
+export type { BatchIdentifierResponse };
+
 export type BatchSource = "synthesized" | "purchased" | "donated" | "natural_extract";
 
 export const BATCH_SOURCE_LABELS: Record<BatchSource, string> = {
@@ -64,6 +67,7 @@ export interface Batch {
   synthesis_date: string | null;
   expiry_date: string | null;
   appearance: string | null;
+  identifiers?: BatchIdentifierResponse[];
 }
 
 export interface CreateBatchInput {
