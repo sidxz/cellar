@@ -1,8 +1,11 @@
 "use client";
 
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { showSuccess, showError } from "@/shared/lib/toast";
+import { renderToast } from "@/features/inventory/components/mirror-summary-toast";
+import type { CreateBatchResponse } from "@/shared/lib/api/model/createBatchResponse";
 import type { Batch, BatchListItem, CreateBatchInput, PaginatedResponse, UpdateBatchInput } from "../types";
 
 const batchHooks = createCrudHooks<Batch, CreateBatchInput, UpdateBatchInput>({
@@ -12,8 +15,34 @@ const batchHooks = createCrudHooks<Batch, CreateBatchInput, UpdateBatchInput>({
 });
 
 export const useBatch = batchHooks.useGet;
-export const useCreateBatch = batchHooks.useCreate;
 export const useUpdateBatch = batchHooks.useUpdate;
+
+/**
+ * Custom createBatch mutation typed against the `CreateBatchResponse` envelope.
+ * The BE now returns `{ batch, mirror_summary }` so we can fire a toast when
+ * auto-mirrors are created or skipped.
+ */
+export function useCreateBatch() {
+  const qc = useQueryClient();
+  return useMutation<CreateBatchResponse, Error, CreateBatchInput>({
+    mutationFn: (data: CreateBatchInput) =>
+      customInstance<CreateBatchResponse>({
+        url: "/api/v1/batches",
+        method: "POST",
+        data,
+      }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["batches"] });
+      showSuccess("Batch created");
+      if (data?.mirror_summary) {
+        renderToast(data.mirror_summary);
+      }
+    },
+    onError: (err: Error) => {
+      showError(err.message || "Failed to create Batch");
+    },
+  });
+}
 
 /** Custom hook — batches are listed under a molecule, not flat. */
 export function useBatchesByMolecule(moleculeId: string | undefined) {
