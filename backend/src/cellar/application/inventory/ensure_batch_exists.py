@@ -19,8 +19,12 @@ from dataclasses import dataclass
 from returns.result import Result, Success
 
 from cellar.application.inventory.resolve_batch_ref import resolve_batch_ref
+from cellar.application.inventory.sync_batch_identifier_mirrors import (
+    SyncBatchIdentifierMirrors,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.domain.inventory.enums import BatchSource
@@ -56,10 +60,14 @@ class EnsureBatchExists:
         uow: UnitOfWork,
         batch_repo: BatchRepository,
         settings_repo: WorkspaceSettingsRepository,
+        sync: SyncBatchIdentifierMirrors | None = None,
+        molecule_repo: MoleculeRepository | None = None,
     ) -> None:
         self._uow = uow
         self._batch_repo = batch_repo
         self._settings_repo = settings_repo
+        self._sync = sync
+        self._molecule_repo = molecule_repo
 
     async def __call__(
         self, input: EnsureBatchExistsCommand
@@ -109,6 +117,19 @@ class EnsureBatchExists:
                 source=input.source_label,
                 registered_by=input.importing_user_id,
             ))
+
+            if self._sync is not None and self._molecule_repo is not None:
+                mol = await self._molecule_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.molecule_id
+                )
+                if mol is not None and mol.identifiers:
+                    await self._sync.fan_out_for_new_batch(
+                        workspace_id=input.workspace_id,
+                        batch=batch,
+                        identifiers=mol.identifiers,
+                        actor=input.importing_user_id,
+                    )
+
             await self._batch_repo.save(batch)
             await self._uow.commit()
 

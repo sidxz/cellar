@@ -186,10 +186,14 @@ def register_inventory(container: Container) -> None:
 
     def _ensure_batch_exists(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        batch_repo = SQLAlchemyBatchRepository(uow)
+        sync = SyncBatchIdentifierMirrors(batch_repo)
         return EnsureBatchExists(
             uow=uow,
-            batch_repo=SQLAlchemyBatchRepository(uow),
+            batch_repo=batch_repo,
             settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            sync=sync,
         )
 
     def _bulk_add_batch_identifiers(c: Container):
