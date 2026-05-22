@@ -11,6 +11,10 @@ from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
+from cellar.application.inventory.sync_batch_identifier_mirrors import (
+    MirrorSummary,
+    SyncBatchIdentifierMirrors,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -25,6 +29,14 @@ from cellar.domain.shared.value_objects import Amount, Concentration
 from cellar.domain.workspace_config.enums import FieldTarget
 from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
 from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateBatchResult:
+    """Wrapped result: created batch + summary of fan-out to identifier mirrors."""
+
+    batch: Batch
+    mirror_summary: MirrorSummary
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -62,6 +74,7 @@ class CreateBatch:
         dispatcher: EventDispatcherProtocol,
         custom_field_validator: CustomFieldValidator | None = None,
         workspace_settings_repo: WorkspaceSettingsRepository | None = None,
+        sync: SyncBatchIdentifierMirrors | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -69,6 +82,7 @@ class CreateBatch:
         self._dispatcher = dispatcher
         self._custom_field_validator = custom_field_validator
         self._workspace_settings_repo = workspace_settings_repo
+        self._sync = sync
 
     async def _resolve_batch_width(self, workspace_id: uuid.UUID) -> int:
         if self._workspace_settings_repo is None:
@@ -83,7 +97,7 @@ class CreateBatch:
 
     async def __call__(
         self, input: CreateBatchCommand, auth: AuthContext | None = None
-    ) -> Result[Batch, DomainError]:
+    ) -> Result[CreateBatchResult, DomainError]:
         require_editor(auth)
 
         async with self._uow:
@@ -138,8 +152,17 @@ class CreateBatch:
                 custom_fields=input.custom_fields,
             )
 
+            mirror_summary = MirrorSummary.empty()
+            if self._sync is not None:
+                mirror_summary = await self._sync.fan_out_for_new_batch(
+                    workspace_id=input.workspace_id,
+                    batch=batch,
+                    identifiers=molecule.identifiers,
+                    actor=input.chemist,
+                )
+
             await self._repo.save(batch)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
-        return Success(batch)
+        return Success(CreateBatchResult(batch=batch, mirror_summary=mirror_summary))

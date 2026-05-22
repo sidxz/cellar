@@ -14,6 +14,7 @@ from cellar.application.inventory.batch_identifiers import (
 )
 from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
 from cellar.application.inventory.create_batch import CreateBatch
+from cellar.application.inventory.sync_batch_identifier_mirrors import SyncBatchIdentifierMirrors
 from cellar.application.inventory.create_sample import CreateSample
 from cellar.application.inventory.delete_storage_location import DeleteStorageLocation
 from cellar.application.inventory.ensure_batch_exists import EnsureBatchExists
@@ -141,13 +142,16 @@ def register_inventory(container: Container) -> None:
     def _batch_cmd(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         validator = CustomFieldValidator(repo=SQLAlchemyCustomFieldDefinitionRepository(uow))
+        batch_repo = SQLAlchemyBatchRepository(uow)
+        sync = SyncBatchIdentifierMirrors(batch_repo)
         return CreateBatch(
             uow,
-            SQLAlchemyBatchRepository(uow),
+            batch_repo,
             SQLAlchemyMoleculeRepository(uow),
             c[EventDispatcher],
             validator,
             workspace_settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+            sync=sync,
         )
 
     def _batch_query(uc_cls: type):

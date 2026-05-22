@@ -379,7 +379,7 @@ async def _create_batch(
         )
         return None, None, False
 
-    batch = batch_result.unwrap()
+    batch = batch_result.unwrap().batch
 
     # Capture the CDD batch id as a BatchIdentifier so future imports + plate
     # lookups can resolve via find_by_external_identifier (mirror of how

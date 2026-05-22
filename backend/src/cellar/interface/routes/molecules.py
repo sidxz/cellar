@@ -449,7 +449,7 @@ async def register_molecule(
             custom_fields=b.custom_fields,
         )
         batch_outcome = result_to_response(await create_batch_uc(batch_cmd, auth=auth))
-        batch_response = BatchResponse.from_domain(batch_outcome)
+        batch_response = BatchResponse.from_domain(batch_outcome.batch)
 
     detected_salt_resp: DetectedSaltResponse | None = None
     if outcome.detected_salt is not None:

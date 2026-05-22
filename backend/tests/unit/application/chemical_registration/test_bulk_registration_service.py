@@ -15,6 +15,8 @@ from cellar.application.chemical_registration.bulk_registration_service import (
 )
 from cellar.application.chemical_registration.protocols import DetectedSaltDTO
 from cellar.application.chemical_registration.register_molecule import RegistrationOutcome
+from cellar.application.inventory.create_batch import CreateBatchResult
+from cellar.application.inventory.sync_batch_identifier_mirrors import MirrorSummary
 from cellar.domain.chemical_registration.enums import BulkRegistrationStatus
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.value_objects import BatchNumber
@@ -97,6 +99,14 @@ def _mock_batch(batch_id: uuid.UUID | None = None) -> MagicMock:
     return batch
 
 
+def _mock_batch_result(batch_id: uuid.UUID | None = None) -> CreateBatchResult:
+    """Wrap a mock Batch in a CreateBatchResult (matches the new use case return type)."""
+    return CreateBatchResult(
+        batch=_mock_batch(batch_id),
+        mirror_summary=MirrorSummary.empty(),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -166,7 +176,7 @@ class TestBulkRegistrationService:
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
-            MockBatchClass.return_value = AsyncMock(return_value=Success(mock_batch))
+            MockBatchClass.return_value = AsyncMock(return_value=Success(CreateBatchResult(batch=mock_batch, mirror_summary=MirrorSummary.empty())))
             result = await service(cmd)
 
         assert isinstance(result, Success)
@@ -212,7 +222,7 @@ class TestBulkRegistrationService:
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_side_effect)
-            MockBatchClass.return_value = AsyncMock(return_value=Success(mock_batch))
+            MockBatchClass.return_value = AsyncMock(return_value=Success(CreateBatchResult(batch=mock_batch, mirror_summary=MirrorSummary.empty())))
             result = await service(cmd)
 
         assert isinstance(result, Success)
@@ -256,7 +266,7 @@ class TestBulkRegistrationService:
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_side_effect)
-            MockBatchClass.return_value = AsyncMock(return_value=Success(mock_batch))
+            MockBatchClass.return_value = AsyncMock(return_value=Success(CreateBatchResult(batch=mock_batch, mirror_summary=MirrorSummary.empty())))
             result = await service(cmd)
 
         assert isinstance(result, Success)
@@ -339,7 +349,7 @@ class TestBulkRegistrationBatchCreation:
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
-            mock_create_batch = AsyncMock(return_value=Success(mock_batch))
+            mock_create_batch = AsyncMock(return_value=Success(CreateBatchResult(batch=mock_batch, mirror_summary=MirrorSummary.empty())))
             MockBatchClass.return_value = mock_create_batch
             result = await service(cmd)
 
@@ -417,7 +427,7 @@ class TestBulkRegistrationBatchCreation:
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
-            mock_create_batch = AsyncMock(return_value=Success(mock_batch))
+            mock_create_batch = AsyncMock(return_value=Success(CreateBatchResult(batch=mock_batch, mirror_summary=MirrorSummary.empty())))
             MockBatchClass.return_value = mock_create_batch
             result = await service(cmd)
 
@@ -492,7 +502,7 @@ class TestBulkRegistrationBatchCreation:
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(return_value=Success(mock_outcome))
-            mock_create_batch = AsyncMock(return_value=Success(mock_batch))
+            mock_create_batch = AsyncMock(return_value=Success(CreateBatchResult(batch=mock_batch, mirror_summary=MirrorSummary.empty())))
             MockBatchClass.return_value = mock_create_batch
             result = await service(cmd)
 
@@ -624,7 +634,7 @@ class TestBulkRegistrationBatchPolicy:
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_reg_side_effect)
-            mock_create_batch = AsyncMock(return_value=Success(mock_batch))
+            mock_create_batch = AsyncMock(return_value=Success(CreateBatchResult(batch=mock_batch, mirror_summary=MirrorSummary.empty())))
             MockBatchClass.return_value = mock_create_batch
             result = await service(cmd)
 
@@ -684,7 +694,7 @@ class TestBulkRegistrationBatchPolicy:
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_reg_side_effect)
-            mock_create_batch = AsyncMock(return_value=Success(mock_batch))
+            mock_create_batch = AsyncMock(return_value=Success(CreateBatchResult(batch=mock_batch, mirror_summary=MirrorSummary.empty())))
             MockBatchClass.return_value = mock_create_batch
             result = await service(cmd)
 
@@ -741,7 +751,7 @@ class TestBulkRegistrationBatchPolicy:
             ) as MockBatchClass,
         ):
             MockRegClass.return_value = AsyncMock(side_effect=_reg_side_effect)
-            mock_create_batch = AsyncMock(return_value=Success(mock_batch))
+            mock_create_batch = AsyncMock(return_value=Success(CreateBatchResult(batch=mock_batch, mirror_summary=MirrorSummary.empty())))
             MockBatchClass.return_value = mock_create_batch
             result = await service(cmd)
 

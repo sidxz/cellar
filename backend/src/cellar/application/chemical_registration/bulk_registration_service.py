@@ -438,5 +438,5 @@ class BulkRegistrationService:
             )
             return None, None, False, str(err)
 
-        batch = batch_result.unwrap()
+        batch = batch_result.unwrap().batch
         return batch.id, batch.batch_number.value, salt_matched, None

@@ -188,7 +188,7 @@ async def create_batch(
         custom_fields=body.custom_fields,
     )
     result = await uc(cmd, auth=auth)
-    return BatchResponse.from_domain(result_to_response(result))
+    return BatchResponse.from_domain(result_to_response(result).batch)
 
 
 @router.get("/batches/{batch_id}", response_model=BatchResponse)

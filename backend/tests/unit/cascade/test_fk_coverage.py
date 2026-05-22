@@ -227,6 +227,20 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     ("campaign_result", "campaign_id", "campaign"),
     ("campaign_measurement", "result_id", "campaign_result"),
     ("campaign_measurement", "channel_id", "campaign_channel"),
+
+    # -------------------------------------------------------------------------
+    # batch_identifiers → molecule_identifiers: auto-mirror cascade on synonym removal
+    # -------------------------------------------------------------------------
+    # batch_identifiers.derived_from_molecule_identifier_id is a nullable FK to
+    # molecule_identifiers with ondelete=CASCADE. When a molecule synonym
+    # (MoleculeIdentifier) is deleted, the DB engine automatically cascades the
+    # delete to all derived batch identifier mirrors that reference it. This is
+    # intentional — mirror rows should not outlive their parent synonym.
+    # molecule_identifiers is not a Tier-1 admin-deletable entity (it's a child
+    # of molecules); removal happens through the RemoveIdentifier use case.
+    # No Tier-2 rule or TIER1_PARENT_TABLE registration needed — the DB CASCADE
+    # ondelete clause handles this automatically.
+    ("batch_identifiers", "derived_from_molecule_identifier_id", "molecule_identifiers"),
 }
 
 
