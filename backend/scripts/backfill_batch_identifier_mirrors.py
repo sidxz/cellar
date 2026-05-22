@@ -154,7 +154,7 @@ async def _main() -> None:
     )
     args = parser.parse_args()
 
-    engine = create_async_engine(DatabaseSettings().url, echo=False)
+    engine = create_async_engine(DatabaseSettings().database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     stats = await run_backfill(
         session_factory, workspace_id=args.workspace_id, dry_run=args.dry_run
