@@ -92,6 +92,11 @@ class BatchIdentifierModel(Base, EntityModelMixin):
     identifier_type: Mapped[str] = mapped_column(String(50), nullable=False)
     source: Mapped[str] = mapped_column(String(255), nullable=False)
     registered_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    derived_from_molecule_identifier_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("molecule_identifiers.id", ondelete="CASCADE"),
+        nullable=True,
+    )
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "identifier", name="uq_batch_ws_identifier"),

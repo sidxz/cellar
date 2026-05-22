@@ -232,6 +232,7 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
                 identifier_type=im.identifier_type,
                 source=im.source,
                 registered_by=im.registered_by,
+                derived_from_molecule_identifier_id=im.derived_from_molecule_identifier_id,
                 created_at=im.created_at,
                 updated_at=im.updated_at,
             )
@@ -366,6 +367,7 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             identifier_type=ident.identifier_type,
             source=ident.source,
             registered_by=ident.registered_by,
+            derived_from_molecule_identifier_id=ident.derived_from_molecule_identifier_id,
         )
 
     # ------------------------------------------------------------------
