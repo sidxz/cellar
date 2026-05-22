@@ -157,12 +157,42 @@ class AddBatchIdentifierBody(BaseModel):
     source: str
 
 
-@router.post("/batches", response_model=BatchResponse, status_code=201)
+class MirrorSummarySkippedResponse(BaseModel):
+    batch_number: str
+    mirror_string: str
+    reason: str
+
+
+class MirrorSummaryResponse(BaseModel):
+    created: int
+    skipped: list[MirrorSummarySkippedResponse]
+
+    @classmethod
+    def from_domain(cls, summary) -> "MirrorSummaryResponse":
+        return cls(
+            created=summary.created,
+            skipped=[
+                MirrorSummarySkippedResponse(
+                    batch_number=s.batch_number,
+                    mirror_string=s.mirror_string,
+                    reason=s.reason,
+                )
+                for s in summary.skipped
+            ],
+        )
+
+
+class CreateBatchResponse(BaseModel):
+    batch: BatchResponse
+    mirror_summary: MirrorSummaryResponse
+
+
+@router.post("/batches", response_model=CreateBatchResponse, status_code=201)
 async def create_batch(
     auth: AuthDep,
     body: CreateBatchRequest,
     uc: CreateBatchDep,
-) -> BatchResponse:
+) -> CreateBatchResponse:
     cmd = CreateBatchCommand(
         workspace_id=auth.workspace_id,
         molecule_id=body.molecule_id,
@@ -187,8 +217,11 @@ async def create_batch(
         appearance=body.appearance,
         custom_fields=body.custom_fields,
     )
-    result = await uc(cmd, auth=auth)
-    return BatchResponse.from_domain(result_to_response(result).batch)
+    outcome = result_to_response(await uc(cmd, auth=auth))
+    return CreateBatchResponse(
+        batch=BatchResponse.from_domain(outcome.batch),
+        mirror_summary=MirrorSummaryResponse.from_domain(outcome.mirror_summary),
+    )
 
 
 @router.get("/batches/{batch_id}", response_model=BatchResponse)
