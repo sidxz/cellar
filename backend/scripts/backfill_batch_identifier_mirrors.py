@@ -20,17 +20,18 @@ import structlog
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+import cellar.infrastructure.persistence.sqlalchemy.inventory.models
+import cellar.infrastructure.persistence.sqlalchemy.research_organization.models
+import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models
+
 # Eagerly import sibling model modules so SQLAlchemy can resolve cross-context FKs.
 import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
-import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
-import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
-import cellar.infrastructure.persistence.sqlalchemy.inventory.models  # noqa: F401
+from cellar.infrastructure.persistence.settings import DatabaseSettings
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
-    MoleculeModel,
     MoleculeIdentifierModel,
+    MoleculeModel,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
-from cellar.infrastructure.persistence.settings import DatabaseSettings
 
 logger = structlog.get_logger(__name__)
 

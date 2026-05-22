@@ -17,14 +17,13 @@ from cellar.application.inventory.bulk_add_batch_identifiers import (
     BulkAddBatchIdentifiersCommand,
     BulkIdentifierRow,
 )
-from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
+from cellar.application.inventory.create_batch import CreateBatchCommand
 from cellar.application.inventory.get_batch import (
-    GetBatch,
     GetBatchQuery,
-    ListBatchesByMolecule,
     ListBatchesByMoleculeQuery,
 )
-from cellar.application.inventory.update_batch import UpdateBatch, UpdateBatchCommand
+from cellar.application.inventory.update_batch import UpdateBatchCommand
+from cellar.application.shared.sentinel import UNSET
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.interface.dependencies import (
@@ -39,7 +38,6 @@ from cellar.interface.dependencies import (
     UpdateBatchDep,
 )
 from cellar.interface.error_handlers import result_to_response
-from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["batches"])
 
@@ -142,7 +140,7 @@ class BatchIdentifierResponse(BaseModel):
     source: str
 
     @classmethod
-    def from_domain(cls, i: BatchIdentifier) -> "BatchIdentifierResponse":
+    def from_domain(cls, i: BatchIdentifier) -> BatchIdentifierResponse:
         return cls(
             id=i.id,
             identifier=i.identifier,
@@ -168,7 +166,7 @@ class MirrorSummaryResponse(BaseModel):
     skipped: list[MirrorSummarySkippedResponse]
 
     @classmethod
-    def from_domain(cls, summary) -> "MirrorSummaryResponse":
+    def from_domain(cls, summary) -> MirrorSummaryResponse:
         return cls(
             created=summary.created,
             skipped=[
