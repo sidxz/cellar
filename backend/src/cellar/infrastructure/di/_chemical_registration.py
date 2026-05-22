@@ -51,6 +51,9 @@ from cellar.application.chemical_registration.identifiers import (
     ListIdentifiers,
     RemoveIdentifier,
 )
+from cellar.application.inventory.sync_batch_identifier_mirrors import (
+    SyncBatchIdentifierMirrors,
+)
 from cellar.application.chemical_registration.list_disclosures import ListDisclosures
 from cellar.application.chemical_registration.list_disclosures_by_workspace import (
     ListDisclosuresByWorkspace,
@@ -239,7 +242,14 @@ def register_chemical_registration(container: Container) -> None:
     container.define(ListMolecules, _mol_query(ListMolecules))
     container.define(ListMoleculesByIds, _mol_query(ListMoleculesByIds))
     container.define(GetMoleculeByIdentifier, _mol_query(GetMoleculeByIdentifier))
-    container.define(AddIdentifier, _mol_cmd_no_proc(AddIdentifier))
+    def _add_identifier(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        mol_repo = SQLAlchemyMoleculeRepository(uow)
+        batch_repo = SQLAlchemyBatchRepository(uow)
+        sync = SyncBatchIdentifierMirrors(batch_repo)
+        return AddIdentifier(uow, mol_repo, c[EventDispatcher], sync=sync, batch_repo=batch_repo)
+
+    container.define(AddIdentifier, _add_identifier)
     container.define(RemoveIdentifier, _mol_cmd_no_proc(RemoveIdentifier))
     container.define(ListIdentifiers, _mol_query(ListIdentifiers))
 

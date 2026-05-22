@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_workspace_role
+from cellar.application.inventory.sync_batch_identifier_mirrors import (
+    MirrorSummary,
+    SyncBatchIdentifierMirrors,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
@@ -15,10 +19,11 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.molecule import Molecule
 from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from cellar.domain.chemical_registration.repository import MoleculeRepository
+from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 
 # ---------------------------------------------------------------------------
-# Commands / Queries
+# Commands / Queries / Result types
 # ---------------------------------------------------------------------------
 
 
@@ -45,29 +50,41 @@ class ListIdentifiersQuery(Query):
     molecule_id: uuid.UUID
 
 
+@dataclass(frozen=True, kw_only=True)
+class AddIdentifierResult:
+    """Wrapped result: updated molecule + summary of fan-out to batch mirrors."""
+
+    molecule: Molecule
+    mirror_summary: MirrorSummary
+
+
 # ---------------------------------------------------------------------------
 # Use Cases
 # ---------------------------------------------------------------------------
 
 
 class AddIdentifier:
-    """Add an external identifier to a molecule."""
+    """Add an external identifier to a molecule. Fans out mirrors to all batches."""
 
     def __init__(
         self,
         uow: UnitOfWork,
         repo: MoleculeRepository,
         dispatcher: EventDispatcherProtocol,
+        sync: SyncBatchIdentifierMirrors,
+        batch_repo: BatchRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._sync = sync
+        self._batch_repo = batch_repo
 
     async def __call__(
         self,
         input: AddIdentifierCommand,
         auth: AuthContext | None = None,
-    ) -> Result[Molecule, DomainError]:
+    ) -> Result[AddIdentifierResult, DomainError]:
         require_editor(auth)
 
         async with self._uow:
@@ -100,10 +117,19 @@ class AddIdentifier:
                 return Failure(exc)
 
             await self._repo.save(mol)
+
+            batches = await self._batch_repo.find_by_molecule(input.workspace_id, mol.id)
+            mirror_summary = await self._sync.fan_out_for_new_identifier(
+                workspace_id=input.workspace_id,
+                identifier=identifier,
+                batches=batches,
+                actor=input.registered_by,
+            )
+
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
-        return Success(mol)
+        return Success(AddIdentifierResult(molecule=mol, mirror_summary=mirror_summary))
 
 
 class RemoveIdentifier:
