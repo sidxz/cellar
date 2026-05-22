@@ -26,6 +26,7 @@ class BatchIdentifier(Entity):
         identifier_type: str,
         source: str,
         registered_by: uuid.UUID,
+        derived_from_molecule_identifier_id: uuid.UUID | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -37,6 +38,7 @@ class BatchIdentifier(Entity):
         self.identifier_type = identifier_type
         self.source = source
         self.registered_by = registered_by
+        self.derived_from_molecule_identifier_id = derived_from_molecule_identifier_id
 
     @classmethod
     def create(
@@ -47,6 +49,7 @@ class BatchIdentifier(Entity):
         identifier_type: str,
         source: str,
         registered_by: uuid.UUID,
+        derived_from_molecule_identifier_id: uuid.UUID | None = None,
     ) -> BatchIdentifier:
         return cls(
             batch_id=batch_id,
@@ -54,4 +57,5 @@ class BatchIdentifier(Entity):
             identifier_type=identifier_type,
             source=source,
             registered_by=registered_by,
+            derived_from_molecule_identifier_id=derived_from_molecule_identifier_id,
         )
