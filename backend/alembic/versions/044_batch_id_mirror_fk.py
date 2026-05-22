@@ -8,7 +8,7 @@ automatically removes its derived mirrors.
 NULL on this column = chemist-added BatchIdentifier (untouched by sync).
 Non-NULL = auto-mirror keyed to a specific MoleculeIdentifier.
 
-Revision ID: 044_auto_mirror_fk_on_batch_identifiers
+Revision ID: 044_batch_id_mirror_fk
 Revises: 043_batch_identifiers
 Create Date: 2026-05-22
 """
@@ -37,7 +37,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "idx_batch_identifiers_derived_from",
+        "ix_batch_identifiers_derived_from",
         "batch_identifiers",
         ["derived_from_molecule_identifier_id"],
         postgresql_where=sa.text("derived_from_molecule_identifier_id IS NOT NULL"),
@@ -45,5 +45,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("idx_batch_identifiers_derived_from", table_name="batch_identifiers")
+    # Drop either name (handles re-apply after the idx_ → ix_ rename)
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_batch_identifiers_derived_from"))
+    op.execute(sa.text("DROP INDEX IF EXISTS idx_batch_identifiers_derived_from"))
     op.drop_column("batch_identifiers", "derived_from_molecule_identifier_id")
