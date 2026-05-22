@@ -121,6 +121,36 @@ class IdentifierResponse(BaseModel):
         )
 
 
+class MirrorSummarySkippedResponse(BaseModel):
+    batch_number: str
+    mirror_string: str
+    reason: str
+
+
+class MirrorSummaryResponse(BaseModel):
+    created: int
+    skipped: list[MirrorSummarySkippedResponse]
+
+    @classmethod
+    def from_domain(cls, summary) -> MirrorSummaryResponse:
+        return cls(
+            created=summary.created,
+            skipped=[
+                MirrorSummarySkippedResponse(
+                    batch_number=s.batch_number,
+                    mirror_string=s.mirror_string,
+                    reason=s.reason,
+                )
+                for s in summary.skipped
+            ],
+        )
+
+
+class AddIdentifierResponse(BaseModel):
+    identifiers: list[IdentifierResponse]
+    mirror_summary: MirrorSummaryResponse
+
+
 class MoleculeResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -763,7 +793,7 @@ async def list_identifiers(
 
 @router.post(
     "/{molecule_id}/identifiers",
-    response_model=list[IdentifierResponse],
+    response_model=AddIdentifierResponse,
     status_code=201,
 )
 async def add_identifier(
@@ -771,8 +801,8 @@ async def add_identifier(
     body: AddIdentifierBody,
     auth: AuthDep,
     use_case: AddIdentifierDep,
-) -> list[IdentifierResponse]:
-    """Add an external identifier to a molecule. Returns the updated list."""
+) -> AddIdentifierResponse:
+    """Add an external identifier to a molecule. Returns updated list + mirror summary."""
     command = AddIdentifierCommand(
         workspace_id=auth.workspace_id,
         molecule_id=molecule_id,
@@ -781,8 +811,11 @@ async def add_identifier(
         source=body.source,
         registered_by=auth.user_id,
     )
-    mol = result_to_response(await use_case(command, auth=auth))
-    return [IdentifierResponse.from_domain(i) for i in mol.identifiers]
+    outcome = result_to_response(await use_case(command, auth=auth))
+    return AddIdentifierResponse(
+        identifiers=[IdentifierResponse.from_domain(i) for i in outcome.molecule.identifiers],
+        mirror_summary=MirrorSummaryResponse.from_domain(outcome.mirror_summary),
+    )
 
 
 @router.delete(
