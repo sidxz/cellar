@@ -20,12 +20,10 @@ describe("renderToast", () => {
     expect(toast.message).not.toHaveBeenCalled()
   })
 
-  it("renders success toast for created > 0 and no skips", () => {
+  it("does nothing on clean success (no skipped rows)", () => {
     renderToast({ created: 3, skipped: [] })
-    expect(toast.success).toHaveBeenCalledWith(
-      expect.stringContaining("3 batch mirror"),
-      expect.any(Object),
-    )
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.message).not.toHaveBeenCalled()
   })
 
   it("renders message toast with details when there are skips", () => {

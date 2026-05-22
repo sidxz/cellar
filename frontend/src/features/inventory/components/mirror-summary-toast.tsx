@@ -17,15 +17,7 @@ const reasonLabels = {
 
 export function renderToast(summary: MirrorSummary): void {
   const { created, skipped } = summary
-  if (created === 0 && skipped.length === 0) return
-
-  if (skipped.length === 0) {
-    toast.success(
-      `${created} batch mirror${created === 1 ? "" : "s"} created`,
-      { duration: 4000 },
-    )
-    return
-  }
+  if (skipped.length === 0) return
 
   const itemLines = skipped
     .map((s) => `${s.mirror_string} → ${reasonLabels[s.reason as keyof typeof reasonLabels] ?? s.reason}`)
