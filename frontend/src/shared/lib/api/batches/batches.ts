@@ -30,6 +30,7 @@ import type {
   BulkAddBatchIdentifiersRequest,
   BulkAddBatchIdentifiersResponse,
   CreateBatchRequest,
+  CreateBatchResponse,
   HTTPValidationError,
   UpdateBatchRequest
 } from '.././model';
@@ -48,7 +49,7 @@ export const createBatchApiV1BatchesPost = (
 ) => {
       
       
-      return customInstance<BatchResponse>(
+      return customInstance<CreateBatchResponse>(
       {url: `/api/v1/batches`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
       data: createBatchRequest, signal

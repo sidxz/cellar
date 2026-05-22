@@ -26,6 +26,7 @@ import type {
 import type {
   ActivitySummaryResponse,
   AddIdentifierBody,
+  AddIdentifierResponse,
   CreateRelationshipBody,
   DepictRequest,
   DepictResponse,
@@ -1073,7 +1074,7 @@ export function useListIdentifiersApiV1MoleculesMoleculeIdIdentifiersGet<TData =
 
 
 /**
- * Add an external identifier to a molecule. Returns the updated list.
+ * Add an external identifier to a molecule. Returns updated list + mirror summary.
  * @summary Add Identifier
  */
 export const addIdentifierApiV1MoleculesMoleculeIdIdentifiersPost = (
@@ -1083,7 +1084,7 @@ export const addIdentifierApiV1MoleculesMoleculeIdIdentifiersPost = (
 ) => {
       
       
-      return customInstance<IdentifierResponse[]>(
+      return customInstance<AddIdentifierResponse>(
       {url: `/api/v1/molecules/${moleculeId}/identifiers`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
       data: addIdentifierBody, signal
