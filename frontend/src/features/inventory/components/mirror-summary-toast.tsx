@@ -5,7 +5,7 @@ export type MirrorSummary = {
   skipped: Array<{
     batch_number: string
     mirror_string: string
-    reason: "already_mapped" | "workspace_conflict" | "malformed_batch_number"
+    reason: string
   }>
 }
 
@@ -28,7 +28,7 @@ export function renderToast(summary: MirrorSummary): void {
   }
 
   const itemLines = skipped
-    .map((s) => `${s.mirror_string} → ${reasonLabels[s.reason]}`)
+    .map((s) => `${s.mirror_string} → ${reasonLabels[s.reason as keyof typeof reasonLabels] ?? s.reason}`)
     .join("\n")
   const description = `${skipped.length} skipped\n${itemLines}`
   toast.message(

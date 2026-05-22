@@ -2,12 +2,13 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import type { AddIdentifierResponse } from "@/shared/lib/api/model/addIdentifierResponse";
 import { showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { renderToast } from "@/features/inventory/components/mirror-summary-toast";
 import type {
   Molecule,
-  MoleculeIdentifier,
   RegisterMoleculeInput,
   RegistrationResponse,
   UpdateMoleculeInput,
@@ -159,12 +160,15 @@ export function useAddIdentifier(moleculeId: string) {
       identifier_type: string;
       source: string;
     }) =>
-      customInstance<MoleculeIdentifier[]>({
+      customInstance<AddIdentifierResponse>({
         url: `/api/v1/molecules/${moleculeId}/identifiers`,
         method: "POST",
         data,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: MOLECULES_KEY });
+      if (data?.mirror_summary) renderToast(data.mirror_summary);
+    },
   });
 }
 
