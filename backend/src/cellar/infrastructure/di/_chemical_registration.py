@@ -8,6 +8,7 @@ from __future__ import annotations
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.chemical_registration.bulk_registration_item_reader import (
     BulkRegistrationItemReader,
 )
@@ -17,28 +18,18 @@ from cellar.application.chemical_registration.bulk_registration_orchestrator imp
 from cellar.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationService,
 )
-from cellar.application.chemical_registration.get_bulk_registration_runtime_status import (
-    GetBulkRegistrationRuntimeStatus,
-)
-from cellar.application.chemical_registration.start_bulk_registration import (
-    StartBulkRegistration,
-)
-from cellar.application.chemical_registration.list_bulk_registration_items import (
-    ListBulkRegistrationItems,
-)
-from cellar.application.chemical_registration.preview_bulk_registration_file import (
-    BulkFileParserProtocol,
-    PreviewBulkRegistrationFile,
-)
 from cellar.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
 from cellar.application.chemical_registration.create_relationship import CreateRelationship
 from cellar.application.chemical_registration.delete_relationship import DeleteRelationship
 from cellar.application.chemical_registration.depict_molecules import (
-    DepictMolecules,
     DepictionService,
+    DepictMolecules,
 )
 from cellar.application.chemical_registration.disclosure_service import DisclosureService
 from cellar.application.chemical_registration.export_sdf import ExportMoleculesSDF
+from cellar.application.chemical_registration.get_bulk_registration_runtime_status import (
+    GetBulkRegistrationRuntimeStatus,
+)
 from cellar.application.chemical_registration.get_disclosure import GetDisclosure
 from cellar.application.chemical_registration.get_merge_history import GetMergeHistory
 from cellar.application.chemical_registration.get_merge_impact import GetMergeImpact
@@ -51,8 +42,8 @@ from cellar.application.chemical_registration.identifiers import (
     ListIdentifiers,
     RemoveIdentifier,
 )
-from cellar.application.inventory.sync_batch_identifier_mirrors import (
-    SyncBatchIdentifierMirrors,
+from cellar.application.chemical_registration.list_bulk_registration_items import (
+    ListBulkRegistrationItems,
 )
 from cellar.application.chemical_registration.list_disclosures import ListDisclosures
 from cellar.application.chemical_registration.list_disclosures_by_workspace import (
@@ -66,14 +57,21 @@ from cellar.application.chemical_registration.merge_service import MergeService
 from cellar.application.chemical_registration.merge_side_effect_registry import (
     MergeSideEffectRegistry,
 )
+from cellar.application.chemical_registration.molecule_reader import MoleculeReader
+from cellar.application.chemical_registration.preview_bulk_registration_file import (
+    BulkFileParserProtocol,
+    PreviewBulkRegistrationFile,
+)
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.chemical_registration.register_molecule import RegisterMolecule
 from cellar.application.chemical_registration.reject_disclosure import RejectDisclosure
 from cellar.application.chemical_registration.resolve_disclosure_conflict import (
     ResolveDisclosureConflict,
 )
-from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 from cellar.application.chemical_registration.search_molecules import SearchMolecules
+from cellar.application.chemical_registration.start_bulk_registration import (
+    StartBulkRegistration,
+)
 from cellar.application.chemical_registration.synthesis_routes import (
     AddReactionStep,
     CreateSynthesisRoute,
@@ -89,6 +87,9 @@ from cellar.application.chemical_registration.synthesis_routes import (
 )
 from cellar.application.chemical_registration.update_molecule import UpdateMolecule
 from cellar.application.inventory.salt_matcher import SaltMatcher
+from cellar.application.inventory.sync_batch_identifier_mirrors import (
+    SyncBatchIdentifierMirrors,
+)
 from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.messaging.merge_handlers import (
@@ -102,10 +103,10 @@ from cellar.infrastructure.messaging.merge_handlers import (
     SynthesisRequestMergeSideEffect,
     SynthesisRouteMergeSideEffect,
 )
+from cellar.infrastructure.parsers.chemical_file_parser import BulkFileParserAdapter
 from cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_merge_side_effect import (
     AttachmentMergeSideEffect,
 )
-from cellar.infrastructure.parsers.chemical_file_parser import BulkFileParserAdapter
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_item_reader import (
     SQLAlchemyBulkRegistrationItemReader,
 )
@@ -121,11 +122,11 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.merge_ev
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.merge_impact_reader import (
     SQLAlchemyMergeImpactReader,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_relationship_repository import (
-    SQLAlchemyMoleculeRelationshipRepository,
-)
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
     SQLAlchemyMoleculeReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_relationship_repository import (
+    SQLAlchemyMoleculeRelationshipRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
@@ -151,7 +152,6 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_set
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.depiction import DepictionGenerator
 from cellar.infrastructure.storage.fsspec_client import FsspecStorageClient
-from cellar.application.admin.admin_delete_registry import register_admin_delete
 
 
 def register_chemical_registration(container: Container) -> None:
