@@ -99,13 +99,6 @@ def _mock_batch(batch_id: uuid.UUID | None = None) -> MagicMock:
     return batch
 
 
-def _mock_batch_result(batch_id: uuid.UUID | None = None) -> CreateBatchResult:
-    """Wrap a mock Batch in a CreateBatchResult (matches the new use case return type)."""
-    return CreateBatchResult(
-        batch=_mock_batch(batch_id),
-        mirror_summary=MirrorSummary.empty(),
-    )
-
 
 # ---------------------------------------------------------------------------
 # Tests

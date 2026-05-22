@@ -7,6 +7,7 @@ from __future__ import annotations
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.inventory.batch_identifiers import (
     AddBatchIdentifier,
     ListBatchIdentifiers,
@@ -14,7 +15,6 @@ from cellar.application.inventory.batch_identifiers import (
 )
 from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
 from cellar.application.inventory.create_batch import CreateBatch
-from cellar.application.inventory.sync_batch_identifier_mirrors import SyncBatchIdentifierMirrors
 from cellar.application.inventory.create_sample import CreateSample
 from cellar.application.inventory.delete_storage_location import DeleteStorageLocation
 from cellar.application.inventory.ensure_batch_exists import EnsureBatchExists
@@ -25,7 +25,6 @@ from cellar.application.inventory.import_plate_data import (
     ImportFileCache,
     ImportPlateDataService,
 )
-from cellar.infrastructure.cache.in_memory_file_cache import InMemoryImportFileCache
 from cellar.application.inventory.import_templates import (
     CreateImportTemplate,
     DeleteImportTemplate,
@@ -71,6 +70,7 @@ from cellar.application.inventory.shipments import (
     ShipShipment,
     UpdateShipment,
 )
+from cellar.application.inventory.sync_batch_identifier_mirrors import SyncBatchIdentifierMirrors
 from cellar.application.inventory.synthesis_requests import (
     ApproveSynthesisRequest,
     AssignSynthesisRequest,
@@ -93,6 +93,7 @@ from cellar.application.inventory.update_storage_location import UpdateStorageLo
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from cellar.application.screening.create_run import CreateRun
 from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
+from cellar.infrastructure.cache.in_memory_file_cache import InMemoryImportFileCache
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
@@ -115,9 +116,6 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.sample_repository im
 from cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_repository import (
     SQLAlchemySampleRequestRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
-    SQLAlchemyWorkspaceSettingsRepository,
-)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.shipment_repository import (
     SQLAlchemyShipmentRepository,
 )
@@ -130,8 +128,10 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_re
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (
     SQLAlchemyCustomFieldDefinitionRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
+    SQLAlchemyWorkspaceSettingsRepository,
+)
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from cellar.application.admin.admin_delete_registry import register_admin_delete
 
 
 def register_inventory(container: Container) -> None:

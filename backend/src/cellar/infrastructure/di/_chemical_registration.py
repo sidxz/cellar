@@ -464,6 +464,8 @@ def register_chemical_registration(container: Container) -> None:
     # --- Bulk Registration ---
     def _bulk_registration_service(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        batch_repo = SQLAlchemyBatchRepository(uow)
+        sync = SyncBatchIdentifierMirrors(batch_repo)
         return BulkRegistrationService(
             uow=uow,
             bulk_reg_repo=SQLAlchemyBulkRegistrationRepository(uow),
@@ -471,8 +473,9 @@ def register_chemical_registration(container: Container) -> None:
             dispatcher=c[EventDispatcher],
             structure_processor=c[StructureProcessorProtocol],
             salt_matcher=SaltMatcher(SQLAlchemySaltEntryRepository(uow)),
-            batch_repo=SQLAlchemyBatchRepository(uow),
+            batch_repo=batch_repo,
             settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+            sync=sync,
         )
 
     container.define(BulkRegistrationService, _bulk_registration_service)

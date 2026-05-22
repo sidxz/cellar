@@ -25,6 +25,7 @@ from cellar.application.chemical_registration.register_molecule import (
 from cellar.application.inventory.batch_policy import should_create_batch
 from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from cellar.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
+from cellar.application.inventory.sync_batch_identifier_mirrors import SyncBatchIdentifierMirrors
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -115,6 +116,7 @@ class BulkRegistrationService:
         salt_matcher: SaltMatcher,
         batch_repo: BatchRepository,
         settings_repo: WorkspaceSettingsRepository,
+        sync: SyncBatchIdentifierMirrors | None = None,
     ) -> None:
         self._uow = uow
         self._bulk_reg_repo = bulk_reg_repo
@@ -124,6 +126,7 @@ class BulkRegistrationService:
         self._salt_matcher = salt_matcher
         self._batch_repo = batch_repo
         self._settings_repo = settings_repo
+        self._sync = sync
 
     async def __call__(
         self,
@@ -408,6 +411,7 @@ class BulkRegistrationService:
             repo=self._batch_repo,
             molecule_repo=self._mol_repo,
             dispatcher=self._dispatcher,
+            sync=self._sync,
         )
 
         batch_cmd = CreateBatchCommand(
