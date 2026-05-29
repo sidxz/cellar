@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildChildIndex,
+  buildSubtreeMolIdMap,
   collectSubtreeMolIds,
   rootNodes,
 } from "./scaffold-tree-math";
@@ -53,6 +54,67 @@ describe("scaffold-tree-math", () => {
 
   it("collectSubtreeMolIds handles unknown smiles gracefully", () => {
     expect(collectSubtreeMolIds("does-not-exist", tree)).toEqual([]);
+  });
+
+  describe("buildSubtreeMolIdMap", () => {
+    it("returns one entry per node with self + descendant mol ids", () => {
+      const map = buildSubtreeMolIdMap(tree);
+      expect(new Set(map.get("c1ccccc1"))).toEqual(new Set(["m1", "m2", "m3"]));
+      expect(new Set(map.get("c1ccc2ccccc2c1"))).toEqual(new Set(["m2", "m3"]));
+      expect(map.get("c1ccc2cc(N)ccc2c1")).toEqual(["m3"]);
+      expect(new Set(map.get(NO_SCAFFOLD_SENTINEL))).toEqual(
+        new Set(["m4", "m5"]),
+      );
+    });
+
+    it("matches collectSubtreeMolIds for every node", () => {
+      const map = buildSubtreeMolIdMap(tree);
+      for (const n of tree.nodes) {
+        expect(new Set(map.get(n.scaffold_smiles))).toEqual(
+          new Set(collectSubtreeMolIds(n.scaffold_smiles, tree)),
+        );
+      }
+    });
+
+    it("dedupes across a diamond DAG", () => {
+      const diamond: ScaffoldTreeResult = {
+        nodes: [
+          { scaffold_smiles: "A", molecule_ids: [], molecule_count: 0, subtree_molecule_count: 3 },
+          { scaffold_smiles: "B", molecule_ids: ["m1"], molecule_count: 1, subtree_molecule_count: 2 },
+          { scaffold_smiles: "C", molecule_ids: ["m2"], molecule_count: 1, subtree_molecule_count: 2 },
+          { scaffold_smiles: "D", molecule_ids: ["m3"], molecule_count: 1, subtree_molecule_count: 1 },
+        ],
+        edges: [
+          { parent_smiles: "A", child_smiles: "B" },
+          { parent_smiles: "A", child_smiles: "C" },
+          { parent_smiles: "B", child_smiles: "D" },
+          { parent_smiles: "C", child_smiles: "D" },
+        ],
+        stats: { node_count: 4, elapsed_ms: 0, cache_hit: false },
+      };
+      const map = buildSubtreeMolIdMap(diamond);
+      expect([...(map.get("A") ?? [])].sort()).toEqual(["m1", "m2", "m3"]);
+      // D reached via two paths but appears once.
+      expect(map.get("D")).toEqual(["m3"]);
+    });
+
+    it("terminates and stays sane on a cyclic edge set (DAGs are expected; this is a guard)", () => {
+      const cyclic: ScaffoldTreeResult = {
+        nodes: [
+          { scaffold_smiles: "X", molecule_ids: ["m1"], molecule_count: 1, subtree_molecule_count: 2 },
+          { scaffold_smiles: "Y", molecule_ids: ["m2"], molecule_count: 1, subtree_molecule_count: 2 },
+        ],
+        edges: [
+          { parent_smiles: "X", child_smiles: "Y" },
+          { parent_smiles: "Y", child_smiles: "X" },
+        ],
+        stats: { node_count: 2, elapsed_ms: 0, cache_hit: false },
+      };
+      // Must not throw / infinite-loop. Each node at minimum contains its own id.
+      const map = buildSubtreeMolIdMap(cyclic);
+      expect(map.get("X")).toContain("m1");
+      expect(map.get("Y")).toContain("m2");
+    });
   });
 
   it("collectSubtreeMolIds avoids double-counting in a diamond DAG", () => {

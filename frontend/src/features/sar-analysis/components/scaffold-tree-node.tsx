@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -8,13 +8,14 @@ import { stashScaffoldSearch } from "@/features/research-organization/lib/scaffo
 
 import {
   NO_SCAFFOLD_SENTINEL,
-  type ScaffoldTreeResult,
+  type ScaffoldTreeNode as ScaffoldTreeNodeData,
 } from "../types/scaffold-tree";
 import type { ActivityRollupBin } from "../lib/scaffold-rollup";
 
 type Props = {
   scaffoldSmiles: string;
-  tree: ScaffoldTreeResult;
+  /** smiles -> node lookup, built once at the tree root (not per node) */
+  nodesBySmiles: Map<string, ScaffoldTreeNodeData>;
   /** Parent -> children map, computed once at the tree root */
   childIndex: Map<string, string[]>;
   /** Scaffold -> activity rollup color bin, computed once at the tree root */
@@ -42,7 +43,7 @@ const BIN_COLORS: Record<ActivityRollupBin, string> = {
 function ScaffoldTreeNodeInner(props: Props) {
   const {
     scaffoldSmiles,
-    tree,
+    nodesBySmiles,
     childIndex,
     colorBins,
     visibleNodes,
@@ -61,14 +62,6 @@ function ScaffoldTreeNodeInner(props: Props) {
     stashScaffoldSearch(stashed);
     router.push("/search");
   };
-
-  // Map lookup over tree.nodes is O(N) per node — for 30+ nodes recursing,
-  // that's redundant. Build a smiles->node lookup once at the root, walk down.
-  const nodesBySmiles = useMemo(() => {
-    const m = new Map<string, ScaffoldTreeResult["nodes"][number]>();
-    for (const n of tree.nodes) m.set(n.scaffold_smiles, n);
-    return m;
-  }, [tree]);
 
   const node = nodesBySmiles.get(scaffoldSmiles);
   if (!node) return null;
@@ -171,7 +164,7 @@ function ScaffoldTreeNodeInner(props: Props) {
             <ScaffoldTreeNode
               key={c}
               scaffoldSmiles={c}
-              tree={tree}
+              nodesBySmiles={nodesBySmiles}
               childIndex={childIndex}
               colorBins={colorBins}
               visibleNodes={visibleNodes}

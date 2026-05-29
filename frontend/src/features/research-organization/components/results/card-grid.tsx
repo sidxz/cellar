@@ -47,6 +47,11 @@ export function CardGrid({
 }: CardGridProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const [columnCount, setColumnCount] = useState(1);
+  // Whether the scroll container has real layout. In jsdom (and only there)
+  // clientWidth/Height are 0 — that's the ONLY case where we render every row
+  // non-virtualized. In a real browser this stays false, so we never mass-mount
+  // the full set on the first paint (see useFallback below).
+  const [noLayout, setNoLayout] = useState(false);
 
   useEffect(() => {
     const el = parentRef.current;
@@ -56,6 +61,7 @@ export function CardGrid({
       // In jsdom clientWidth is 0 — fall back to 1 column so all items render.
       const cols = width > 0 ? Math.max(1, Math.floor(width / minTileWidth)) : 1;
       setColumnCount(cols);
+      setNoLayout(width === 0 && el.clientHeight === 0);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -82,8 +88,14 @@ export function CardGrid({
   // In jsdom, getVirtualItems() is empty because there is no scroll-container
   // height to intersect against. Fall back to rendering all rows so tests can
   // assert on tile content without needing a real browser layout engine.
+  //
+  // CRITICAL: gate the fallback on `noLayout` (jsdom), NOT on
+  // `virtualItems.length === 0`. The latter is also true on the FIRST real
+  // browser render (parentRef isn't attached yet), which would mass-mount
+  // every card — 5000 RDKit renders — and freeze the tab before windowing
+  // engages. In a browser the virtualizer fills in on the next frame.
   const virtualItems = virtualizer.getVirtualItems();
-  const useFallback = virtualItems.length === 0 && rows.length > 0;
+  const useFallback = noLayout && rows.length > 0;
 
   // Always render the scroll container with parentRef attached so the
   // ResizeObserver effect can measure its width on first render (even when

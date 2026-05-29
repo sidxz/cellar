@@ -22,9 +22,10 @@ import { ScaffoldColorPicker } from "./scaffold-color-picker";
 import { useTreeSubMode } from "../lib/use-tree-sub-mode";
 import {
   buildChildIndex,
-  collectSubtreeMolIds,
+  buildSubtreeMolIdMap,
   rootNodes,
 } from "../lib/scaffold-tree-math";
+import type { ScaffoldTreeNode as ScaffoldTreeNodeType } from "../types/scaffold-tree";
 import { collectSubtreeScaffolds } from "../lib/collect-subtree-scaffolds";
 import { NO_SCAFFOLD_SENTINEL } from "../types/scaffold-tree";
 import {
@@ -201,27 +202,44 @@ export function ScaffoldTreeView({
     [onOpen, router],
   );
 
-  // Computed once per tree change. Recursive children call buildChildIndex
-  // and collectSubtreeMolIds otherwise — that's O(N^2) work per render.
+  // Computed once per tree change. Recursive children would otherwise rebuild
+  // these per node — O(N^2) work per render.
   const childIndex = useMemo(
     () => (tree ? buildChildIndex(tree) : new Map<string, string[]>()),
     [tree],
   );
 
+  // smiles -> node lookup, built once at the root and threaded into the
+  // recursive ScaffoldTreeNode children so each node skips an O(N) rebuild.
+  const nodesBySmiles = useMemo(() => {
+    const m = new Map<string, ScaffoldTreeNodeType>();
+    if (tree) for (const n of tree.nodes) m.set(n.scaffold_smiles, n);
+    return m;
+  }, [tree]);
+
+  // Every node's subtree molecule-id set, computed in ONE pass per tree.
+  // Reused by both the color rollup and the in-memory subtree filter so we
+  // never rebuild the node/child indexes per node (the old per-node
+  // collectSubtreeMolIds call was O(N^2) and froze large collections).
+  const subtreeMolIds = useMemo(
+    () => (tree ? buildSubtreeMolIdMap(tree) : new Map<string, string[]>()),
+    [tree],
+  );
+
   // Pre-compute per-node activity rollup color once per (tree, colorBy,
-  // activityData) change. Avoids per-node DFS during recursive render.
+  // activityData) change. Reads the prebuilt subtree map — no per-node DFS.
   const colorBins = useMemo(() => {
     const map = new Map<string, ActivityRollupBin>();
     if (!tree || !colorBy || !activityData) return map;
     for (const node of tree.nodes) {
-      const ids = collectSubtreeMolIds(node.scaffold_smiles, tree);
+      const ids = subtreeMolIds.get(node.scaffold_smiles) ?? [];
       const bin = classifyActivity(
         medianPic50ForMols(ids, activityData, colorBy),
       );
       if (bin) map.set(node.scaffold_smiles, bin);
     }
     return map;
-  }, [tree, colorBy, activityData]);
+  }, [tree, colorBy, activityData, subtreeMolIds]);
 
   // V4 Path A: when a scaffold is selected on a collection page, fetch the
   // filtered set server-side via the new exact_match_in criterion. Avoids the
@@ -269,13 +287,12 @@ export function ScaffoldTreeView({
     // chemists who pick "piperidine variant A" want THOSE compounds, not also
     // every other scaffold that happens to be a substructure.
     if (subMode === "groups") {
-      const node = tree.nodes.find(
-        (n) => n.scaffold_smiles === selectedScaffold,
+      const directIds = new Set(
+        nodesBySmiles.get(selectedScaffold)?.molecule_ids ?? [],
       );
-      const directIds = new Set(node?.molecule_ids ?? []);
       return molecules.filter((m) => directIds.has(m.id));
     }
-    const ids = new Set(collectSubtreeMolIds(selectedScaffold, tree));
+    const ids = new Set(subtreeMolIds.get(selectedScaffold) ?? []);
     return molecules.filter((m) => ids.has(m.id));
   }, [
     molecules,
@@ -285,6 +302,8 @@ export function ScaffoldTreeView({
     collectionId,
     selectedScaffolds,
     serverFiltered.data,
+    nodesBySmiles,
+    subtreeMolIds,
   ]);
 
   // Path A: visible nodes after the min-members filter. A node is visible
@@ -449,7 +468,7 @@ export function ScaffoldTreeView({
               onChange={setColorBy}
             />
           </div>
-          <div className="flex-1 overflow-y-auto p-1">
+          <div className="flex-1 min-h-0 overflow-y-auto p-1">
             {subMode === "groups" ? (
               <ScaffoldGroupsList
                 tree={tree}
@@ -481,7 +500,7 @@ export function ScaffoldTreeView({
                 <ScaffoldTreeNode
                   key={root.scaffold_smiles}
                   scaffoldSmiles={root.scaffold_smiles}
-                  tree={tree}
+                  nodesBySmiles={nodesBySmiles}
                   childIndex={childIndex}
                   colorBins={colorBins}
                   visibleNodes={visibleNodes}
@@ -498,14 +517,19 @@ export function ScaffoldTreeView({
       </ResizablePanel>
       <ResizableHandle withHandle />
       <ResizablePanel defaultSize={CARDS_DEFAULT_PCT}>
-        <div className="h-full overflow-auto">
-          <CardGrid
-            molecules={filteredMolecules}
-            selectedIds={selectedIds}
-            onSelectChange={handleSelectChange}
-            onOpen={handleOpen}
-          />
-        </div>
+        {/* CardGrid must own a DEFINITE-height scroll container or its
+            virtualizer can't window — a percentage-height (`h-full`) chain
+            through a flex-stretched ResizablePanel resolves to content height,
+            so the grid renders every molecule (5000 RDKit thumbnails) and
+            freezes the tab. Give it the same explicit height the grid view
+            uses; the panel group is sized to exactly this. */}
+        <CardGrid
+          molecules={filteredMolecules}
+          selectedIds={selectedIds}
+          onSelectChange={handleSelectChange}
+          onOpen={handleOpen}
+          height="calc(100vh - 14rem)"
+        />
       </ResizablePanel>
     </ResizablePanelGroup>
   );
