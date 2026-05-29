@@ -61,7 +61,7 @@ class BuildScaffoldNetwork:
         job_repository: ScaffoldTreeJobRepository,
         uow: UnitOfWork,
         network_builder: ScaffoldNetworkBuilder,
-        cache_ttl_seconds: int = 3600,
+        cache_ttl_seconds: int | None = None,
     ) -> None:
         self._fetcher = molecule_fetcher
         self._repo = job_repository

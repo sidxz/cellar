@@ -149,6 +149,39 @@ async def test_find_cached_beyond_ttl_returns_none(uow):
 
 
 @pytest.mark.asyncio
+async def test_find_cached_with_none_ttl_returns_old_ready_result(uow):
+    """ttl_seconds=None → id-based cache: a ready tree never expires on time."""
+    now = datetime.now(timezone.utc)
+    job = (
+        ScaffoldTreeJob.create(
+            workspace_id=uuid.uuid4(),
+            requested_by=uuid.uuid4(),
+            ids_hash="cache-key-D",
+            now=now - timedelta(days=30),
+        )
+        .mark_running(now - timedelta(days=30))
+        .mark_ready(
+            ScaffoldTreeResult(
+                stats=ScaffoldTreeStats(node_count=0, elapsed_ms=10, cache_hit=False),
+            ),
+            now - timedelta(days=30),
+        )
+    )
+
+    async with uow:
+        repo = SQLAlchemyScaffoldTreeJobRepository(uow)
+        await repo.save(job)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyScaffoldTreeJobRepository(uow)
+        cached = await repo.find_cached(ids_hash="cache-key-D", ttl_seconds=None)
+
+    # 30 days old — would miss any finite TTL, but None means no time expiry.
+    assert cached is not None
+
+
+@pytest.mark.asyncio
 async def test_find_cached_ignores_non_ready_jobs(uow):
     job = ScaffoldTreeJob.create(
         workspace_id=uuid.uuid4(),

@@ -67,9 +67,12 @@ class StartScaffoldTreeJob:
     async def execute(self, payload: StartScaffoldTreeJobInput) -> StartScaffoldTreeJobOutput:
         ids_hash = compute_ids_hash(payload.molecule_ids)
 
-        # Always check cache first regardless of size.
+        # Always check cache first regardless of size. ttl_seconds=None → the
+        # cache is invalidated only by a membership change (which changes
+        # ids_hash), never by time. A computed tree for a stable collection
+        # stays a permanent cache hit.
         async with self._uow:
-            cached = await self._repo.find_cached(ids_hash=ids_hash, ttl_seconds=3600)
+            cached = await self._repo.find_cached(ids_hash=ids_hash, ttl_seconds=None)
 
         if cached is not None:
             return StartScaffoldTreeJobOutput(

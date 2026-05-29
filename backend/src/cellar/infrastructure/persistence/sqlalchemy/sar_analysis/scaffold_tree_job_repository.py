@@ -49,17 +49,22 @@ class SQLAlchemyScaffoldTreeJobRepository:
         return _to_domain(model) if model else None
 
     async def find_cached(
-        self, *, ids_hash: str, ttl_seconds: int
+        self, *, ids_hash: str, ttl_seconds: int | None
     ) -> ScaffoldTreeResult | None:
         session = self._uow.session
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
+        conditions = [
+            ScaffoldTreeJobModel.ids_hash == ids_hash,
+            ScaffoldTreeJobModel.status == ScaffoldTreeJobStatus.READY.value,
+        ]
+        # ttl_seconds=None → id-based cache: a ready tree for this exact member
+        # set (ids_hash) never goes stale on time alone. Membership changes
+        # produce a different ids_hash, so they miss naturally and recompute.
+        if ttl_seconds is not None:
+            cutoff = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
+            conditions.append(ScaffoldTreeJobModel.completed_at > cutoff)
         stmt = (
             select(ScaffoldTreeJobModel)
-            .where(
-                ScaffoldTreeJobModel.ids_hash == ids_hash,
-                ScaffoldTreeJobModel.status == ScaffoldTreeJobStatus.READY.value,
-                ScaffoldTreeJobModel.completed_at > cutoff,
-            )
+            .where(*conditions)
             .order_by(ScaffoldTreeJobModel.completed_at.desc())
             .limit(1)
         )

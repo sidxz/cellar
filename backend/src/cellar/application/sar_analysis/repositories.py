@@ -18,8 +18,15 @@ class ScaffoldTreeJobRepository(Protocol):
     ) -> ScaffoldTreeJob | None: ...
 
     async def find_cached(
-        self, *, ids_hash: str, ttl_seconds: int
-    ) -> ScaffoldTreeResult | None: ...
+        self, *, ids_hash: str, ttl_seconds: int | None
+    ) -> ScaffoldTreeResult | None:
+        """Return the cached tree for ``ids_hash``.
+
+        ``ttl_seconds=None`` means no time-based expiry: a ready result is
+        valid until the member set changes (which changes ``ids_hash``). The
+        hash is the sole invalidation key.
+        """
+        ...
 
 
 class UmapJobRepository(Protocol):
