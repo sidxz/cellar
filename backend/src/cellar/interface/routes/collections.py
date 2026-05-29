@@ -5,8 +5,11 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from cellar.application.research_organization.bulk_add_to_collection import (
+    BulkAddToCollectionCommand,
+)
 from cellar.application.research_organization.collection_membership import (
     AddMoleculesToCollectionCommand,
     ListCollectionMoleculesQuery,
@@ -22,10 +25,12 @@ from cellar.application.research_organization.get_collection import (
 from cellar.application.research_organization.update_collection import UpdateCollectionCommand
 from cellar.application.shared.molecule_resolver import MoleculeReference, RefType
 from cellar.application.shared.sentinel import UNSET
+from cellar.domain.research_organization.bulk_add_types import BulkAddRow
 from cellar.domain.research_organization.collection import Collection
 from cellar.interface.dependencies import (
     AddMoleculesToCollectionDep,
     AuthDep,
+    BulkAddToCollectionDep,
     ComposeCollectionsDep,
     CreateCollectionDep,
     DeleteCollectionDep,
@@ -120,6 +125,39 @@ class MembershipResultResponse(BaseModel):
     added_count: int
     already_present: int
     unresolved: list[UnresolvedMoleculeResponse]
+
+
+class BulkAddRowBody(BaseModel):
+    row_index: int
+    registration_number: str | None = None
+    external_id: str | None = None
+    inchi_key: str | None = None
+    smiles: str | None = None
+    name: str | None = None
+    notes: str | None = None
+
+
+class BulkAddRequestBody(BaseModel):
+    rows: list[BulkAddRowBody]
+
+
+class RowOutcomeResponse(BaseModel):
+    row_index: int
+    status: str
+    molecule_id: uuid.UUID | None = None
+    molecule_name: str | None = None
+    candidates: list[uuid.UUID] = Field(default_factory=list)
+    message: str | None = None
+
+
+class BulkAddResponse(BaseModel):
+    outcomes: list[RowOutcomeResponse]
+    resolved_count: int
+    already_present_count: int
+    unregistered_count: int
+    ambiguous_count: int
+    error_count: int
+    preview_id: uuid.UUID | None = None
 
 
 @router.get("", response_model=PaginatedResponse[CollectionResponse])
@@ -287,3 +325,77 @@ async def list_collection_molecules(
     )
     molecule_ids = result_to_response(await use_case(query, auth=auth))
     return molecule_ids
+
+
+@router.post(
+    "/{collection_id}/molecules/preview-bulk",
+    response_model=BulkAddResponse,
+)
+async def preview_bulk_add_to_collection(
+    collection_id: uuid.UUID,
+    body: BulkAddRequestBody,
+    auth: AuthDep,
+    use_case: BulkAddToCollectionDep,
+) -> BulkAddResponse:
+    return await _run_bulk(collection_id, body, auth, use_case, dry_run=True)
+
+
+@router.post(
+    "/{collection_id}/molecules/bulk",
+    response_model=BulkAddResponse,
+)
+async def bulk_add_to_collection(
+    collection_id: uuid.UUID,
+    body: BulkAddRequestBody,
+    auth: AuthDep,
+    use_case: BulkAddToCollectionDep,
+) -> BulkAddResponse:
+    return await _run_bulk(collection_id, body, auth, use_case, dry_run=False)
+
+
+async def _run_bulk(
+    collection_id: uuid.UUID,
+    body: BulkAddRequestBody,
+    auth,  # noqa: ANN001
+    use_case,  # noqa: ANN001
+    *,
+    dry_run: bool,
+) -> BulkAddResponse:
+    rows = [
+        BulkAddRow(
+            row_index=r.row_index,
+            registration_number=r.registration_number,
+            external_id=r.external_id,
+            inchi_key=r.inchi_key,
+            smiles=r.smiles,
+            name=r.name,
+            notes=r.notes,
+        )
+        for r in body.rows
+    ]
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=auth.workspace_id,
+        collection_id=collection_id,
+        rows=rows,
+        dry_run=dry_run,
+    )
+    result = result_to_response(await use_case(cmd, auth=auth))
+    return BulkAddResponse(
+        outcomes=[
+            RowOutcomeResponse(
+                row_index=o.row_index,
+                status=o.status.value,
+                molecule_id=o.molecule_id,
+                molecule_name=o.molecule_name,
+                candidates=list(o.candidates),
+                message=o.message,
+            )
+            for o in result.outcomes
+        ],
+        resolved_count=result.resolved_count,
+        already_present_count=result.already_present_count,
+        unregistered_count=result.unregistered_count,
+        ambiguous_count=result.ambiguous_count,
+        error_count=result.error_count,
+        preview_id=result.preview_id,
+    )

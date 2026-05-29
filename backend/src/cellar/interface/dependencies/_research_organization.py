@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import Depends
 from lagom import Container
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.research_organization.add_campaign_channel import AddCampaignChannel
 from cellar.application.research_organization.add_result_row import AddResultRow
@@ -100,7 +101,14 @@ from cellar.application.research_organization.update_saved_search import UpdateS
 from cellar.application.screening.get_dose_response_curves_batch import (
     GetDoseResponseCurvesBatch,
 )
-from cellar.domain.research_organization.repository import CampaignRepository
+from cellar.domain.research_organization.repository import (
+    CampaignRepository,
+    CollectionRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
+    SQLAlchemyCollectionRepository,
+)
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 from ._core import _get_use_case, get_container
 
@@ -144,6 +152,9 @@ __all__ = [
     "AddMoleculeToProjectDep",
     "RemoveMoleculeFromProjectDep",
     "ListMoleculeProjectsDep",
+    # Collection repository (for the unregistered-rows handoff endpoint)
+    "get_collection_repo_uow",
+    "CollectionRepoUoWDep",
     # Campaigns
     "get_campaign_repo",
     "CampaignRepositoryDep",
@@ -237,6 +248,27 @@ RemoveMoleculeFromProjectDep = Annotated[
 ]
 ListMoleculeProjectsDep = Annotated[
     ListMoleculeProjects, Depends(_get_use_case(ListMoleculeProjects))
+]
+
+
+# --- Collection repository (route-managed UoW) ---
+def get_collection_repo_uow(
+    container: Annotated[Container, Depends(get_container)],
+) -> tuple[CollectionRepository, AsyncUnitOfWork]:
+    """Fresh ``(CollectionRepository, AsyncUnitOfWork)`` pair.
+
+    The route handler is responsible for entering the UoW context::
+
+        repo, uow = collection_repo_uow
+        async with uow:
+            collection = await repo.find_by_id_in_workspace(...)
+    """
+    uow = AsyncUnitOfWork(container[async_sessionmaker])
+    return SQLAlchemyCollectionRepository(uow), uow
+
+
+CollectionRepoUoWDep = Annotated[
+    tuple[CollectionRepository, AsyncUnitOfWork], Depends(get_collection_repo_uow)
 ]
 
 

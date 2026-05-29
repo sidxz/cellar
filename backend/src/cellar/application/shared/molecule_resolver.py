@@ -11,6 +11,8 @@ import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 
+from returns.result import Failure
+
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 
@@ -129,7 +131,7 @@ class MoleculeResolver:
         self, workspace_id: uuid.UUID, ref: MoleculeReference
     ) -> ResolvedMolecule | UnresolvedMolecule:
         result = self._structure_processor.process(ref.value)
-        if not result.is_success:
+        if isinstance(result, Failure):
             return UnresolvedMolecule(ref=ref, reason="invalid")
 
         processed = result.unwrap()
