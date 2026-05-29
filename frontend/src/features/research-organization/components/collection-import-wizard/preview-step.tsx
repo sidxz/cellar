@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/shared/components/ui/badge";
@@ -41,6 +42,9 @@ export interface PreviewStepProps {
   result: PreviewResult;
   collectionId: string;
   onCommit: () => void;
+  rows?: Record<string, string>[];
+  mapping?: Record<string, string>;
+  submitting?: boolean;
 }
 
 const STATUS_VARIANT: Record<
@@ -54,15 +58,51 @@ const STATUS_VARIANT: Record<
   error: "destructive",
 };
 
+// Priority order of roles to surface as "what was the chemist's input on this row?"
+const INPUT_PRIORITY = [
+  "registration_number",
+  "inchi_key",
+  "smiles",
+  "external_id",
+  "name",
+] as const;
+
+function truncate(s: string, max = 40): string {
+  return s.length > max ? s.slice(0, max) + "…" : s;
+}
+
 export function PreviewStep({
   result,
   collectionId,
   onCommit,
+  rows,
+  mapping,
+  submitting = false,
 }: PreviewStepProps) {
   const canCommit = result.resolved_count > 0;
   const handoffHref = result.preview_id
     ? `/compounds/bulk-register?from_collection_import=${result.preview_id}&return_to_collection=${collectionId}`
     : null;
+
+  function getRowInput(rowIndex: number): string {
+    if (!rows || !mapping) return "";
+    const row = rows[rowIndex];
+    if (!row) return "";
+    for (const role of INPUT_PRIORITY) {
+      const header = mapping[role];
+      if (!header) continue;
+      const v = row[header];
+      if (v && v.trim()) return truncate(v.trim());
+    }
+    return "";
+  }
+
+  const commitLabel = submitting
+    ? "Adding…"
+    : `Add ${result.resolved_count} to collection`;
+  const bottomAriaLabel = `Add ${result.resolved_count} resolved ${
+    result.resolved_count === 1 ? "row" : "rows"
+  } to the collection`;
 
   return (
     <div className="space-y-6">
@@ -95,38 +135,68 @@ export function PreviewStep({
           </Link>
         </div>
       )}
+      {canCommit && (
+        <div className="flex justify-end">
+          <Button
+            disabled={submitting}
+            onClick={onCommit}
+            aria-label={`Add ${result.resolved_count} resolved ${
+              result.resolved_count === 1 ? "row" : "rows"
+            } to the collection (top)`}
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Adding…
+              </>
+            ) : (
+              `Add ${result.resolved_count} to collection`
+            )}
+          </Button>
+        </div>
+      )}
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Row</TableHead>
+            <TableHead>Input</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Molecule</TableHead>
             <TableHead>Diagnostic</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {result.outcomes.map((o) => (
-            <TableRow key={o.row_index}>
-              <TableCell className="font-mono">#{o.row_index + 1}</TableCell>
-              <TableCell>
-                <Badge variant={STATUS_VARIANT[o.status]}>{o.status}</Badge>
-              </TableCell>
-              <TableCell>{o.molecule_name ?? "—"}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {o.message ?? ""}
-              </TableCell>
-            </TableRow>
-          ))}
+          {result.outcomes.map((o) => {
+            const input = getRowInput(o.row_index);
+            return (
+              <TableRow key={o.row_index}>
+                <TableCell className="font-mono text-sm">
+                  {input || `#${o.row_index + 1}`}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={STATUS_VARIANT[o.status]}>{o.status}</Badge>
+                </TableCell>
+                <TableCell>{o.molecule_name ?? "—"}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {o.message ?? ""}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
       <Button
-        disabled={!canCommit}
+        disabled={!canCommit || submitting}
         onClick={onCommit}
-        aria-label={`Add ${result.resolved_count} resolved ${
-          result.resolved_count === 1 ? "row" : "rows"
-        } to the collection`}
+        aria-label={bottomAriaLabel}
       >
-        Add {result.resolved_count} to collection
+        {submitting ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Adding…
+          </>
+        ) : (
+          commitLabel
+        )}
       </Button>
     </div>
   );

@@ -57,8 +57,11 @@ describe("PreviewStep", () => {
         onCommit={vi.fn()}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: /add 1 resolved/i }),
-    ).toBeEnabled();
+    // There are two commit buttons (top + bottom); both should be enabled.
+    const buttons = screen.getAllByRole("button", { name: /add 1 resolved/i });
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const b of buttons) {
+      expect(b).toBeEnabled();
+    }
   });
 });

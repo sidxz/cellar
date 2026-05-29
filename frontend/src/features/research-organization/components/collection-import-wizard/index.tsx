@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 
+import { useCollection } from "@/features/research-organization/hooks/use-collections";
 import { useCommitCollectionImport } from "@/features/research-organization/hooks/use-commit-collection-import";
 import {
   useCollectionImportTemplates,
   useCreateCollectionImportTemplate,
 } from "@/features/research-organization/hooks/use-collection-import-templates";
 import { usePreviewCollectionImport } from "@/features/research-organization/hooks/use-preview-collection-import";
+import { useBreadcrumbOverride } from "@/shared/components/layout/breadcrumb-context";
 import type {
   BulkAddRequestBody,
   BulkAddResponse,
@@ -60,6 +62,10 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
   const previewMut = usePreviewCollectionImport(collectionId);
   const commitMut = useCommitCollectionImport(collectionId);
 
+  const collectionQuery = useCollection(collectionId);
+  const collectionName = collectionQuery.data?.name ?? "";
+  useBreadcrumbOverride(collectionId, collectionName);
+
   function buildBody(currentMapping: Record<string, string>): BulkAddRequestBody {
     return {
       rows: rows.map((r, i): BulkAddRowBody => {
@@ -99,7 +105,14 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
 
   return (
     <div className="mx-auto max-w-4xl p-6">
-      <h1 className="mb-6 text-2xl font-semibold">Bulk import to collection</h1>
+      <h1 className="mb-6 text-2xl font-semibold">
+        Bulk import to{" "}
+        {collectionName ? (
+          <span className="text-primary">{collectionName}</span>
+        ) : (
+          "collection"
+        )}
+      </h1>
       {step === "upload" && (
         <UploadStep
           onParsed={({ headers, rows }) => {
@@ -115,6 +128,7 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
           rows={rows}
           templates={templatesQ.data ?? []}
           onContinue={handleContinueFromMapping}
+          submitting={previewMut.isPending}
         />
       )}
       {step === "preview" && preview && (
@@ -122,6 +136,9 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
           result={preview}
           collectionId={collectionId}
           onCommit={handleCommit}
+          rows={rows}
+          mapping={mapping}
+          submitting={commitMut.isPending}
         />
       )}
       {step === "confirm" && preview && (

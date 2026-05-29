@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -102,6 +103,7 @@ export interface MappingStepProps {
     mapping: Record<string, string>;
     saveAsTemplate?: { name: string };
   }) => void;
+  submitting?: boolean;
 }
 
 export function MappingStep({
@@ -109,6 +111,7 @@ export function MappingStep({
   rows: _rows,
   templates,
   onContinue,
+  submitting = false,
 }: MappingStepProps) {
   const initial = useMemo<Record<string, Role>>(() => {
     const m: Record<string, Role> = {};
@@ -211,6 +214,7 @@ export function MappingStep({
         />
       )}
       <Button
+        disabled={submitting}
         onClick={() =>
           onContinue({
             mapping: buildOutput(),
@@ -218,7 +222,14 @@ export function MappingStep({
           })
         }
       >
-        Continue
+        {submitting ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Resolving…
+          </>
+        ) : (
+          "Continue"
+        )}
       </Button>
     </div>
   );
