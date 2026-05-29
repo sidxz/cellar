@@ -4,10 +4,10 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
-import type { RowOutcomeResponse } from './rowOutcomeResponse';
+import type { CellarInterfaceRoutesBatchesRowOutcomeResponse } from './cellarInterfaceRoutesBatchesRowOutcomeResponse';
 import type { BulkAddBatchIdentifiersResponseCounts } from './bulkAddBatchIdentifiersResponseCounts';
 
 export interface BulkAddBatchIdentifiersResponse {
-  outcomes: RowOutcomeResponse[];
+  outcomes: CellarInterfaceRoutesBatchesRowOutcomeResponse[];
   counts: BulkAddBatchIdentifiersResponseCounts;
 }

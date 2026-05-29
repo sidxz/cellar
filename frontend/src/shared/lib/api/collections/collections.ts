@@ -25,6 +25,8 @@ import type {
 
 import type {
   AddMoleculesBody,
+  BulkAddRequestBody,
+  BulkAddResponse,
   CollectionResponse,
   ComposeCollectionsBody,
   CreateCollectionBody,
@@ -711,3 +713,134 @@ export function useListCollectionMoleculesApiV1CollectionsCollectionIdMoleculesG
 
 
 
+/**
+ * @summary Preview Bulk Add To Collection
+ */
+export const previewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost = (
+    collectionId: string,
+    bulkAddRequestBody: BulkAddRequestBody,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<BulkAddResponse>(
+      {url: `/api/v1/collections/${collectionId}/molecules/preview-bulk`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: bulkAddRequestBody, signal
+    },
+      );
+    }
+  
+
+
+export const getPreviewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost>>, TError,{collectionId: string;data: BulkAddRequestBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof previewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost>>, TError,{collectionId: string;data: BulkAddRequestBody}, TContext> => {
+
+const mutationKey = ['previewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost>>, {collectionId: string;data: BulkAddRequestBody}> = (props) => {
+          const {collectionId,data} = props ?? {};
+
+          return  previewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost(collectionId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPostMutationResult = NonNullable<Awaited<ReturnType<typeof previewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost>>>
+    export type PreviewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPostMutationBody = BulkAddRequestBody
+    export type PreviewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Preview Bulk Add To Collection
+ */
+export const usePreviewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost>>, TError,{collectionId: string;data: BulkAddRequestBody}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof previewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPost>>,
+        TError,
+        {collectionId: string;data: BulkAddRequestBody},
+        TContext
+      > => {
+
+      const mutationOptions = getPreviewBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesPreviewBulkPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * @summary Bulk Add To Collection
+ */
+export const bulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost = (
+    collectionId: string,
+    bulkAddRequestBody: BulkAddRequestBody,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<BulkAddResponse>(
+      {url: `/api/v1/collections/${collectionId}/molecules/bulk`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: bulkAddRequestBody, signal
+    },
+      );
+    }
+  
+
+
+export const getBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost>>, TError,{collectionId: string;data: BulkAddRequestBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof bulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost>>, TError,{collectionId: string;data: BulkAddRequestBody}, TContext> => {
+
+const mutationKey = ['bulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost>>, {collectionId: string;data: BulkAddRequestBody}> = (props) => {
+          const {collectionId,data} = props ?? {};
+
+          return  bulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost(collectionId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPostMutationResult = NonNullable<Awaited<ReturnType<typeof bulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost>>>
+    export type BulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPostMutationBody = BulkAddRequestBody
+    export type BulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Bulk Add To Collection
+ */
+export const useBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost>>, TError,{collectionId: string;data: BulkAddRequestBody}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof bulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPost>>,
+        TError,
+        {collectionId: string;data: BulkAddRequestBody},
+        TContext
+      > => {
+
+      const mutationOptions = getBulkAddToCollectionApiV1CollectionsCollectionIdMoleculesBulkPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    
