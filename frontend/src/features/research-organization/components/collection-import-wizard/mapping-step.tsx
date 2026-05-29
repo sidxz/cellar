@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
@@ -95,6 +95,29 @@ interface TemplateLite {
   column_mapping: Record<string, string>;
 }
 
+// Mirrors backend/src/cellar/application/research_organization/collection_import_templates.py::score_template_against_headers
+function scoreTemplate(template: TemplateLite, headers: string[]): number {
+  const normHeaders = new Set(headers.map(norm));
+  const refs = Object.values(template.column_mapping).filter(Boolean);
+  if (refs.length === 0) return 0;
+  const matched = refs.filter((r) => normHeaders.has(norm(r))).length;
+  return matched / refs.length;
+}
+
+function pickBestTemplate(
+  templates: TemplateLite[],
+  headers: string[],
+): { template: TemplateLite; score: number } | null {
+  let best: { template: TemplateLite; score: number } | null = null;
+  for (const t of templates) {
+    const score = scoreTemplate(t, headers);
+    if (score >= 0.7 && (!best || score > best.score)) {
+      best = { template: t, score };
+    }
+  }
+  return best;
+}
+
 export interface MappingStepProps {
   headers: string[];
   rows: Record<string, string>[];
@@ -122,6 +145,10 @@ export function MappingStep({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [save, setSave] = useState(false);
   const [tplName, setTplName] = useState("");
+  const [appliedTemplateName, setAppliedTemplateName] = useState<string | null>(
+    null,
+  );
+  const autoAppliedRef = useRef(false);
 
   function applyTemplate(id: string) {
     setSelectedTemplateId(id);
@@ -133,7 +160,26 @@ export function MappingStep({
       if (headers.includes(header)) next[header] = role as Role;
     }
     setMapping(next);
+    // Manual pick — show the indicator too (and don't let the auto-effect overwrite later).
+    setAppliedTemplateName(tpl.name);
+    autoAppliedRef.current = true;
   }
+
+  useEffect(() => {
+    if (autoAppliedRef.current) return;
+    if (templates.length === 0) return;
+    const best = pickBestTemplate(templates, headers);
+    if (!best) return;
+    const next: Record<string, Role> = {};
+    for (const h of headers) next[h] = "ignore";
+    for (const [role, header] of Object.entries(best.template.column_mapping)) {
+      if (headers.includes(header)) next[header] = role as Role;
+    }
+    setMapping(next);
+    setSelectedTemplateId(best.template.id);
+    setAppliedTemplateName(best.template.name);
+    autoAppliedRef.current = true;
+  }, [templates, headers]);
 
   function buildOutput() {
     const out: Record<string, string> = {};
@@ -162,6 +208,14 @@ export function MappingStep({
               </option>
             ))}
           </select>
+        </div>
+      )}
+      {appliedTemplateName && (
+        <div className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm">
+          <p className="text-emerald-900">
+            ✓ Applied saved template &ldquo;{appliedTemplateName}&rdquo;. You
+            can override below or pick a different template above.
+          </p>
         </div>
       )}
       <Table>
@@ -206,6 +260,12 @@ export function MappingStep({
         />
         <Label htmlFor="save">Save this mapping as a workspace template</Label>
       </div>
+      {templates.length === 0 && !save && (
+        <p className="text-xs text-muted-foreground">
+          No saved templates yet. Save this mapping at the end to reuse it next
+          time.
+        </p>
+      )}
       {save && (
         <Input
           placeholder="Template name"

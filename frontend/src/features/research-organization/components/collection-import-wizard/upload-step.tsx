@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 
 import {
   buildCollectionImportTemplate,
-  parseCollectionImportCsv,
+  parseCollectionImportFile,
 } from "@/features/research-organization/lib/parse-collection-import-csv";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
@@ -26,7 +26,7 @@ export function UploadStep({ onParsed }: UploadStepProps) {
     setError(null);
     setParsing(true);
     setLastFile(file.name);
-    const parsed = await parseCollectionImportCsv(file);
+    const parsed = await parseCollectionImportFile(file);
     setParsing(false);
     if (parsed.kind === "error") {
       setError(parsed.message);
@@ -50,7 +50,7 @@ export function UploadStep({ onParsed }: UploadStepProps) {
     <Card>
       <CardContent className="space-y-4 p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Upload CSV</h2>
+          <h2 className="text-lg font-semibold">Upload CSV or Excel</h2>
           <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
             <Download className="mr-2 h-4 w-4" />
             Download Template
@@ -59,19 +59,19 @@ export function UploadStep({ onParsed }: UploadStepProps) {
         <div className="rounded-lg border-2 border-dashed p-8 text-center">
           <Upload className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Upload a CSV mapping rows to Cellar molecules.
+            Upload a CSV or Excel file mapping rows to Cellar molecules.
           </p>
           {lastFile && (
             <p className="mt-2 text-xs text-muted-foreground">Last: {lastFile}</p>
           )}
           <Label htmlFor="csv-file" className="sr-only">
-            Upload CSV
+            Upload CSV or Excel
           </Label>
           <Input
             id="csv-file"
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
