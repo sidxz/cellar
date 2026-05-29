@@ -19,10 +19,17 @@ from cellar.application.research_organization.add_results_from_runs import (
     AddResultsFromRuns as AddResultsFromRunsUC,
 )
 from cellar.application.research_organization.archive_project import ArchiveProject
+from cellar.application.research_organization.bulk_add_to_collection import BulkAddToCollection
 from cellar.application.research_organization.bulk_set_result_decisions import (
     BulkSetResultDecisions,
 )
 from cellar.application.research_organization.close_campaign import CloseCampaign
+from cellar.application.research_organization.collection_import_templates import (
+    CreateCollectionImportTemplate,
+    DeleteCollectionImportTemplate,
+    ListCollectionImportTemplates,
+    UpdateCollectionImportTemplate,
+)
 from cellar.application.research_organization.collection_membership import (
     AddMoleculesToCollection,
     ListCollectionMolecules,
@@ -116,6 +123,11 @@ __all__ = [
     "RemoveMoleculesFromCollectionDep",
     "ListCollectionMoleculesDep",
     "ListCollectionsForMoleculeDep",
+    "BulkAddToCollectionDep",
+    "CreateCollectionImportTemplateDep",
+    "UpdateCollectionImportTemplateDep",
+    "DeleteCollectionImportTemplateDep",
+    "ListCollectionImportTemplatesDep",
     # Saved searches
     "CreateSavedSearchDep",
     "UpdateSavedSearchDep",
@@ -186,6 +198,21 @@ ListCollectionMoleculesDep = Annotated[
 ]
 ListCollectionsForMoleculeDep = Annotated[
     ListCollectionsForMolecule, Depends(_get_use_case(ListCollectionsForMolecule))
+]
+BulkAddToCollectionDep = Annotated[
+    BulkAddToCollection, Depends(_get_use_case(BulkAddToCollection))
+]
+CreateCollectionImportTemplateDep = Annotated[
+    CreateCollectionImportTemplate, Depends(_get_use_case(CreateCollectionImportTemplate))
+]
+UpdateCollectionImportTemplateDep = Annotated[
+    UpdateCollectionImportTemplate, Depends(_get_use_case(UpdateCollectionImportTemplate))
+]
+DeleteCollectionImportTemplateDep = Annotated[
+    DeleteCollectionImportTemplate, Depends(_get_use_case(DeleteCollectionImportTemplate))
+]
+ListCollectionImportTemplatesDep = Annotated[
+    ListCollectionImportTemplates, Depends(_get_use_case(ListCollectionImportTemplates))
 ]
 CreateSavedSearchDep = Annotated[CreateSavedSearch, Depends(_get_use_case(CreateSavedSearch))]
 UpdateSavedSearchDep = Annotated[UpdateSavedSearch, Depends(_get_use_case(UpdateSavedSearch))]

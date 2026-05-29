@@ -4,11 +4,18 @@ collections, saved searches, execute search.
 
 from __future__ import annotations
 
-from lagom import Container
+from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.research_organization.archive_project import ArchiveProject
+from cellar.application.research_organization.bulk_add_to_collection import BulkAddToCollection
+from cellar.application.research_organization.collection_import_templates import (
+    CreateCollectionImportTemplate,
+    DeleteCollectionImportTemplate,
+    ListCollectionImportTemplates,
+    UpdateCollectionImportTemplate,
+)
 from cellar.application.research_organization.collection_membership import (
     AddMoleculesToCollection,
     ListCollectionMolecules,
@@ -57,6 +64,9 @@ from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_import_template_repository import (
+    SQLAlchemyCollectionImportTemplateRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
     SQLAlchemyCollectionRepository,
@@ -128,7 +138,10 @@ from cellar.application.research_organization.update_campaign_metadata import (
 )
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository
-from cellar.domain.research_organization.repository import CampaignRepository
+from cellar.domain.research_organization.repository import (
+    CampaignRepository,
+    CollectionImportTemplateRepository,
+)
 from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
@@ -290,6 +303,64 @@ def register_research_organization(container: Container) -> None:
 
     container.define(AddMoleculesToCollection, _add_molecules)
     container.define(RemoveMoleculesFromCollection, _remove_molecules)
+
+    # --- Collection Import Templates (CRUD) ---
+    def _collection_import_template_repo(c: Container) -> CollectionImportTemplateRepository:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SQLAlchemyCollectionImportTemplateRepository(uow)
+
+    container.define(CollectionImportTemplateRepository, _collection_import_template_repo)
+
+    def _collection_import_template_cmd(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                SQLAlchemyCollectionImportTemplateRepository(uow),
+                c[EventDispatcher],
+            )
+
+        return _f
+
+    def _list_collection_import_templates(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListCollectionImportTemplates(
+            uow, SQLAlchemyCollectionImportTemplateRepository(uow)
+        )
+
+    container.define(
+        CreateCollectionImportTemplate,
+        _collection_import_template_cmd(CreateCollectionImportTemplate),
+    )
+    container.define(
+        UpdateCollectionImportTemplate,
+        _collection_import_template_cmd(UpdateCollectionImportTemplate),
+    )
+    container.define(
+        DeleteCollectionImportTemplate,
+        _collection_import_template_cmd(DeleteCollectionImportTemplate),
+    )
+    container.define(ListCollectionImportTemplates, _list_collection_import_templates)
+
+    # --- BulkAddToCollection — SINGLETON (stash dict lives on the instance) ---
+    # The in-memory preview-id stash for unregistered rows lives on
+    # ``self._stash``. Binding transiently would lose the stash between the
+    # preview POST and the handoff GET. The use case enters/exits a fresh
+    # ``async with self._uow`` per call, so a process-stable instance is safe
+    # as long as concurrent calls don't collide on the shared UoW session —
+    # acceptable for a low-traffic wizard endpoint.
+    def _bulk_add_to_collection(c: Container) -> BulkAddToCollection:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        resolver = MoleculeResolver(
+            SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]
+        )
+        return BulkAddToCollection(
+            uow,
+            resolver,
+            SQLAlchemyCollectionRepository(uow),
+        )
+
+    container[BulkAddToCollection] = Singleton(_bulk_add_to_collection)
 
     # --- Saved Searches ---
     def _ss_cmd(uc_cls: type):
