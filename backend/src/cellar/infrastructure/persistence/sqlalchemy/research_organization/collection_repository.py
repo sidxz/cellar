@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 import sqlalchemy as sa
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import aliased
 
@@ -100,7 +101,7 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         workspace_id: uuid.UUID,
         *,
         project_ids: list[uuid.UUID] | None = None,
-        cursor_id: uuid.UUID | None = None,
+        cursor: tuple[datetime, uuid.UUID] | None = None,
         limit: int | None = None,
     ) -> list[Collection]:
         # Subquery for molecule counts
@@ -120,9 +121,23 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         )
         if project_ids:
             stmt = stmt.where(CollectionModel.project_id.in_(project_ids))
-        if cursor_id is not None:
-            stmt = stmt.where(CollectionModel.id > cursor_id)
-        stmt = stmt.order_by(CollectionModel.id)
+        # Newest-activity-first. Keyset on (updated_at, id) so pagination stays
+        # stable under the DESC ordering: the next page is everything strictly
+        # "older" than the last row of the previous page.
+        if cursor is not None:
+            cursor_updated_at, cursor_id = cursor
+            stmt = stmt.where(
+                sa.or_(
+                    CollectionModel.updated_at < cursor_updated_at,
+                    sa.and_(
+                        CollectionModel.updated_at == cursor_updated_at,
+                        CollectionModel.id < cursor_id,
+                    ),
+                )
+            )
+        stmt = stmt.order_by(
+            CollectionModel.updated_at.desc(), CollectionModel.id.desc()
+        )
         if limit is not None:
             stmt = stmt.limit(limit)
 
@@ -163,7 +178,23 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         values = [{"collection_id": collection_id, "molecule_id": mid} for mid in molecule_ids]
         stmt = pg_insert(CollectionMoleculeModel).values(values).on_conflict_do_nothing()
         result = await self._session.execute(stmt)
+        if result.rowcount:
+            await self._touch_updated_at(collection_id)
         return result.rowcount  # type: ignore[return-value]
+
+    async def _touch_updated_at(self, collection_id: uuid.UUID) -> None:
+        """Bump a collection's ``updated_at`` after a membership change.
+
+        Membership lives in a join table, so inserts/deletes there don't trip
+        the row's ``onupdate`` — but adding/removing molecules IS "working on"
+        the collection, and the workspace list sorts by ``updated_at`` (newest
+        activity first), so the collection should rise to the top.
+        """
+        await self._session.execute(
+            update(CollectionModel)
+            .where(CollectionModel.id == collection_id)
+            .values(updated_at=func.now())
+        )
 
     async def remove_molecules(
         self, workspace_id: uuid.UUID, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
@@ -188,6 +219,8 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
             ),
         )
         result = await self._session.execute(stmt)
+        if result.rowcount:
+            await self._touch_updated_at(collection_id)
         return result.rowcount  # type: ignore[return-value]
 
     async def get_molecule_ids(

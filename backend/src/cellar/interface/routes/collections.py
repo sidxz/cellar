@@ -41,7 +41,11 @@ from cellar.interface.dependencies import (
     UpdateCollectionDep,
 )
 from cellar.interface.error_handlers import result_to_response
-from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
+from cellar.interface.pagination import (
+    PaginatedResponse,
+    clamp_limit,
+    parse_ts_cursor,
+)
 
 router = APIRouter(prefix="/api/v1/collections", tags=["collections"])
 
@@ -175,7 +179,7 @@ async def list_collections(
     query = ListCollectionsQuery(
         workspace_id=auth.workspace_id,
         project_ids=tuple(project_ids) if project_ids else None,
-        cursor_id=parse_cursor(cursor),
+        cursor=parse_ts_cursor(cursor),
         limit=clamp_limit(limit),
     )
     page = result_to_response(await use_case(query, auth=auth))
@@ -386,6 +390,15 @@ async def _run_bulk(
         preview_id=body.preview_id,
     )
     result = result_to_response(await use_case(cmd, auth=auth))
+    return bulk_add_result_to_response(result)
+
+
+def bulk_add_result_to_response(result) -> BulkAddResponse:  # noqa: ANN001
+    """Map a BulkAddResult (domain) to the BulkAddResponse wire model.
+
+    Shared by the preview/commit endpoints and the preview re-resolve endpoint
+    so all three return an identical shape.
+    """
     return BulkAddResponse(
         outcomes=[
             RowOutcomeResponse(

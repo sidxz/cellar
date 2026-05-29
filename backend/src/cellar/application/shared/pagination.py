@@ -6,6 +6,7 @@ Re-exports domain pagination types and adds application-level utilities.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from cellar.domain.shared.pagination import EnrichedPageResult, PageResult
 
@@ -17,7 +18,9 @@ __all__ = [
     "EnrichedPageResult",
     "PageResult",
     "clamp_limit",
+    "encode_ts_cursor",
     "parse_cursor",
+    "parse_ts_cursor",
 ]
 
 DEFAULT_PAGE_SIZE = 50
@@ -36,6 +39,28 @@ def parse_cursor(cursor: str | None) -> uuid.UUID | None:
     try:
         return uuid.UUID(cursor)
     except ValueError:
+        return None
+
+
+def encode_ts_cursor(ts: datetime, id_: uuid.UUID) -> str:
+    """Opaque keyset cursor for ``ORDER BY <ts> DESC, id DESC`` listings.
+
+    Encodes the (timestamp, id) of the last row on a page. ``parse_ts_cursor``
+    is its inverse. The pipe separator can't appear in an ISO timestamp or a
+    UUID, so the split is unambiguous.
+    """
+    return f"{ts.isoformat()}|{id_}"
+
+
+def parse_ts_cursor(cursor: str | None) -> tuple[datetime, uuid.UUID] | None:
+    """Parse a cursor produced by ``encode_ts_cursor`` — or ``None`` if absent
+    or malformed (a bad cursor degrades to "first page", never an error)."""
+    if not cursor:
+        return None
+    try:
+        ts_str, id_str = cursor.split("|", 1)
+        return datetime.fromisoformat(ts_str), uuid.UUID(id_str)
+    except (ValueError, AttributeError):
         return None
 
 

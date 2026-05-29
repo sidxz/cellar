@@ -203,6 +203,49 @@ class TestCollectionRepository:
             assert loaded.description == "Primary screen hits"
             assert loaded.molecule_count == 0
 
+    async def test_find_by_workspace_orders_by_recent_activity(
+        self, uow: AsyncUnitOfWork
+    ) -> None:
+        """Collections list newest-activity-first; adding molecules to an older
+        collection bumps its updated_at and floats it to the top."""
+        ws_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        mol_id = uuid.uuid4()
+        await _insert_molecule(uow, mol_id, ws_id)
+
+        async with uow:
+            repo = SQLAlchemyCollectionRepository(uow)
+            older = Collection.create(
+                workspace_id=ws_id, name="Older", created_by=user_id
+            )
+            await repo.save(older)
+            await uow.commit()
+
+        async with uow:
+            repo = SQLAlchemyCollectionRepository(uow)
+            newer = Collection.create(
+                workspace_id=ws_id, name="Newer", created_by=user_id
+            )
+            await repo.save(newer)
+            await uow.commit()
+
+        # Newest-created first.
+        async with uow:
+            repo = SQLAlchemyCollectionRepository(uow)
+            names = [c.name for c in await repo.find_by_workspace(ws_id)]
+            assert names == ["Newer", "Older"]
+
+        # Working on the older one (adding a molecule) floats it back to the top.
+        async with uow:
+            repo = SQLAlchemyCollectionRepository(uow)
+            await repo.add_molecules(ws_id, older.id, [mol_id])
+            await uow.commit()
+
+        async with uow:
+            repo = SQLAlchemyCollectionRepository(uow)
+            names = [c.name for c in await repo.find_by_workspace(ws_id)]
+            assert names == ["Older", "Newer"]
+
     async def test_find_by_workspace_with_counts(
         self, uow: AsyncUnitOfWork
     ) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.research_organization.campaign import Campaign
@@ -66,9 +67,15 @@ class CollectionRepository(Protocol):
         workspace_id: uuid.UUID,
         *,
         project_ids: list[uuid.UUID] | None = None,
-        cursor_id: uuid.UUID | None = None,
+        cursor: tuple[datetime, uuid.UUID] | None = None,
         limit: int | None = None,
-    ) -> list[Collection]: ...
+    ) -> list[Collection]:
+        """List collections newest-activity-first (``updated_at DESC, id DESC``).
+
+        ``cursor`` is the (updated_at, id) of the last row of the previous page
+        for keyset pagination.
+        """
+        ...
 
     async def add_molecules(
         self, workspace_id: uuid.UUID, collection_id: uuid.UUID, molecule_ids: list[uuid.UUID]
