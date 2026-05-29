@@ -139,6 +139,7 @@ class BulkAddRowBody(BaseModel):
 
 class BulkAddRequestBody(BaseModel):
     rows: list[BulkAddRowBody]
+    template_id: uuid.UUID | None = None
 
 
 class RowOutcomeResponse(BaseModel):
@@ -378,6 +379,7 @@ async def _run_bulk(
         collection_id=collection_id,
         rows=rows,
         dry_run=dry_run,
+        template_id=body.template_id,
     )
     result = result_to_response(await use_case(cmd, auth=auth))
     return BulkAddResponse(

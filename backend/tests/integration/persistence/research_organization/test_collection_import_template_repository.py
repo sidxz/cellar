@@ -102,6 +102,88 @@ async def test_find_by_workspace_scopes_to_workspace(uow):
 
 
 @pytest.mark.asyncio
+async def test_used_in_collections_persists_across_save_and_load(uow):
+    ws_id = uuid.uuid4()
+    tpl = CollectionImportTemplate.create(
+        workspace_id=ws_id,
+        name="usage-test",
+        column_mapping={"name": "X"},
+        created_by=uuid.uuid4(),
+    )
+    c1 = uuid.uuid4()
+    c2 = uuid.uuid4()
+    tpl.record_usage_in(c1)
+    tpl.record_usage_in(c2)
+
+    async with uow:
+        repo = SQLAlchemyCollectionImportTemplateRepository(uow)
+        await repo.save(tpl)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyCollectionImportTemplateRepository(uow)
+        reloaded = await repo.find_by_id_in_workspace(ws_id, tpl.id)
+
+    assert reloaded is not None
+    assert set(reloaded.used_in_collections) == {c1, c2}
+
+
+@pytest.mark.asyncio
+async def test_used_in_collections_default_is_empty_list(uow):
+    """Newly-created templates with no recorded usage round-trip as []."""
+    ws_id = uuid.uuid4()
+    tpl = CollectionImportTemplate.create(
+        workspace_id=ws_id,
+        name="empty-usage",
+        column_mapping={"name": "X"},
+        created_by=uuid.uuid4(),
+    )
+
+    async with uow:
+        repo = SQLAlchemyCollectionImportTemplateRepository(uow)
+        await repo.save(tpl)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyCollectionImportTemplateRepository(uow)
+        reloaded = await repo.find_by_id_in_workspace(ws_id, tpl.id)
+
+    assert reloaded is not None
+    assert reloaded.used_in_collections == []
+
+
+@pytest.mark.asyncio
+async def test_used_in_collections_update_path_persists(uow):
+    """Recording new usages after the row exists must persist via _update_model."""
+    ws_id = uuid.uuid4()
+    tpl = CollectionImportTemplate.create(
+        workspace_id=ws_id,
+        name="update-usage",
+        column_mapping={"name": "X"},
+        created_by=uuid.uuid4(),
+    )
+    async with uow:
+        repo = SQLAlchemyCollectionImportTemplateRepository(uow)
+        await repo.save(tpl)
+        await uow.commit()
+
+    c1 = uuid.uuid4()
+    tpl.record_usage_in(c1)
+
+    async with uow:
+        repo = SQLAlchemyCollectionImportTemplateRepository(uow)
+        await repo.save(tpl)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyCollectionImportTemplateRepository(uow)
+        reloaded = await repo.find_by_id_in_workspace(ws_id, tpl.id)
+
+    assert reloaded is not None
+    assert reloaded.used_in_collections == [c1]
+
+
+@pytest.mark.asyncio
 async def test_delete_removes_template(uow):
     ws_id = uuid.uuid4()
     tpl = CollectionImportTemplate.create(

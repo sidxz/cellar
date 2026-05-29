@@ -17,6 +17,28 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
 )
 
 
+def _hydrate_used_in_collections(raw: list | None) -> list[uuid.UUID]:
+    """JSONB round-trips UUIDs as strings; rehydrate into uuid.UUID."""
+    if not raw:
+        return []
+    out: list[uuid.UUID] = []
+    for entry in raw:
+        if isinstance(entry, uuid.UUID):
+            out.append(entry)
+        else:
+            try:
+                out.append(uuid.UUID(str(entry)))
+            except (ValueError, TypeError):
+                # Defensive: skip malformed entries rather than crash a read.
+                continue
+    return out
+
+
+def _serialize_used_in_collections(entries: list[uuid.UUID]) -> list[str]:
+    """Persist UUIDs as strings in JSONB (Postgres-side comparable + portable)."""
+    return [str(x) for x in entries]
+
+
 class SQLAlchemyCollectionImportTemplateRepository(
     EntityRepository[CollectionImportTemplate, CollectionImportTemplateModel]
 ):
@@ -43,6 +65,7 @@ class SQLAlchemyCollectionImportTemplateRepository(
             name=model.name,
             description=model.description,
             column_mapping=model.column_mapping,
+            used_in_collections=_hydrate_used_in_collections(model.used_in_collections),
             created_by=model.created_by,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -55,6 +78,7 @@ class SQLAlchemyCollectionImportTemplateRepository(
             name=entity.name,
             description=entity.description,
             column_mapping=entity.column_mapping,
+            used_in_collections=_serialize_used_in_collections(entity.used_in_collections),
             created_by=entity.created_by,
         )
 
@@ -66,3 +90,4 @@ class SQLAlchemyCollectionImportTemplateRepository(
         model.name = entity.name
         model.description = entity.description
         model.column_mapping = entity.column_mapping
+        model.used_in_collections = _serialize_used_in_collections(entity.used_in_collections)

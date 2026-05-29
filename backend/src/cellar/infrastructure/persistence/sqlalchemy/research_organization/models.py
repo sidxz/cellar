@@ -289,6 +289,11 @@ class CollectionImportTemplateModel(Base, EntityModelMixin, WorkspaceIdMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     column_mapping: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    # Append-only list of collection ids this template has been applied to
+    # (stored as JSONB list of stringy UUIDs; round-trip via the repo).
+    used_in_collections: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
 
     __table_args__ = (

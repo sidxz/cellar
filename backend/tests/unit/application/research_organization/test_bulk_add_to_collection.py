@@ -21,6 +21,9 @@ from cellar.domain.research_organization.bulk_add_types import (
     BulkAddRow,
     RowStatus,
 )
+from cellar.domain.research_organization.collection_import_template import (
+    CollectionImportTemplate,
+)
 
 
 @dataclass
@@ -104,6 +107,21 @@ class FakeUoW:
         return []
 
 
+@dataclass
+class FakeTemplateRepo:
+    """Stub: holds templates keyed by (workspace_id, template_id)."""
+
+    items: dict[tuple[uuid.UUID, uuid.UUID], CollectionImportTemplate] = field(
+        default_factory=dict
+    )
+
+    async def find_by_id_in_workspace(self, ws, tid):
+        return self.items.get((ws, tid))
+
+    async def save(self, t):
+        self.items[(t.workspace_id, t.id)] = t
+
+
 @pytest.mark.asyncio
 async def test_dry_run_classifies_all_five_statuses():
     existing = uuid.uuid4()
@@ -117,7 +135,11 @@ async def test_dry_run_classifies_all_five_statuses():
         names_by_id={existing: "Phenol", already: "Acetone"}
     )
     use_case = BulkAddToCollection(
-        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=FakeTemplateRepo(),
     )
 
     rows = [
@@ -154,7 +176,11 @@ async def test_commit_adds_only_resolved_rows():
     repo = FakeCollectionRepo(members=set())
     molecule_repo = FakeMoleculeRepo()
     use_case = BulkAddToCollection(
-        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=FakeTemplateRepo(),
     )
 
     cmd = BulkAddToCollectionCommand(
@@ -179,7 +205,11 @@ async def test_stash_persists_unregistered_rows_for_handoff():
     repo = FakeCollectionRepo(members=set())
     molecule_repo = FakeMoleculeRepo()
     use_case = BulkAddToCollection(
-        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=FakeTemplateRepo(),
     )
     cmd = BulkAddToCollectionCommand(
         workspace_id=uuid.uuid4(),
@@ -200,7 +230,11 @@ async def test_collection_not_found_returns_failure():
     repo = FakeCollectionRepo(members=set(), collection_exists=False)
     molecule_repo = FakeMoleculeRepo()
     use_case = BulkAddToCollection(
-        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=FakeTemplateRepo(),
     )
     cmd = BulkAddToCollectionCommand(
         workspace_id=uuid.uuid4(),
@@ -218,7 +252,11 @@ async def test_fetch_stash_returns_none_after_ttl_expiry():
     repo = FakeCollectionRepo(members=set())
     molecule_repo = FakeMoleculeRepo()
     use_case = BulkAddToCollection(
-        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=FakeTemplateRepo(),
     )
     cmd = BulkAddToCollectionCommand(
         workspace_id=uuid.uuid4(),
@@ -256,7 +294,11 @@ async def test_resolved_outcomes_carry_molecule_name():
         names_by_id={existing: "Phenol", already: "Acetone"}
     )
     use_case = BulkAddToCollection(
-        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=FakeTemplateRepo(),
     )
     cmd = BulkAddToCollectionCommand(
         workspace_id=uuid.uuid4(),
@@ -285,3 +327,160 @@ async def test_resolved_outcomes_carry_molecule_name():
     assert by_idx[2].status == RowStatus.UNREGISTERED
     assert by_idx[2].molecule_id is None
     assert by_idx[2].molecule_name is None
+
+
+@pytest.mark.asyncio
+async def test_commit_with_template_id_records_usage():
+    """On commit with template_id + at least one resolved row, the template
+    records the collection in its used_in_collections list.
+    """
+    existing_mol = uuid.uuid4()
+    resolver = FakeResolver(
+        resolved_map={"CC-1": existing_mol}, ambiguous_values=set()
+    )
+    repo = FakeCollectionRepo(members=set())
+    molecule_repo = FakeMoleculeRepo(names_by_id={existing_mol: "Phenol"})
+
+    template_id = uuid.uuid4()
+    workspace_id = uuid.uuid4()
+    collection_id = uuid.uuid4()
+    tpl = CollectionImportTemplate(
+        id=template_id,
+        workspace_id=workspace_id,
+        name="t",
+        column_mapping={"registration_number": "Reg No."},
+        created_by=uuid.uuid4(),
+    )
+    template_repo = FakeTemplateRepo(items={(workspace_id, template_id): tpl})
+
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=template_repo,
+    )
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=workspace_id,
+        collection_id=collection_id,
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=False,
+        template_id=template_id,
+    )
+    result = (await use_case(cmd)).unwrap()
+
+    assert result.resolved_count == 1
+    # Template was updated with the usage
+    assert collection_id in tpl.used_in_collections
+
+
+@pytest.mark.asyncio
+async def test_commit_with_template_id_but_no_resolved_rows_skips_usage():
+    """If nothing actually resolved, the template usage list stays empty —
+    we don't pollute the chemist's "used here before" filter with no-ops.
+    """
+    resolver = FakeResolver(resolved_map={}, ambiguous_values=set())
+    repo = FakeCollectionRepo(members=set())
+    molecule_repo = FakeMoleculeRepo()
+
+    template_id = uuid.uuid4()
+    workspace_id = uuid.uuid4()
+    collection_id = uuid.uuid4()
+    tpl = CollectionImportTemplate(
+        id=template_id,
+        workspace_id=workspace_id,
+        name="t",
+        column_mapping={"registration_number": "Reg No."},
+        created_by=uuid.uuid4(),
+    )
+    template_repo = FakeTemplateRepo(items={(workspace_id, template_id): tpl})
+
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=template_repo,
+    )
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=workspace_id,
+        collection_id=collection_id,
+        rows=[BulkAddRow(row_index=0, registration_number="CC-NOPE")],
+        dry_run=False,
+        template_id=template_id,
+    )
+    await use_case(cmd)
+
+    assert collection_id not in tpl.used_in_collections
+    assert tpl.used_in_collections == []
+
+
+@pytest.mark.asyncio
+async def test_commit_without_template_id_does_not_touch_template_repo():
+    """No template_id on the command means the template repo is never read."""
+    resolver = FakeResolver(
+        resolved_map={"CC-1": uuid.uuid4()}, ambiguous_values=set()
+    )
+    repo = FakeCollectionRepo(members=set())
+    molecule_repo = FakeMoleculeRepo()
+    template_repo = FakeTemplateRepo()
+
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=template_repo,
+    )
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=uuid.uuid4(),
+        collection_id=uuid.uuid4(),
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=False,
+        template_id=None,
+    )
+    result = (await use_case(cmd)).unwrap()
+
+    assert result.resolved_count == 1
+    assert template_repo.items == {}
+
+
+@pytest.mark.asyncio
+async def test_dry_run_with_template_id_does_not_record_usage():
+    """Preview / dry-run must never mutate the template — usage only on commit."""
+    existing_mol = uuid.uuid4()
+    resolver = FakeResolver(
+        resolved_map={"CC-1": existing_mol}, ambiguous_values=set()
+    )
+    repo = FakeCollectionRepo(members=set())
+    molecule_repo = FakeMoleculeRepo(names_by_id={existing_mol: "Phenol"})
+
+    template_id = uuid.uuid4()
+    workspace_id = uuid.uuid4()
+    collection_id = uuid.uuid4()
+    tpl = CollectionImportTemplate(
+        id=template_id,
+        workspace_id=workspace_id,
+        name="t",
+        column_mapping={"registration_number": "Reg No."},
+        created_by=uuid.uuid4(),
+    )
+    template_repo = FakeTemplateRepo(items={(workspace_id, template_id): tpl})
+
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=template_repo,
+    )
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=workspace_id,
+        collection_id=collection_id,
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=True,
+        template_id=template_id,
+    )
+    await use_case(cmd)
+
+    assert tpl.used_in_collections == []

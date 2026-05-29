@@ -32,7 +32,10 @@ from cellar.domain.research_organization.bulk_add_types import (
     RowOutcome,
     RowStatus,
 )
-from cellar.domain.research_organization.repository import CollectionRepository
+from cellar.domain.research_organization.repository import (
+    CollectionImportTemplateRepository,
+    CollectionRepository,
+)
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 _STASH_TTL_SECONDS = 1800
@@ -46,6 +49,10 @@ class BulkAddToCollectionCommand(Command):
     collection_id: uuid.UUID
     rows: list[BulkAddRow]
     dry_run: bool
+    # Optional template the chemist selected for this import. When provided
+    # AND commit produces at least one resolved row, the template records the
+    # collection in its `used_in_collections` list (idempotent).
+    template_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -75,11 +82,13 @@ class BulkAddToCollection:
         resolver: MoleculeResolver,
         repo: CollectionRepository,
         molecule_repo: MoleculeRepository,
+        template_repo: CollectionImportTemplateRepository,
     ) -> None:
         self._uow = uow
         self._resolver = resolver
         self._repo = repo
         self._molecule_repo = molecule_repo
+        self._template_repo = template_repo
         self._stash: dict[uuid.UUID, StashedUnregisteredRows] = {}
 
     async def __call__(
@@ -215,6 +224,16 @@ class BulkAddToCollection:
                     await self._repo.add_molecules(
                         input.workspace_id, input.collection_id, resolved_ids
                     )
+                    # Record template usage on productive commits only — if
+                    # nothing actually resolved, the chemist didn't use the
+                    # template in any meaningful way.
+                    if input.template_id is not None:
+                        tpl = await self._template_repo.find_by_id_in_workspace(
+                            input.workspace_id, input.template_id
+                        )
+                        if tpl is not None:
+                            tpl.record_usage_in(input.collection_id)
+                            await self._template_repo.save(tpl)
                     await self._uow.commit()
 
             preview_id: uuid.UUID | None = None

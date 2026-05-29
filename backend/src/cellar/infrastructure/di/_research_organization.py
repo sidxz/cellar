@@ -358,6 +358,7 @@ def register_research_organization(container: Container) -> None:
             resolver,
             SQLAlchemyCollectionRepository(uow),
             molecule_repo,
+            SQLAlchemyCollectionImportTemplateRepository(uow),
         )
 
     container[BulkAddToCollection] = Singleton(_bulk_add_to_collection)
