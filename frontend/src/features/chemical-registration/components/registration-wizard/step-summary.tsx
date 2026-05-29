@@ -1,9 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -15,7 +13,6 @@ import {
   XCircle,
   AlertCircle,
   Loader2,
-  FolderPlus,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -31,7 +28,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/shared/components/ui/tabs";
-import { addMoleculesToCollectionApiV1CollectionsCollectionIdMoleculesPost as addMoleculesToCollection } from "@/shared/lib/api/collections/collections";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { useBulkRegistrationItems } from "../../hooks/use-registration-wizard-api";
 import type { BulkRegItemAction } from "../../types/registration-wizard";
@@ -131,12 +127,9 @@ function SingleSummary() {
 
 function BulkSummary() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const progress = useRegistrationWizard((s) => s.progress);
   const workflowId = useRegistrationWizard((s) => s.workflowId);
   const reset = useRegistrationWizard((s) => s.reset);
-
-  const returnToCollection = searchParams.get("return_to_collection");
 
   if (!progress) {
     return (
@@ -264,15 +257,6 @@ function BulkSummary() {
         </CardContent>
       </Card>
 
-      {/* Add to collection — handoff back to the collection-import flow */}
-      {returnToCollection && workflowId && (
-        <AddToCollectionCta
-          workflowId={workflowId}
-          collectionId={returnToCollection}
-          registeredCount={registered_count}
-          duplicateCount={duplicate_count}
-        />
-      )}
 
       {/* Per-row results table */}
       {workflowId && (
@@ -296,134 +280,6 @@ function BulkSummary() {
         />
       )}
     </div>
-  );
-}
-
-// ─── Add-to-collection CTA (collection-import handoff return path) ──────────
-
-function AddToCollectionCta({
-  workflowId,
-  collectionId,
-  registeredCount,
-  duplicateCount,
-}: {
-  workflowId: string;
-  collectionId: string;
-  registeredCount: number;
-  duplicateCount: number;
-}) {
-  // Successfully-registered + dedup'd items both produced a molecule that
-  // belongs in the destination collection. Pull all of them via the
-  // per-action endpoint (limit high enough to capture the full set).
-  const PAGE = 1000;
-
-  const registeredQuery = useBulkRegistrationItems(
-    workflowId,
-    "registered",
-    PAGE,
-    0,
-    registeredCount > 0,
-  );
-  const dedupQuery = useBulkRegistrationItems(
-    workflowId,
-    "deduplicated",
-    PAGE,
-    0,
-    duplicateCount > 0,
-  );
-
-  const moleculeIds = useMemo(() => {
-    const ids: string[] = [];
-    for (const r of registeredQuery.data?.rows ?? []) {
-      if (r.molecule_id) ids.push(r.molecule_id);
-    }
-    for (const r of dedupQuery.data?.rows ?? []) {
-      if (r.molecule_id) ids.push(r.molecule_id);
-    }
-    return ids;
-  }, [registeredQuery.data, dedupQuery.data]);
-
-  const isLoading = registeredQuery.isPending || dedupQuery.isPending;
-
-  const addMut = useMutation({
-    mutationFn: () =>
-      addMoleculesToCollection(collectionId, {
-        references: moleculeIds.map((id) => ({ value: id, ref_type: "uuid" })),
-      }),
-  });
-
-  // Nothing to add yet — usually means both counts are 0 (no successful rows).
-  if (!isLoading && moleculeIds.length === 0) return null;
-
-  return (
-    <Card className="border-emerald-300 bg-emerald-50/60 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-      <CardContent className="space-y-3 py-5">
-        {addMut.isSuccess ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm">
-              <CheckCircle2 className="mr-1.5 inline h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              <span className="font-medium">
-                Added {moleculeIds.length}{" "}
-                {moleculeIds.length === 1 ? "molecule" : "molecules"} to the
-                collection.
-              </span>
-            </p>
-            <Link href={`/collections/${collectionId}`}>
-              <Button size="sm">
-                View collection
-                <ExternalLink className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">
-                <FolderPlus className="mr-1.5 inline h-4 w-4 text-emerald-700 dark:text-emerald-400" />
-                Return to your collection
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {isLoading
-                  ? "Loading registered molecules…"
-                  : `Add ${moleculeIds.length} ${
-                      moleculeIds.length === 1 ? "molecule" : "molecules"
-                    } to the collection you imported from.`}
-              </p>
-            </div>
-            <Button
-              onClick={() => addMut.mutate()}
-              disabled={isLoading || moleculeIds.length === 0 || addMut.isPending}
-              size="sm"
-            >
-              {addMut.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Adding…
-                </>
-              ) : (
-                <>
-                  Add to collection
-                  <FolderPlus className="ml-2 h-4 w-4" />
-                </>
-              )}
-            </Button>
-          </div>
-        )}
-        {addMut.isError && (
-          <p className="text-sm text-destructive">
-            Couldn&rsquo;t add to the collection — try again, or open the
-            collection manually:{" "}
-            <Link
-              href={`/collections/${collectionId}`}
-              className="underline underline-offset-2"
-            >
-              view collection
-            </Link>
-            .
-          </p>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 

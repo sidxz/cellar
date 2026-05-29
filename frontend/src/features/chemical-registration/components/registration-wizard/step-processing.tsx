@@ -251,6 +251,7 @@ function BulkProcessing() {
   const bulkInput = useRegistrationWizard((s) => s.bulkInput);
   const workflowId = useRegistrationWizard((s) => s.workflowId);
   const setWorkflowId = useRegistrationWizard((s) => s.setWorkflowId);
+  const setProgress = useRegistrationWizard((s) => s.setProgress);
   const setMergeCandidates = useRegistrationWizard((s) => s.setMergeCandidates);
   const setCurrentStep = useRegistrationWizard((s) => s.setCurrentStep);
   const nextStep = useRegistrationWizard((s) => s.nextStep);
@@ -281,9 +282,18 @@ function BulkProcessing() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll for progress — read directly from the query; no Zustand mirror needed
+  // Poll for progress.
   const statusQuery = useBulkRegistrationStatus(workflowId, !!workflowId);
   const progress = statusQuery.data;
+
+  // Mirror the latest progress into the store so the Summary step (which reads
+  // `s.progress`) has the final counts after we advance. Without this the
+  // summary renders "No bulk registration data available" — and, on the
+  // collection-import return path, the "Add to collection" CTA never appears.
+  // Polling stops on completed/failed, so this settles on the final value.
+  useEffect(() => {
+    if (progress) setProgress(progress);
+  }, [progress, setProgress]);
 
   // Auto-advance when complete
   const hasAdvanced = useRef(false);
