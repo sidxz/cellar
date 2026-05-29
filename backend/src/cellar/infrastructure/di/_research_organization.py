@@ -351,13 +351,13 @@ def register_research_organization(container: Container) -> None:
     # acceptable for a low-traffic wizard endpoint.
     def _bulk_add_to_collection(c: Container) -> BulkAddToCollection:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        resolver = MoleculeResolver(
-            SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]
-        )
+        molecule_repo = SQLAlchemyMoleculeRepository(uow)
+        resolver = MoleculeResolver(molecule_repo, c[StructureProcessorProtocol])
         return BulkAddToCollection(
             uow,
             resolver,
             SQLAlchemyCollectionRepository(uow),
+            molecule_repo,
         )
 
     container[BulkAddToCollection] = Singleton(_bulk_add_to_collection)

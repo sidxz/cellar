@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 import pytest
 
@@ -61,6 +62,37 @@ class FakeCollectionRepo:
 
 
 @dataclass
+class FakeMoleculeRepo:
+    """Stub: returns SimpleNamespace mol-like objects keyed by id.
+
+    Stamps registration_number as "CC-<first6 of id, upper>" by default; name
+    comes from the dict. The use case prefers registration_number for display
+    but falls back to name when reg is missing.
+    """
+
+    names_by_id: dict[uuid.UUID, str] = field(default_factory=dict)
+    include_registration_number: bool = True
+
+    async def find_by_ids(self, ws, ids):
+        result = []
+        for mid in ids:
+            if mid in self.names_by_id:
+                reg = (
+                    f"CC-{str(mid)[:6].upper()}"
+                    if self.include_registration_number
+                    else None
+                )
+                result.append(
+                    SimpleNamespace(
+                        id=mid,
+                        name=self.names_by_id[mid],
+                        registration_number=reg,
+                    )
+                )
+        return result
+
+
+@dataclass
 class FakeUoW:
     async def __aenter__(self):
         return self
@@ -81,7 +113,12 @@ async def test_dry_run_classifies_all_five_statuses():
         ambiguous_values={"aspirin"},
     )
     repo = FakeCollectionRepo(members={already})
-    use_case = BulkAddToCollection(uow=FakeUoW(), resolver=resolver, repo=repo)
+    molecule_repo = FakeMoleculeRepo(
+        names_by_id={existing: "Phenol", already: "Acetone"}
+    )
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+    )
 
     rows = [
         BulkAddRow(row_index=0, registration_number="CC-000001"),
@@ -115,7 +152,10 @@ async def test_commit_adds_only_resolved_rows():
         ambiguous_values=set(),
     )
     repo = FakeCollectionRepo(members=set())
-    use_case = BulkAddToCollection(uow=FakeUoW(), resolver=resolver, repo=repo)
+    molecule_repo = FakeMoleculeRepo()
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+    )
 
     cmd = BulkAddToCollectionCommand(
         workspace_id=uuid.uuid4(),
@@ -137,7 +177,10 @@ async def test_commit_adds_only_resolved_rows():
 async def test_stash_persists_unregistered_rows_for_handoff():
     resolver = FakeResolver(resolved_map={}, ambiguous_values=set())
     repo = FakeCollectionRepo(members=set())
-    use_case = BulkAddToCollection(uow=FakeUoW(), resolver=resolver, repo=repo)
+    molecule_repo = FakeMoleculeRepo()
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+    )
     cmd = BulkAddToCollectionCommand(
         workspace_id=uuid.uuid4(),
         collection_id=uuid.uuid4(),
@@ -155,7 +198,10 @@ async def test_stash_persists_unregistered_rows_for_handoff():
 async def test_collection_not_found_returns_failure():
     resolver = FakeResolver(resolved_map={}, ambiguous_values=set())
     repo = FakeCollectionRepo(members=set(), collection_exists=False)
-    use_case = BulkAddToCollection(uow=FakeUoW(), resolver=resolver, repo=repo)
+    molecule_repo = FakeMoleculeRepo()
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+    )
     cmd = BulkAddToCollectionCommand(
         workspace_id=uuid.uuid4(),
         collection_id=uuid.uuid4(),
@@ -170,7 +216,10 @@ async def test_collection_not_found_returns_failure():
 async def test_fetch_stash_returns_none_after_ttl_expiry():
     resolver = FakeResolver(resolved_map={}, ambiguous_values=set())
     repo = FakeCollectionRepo(members=set())
-    use_case = BulkAddToCollection(uow=FakeUoW(), resolver=resolver, repo=repo)
+    molecule_repo = FakeMoleculeRepo()
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+    )
     cmd = BulkAddToCollectionCommand(
         workspace_id=uuid.uuid4(),
         collection_id=uuid.uuid4(),
@@ -189,3 +238,50 @@ async def test_fetch_stash_returns_none_after_ttl_expiry():
         expires_at=0.0,
     )
     assert use_case.fetch_stash(preview_id) is None
+
+
+@pytest.mark.asyncio
+async def test_resolved_outcomes_carry_molecule_name():
+    """Preview rows for resolved/already_present molecules must show the
+    chemist a display name — fixes the all-em-dash bug in the import wizard.
+    """
+    existing = uuid.uuid4()
+    already = uuid.uuid4()
+    resolver = FakeResolver(
+        resolved_map={"CC-000001": existing, "CC-000002": already},
+        ambiguous_values=set(),
+    )
+    repo = FakeCollectionRepo(members={already})
+    molecule_repo = FakeMoleculeRepo(
+        names_by_id={existing: "Phenol", already: "Acetone"}
+    )
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(), resolver=resolver, repo=repo, molecule_repo=molecule_repo
+    )
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=uuid.uuid4(),
+        collection_id=uuid.uuid4(),
+        rows=[
+            BulkAddRow(row_index=0, registration_number="CC-000001"),
+            BulkAddRow(row_index=1, registration_number="CC-000002"),
+            BulkAddRow(row_index=2, smiles="c1ccccc1O"),
+        ],
+        dry_run=True,
+    )
+    result = (await use_case(cmd)).unwrap()
+    by_idx = {o.row_index: o for o in result.outcomes}
+
+    # Resolved row: name must be populated (either reg_number or fallback name).
+    assert by_idx[0].status == RowStatus.RESOLVED
+    assert by_idx[0].molecule_name is not None
+    assert by_idx[0].molecule_name != ""
+
+    # Already-present row: same — chemist needs to know which mol is dupe.
+    assert by_idx[1].status == RowStatus.ALREADY_PRESENT
+    assert by_idx[1].molecule_name is not None
+    assert by_idx[1].molecule_name != ""
+
+    # Unregistered row: molecule_id is None, so molecule_name stays None.
+    assert by_idx[2].status == RowStatus.UNREGISTERED
+    assert by_idx[2].molecule_id is None
+    assert by_idx[2].molecule_name is None

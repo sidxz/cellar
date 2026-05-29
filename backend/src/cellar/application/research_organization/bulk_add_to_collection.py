@@ -25,6 +25,7 @@ from cellar.application.shared.molecule_resolver import (
     RefType,
 )
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.research_organization.bulk_add_types import (
     BulkAddResult,
     BulkAddRow,
@@ -73,10 +74,12 @@ class BulkAddToCollection:
         uow: UnitOfWork,
         resolver: MoleculeResolver,
         repo: CollectionRepository,
+        molecule_repo: MoleculeRepository,
     ) -> None:
         self._uow = uow
         self._resolver = resolver
         self._repo = repo
+        self._molecule_repo = molecule_repo
         self._stash: dict[uuid.UUID, StashedUnregisteredRows] = {}
 
     async def __call__(
@@ -161,6 +164,46 @@ class BulkAddToCollection:
                             message=reason,
                         )
                     )
+
+            # Bulk-look up names for every molecule_id present in resolved /
+            # already_present outcomes. The resolver doesn't carry display
+            # fields, so we fetch them here in one round-trip. Display priority
+            # is registration_number (chemist's primary identifier), then name.
+            resolved_ids = list(
+                {
+                    o.molecule_id
+                    for o in outcomes
+                    if o.molecule_id is not None
+                    and o.status in (RowStatus.RESOLVED, RowStatus.ALREADY_PRESENT)
+                }
+            )
+            name_by_id: dict[uuid.UUID, str] = {}
+            if resolved_ids:
+                molecules = await self._molecule_repo.find_by_ids(
+                    input.workspace_id, resolved_ids
+                )
+                for m in molecules:
+                    reg = getattr(m, "registration_number", None)
+                    nm = getattr(m, "name", None)
+                    display = str(reg) if reg else (nm or "")
+                    if display:
+                        name_by_id[m.id] = display
+
+            # RowOutcome is frozen; rebuild with molecule_name stamped on the
+            # resolved / already_present rows.
+            outcomes = [
+                RowOutcome(
+                    row_index=o.row_index,
+                    status=o.status,
+                    molecule_id=o.molecule_id,
+                    molecule_name=(
+                        name_by_id.get(o.molecule_id) if o.molecule_id else None
+                    ),
+                    candidates=o.candidates,
+                    message=o.message,
+                )
+                for o in outcomes
+            ]
 
             if not input.dry_run:
                 resolved_ids = [
