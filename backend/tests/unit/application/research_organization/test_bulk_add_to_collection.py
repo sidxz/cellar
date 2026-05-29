@@ -149,3 +149,43 @@ async def test_stash_persists_unregistered_rows_for_handoff():
     assert isinstance(stashed, StashedUnregisteredRows)
     assert stashed.rows[0].smiles == "c1ccccc1O"
     assert stashed.rows[0].name == "phenol"
+
+
+@pytest.mark.asyncio
+async def test_collection_not_found_returns_failure():
+    resolver = FakeResolver(resolved_map={}, ambiguous_values=set())
+    repo = FakeCollectionRepo(members=set(), collection_exists=False)
+    use_case = BulkAddToCollection(uow=FakeUoW(), resolver=resolver, repo=repo)
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=uuid.uuid4(),
+        collection_id=uuid.uuid4(),
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=True,
+    )
+    result = await use_case(cmd)
+    assert result.failure() is not None  # NotFoundError
+
+
+@pytest.mark.asyncio
+async def test_fetch_stash_returns_none_after_ttl_expiry():
+    resolver = FakeResolver(resolved_map={}, ambiguous_values=set())
+    repo = FakeCollectionRepo(members=set())
+    use_case = BulkAddToCollection(uow=FakeUoW(), resolver=resolver, repo=repo)
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=uuid.uuid4(),
+        collection_id=uuid.uuid4(),
+        rows=[BulkAddRow(row_index=0, smiles="c1ccccc1O")],
+        dry_run=True,
+    )
+    result = (await use_case(cmd)).unwrap()
+    preview_id = result.preview_id
+    assert use_case.fetch_stash(preview_id) is not None
+
+    # Manually expire the stash entry by overwriting its expires_at to the past.
+    use_case._stash[preview_id] = type(use_case._stash[preview_id])(
+        workspace_id=use_case._stash[preview_id].workspace_id,
+        collection_id=use_case._stash[preview_id].collection_id,
+        rows=use_case._stash[preview_id].rows,
+        expires_at=0.0,
+    )
+    assert use_case.fetch_stash(preview_id) is None

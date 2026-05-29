@@ -172,7 +172,7 @@ class BulkAddToCollection:
                     await self._repo.add_molecules(
                         input.workspace_id, input.collection_id, resolved_ids
                     )
-                await self._uow.commit()
+                    await self._uow.commit()
 
             preview_id: uuid.UUID | None = None
             unregistered_row_indices = {
