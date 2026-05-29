@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -45,7 +45,7 @@ class RowOutcome:
     status: RowStatus
     molecule_id: uuid.UUID | None = None
     molecule_name: str | None = None
-    candidates: list[uuid.UUID] = field(default_factory=list)
+    candidates: tuple[uuid.UUID, ...] = ()
     message: str | None = None
 
 
