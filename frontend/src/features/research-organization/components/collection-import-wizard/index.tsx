@@ -57,6 +57,7 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
     null,
   );
   const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [pendingTemplateName, setPendingTemplateName] = useState<string | null>(
     null,
   );
@@ -73,18 +74,37 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
   const collectionName = collectionQuery.data?.name ?? "";
   useBreadcrumbOverride(collectionId, collectionName);
 
-  function buildBody(currentMapping: Record<string, string>): BulkAddRequestBody {
+  function buildRows(currentMapping: Record<string, string>): BulkAddRowBody[] {
+    return rows.map((r, i): BulkAddRowBody => {
+      const out: BulkAddRowBody = { row_index: i };
+      for (const [role, header] of Object.entries(currentMapping)) {
+        if (!isRowField(role)) continue;
+        const v = r[header];
+        out[role] = v ? v : null;
+      }
+      return out;
+    });
+  }
+
+  function buildPreviewBody(
+    currentMapping: Record<string, string>,
+  ): BulkAddRequestBody {
+    // Preview body never carries a preview_id — BE mints a fresh one.
     return {
-      rows: rows.map((r, i): BulkAddRowBody => {
-        const out: BulkAddRowBody = { row_index: i };
-        for (const [role, header] of Object.entries(currentMapping)) {
-          if (!isRowField(role)) continue;
-          const v = r[header];
-          out[role] = v ? v : null;
-        }
-        return out;
-      }),
+      rows: buildRows(currentMapping),
       template_id: selectedTemplateId,
+    };
+  }
+
+  function buildCommitBody(): BulkAddRequestBody {
+    // Commit body forwards the preview_id stashed from the prior preview
+    // call so the BE can reuse cached outcomes (skip the resolver). If
+    // previewId is null (e.g. the preview call failed to mint one), the
+    // BE silently falls back to the full resolve path.
+    return {
+      rows: buildRows(mapping),
+      template_id: selectedTemplateId,
+      preview_id: previewId,
     };
   }
 
@@ -94,13 +114,14 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
   }) {
     setMapping(out.mapping);
     if (out.saveAsTemplate) setPendingTemplateName(out.saveAsTemplate.name);
-    const res = await previewMut.mutateAsync(buildBody(out.mapping));
+    const res = await previewMut.mutateAsync(buildPreviewBody(out.mapping));
     setPreview(toPreviewResult(res));
+    setPreviewId(res.preview_id ?? null);
     setStep("preview");
   }
 
   async function handleCommit() {
-    const res = await commitMut.mutateAsync(buildBody(mapping));
+    const res = await commitMut.mutateAsync(buildCommitBody());
     setPreview(toPreviewResult(res));
     if (pendingTemplateName) {
       await createTpl.mutateAsync({
@@ -163,6 +184,7 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
             setMapping({});
             setSelectedTemplateId(null);
             setPreview(null);
+            setPreviewId(null);
           }}
         />
       )}

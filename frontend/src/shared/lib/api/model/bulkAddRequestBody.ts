@@ -6,8 +6,10 @@
  */
 import type { BulkAddRowBody } from './bulkAddRowBody';
 import type { BulkAddRequestBodyTemplateId } from './bulkAddRequestBodyTemplateId';
+import type { BulkAddRequestBodyPreviewId } from './bulkAddRequestBodyPreviewId';
 
 export interface BulkAddRequestBody {
   rows: BulkAddRowBody[];
   template_id?: BulkAddRequestBodyTemplateId;
+  preview_id?: BulkAddRequestBodyPreviewId;
 }

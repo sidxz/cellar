@@ -11,6 +11,7 @@ import pytest
 from cellar.application.research_organization.bulk_add_to_collection import (
     BulkAddToCollection,
     BulkAddToCollectionCommand,
+    CachedPreview,
     StashedUnregisteredRows,
 )
 from cellar.application.shared.molecule_resolver import (
@@ -32,8 +33,10 @@ class FakeResolver:
 
     resolved_map: dict[str, uuid.UUID]
     ambiguous_values: set[str]
+    calls: list[list] = field(default_factory=list)
 
     async def resolve(self, workspace_id, refs):
+        self.calls.append(list(refs))
         resolved, unresolved = [], []
         for r in refs:
             if r.value in self.resolved_map:
@@ -219,9 +222,16 @@ async def test_stash_persists_unregistered_rows_for_handoff():
     )
     result = (await use_case(cmd)).unwrap()
     stashed = use_case.fetch_stash(result.preview_id)
+    assert isinstance(stashed, CachedPreview)
+    # StashedUnregisteredRows is a backwards-compat alias for CachedPreview.
     assert isinstance(stashed, StashedUnregisteredRows)
+    # The stash now holds ALL input rows (so commit can reuse outcomes);
+    # filtering to unregistered happens at the handoff endpoint.
     assert stashed.rows[0].smiles == "c1ccccc1O"
     assert stashed.rows[0].name == "phenol"
+    # Outcomes are cached too.
+    assert len(stashed.outcomes) == 1
+    assert stashed.outcomes[0].status == RowStatus.UNREGISTERED
 
 
 @pytest.mark.asyncio
@@ -269,10 +279,12 @@ async def test_fetch_stash_returns_none_after_ttl_expiry():
     assert use_case.fetch_stash(preview_id) is not None
 
     # Manually expire the stash entry by overwriting its expires_at to the past.
-    use_case._stash[preview_id] = type(use_case._stash[preview_id])(
-        workspace_id=use_case._stash[preview_id].workspace_id,
-        collection_id=use_case._stash[preview_id].collection_id,
-        rows=use_case._stash[preview_id].rows,
+    entry = use_case._stash[preview_id]
+    use_case._stash[preview_id] = type(entry)(
+        workspace_id=entry.workspace_id,
+        collection_id=entry.collection_id,
+        rows=entry.rows,
+        outcomes=entry.outcomes,
         expires_at=0.0,
     )
     assert use_case.fetch_stash(preview_id) is None
@@ -484,3 +496,160 @@ async def test_dry_run_with_template_id_does_not_record_usage():
     await use_case(cmd)
 
     assert tpl.used_in_collections == []
+
+
+@pytest.mark.asyncio
+async def test_commit_with_preview_id_reuses_cached_outcomes():
+    """Commit with a valid preview_id reuses cached outcomes and does NOT
+    call the resolver again — the perf fix that motivated this change.
+    """
+    existing_mol = uuid.uuid4()
+    workspace_id = uuid.uuid4()
+    collection_id = uuid.uuid4()
+    resolver = FakeResolver(
+        resolved_map={"CC-1": existing_mol}, ambiguous_values=set()
+    )
+    repo = FakeCollectionRepo(members=set())
+    molecule_repo = FakeMoleculeRepo(names_by_id={existing_mol: "Phenol"})
+    template_repo = FakeTemplateRepo()
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=template_repo,
+    )
+
+    # Step 1: preview
+    preview_cmd = BulkAddToCollectionCommand(
+        workspace_id=workspace_id,
+        collection_id=collection_id,
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=True,
+    )
+    preview_result = (await use_case(preview_cmd)).unwrap()
+    assert preview_result.preview_id is not None
+    assert preview_result.resolved_count == 1
+    assert len(resolver.calls) == 1
+
+    # Step 2: commit with preview_id reuses cache — resolver call count stays at 1.
+    commit_cmd = BulkAddToCollectionCommand(
+        workspace_id=workspace_id,
+        collection_id=collection_id,
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=False,
+        preview_id=preview_result.preview_id,
+    )
+    commit_result = (await use_case(commit_cmd)).unwrap()
+    assert commit_result.resolved_count == 1
+    assert existing_mol in repo.members
+    # The critical assertion: resolver was NOT re-invoked on commit.
+    assert len(resolver.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_commit_without_preview_id_falls_back_to_full_resolve():
+    """Backwards-compat path — commit without preview_id resolves fresh."""
+    existing_mol = uuid.uuid4()
+    resolver = FakeResolver(
+        resolved_map={"CC-1": existing_mol}, ambiguous_values=set()
+    )
+    repo = FakeCollectionRepo(members=set())
+    molecule_repo = FakeMoleculeRepo(names_by_id={existing_mol: "Phenol"})
+    template_repo = FakeTemplateRepo()
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=template_repo,
+    )
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=uuid.uuid4(),
+        collection_id=uuid.uuid4(),
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=False,
+        # No preview_id — full resolve path.
+    )
+    result = (await use_case(cmd)).unwrap()
+    assert result.resolved_count == 1
+    assert existing_mol in repo.members
+    assert len(resolver.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_commit_with_stale_preview_id_falls_back():
+    """Stale preview_id (random UUID, not in stash) → fall back to fresh resolve."""
+    existing_mol = uuid.uuid4()
+    resolver = FakeResolver(
+        resolved_map={"CC-1": existing_mol}, ambiguous_values=set()
+    )
+    repo = FakeCollectionRepo(members=set())
+    molecule_repo = FakeMoleculeRepo(names_by_id={existing_mol: "Phenol"})
+    template_repo = FakeTemplateRepo()
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=template_repo,
+    )
+    # No preview run — just send a random UUID as preview_id.
+    cmd = BulkAddToCollectionCommand(
+        workspace_id=uuid.uuid4(),
+        collection_id=uuid.uuid4(),
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=False,
+        preview_id=uuid.uuid4(),  # Not in stash.
+    )
+    result = (await use_case(cmd)).unwrap()
+    # Fallback path still resolves correctly.
+    assert result.resolved_count == 1
+    assert existing_mol in repo.members
+    assert len(resolver.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_commit_with_preview_id_from_different_workspace_falls_back():
+    """Workspace mismatch in cached preview → fall back to fresh resolve."""
+    existing_mol = uuid.uuid4()
+    resolver = FakeResolver(
+        resolved_map={"CC-1": existing_mol}, ambiguous_values=set()
+    )
+    repo = FakeCollectionRepo(members=set())
+    molecule_repo = FakeMoleculeRepo(names_by_id={existing_mol: "Phenol"})
+    template_repo = FakeTemplateRepo()
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=template_repo,
+    )
+
+    # Preview against workspace A.
+    workspace_a = uuid.uuid4()
+    collection_id = uuid.uuid4()
+    preview_cmd = BulkAddToCollectionCommand(
+        workspace_id=workspace_a,
+        collection_id=collection_id,
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=True,
+    )
+    preview_result = (await use_case(preview_cmd)).unwrap()
+    assert preview_result.preview_id is not None
+
+    # Commit with the same preview_id but a DIFFERENT workspace.
+    workspace_b = uuid.uuid4()
+    commit_cmd = BulkAddToCollectionCommand(
+        workspace_id=workspace_b,
+        collection_id=collection_id,
+        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
+        dry_run=False,
+        preview_id=preview_result.preview_id,
+    )
+    # Workspace-mismatch should bypass cache and go through the full resolve path.
+    # (Both calls to resolver — preview + commit — fired.)
+    result = (await use_case(commit_cmd)).unwrap()
+    assert result.resolved_count == 1
+    assert len(resolver.calls) == 2

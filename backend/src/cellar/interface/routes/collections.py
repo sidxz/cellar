@@ -140,6 +140,9 @@ class BulkAddRowBody(BaseModel):
 class BulkAddRequestBody(BaseModel):
     rows: list[BulkAddRowBody]
     template_id: uuid.UUID | None = None
+    # Optional preview_id from a prior dry_run. Allows the commit path to
+    # reuse cached preview outcomes (skip the resolver) for big imports.
+    preview_id: uuid.UUID | None = None
 
 
 class RowOutcomeResponse(BaseModel):
@@ -380,6 +383,7 @@ async def _run_bulk(
         rows=rows,
         dry_run=dry_run,
         template_id=body.template_id,
+        preview_id=body.preview_id,
     )
     result = result_to_response(await use_case(cmd, auth=auth))
     return BulkAddResponse(

@@ -135,6 +135,7 @@ export * from './bulkAddBatchIdentifiersRequest';
 export * from './bulkAddBatchIdentifiersResponse';
 export * from './bulkAddBatchIdentifiersResponseCounts';
 export * from './bulkAddRequestBody';
+export * from './bulkAddRequestBodyPreviewId';
 export * from './bulkAddRequestBodyTemplateId';
 export * from './bulkAddResponse';
 export * from './bulkAddResponsePreviewId';

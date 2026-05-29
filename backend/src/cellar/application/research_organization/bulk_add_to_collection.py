@@ -53,14 +53,30 @@ class BulkAddToCollectionCommand(Command):
     # AND commit produces at least one resolved row, the template records the
     # collection in its `used_in_collections` list (idempotent).
     template_id: uuid.UUID | None = None
+    # Optional preview_id minted by a prior dry_run. When provided on commit
+    # AND the cached entry is still valid (same workspace + collection, not
+    # expired), the use case reuses the cached outcomes and skips the
+    # resolver entirely. Cuts chemist wait time in half on large imports.
+    preview_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
-class StashedUnregisteredRows:
+class CachedPreview:
+    """Cached preview outcomes for two purposes:
+
+    1. Hand off unregistered rows to the bulk-register wizard (existing).
+    2. Allow commit to skip the resolver by reusing outcomes (new).
+    """
+
     workspace_id: uuid.UUID
     collection_id: uuid.UUID
     rows: list[BulkAddRow]
+    outcomes: list[RowOutcome]
     expires_at: float
+
+
+# Backwards-compat alias for any consumer that imported the old name.
+StashedUnregisteredRows = CachedPreview
 
 
 class BulkAddToCollection:
@@ -89,7 +105,7 @@ class BulkAddToCollection:
         self._repo = repo
         self._molecule_repo = molecule_repo
         self._template_repo = template_repo
-        self._stash: dict[uuid.UUID, StashedUnregisteredRows] = {}
+        self._stash: dict[uuid.UUID, CachedPreview] = {}
 
     async def __call__(
         self,
@@ -108,6 +124,41 @@ class BulkAddToCollection:
             )
             if collection is None:
                 return Failure(NotFoundError("Collection", str(input.collection_id)))
+
+            # Commit-with-preview_id fast path: reuse cached outcomes from a
+            # prior dry_run, skipping the resolver entirely. Falls through to
+            # the full resolve path if the cache is stale / mismatched.
+            if not input.dry_run and input.preview_id is not None:
+                cached = self.fetch_stash(input.preview_id)
+                if (
+                    cached is not None
+                    and cached.workspace_id == input.workspace_id
+                    and cached.collection_id == input.collection_id
+                ):
+                    outcomes = cached.outcomes
+                    resolved_ids = [
+                        o.molecule_id
+                        for o in outcomes
+                        if o.status == RowStatus.RESOLVED
+                        and o.molecule_id is not None
+                    ]
+                    if resolved_ids:
+                        await self._repo.add_molecules(
+                            input.workspace_id,
+                            input.collection_id,
+                            resolved_ids,
+                        )
+                        if input.template_id is not None:
+                            tpl = await self._template_repo.find_by_id_in_workspace(
+                                input.workspace_id, input.template_id
+                            )
+                            if tpl is not None:
+                                tpl.record_usage_in(input.collection_id)
+                                await self._template_repo.save(tpl)
+                        await self._uow.commit()
+                    return Success(
+                        BulkAddResult.from_outcomes(outcomes, preview_id=None)
+                    )
 
             member_ids = set(
                 await self._repo.get_molecule_ids(
@@ -237,18 +288,15 @@ class BulkAddToCollection:
                     await self._uow.commit()
 
             preview_id: uuid.UUID | None = None
-            unregistered_row_indices = {
-                o.row_index for o in outcomes if o.status == RowStatus.UNREGISTERED
-            }
-            unregistered_rows = [
-                row for row in input.rows if row.row_index in unregistered_row_indices
-            ]
-            if unregistered_rows:
+            if input.dry_run:
+                # Always stash on dry_run so commit can reuse outcomes AND
+                # the unregistered-rows handoff endpoint can filter them out.
                 preview_id = uuid.uuid4()
-                self._stash[preview_id] = StashedUnregisteredRows(
+                self._stash[preview_id] = CachedPreview(
                     workspace_id=input.workspace_id,
                     collection_id=input.collection_id,
-                    rows=unregistered_rows,
+                    rows=list(input.rows),
+                    outcomes=outcomes,
                     expires_at=time.time() + _STASH_TTL_SECONDS,
                 )
                 self._gc_stash()
@@ -259,7 +307,7 @@ class BulkAddToCollection:
 
     def fetch_stash(
         self, preview_id: uuid.UUID | None
-    ) -> StashedUnregisteredRows | None:
+    ) -> CachedPreview | None:
         if preview_id is None:
             return None
         self._gc_stash()

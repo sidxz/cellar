@@ -12,6 +12,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from cellar.domain.research_organization.bulk_add_types import RowStatus
 from cellar.interface.dependencies import (
     AuthDep,
     BulkAddToCollectionDep,
@@ -59,6 +60,18 @@ async def get_unregistered_rows(
             stashed.workspace_id, stashed.collection_id
         )
 
+    # The stash now holds ALL rows (not just unregistered) so the commit
+    # path can reuse cached outcomes. Filter back down to unregistered rows
+    # for the bulk-register wizard handoff.
+    unregistered_indices = {
+        o.row_index
+        for o in stashed.outcomes
+        if o.status == RowStatus.UNREGISTERED
+    }
+    unregistered_rows = [
+        r for r in stashed.rows if r.row_index in unregistered_indices
+    ]
+
     return UnregisteredRowsResponse(
         rows=[
             UnregisteredRowResponse(
@@ -70,7 +83,7 @@ async def get_unregistered_rows(
                 name=r.name,
                 notes=r.notes,
             )
-            for r in stashed.rows
+            for r in unregistered_rows
         ],
         collection_id=stashed.collection_id,
         collection_name=getattr(collection, "name", None),
