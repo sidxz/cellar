@@ -7,6 +7,9 @@ from typing import Protocol, runtime_checkable
 
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.collection import Collection
+from cellar.domain.research_organization.collection_import_template import (
+    CollectionImportTemplate,
+)
 from cellar.domain.research_organization.project import Project
 from cellar.domain.research_organization.project_membership import (
     ProjectMember,
@@ -198,3 +201,23 @@ class CampaignRepository(Protocol):
     ) -> list[Campaign]: ...
 
     async def is_locked(self, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> bool: ...
+
+
+@runtime_checkable
+class CollectionImportTemplateRepository(Protocol):
+    """Repository for CollectionImportTemplate aggregates."""
+
+
+    async def save(self, template: CollectionImportTemplate) -> None: ...
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, template_id: uuid.UUID
+    ) -> CollectionImportTemplate | None: ...
+
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[CollectionImportTemplate]: ...
+
+    async def delete(
+        self, workspace_id: uuid.UUID, template_id: uuid.UUID
+    ) -> None: ...
