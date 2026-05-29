@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
+import { useCollectionImportHandoff } from "../../hooks/use-collection-import-handoff";
 import { StepInput } from "./step-input";
 import { StepPreview } from "./step-preview";
 import { StepProcessing } from "./step-processing";
@@ -81,6 +82,12 @@ export function RegistrationWizard() {
   const reset = useRegistrationWizard((s) => s.reset);
 
   const steps = useMemo(() => getSteps(mode), [mode]);
+
+  // ─── Collection-import handoff (CSV stash → bulkInput) ──────────────────
+  // When the user arrives via ?from_collection_import=<preview_id>, fetch
+  // the stashed unregistered rows and inject them as a CSV file into the
+  // wizard's bulkInput. Also forces bulk mode.
+  useCollectionImportHandoff();
 
   // ─── URL param initialization ───────────────────────────────────────────
   useEffect(() => {
