@@ -281,6 +281,24 @@ class CampaignResultModel(Base, EntityModelMixin):
     )
 
 
+class CollectionImportTemplateModel(Base, EntityModelMixin, WorkspaceIdMixin):
+    """Saved column mapping for the collection bulk-import wizard."""
+
+    __tablename__ = "collection_import_templates"
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    column_mapping: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "name", name="uq_collection_import_template_ws_name"
+        ),
+        Index("ix_collection_import_template_ws", "workspace_id"),
+    )
+
+
 class CampaignMeasurementModel(Base, EntityModelMixin):
     """CampaignMeasurement — owned grandchild (one per result x channel)."""
 
