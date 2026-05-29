@@ -34,4 +34,35 @@ describe("MappingStep", () => {
       }),
     );
   });
+
+  it("renders filter chips when templates exist", () => {
+    render(
+      <MappingStep
+        headers={["Reg No."]}
+        rows={[]}
+        templates={[
+          {
+            id: "t1",
+            name: "shared template",
+            column_mapping: { registration_number: "Reg No." },
+            used_in_this_collection: false,
+            created_by: "other-user",
+          },
+        ]}
+        currentUserId="me"
+        selectedTemplateId={null}
+        onSelectedTemplateChange={vi.fn()}
+        onContinue={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /all \(1\)/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /used here \(0\)/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /mine \(0\)/i }),
+    ).toBeInTheDocument();
+  });
 });

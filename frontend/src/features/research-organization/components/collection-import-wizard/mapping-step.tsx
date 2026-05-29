@@ -93,6 +93,8 @@ interface TemplateLite {
   id: string;
   name: string;
   column_mapping: Record<string, string>;
+  used_in_this_collection?: boolean;
+  created_by?: string;
 }
 
 // Mirrors backend/src/cellar/application/research_organization/collection_import_templates.py::score_template_against_headers
@@ -104,24 +106,68 @@ function scoreTemplate(template: TemplateLite, headers: string[]): number {
   return matched / refs.length;
 }
 
+type TemplateTier = "used_here" | "mine" | "workspace";
+
+interface PickResult {
+  template: TemplateLite;
+  score: number;
+  tier: TemplateTier;
+}
+
 function pickBestTemplate(
   templates: TemplateLite[],
   headers: string[],
-): { template: TemplateLite; score: number } | null {
-  let best: { template: TemplateLite; score: number } | null = null;
-  for (const t of templates) {
-    const score = scoreTemplate(t, headers);
-    if (score >= 0.7 && (!best || score > best.score)) {
-      best = { template: t, score };
+  currentUserId?: string,
+): PickResult | null {
+  const tiers: { name: TemplateTier; filter: (t: TemplateLite) => boolean }[] =
+    [
+      { name: "used_here", filter: (t) => !!t.used_in_this_collection },
+      {
+        name: "mine",
+        filter: (t) => !!currentUserId && t.created_by === currentUserId,
+      },
+      { name: "workspace", filter: () => true },
+    ];
+  for (const tier of tiers) {
+    const candidates = templates.filter(tier.filter);
+    let best: { template: TemplateLite; score: number } | null = null;
+    for (const t of candidates) {
+      const score = scoreTemplate(t, headers);
+      if (score >= 0.7 && (!best || score > best.score)) {
+        best = { template: t, score };
+      }
     }
+    if (best) return { ...best, tier: tier.name };
   }
-  return best;
+  return null;
+}
+
+function tierFor(t: TemplateLite, currentUserId?: string): TemplateTier {
+  if (t.used_in_this_collection) return "used_here";
+  if (currentUserId && t.created_by === currentUserId) return "mine";
+  return "workspace";
+}
+
+const TIER_MESSAGE: Record<TemplateTier, string> = {
+  used_here: "used here before",
+  mine: "your template",
+  workspace: "best match",
+};
+
+type FilterChip = "all" | "used_here" | "mine";
+
+interface AppliedTemplate {
+  name: string;
+  tier: TemplateTier;
 }
 
 export interface MappingStepProps {
   headers: string[];
   rows: Record<string, string>[];
   templates: TemplateLite[];
+  currentUserId?: string;
+  selectedTemplateId?: string | null;
+  onSelectedTemplateChange?: (id: string | null) => void;
   onContinue: (output: {
     mapping: Record<string, string>;
     saveAsTemplate?: { name: string };
@@ -133,6 +179,9 @@ export function MappingStep({
   headers,
   rows: _rows,
   templates,
+  currentUserId,
+  selectedTemplateId: selectedTemplateIdProp,
+  onSelectedTemplateChange,
   onContinue,
   submitting = false,
 }: MappingStepProps) {
@@ -142,44 +191,87 @@ export function MappingStep({
     return m;
   }, [headers]);
   const [mapping, setMapping] = useState<Record<string, Role>>(initial);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const [save, setSave] = useState(false);
-  const [tplName, setTplName] = useState("");
-  const [appliedTemplateName, setAppliedTemplateName] = useState<string | null>(
+  // Internal fallback when the composer doesn't lift state up (e.g. tests).
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(
     null,
   );
+  const selectedTemplateId =
+    selectedTemplateIdProp !== undefined
+      ? (selectedTemplateIdProp ?? null)
+      : internalSelectedId;
+  function setSelectedTemplateId(id: string | null) {
+    setInternalSelectedId(id);
+    onSelectedTemplateChange?.(id);
+  }
+  const [save, setSave] = useState(false);
+  const [tplName, setTplName] = useState("");
+  const [appliedTemplate, setAppliedTemplate] =
+    useState<AppliedTemplate | null>(null);
+  const [filter, setFilter] = useState<FilterChip>("all");
   const autoAppliedRef = useRef(false);
 
+  const filteredTemplates = useMemo(() => {
+    if (filter === "used_here") {
+      return templates.filter((t) => t.used_in_this_collection);
+    }
+    if (filter === "mine") {
+      return templates.filter(
+        (t) => !!currentUserId && t.created_by === currentUserId,
+      );
+    }
+    return templates;
+  }, [filter, templates, currentUserId]);
+
+  const usedHereCount = useMemo(
+    () => templates.filter((t) => t.used_in_this_collection).length,
+    [templates],
+  );
+  const mineCount = useMemo(
+    () =>
+      templates.filter(
+        (t) => !!currentUserId && t.created_by === currentUserId,
+      ).length,
+    [templates, currentUserId],
+  );
+
   function applyTemplate(id: string) {
-    setSelectedTemplateId(id);
+    if (!id) {
+      // "Choose template…" — clear selection but don't reset the auto-apply guard.
+      setSelectedTemplateId(null);
+      return;
+    }
     const tpl = templates.find((x) => x.id === id);
     if (!tpl) return;
+    setSelectedTemplateId(id);
     const next: Record<string, Role> = {};
     for (const h of headers) next[h] = "ignore";
     for (const [role, header] of Object.entries(tpl.column_mapping)) {
       if (headers.includes(header)) next[header] = role as Role;
     }
     setMapping(next);
-    // Manual pick — show the indicator too (and don't let the auto-effect overwrite later).
-    setAppliedTemplateName(tpl.name);
+    // Manual pick — show the indicator (with tier) and prevent the auto-effect
+    // from overwriting later.
+    setAppliedTemplate({ name: tpl.name, tier: tierFor(tpl, currentUserId) });
     autoAppliedRef.current = true;
   }
 
   useEffect(() => {
     if (autoAppliedRef.current) return;
     if (templates.length === 0) return;
-    const best = pickBestTemplate(templates, headers);
-    if (!best) return;
+    const result = pickBestTemplate(templates, headers, currentUserId);
+    if (!result) return;
     const next: Record<string, Role> = {};
     for (const h of headers) next[h] = "ignore";
-    for (const [role, header] of Object.entries(best.template.column_mapping)) {
+    for (const [role, header] of Object.entries(result.template.column_mapping)) {
       if (headers.includes(header)) next[header] = role as Role;
     }
     setMapping(next);
-    setSelectedTemplateId(best.template.id);
-    setAppliedTemplateName(best.template.name);
+    setSelectedTemplateId(result.template.id);
+    setAppliedTemplate({ name: result.template.name, tier: result.tier });
     autoAppliedRef.current = true;
-  }, [templates, headers]);
+    // setSelectedTemplateId is stable in this scope (no need to add as dep).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templates, headers, currentUserId]);
 
   function buildOutput() {
     const out: Record<string, string> = {};
@@ -193,28 +285,65 @@ export function MappingStep({
   return (
     <div className="space-y-6">
       {templates.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant={filter === "all" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("all")}
+          >
+            All ({templates.length})
+          </Button>
+          <Button
+            type="button"
+            variant={filter === "used_here" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("used_here")}
+          >
+            Used here ({usedHereCount})
+          </Button>
+          <Button
+            type="button"
+            variant={filter === "mine" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("mine")}
+          >
+            Mine ({mineCount})
+          </Button>
+        </div>
+      )}
+      {templates.length > 0 && (
         <div className="space-y-2">
           <Label htmlFor="template-picker">Apply a saved template</Label>
           <select
             id="template-picker"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            value={selectedTemplateId}
+            value={selectedTemplateId ?? ""}
             onChange={(e) => applyTemplate(e.target.value)}
           >
             <option value="">Choose template…</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
+            {filteredTemplates.map((t) => {
+              const tags: string[] = [];
+              if (t.used_in_this_collection) tags.push("used here");
+              if (currentUserId && t.created_by === currentUserId)
+                tags.push("mine");
+              const suffix = tags.length > 0 ? ` (${tags.join(", ")})` : "";
+              return (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {suffix}
+                </option>
+              );
+            })}
           </select>
         </div>
       )}
-      {appliedTemplateName && (
+      {appliedTemplate && (
         <div className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm">
           <p className="text-emerald-900">
-            ✓ Applied saved template &ldquo;{appliedTemplateName}&rdquo;. You
-            can override below or pick a different template above.
+            ✓ Applied saved template &ldquo;{appliedTemplate.name}&rdquo; —{" "}
+            {TIER_MESSAGE[appliedTemplate.tier]}. You can override below or pick
+            a different template above.
           </p>
         </div>
       )}

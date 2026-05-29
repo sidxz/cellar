@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuthz } from "@sentinel-auth/nextjs";
 import { useState } from "react";
 
 import { useCollection } from "@/features/research-organization/hooks/use-collections";
@@ -52,12 +53,18 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null,
+  );
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [pendingTemplateName, setPendingTemplateName] = useState<string | null>(
     null,
   );
 
-  const templatesQ = useCollectionImportTemplates();
+  const { user } = useAuthz();
+  const currentUserId = user?.userId;
+
+  const templatesQ = useCollectionImportTemplates(collectionId);
   const createTpl = useCreateCollectionImportTemplate();
   const previewMut = usePreviewCollectionImport(collectionId);
   const commitMut = useCommitCollectionImport(collectionId);
@@ -77,6 +84,7 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
         }
         return out;
       }),
+      template_id: selectedTemplateId,
     };
   }
 
@@ -127,6 +135,9 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
           headers={headers}
           rows={rows}
           templates={templatesQ.data ?? []}
+          currentUserId={currentUserId}
+          selectedTemplateId={selectedTemplateId}
+          onSelectedTemplateChange={setSelectedTemplateId}
           onContinue={handleContinueFromMapping}
           submitting={previewMut.isPending}
         />
@@ -150,6 +161,7 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
             setHeaders([]);
             setRows([]);
             setMapping({});
+            setSelectedTemplateId(null);
             setPreview(null);
           }}
         />

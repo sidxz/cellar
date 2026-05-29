@@ -17,12 +17,22 @@ import type {
 const TEMPLATES_QK = ["collection-import-templates"] as const;
 
 /**
- * List all collection-import templates in the current workspace.
+ * List collection-import templates in the current workspace.
+ *
+ * When `collectionId` is provided, the server annotates each template with
+ * `used_in_this_collection: boolean` based on whether the template has been
+ * used on prior imports into that collection. The cache key includes the
+ * collection id so prior-collection vs. workspace-wide views don't collide.
+ *
+ * Mutations in this module use a `["collection-import-templates"]` prefix on
+ * `invalidateQueries`, which is a prefix-match in TanStack v5 and therefore
+ * invalidates every per-collection variant on the next save/update/delete.
  */
-export function useCollectionImportTemplates() {
+export function useCollectionImportTemplates(collectionId?: string) {
   return useQuery({
-    queryKey: TEMPLATES_QK,
-    queryFn: () => listCollectionImportTemplates(),
+    queryKey: [...TEMPLATES_QK, collectionId ?? null],
+    queryFn: () =>
+      listCollectionImportTemplates({ collection_id: collectionId }),
   });
 }
 
