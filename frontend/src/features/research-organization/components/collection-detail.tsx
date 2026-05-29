@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, Pencil, Plus, Trash2 } from "lucide-react";
+import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -167,6 +168,17 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               <Plus className="mr-2 h-4 w-4" />
               Add Molecules
             </Button>
+            <Link href={`/collections/${collectionId}/import`}>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isFrozen}
+                title={isFrozen ? FROZEN_TOOLTIP : undefined}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Bulk import
+              </Button>
+            </Link>
             {isAdmin && (
               <AdminDeleteButton
                 entityType="collection"
