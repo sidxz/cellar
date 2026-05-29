@@ -139,7 +139,15 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
     : null;
 
   const asyncJobDto = start.data?.job ?? null;
-  const asyncJob: UmapJob | null = asyncJobDto ? dtoToUmapJob(asyncJobDto) : null;
+  // MUST be memoized on the (stable, React-Query-cached) DTO. Deriving a fresh
+  // object every render makes the polling effect below — which depends on
+  // `asyncJob` — re-run on EVERY render, firing a new poll each time. That was
+  // a runaway request storm (thousands of polls of the same job id). With the
+  // DTO stable, this reference is stable and the effect runs once per job.
+  const asyncJob: UmapJob | null = useMemo(
+    () => (asyncJobDto ? dtoToUmapJob(asyncJobDto) : null),
+    [asyncJobDto],
+  );
 
   // Polling state (only used when the initial response returned a job, not a result).
   const [polledResult, setPolledResult] = useState<UmapResult | null>(null);

@@ -98,6 +98,44 @@ describe("useUmapCluster", () => {
     expect(result.current.error).toBeNull();
   });
 
+  it("does not re-poll on every re-render once a job is in flight (no request storm)", async () => {
+    const startFn = vi.fn(async () => ({
+      result: null,
+      job: makeJobDto("pending"),
+    }));
+    // Every poll immediately returns ready. The bug re-ran the polling effect
+    // on each render (asyncJob was re-derived to a new object every render),
+    // firing a fresh poll per render → thousands of requests.
+    const pollFn = vi.fn(async () => ({
+      result: makeResultDto(),
+      job: makeJobDto("ready"),
+    }));
+
+    const props = {
+      moleculeIds: ["a", "b"],
+      picker: "maxmin" as const,
+      n: 5,
+      enabled: true,
+      startFn,
+      pollFn,
+      pollIntervalMs: 10,
+    };
+
+    const { result, rerender } = renderHook((p) => useUmapCluster(p), {
+      wrapper,
+      initialProps: props,
+    });
+
+    await waitFor(() => expect(result.current.result).not.toBeNull());
+
+    // Force several re-renders with stable inputs. The fixed hook must NOT
+    // launch a new poll for each render.
+    for (let i = 0; i < 8; i++) rerender({ ...props });
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(pollFn.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+
   it("surfaces error when job fails", async () => {
     const startFn = vi.fn(async () => ({
       result: null,
