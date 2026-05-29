@@ -17,8 +17,10 @@ export interface ConfirmStepProps {
 }
 
 export function ConfirmStep({ result, collectionId, onClose }: ConfirmStepProps) {
+  // Registration opens in a new tab; route is /compounds/register, which reads
+  // ?from_collection_import to pre-fill the bulk step.
   const handoffHref = result.preview_id
-    ? `/compounds/bulk-register?from_collection_import=${result.preview_id}&return_to_collection=${collectionId}`
+    ? `/compounds/register?from_collection_import=${result.preview_id}`
     : null;
   return (
     <div className="space-y-4">
@@ -37,9 +39,11 @@ export function ConfirmStep({ result, collectionId, onClose }: ConfirmStepProps)
           </p>
           <Link
             href={handoffHref}
+            target="_blank"
+            rel="noopener noreferrer"
             className="mt-2 inline-block text-sm font-medium underline"
           >
-            Register them now →
+            Register them ↗ (opens a new tab)
           </Link>
         </div>
       )}

@@ -171,6 +171,57 @@ async def test_dry_run_classifies_all_five_statuses():
 
 
 @pytest.mark.asyncio
+async def test_re_running_preview_picks_up_newly_registered():
+    """register→re-check loop: a row UNREGISTERED at preview time resolves once
+    the molecule exists. Re-running the dry_run (what the wizard's "Re-check"
+    button does, with the same uploaded rows) reflects current DB state."""
+    ws = uuid.uuid4()
+    cid = uuid.uuid4()
+    resolver = FakeResolver(resolved_map={}, ambiguous_values=set())
+    repo = FakeCollectionRepo(members=set())
+    molecule_repo = FakeMoleculeRepo()
+    use_case = BulkAddToCollection(
+        uow=FakeUoW(),
+        resolver=resolver,
+        repo=repo,
+        molecule_repo=molecule_repo,
+        template_repo=FakeTemplateRepo(),
+    )
+
+    rows = [BulkAddRow(row_index=0, smiles="c1ccccc1O", name="phenol")]
+    first = (
+        await use_case(
+            BulkAddToCollectionCommand(
+                workspace_id=ws, collection_id=cid, rows=rows, dry_run=True
+            )
+        )
+    ).unwrap()
+    assert first.outcomes[0].status == RowStatus.UNREGISTERED
+
+    stashed = use_case.fetch_stash(first.preview_id)
+    assert stashed is not None
+
+    # Simulate the molecule being registered between preview and return.
+    new_mol = uuid.uuid4()
+    resolver.resolved_map["c1ccccc1O"] = new_mol
+    molecule_repo.names_by_id[new_mol] = "phenol"
+
+    # Re-resolve the ORIGINAL stashed rows — now it resolves.
+    second = (
+        await use_case(
+            BulkAddToCollectionCommand(
+                workspace_id=ws,
+                collection_id=cid,
+                rows=list(stashed.rows),
+                dry_run=True,
+            )
+        )
+    ).unwrap()
+    assert second.outcomes[0].status == RowStatus.RESOLVED
+    assert second.resolved_count == 1
+
+
+@pytest.mark.asyncio
 async def test_commit_adds_only_resolved_rows():
     resolver = FakeResolver(
         resolved_map={"CC-1": uuid.uuid4(), "CC-2": uuid.uuid4()},

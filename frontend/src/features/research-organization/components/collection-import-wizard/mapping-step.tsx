@@ -173,6 +173,14 @@ export interface MappingStepProps {
     saveAsTemplate?: { name: string };
   }) => void;
   submitting?: boolean;
+  /** Error from a failed template save, surfaced by the wizard. */
+  templateError?: string | null;
+  /**
+   * Id of a template the wizard just saved from this session. When it changes,
+   * the "save as template" toggle is cleared so the just-saved name doesn't
+   * trip the duplicate-name guard against the template it created.
+   */
+  justSavedTemplateId?: string | null;
 }
 
 export function MappingStep({
@@ -184,6 +192,8 @@ export function MappingStep({
   onSelectedTemplateChange,
   onContinue,
   submitting = false,
+  templateError = null,
+  justSavedTemplateId = null,
 }: MappingStepProps) {
   const initial = useMemo<Record<string, Role>>(() => {
     const m: Record<string, Role> = {};
@@ -209,6 +219,21 @@ export function MappingStep({
     useState<AppliedTemplate | null>(null);
   const [filter, setFilter] = useState<FilterChip>("all");
   const autoAppliedRef = useRef(false);
+  const clearedSaveForRef = useRef<string | null>(null);
+
+  // Once the wizard reports a successful save, the "save as template" intent is
+  // fulfilled — clear the toggle so the just-saved name doesn't immediately
+  // trip the duplicate-name guard against the template it just created.
+  useEffect(() => {
+    if (
+      justSavedTemplateId &&
+      justSavedTemplateId !== clearedSaveForRef.current
+    ) {
+      clearedSaveForRef.current = justSavedTemplateId;
+      setSave(false);
+      setTplName("");
+    }
+  }, [justSavedTemplateId]);
 
   const filteredTemplates = useMemo(() => {
     if (filter === "used_here") {
@@ -281,6 +306,18 @@ export function MappingStep({
     }
     return out;
   }
+
+  // Client-side guard so a name collision is caught instantly (instead of a
+  // failed round-trip), matching the BE's unique (workspace, name) constraint.
+  const trimmedTplName = tplName.trim();
+  const isDuplicateName =
+    save &&
+    trimmedTplName.length > 0 &&
+    templates.some((t) => t.name.trim() === trimmedTplName);
+  // When the chemist opts to save, require a valid name before continuing so
+  // the intent isn't silently dropped.
+  const saveBlocksContinue =
+    save && (trimmedTplName.length === 0 || isDuplicateName);
 
   return (
     <div className="space-y-6">
@@ -391,23 +428,41 @@ export function MappingStep({
       </div>
       {templates.length === 0 && !save && (
         <p className="text-xs text-muted-foreground">
-          No saved templates yet. Save this mapping at the end to reuse it next
-          time.
+          No saved templates yet. Tick the box above to save this mapping now and
+          reuse it next time.
         </p>
       )}
       {save && (
-        <Input
-          placeholder="Template name"
-          value={tplName}
-          onChange={(e) => setTplName(e.target.value)}
-        />
+        <div className="space-y-1">
+          <Input
+            placeholder="Template name"
+            value={tplName}
+            onChange={(e) => setTplName(e.target.value)}
+            aria-invalid={isDuplicateName || undefined}
+          />
+          {isDuplicateName && !submitting && (
+            <p className="text-xs text-destructive">
+              A template named &ldquo;{trimmedTplName}&rdquo; already exists.
+              Pick a different name.
+            </p>
+          )}
+          {(!isDuplicateName || submitting) && (
+            <p className="text-xs text-muted-foreground">
+              Saved as soon as you continue — independent of the import.
+            </p>
+          )}
+        </div>
+      )}
+      {templateError && (
+        <p className="text-sm text-destructive">{templateError}</p>
       )}
       <Button
-        disabled={submitting}
+        disabled={submitting || saveBlocksContinue}
         onClick={() =>
           onContinue({
             mapping: buildOutput(),
-            saveAsTemplate: save && tplName ? { name: tplName } : undefined,
+            saveAsTemplate:
+              save && trimmedTplName ? { name: trimmedTplName } : undefined,
           })
         }
       >

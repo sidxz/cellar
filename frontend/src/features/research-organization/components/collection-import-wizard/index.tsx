@@ -2,6 +2,7 @@
 
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { useCollection } from "@/features/research-organization/hooks/use-collections";
 import { useCommitCollectionImport } from "@/features/research-organization/hooks/use-commit-collection-import";
@@ -48,6 +49,18 @@ function toPreviewResult(res: BulkAddResponse): PreviewResult {
   return res as unknown as PreviewResult;
 }
 
+// Human-readable message for a failed template save. A workspace-unique name
+// collision is the common case (the BE has a unique (workspace, name)
+// constraint), so call it out explicitly; otherwise fall back to the raw error.
+function templateSaveErrorMessage(err: unknown, name: string): string {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  if (status === 409 || status === 400) {
+    return `Couldn't save template "${name}" — a template with that name may already exist. Rename it or uncheck "Save this mapping".`;
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return `Couldn't save template "${name}": ${msg}`;
+}
+
 export function CollectionImportWizard({ collectionId }: { collectionId: string }) {
   const [step, setStep] = useState<Step>("upload");
   const [headers, setHeaders] = useState<string[]>([]);
@@ -58,7 +71,11 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
   );
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [pendingTemplateName, setPendingTemplateName] = useState<string | null>(
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  // Id of a template just saved from this wizard — signals the mapping step to
+  // clear its "save as template" toggle so the just-saved name doesn't trip the
+  // duplicate-name guard against itself.
+  const [justSavedTemplateId, setJustSavedTemplateId] = useState<string | null>(
     null,
   );
 
@@ -113,7 +130,30 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
     saveAsTemplate?: { name: string };
   }) {
     setMapping(out.mapping);
-    if (out.saveAsTemplate) setPendingTemplateName(out.saveAsTemplate.name);
+    setTemplateError(null);
+
+    // Save the template NOW — when the chemist finalizes the mapping — not
+    // after the molecules commit. The mapping is a reusable artifact in its own
+    // right; coupling it to a successful import is what made saves silently
+    // vanish. On failure we surface the error and stay on the mapping step so
+    // the chemist can fix the name (or uncheck save) rather than lose it.
+    if (out.saveAsTemplate) {
+      try {
+        const created = await createTpl.mutateAsync({
+          name: out.saveAsTemplate.name,
+          column_mapping: out.mapping,
+        });
+        // Treat the just-saved template as the applied one so commit records
+        // usage against it (used_in_this_collection).
+        setSelectedTemplateId(created.id);
+        setJustSavedTemplateId(created.id);
+        toast.success(`Template "${created.name}" saved`);
+      } catch (e) {
+        setTemplateError(templateSaveErrorMessage(e, out.saveAsTemplate.name));
+        return; // stay on mapping; nothing imported yet
+      }
+    }
+
     const res = await previewMut.mutateAsync(buildPreviewBody(out.mapping));
     setPreview(toPreviewResult(res));
     setPreviewId(res.preview_id ?? null);
@@ -123,13 +163,16 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
   async function handleCommit() {
     const res = await commitMut.mutateAsync(buildCommitBody());
     setPreview(toPreviewResult(res));
-    if (pendingTemplateName) {
-      await createTpl.mutateAsync({
-        name: pendingTemplateName,
-        column_mapping: mapping,
-      });
-    }
     setStep("confirm");
+  }
+
+  // Re-run the resolution over the SAME uploaded rows (still in client state).
+  // Used after the chemist registers the unregistered molecules in a separate
+  // tab: re-checking picks them up so the whole set resolves and can be added.
+  async function handleRecheck() {
+    const res = await previewMut.mutateAsync(buildPreviewBody(mapping));
+    setPreview(toPreviewResult(res));
+    setPreviewId(res.preview_id ?? null);
   }
 
   return (
@@ -160,7 +203,9 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
           selectedTemplateId={selectedTemplateId}
           onSelectedTemplateChange={setSelectedTemplateId}
           onContinue={handleContinueFromMapping}
-          submitting={previewMut.isPending}
+          submitting={previewMut.isPending || createTpl.isPending}
+          templateError={templateError}
+          justSavedTemplateId={justSavedTemplateId}
         />
       )}
       {step === "preview" && preview && (
@@ -171,6 +216,8 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
           rows={rows}
           mapping={mapping}
           submitting={commitMut.isPending}
+          onRecheck={handleRecheck}
+          rechecking={previewMut.isPending}
         />
       )}
       {step === "confirm" && preview && (

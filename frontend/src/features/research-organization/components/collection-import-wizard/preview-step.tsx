@@ -45,6 +45,14 @@ export interface PreviewStepProps {
   rows?: Record<string, string>[];
   mapping?: Record<string, string>;
   submitting?: boolean;
+  /**
+   * Re-run the resolution with the same uploaded rows. Used after the chemist
+   * registers the unregistered molecules in a separate tab — re-checking picks
+   * them up so the whole set can be added. Omit to hide the Re-check button.
+   */
+  onRecheck?: () => void;
+  /** True while a re-check is in flight. */
+  rechecking?: boolean;
 }
 
 const STATUS_VARIANT: Record<
@@ -73,15 +81,21 @@ function truncate(s: string, max = 40): string {
 
 export function PreviewStep({
   result,
-  collectionId,
   onCommit,
   rows,
   mapping,
   submitting = false,
+  onRecheck,
+  rechecking = false,
 }: PreviewStepProps) {
   const canCommit = result.resolved_count > 0;
+  // Registration opens in a NEW TAB so this import tab keeps its uploaded rows.
+  // The chemist registers there, comes back, and clicks Re-check — which simply
+  // re-runs the resolution over the rows still held here. The wizard lives at
+  // /compounds/register; useCollectionImportHandoff reads ?from_collection_import
+  // to pre-fill the bulk step.
   const handoffHref = result.preview_id
-    ? `/compounds/bulk-register?from_collection_import=${result.preview_id}&return_to_collection=${collectionId}`
+    ? `/compounds/register?from_collection_import=${result.preview_id}`
     : null;
 
   function getRowInput(rowIndex: number): string {
@@ -125,14 +139,36 @@ export function PreviewStep({
         <div className="rounded border border-amber-300 bg-amber-50 p-3">
           <p className="text-sm text-amber-900">
             {result.unregistered_count} rows reference molecules not yet
-            registered. They will be skipped by this import.
+            registered. They&rsquo;ll be skipped — register them first, then
+            re-check.
           </p>
-          <Link
-            href={handoffHref}
-            className="mt-2 inline-block text-sm font-medium underline"
-          >
-            Register them →
-          </Link>
+          <div className="mt-2 flex flex-wrap items-center gap-4">
+            <Link
+              href={handoffHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium underline"
+            >
+              Register them ↗ (opens a new tab)
+            </Link>
+            {onRecheck && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRecheck}
+                disabled={rechecking}
+              >
+                {rechecking ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Re-checking…
+                  </>
+                ) : (
+                  "Re-check"
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       )}
       {canCommit && (

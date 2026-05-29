@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PreviewStep } from "./preview-step";
 
@@ -41,12 +41,28 @@ describe("PreviewStep", () => {
         onCommit={vi.fn()}
       />,
     );
-    expect(
-      screen.getByRole("link", { name: /register them/i }),
-    ).toHaveAttribute(
+    const link = screen.getByRole("link", { name: /register them/i });
+    // Opens registration in a new tab so this import tab keeps its rows; only
+    // from_collection_import is carried (the wizard re-checks client-side).
+    expect(link).toHaveAttribute(
       "href",
-      "/compounds/bulk-register?from_collection_import=p1&return_to_collection=c1",
+      "/compounds/register?from_collection_import=p1",
     );
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("re-checks via onRecheck when there are unregistered rows", () => {
+    const onRecheck = vi.fn();
+    render(
+      <PreviewStep
+        result={result as any}
+        collectionId="c1"
+        onCommit={vi.fn()}
+        onRecheck={onRecheck}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /re-check/i }));
+    expect(onRecheck).toHaveBeenCalled();
   });
 
   it("enables commit button only when resolved_count > 0", () => {
