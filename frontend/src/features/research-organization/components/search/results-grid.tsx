@@ -86,15 +86,24 @@ function similarityBarColor(score: number): string {
   return "bg-muted-foreground/30";
 }
 
+function formatSimilarityPercent(score: number): string {
+  // Match the structure filter's "≥ NN %" UI — integer percent. 1 decimal
+  // place would carry more info but creates a unit mismatch with the
+  // threshold the chemist just typed.
+  return `${Math.round(score * 100)}%`;
+}
+
 function buildSimilarityColumn(): ColDef<EnrichedMolecule> {
   return {
     headerName: "Sim",
     width: 130,
     headerTooltip:
       "Similarity score for this row, computed by the cartridge against the search query. " +
-      "Range 0–1 (1.0 = identical). Algorithm + metric depend on the active mode.",
+      "Expressed as percent (100% = identical) to match the search threshold input. " +
+      "Algorithm + metric depend on the active mode.",
     valueGetter: (p) => p.data?.similarity_score ?? null,
-    valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : "—"),
+    valueFormatter: (p) =>
+      p.value != null ? formatSimilarityPercent(Number(p.value)) : "—",
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const score = params.data?.similarity_score;
       if (score == null) {
@@ -105,7 +114,7 @@ function buildSimilarityColumn(): ColDef<EnrichedMolecule> {
       return (
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs tabular-nums">
-            {score.toFixed(3)}
+            {formatSimilarityPercent(score)}
           </span>
           <div className="h-1.5 w-12 rounded-full bg-muted overflow-hidden">
             <div

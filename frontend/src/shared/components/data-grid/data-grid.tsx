@@ -151,6 +151,19 @@ export function DataGrid<TData = unknown>({
     }
   }, [clearSelectionToken]);
 
+  // Re-fit columns on columnDefs changes. `onGridReady` only fires on grid
+  // mount, so when the grid stays mounted across a change (e.g. /search runs
+  // a second query while the previous result set is still on screen, so
+  // `loading` never flips true and the grid doesn't unmount), AG Grid resets
+  // column widths to the values in the new defs but our auto-fit never
+  // re-fires — leaving narrow columns with empty space on the right. Skipped
+  // when `preferencesKey` is set so user-resized widths in `prefs` win.
+  useEffect(() => {
+    if (hasPrefs) return;
+    if (!gridRef.current?.api) return;
+    gridRef.current.api.sizeColumnsToFit();
+  }, [finalColumnDefs, hasPrefs]);
+
   const handleRowClicked = useCallback(
     (event: RowClickedEvent<TData>) => {
       if (!onRowClick || !event.data) return;
