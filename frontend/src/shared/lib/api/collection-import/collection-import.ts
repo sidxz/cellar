@@ -27,6 +27,7 @@ import type {
   CollectionImportTemplateResponse,
   CreateCollectionImportTemplateRequest,
   HTTPValidationError,
+  ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetParams,
   UnregisteredRowsResponse,
   UpdateCollectionImportTemplateRequest
 } from '.././model';
@@ -132,13 +133,14 @@ export function useGetUnregisteredRowsApiV1CollectionImportPreviewsPreviewIdUnre
  * @summary List Collection Import Templates
  */
 export const listCollectionImportTemplatesApiV1CollectionImportTemplatesGet = (
-    
+    params?: ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetParams,
  signal?: AbortSignal
 ) => {
       
       
       return customInstance<CollectionImportTemplateResponse[]>(
-      {url: `/api/v1/collection-import-templates`, method: 'GET', signal
+      {url: `/api/v1/collection-import-templates`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -146,23 +148,23 @@ export const listCollectionImportTemplatesApiV1CollectionImportTemplatesGet = (
 
 
 
-export const getListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryKey = () => {
+export const getListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryKey = (params?: ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetParams,) => {
     return [
-    `/api/v1/collection-import-templates`
+    `/api/v1/collection-import-templates`, ...(params ? [params]: [])
     ] as const;
     }
 
     
-export const getListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryOptions = <TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>>, }
+export const getListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryOptions = <TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = HTTPValidationError>(params?: ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryKey(params);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>> = ({ signal }) => listCollectionImportTemplatesApiV1CollectionImportTemplatesGet(signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>> = ({ signal }) => listCollectionImportTemplatesApiV1CollectionImportTemplatesGet(params, signal);
 
       
 
@@ -172,11 +174,11 @@ const {query: queryOptions} = options ?? {};
 }
 
 export type ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryResult = NonNullable<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>>
-export type ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryError = unknown
+export type ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryError = HTTPValidationError
 
 
-export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGet<TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>> & Pick<
+export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGet<TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = HTTPValidationError>(
+ params: undefined |  ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>,
           TError,
@@ -185,8 +187,8 @@ export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGe
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGet<TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>> & Pick<
+export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGet<TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = HTTPValidationError>(
+ params?: ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>,
           TError,
@@ -195,20 +197,20 @@ export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGe
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGet<TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>>, }
+export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGet<TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = HTTPValidationError>(
+ params?: ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary List Collection Import Templates
  */
 
-export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGet<TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>>, }
+export function useListCollectionImportTemplatesApiV1CollectionImportTemplatesGet<TData = Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError = HTTPValidationError>(
+ params?: ListCollectionImportTemplatesApiV1CollectionImportTemplatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionImportTemplatesApiV1CollectionImportTemplatesGet>>, TError, TData>>, }
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryOptions(options)
+  const queryOptions = getListCollectionImportTemplatesApiV1CollectionImportTemplatesGetQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

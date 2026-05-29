@@ -17,4 +17,5 @@ export interface CollectionImportTemplateResponse {
   created_by: string;
   created_at: string;
   updated_at: CollectionImportTemplateResponseUpdatedAt;
+  used_in_this_collection?: boolean;
 }

@@ -5,7 +5,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { BulkAddRowBody } from './bulkAddRowBody';
+import type { BulkAddRequestBodyTemplateId } from './bulkAddRequestBodyTemplateId';
 
 export interface BulkAddRequestBody {
   rows: BulkAddRowBody[];
+  template_id?: BulkAddRequestBodyTemplateId;
 }
