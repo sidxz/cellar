@@ -39,3 +39,40 @@ def test_update_changes_mapping_and_bumps_updated_at():
     tpl.update(column_mapping={"name": "Compound", "smiles": "Structure"})
     assert tpl.column_mapping["smiles"] == "Structure"
     assert tpl.updated_at >= original_updated
+
+
+def test_new_template_has_empty_usage_list():
+    tpl = CollectionImportTemplate.create(
+        workspace_id=uuid.uuid4(),
+        name="t",
+        column_mapping={"name": "X"},
+        created_by=uuid.uuid4(),
+    )
+    assert tpl.used_in_collections == []
+
+
+def test_record_usage_appends_and_bumps_updated_at():
+    tpl = CollectionImportTemplate.create(
+        workspace_id=uuid.uuid4(),
+        name="t",
+        column_mapping={"name": "X"},
+        created_by=uuid.uuid4(),
+    )
+    before = tpl.updated_at
+    cid = uuid.uuid4()
+    tpl.record_usage_in(cid)
+    assert tpl.used_in_collections == [cid]
+    assert tpl.updated_at >= before
+
+
+def test_record_usage_is_idempotent():
+    tpl = CollectionImportTemplate.create(
+        workspace_id=uuid.uuid4(),
+        name="t",
+        column_mapping={"name": "X"},
+        created_by=uuid.uuid4(),
+    )
+    cid = uuid.uuid4()
+    tpl.record_usage_in(cid)
+    tpl.record_usage_in(cid)  # second call no-op
+    assert tpl.used_in_collections == [cid]

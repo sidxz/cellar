@@ -31,6 +31,7 @@ class CollectionImportTemplate(Entity):
         name: str,
         description: str | None = None,
         column_mapping: dict[str, str],
+        used_in_collections: list[uuid.UUID] | None = None,
         created_by: uuid.UUID,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -42,6 +43,7 @@ class CollectionImportTemplate(Entity):
         self.name = name.strip()
         self.description = description
         self.column_mapping = column_mapping
+        self.used_in_collections = list(used_in_collections) if used_in_collections else []
         self.created_by = created_by
 
     @classmethod
@@ -77,6 +79,13 @@ class CollectionImportTemplate(Entity):
         if column_mapping is not None:
             self._validate_mapping(column_mapping)
             self.column_mapping = column_mapping
+        self.updated_at = datetime.now(UTC)
+
+    def record_usage_in(self, collection_id: uuid.UUID) -> None:
+        """Idempotent: append collection_id to used_in_collections if absent."""
+        if collection_id in self.used_in_collections:
+            return
+        self.used_in_collections.append(collection_id)
         self.updated_at = datetime.now(UTC)
 
     @staticmethod
