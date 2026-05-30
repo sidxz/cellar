@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { ClusterToolbar } from "./cluster-toolbar";
 
 describe("ClusterToolbar", () => {
@@ -9,12 +9,10 @@ describe("ClusterToolbar", () => {
         picker="maxmin"
         n={50}
         threshold={0.4}
-        selectedCount={0}
         onPickerChange={() => {}}
         onNChange={() => {}}
         onThresholdChange={() => {}}
         onDiversify={() => {}}
-        onSave={() => {}}
         colorPicker={null}
       />,
     );
@@ -27,37 +25,13 @@ describe("ClusterToolbar", () => {
         picker="butina"
         n={50}
         threshold={0.4}
-        selectedCount={0}
         onPickerChange={() => {}}
         onNChange={() => {}}
         onThresholdChange={() => {}}
         onDiversify={() => {}}
-        onSave={() => {}}
         colorPicker={null}
       />,
     );
     expect(screen.getByLabelText(/threshold/i)).toBeInTheDocument();
-  });
-
-  it("Save button shows live count and is disabled at zero", () => {
-    const save = vi.fn();
-    render(
-      <ClusterToolbar
-        picker="maxmin"
-        n={50}
-        threshold={0.4}
-        selectedCount={12}
-        onPickerChange={() => {}}
-        onNChange={() => {}}
-        onThresholdChange={() => {}}
-        onDiversify={() => {}}
-        onSave={save}
-        colorPicker={null}
-      />,
-    );
-    const saveBtn = screen.getByRole("button", { name: /save selection \(12\)/i });
-    expect(saveBtn).not.toBeDisabled();
-    fireEvent.click(saveBtn);
-    expect(save).toHaveBeenCalled();
   });
 });

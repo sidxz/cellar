@@ -18,7 +18,6 @@ interface ClusterToolbarProps {
   picker: UmapPicker;
   n: number;
   threshold: number;
-  selectedCount: number;
   onPickerChange: (p: UmapPicker) => void;
   onNChange: (n: number) => void;
   onThresholdChange: (t: number) => void;
@@ -26,7 +25,6 @@ interface ClusterToolbarProps {
   /** True when toolbar values diverge from the last committed compute — surfaces
    *  the Diversify button as the explicit recompute trigger. */
   diversifyDirty?: boolean;
-  onSave: () => void;
   colorPicker: ReactNode;
 }
 
@@ -89,16 +87,9 @@ export function ClusterToolbar(props: ClusterToolbarProps) {
         variant={props.diversifyDirty ? "default" : "outline"}
         onClick={props.onDiversify}
       >
-        {props.diversifyDirty ? "Apply changes" : "Diversify"}
+        {props.diversifyDirty ? "Apply changes" : "Recompute"}
       </Button>
 
-      <Button
-        size="sm"
-        onClick={props.onSave}
-        disabled={props.selectedCount === 0}
-      >
-        Save selection ({props.selectedCount})
-      </Button>
     </div>
   );
 }

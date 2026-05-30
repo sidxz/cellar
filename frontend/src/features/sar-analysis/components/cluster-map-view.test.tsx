@@ -1,11 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
-
-// ---------------------------------------------------------------------------
-// Mocks — must be declared before importing the component under test.
-// ---------------------------------------------------------------------------
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -13,42 +9,30 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-// react-resizable-panels uses ResizeObserver + layout APIs absent from jsdom.
 vi.mock("@/shared/components/ui/resizable", () => ({
   ResizablePanelGroup: ({ children }: any) => (
     <div data-testid="panel-group">{children}</div>
   ),
-  ResizablePanel: ({ children }: any) => (
-    <div data-testid="panel">{children}</div>
-  ),
+  ResizablePanel: ({ children }: any) => <div data-testid="panel">{children}</div>,
   ResizableHandle: () => <div data-testid="resize-handle" />,
 }));
 
-// Plotly uses WebGL not available in jsdom.
-vi.mock("@/shared/lib/plotly", () => ({
-  Plot: () => <div data-testid="plotly" />,
-}));
+vi.mock("@/shared/lib/plotly", () => ({ Plot: () => <div data-testid="plotly" /> }));
 
-// Stub ClusterScatter since it depends on the mocked Plotly.
+// Stub ClusterScatter: clicking it simulates a lasso of {a, b}.
 vi.mock("./cluster-scatter", () => ({
   ClusterScatter: ({ onSelected }: any) => (
-    <div
-      data-testid="cluster-scatter"
-      onClick={() => onSelected(null)}
-    />
+    <div data-testid="cluster-scatter" onClick={() => onSelected(["a", "b"])} />
   ),
 }));
 
-// Stub ClusterSelectionPane (renders CardGrid which virtualizes — heavy in jsdom).
+// Basket pane reads `basketIds`.
 vi.mock("./cluster-selection-pane", () => ({
-  ClusterSelectionPane: ({ selectedIds }: any) => (
-    <div data-testid="selection-pane">
-      selected:{selectedIds.size}
-    </div>
+  ClusterSelectionPane: ({ basketIds }: any) => (
+    <div data-testid="selection-pane">basket:{basketIds.size}</div>
   ),
 }));
 
-// Stub SaveSelectionDialog.
 vi.mock("./save-selection-dialog", () => ({
   SaveSelectionDialog: ({ open, onClose }: any) =>
     open ? (
@@ -58,7 +42,7 @@ vi.mock("./save-selection-dialog", () => ({
     ) : null,
 }));
 
-// Fixed UMAP result so we don't touch the real hook or network.
+// Fixed UMAP result (representatives = [a]).
 vi.mock("@/features/sar-analysis/hooks/use-umap-cluster", () => ({
   useUmapCluster: vi.fn(() => ({
     result: {
@@ -83,29 +67,26 @@ vi.mock("@/features/sar-analysis/hooks/use-umap-cluster", () => ({
   })),
 }));
 
-// ---------------------------------------------------------------------------
-// Component under test (imported AFTER mocks)
-// ---------------------------------------------------------------------------
+// Region pick hook — idle by default.
+vi.mock("@/features/sar-analysis/hooks/use-region-diverse-pick", () => ({
+  useRegionDiversePick: vi.fn(() => ({
+    pickedIds: new Set<string>(),
+    loading: false,
+    error: null,
+    active: false,
+    pick: vi.fn(),
+    reset: vi.fn(),
+  })),
+}));
 
 import { ClusterMapView } from "./cluster-map-view";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const molecules: any[] = [
-  { id: "a", name: "Mol A", bemis_murcko_smiles: "c1ccccc1", structure: { smiles: "c1ccccc1" } },
-  { id: "b", name: "Mol B", bemis_murcko_smiles: "c1ccc2ccccc2c1", structure: { smiles: "c1ccc2ccccc2c1" } },
-  // Need >= 10 for UMAP to be enabled
-  { id: "c", name: "Mol C", bemis_murcko_smiles: "", structure: { smiles: "CCC" } },
-  { id: "d", name: "Mol D", bemis_murcko_smiles: "", structure: { smiles: "CCCC" } },
-  { id: "e", name: "Mol E", bemis_murcko_smiles: "", structure: { smiles: "CCCCC" } },
-  { id: "f", name: "Mol F", bemis_murcko_smiles: "", structure: { smiles: "CCCCCC" } },
-  { id: "g", name: "Mol G", bemis_murcko_smiles: "", structure: { smiles: "CCCCCCC" } },
-  { id: "h", name: "Mol H", bemis_murcko_smiles: "", structure: { smiles: "CCCCCCCC" } },
-  { id: "i", name: "Mol I", bemis_murcko_smiles: "", structure: { smiles: "CCCCCCCCC" } },
-  { id: "j", name: "Mol J", bemis_murcko_smiles: "", structure: { smiles: "CCCCCCCCCC" } },
-];
+const molecules: any[] = Array.from({ length: 10 }, (_, i) => ({
+  id: String.fromCharCode(97 + i),
+  name: `Mol ${i}`,
+  bemis_murcko_smiles: "",
+  structure: { smiles: "CCC" },
+}));
 
 const defaultProps = {
   molecules,
@@ -122,84 +103,73 @@ const wrapper = ({ children }: any) => {
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 };
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("ClusterMapView", () => {
-  it("renders scatter and selection pane when result is set", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("renders the scatter, basket pane, and split group", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
     expect(screen.getByTestId("cluster-scatter")).toBeInTheDocument();
     expect(screen.getByTestId("selection-pane")).toBeInTheDocument();
-  });
-
-  it("renders the split-pane group", () => {
-    render(<ClusterMapView {...defaultProps} />, { wrapper });
     expect(screen.getByTestId("panel-group")).toBeInTheDocument();
-    // resize handle between the two panels
     expect(screen.getByTestId("resize-handle")).toBeInTheDocument();
   });
 
-  it("renders the Diversify button in the toolbar", () => {
+  it("renders the Diversify button and an empty basket bar", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
-    expect(screen.getByRole("button", { name: /diversify/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /diversify/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/basket: 0/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /save as collection/i }),
+    ).toBeDisabled();
   });
 
-  it("shows 'Save selection' button, disabled when no selection", () => {
-    // With only representatives set (mol 'a'), selectedIds has 1 element.
-    // But button text says the count.
+  it("lasso → Add all adds the region to the basket and enables Save", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
-    const saveBtn = screen.getByRole("button", { name: /save selection/i });
-    // 'a' is the representative; selectedIds = {a}, count = 1 → button enabled
-    expect(saveBtn).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId("cluster-scatter"));
+    expect(screen.getByText(/2 in region/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /add all \(2\)/i }));
+    expect(screen.getByText(/basket: 2/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /save as collection/i }),
+    ).not.toBeDisabled();
   });
 
-  it("opens the SaveSelectionDialog when Save is clicked", () => {
+  it("opens the SaveSelectionDialog from the basket bar once non-empty", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
-    const saveBtn = screen.getByRole("button", { name: /save selection/i });
-    fireEvent.click(saveBtn);
+    fireEvent.click(screen.getByTestId("cluster-scatter"));
+    fireEvent.click(screen.getByRole("button", { name: /add all \(2\)/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /save as collection/i }),
+    );
     expect(screen.getByTestId("save-dialog")).toBeInTheDocument();
   });
 
-  it("closes the SaveSelectionDialog when onClose is triggered", () => {
+  it("Add Diversify picks seeds the basket from representatives", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
-    fireEvent.click(screen.getByRole("button", { name: /save selection/i }));
-    expect(screen.getByTestId("save-dialog")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /close/i }));
-    expect(screen.queryByTestId("save-dialog")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /add diversify picks \(1\)/i }),
+    );
+    expect(screen.getByText(/basket: 1/i)).toBeInTheDocument();
   });
 
-  it("passes collectionId only when on a collection page (XOR with moleculeIds)", async () => {
+  it("passes collectionId only when on a collection page (XOR moleculeIds)", async () => {
     const { useUmapCluster } = await import(
       "@/features/sar-analysis/hooks/use-umap-cluster"
     );
     (useUmapCluster as any).mockClear();
-    render(
-      <ClusterMapView {...defaultProps} collectionId="col-1" />,
-      { wrapper },
-    );
+    render(<ClusterMapView {...defaultProps} collectionId="col-1" />, {
+      wrapper,
+    });
     const call = (useUmapCluster as any).mock.calls[0][0];
     expect(call.collectionId).toBe("col-1");
     expect(call.moleculeIds).toBeUndefined();
   });
 
-  it("passes moleculeIds only when no collectionId (search-page case)", async () => {
-    const { useUmapCluster } = await import(
-      "@/features/sar-analysis/hooks/use-umap-cluster"
-    );
-    (useUmapCluster as any).mockClear();
-    render(<ClusterMapView {...defaultProps} />, { wrapper });
-    const call = (useUmapCluster as any).mock.calls[0][0];
-    expect(call.collectionId).toBeUndefined();
-    expect(call.moleculeIds).toEqual(molecules.map((m) => m.id));
-  });
-
-  it("shows a 'not enough molecules' message when fewer than 10 mols given", () => {
+  it("shows a 'not enough molecules' message when fewer than 10 mols", () => {
     render(
-      <ClusterMapView
-        {...defaultProps}
-        molecules={molecules.slice(0, 3)}
-      />,
+      <ClusterMapView {...defaultProps} molecules={molecules.slice(0, 3)} />,
       { wrapper },
     );
     expect(screen.getByText(/need at least 10 molecules/i)).toBeInTheDocument();

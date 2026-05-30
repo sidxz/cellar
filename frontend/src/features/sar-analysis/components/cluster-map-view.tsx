@@ -10,19 +10,20 @@ import {
 import type { Molecule } from "@/features/chemical-registration/types";
 
 import { useUmapCluster } from "../hooks/use-umap-cluster";
+import { useCherrypickBasket } from "../hooks/use-cherrypick-basket";
+import { useRegionDiversePick } from "../hooks/use-region-diverse-pick";
 import { usePickerConfig } from "../lib/use-picker-config";
 import { useColorMode } from "../lib/use-color-mode";
 import type { ColorOption } from "../lib/cluster-palette";
 import { ClusterScatter } from "./cluster-scatter";
 import { ClusterToolbar } from "./cluster-toolbar";
+import { ClusterBasketBar } from "./cluster-basket-bar";
+import { RegionActionBar } from "./region-action-bar";
 import { ClusterSelectionPane } from "./cluster-selection-pane";
 import { ColorModePicker, type ProtocolOption } from "./color-mode-picker";
 import { SaveSelectionDialog } from "./save-selection-dialog";
 
-// ---------------------------------------------------------------------------
 // react-resizable-panels v4: STRING = percent, NUMBER = pixels.
-// Always use strings for percent-based layout. See feedback_react_resizable_panels_v4_pixels.md
-// ---------------------------------------------------------------------------
 const SCATTER_DEFAULT_PCT = "70%";
 const SCATTER_MIN_PCT = "50%";
 const SCATTER_MAX_PCT = "80%";
@@ -30,13 +31,8 @@ const PANE_DEFAULT_PCT = "30%";
 const PANE_MIN_PCT = "20%";
 const PANE_MAX_PCT = "50%";
 
-// Minimum molecule count before UMAP is attempted. Below this the 2-D
-// projection is degenerate and the hook would fail on the BE anyway.
 const MIN_MOLS_FOR_UMAP = 10;
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
+const DEFAULT_REGION_N = 12;
 
 export interface ClusterMapViewProps {
   molecules: Molecule[];
@@ -53,17 +49,6 @@ export interface ClusterMapViewProps {
   sourceLabel: string;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Build a mol-id → pIC50 lookup for a given protocol from the activityData
- * shape used by the research-org search layer.
- *
- * activityData: Record<moleculeId, Record<protocolId, { pic50?: number | null }>>
- * Returns null for mols with no data for the requested protocol.
- */
 function buildActivityPic50(
   molecules: Molecule[],
   activityData: Record<string, Record<string, any>>,
@@ -75,20 +60,15 @@ function buildActivityPic50(
       out[mol.id] = null;
       continue;
     }
-    const perMol = activityData[mol.id];
-    const entry = perMol?.[protocolId];
-    // Prefer pic50; fall back to null so the scatter renders transparent.
+    const entry = activityData[mol.id]?.[protocolId];
     out[mol.id] = entry?.pic50 ?? entry?.pIC50 ?? null;
   }
   return out;
 }
 
-/**
- * Build a mol-id → scaffold SMILES (or null) lookup from molecules.
- * The Molecule type carries `bemis_murcko_smiles` set by the BE at
- * registration time; an empty string means "acyclic — no scaffold".
- */
-function buildScaffoldByMol(molecules: Molecule[]): Record<string, string | null> {
+function buildScaffoldByMol(
+  molecules: Molecule[],
+): Record<string, string | null> {
   const out: Record<string, string | null> = {};
   for (const mol of molecules) {
     const s = (mol as any).bemis_murcko_smiles;
@@ -96,10 +76,6 @@ function buildScaffoldByMol(molecules: Molecule[]): Record<string, string | null
   }
   return out;
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 export function ClusterMapView({
   molecules,
@@ -111,9 +87,6 @@ export function ClusterMapView({
   defaultProjectId,
   sourceLabel,
 }: ClusterMapViewProps) {
-  // --- Picker & color URL state ---
-  // Size-adaptive default N: ~10% of the compound set, clamped to [5, 50].
-  // For a 22-mol collection the default is 5 (not the old hardcoded 50).
   const { picker, n, threshold, setPicker, setN, setThreshold } =
     usePickerConfig({ collectionSize: molecules.length });
   const { mode: colorMode, protocolId: colorProtocolId, setMode: setColorMode } =
@@ -121,21 +94,12 @@ export function ClusterMapView({
       defaultMode: defaultColorProtocolId ? "activity" : "cluster",
     });
 
-  // --- Lasso + subset state ---
-  // Plotly's onSelected gives us the selected molecule IDs directly (more
-  // reliable than reconstructing the polygon + running point-in-polygon).
+  // Lasso region (transient).
   const [lassoedIds, setLassoedIds] = useState<Set<string>>(new Set());
-  // When user hits Diversify with a lasso active, snapshot those IDs into
-  // pendingSubset to scope re-computation to the selection.
-  const [pendingSubset, setPendingSubset] = useState<string[] | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [regionN, setRegionN] = useState(DEFAULT_REGION_N);
+  const [saveOpen, setSaveOpen] = useState(false);
 
-  // --- Committed picker config ---
-  // Toolbar (`picker`, `n`, `threshold` from URL state) holds the PENDING
-  // config the chemist is composing. The map only re-fetches when the chemist
-  // hits Diversify, which commits pending → committed below. Auto-fetch on
-  // every keystroke would burn server compute + cache slots; the explicit
-  // Diversify trigger matches the brainstormed interaction model.
+  // Committed picker config — the map only recomputes on Diversify.
   const [committedPicker, setCommittedPicker] = useState(picker);
   const [committedN, setCommittedN] = useState(n);
   const [committedThreshold, setCommittedThreshold] = useState(threshold);
@@ -144,62 +108,36 @@ export function ClusterMapView({
     (picker === "maxmin" && committedN !== n) ||
     committedThreshold !== threshold;
 
-  // --- All mol IDs (for the hook) ---
   const allIds = useMemo(() => molecules.map((m) => m.id), [molecules]);
 
-  // --- UMAP hook ---
-  // API contract: exactly one of collection_id / molecule_ids. Send collection_id
-  // for full-collection compute (server expands membership); send molecule_ids
-  // for /search or for a lasso-scoped subset.
-  const useCollectionSource = !pendingSubset && Boolean(collectionId);
+  // --- Map UMAP (must be called BEFORE useRegionDiversePick for the test's
+  //     mock.calls[0] ordering). Diversify is decoupled from the lasso: the
+  //     map always computes over the whole collection / set.
   const { result, loading, error, cancel } = useUmapCluster({
-    collectionId: useCollectionSource ? collectionId : undefined,
-    moleculeIds: useCollectionSource ? undefined : (pendingSubset ?? allIds),
+    collectionId: collectionId ?? undefined,
+    moleculeIds: collectionId ? undefined : allIds,
     picker: committedPicker,
     n: committedN,
     threshold: committedThreshold,
     enabled: molecules.length >= MIN_MOLS_FOR_UMAP,
   });
 
-  // --- Derived selection state ---
+  // --- Cherry-pick basket (persistent) + region diverse-pick (on-demand).
+  const basket = useCherrypickBasket(collectionId);
+  const region = useRegionDiversePick();
 
-  // Representatives from the cluster result.
   const repIds: Set<string> = useMemo(
     () => new Set((result?.representatives ?? []).map((r) => r.moleculeId)),
     [result],
   );
 
-  // Selection precedence: an active lasso wins over the auto-Diversify picks.
-  // No lasso → show the picks. Lasso around empty space → still show the picks
-  // (chemist can retry; they didn't lose context).
-  const selectedIds: Set<string> = useMemo(() => {
-    if (lassoedIds.size > 0) return lassoedIds;
-    return repIds;
-  }, [lassoedIds, repIds]);
-
-  const selectedMolecules = useMemo(
-    () => molecules.filter((m) => selectedIds.has(m.id)),
-    [molecules, selectedIds],
-  );
-
-  // --- Color derivations for ClusterScatter ---
-
-  // activityData is not threaded in at this component level — color-by-activity
-  // uses the protocol's pic50 values from the molecules themselves. For now
-  // we build a null map; callers that want live activity colors should extend
-  // ClusterMapViewProps with an `activityData` prop (see V3 follow-up plan).
+  // --- Color derivations.
   const activityPic50 = useMemo(
     () => buildActivityPic50(molecules, {}, colorProtocolId),
     [molecules, colorProtocolId],
   );
+  const scaffoldByMol = useMemo(() => buildScaffoldByMol(molecules), [molecules]);
 
-  const scaffoldByMol = useMemo(
-    () => buildScaffoldByMol(molecules),
-    [molecules],
-  );
-
-  // Chemist-readable hover label: prefer "reg_number · name" → reg_number → name
-  // → short id. UUIDs are never shown.
   const labelByMolId = useMemo(() => {
     const map: Record<string, string> = {};
     for (const m of molecules) {
@@ -214,46 +152,64 @@ export function ClusterMapView({
   }, [molecules]);
 
   const colorOption: ColorOption = useMemo(() => {
-    if (colorMode === "activity" && colorProtocolId) {
+    if (colorMode === "activity" && colorProtocolId)
       return { mode: "activity", protocolId: colorProtocolId };
-    }
     if (colorMode === "scaffold") return { mode: "scaffold" };
     if (colorMode === "none") return { mode: "none" };
     return { mode: "cluster" };
   }, [colorMode, colorProtocolId]);
 
-  // --- Handlers ---
-
-  const handleLassoSelected = useCallback(
-    (ids: string[] | null) => {
-      setLassoedIds(new Set(ids ?? []));
-    },
-    [],
-  );
+  // --- Handlers.
+  const handleLassoSelected = useCallback((ids: string[] | null) => {
+    setLassoedIds(new Set(ids ?? []));
+  }, []);
 
   const handlePointClick = useCallback((_moleculeId: string) => {
-    // Future: open molecule detail panel. No-op for now.
+    // Future: open molecule detail panel.
   }, []);
 
   const handleDiversify = useCallback(() => {
-    // Commit pending picker config → committed (triggers refetch).
     setCommittedPicker(picker);
     setCommittedN(n);
     setCommittedThreshold(threshold);
-    // Snapshot lasso into pendingSubset to re-scope computation; clear the
-    // lasso so the next interaction starts fresh.
-    setPendingSubset(lassoedIds.size > 0 ? [...lassoedIds] : null);
+  }, [picker, n, threshold]);
+
+  const handlePickDiverse = useCallback(() => {
+    if (lassoedIds.size > 0) region.pick([...lassoedIds], regionN);
+  }, [lassoedIds, regionN, region]);
+
+  const handleAddPicks = useCallback(() => {
+    basket.addMany([...region.pickedIds]);
+    region.reset();
+  }, [basket, region]);
+
+  const handleAddAll = useCallback(() => {
+    basket.addMany([...lassoedIds]);
+  }, [basket, lassoedIds]);
+
+  const handleRemoveRegion = useCallback(() => {
+    basket.removeMany([...lassoedIds]);
+  }, [basket, lassoedIds]);
+
+  const handleClearRegion = useCallback(() => {
     setLassoedIds(new Set());
-  }, [lassoedIds, picker, n, threshold]);
+    region.reset();
+  }, [region]);
+
+  const handleAddRepPicks = useCallback(() => {
+    basket.addMany([...repIds]);
+  }, [basket, repIds]);
 
   const handleSave = useCallback(() => {
-    if (selectedIds.size === 0) return;
-    setPreviewOpen(true);
-  }, [selectedIds]);
+    if (basket.size > 0) setSaveOpen(true);
+  }, [basket.size]);
 
-  const defaultName = `Diversify-${selectedIds.size} from ${sourceLabel}`;
+  const basketMolecules = useMemo(
+    () => molecules.filter((m) => basket.ids.has(m.id)),
+    [molecules, basket.ids],
+  );
+  const defaultName = `cherrypick-${basket.size} from ${sourceLabel}`;
 
-  // --- Not enough molecules ---
   if (molecules.length < MIN_MOLS_FOR_UMAP) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
@@ -263,29 +219,23 @@ export function ClusterMapView({
     );
   }
 
-  // --- Error state ---
   if (error) {
     return (
-      <div className="p-6 text-sm text-rose-600">
-        Cluster map failed: {error}
-      </div>
+      <div className="p-6 text-sm text-rose-600">Cluster map failed: {error}</div>
     );
   }
 
   return (
     <div className="flex flex-col h-[calc(100vh-14rem)] min-h-[480px]">
-      {/* Toolbar — picker controls + color-by + action buttons */}
       <ClusterToolbar
         picker={picker}
         n={n}
         threshold={threshold}
-        selectedCount={selectedIds.size}
         onPickerChange={setPicker}
         onNChange={setN}
         onThresholdChange={setThreshold}
         onDiversify={handleDiversify}
         diversifyDirty={isDirty}
-        onSave={handleSave}
         colorPicker={
           <ColorModePicker
             mode={colorMode}
@@ -296,8 +246,14 @@ export function ClusterMapView({
         }
       />
 
-      {/* Status row — disambiguates picks vs chemotype clusters so the chemist
-          isn't surprised when N=2 shows 8 colors on the map. */}
+      <ClusterBasketBar
+        count={basket.size}
+        repCount={repIds.size}
+        onAddRepPicks={handleAddRepPicks}
+        onSave={handleSave}
+        onClear={basket.clear}
+      />
+
       {result && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
           <span>
@@ -312,23 +268,32 @@ export function ClusterMapView({
             <span className="font-medium text-foreground">
               {result.representatives.length}
             </span>{" "}
-            representative
-            {result.representatives.length === 1 ? "" : "s"} (
+            representative{result.representatives.length === 1 ? "" : "s"} (
             {committedPicker === "maxmin"
               ? `MaxMin N=${committedN}`
               : "Butina medoids"}
             )
           </span>
           <span className="text-border">·</span>
-          <span>
-            {lassoedIds.size > 0
-              ? `Lasso: ${lassoedIds.size} selected`
-              : "Drag on the map to lasso a region"}
-          </span>
+          {lassoedIds.size > 0 ? (
+            <RegionActionBar
+              regionCount={lassoedIds.size}
+              n={regionN}
+              onNChange={setRegionN}
+              onPickDiverse={handlePickDiverse}
+              picking={region.loading}
+              pickCount={region.pickedIds.size}
+              onAddPicks={handleAddPicks}
+              onAddAll={handleAddAll}
+              onRemove={handleRemoveRegion}
+              onClear={handleClearRegion}
+            />
+          ) : (
+            <span>Drag on the map to lasso a region</span>
+          )}
         </div>
       )}
 
-      {/* Split pane — scatter left, selection pane right */}
       <ResizablePanelGroup
         orientation="horizontal"
         className="flex-1 rounded-md border"
@@ -363,6 +328,8 @@ export function ClusterMapView({
                 scaffoldByMol={scaffoldByMol}
                 labelByMolId={labelByMolId}
                 lassoedIds={lassoedIds}
+                basketIds={basket.ids}
+                regionPickIds={region.pickedIds}
                 onSelected={handleLassoSelected}
                 onPointClick={handlePointClick}
               />
@@ -384,20 +351,19 @@ export function ClusterMapView({
         >
           <ClusterSelectionPane
             allMolecules={molecules}
-            selectedIds={selectedIds}
+            basketIds={basket.ids}
           />
         </ResizablePanel>
       </ResizablePanelGroup>
 
-      {/* Save-as-collection dialog */}
       <SaveSelectionDialog
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
+        open={saveOpen}
+        onClose={() => setSaveOpen(false)}
         onSave={async (args) => {
           await onSaveCollection(args);
-          setPreviewOpen(false);
+          setSaveOpen(false);
         }}
-        selectedMolecules={selectedMolecules}
+        selectedMolecules={basketMolecules}
         defaultName={defaultName}
         projects={projects}
         defaultProjectId={defaultProjectId}
