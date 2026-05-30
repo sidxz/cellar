@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from cellar.application.screening.fit_dose_response import FitOverrides
 from cellar.application.screening.get_plate_map import GetPlateMapQuery
+from cellar.application.shared.grid_plate_reshaper import reshape_grid_to_well_value_csv
 from cellar.application.screening.import_run_readouts import (
     ImportRunReadoutsCommand,
     ImportRunReadoutsResult,
@@ -20,6 +21,7 @@ from cellar.application.screening.plate_setup import (
     SetUpRunPlateCommand,
 )
 from cellar.domain.screening_assay.enums import HillSlopeConstraint
+from cellar.domain.shared.errors import ValidationError
 from cellar.interface.dependencies import (
     AuthDep,
     GetPlateMapDep,
@@ -263,6 +265,7 @@ async def import_run_readouts(
     import_uc: ImportRunReadoutsDep,
     calc_engine: ReadoutCalculationEngineDep,
     readout_definition_id: Annotated[uuid.UUID | None, Query()] = None,
+    layout: Annotated[str, Query()] = "long",
 ) -> ImportReadoutsResponse:
     """Import readout data from a CSV or XLSX into a run that already has wells set up.
 
@@ -274,14 +277,29 @@ async def import_run_readouts(
     - Single-value: ``Well, Value`` columns with ``readout_definition_id`` query param.
     - Multi-column: ``Well, <ReadoutDefName1>, <ReadoutDefName2>, ...`` — headers
       matched case-insensitively to readout definition names.
+    - Grid (``layout=grid``): a plate matrix (column numbers across the top, row
+      letters down the side) for a single ``readout_definition_id``; reshaped to
+      ``Well, Value`` before import.
     """
     content = await file.read()
+    filename = file.filename or ""
+
+    # Grid layout: reshape the plate matrix into the Well,Value long format the
+    # importer already understands. A grid carries a single readout, so the
+    # readout definition must be supplied.
+    if layout == "grid":
+        if readout_definition_id is None:
+            raise ValidationError(
+                "Grid layout requires a readout to import into (readout_definition_id)."
+            )
+        content = reshape_grid_to_well_value_csv(content, filename)
+        filename = "grid.csv"
 
     cmd = ImportRunReadoutsCommand(
         workspace_id=auth.workspace_id,
         run_id=run_id,
         file_content=content,
-        filename=file.filename or "",
+        filename=filename,
         readout_definition_id=readout_definition_id,
     )
     result = await import_uc(cmd, auth=auth)

@@ -17,6 +17,7 @@ from cellar.application.screening.import_run_readouts import (
     ImportRunReadoutsCommand,
     ImportRunReadoutsResult,
 )
+from cellar.application.shared.grid_plate_reshaper import reshape_grid_to_well_value_csv
 from cellar.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
@@ -391,3 +392,47 @@ class TestImportRunReadouts:
         from cellar.domain.shared.errors import AuthorizationError
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
+
+    @pytest.mark.asyncio
+    async def test_grid_reshaped_then_imported(self):
+        """A plate grid, reshaped to Well,Value, imports correctly via the use case.
+
+        Proves the grid reshaper output composes with the existing readout import
+        end-to-end (no DB). A grid cell with no matching run well is unmatched.
+        """
+        ws_id, auth = _make_ws_and_auth()
+        plate_id = uuid.uuid4()
+        batch = FakeBatch()
+        wells = [
+            _make_well(plate_id, "A", 1, batch_id=batch.id),
+            _make_well(plate_id, "A", 2, batch_id=batch.id),
+            _make_well(plate_id, "B", 1, batch_id=batch.id),
+        ]
+        run = _make_run_with_wells(ws_id, wells)
+        protocol = _make_protocol(ws_id, ["% Inhibition"])
+        rd_id = protocol.readout_definitions[0].id
+
+        saved: list = []
+        uc, _, _ = _build_use_case(
+            run=run, protocol=protocol, batch=batch, save_bulk_called=saved
+        )
+
+        # Grid covers A1,A2,B1,B2 — but B2 is not a run well.
+        grid = b",1,2\nA,2.3,5.1\nB,4.2,6.3\n"
+        reshaped = reshape_grid_to_well_value_csv(grid, "plate.csv")
+
+        cmd = ImportRunReadoutsCommand(
+            workspace_id=ws_id,
+            run_id=run.id,
+            file_content=reshaped,
+            filename="grid.csv",
+            readout_definition_id=rd_id,
+        )
+        result = await uc(cmd, auth=auth)
+
+        assert isinstance(result, Success), result
+        res = result.unwrap()
+        assert res.matched == 3
+        assert res.unmatched == 1  # B2 has no run well
+        assert res.readouts_created == 3
+        assert {e.value.value for e in saved} == {2.3, 5.1, 4.2}
