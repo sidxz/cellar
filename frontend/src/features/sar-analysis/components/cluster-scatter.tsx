@@ -12,6 +12,7 @@ import {
   type ColorOption,
 } from "@/features/sar-analysis/lib/cluster-palette";
 import { selectedIdsFromPlotlyEvent } from "@/features/sar-analysis/lib/lasso-math";
+import { buildOverlayTraces } from "@/features/sar-analysis/lib/cluster-overlay";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,6 +30,10 @@ interface ClusterScatterProps {
   /** IDs currently lassoed — when non-empty, non-lassoed points dim to 0.35
    *  opacity so the chemist can see what they selected on the map. */
   lassoedIds?: Set<string>;
+  /** Molecule ids currently in the cherry-pick basket — drawn as emerald rings. */
+  basketIds?: Set<string>;
+  /** Region diverse-pick candidates — drawn as violet open stars. */
+  regionPickIds?: Set<string>;
   /** Fires with the array of selected molecule IDs after a lasso / box selection,
    *  or null when the selection is cleared. */
   onSelected: (moleculeIds: string[] | null) => void;
@@ -66,6 +71,8 @@ export function ClusterScatter({
   scaffoldByMol,
   labelByMolId,
   lassoedIds,
+  basketIds,
+  regionPickIds,
   onSelected,
   onPointClick,
 }: ClusterScatterProps) {
@@ -169,7 +176,17 @@ export function ClusterScatter({
         }
       : null;
 
-  const data = starTrace ? [baseTrace, starTrace] : [baseTrace];
+  const overlayTraces = buildOverlayTraces(
+    points,
+    basketIds,
+    regionPickIds,
+    traceType,
+  );
+  const data = [
+    baseTrace,
+    ...(starTrace ? [starTrace] : []),
+    ...overlayTraces,
+  ];
 
   // PlotProps.onClick / onSelected are not declared on the shared PlotProps
   // interface (which is intentionally loose). We pass them via a cast so the
