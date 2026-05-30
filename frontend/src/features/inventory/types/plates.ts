@@ -27,12 +27,7 @@ export const plateTypeLabels: Record<PlateType, string> = {
   pooled: "Pooled",
 };
 
-export type PlateStatus =
-  | "registered"
-  | "in_use"
-  | "stored"
-  | "depleted"
-  | "disposed";
+export type PlateStatus = "registered" | "in_use" | "stored" | "depleted" | "disposed";
 
 export const plateStatusLabels: Record<PlateStatus, string> = {
   registered: "Registered",
@@ -46,6 +41,8 @@ export interface WellMapping {
   batch_id: string;
   concentration_value: number | null;
   concentration_unit: string | null;
+  /** Role of the well — sample / positive_control / negative_control / blank / reference. */
+  well_type?: string;
 }
 
 export interface RegisteredPlate {

@@ -58,6 +58,16 @@ router = APIRouter(prefix="/api/v1/plates", tags=["plates"])
 # ---------------------------------------------------------------------------
 
 
+class WellEntryModel(BaseModel):
+    """One well's assignment as exposed by the API — flat shape, mirrors storage."""
+
+    batch_id: str | None = None
+    concentration_value: float | None = None
+    concentration_unit: str | None = None
+    well_type: str = "sample"
+    cdd_batch_id_unresolved: int | None = None
+
+
 class PlateResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -65,7 +75,7 @@ class PlateResponse(BaseModel):
     plate_label: str
     format: str
     plate_type: str
-    well_map: dict | None = None
+    well_map: dict[str, WellEntryModel] | None = None
     status: str
     storage_location_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
@@ -83,7 +93,11 @@ class PlateResponse(BaseModel):
             plate_label=p.plate_label,
             format=p.format.value,
             plate_type=p.plate_type.value,
-            well_map=p.well_map or None,
+            well_map=(
+                {pos: WellEntryModel(**wa.to_dict()) for pos, wa in p.well_map.items()}
+                if p.well_map
+                else None
+            ),
             status=p.status.value,
             storage_location_id=p.storage_location_id,
             project_id=p.project_id,

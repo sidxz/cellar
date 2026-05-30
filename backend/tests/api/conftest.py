@@ -76,6 +76,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     from cellar.interface.routes.readout_data import router as readout_data_router
     from cellar.interface.routes.scaffold_tree import router as scaffold_tree_router
     from cellar.interface.routes.umap_cluster import router as umap_cluster_router
+    from cellar.interface.routes.registered_plates import router as registered_plates_router
 
     app.include_router(user_router)
     app.include_router(org_router)
@@ -85,6 +86,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(export_router)
     app.include_router(export_legacy_router)
     app.include_router(plate_template_router)
+    app.include_router(registered_plates_router)
     app.include_router(project_router)
     app.include_router(collection_router)
     app.include_router(collection_import_previews_router)

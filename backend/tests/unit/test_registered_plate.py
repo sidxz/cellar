@@ -13,9 +13,10 @@ from cellar.domain.inventory.events import (
     PlateWellsMapped,
 )
 from cellar.domain.inventory.registered_plate import RegisteredPlate
-from cellar.domain.screening_assay.enums import PlateFormat
+from cellar.domain.inventory.well_assignment import WellAssignment
+from cellar.domain.shared.enums import ConcentrationUnit, PlateFormat, WellType
 from cellar.domain.shared.errors import ValidationError
-from cellar.domain.shared.value_objects import Barcode
+from cellar.domain.shared.value_objects import Barcode, Concentration
 
 
 def _make_plate(**overrides):
@@ -29,6 +30,14 @@ def _make_plate(**overrides):
     )
     defaults.update(overrides)
     return RegisteredPlate.register(**defaults)
+
+
+def _wa(batch_id=None, value=10.0, unit=ConcentrationUnit.MM, well_type=WellType.SAMPLE):
+    return WellAssignment(
+        well_type=well_type,
+        batch_id=batch_id,
+        concentration=Concentration(value=value, unit=unit) if value else None,
+    )
 
 
 class TestRegister:
@@ -58,30 +67,39 @@ class TestMapWells:
     def test_sets_well_map(self):
         plate = _make_plate()
         batch_id = uuid.uuid4()
-        well_map = {"A1": {"batch_id": str(batch_id), "concentration_value": 10.0, "concentration_unit": "mM"}}
-        plate.map_wells(well_map)
-        assert plate.well_map == well_map
+        wa = _wa(batch_id=batch_id)
+        plate.map_wells({"A1": wa})
+        assert plate.well_map == {"A1": wa}
+        assert plate.well_map["A1"].batch_id == batch_id
+        assert plate.well_map["A1"].well_type == WellType.SAMPLE
 
     def test_emits_wells_mapped_event(self):
         plate = _make_plate()
-        batch_id = uuid.uuid4()
-        well_map = {"A1": {"batch_id": str(batch_id), "concentration_value": 10.0, "concentration_unit": "mM"}}
         plate.clear_events()
-        plate.map_wells(well_map)
+        plate.map_wells({"A1": _wa(batch_id=uuid.uuid4())})
         events = plate.collect_events()
         assert len(events) == 1
         assert isinstance(events[0], PlateWellsMapped)
         assert events[0].well_count == 1
 
+    def test_emits_batch_ids_for_mapped_wells(self):
+        plate = _make_plate()
+        bid = uuid.uuid4()
+        plate.clear_events()
+        plate.map_wells(
+            {"A1": _wa(batch_id=bid), "A2": _wa(batch_id=None, well_type=WellType.BLANK)}
+        )
+        events = plate.collect_events()
+        assert events[0].batch_ids == [bid]  # blank well contributes no batch id
+
     def test_rejects_invalid_position_for_format(self):
         plate = _make_plate(format=PlateFormat.F96)
         with pytest.raises(ValidationError, match="position"):
-            plate.map_wells({"P24": {"batch_id": str(uuid.uuid4()), "concentration_value": 1.0, "concentration_unit": "mM"}})
+            plate.map_wells({"P24": _wa(batch_id=uuid.uuid4())})
 
     def test_accepts_valid_positions_for_384(self):
         plate = _make_plate(format=PlateFormat.F384)
-        batch_id = uuid.uuid4()
-        plate.map_wells({"P24": {"batch_id": str(batch_id), "concentration_value": 1.0, "concentration_unit": "mM"}})
+        plate.map_wells({"P24": _wa(batch_id=uuid.uuid4())})
         assert "P24" in plate.well_map
 
 
@@ -140,6 +158,6 @@ class TestMove:
 class TestFormatImmutability:
     def test_cannot_change_format_with_mapped_wells(self):
         plate = _make_plate(format=PlateFormat.F96)
-        plate.map_wells({"A1": {"batch_id": str(uuid.uuid4()), "concentration_value": 1.0, "concentration_unit": "mM"}})
+        plate.map_wells({"A1": _wa(batch_id=uuid.uuid4())})
         with pytest.raises(ValidationError, match="format"):
             plate.update(format=PlateFormat.F384)

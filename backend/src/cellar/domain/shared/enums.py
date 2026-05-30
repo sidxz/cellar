@@ -67,6 +67,16 @@ class PlateFormat(StrEnum):
     F1536 = "1536"
 
 
+class WellType(StrEnum):
+    """Role of a well on a plate — shared across screening and inventory contexts."""
+
+    SAMPLE = "sample"
+    POSITIVE_CONTROL = "positive_control"
+    NEGATIVE_CONTROL = "negative_control"
+    BLANK = "blank"
+    REFERENCE = "reference"
+
+
 class AssignmentType(StrEnum):
     """Synthesis request assignment target."""
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from cellar.domain.inventory.well_assignment import WellAssignment
 from cellar.domain.shared.enums import AmountUnit, ConcentrationUnit, LightCondition
 from cellar.domain.shared.value_objects import (
     Amount,
@@ -104,3 +105,20 @@ def storage_to_columns(storage: StorageCondition | None) -> dict[str, object | N
             storage.light_condition.value if storage.light_condition else None
         ),
     }
+
+
+# --- WellAssignment map (JSONB on RegisteredPlate.well_map) ------------------
+
+
+def well_map_from_jsonb(raw: dict | None) -> dict[str, WellAssignment]:
+    """Deserialize a plate's JSONB well_map into typed WellAssignment VOs."""
+    if not raw:
+        return {}
+    return {pos: WellAssignment.from_dict(entry) for pos, entry in raw.items()}
+
+
+def well_map_to_jsonb(well_map: dict[str, WellAssignment]) -> dict | None:
+    """Serialize a typed well_map into the flat JSONB shape (or None when empty)."""
+    if not well_map:
+        return None
+    return {pos: wa.to_dict() for pos, wa in well_map.items()}

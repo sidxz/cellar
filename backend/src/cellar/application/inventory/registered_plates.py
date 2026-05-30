@@ -18,6 +18,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.enums import PlateStatus, PlateType
 from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
+from cellar.domain.inventory.well_assignment import WellAssignment
 from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import Barcode
@@ -169,7 +170,9 @@ class RegisterPlate:
             )
 
             if input.well_map:
-                plate.map_wells(input.well_map)
+                plate.map_wells(
+                    {pos: WellAssignment.from_dict(entry) for pos, entry in input.well_map.items()}
+                )
 
             await self._repo.save(plate)
             events = await self._uow.commit()
@@ -313,7 +316,9 @@ class MapWells:
                 entry["batch_id"] = str(batch.id)
                 seen_refs[raw] = batch.id
 
-            plate.map_wells(resolved_map)
+            plate.map_wells(
+                {pos: WellAssignment.from_dict(entry) for pos, entry in resolved_map.items()}
+            )
 
             await self._repo.save(plate)
             events = await self._uow.commit()

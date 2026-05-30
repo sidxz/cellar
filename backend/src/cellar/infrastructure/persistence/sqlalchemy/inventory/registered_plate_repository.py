@@ -16,6 +16,10 @@ from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
     escape_like,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory._vo_mappers import (
+    well_map_from_jsonb,
+    well_map_to_jsonb,
+)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     RegisteredPlateModel,
 )
@@ -145,7 +149,7 @@ class SQLAlchemyRegisteredPlateRepository(
             plate_type=PlateType(model.plate_type),
             registered_by=model.registered_by,
             status=PlateStatus(model.status),
-            well_map=model.well_map if model.well_map is not None else {},
+            well_map=well_map_from_jsonb(model.well_map),
             storage_location_id=model.storage_location_id,
             parent_plate_id=model.parent_plate_id,
             project_id=model.project_id,
@@ -166,7 +170,7 @@ class SQLAlchemyRegisteredPlateRepository(
             plate_type=aggregate.plate_type.value,
             registered_by=aggregate.registered_by,
             status=aggregate.status.value,
-            well_map=aggregate.well_map if aggregate.well_map else None,
+            well_map=well_map_to_jsonb(aggregate.well_map),
             storage_location_id=aggregate.storage_location_id,
             parent_plate_id=aggregate.parent_plate_id,
             project_id=aggregate.project_id,
@@ -181,7 +185,7 @@ class SQLAlchemyRegisteredPlateRepository(
         model.format = aggregate.format.value
         model.plate_type = aggregate.plate_type.value
         model.status = aggregate.status.value
-        model.well_map = aggregate.well_map if aggregate.well_map else None
+        model.well_map = well_map_to_jsonb(aggregate.well_map)
         model.storage_location_id = aggregate.storage_location_id
         model.parent_plate_id = aggregate.parent_plate_id
         model.project_id = aggregate.project_id

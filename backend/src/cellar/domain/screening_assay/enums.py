@@ -106,14 +106,9 @@ class TargetType(StrEnum):
 from cellar.domain.shared.enums import PlateFormat as PlateFormat  # noqa: F401
 
 
-class WellType(StrEnum):
-    """Role of a well on a plate."""
-
-    SAMPLE = "sample"
-    POSITIVE_CONTROL = "positive_control"
-    NEGATIVE_CONTROL = "negative_control"
-    BLANK = "blank"
-    REFERENCE = "reference"
+# WellType is shared across screening and inventory — canonical definition
+# lives in domain.shared.enums. Re-exported here for backwards compatibility.
+from cellar.domain.shared.enums import WellType as WellType  # noqa: F401, E402
 
 
 class RunStatus(StrEnum):

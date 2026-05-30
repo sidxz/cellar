@@ -378,20 +378,14 @@ class ImportPlateDataService:
                     well_map = plate.well_map if hasattr(plate, "well_map") else {}
                     well_entry = well_map.get(well_pos) if well_map else None
 
-                    if not well_entry or not well_entry.get("batch_id"):
+                    if well_entry is None or well_entry.batch_id is None:
                         errors.append(
                             f"Row {row_num}: Well {well_pos} not mapped on plate {barcode!r}"
                         )
                         skipped += 1
                         continue
 
-                    batch_id_raw = well_entry["batch_id"]
-                    try:
-                        batch_id = uuid.UUID(str(batch_id_raw))
-                    except (ValueError, AttributeError):
-                        errors.append(f"Row {row_num}: Invalid batch_id {batch_id_raw!r}")
-                        skipped += 1
-                        continue
+                    batch_id = well_entry.batch_id
 
                     batch = await self._batch_repo.find_by_id_in_workspace(workspace_id, batch_id)
                     if batch is None:

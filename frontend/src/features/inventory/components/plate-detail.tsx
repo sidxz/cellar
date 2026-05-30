@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Copy, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
+import { AttachmentList, FileUploadZone } from "@/features/attachment";
+import { useProject } from "@/features/research-organization/hooks/use-projects";
+import { usePlateTemplate } from "@/features/screening-assay/hooks/use-plate-templates";
+import { WELL_TYPE_LABELS, type WellType } from "@/features/screening-assay/types";
+import { DetailShell } from "@/shared/components/detail-shell";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -25,16 +27,15 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { DetailShell } from "@/shared/components/detail-shell";
-import { StatusBadge } from "@/shared/components/status-badge";
-import { AttachmentList, FileUploadZone } from "@/features/attachment";
-import { usePlate, usePlateChildren, useChangeStatus, useDerivePlate } from "../hooks/use-plates";
-import type { PlateStatus, PlateType, WellMapping } from "../types/plates";
+import { Copy, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useChangeStatus, useDerivePlate, usePlate, usePlateChildren } from "../hooks/use-plates";
+import { useStorageLocations } from "../hooks/use-storage-locations";
+import type { PlateType, WellMapping } from "../types/plates";
 import { plateTypeLabels } from "../types/plates";
 import { WellMappingDialog } from "./well-mapping-dialog";
-import { useStorageLocations } from "../hooks/use-storage-locations";
-import { usePlateTemplate } from "@/features/screening-assay/hooks/use-plate-templates";
-import { useProject } from "@/features/research-organization/hooks/use-projects";
 
 // ---------------------------------------------------------------------------
 // ID → name resolver helpers
@@ -66,10 +67,7 @@ function ResolvedParentPlate({ id }: { id: string | null }) {
   const { data: parent } = usePlate(id ?? undefined);
   if (!id) return <span className="text-muted-foreground">None</span>;
   return (
-    <Link
-      href={`/inventory/plates/${id}`}
-      className="text-primary hover:underline font-mono"
-    >
+    <Link href={`/inventory/plates/${id}`} className="text-primary hover:underline font-mono">
       {parent ? parent.barcode : "View parent"}
     </Link>
   );
@@ -80,8 +78,18 @@ function ResolvedParentPlate({ id }: { id: string | null }) {
 // ---------------------------------------------------------------------------
 
 function wellTypeColor(well: WellMapping): string {
-  if (!well.concentration_value) return "bg-muted";
-  return "bg-primary/60";
+  switch (well.well_type) {
+    case "positive_control":
+      return "bg-emerald-500/70";
+    case "negative_control":
+      return "bg-rose-500/70";
+    case "blank":
+      return "bg-slate-400/60";
+    case "reference":
+      return "bg-amber-500/70";
+    default:
+      return well.batch_id ? "bg-primary/60" : "bg-muted";
+  }
 }
 
 interface WellMapProps {
@@ -90,18 +98,33 @@ interface WellMapProps {
 }
 
 function WellMapVisualization({ wellMap, format }: WellMapProps) {
-  const fmt = parseInt(format, 10);
+  const fmt = Number.parseInt(format, 10);
 
   // Determine rows/cols based on format
   let rows = 8;
   let cols = 12;
-  if (fmt === 6) { rows = 2; cols = 3; }
-  else if (fmt === 12) { rows = 3; cols = 4; }
-  else if (fmt === 24) { rows = 4; cols = 6; }
-  else if (fmt === 48) { rows = 6; cols = 8; }
-  else if (fmt === 96) { rows = 8; cols = 12; }
-  else if (fmt === 384) { rows = 16; cols = 24; }
-  else if (fmt === 1536) { rows = 32; cols = 48; }
+  if (fmt === 6) {
+    rows = 2;
+    cols = 3;
+  } else if (fmt === 12) {
+    rows = 3;
+    cols = 4;
+  } else if (fmt === 24) {
+    rows = 4;
+    cols = 6;
+  } else if (fmt === 48) {
+    rows = 6;
+    cols = 8;
+  } else if (fmt === 96) {
+    rows = 8;
+    cols = 12;
+  } else if (fmt === 384) {
+    rows = 16;
+    cols = 24;
+  } else if (fmt === 1536) {
+    rows = 32;
+    cols = 48;
+  }
 
   const rowLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".slice(0, rows).split("");
 
@@ -118,7 +141,11 @@ function WellMapVisualization({ wellMap, format }: WellMapProps) {
             return (
               <div
                 key={pos}
-                title={well ? `${pos}: ${well.concentration_value ?? "—"} ${well.concentration_unit ?? ""}` : pos}
+                title={
+                  well
+                    ? `${pos} · ${WELL_TYPE_LABELS[(well.well_type ?? "sample") as WellType]}${well.concentration_value != null ? ` · ${well.concentration_value} ${well.concentration_unit ?? ""}` : ""}`
+                    : pos
+                }
                 className={`${cellSize} rounded-sm ${well ? wellTypeColor(well) : "bg-muted/40 border border-muted"}`}
               />
             );
@@ -204,7 +231,9 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                 <SelectValue>Change Status</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__current__" disabled>Change Status</SelectItem>
+                <SelectItem value="__current__" disabled>
+                  Change Status
+                </SelectItem>
                 {p.status === "registered" && (
                   <>
                     <SelectItem value="stored">Store</SelectItem>
@@ -225,9 +254,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                     <SelectItem value="disposed">Dispose</SelectItem>
                   </>
                 )}
-                {p.status === "depleted" && (
-                  <SelectItem value="disposed">Dispose</SelectItem>
-                )}
+                {p.status === "depleted" && <SelectItem value="disposed">Dispose</SelectItem>}
               </SelectContent>
             </Select>
           </>
@@ -237,125 +264,116 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
           const wellCount = plate.well_map ? Object.keys(plate.well_map).length : 0;
           return (
             <>
-      <div className="flex flex-wrap items-center gap-2 -mt-3">
-        <StatusBadge status={plate.status} />
-        <Badge variant="outline">
-          {plateTypeLabels[plate.plate_type as PlateType] ?? plate.plate_type}
-        </Badge>
-        {plate.plate_label && (
-          <span className="text-muted-foreground">{plate.plate_label}</span>
-        )}
-      </div>
+              <div className="flex flex-wrap items-center gap-2 -mt-3">
+                <StatusBadge status={plate.status} />
+                <Badge variant="outline">
+                  {plateTypeLabels[plate.plate_type as PlateType] ?? plate.plate_type}
+                </Badge>
+                {plate.plate_label && (
+                  <span className="text-muted-foreground">{plate.plate_label}</span>
+                )}
+              </div>
 
-      {/* Metadata card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <MetaRow label="Format">{plate.format}-well</MetaRow>
-          <MetaRow label="Wells Mapped">
-            {wellCount > 0 ? (
-              <span>
-                {wellCount} / {plate.format} wells
-              </span>
-            ) : (
-              <span className="text-muted-foreground">None</span>
-            )}
-          </MetaRow>
-          <MetaRow label="Storage Location">
-            <ResolvedStorageLocation id={plate.storage_location_id} />
-          </MetaRow>
-          <MetaRow label="Project">
-            <ResolvedProject id={plate.project_id} />
-          </MetaRow>
-          <MetaRow label="Template">
-            <ResolvedTemplate id={plate.template_id} />
-          </MetaRow>
-          <MetaRow label="Parent Plate">
-            <ResolvedParentPlate id={plate.parent_plate_id} />
-          </MetaRow>
-          {plate.notes && (
-            <MetaRow label="Notes">
-              <span className="text-muted-foreground">{plate.notes}</span>
-            </MetaRow>
-          )}
-        </CardContent>
-      </Card>
+              {/* Metadata card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <MetaRow label="Format">{plate.format}-well</MetaRow>
+                  <MetaRow label="Wells Mapped">
+                    {wellCount > 0 ? (
+                      <span>
+                        {wellCount} / {plate.format} wells
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">None</span>
+                    )}
+                  </MetaRow>
+                  <MetaRow label="Storage Location">
+                    <ResolvedStorageLocation id={plate.storage_location_id} />
+                  </MetaRow>
+                  <MetaRow label="Project">
+                    <ResolvedProject id={plate.project_id} />
+                  </MetaRow>
+                  <MetaRow label="Template">
+                    <ResolvedTemplate id={plate.template_id} />
+                  </MetaRow>
+                  <MetaRow label="Parent Plate">
+                    <ResolvedParentPlate id={plate.parent_plate_id} />
+                  </MetaRow>
+                  {plate.notes && (
+                    <MetaRow label="Notes">
+                      <span className="text-muted-foreground">{plate.notes}</span>
+                    </MetaRow>
+                  )}
+                </CardContent>
+              </Card>
 
-      {/* Well map visualization */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Well Map{" "}
-            {wellCount > 0 && (
-              <span className="ml-1 text-sm font-normal text-muted-foreground">
-                ({wellCount} wells occupied)
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {wellCount > 0 && plate.well_map ? (
-            <div className="overflow-auto">
-              <WellMapVisualization
-                wellMap={plate.well_map}
-                format={plate.format}
-              />
-              <p className="mt-3 text-xs text-muted-foreground">
-                Colored wells have compound batches mapped. Hover a well for details.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-              <FlaskConical className="h-8 w-8 text-muted-foreground/40" />
-              <p className="mt-2 text-sm text-muted-foreground">
-                No wells mapped yet.
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              {/* Well map visualization */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Well Map{" "}
+                    {wellCount > 0 && (
+                      <span className="ml-1 text-sm font-normal text-muted-foreground">
+                        ({wellCount} wells occupied)
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {wellCount > 0 && plate.well_map ? (
+                    <div className="overflow-auto">
+                      <WellMapVisualization wellMap={plate.well_map} format={plate.format} />
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Colored wells have compound batches mapped. Hover a well for details.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
+                      <FlaskConical className="h-8 w-8 text-muted-foreground/40" />
+                      <p className="mt-2 text-sm text-muted-foreground">No wells mapped yet.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-      {/* Children plates */}
-      {children && children.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              Daughter Plates ({children.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {children.map((child) => (
-                <li key={child.id} className="flex items-center gap-3">
-                  <Link
-                    href={`/inventory/plates/${child.id}`}
-                    className="font-mono text-sm text-primary hover:underline"
-                  >
-                    {child.barcode}
-                  </Link>
-                  <span className="text-sm text-muted-foreground">
-                    {child.plate_label}
-                  </span>
-                  <StatusBadge status={child.status} className="ml-auto" />
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+              {/* Children plates */}
+              {children && children.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Daughter Plates ({children.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {children.map((child) => (
+                        <li key={child.id} className="flex items-center gap-3">
+                          <Link
+                            href={`/inventory/plates/${child.id}`}
+                            className="font-mono text-sm text-primary hover:underline"
+                          >
+                            {child.barcode}
+                          </Link>
+                          <span className="text-sm text-muted-foreground">{child.plate_label}</span>
+                          <StatusBadge status={child.status} className="ml-auto" />
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
 
-      {/* Attachments */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Files</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FileUploadZone entityType="plate" entityId={plateId} />
-          <AttachmentList entityType="plate" entityId={plateId} />
-        </CardContent>
-      </Card>
+              {/* Attachments */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Files</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <FileUploadZone entityType="plate" entityId={plateId} />
+                  <AttachmentList entityType="plate" entityId={plateId} />
+                </CardContent>
+              </Card>
             </>
           );
         }}
@@ -373,11 +391,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
       )}
 
       {/* Derive plate dialog */}
-      <DerivePlateDialog
-        parentPlateId={plateId}
-        open={deriveOpen}
-        onOpenChange={setDeriveOpen}
-      />
+      <DerivePlateDialog parentPlateId={plateId} open={deriveOpen} onOpenChange={setDeriveOpen} />
     </>
   );
 }
@@ -452,13 +466,11 @@ function DerivePlateDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(Object.entries(plateTypeLabels) as [PlateType, string][]).map(
-                  ([value, lbl]) => (
-                    <SelectItem key={value} value={value}>
-                      {lbl}
-                    </SelectItem>
-                  )
-                )}
+                {(Object.entries(plateTypeLabels) as [PlateType, string][]).map(([value, lbl]) => (
+                  <SelectItem key={value} value={value}>
+                    {lbl}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -479,11 +491,7 @@ function DerivePlateDialog({
           </div>
           <div className="space-y-2">
             <Label>Notes</Label>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={2}
-            />
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
         </div>
 
@@ -508,7 +516,7 @@ function DerivePlateDialog({
                     onOpenChange(false);
                     router.push(`/inventory/plates/${newPlate.id}`);
                   },
-                }
+                },
               );
             }}
           >

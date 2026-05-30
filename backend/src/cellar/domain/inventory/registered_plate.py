@@ -19,6 +19,7 @@ from cellar.domain.inventory.events import (
     PlateStatusChanged,
     PlateWellsMapped,
 )
+from cellar.domain.inventory.well_assignment import WellAssignment
 from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import ValidationError
@@ -96,7 +97,7 @@ class RegisteredPlate(AggregateRoot):
         plate_type: PlateType,
         registered_by: uuid.UUID,
         status: PlateStatus = PlateStatus.REGISTERED,
-        well_map: dict[str, Any] | None = None,
+        well_map: dict[str, WellAssignment] | None = None,
         storage_location_id: uuid.UUID | None = None,
         parent_plate_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
@@ -119,7 +120,7 @@ class RegisteredPlate(AggregateRoot):
         self.plate_type = plate_type
         self.registered_by = registered_by
         self.status = status
-        self.well_map: dict[str, Any] = well_map if well_map is not None else {}
+        self.well_map: dict[str, WellAssignment] = well_map if well_map is not None else {}
         self.storage_location_id = storage_location_id
         self.parent_plate_id = parent_plate_id
         self.project_id = project_id
@@ -178,12 +179,12 @@ class RegisteredPlate(AggregateRoot):
     # Well mapping
     # ------------------------------------------------------------------
 
-    def map_wells(self, well_map: dict[str, Any]) -> None:
-        """Assign batch/concentration data to individual wells.
+    def map_wells(self, well_map: dict[str, WellAssignment]) -> None:
+        """Assign role / batch / concentration data to individual wells.
 
-        *well_map* is keyed by position string (e.g. "A1") and each value is a
-        dict with at minimum ``batch_id``, ``concentration_value``, and
-        ``concentration_unit``.
+        *well_map* is keyed by position string (e.g. "A1"); each value is a
+        :class:`WellAssignment` carrying the well's role, batch reference, and
+        concentration. Positions are validated against the plate format.
         """
         for position in well_map:
             _validate_well_position(position, self.format)
@@ -191,14 +192,9 @@ class RegisteredPlate(AggregateRoot):
         self.well_map = dict(well_map)
         self.updated_at = datetime.now(UTC)
 
-        batch_ids: list[uuid.UUID] = []
-        for well_data in well_map.values():
-            raw = well_data.get("batch_id")
-            if raw:
-                try:
-                    batch_ids.append(uuid.UUID(str(raw)))
-                except (ValueError, AttributeError):
-                    pass
+        batch_ids: list[uuid.UUID] = [
+            wa.batch_id for wa in well_map.values() if wa.batch_id is not None
+        ]
 
         self.register_event(
             PlateWellsMapped(
