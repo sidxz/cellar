@@ -183,6 +183,41 @@ Detailed specs in `docs/domain-model/`:
 
 _Per-conversation handoff. Add a brief status block when ending a session that needs continuation; keep prior handoffs out of this file once the work is shipped._
 
+### 2026-05-29 — Cluster-map lasso → cherry-pick basket shipped on prot-2
+
+**Branch:** `prot-2`, +11 commits on top of the bulk batch-identifier import batch (2 docs + 9 impl/fix). Nothing pushed. **Browser smoke pending — this is the gate; see below.** Frontend-only, no backend/DB change. FE 587/587 vitest pass; `pnpm exec tsc --noEmit` clean.
+
+**Spec:** `docs/superpowers/specs/2026-05-29-cluster-lasso-cherrypick-design.md`. **Plan:** `docs/superpowers/plans/2026-05-29-cluster-lasso-cherrypick.md` (9 TDD tasks, subagent-driven + final code review).
+
+**What this is:** chemist reported the collections Cluster-map lasso "does nothing." Reframed it (with the chemist) from a dead select-and-maybe-save into a **cherry-pick basket for vendor-library acquisition**: lasso a chemotype neighborhood → "Pick N diverse here" (or "Add all") → accumulate a persistent basket across regions (de-duped) → "Save as collection". The example collection `chembridge_top5000_kb` is a ChemBridge vendor library, so the job is "what do I buy / put on a plate," not SAR.
+
+**The actual bug (likely root cause):** `lasso-math.ts` had a fully-tested `pointInPolygon`/`idsInsidePolygon` that was **never imported**. `cluster-scatter.tsx` resolved selections via Plotly's fragile `ev.points`/`pointNumber` path instead. Fix wires a new `selectedIdsFromPlotlyEvent(ev, points)` that reads data-space `ev.lassoPoints` (lasso) / `ev.range` (box) and ray-casts membership — robust on both `scatter` and `scattergl`. NOTE: at exactly 5000 points this collection renders SVG `scatter` (the scattergl cutoff is `>5000`), so the original scattergl theory does NOT explain this case — the `ev.points` path was the issue. **This fix is unit-tested against a mocked event shape only; it MUST be confirmed against real Plotly in a browser (smoke #2).**
+
+**11 commits (oldest → newest):** `f7ea4dea` spec · `fb53d1a2` plan · `b82566a2` lasso polygon fix · `ca087569` useCherrypickBasket (+ Node 25 localStorage polyfill in vitest.setup.ts — see below) · `70f641a1` useRegionDiversePick · `ba99f5db` RegionActionBar · `84512f4a` ClusterBasketBar · `22a87e0f` overlay markers · `f99f54ab` basket pane · `8a090075` integration · `90d5f70b` keep "Diversify" label (impl had renamed it to "Recompute" to dodge an ambiguous test selector — reverted, selector made exact) · `2accc409` tsc+biome fixups · `aae5e4b6` reset region pick when lasso clears (code-review follow-up).
+
+**Locked design decisions:**
+- Basket = `Set` persisted to `localStorage` under `cellar:cherrypick:{collectionId}` (session-only durability, per-collection, SSR-safe). No backend tables.
+- "Pick N diverse here" **reuses** `POST /api/v1/sar/umap-cluster` scoped to the lassoed ids (picker=maxmin), taking only `representatives`. Zero backend change. (`useRegionDiversePick` wraps `useUmapCluster`.)
+- Map does NOT re-embed during cherry-picking. The old "Diversify-scoped-to-lasso re-embed" (`pendingSubset`) was REMOVED — Diversify now always computes over the whole collection/set; the lasso only feeds the basket.
+- Markers: emerald open ring = in-basket; violet open star = region-pick candidate; existing lasso-dim kept.
+- Out of scope (V1): SDF/CSV export, acquisition/sample-request wiring, server-persisted named selections, drill-in re-embed, activity-triage promote-to-project, per-card basket removal (removal is via lasso + Remove). Plate target `96` is display-only.
+
+**Smoke checklist (12 steps) is at the bottom of the plan file.** Top priority: **#2 (drag a lasso → status row shows "{N} in region", points dim)** — this is the bug fix; if it fails, log the raw `plotly_selected` event and extend `selectedIdsFromPlotlyEvent`. Then #3 Add all → emerald rings + Save enabled, #5 Pick diverse → violet stars, #6 overlap de-dupes, #9 reload persists, #10 Save as collection, #11 different collection = empty basket.
+
+**Diagnostic anchors:**
+- `frontend/src/features/sar-analysis/lib/lasso-math.ts::selectedIdsFromPlotlyEvent` — the lasso fix. Prefers data-space geometry; `pointNumber` is fallback only.
+- `frontend/src/features/sar-analysis/hooks/use-cherrypick-basket.ts` — localStorage Set, `cellar:cherrypick:{collectionId}`.
+- `frontend/src/features/sar-analysis/hooks/use-region-diverse-pick.ts` — wraps `useUmapCluster` (maxmin) over the lassoed subset.
+- `frontend/src/features/sar-analysis/components/cluster-map-view.tsx` — orchestration. `handleLassoSelected` resets the region pick on empty selection (else violet stars stick). Map `useUmapCluster` is called BEFORE `useRegionDiversePick` (a test asserts `mock.calls[0]` ordering).
+- `frontend/src/features/sar-analysis/lib/cluster-overlay.ts::buildOverlayTraces` — the two marker overlays.
+
+**Open caveats:**
+- **vitest.setup.ts now polyfills window.localStorage** because Node 25 ships a built-in Web Storage that shadows jsdom and returns an object without `.clear()`. SSR-guarded in-memory store. If FE tests ever behave oddly around storage, that polyfill is why. (Saved to memory as `reference_node25_localstorage_shadows_jsdom.md`.)
+- The lasso fix is the only part not provable without a browser. Everything else (basket, region pick, markers, save) is exercised by unit tests.
+- `pnpm lint` (Biome) fails repo-wide with ~1128 PRE-EXISTING errors; this is not a gate here (handoffs use `tsc --noEmit` + tests). The new files were Biome-safe-fixed; production files are clean.
+
+**How to resume:** `docker compose up -d && cd frontend && pnpm dev` → open `chembridge_top5000_kb` → `?view=clusters` → walk the 12-step smoke (plan file). If smokes pass, push `prot-2` and open a PR against `main` — it bundles this + all prior un-pushed sessions (DR edit-points, CC- prefix, batch identifiers, bulk import, etc.). PR should call out: this adds a cherry-pick basket to the cluster map (frontend-only).
+
 ### 2026-05-21 — Bulk batch-identifier CSV import wizard shipped on prot-2
 
 **Branch:** `prot-2`, +10 commits on top of the per-batch identifiers + import-alias batch shipped earlier today. Nothing pushed. **Browser smoke pending.**
