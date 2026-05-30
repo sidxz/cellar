@@ -5,15 +5,16 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
-import { cn } from "@/shared/lib/utils";
-import { Paperclip, Pencil, Upload } from "lucide-react";
-import { useState } from "react";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
+import { cn } from "@/shared/lib/utils";
+import { Grid3x3, Paperclip, Pencil, Upload } from "lucide-react";
+import { useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { type ZPrimeQuality, classifyZPrime, readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
 import type { PlateFormat, Run } from "../types";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
+import { GridImportDialog } from "./grid-import-dialog";
 import { PlateHeatmap } from "./plate-heatmap";
 import { PlateMapViewer } from "./plate-map-viewer";
 import { ReadoutDataTable } from "./readout-data-table";
@@ -32,8 +33,6 @@ const Z_PRIME_BADGE: Record<ZPrimeQuality, { label: string; className: string }>
   },
   poor: { label: "Poor", className: "bg-destructive/20 text-destructive border-destructive/30" },
 };
-
-
 
 // ─── QC Metrics Panel (inline) ────────────────────────────────────────────────
 
@@ -171,6 +170,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
 
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
+  const [gridImportOpen, setGridImportOpen] = useState(false);
 
   const plates = plateMap?.plates ?? [];
   const doseUnit = plateMap?.dose_unit ?? "uM";
@@ -200,13 +200,23 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
               runId={run.id}
               protocolId={run.protocol_id}
               toolbarActions={
-                <Button
-                  size="sm"
-                  onClick={() => setRunImportWizardOpen(true)}
-                  disabled={run.is_locked}
-                >
-                  <Upload className="mr-2 h-4 w-4" /> Import Run File
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => setRunImportWizardOpen(true)}
+                    disabled={run.is_locked}
+                  >
+                    <Upload className="mr-2 h-4 w-4" /> Import Run File
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setGridImportOpen(true)}
+                    disabled={run.is_locked}
+                  >
+                    <Grid3x3 className="mr-2 h-4 w-4" /> Import Grid
+                  </Button>
+                </>
               }
             />
           </div>
@@ -314,6 +324,12 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         protocolId={run.protocol_id}
         open={runImportWizardOpen}
         onOpenChange={setRunImportWizardOpen}
+      />
+      <GridImportDialog
+        runId={run.id}
+        protocolId={run.protocol_id}
+        open={gridImportOpen}
+        onOpenChange={setGridImportOpen}
       />
     </>
   );
