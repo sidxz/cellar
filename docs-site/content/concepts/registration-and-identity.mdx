@@ -1,0 +1,169 @@
+import { Callout } from 'nextra/components'
+
+# Registration & identity
+
+**What you'll learn:** How chemcellar assigns a permanent identity to every compound, why no two molecules can silently duplicate each other, and what a registration number means for your data.
+
+---
+
+## What is registration?
+
+When you add a compound to chemcellar for the first time, the system runs a process called **registration**. Registration does three things:
+
+1. It normalises the chemical structure you provided into a single canonical form.
+2. It checks whether that structure — or any external identifier you supplied — already exists in your workspace.
+3. It assigns the compound a permanent [registration number](/reference/glossary#registration-number) and records it in the registry.
+
+Everything downstream — inventory [batches](/reference/glossary#batch), screening [plates](/reference/glossary#plate), dose-response curves, and research [collections](/reference/glossary#collection) — traces back to this registered identity. Getting it right at registration time keeps your data clean for the life of the project.
+
+---
+
+## The registration pipeline
+
+Behind the scenes, every submitted structure passes through a short pipeline before chemcellar decides what to do with it.
+
+### 1. Structure normalisation
+
+chemcellar applies a standardisation pipeline to the raw [SMILES](/reference/glossary#smiles) or molfile you draw or paste:
+
+- Salt fragments are stripped; the parent structure becomes the canonical form.
+- Atom valences, aromaticity, and hydrogen counts are normalised.
+- A canonical SMILES string is computed — one and only one way of writing the structure.
+- An [InChI](/reference/glossary#inchi) and [InChIKey](/reference/glossary#inchikey) are computed from the canonical form.
+
+The InChIKey is a 27-character hash of the InChI. It is the primary key chemcellar uses for structural deduplication.
+
+<Callout type="info">
+  chemcellar's canonicalisation follows the same conventions used by ChEMBL, PubChem, and CAS. A compound you look up in those databases should produce the same InChIKey here.
+</Callout>
+
+Try rendering a structure to see what it looks like before submitting:
+
+<StructureViewer smiles="CC(=O)Oc1ccccc1C(=O)O" />
+
+*Try it: replace the SMILES above with one of your own compounds.*
+
+### 2. Deduplication check
+
+After normalisation, chemcellar checks three things in order:
+
+| Check | If it matches | Outcome |
+|---|---|---|
+| InChIKey | Found in workspace | New [batch](/reference/glossary#batch) added to the existing molecule |
+| External identifier | Not found anywhere | Registration proceeds |
+| External identifier | Found on a *different* molecule | **Blocked** — conflict returned for you to resolve |
+
+The full decision table:
+
+| InChIKey match? | External ID match? | Result |
+|---|---|---|
+| No | No | New molecule + new batch |
+| Yes | No | Existing molecule — new batch added |
+| No | Yes (different molecule) | **Conflict** — registration blocked |
+| Yes | Yes (same molecule) | Existing molecule — new batch added |
+
+This logic guarantees that each unique chemical structure appears exactly once in your workspace. If you submit aspirin twice — even as two different salt forms — the parent structure is deduplicated and both submissions land as separate batches under one molecule record.
+
+### 3. Registration number assignment
+
+When a new molecule is created, chemcellar assigns it a **registration number** in the format `CV-NNNNN` (for example, `CV-00042`). This number is:
+
+- **Immutable.** It never changes, even if the molecule is later merged into another record.
+- **Human-readable.** You can search, share, and cite it in lab notebooks and reports.
+- **Workspace-scoped.** Numbers are unique within your workspace; different workspaces maintain independent sequences.
+
+<Callout type="info">
+  If two molecules are merged (see [Undisclosed molecules](/concepts/undisclosed-molecules)), the absorbed molecule's registration number is preserved as a legacy identifier on the surviving record. You can still look up `CV-00001` and find the correct compound.
+</Callout>
+
+---
+
+## Stereochemistry and tautomers
+
+Two questions come up frequently in medicinal chemistry labs.
+
+### Are enantiomers the same molecule?
+
+No. chemcellar treats each stereoisomer as a distinct molecule. The (R) and (S) enantiomers of a chiral compound receive separate registration numbers. A racemic mixture — a 50:50 blend — is registered as its own entry, separate from either pure enantiomer.
+
+The stereochemistry classification (`achiral`, `single_stereo`, `multi_stereo`, `racemic`, or `undefined`) is recorded automatically from the submitted structure and displayed on the molecule detail page.
+
+### Are tautomers the same molecule?
+
+For common medicinal chemistry tautomers — pyridones, imidazoles, tetrazoles, guanines — chemcellar relies on the mobile-H layer of the standard InChI to recognise equivalent tautomeric forms and prevent duplicates. This matches the approach used by ChEMBL and PubChem.
+
+chemcellar does **not** apply an exhaustive tautomer canonicaliser at registration time. Aggressive tautomer enumeration can strip stereo information from compounds with chiral centres adjacent to enolizable carbonyls — amino acids, sugars, profens, and β-lactams are common examples. The conservative approach protects stereochemistry while still catching the most frequent tautomeric pairs.
+
+If you need tautomer-aware searching beyond what InChI handles, use the similarity search with an appropriate threshold or contact your workspace administrator.
+
+---
+
+## External identifiers
+
+A molecule can carry any number of **external identifiers** alongside its registration number — CAS numbers, ChEMBL IDs, vendor catalogue numbers, legacy IDs from previous databases, and so on.
+
+Each identifier is unique within the workspace. If you try to register a new molecule with an identifier that already belongs to another molecule, registration is blocked. This prevents silent ID collisions between data sources.
+
+Identifiers are added at registration time, during bulk import, or manually on the molecule detail page. When two molecule records are merged, all identifiers from the absorbed record are transferred to the surviving molecule.
+
+---
+
+## Salts and mixtures
+
+**Salts:** The free-base (or free-acid) parent structure is registered as the molecule. The salt form — for example, hydrochloride or sodium salt — is recorded on the [batch](/reference/glossary#batch), not on the molecule itself. This means all salt forms of a compound share one registry entry but can have distinct physical batch records reflecting the actual material on the shelf.
+
+**Mixtures:** When you need to register a formulation or a compound that is inherently a mixture (a co-crystal, a prodrug combination, a defined ratio of two actives), chemcellar supports a dedicated mixture molecule type. A mixture entry references its component molecules by their registration numbers. Each component is still its own registered entity.
+
+---
+
+## Molecule types
+
+chemcellar supports a range of molecular entities beyond classic small molecules:
+
+| Type | When to use |
+|---|---|
+| Small molecule | Default — synthetic organic compounds |
+| Peptide | Linear or cyclic amino acid sequences |
+| Biologic | Larger biomolecules: proteins, antibodies, nucleic acids |
+| Antibody | Monoclonal antibodies with full sequence data |
+| Nucleic acid | DNA/RNA oligonucleotides |
+| Mixture | Defined combinations of two or more registered molecules |
+| Unknown | Placeholder when type has not yet been determined |
+
+---
+
+## What happens after registration
+
+Once a molecule is registered:
+
+- A first [batch](/reference/glossary#batch) is created automatically, representing the physical material you submitted alongside registration.
+- [Molecular descriptors](/concepts/molecular-properties) — molecular weight, logP, TPSA, hydrogen-bond donors and acceptors — are computed immediately from the structure.
+- A 2D structure image is generated for display on cards, detail pages, and exports.
+- Similarity fingerprints are computed and indexed so the molecule is immediately findable by structural similarity search.
+- The registration event is recorded in the append-only [audit trail](/concepts/compliance).
+
+<Callout type="warning">
+  Registration is recorded in the append-only audit trail. You can correct a structure after registration (for example, to fix a drawing error), but the correction is itself an audited event — the original structure is preserved in the audit history.
+</Callout>
+
+---
+
+## Registration status
+
+By default, molecules registered directly by a bench chemist are immediately visible in the registry as `approved`. Your workspace can be configured to require a review step for certain sources: in that case a molecule starts in `pending_review` and is hidden from standard queries until a designated reviewer approves it.
+
+| Status | Meaning |
+|---|---|
+| `pending_review` | Submitted, not yet approved — hidden from standard searches |
+| `approved` | Visible and active in the registry |
+| `rejected` | Not approved; can be resubmitted after correction |
+
+---
+
+## Related
+
+- [Undisclosed molecules](/concepts/undisclosed-molecules) — how to register compounds whose structure must be kept confidential
+- [Batches and samples](/concepts/batches-and-samples) — the physical inventory that hangs off each registered molecule
+- [Register a single molecule](/guides/registration/) — step-by-step guide
+- [Bulk registration](/guides/registration/bulk-registration) — import a whole SDF or CSV file at once
+- [Identifiers](/guides/registration/identifiers) — managing CAS numbers, vendor IDs, and legacy IDs

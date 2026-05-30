@@ -1,0 +1,254 @@
+import { Callout } from 'nextra/components'
+
+# Assays & screening
+
+**What you'll learn:** How chemcellar organizes screening experiments — from the protocol that defines
+what you measure, to the run that executes it, to the plates and wells that hold your compounds,
+and the readout data that comes out the other side.
+
+---
+
+## The screening hierarchy
+
+A complete screening experiment in chemcellar has four nested levels:
+
+| Level | What it represents |
+|-------|--------------------|
+| **[Protocol](/reference/glossary#protocol)** | A reusable, versioned description of the assay procedure and what it measures |
+| **[Run](/reference/glossary#run)** | One execution of a protocol on a specific date |
+| **[Plate](/reference/glossary#plate)** | A physical microplate used in that run |
+| **[Well](/reference/glossary#well)** | A single position on a plate, holding one compound at one concentration |
+
+Underneath the wells sits the measured data: **[readout data](/reference/glossary#readout-data)** records the
+numeric or qualitative result for each well, and (for concentration-response experiments)
+**[dose-response curves](/concepts/dose-response)** are fitted automatically.
+
+---
+
+## Protocols
+
+A **protocol** is a reusable template that defines exactly what an assay measures and how the
+results are represented. Think of it as the recipe — one protocol can be run many times against
+different sets of compounds.
+
+### What a protocol defines
+
+- **Name and description** — a human-readable name (e.g., "hERG Patch Clamp Assay") and a
+  detailed procedure description.
+- **Protocol type** — biochemical, cell-based, ADMET, in vivo, analytical, or physicochemical.
+- **[Target](/reference/glossary#target)** — the biological entity being tested against (optional, but important for
+  activity interpretation). chemcellar stores target metadata including the gene name, organism,
+  UniProt ID, and target class (kinase, GPCR, ion channel, etc.).
+- **Readout definitions** — the measurement columns the protocol produces (see below).
+- **Condition definitions** — categorical variables that can differ between runs of the same
+  protocol (e.g., cell line, species, time point).
+
+### Readout definitions
+
+Every protocol owns one or more **readout definitions** — the precise specification of each
+measurement column. For each readout, the protocol records:
+
+- **Name** — e.g., "IC50", "% Inhibition", "Cell Viability".
+- **Data type** — numeric, text, pick-list, file, or date.
+- **Unit** — e.g., nM, µM, %, fold-change.
+- **Normalization method** — how raw plate readings are converted to reported values:
+  percent inhibition, percent activation, percent control, z-score, or none.
+- **Aggregation** — how replicate values are combined: mean, median, geometric mean, min, max,
+  or none.
+- **Calculated readouts** — some readouts are derived from others by a formula rather than
+  measured directly (e.g., selectivity ratio = IC50_targetA / IC50_targetB).
+
+### Protocol versioning
+
+Protocols are versioned. When you need to change the procedure or add a readout column, you create
+a new version of the protocol rather than editing the existing one. The old version is retired and
+a new draft version is created. This means all historical runs retain a permanent reference to the
+exact protocol version under which they were performed — a requirement for GLP and audit-compliant
+data management.
+
+**Status transitions:**
+
+```
+draft ──[publish]──► active
+active ──[retire]──► retired
+active ──[new version]──► retired  (previous version retired automatically)
+```
+
+Only `active` protocols can have new runs started against them. Only `draft` protocols can have
+their readout definitions edited.
+
+<Callout type="warning">
+Once a protocol is active and has associated runs, its readout definitions cannot be modified.
+Create a new version instead. This preserves the integrity of all historical data.
+</Callout>
+
+> 📷 *Screenshot: the protocol detail page, showing the protocol name, status badge (Active), target
+> link, and the readout definitions table with column names, units, and normalization settings.*
+
+---
+
+## Runs
+
+A **run** is a single execution of a protocol — one experiment performed on one date. Runs have
+their own lifecycle that reflects the scientific review process:
+
+```
+draft ──► in_progress ──► completed ──► approved
+                                    ──► rejected ──► draft  (rework cycle)
+```
+
+### Run metadata
+
+Each run records:
+
+- Which protocol version it executed.
+- The date the experiment was performed and who performed it.
+- Where it was performed (your lab, or an external CRO/lab).
+- Condition values for the run (e.g., "Cell Line: HEK293", "Time Point: 24h").
+- QC metrics (Z′ factor, signal-to-noise ratio, coefficient of variation) — collected after data
+  entry, before approval.
+- An optional link to a parent run, for confirmation screens or repeats.
+
+### Approval and data locking
+
+When a run reaches `completed` status, a reviewer examines the QC metrics and the data. Approving
+a run records an **electronic signature** under 21 CFR Part 11 and optionally applies a **data lock**.
+
+<Callout type="warning">
+Approving a run applies an electronic signature under 21 CFR Part 11. Once approved and locked,
+the run's data cannot be edited without a documented, audited change recorded by an administrator.
+This action is recorded in the append-only audit trail.
+</Callout>
+
+A locked run's readout data and dose-response curves are immutable — every write attempt is blocked
+at the application level and, as a defense-in-depth measure, at the database level. Unlocking
+requires a separate electronic signature and creates a new audit entry explaining why.
+
+> 📷 *Screenshot: the run detail page header showing status badge (Completed), QC metrics panel
+> (Z′ = 0.72, S/N = 8.4), and the Approve / Reject action buttons.*
+
+---
+
+## Plates and wells
+
+### Plates
+
+A **plate** is a physical microplate used in a run. chemcellar supports standard plate formats:
+6, 12, 24, 48, 96, 384, and 1536 wells. Each plate has:
+
+- A **plate number** — its sequence within the run.
+- A **barcode** — the physical label on the plate.
+- A **plate map** — the layout of compounds, controls, and blanks assigned to each well position.
+- An optional link to a **plate template**, which pre-assigns well types to positions.
+
+Plates can be linked in mother-to-daughter lineages (e.g., a compound plate spotted onto an assay plate).
+
+### Wells
+
+A **well** is a single position on a plate, identified by row letter and column number (e.g., A1,
+H12, P24). Every well records:
+
+- **Well type** — `sample` (a test compound), `positive_control`, `negative_control`, `blank`,
+  or `reference`.
+- **Batch** — which specific physical batch of compound was placed in this well.
+- **Concentration** — the test concentration in the well (e.g., 10 µM).
+
+Knowing the exact batch in each well is what makes chemcellar's traceability possible: if you see
+unusual activity for a well, you can follow the chain from that well → batch → molecule and
+investigate whether purity, synthesis method, or compound identity is a factor.
+
+### Plate templates
+
+A **plate template** is a reusable layout definition. Templates pre-assign well types to positions
+across a plate format (e.g., columns 1-2 = controls, rows A-H columns 3-24 = samples). Applying a
+template when creating a run saves time and reduces layout errors.
+
+> 📷 *Screenshot: the plate map builder showing a 96-well plate with color-coded well types:
+> green = positive control, red = negative control, white = blank, blue = sample.*
+
+---
+
+## Visualizing a plate: the heatmap
+
+The plate heatmap is one of the most useful tools for spotting QC problems and activity patterns
+at a glance. Each well is colored by its readout value — a gradient from low to high lets you see
+spatial patterns, systematic errors, or outlier wells immediately.
+
+Hover over any well to see the compound name, batch number, concentration, and raw value. The
+interactive demo below uses a simulated gradient to illustrate the layout.
+
+<PlateHeatmapDemo format={96} colorScale="viridis" showLabels={true} />
+
+*Try it: hover over individual wells to see per-well details. The color scale runs from low activity
+(dark) to high activity (bright).*
+
+<Callout type="default" emoji="💡">
+In a real assay, you would expect positive control wells to appear at one extreme of the color
+scale and negative controls at the other. Drift in the gradient or a spatial pattern of high/low
+activity can reveal plate dispensing errors or evaporation artefacts.
+</Callout>
+
+---
+
+## Readout data
+
+**Readout data** is the measured result for a specific compound well in a specific run. It links
+together:
+
+- The run and the well it came from.
+- The molecule and batch that were in that well.
+- The readout definition it satisfies (which measurement column).
+- The value — a **[qualified value](/reference/glossary#qualified-value)** consisting of a number and a comparator
+  qualifier (`=`, `<`, `>`, `~`, `<=`, `>=`).
+
+### Qualified values and assay limits
+
+Not every measurement is an exact number. When a compound falls outside the assay's measurable
+range, chemcellar records a **qualified value**:
+
+| Qualifier | Meaning | Example |
+|-----------|---------|---------|
+| `=` | Exact measured value | IC50 = 42 nM |
+| `<` | Below the assay lower limit | IC50 < 1 nM |
+| `>` | Above the assay upper limit (inactive) | IC50 > 10 000 nM |
+| `~` | Approximate estimate | IC50 ~ 500 nM |
+
+This distinction is scientifically important. A compound with IC50 > 10 µM is inactive at the
+highest tested concentration — it is not the same as a compound with IC50 = 10 µM. Reporting the
+qualifier preserves that information for downstream SAR analysis and portfolio decisions.
+
+### Outlier flagging
+
+Individual data points can be flagged as outliers. Outliers are retained in the database (never
+deleted) and excluded from aggregations and curve fitting. This preserves the raw experimental
+record while ensuring derived statistics reflect clean data.
+
+---
+
+## Targets
+
+A **target** is the biological entity a compound is tested against — for example, a protein kinase,
+a GPCR, an ion channel, or a cell line. Each target in chemcellar can carry:
+
+- **Gene name** — the official HGNC gene symbol (e.g., EGFR, BRAF).
+- **Organism** — e.g., Homo sapiens, Mus musculus.
+- **UniProt ID** and NCBI Gene ID — for cross-referencing external databases.
+- **Target class** — kinase, GPCR, ion channel, nuclear receptor, etc.
+- **Target type** — single protein, protein complex, protein family, nucleic acid, organism,
+  cell line, or tissue.
+
+Targets are workspace-level reference entities. One target can be referenced by many protocols,
+which means you can easily pull together all runs and compounds tested against, say, the hERG
+channel across all your assay formats.
+
+---
+
+## Related
+
+- [Dose-response curves](/concepts/dose-response) — how IC50 and EC50 values are fitted and
+  what the curve parameters mean
+- [Batches & samples](/concepts/batches-and-samples) — the physical material that goes into wells
+- [Compliance & audit trail](/concepts/compliance) — run approval, electronic signatures, and
+  data locking under 21 CFR Part 11
+- [Screen campaigns](/guides/research-organization/screen-campaigns) — how to organize runs and
+  compounds into a portfolio-level campaign

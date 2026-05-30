@@ -1,0 +1,158 @@
+import { Callout } from 'nextra/components'
+
+# Request material from inventory
+
+**Who this is for:** Scientists and biologists who need physical compound material for an experiment, and sample management team members who fulfil those requests.
+
+**What you'll accomplish:** You will submit a [sample request](/reference/glossary#sample-request) for a specific compound, track it through approval and preparation, and understand how the sample management team fulfils it.
+
+---
+
+## Before you start
+
+- You need the **Submit sample request** permission to create a request. All workspace members typically have this by default.
+- The compound you need must already be [registered](/guides/registration) and have at least one available [sample](/reference/glossary#sample) in inventory. If no material exists, submit a [synthesis request](./synthesis-requests) instead.
+- Know approximately how much material you need and have a clear scientific purpose — the sample management team will review this before preparing your material.
+
+<Callout type="info">
+A sample request is a formal workflow, not a direct reservation. You are asking the sample management team to locate and prepare material for you. They may choose a different batch than you specified if the preferred batch is unavailable or nearly depleted.
+</Callout>
+
+---
+
+## Step 1 — Submit a sample request
+
+1. In the top navigation bar, click **Inventory**.
+2. In the left sidebar, click **Sample requests**.
+3. Click **New request**.
+4. In the **New sample request** form:
+   - **Molecule** — search by registration number, name, or structure. Type at least three characters to get suggestions. Select the compound you need.
+   - **Batch (optional)** — if you need material from a specific batch (for example, a particular salt form or purity grade), select it from the dropdown. Leave blank to let the sample management team choose the best available batch.
+   - **Requested amount** — enter the quantity you need and select the unit (mg, mL, µmol).
+   - **Purpose** — describe the scientific purpose concisely. For example: "Activity confirmation in ALDH1A1 TR-FRET assay at 10 µM". This helps the sample management team prioritise and ensures an audit trail.
+   - **Priority** — choose `routine`, `urgent`, or `critical`. Use `urgent` and `critical` sparingly; they alert the team immediately.
+5. Click **Submit request**.
+
+> 📷 *Screenshot: the New sample request form with the Molecule field showing a search dropdown, the Requested amount field with a unit selector, and the Priority dropdown set to "routine".*
+
+<Callout type="warning">
+Submitted sample requests are recorded in the append-only audit trail. The requester, molecule, requested amount, purpose, and timestamp are all captured at submission.
+</Callout>
+
+---
+
+## Step 2 — Track your request
+
+After submission, your request appears in **Inventory > Sample requests** with status `submitted`. You can follow its progress through the workflow:
+
+| Status | Meaning |
+|--------|---------|
+| `submitted` | Awaiting review by the sample management team |
+| `approved` | The request has been approved; material will be prepared |
+| `preparing` | The team is currently weighing, aliquoting, or diluting your material |
+| `fulfilled` | Material is ready; see [Step 4](#step-4--receive-your-material) |
+| `rejected` | The request was declined; a rejection reason is shown |
+| `cancelled` | The request was withdrawn before preparation began |
+
+> 📷 *Screenshot: the Sample requests list with status badges shown in colour — "submitted" in grey, "approved" in blue, "preparing" in amber, "fulfilled" in green, "rejected" in red.*
+
+<Callout type="default" emoji="💡">
+You will receive a notification when your request status changes to `fulfilled` or `rejected`. Check the notification centre (bell icon in the top-right corner) for updates.
+</Callout>
+
+---
+
+## Step 3 — What the sample management team does (fulfiller view)
+
+This section describes the fulfilment workflow for sample management team members.
+
+### Reviewing requests
+
+1. Go to **Inventory > Sample requests**.
+2. Filter by status = `submitted` to see all open requests.
+3. Click on a request to open its detail view. Review the molecule, requested amount, purpose, and priority.
+4. If the request is reasonable and material is available, click **Approve**. If not, click **Reject** and enter a rejection reason — a reason is required so the requester understands what to do next.
+
+<Callout type="info">
+Approving or rejecting a request is recorded in the audit trail. The reviewing user and timestamp are captured.
+</Callout>
+
+### Locating suitable material
+
+After approval:
+
+1. Open the approved request and click **Start preparing**.
+2. The request status changes to `preparing`.
+3. In the **Fulfil with sample** section, search for available samples of the requested molecule:
+   - chemcellar shows all available samples for that molecule, sorted by amount descending.
+   - If the requester specified a batch, those samples appear at the top.
+   - Check the storage location to physically locate the sample in the lab.
+
+> 📷 *Screenshot: the fulfilment panel on a sample request detail page, showing a list of available samples with their barcodes, batch numbers, amounts, and storage locations.*
+
+### Aliquoting and recording fulfilment
+
+1. Physically locate the sample in the lab using the storage location shown.
+2. Aliquot (or otherwise prepare) the requested amount.
+3. Back in chemcellar, open the sample record for the source container:
+   - Click **Record consumption** and enter the amount you removed.
+   - chemcellar subtracts this from the sample's remaining amount.
+4. Return to the sample request and click **Mark as fulfilled**.
+5. In the fulfilment dialog:
+   - Select the **Sample used** — the barcode of the container you aliquoted from.
+   - Confirm the amount actually provided (which may differ slightly from the requested amount if exact weighing was not possible).
+6. Click **Confirm fulfilment**.
+
+The request status changes to `fulfilled` and a link to the source sample is recorded on the request. The requester receives a notification.
+
+<Callout type="warning">
+Once a request is marked as `fulfilled`, it is a terminal state and cannot be reversed. The sample consumption event and the fulfilment linkage are both recorded in the append-only audit trail. Double-check the sample barcode and amount before confirming.
+</Callout>
+
+---
+
+## Step 4 — Receive your material
+
+When you receive a notification that your request is fulfilled:
+
+1. Open the request in **Inventory > Sample requests** and confirm the status is `fulfilled`.
+2. The detail page shows:
+   - The **sample** that was used to fulfil the request (batch number, barcode, storage location at the time of fulfilment).
+   - The **amount actually provided**.
+3. Retrieve your material from the agreed collection point and verify the container label matches the barcode shown.
+
+---
+
+## Cancelling a request
+
+You can cancel a request at any time before it reaches `fulfilled`, `rejected`, or `cancelled`:
+
+1. Open the request in **Inventory > Sample requests**.
+2. Click **Cancel request**.
+3. Confirm the cancellation.
+
+<Callout type="info">
+Cancellation is recorded in the audit trail. If preparation was already underway (`preparing` status), inform the sample management team directly so they can stop work.
+</Callout>
+
+---
+
+## Common issues
+
+| Issue | What to do |
+|-------|-----------|
+| No available samples shown for my molecule | The molecule may have no `available` samples. Check the molecule's **Samples** tab. If all samples are depleted or disposed, submit a [synthesis request](./synthesis-requests) instead. |
+| Request rejected with "insufficient material" | The requested amount exceeds what is available. Split your request into smaller amounts or wait for re-synthesis. |
+| Request rejected with "batch unavailable" | The specific batch you requested is no longer available. Resubmit without a batch preference to let the team choose. |
+| I need material urgently but my request is `submitted` | Change the priority to `urgent` by editing the request (before approval), or contact the sample management team directly. |
+
+---
+
+## Related
+
+- [Inventory overview](./index) — adding batches and samples to inventory.
+- [Storage locations](./storage) — understanding where samples live.
+- [Synthesis requests](./synthesis-requests) — requesting synthesis of a new compound when no material exists.
+- [Shipments](./shipments) — if your fulfilled material needs to be shipped elsewhere.
+- [Batches & samples](/concepts/batches-and-samples) — the conceptual model behind sample requests.
+- [Glossary](/reference/glossary)

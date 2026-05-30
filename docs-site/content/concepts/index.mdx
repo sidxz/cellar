@@ -1,0 +1,78 @@
+import { Callout } from 'nextra/components'
+
+# Concepts: cheminformatics & the compound registry
+
+**What you'll learn:** The ideas that underpin chemcellar — what a compound registry does, why chemical identity is harder than it looks, and how the platform organises everything from a drawn structure to a screening result.
+
+---
+
+## What is a compound registry?
+
+A compound registry is the master record of every chemical structure your organisation works with. Think of it like a library catalogue, but for molecules. Each unique structure gets one permanent record — its [molecule](/reference/glossary#molecule) — along with a human-readable registration number (for example, CV-00001). Every batch synthesised, every sample stored, and every assay result ever measured gets linked back to that record.
+
+Without a registry, the same compound can appear under dozens of vendor codes, internal codes, and hand-typed names across spreadsheets and notebooks. A registry eliminates that ambiguity by anchoring every piece of scientific data to a single, deduplicated structural identity.
+
+chemcellar is the registry for your workspace. It also manages the downstream data — [batches](/concepts/batches-and-samples), [inventory](/guides/inventory), [screening runs](/guides/screening), and [research organisation](/guides/research-organization/projects) — all connected to the same canonical compound record.
+
+---
+
+## Why chemical identity is non-trivial
+
+A molecule drawn by one chemist may look different from the same compound drawn by another, even if the two structures are chemically identical. Several sources of ambiguity arise in practice:
+
+- **Representation format.** A structure can be expressed as a hand-drawn image, a SMILES string, an InChI, a molfile, or a name. Different formats carry different amounts of information.
+- **Canonicalization.** The same molecule can be written as many different SMILES strings. A canonical SMILES is the unique, agreed-upon form for a given structure — without it, a simple text comparison would falsely report duplicates as unique compounds.
+- **Stereochemistry.** Two molecules with the same connectivity but different spatial arrangements of atoms (enantiomers, diastereomers) are distinct compounds with different biological activities. The registry must track stereo precisely.
+- **Tautomers.** Many structures exist as interconverting forms in solution (for example, a keto form and an enol form). chemcellar uses standard InChI's mobile-hydrogen layer to treat these as the same compound without running an explicit tautomer canonicalizer — matching the practice of ChEMBL, PubChem, and CAS.
+- **Salts.** A drug might be stored as its hydrochloride salt, but the parent free base is the molecule of interest. chemcellar strips counter-ions before deduplication, recording the salt form on the [batch](/reference/glossary#batch) rather than the molecule.
+
+Understanding these distinctions helps you predict how chemcellar will handle your data at registration time.
+
+---
+
+## Core concepts in this section
+
+The pages below build on each other. Start with chemical structures if you are new to cheminformatics notation, or jump directly to the topic you need.
+
+| Page | What it covers |
+|------|---------------|
+| [Chemical structures](/concepts/chemical-structures) | SMILES, InChI, InChIKey, canonicalization, stereochemistry, tautomers |
+| [Molecular properties](/concepts/molecular-properties) | MW, logP, TPSA, HBD/HBA, computed descriptors vs predicted properties |
+| [Registration & identity](/concepts/registration-and-identity) | Registration numbers, deduplication, the full registration pipeline |
+| [Undisclosed molecules](/concepts/undisclosed-molecules) | Partner compounds with no disclosed structure, disclosure, and merge |
+| [Batches & samples](/concepts/batches-and-samples) | Physical material: batches, samples, storage, inventory |
+| [Assays & screening](/concepts/assays-and-screening) | Protocols, runs, plates, wells, and readout data |
+| [Dose-response](/concepts/dose-response) | IC50, EC50, four-parameter logistic curves |
+| [SAR & similarity](/concepts/sar-and-similarity) | Fingerprints, Tanimoto similarity, substructure search |
+| [Projects, collections & campaigns](/concepts/projects-collections-campaigns) | Research organisation: projects, collections, screen campaigns |
+| [Compliance](/concepts/compliance) | Audit trail, data lock, 21 CFR Part 11 alignment |
+
+---
+
+## How chemcellar connects the dots
+
+Every scientific action in chemcellar traces back to a molecule record:
+
+```
+Molecule (canonical structure, registration number)
+  └── Batch (specific synthesis or purchase lot)
+        └── Sample (physical aliquot in inventory)
+              └── Well (position on a plate in a run)
+                    └── ReadoutData (the measured value)
+                          └── DoseResponseCurve (IC50, EC50)
+```
+
+A [project](/reference/glossary#project) or [collection](/reference/glossary#collection) groups molecules for scientific purposes. A [screen campaign](/reference/glossary#campaign) tracks which molecules were screened under a given [protocol](/reference/glossary#protocol) and what the outcomes were.
+
+<Callout type="info">
+chemcellar enforces workspace isolation — all records belong to one workspace and are never mixed with data from another. Your compounds are yours.
+</Callout>
+
+---
+
+## Related
+
+- [Getting started: register your first molecule](/getting-started/first-molecule)
+- [Guide: registration overview](/guides/registration)
+- [Reference: glossary](/reference/glossary)
+- [Reference: chemistry standards](/reference/chemistry-standards)

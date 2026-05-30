@@ -1,0 +1,105 @@
+import { Callout } from 'nextra/components'
+
+# Roadmap
+
+chemcellar's core workflow — register, organize, screen, analyze, and export — is fully shipped. This page describes the features we are planning for the next phase of development. None of these are available yet. We will update this page and the [getting started](/getting-started) guides as each feature lands.
+
+<Callout type="info">If a feature you need is listed here as planned, reach out to your workspace administrator. We welcome feedback on priorities.</Callout>
+
+---
+
+## Electronic Lab Notebook (ELN)
+
+**What it is**
+
+An electronic lab notebook lets you write up experimental activities directly inside chemcellar and link those notes to structured data — a run, a batch, a synthesis route, a collection. Instead of keeping a separate Word document or paper notebook, you document what you did, why you did it, and what happened, all in one place alongside the actual data.
+
+**Why it matters**
+
+Good records are the foundation of reproducible science. When an ELN entry is linked to a chemcellar run, anyone reading the notebook can navigate straight to the plate heatmap and the dose-response curves. When the entry is signed electronically, it becomes part of the append-only audit record — supporting both internal review and regulatory inspection.
+
+**What we are planning**
+
+- A rich-text editor (supporting formatted text, tables, embedded images, and structure drawings) attached to any project.
+- Templates for common experiment types — synthesis reports, assay results, stability observations — so teams have a consistent format from day one.
+- Cross-context linking: you will be able to insert a reference to a molecule, a run, a batch, or a collection inside an ELN entry, and that reference will stay live as the data evolves.
+- A signing workflow aligned with the existing electronic signature model: draft → active → signed. Once signed, the entry is immutable, and the signature is recorded in the audit trail.
+- Search across ELN entries by keyword, linked entity, date, and author.
+
+**Timeline**
+
+Planned for Phase 3. No release date is committed.
+
+---
+
+## Advanced SAR Analysis: Markush Structures & Matched Molecular Pairs
+
+**What it is**
+
+Structure-activity relationship (SAR) analysis is the process of understanding how changes to a molecule's structure affect its biological activity. chemcellar already supports similarity search using Morgan fingerprints. The planned SAR module adds two more powerful tools: Markush structures and matched molecular pairs.
+
+A **Markush structure** (sometimes called a generic structure) defines a family of compounds by specifying a fixed core scaffold and variable positions (R-groups). For example: "all compounds with this kinase-binding scaffold, where R1 can be any of these twelve substituents." Markush definitions are used for patent analysis (does a competitor's compound fall inside our claims?), library design, and SAR scaffold enumeration.
+
+**Matched molecular pairs (MMPs)** are automatically computed pairs of molecules that differ by exactly one small structural change — for example, replacing a fluorine with a chlorine. The key insight is that if you have many such pairs, you can measure how that specific change affects potency, selectivity, solubility, or metabolic stability on average across your dataset. This lets you answer questions like "does adding a methyl group at position 4 generally improve our IC50 in this series?"
+
+**Why it matters**
+
+A medicinal chemist designing the next round of compounds needs to know which structural changes are productive. Without MMPs, this analysis happens informally or in a spreadsheet. With MMP analysis in chemcellar, the relationships between your registered compounds become queryable and visual.
+
+**What we are planning**
+
+- A Markush definition editor where you draw a core scaffold and define R-group positions and their allowed substituents, using the existing structure editor.
+- Automated search of registered molecules against active Markush definitions, so you always know which of your compounds fall inside a defined series.
+- Library enumeration: given a Markush definition, generate the full set (or a representative sample) of possible structures and check which ones are already registered.
+- Precomputed MMP tables: for every pair of registered molecules that differ by a single transformation, chemcellar will store the transformation and the associated property deltas (activity, selectivity, computed properties).
+- A transformation browser: pick a transformation (for example, "F → Cl") and see how it has affected each measured property across your dataset.
+- An SAR scatter-plot surface: plot potency versus a property, with each point colored or shaped by a structural feature.
+
+<Callout type="info">MMP batch computation requires asynchronous processing. When this feature ships, computation will run in the background and results will appear as they complete, without blocking registration or other workflows.</Callout>
+
+**Timeline**
+
+Planned for Phase 3, after Temporal workflow infrastructure is in place. No release date is committed.
+
+---
+
+## Formulation & Drug Product
+
+**What it is**
+
+A formulation is a recipe that combines one or more active pharmaceutical ingredients (APIs) with excipients — inactive materials like fillers, binders, and coatings — to create a dosage form: a tablet, a capsule, an injectable solution, a topical cream, and so on. Formulation scientists work at the interface of chemistry and manufacturing. Their records — which lots went into which batch, what the QC results were, how the product behaved under stress conditions — are distinct from the compound registration and screening data that medicinal chemists and biologists produce.
+
+**Why it matters**
+
+Right now, formulation records typically live in separate documents or systems, disconnected from the compound data in chemcellar. When a molecule is selected from a screen campaign and advanced to formulation work, the connection between the active ingredient's structure (in chemcellar) and its pharmaceutical product form (in a spreadsheet or ELN) is manual and fragile. The Formulation context bridges this gap.
+
+**What we are planning**
+
+- A **formulation recipe** system: define a versioned recipe specifying the API (linked to a registered molecule), each excipient (drawn from a workspace excipient catalog), the amount or weight-fraction of each component, and the dosage form and route of administration. Versioning follows the same pattern as screening protocols — a new version creates a new draft linked to the previous active version.
+- An **excipient catalog**: a workspace-level list of standard pharmaceutical excipients (lactose monohydrate, magnesium stearate, PEG 400, and so on) with CAS numbers and pharmacopoeia grade (USP, NF, Ph. Eur., JP). Excipients in the catalog are distinct from registered molecules — they are commercial materials, not novel compounds under investigation.
+- **Formulation batches**: record a physical preparation of a formulation — which specific inventory lots were used for each ingredient, the total batch scale (lab, pilot, clinical), QC results (assay, dissolution, content uniformity), and manufacturing notes. Each formulation batch is traceable back to the exact molecule batch used as the API.
+- **Stability studies**: follow a formulation batch over time under defined storage conditions (temperature, humidity, light) aligned with ICH stability guideline protocols. At each time point, record measurements (assay percentage, degradation products, appearance, moisture content) and flag whether the batch still meets specification. Studies can run for months to years; chemcellar will track scheduled time points and alert you when a measurement is due.
+- **ELN linkage**: formulation batch preparation records can link to ELN entries, so the detailed procedure lives next to the structured batch record.
+
+**Timeline**
+
+Planned for Phase 3. No release date is committed.
+
+---
+
+## Other planned enhancements
+
+These smaller improvements are also on the roadmap but are not yet in active development:
+
+| Feature | What it adds |
+|---------|-------------|
+| **Real-time notifications** | In-app alerts when a long-running import finishes, a campaign is closed, or a sample request changes state — no need to refresh the page. |
+| **WebSocket live updates** | Plate heatmaps and campaign compound grids refresh automatically when collaborators update data in the same session. |
+| **Advanced dashboard charts** | Workspace-level summary charts: compounds registered over time, runs completed per project, active campaigns by status. |
+| **Playwright end-to-end test suite** | Automated browser tests for the full registration → screening → campaign workflow, run in CI on every pull request. |
+| **E2E audit observability** | OpenTelemetry traces exported to Grafana Tempo, with Prometheus metrics for database and API health. |
+| **Temporal-backed bulk operations** | Long-running bulk registrations, MMP batch computation, and disclosure workflows managed by a durable workflow engine, with progress tracking in the UI. |
+
+---
+
+<Callout type="default" emoji="💡">Feature requests and bug reports are tracked on the project board. If something listed here is critical to your work, let your workspace administrator know — user demand shapes priorities.</Callout>

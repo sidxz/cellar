@@ -1,0 +1,141 @@
+import { Callout } from 'nextra/components'
+
+# For scientists & biochemists
+
+**Who this is for:** Bench chemists, medicinal chemists, and assay scientists who will register compounds, track physical material, and run screening experiments day-to-day.
+
+**What you'll find here:** A curated path through the docs — in the order you will actually use chemcellar at the bench.
+
+---
+
+## Your workflow at a glance
+
+As a scientist, you touch every stage of the platform:
+
+1. **Register** a new compound or import a batch from a synthesis run.
+2. **Track inventory** — create batches, aliquot samples, manage storage.
+3. **Design and run assays** — define protocols, record plate data, review curves.
+4. **Organize** — group compounds into projects and collections for a program.
+5. **Search and export** — find actives by structure or property, export for reporting.
+
+---
+
+## Step 1 — Registering compounds
+
+A [molecule](/reference/glossary#molecule) in chemcellar is defined by its chemical structure. When you register, the platform canonicalizes the [SMILES](/reference/glossary#smiles) you provide (following ChEMBL/PubChem conventions), computes an [InChIKey](/reference/glossary#inchikey) fingerprint for deduplication, and assigns a unique [registration number](/reference/glossary#registration-number) such as `CV-00001`.
+
+> 📷 *Screenshot: the Register Molecule dialog with the Ketcher structure editor open, a SMILES pasted in, and the computed InChIKey displayed below the canvas.*
+
+### What to read
+
+- [Getting started → Register your first molecule](/getting-started/first-molecule) — step-by-step walkthrough.
+- [Concepts → Registration & identity](/concepts/registration-and-identity) — how deduplication and registration numbers work.
+- [Concepts → Chemical structures](/concepts/chemical-structures) — SMILES, InChI, and canonicalization explained.
+
+### Key facts for chemists
+
+- chemcellar does **not** alter stereochemistry during canonicalization. If you draw a chiral center, it is preserved exactly.
+- Tautomers are normalized to a canonical form. The original structure is stored alongside the canonical form for reference.
+- If a structure already exists in the workspace, registration is blocked by default. You can request an exception via [bulk registration](/guides/import) settings.
+- You can register without a structure (an [undisclosed molecule](/concepts/undisclosed-molecules)) and disclose the structure later under a separate workflow.
+
+<Callout type="info">chemcellar canonicalizes every structure on registration using the ChEMBL structure pipeline. The canonical SMILES and InChIKey stored are deterministic — the same structure always yields the same key, regardless of which software drew it.</Callout>
+
+---
+
+## Step 2 — Tracking physical material
+
+Every synthesis run produces a [batch](/reference/glossary#batch) — a discrete lot of material tied to a molecule. Batches record purity, amount, supplier or synthesizer, and date. From a batch you aliquot [samples](/reference/glossary#sample) into individual vials and assign them to storage locations.
+
+> 📷 *Screenshot: the Batch detail page showing amount remaining, purity, storage location, and linked samples in a table.*
+
+### What to read
+
+- [Concepts → Batches & samples](/concepts/batches-and-samples) — the distinction between a molecule, a batch, and a sample.
+- Inventory guides (coming in Guides section) — create a batch, aliquot samples, move samples between locations.
+
+### Key facts
+
+- A molecule can have many batches (multiple synthesis runs, different suppliers).
+- A batch tracks remaining amount as samples are consumed.
+- When a sample amount reaches zero, chemcellar marks it as depleted and can alert the responsible scientist.
+- [Synthesis requests](/reference/glossary#synthesis-request) let you formally request that a compound be re-synthesized when stock runs low.
+
+---
+
+## Step 3 — Designing and running assays
+
+An assay in chemcellar has two parts: the [protocol](/reference/glossary#protocol) (the "how") and the [run](/reference/glossary#run) (the "when and what").
+
+A **protocol** specifies the assay type, the biological target, the plate format, the readout definitions (what you are measuring, in what units), and any conditions you want to record (e.g., incubation time, temperature). Protocols are versioned — you can update a protocol without losing the history of older runs.
+
+A **run** is a single execution of a protocol. You associate it with a protocol, record per-well data (either by typing or by uploading a plate-reader file), and then review the results. chemcellar automatically fits [dose-response curves](/reference/glossary#dose-response-curve) using a four-parameter logistic (4PL) model when concentration-series data is present.
+
+> 📷 *Screenshot: the Run detail page with a 96-well plate heatmap colored by % inhibition, and a dose-response curve panel below for the selected compound.*
+
+### What to read
+
+- [Concepts → Assays & screening](/concepts/assays-and-screening) — protocols, runs, plates, wells, and readouts explained.
+- [Concepts → Dose-response](/concepts/dose-response) — the 4PL model, IC50, Hill slope, and how to interpret curves.
+
+### Key facts for assay scientists
+
+- You can define multiple **readout definitions** per protocol (e.g., % inhibition and cell viability from the same plate).
+- Plate-reader CSV/XLSX files can be imported directly on the Run detail page. chemcellar reshapes the reader matrix into its internal well model.
+- Each well can be tagged as a **control** (positive, negative, blank) in the plate template. chemcellar uses control wells to compute Z′ and to normalize readout values.
+- Once a run passes QC review and is approved, data is **locked** and the run moves to an approved state.
+
+<Callout type="warning">Approving a run applies an electronic signature under 21 CFR Part 11. You cannot edit the data afterward without a documented, audited change. Review all wells carefully before approving.</Callout>
+
+---
+
+## Step 4 — Organizing your research
+
+### Projects and collections
+
+A [project](/reference/glossary#project) is a named research program. You add compounds to a project by placing them in one or more [collections](/reference/glossary#collection) within that project.
+
+Collections are flexible: you can build them manually, populate them from a saved search, or have chemcellar generate one automatically when you close a screen campaign (containing all compounds with a decision).
+
+> 📷 *Screenshot: the Project detail page with a list of collections on the left and a compound grid on the right, showing structure thumbnails and key properties.*
+
+### Saved searches
+
+A [saved search](/reference/glossary#saved-search) lets you define a query — by structure substructure, property range, or both — and save it. Every time you run it, you get the current matching set. This is useful for tracking a chemical series as new compounds are registered.
+
+### Screen campaigns
+
+A [screen campaign](/reference/glossary#screen-campaign) aggregates measurements from one or more runs into a single view. For each compound you mark a decision: **active**, **inactive**, or **inconclusive**. When you close the campaign, chemcellar creates an immutable snapshot signed with your electronic signature.
+
+---
+
+## Step 5 — Searching and exporting
+
+chemcellar supports four search modes you can combine:
+
+| Mode | Example |
+|------|---------|
+| **Text / registration number** | `CV-00042` or a compound name |
+| **Substructure** | Draw or paste a scaffold; find all compounds containing it |
+| **Similarity** | Draw a query; find compounds above a [Tanimoto](/reference/glossary#tanimoto) threshold |
+| **Property filter** | MW < 500, logP between 1 and 4, TPSA < 120 |
+
+Exports are available as CSV, Excel, or SDF. The SDF export includes computed descriptors and registration metadata, making it easy to load results into other tools.
+
+<Callout type="default" emoji="💡">Use a saved search to keep a live "hit list" that updates automatically as new compounds are registered. You can pin it to a project and re-run it with one click.</Callout>
+
+---
+
+## Quick-reference: where to go
+
+| Task | Where to go |
+|------|-------------|
+| Register a single molecule | [Getting started → First molecule](/getting-started/first-molecule) |
+| Import a list of compounds | [Guides → Import](/guides/import) |
+| Understand how structures are stored | [Concepts → Chemical structures](/concepts/chemical-structures) |
+| Create a batch and aliquot samples | [Concepts → Batches & samples](/concepts/batches-and-samples) |
+| Set up a protocol | [Concepts → Assays & screening](/concepts/assays-and-screening) |
+| Understand dose-response curves | [Concepts → Dose-response](/concepts/dose-response) |
+| Organize compounds into a project | [Concepts → Projects, collections & campaigns](/concepts/projects-collections-campaigns) |
+| Export data | [Guides → Export](/guides/export) |
+| Understand the audit trail | [Concepts → Compliance](/concepts/compliance) |

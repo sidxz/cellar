@@ -1,0 +1,154 @@
+import { Callout } from 'nextra/components'
+
+# Approve a run and lock its data
+
+**Who this is for:** Scientists or data managers who review completed assay runs and apply an electronic signature to certify the data quality.
+
+**What you'll accomplish:** You will review a completed [run](/reference/glossary#run), assess its QC metrics, approve or reject it with an electronic signature, and optionally apply a data lock to make the data permanently immutable.
+
+## Before you start
+
+- You need the **Approve run** permission on your workspace.
+- The run must be in `completed` status. Only a completed run can be submitted for approval. Runs that are still `draft` or `in_progress` cannot be approved.
+- Review the QC metrics (Z′ factor, signal-to-noise, CV) and the readout data before taking any action. Once you approve, an electronic signature is captured and the action cannot be reversed without a separate audited process.
+
+<Callout type="warning">
+Approving a run applies an **electronic signature** under 21 CFR Part 11. You cannot edit the data afterward without a documented, audited change. This action is recorded in the append-only audit trail with your identity and timestamp.
+</Callout>
+
+## Understanding the approval lifecycle
+
+Runs move through this lifecycle:
+
+```
+draft ──► in_progress ──► completed ──► approved
+                                    ──► rejected ──► draft  (rework cycle)
+```
+
+Data lock is separate from status:
+
+```
+unlocked ──[lock]──► locked        (requires completed or approved status)
+locked ──[unlock]──► unlocked      (requires e-signature + documented reason)
+```
+
+A run can be approved without being locked — approval records the scientific review decision, while locking adds the additional constraint that no further edits are possible at all. In GLP or regulated contexts, runs are typically both approved and locked.
+
+## Step 1 — Find the run in the review queue
+
+1. In the top navigation, click **Screening**.
+2. Click **Runs** in the sidebar.
+3. Filter by status **Completed** to see runs awaiting review. You can also sort by run date or protocol name.
+4. Click the run you want to review.
+
+> 📷 *Screenshot: the Runs list filtered to "Completed" status, showing a table of runs with protocol name, run date, operator, and plate count. A "Review" button appears on each row.*
+
+## Step 2 — Review the QC metrics
+
+On the run detail page, the **QC metrics** panel appears in the header area. Review each metric:
+
+- **Z′ factor** — values ≥ 0.5 indicate a good assay. A Z′ between 0 and 0.5 signals a marginal assay; below 0, the controls do not separate from the samples. chemcellar flags Z′ below the workspace-configured threshold (default 0.5) with a yellow warning.
+- **Signal-to-noise ratio** — higher is better. The acceptable minimum depends on the assay format and is set by your workspace administrator.
+- **CV (coefficient of variation)** — a measure of replicate variability among control wells. Below 10% is generally acceptable; above 20% warrants investigation.
+
+> 📷 *Screenshot: the QC metrics panel showing Z′ = 0.72 (green badge), S/N = 8.4, and CV = 4.1%, with a note reading "All metrics within acceptable range."*
+
+If any metric is outside the acceptable range, chemcellar displays a warning. You can still approve the run despite a warning, but you should document your reasoning in the **Reviewer notes** field.
+
+## Step 3 — Review the plate heatmaps and dose-response curves
+
+Before approving, spend a few minutes on the plate data:
+
+1. Click the **Plates** tab and examine each plate heatmap.
+   - Positive controls should cluster at one end of the color scale; negative controls at the other.
+   - Look for spatial patterns that might indicate evaporation, edge effects, or dispensing problems.
+2. Click the **Dose-response** tab and scan the list of fitted curves.
+   - Note any curves with low R² or unusual curve classes (Bell-shaped, Partial).
+   - Check that excluded data points carry documented reasons.
+
+If you find a serious data quality problem at this stage — for example, controls that did not separate, or a large number of inactive compounds in a known-active series — consider rejecting the run rather than approving it.
+
+## Step 4 — Approve or reject the run
+
+When you are satisfied with the data quality:
+
+### To approve
+
+1. Click **Approve run**.
+2. chemcellar asks you to re-authenticate (enter your password or complete your organization's multi-factor step). This re-authentication is what constitutes the electronic signature.
+3. Optionally add **Reviewer notes** — a free-text comment on the data quality, any anomalies observed, or the basis for approval.
+4. Click **Confirm approval**.
+
+The run status changes to `approved`. A `RunApproved` event is emitted and an `AuditOperation` is created with your identity, the timestamp, and the signature ID.
+
+> 📷 *Screenshot: the Approve run dialog showing the password re-authentication field, a Reviewer notes text area, and Confirm approval / Cancel buttons.*
+
+<Callout type="warning">
+Once a run is approved, this action is permanent in the audit trail. You cannot "unapprove" a run. If the data needs to be corrected after approval, an administrator must unlock the run with a new electronic signature and documented reason — see the unlock workflow below.
+</Callout>
+
+### To reject
+
+1. Click **Reject run**.
+2. Enter a **Rejection reason** explaining what needs to be corrected (e.g., "Z′ factor 0.3 — plate evaporation suspected; please repeat the experiment").
+3. Click **Confirm rejection**.
+
+The run returns to `draft` status. The scientist who created the run receives a notification with your rejection reason. They can correct the issue and mark the run complete again for a second review.
+
+> 📷 *Screenshot: the Reject run dialog with a Rejection reason text area and Confirm rejection / Cancel buttons.*
+
+## Step 5 — Apply a data lock (optional but recommended for regulated work)
+
+After a run is approved (or completed), you can apply a data lock to make the run and all its readout data and dose-response curves permanently immutable.
+
+1. On the approved run's detail page, click **Lock data**.
+2. In the dialog, enter a **Lock reason** (e.g., "GLP study completed — data archived per SOP-QA-012").
+3. Click **Confirm lock**.
+
+<Callout type="warning">
+Once a run is **locked**, its data cannot be edited under any circumstances without a separate unlock operation. This action is recorded in the append-only audit trail. Data lock is intended for GLP studies, regulatory submissions, and any context requiring 21 CFR Part 11 compliance.
+</Callout>
+
+> 📷 *Screenshot: the Lock data dialog showing the Lock reason field and Confirm lock / Cancel buttons. The run header shows a "Locked" badge after locking.*
+
+Once locked, the run header displays a **Locked** badge. Any attempt to edit a readout value, dose-response curve, or plate assignment is blocked at the application level and — as a defense-in-depth measure — at the database level.
+
+## Unlocking a locked run
+
+Unlocking a locked run is a regulated action reserved for exceptional circumstances (data correction, investigation of a discrepancy). Only a user with the **Unlock run** permission (typically a QA officer or system administrator) can perform this step.
+
+1. On the locked run's detail page, click **Unlock data** (visible only to users with the Unlock run permission).
+2. Re-authenticate with your credentials (electronic signature).
+3. Enter a mandatory **Unlock reason** explaining why the lock is being removed.
+4. Click **Confirm unlock**.
+
+A `RunUnlocked` event is emitted and an `AuditOperation` is created with your identity, the timestamp, and the stated reason. After corrections are made, the run should be re-locked using the lock workflow above.
+
+<Callout type="warning">
+The unlock reason and your identity are permanently recorded. The audit trail shows both the original lock and the subsequent unlock. This creates a complete, transparent record for inspections and audits.
+</Callout>
+
+## What goes into the audit trail
+
+Every action on a run that affects data integrity is recorded in the append-only audit trail:
+
+| Action | What is recorded |
+|--------|-----------------|
+| Run approved | Run ID, approver identity, timestamp, signature ID, reviewer notes |
+| Run rejected | Run ID, reviewer identity, timestamp, rejection reason |
+| Data locked | Run ID, locker identity, timestamp, lock reason |
+| Data unlocked | Run ID, unlocker identity, timestamp, unlock reason, new signature ID |
+| Readout value added or changed | Run ID, editor identity, timestamp, well ID, old and new value |
+| Data point excluded from curve fit | Run ID, editor identity, timestamp, point index, exclusion reason |
+
+You can view the full audit trail for a run by clicking the **Audit log** tab on the run detail page.
+
+> 📷 *Screenshot: the Audit log tab on a run detail page, showing a chronological list of events: RunCreated, RunCompleted, RunApproved (with signature ID), and RunLocked entries, each with the user name and timestamp.*
+
+## Related
+
+- [Runs](./runs) — creating a run and entering readouts.
+- [Plate data](./plate-data) — viewing heatmaps and importing reader data.
+- [Dose-response](./dose-response) — reviewing curve fits before approval.
+- [Compliance & audit trail](/concepts/compliance) — the full model for electronic signatures, data locking, and 21 CFR Part 11 alignment.
+- [Assays & screening](/concepts/assays-and-screening) — the conceptual model for the full screening workflow.

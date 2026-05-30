@@ -1,0 +1,43 @@
+import { Callout } from 'nextra/components'
+
+# Registration guides
+
+**What you'll find here:** Step-by-step instructions for every task in chemcellar's chemical registration workflow — from drawing a single structure to importing hundreds of compounds from a file.
+
+[Chemical registration](/reference/glossary#chemical-registration) is the process of recording a compound's identity in chemcellar so that it can participate in experiments, inventory tracking, and data analysis. Before any compound can be plated in an assay, sampled from a vial, or analyzed for structure-activity relationships, it must be registered.
+
+## What registration does
+
+When you register a molecule, chemcellar:
+
+1. Normalizes the structure (strips salts, computes a canonical SMILES, generates an [InChIKey](/reference/glossary#inchikey)) using RDKit and the ChEMBL structure pipeline.
+2. Checks the workspace for an existing molecule with the same InChIKey. If one is found, a new [batch](/reference/glossary#batch) is added to the existing molecule rather than creating a duplicate.
+3. Assigns a permanent [registration number](/reference/glossary#registration-number) (e.g., `CV-00001`) that never changes, even if the molecule is later merged with another record.
+4. Computes physicochemical descriptors (molecular weight, logP, TPSA, hydrogen-bond donors and acceptors) and stores them alongside the structure.
+
+<Callout type="info">
+chemcellar canonicalizes every disclosed structure on registration. Two different SMILES strings that describe the same molecule will always produce the same InChIKey and will be recognized as the same compound.
+</Callout>
+
+## Guides in this section
+
+| Guide | What it covers |
+|-------|---------------|
+| [Drawing structures](./drawing-structures) | Using the built-in Ketcher structure editor to draw or import a molecule before registering it |
+| [Bulk registration](./bulk-registration) | Uploading an SDF, CSV, or XLSX file to register many compounds at once |
+| [Identifiers](./identifiers) | Managing vendor IDs, CAS numbers, ChEMBL IDs, and other external identifiers attached to a molecule |
+| [Disclosure & merge](./disclosure-and-merge) | Revealing the structure of an undisclosed molecule and handling the merge that follows if the structure already exists |
+| [Synthesis routes](./synthesis-routes) | Recording the reaction steps used to synthesize a target molecule |
+
+## Key concepts to read first
+
+If you are new to chemcellar or to the domain, these concept pages will give you the background you need before diving into the step-by-step guides:
+
+- [Registration & identity](/concepts/registration-and-identity) — how chemcellar deduplicates compounds and what a registration number means.
+- [Chemical structures](/concepts/chemical-structures) — SMILES, InChI, and the other structure formats chemcellar uses.
+- [Undisclosed molecules](/concepts/undisclosed-molecules) — what it means for a molecule to be undisclosed, and when you would register one.
+- [Batches & samples](/concepts/batches-and-samples) — the relationship between a molecule record and the physical material in the lab.
+
+## Related
+- [Glossary](/reference/glossary)
+- [Chemistry standards reference](/reference/chemistry-standards)

@@ -1,0 +1,179 @@
+import { Callout } from 'nextra/components'
+
+# Manage storage locations
+
+**Who this is for:** Lab managers and administrators who set up the storage hierarchy, and bench scientists who assign samples to specific freezer positions.
+
+**What you'll accomplish:** You will understand how chemcellar models physical storage, learn how to create and arrange storage locations, and be able to use the storage browser to find where a sample currently lives.
+
+---
+
+## Before you start
+
+- You need the **Manage storage** permission to create or edit storage locations. Your workspace administrator can grant this.
+- Assigning a sample to a location requires only the standard **Inventory edit** permission.
+- Plan your hierarchy on paper before entering it — the parent-child relationships are validated and cannot form cycles.
+
+---
+
+## How chemcellar models storage
+
+chemcellar represents your lab's physical storage as a hierarchy that mirrors real infrastructure. Each level is a **storage location** with a type:
+
+```
+Site
+ └── Building
+      └── Room
+           └── Freezer / Refrigerator
+                └── Shelf
+                     └── Rack
+                          └── Box / Drawer
+                               └── Position
+```
+
+Every [sample](/reference/glossary#sample) can be assigned to any node in this tree. In practice you will usually assign samples to a specific **box position** (row + column in a cryobox, for example) for precise tracking, but you can also assign to a higher level such as a shelf when exact position is not tracked.
+
+Each storage location can record:
+
+| Property | What it means |
+|----------|--------------|
+| **Name** | Human-readable label — e.g., "Freezer A", "Shelf 3", "Cryobox 14-B" |
+| **Type** | One of: site, building, room, freezer, refrigerator, shelf, rack, box, drawer |
+| **Temperature** | Nominal temperature — e.g., `−80 °C`, `−20 °C`, `4 °C`, `RT` |
+| **Barcode** | Optional barcode label on the physical container |
+| **Grid dimensions** | For boxes: number of rows and columns (e.g., 9 × 9 for a standard 81-position cryobox) |
+| **Capacity** | Maximum number of items the location can hold |
+
+<Callout type="info">
+A location's parent type is validated. For example, a shelf's parent must be a freezer or refrigerator — a shelf cannot be placed inside another shelf. chemcellar enforces these rules at creation time to prevent hierarchy errors.
+</Callout>
+
+---
+
+## Step 1 — Navigate to Storage management
+
+1. In the top navigation bar, click **Inventory**.
+2. In the left sidebar, click **Storage**.
+3. The storage browser opens with the hierarchy tree on the left and a detail/grid panel on the right.
+
+> 📷 *Screenshot: the Storage browser showing the hierarchy tree on the left (Site > Building > Room > Freezer A) and an empty detail panel on the right.*
+
+---
+
+## Step 2 — Create a storage location
+
+1. In the hierarchy tree, select the parent location under which you want to add a new child. For example, select a room to add a new freezer inside it.
+2. Click **Add location** (the plus button next to the selected node, or the **Add location** button in the action bar).
+3. Fill in the **Add storage location** form:
+   - **Name** — give the location a clear, unambiguous label.
+   - **Type** — select the appropriate type from the dropdown. Only types that are valid children of the selected parent are shown.
+   - **Temperature** — optional. Record the nominal temperature if relevant (e.g., `−80 °C`).
+   - **Barcode** — optional. If the physical container has a barcode label, enter or scan it here.
+   - **Grid dimensions (rows / columns)** — only appears when the type is **box** or **drawer**. Enter the dimensions of the physical grid (e.g., 9 rows × 9 columns for a 81-position box).
+   - **Capacity** — optional maximum item count.
+4. Click **Save**.
+
+The new location appears in the hierarchy tree under the parent you selected.
+
+> 📷 *Screenshot: the Add storage location form with Type set to "Box", rows set to 9, and columns set to 9.*
+
+<Callout type="default" emoji="💡">
+Give locations short, memorable names that your team will recognise instantly — "FRZR-A", "SHELF-3", "BOX-14-B" rather than generic names like "Freezer 1". Good naming prevents mis-assignment and makes audits easier.
+</Callout>
+
+---
+
+## Step 3 — Edit or reorganise locations
+
+To edit an existing location's properties (name, temperature, barcode), click on it in the tree and then click **Edit** in the detail panel. You can change the name, temperature, or barcode at any time.
+
+<Callout type="warning">
+You cannot change a location's **type** after creation, and you cannot move a location to a parent of an incompatible type. If you need to reorganise your hierarchy significantly, contact your workspace administrator — they can use the admin delete function to remove empty locations and recreate them in the correct positions.
+</Callout>
+
+---
+
+## Using the storage browser to find material
+
+The storage browser lets you locate samples by navigating the hierarchy or by scanning a location barcode.
+
+### Navigate the tree
+
+1. Click any node in the hierarchy tree to select it.
+2. The detail panel on the right shows:
+   - **Properties** — name, type, temperature, barcode, capacity.
+   - **Contents** — a list of samples currently assigned to this location (and, if it is a box, a grid view showing which positions are occupied).
+3. Click any sample barcode in the contents list to open that sample's detail record.
+
+> 📷 *Screenshot: the storage browser with a cryobox selected on the left. The right panel shows a 9×9 grid where occupied positions are highlighted in blue and hovering a position reveals the sample barcode and compound registration number.*
+
+### Search by barcode
+
+If you have scanned a location's barcode label, you can go directly to that location without navigating the tree:
+
+1. Click **Search location** in the storage browser toolbar.
+2. Scan or type the location barcode.
+3. chemcellar selects that location in the tree and opens its detail panel.
+
+### Find a sample's location
+
+If you know the sample barcode but not where it is physically stored:
+
+1. Go to **Inventory > Samples**.
+2. Search or filter for the sample by barcode, batch number, or molecule registration number.
+3. In the sample row or detail page, the **Location** column shows the full hierarchy path — for example, `Site / Building 1 / Lab 3A / Freezer A / Shelf 2 / Rack 1 / Box 14 / B4`.
+4. Click the path to jump to that box in the storage browser.
+
+---
+
+## Assigning a sample to a storage location
+
+When you create or edit a sample, you can assign it to any storage location using the location picker:
+
+1. Open the sample record (from the sample list or by scanning the barcode).
+2. Click **Edit** (or fill in the location field when creating a new sample — see the [inventory index](./index) guide).
+3. In the **Storage location** field, click **Select location**.
+4. The location picker opens with the hierarchy tree. Navigate to the target box or position.
+5. If the selected node is a box with grid dimensions, a grid appears — click the target position cell.
+6. Click **Confirm selection**.
+7. Click **Save sample**.
+
+chemcellar records the move as a `SampleMoved` event in the audit trail, capturing the old location and the new location.
+
+<Callout type="info">
+Moving a sample between locations is recorded in the append-only audit trail. The previous and new location, the moving user, and the timestamp are all captured.
+</Callout>
+
+---
+
+## Low-stock threshold and alerts
+
+Each sample has an optional **low-stock threshold** — a quantity below which chemcellar considers the sample to be running low. When the sample's current amount drops below this threshold, chemcellar emits a low-stock notification.
+
+To set or change the threshold:
+
+1. Open the sample record.
+2. Click **Edit**.
+3. In the **Low-stock threshold** field, enter the alert quantity and select its unit. Use the same unit as the sample's current amount to avoid ambiguity.
+4. Click **Save sample**.
+
+<Callout type="default" emoji="💡">
+Set a low-stock threshold whenever a compound is critical to active screening campaigns or synthesis programmes. This gives the sample management team time to request re-synthesis or re-purchase before the material runs out entirely.
+</Callout>
+
+---
+
+## Result
+
+After completing these steps, your storage hierarchy will reflect your lab's physical layout, every sample will be assigned to a known location, and the storage browser will give you a real-time view of what is stored where.
+
+---
+
+## Related
+
+- [Inventory overview](./index) — registering batches and samples.
+- [Sample requests](./sample-requests) — requesting material from existing stock.
+- [Shipments](./shipments) — recording when material is shipped out of the lab.
+- [Batches & samples](/concepts/batches-and-samples) — the concept page explaining the storage location model in detail.
+- [Compliance & audit trail](/concepts/compliance) — how storage moves appear in the audit log.
+- [Glossary](/reference/glossary)

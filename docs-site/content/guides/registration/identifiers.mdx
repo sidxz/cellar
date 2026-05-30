@@ -1,0 +1,98 @@
+import { Callout } from 'nextra/components'
+
+# Manage identifiers
+
+**Who this is for:** Chemists and data managers who need to attach, review, or cross-reference external IDs on a molecule record.
+
+**What you'll accomplish:** You will add one or more external identifiers to a molecule, understand how chemcellar enforces identifier uniqueness, and know how identifiers behave when molecules are merged.
+
+## What is an identifier?
+
+Every molecule in chemcellar has a permanent [registration number](/reference/glossary#registration-number) (e.g., `CV-00001`) assigned by chemcellar itself. That number never changes.
+
+In practice, the same compound often exists in other systems under different names or codes — a vendor catalog number, a CAS registry number, a ChEMBL ID, or a legacy code from a previous informatics system. chemcellar stores these as **molecule identifiers**: an explicit, versioned list of external codes attached to the molecule.
+
+An identifier has:
+
+- **Identifier value** — the code string itself (e.g., `50-78-2` for aspirin's CAS number).
+- **Identifier type** — what kind of code it is:
+  - `vendor_id` — a supplier catalog or lot number.
+  - `cas_number` — a CAS Registry Number.
+  - `chembl_id` — a ChEMBL compound identifier.
+  - `pubchem_cid` — a PubChem Compound ID.
+  - `internal_legacy` — a code from a previous internal system (also created automatically during merge operations).
+  - `custom` — any other type defined by your workspace administrator.
+- **Source** — how the identifier was attached (e.g., "User registration", "Bulk import", "Merge transfer").
+
+<Callout type="info">
+Identifier values are unique across the entire workspace. No two active molecules can share the same identifier string, regardless of type. If you try to add an identifier that already belongs to another molecule, chemcellar will block the action and show you which molecule holds it.
+</Callout>
+
+## Add an identifier to a molecule
+
+1. Open the molecule's detail page. You can reach it by searching for the molecule by registration number, name, or any known identifier, then clicking the result.
+2. On the detail page, navigate to the **Identifiers** tab.
+3. Click **Add identifier**.
+4. In the dialog:
+   - Select the **Identifier type** from the dropdown.
+   - Enter the **Identifier value** in the text field.
+5. Click **Save**.
+
+chemcellar checks the value for uniqueness within the workspace. If it is already in use, the dialog shows the conflicting molecule so you can decide how to proceed.
+
+> 📷 *Screenshot: the Identifiers tab on a molecule detail page, showing existing identifiers in a table and the Add identifier button.*
+
+> 📷 *Screenshot: the Add identifier dialog with the Identifier type dropdown open, showing the available type options.*
+
+## View all identifiers on a molecule
+
+On the molecule's detail page, the **Identifiers** tab lists all identifiers with columns for type, value, source, and date added. You can sort and filter this list if the molecule has many identifiers.
+
+## Remove an identifier
+
+1. On the **Identifiers** tab, find the identifier you want to remove.
+2. Click the **...** (more options) menu on that row and select **Remove**.
+3. Confirm the action in the dialog that appears.
+
+<Callout type="warning">
+Removing an identifier is recorded in the audit trail. If other systems or documents reference the identifier you are removing, update those references before removing it from chemcellar.
+</Callout>
+
+## Search by identifier
+
+You can find a molecule by any of its identifiers without knowing the registration number:
+
+1. Click **Search** in the top navigation bar.
+2. In the search box, type the identifier value (e.g., `50-78-2` or `TBDA-001`).
+3. chemcellar will return the molecule that holds that identifier.
+
+Alternatively, on the molecule list page, use the **Identifiers** filter chip in the sidebar to filter the list to molecules that match a specific identifier value or type.
+
+## Identifiers during bulk registration
+
+When you upload a file for [bulk registration](./bulk-registration), you can include `vendor_id` and `cas_number` columns. chemcellar attaches these as identifiers during registration. If any identifier in the file conflicts with an existing molecule, that row is flagged as an error in the import report.
+
+## Identifiers during merge
+
+When two molecules are [merged](./disclosure-and-merge), all identifiers from the absorbed (source) molecule are transferred to the surviving (target) molecule. In addition, the source molecule's registration number is automatically added as an `internal_legacy` identifier on the target — this preserves a traceable link back to the old record. No identifier is silently dropped during a merge.
+
+<Callout type="info">
+If both molecules share the same identifier value before the merge, chemcellar deduplicates: the identifier is kept once on the target, not duplicated.
+</Callout>
+
+## Identifier types reference
+
+| Type | Purpose | Example |
+|------|---------|---------|
+| `vendor_id` | Supplier catalog or lot code | `TBDA-001`, `SIG-123456` |
+| `cas_number` | CAS Registry Number | `50-78-2` |
+| `chembl_id` | ChEMBL compound ID | `CHEMBL25` |
+| `pubchem_cid` | PubChem Compound ID | `2244` |
+| `internal_legacy` | Code from a previous system; also auto-created on merge | `OLD-CV-00001` |
+| `custom` | Workspace-defined type, configured by your admin | depends on workspace |
+
+## Related
+- [Drawing structures](./drawing-structures) — register a molecule and provide its first identifier at the same time.
+- [Bulk registration](./bulk-registration) — attach identifiers in bulk via file upload.
+- [Disclosure & merge](./disclosure-and-merge) — understand how identifiers move when molecules are merged.
+- [Glossary — registration number](/reference/glossary#registration-number)

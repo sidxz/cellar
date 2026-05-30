@@ -1,0 +1,159 @@
+import { Callout } from 'nextra/components'
+
+# Record a shipment
+
+**Who this is for:** Lab managers and sample management team members who ship compound samples to external collaborators, contract research organisations (CROs), or other lab sites.
+
+**What you'll accomplish:** You will create a [shipment](/reference/glossary#shipment) record that tracks which samples are being sent, the carrier and tracking number, and the expected and actual delivery dates — establishing a complete chain-of-custody record.
+
+---
+
+## Before you start
+
+- You need the **Manage shipments** permission.
+- The receiving organisation must already exist in chemcellar under **Administration > Organisations**. If it does not, ask your workspace administrator to add it before you proceed.
+- Each sample you want to include in the shipment must be in `available` status. You cannot ship a `depleted`, `expired`, `quarantined`, or `disposed` sample.
+- Decide in advance how much of each sample you are shipping — partial shipments from a single vial are allowed, but you must record the exact amount shipped.
+
+<Callout type="info">
+A shipment in chemcellar represents the transfer of physical material between your workspace and an external organisation. It is distinct from a [sample request](./sample-requests), which is an internal workflow. Shipments are the chain-of-custody record for material leaving your facility.
+</Callout>
+
+---
+
+## Step 1 — Create a shipment record
+
+1. In the top navigation bar, click **Inventory**.
+2. In the left sidebar, click **Shipments**.
+3. Click **New shipment**.
+4. Fill in the **New shipment** form:
+   - **Destination organisation** — select the receiving CRO or lab from the dropdown. Only organisations registered in your workspace appear here. Contact your administrator if the organisation is missing.
+   - **Shipping conditions** — describe temperature or handling requirements (for example, "dry ice, −80 °C" or "ambient, keep upright"). This field is free text.
+   - **Notes** — any additional context for the receiving party or your internal records.
+5. Click **Create shipment**.
+
+The shipment is created with status `preparing`. You can now add samples to it.
+
+> 📷 *Screenshot: the New shipment form with the Destination organisation dropdown open, showing a list of registered CROs and labs, and a Shipping conditions field.*
+
+---
+
+## Step 2 — Add samples to the shipment
+
+A shipment must contain at least one sample. You add samples one at a time, specifying how much of each sample is being shipped.
+
+1. On the shipment detail page, click **Add sample**.
+2. In the **Add sample to shipment** dialog:
+   - **Sample barcode** — scan or type the barcode of the container you are shipping. chemcellar looks up the sample and shows its current amount, batch number, and storage location.
+   - **Amount shipped** — enter the quantity being sent and confirm the unit. This can be the full remaining amount or a partial amount (for example, if you are splitting a vial into multiple shipments).
+3. Click **Add to shipment**.
+4. Repeat for each additional sample.
+
+> 📷 *Screenshot: the Add sample dialog on a shipment detail page, with a barcode field showing a recently scanned sample, the current amount pre-filled, and an Amount shipped field.*
+
+<Callout type="default" emoji="💡">
+The amount shipped is recorded as a reference on the shipment item — it does not automatically deduct from the sample's current amount in chemcellar. You must separately record the consumption on each sample (via **Record consumption** on the sample record) if the physical container is leaving your lab and the remaining material is no longer under your control. If you are shipping the entire vial, mark the sample as disposed after confirming delivery.
+</Callout>
+
+<Callout type="warning">
+If you remove a sample from a shipment after adding it (click **Remove** on the shipment item), that removal is recorded in the audit trail along with the user who made the change.
+</Callout>
+
+---
+
+## Step 3 — Mark the shipment as shipped
+
+When the package is handed to the carrier:
+
+1. On the shipment detail page, click **Mark as shipped**.
+2. In the confirmation dialog:
+   - **Tracking number** — enter the carrier's tracking number. This field is required when marking as shipped.
+   - **Carrier** — enter the carrier name (for example, "FedEx", "DHL", "courier").
+   - **Shipping date** — confirm or correct the date the package was handed over (defaults to today).
+   - **Expected arrival date** — the date the carrier estimates delivery.
+3. Click **Confirm shipment**.
+
+The shipment status changes to `shipped`.
+
+> 📷 *Screenshot: the Mark as shipped dialog with the Tracking number field, Carrier field, and Shipping date and Expected arrival date date pickers.*
+
+<Callout type="info">
+Marking a shipment as shipped is recorded in the audit trail. The tracking number, carrier, shipping date, and the user who confirmed are all captured.
+</Callout>
+
+---
+
+## Step 4 — Track the shipment in transit
+
+Once the shipment is `shipped`, chemcellar displays the tracking number, carrier, and expected arrival date on the shipment detail page. The status advances to `in_transit` automatically when the shipping date passes, or you can manually advance it:
+
+1. Open the shipment record.
+2. Click **Mark in transit** if you want to record that the carrier has collected the package.
+
+The shipment's timeline shows the progression from `preparing` through `shipped` to `in_transit`.
+
+---
+
+## Step 5 — Confirm delivery
+
+When the receiving organisation confirms they have received the shipment:
+
+1. Open the shipment record.
+2. Click **Confirm delivery**.
+3. In the confirmation dialog:
+   - **Received date** — enter the date the recipient confirmed receipt. This field is required.
+   - **Notes** — record any discrepancies noted by the recipient (for example, damaged packaging, unexpected condition of samples).
+4. Click **Confirm**.
+
+The shipment status changes to `delivered`. The received date is locked on the record.
+
+<Callout type="warning">
+Confirming delivery is recorded in the append-only audit trail. The received date, the confirming user, and any notes are captured. This record represents your chain-of-custody evidence that material arrived at the stated destination on the stated date.
+</Callout>
+
+---
+
+## Recording a return
+
+If the receiving organisation returns the shipment to you (for example, because material did not meet specifications or the project was cancelled):
+
+1. Open the shipment record.
+2. Click **Mark as returned**.
+3. Enter the reason for the return in the **Notes** field.
+4. Click **Confirm**.
+
+The shipment status changes to `returned`. You will need to inspect the returned samples and update their status and amounts in chemcellar to reflect their actual condition upon return.
+
+---
+
+## Shipment status lifecycle
+
+```
+preparing ──[Mark as shipped]──► shipped ──[in transit]──► in_transit ──[Confirm delivery]──► delivered
+                                                                     └──[Mark as returned]──► returned
+```
+
+`delivered` and `returned` are terminal states — a delivered or returned shipment cannot be re-opened.
+
+---
+
+## Viewing shipment history for a sample
+
+To see all shipments that have included a particular sample:
+
+1. Open the sample record (by barcode or from the Samples list).
+2. Open the **Shipments** tab on the sample detail page.
+3. Each shipment entry shows the destination organisation, shipping date, status, and the amount that was recorded for that shipment item.
+
+This gives you a complete history of where a sample has travelled, which is important for chain-of-custody compliance.
+
+---
+
+## Related
+
+- [Inventory overview](./index) — registering batches and samples.
+- [Sample requests](./sample-requests) — requesting material from existing internal inventory.
+- [Synthesis requests](./synthesis-requests) — if you need to ship starting materials to a CRO for synthesis.
+- [Storage locations](./storage) — where samples live before they are shipped.
+- [Compliance & audit trail](/concepts/compliance) — how shipment events are recorded in the audit log.
+- [Glossary](/reference/glossary)

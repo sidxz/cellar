@@ -1,0 +1,90 @@
+import { Callout } from 'nextra/components'
+
+# Log in and choose a workspace
+
+**Who this is for:** Anyone signing in to chemcellar for the first time, or switching workspaces.
+
+**What you'll accomplish:** You will authenticate through your organisation's identity provider and land on the chemcellar dashboard inside the correct workspace.
+
+---
+
+## How authentication works
+
+chemcellar does not manage passwords. Instead, it delegates all identity and access control to **Sentinel** — the shared identity service used by your organisation. Sentinel connects to an external identity provider such as Google Workspace, Microsoft Entra ID (formerly Azure AD), or GitHub.
+
+When you log in, the flow is:
+
+1. chemcellar redirects you to Sentinel.
+2. Sentinel forwards you to your organisation's identity provider.
+3. You sign in there (your normal institutional credentials).
+4. Your identity provider confirms your identity back to Sentinel.
+5. Sentinel issues a secure token and returns you to chemcellar.
+
+You never enter a separate chemcellar password. If your organisation's single sign-on (SSO) works, chemcellar works.
+
+<Callout type="info">Sentinel manages your user profile, group memberships, and workspace roles. If you cannot log in, or if you see a "not a member of any workspace" error, contact your chemcellar administrator — not your IT helpdesk.</Callout>
+
+---
+
+## Before you start
+
+- Your administrator must have created a Sentinel account for you and added you to at least one workspace.
+- If your organisation uses SSO (Google, Microsoft, etc.), make sure you are already signed in to that provider in your browser — this makes the flow seamless.
+
+---
+
+## Steps
+
+1. Open chemcellar in your browser. Your administrator will give you the URL for your deployment.
+
+   > 📷 *Screenshot: the chemcellar login page showing the "Sign in" button.*
+
+2. Click **Sign in**. You are redirected to the Sentinel authentication screen.
+
+3. On the Sentinel screen, click the button that matches your identity provider (for example, **Continue with Google** or **Sign in with Microsoft**).
+
+   > 📷 *Screenshot: the Sentinel identity-provider selection screen with Google and Microsoft options highlighted.*
+
+4. Complete the sign-in flow on your identity provider's own page. Depending on your organisation's policy, this may include a multi-factor authentication (MFA) prompt.
+
+5. After successful authentication, Sentinel redirects you back to chemcellar.
+
+---
+
+## Choose a workspace
+
+A **workspace** is a tenant boundary. All molecules, batches, protocols, and runs inside one workspace are invisible to users in other workspaces. Most users belong to exactly one workspace. If you belong to more than one — for example, if your team has a sandbox workspace for testing alongside a production workspace — chemcellar will show a **workspace picker** after you log in.
+
+> 📷 *Screenshot: the workspace picker dialog listing two workspaces, one highlighted and a "Select" button.*
+
+6. If the workspace picker appears, click the name of the workspace you want to work in, then click **Select workspace**.
+
+7. If you belong to only one workspace, chemcellar skips the picker and takes you directly to the dashboard.
+
+<Callout type="default" emoji="💡">You can switch workspaces at any time without logging out. Click your avatar or workspace name in the top-right header and select **Switch workspace**.</Callout>
+
+---
+
+## What happens next
+
+You land on the chemcellar dashboard for the chosen workspace. The sidebar shows the main navigation sections: **Molecules**, **Inventory**, **Screening**, **Research**, and **Administration** (if you have the admin role).
+
+If this is your first login, the molecule list will be empty. See [Navigating chemcellar](/getting-started/navigating) to orient yourself, or jump straight to [Register your first molecule](/getting-started/first-molecule).
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | What to do |
+|---|---|---|
+| "Not a member of any workspace" error after login | Your account exists in Sentinel but has not been added to a workspace | Contact your workspace administrator |
+| Redirect loop back to the login page | Your browser is blocking third-party cookies, or your SSO session has expired | Clear cookies, sign out of your identity provider, and try again |
+| "Access denied" on specific pages | Your workspace role does not have the required permission | Ask your administrator to grant you the relevant role or permission |
+| You cannot see workspaces you expect | Your Sentinel account may not be a member of those workspaces | Ask your administrator to add your account |
+
+---
+
+## Related
+
+- [Navigating chemcellar](/getting-started/navigating) — orientation tour after you log in
+- [Users and roles](/administration/users-and-roles) — how administrators manage workspace membership and permissions

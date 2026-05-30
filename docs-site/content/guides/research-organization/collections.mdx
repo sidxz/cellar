@@ -1,0 +1,170 @@
+import { Callout } from 'nextra/components'
+
+# Curate a compound collection
+
+**Who this is for:** Scientists and portfolio managers who need to assemble a curated set of [molecules](/reference/glossary#molecule) — for example, a focused screening library, a hit list, or an internal reference set.
+
+**What you'll accomplish:** You will create a [collection](/reference/glossary#collection), add molecules to it in bulk, understand what frozen collections are and why they cannot be edited, and remove a molecule from a collection.
+
+---
+
+## Before you start
+
+- You need a chemcellar account with at least **Project Editor** access to the project you want to associate the collection with.
+- The molecules you want to add must already be registered in chemcellar. If you need to register compounds first, see [Register a single molecule](/guides/registration) or [Bulk registration](/guides/registration/bulk-registration).
+
+---
+
+## What is a collection?
+
+A [collection](/reference/glossary#collection) (sometimes called a compound library or compound list) is a named, curated set of molecules. Collections are the primary way you organize compounds for screening:
+
+- You build a collection of the compounds you want to test.
+- You attach that collection to a [campaign](/reference/glossary#campaign) as the source of compounds.
+- The campaign pulls measurements from the relevant screening runs for those specific molecules.
+
+A collection holds **references** to molecules, not copies. If a molecule's structure or properties are updated after you add it to a collection, the collection automatically reflects the latest data.
+
+Collections can be large — a focused library can hold tens of thousands of molecules. chemcellar uses an efficient join-table design under the hood so that membership queries stay fast even at scale.
+
+For the conceptual overview of how collections fit into projects and campaigns, see [Projects, Collections & Campaigns](/concepts/projects-collections-campaigns).
+
+---
+
+## Create a collection
+
+1. In the left sidebar, click **Research**, then **Collections**.
+2. Click **New collection**.
+3. In the **Create collection** dialog:
+   - Enter a **Collection name**. Choose something descriptive — for example, "Kinase Focused Library — 2026-Q1" or "Primary hits ≥ 50% inhibition".
+   - Optionally add a **Description**.
+   - Select a **Project** to associate the collection with. A collection belongs to exactly one project.
+4. Click **Create**.
+
+> 📷 *Screenshot: the Create collection dialog showing the Name field filled in as "Primary hits ≥ 50% inhibition", the Description field, and a Project selector dropdown.*
+
+chemcellar creates the collection and takes you to its detail page. The collection starts empty.
+
+---
+
+## Add molecules one at a time
+
+To add a single molecule to a collection from the molecule detail page:
+
+1. Navigate to the molecule's detail page (search by registration number, name, or structure).
+2. Click **Actions**, then **Add to collection**.
+3. In the selector, choose the collection. You can search by collection name.
+4. Click **Add**.
+
+The molecule appears immediately in the collection's member grid.
+
+---
+
+## Add molecules in bulk from search results
+
+The most efficient way to populate a collection is from the search results grid.
+
+1. Run a search — by structure, property filter, text, or any combination. See [Search overview](/guides/search) for details.
+2. In the results grid, select the molecules you want to add:
+   - Click the checkbox on individual rows.
+   - To select all results on the current page, click the checkbox in the header row.
+   - To select all results across all pages, click **Select all N results** in the toolbar that appears after you check any row.
+3. With molecules selected, click **Add to collection** in the selection toolbar.
+4. Choose the target collection from the dropdown (or type to search).
+5. Click **Add N molecules**.
+
+> 📷 *Screenshot: the search results grid with 47 rows selected, the selection toolbar showing "47 selected" with an "Add to collection" button highlighted.*
+
+<Callout type="default" emoji="💡">
+Use the **Select all N results** option when you want to add every molecule that matches a filter — even if there are more results than fit on one page. chemcellar adds all matching molecules, not just the current page.
+</Callout>
+
+<Callout type="info">
+If you add a molecule that is already a member of the collection, chemcellar silently ignores the duplicate. Your final count reflects unique members only.
+</Callout>
+
+---
+
+## View collection members
+
+On the collection detail page, the **Members** tab shows all molecules in the collection in an interactive grid. Each row shows:
+
+- Registration number
+- 2D structure thumbnail
+- Molecular formula and weight
+- Any other columns you have configured (via column preferences)
+
+You can sort and filter this grid the same way you filter the main molecule list. You can also export the current member list to CSV or Excel from the **Export** menu.
+
+> 📷 *Screenshot: the collection detail page Members tab showing a grid of molecules with structure thumbnails, registration numbers, and molecular weight columns, with an Export button visible in the toolbar.*
+
+---
+
+## Remove a molecule from a collection
+
+1. On the collection's detail page, find the molecule in the **Members** grid.
+2. Click the row's **⋯** action menu (or right-click the row).
+3. Click **Remove from collection**.
+4. Confirm when prompted.
+
+The molecule is removed from this collection but is **not deleted** from chemcellar. It remains in the database and in any other collections it belongs to.
+
+<Callout type="info">
+Removing a molecule from a collection is recorded in the audit trail. The molecule's registration record is unaffected.
+</Callout>
+
+---
+
+## Frozen collections
+
+When you close a [campaign](/reference/glossary#campaign) with **Publish collection** enabled, chemcellar creates a **frozen collection** containing every compound whose decision was marked `selected`. This collection is a permanent, immutable snapshot of that membership set at the exact moment of campaign closure.
+
+Frozen collections are intentionally locked:
+
+- The **Add molecules** button is disabled.
+- The **Remove from collection** action is disabled.
+- The collection shows a **Frozen** status badge.
+
+This immutability is what makes the collection a reliable audit artifact. It records exactly which compounds were advanced at a specific decision point and under which electronic signature.
+
+<Callout type="warning">
+Frozen collections cannot be modified. Freezing is recorded in the audit trail as part of campaign closure. If you need to build on the compound list in a frozen collection, create a new (unfrozen) collection and add molecules from the frozen one as a starting point.
+</Callout>
+
+> 📷 *Screenshot: the collection detail page for a frozen collection, showing the "Frozen" status badge next to the collection name, and the Add molecules button grayed out with a tooltip explaining "This collection is frozen".*
+
+### Why a collection gets frozen
+
+A collection is frozen when:
+
+1. A campaign is closed with **Publish collection** enabled, **and**
+2. At least one compound in that campaign has a decision of `selected`.
+
+The frozen collection is automatically named and linked back to the campaign that created it. You can navigate from the frozen collection back to its source campaign at any time.
+
+### Using a frozen collection as input for the next campaign
+
+The most common use of a frozen collection is as the compound source for the next stage of a screening cascade. In the campaign creation dialog, choose **Collection** as the compound source and select the frozen collection. chemcellar resolves the compound list from the frozen membership at that point in time.
+
+---
+
+## What happens when a molecule is merged
+
+During a [merge](/reference/glossary#merge) event (when two molecule records are consolidated because they turn out to be the same compound), chemcellar automatically updates collection membership:
+
+- The surviving (target) molecule is added to any collection where the absorbed (source) molecule was a member.
+- The source molecule is removed from those collections.
+- Frozen collections are **not** updated during a merge — their membership is locked at closure time.
+
+You do not need to manually update collections after a merge.
+
+---
+
+## Related
+
+- [Projects, Collections & Campaigns concept](/concepts/projects-collections-campaigns) — the full picture of how these layers interact.
+- [Work with projects](./projects) — create and manage the project a collection lives in.
+- [Screen campaigns guide](./screen-campaigns) — use a collection as the compound source for a campaign.
+- [Search overview](/guides/search) — find molecules to add to a collection.
+- [Export data](/guides/export) — export a collection's member list.
+- [Glossary: collection](/reference/glossary#collection), [molecule](/reference/glossary#molecule), [campaign](/reference/glossary#campaign), [merge](/reference/glossary#merge)

@@ -1,0 +1,143 @@
+import { Callout } from 'nextra/components'
+
+# Export data from chemcellar
+
+**Who this is for:** Scientists, portfolio managers, and data managers who need to extract molecule, batch, screening, or plate data from chemcellar for use in analysis tools, external reports, or other systems.
+
+**What you'll accomplish:** You will download your data in a format you can open in Excel, process in Python/R, or re-import into chemcellar — including round-trippable plate layouts.
+
+## Before you start
+
+- You need at least the **View** permission for the entity type you want to export (molecules, batches, plates, or screening data).
+- Plate-layout export additionally requires access to the specific plate record under a screening run.
+- No special "export" permission is required — export respects the same workspace-scoped visibility as browsing.
+
+<Callout type="info">
+All exports are generated on demand and reflect the current state of the data at the time you click the download button. There is no scheduled export or snapshot system — if you need a dated snapshot, download and archive the file yourself.
+</Callout>
+
+---
+
+## Export from any data grid (CSV / Excel)
+
+Every AG Grid list view in chemcellar — the molecule list, batch list, screening run list, and others — has a built-in export control in the toolbar.
+
+### Steps
+
+1. Navigate to the list you want to export (for example, **Molecules** in the main navigation, or **Batches** inside a molecule's detail page).
+2. Apply any filters or column visibility settings you need. The export respects your current view — only visible columns and filtered rows are included.
+3. Click the **Export** button (or the down-arrow next to it) in the grid toolbar.
+4. Choose **CSV** or **Excel (.xlsx)**.
+5. The file downloads immediately to your browser's default download location.
+
+> 📷 *Screenshot: the molecule list grid with the Export button highlighted in the toolbar and a dropdown showing CSV and Excel options.*
+
+<Callout type="default" emoji="💡">
+If you want to export a specific subset of molecules — for example, all actives from a particular campaign — use a [saved search](/guides/search/saved-searches) to filter first, then export. The export will contain exactly the filtered rows.
+</Callout>
+
+### What is included in grid exports
+
+| Column | Included in grid export? |
+|--------|------------------------|
+| Registration number (e.g., CV-00001) | Yes — always present |
+| Name, SMILES, InChIKey | Yes |
+| Computed descriptors (MW, logP, TPSA, etc.) | Yes, if the column is visible in your grid |
+| Custom fields | Yes, if the column is visible |
+| Structure image | No — use SDF export for structure files |
+
+---
+
+## Export molecules as SDF
+
+For use in external chemistry tools (modeling software, cheminformatics pipelines, other registration systems), chemcellar can export molecules as an SDF file containing the 2D structure and selected properties as SD tags.
+
+### Steps
+
+1. From the molecule list, apply any filters you need to scope the export.
+2. Click **Export** in the toolbar and choose **SDF**.
+3. chemcellar generates the SDF in the background and downloads it when ready.
+
+The SDF file contains one MOL block per molecule. SD tags include the registration number, name, SMILES, InChIKey, and computed descriptors. Custom fields are included as additional SD tags.
+
+> 📷 *Screenshot: the Export dropdown on the molecule list with the SDF option highlighted.*
+
+<Callout type="info">
+The SMILES in the exported SDF is the canonical form chemcellar stored at registration — the same structure that was standardized through the normalization pipeline. If you need the original SMILES as submitted, contact your administrator to run a database-level export.
+</Callout>
+
+---
+
+## Export a plate layout (CSV / Excel)
+
+Plate-layout export produces a file that describes the exact well-to-batch assignments for a registered plate. The file format matches the well-mapping import format exactly, which means you can export a plate, edit it in a spreadsheet, and re-import it without any reformatting.
+
+This is sometimes called a **round-trippable** export: every piece of data needed to reconstruct the plate in chemcellar is present in the file.
+
+### Steps
+
+1. Open the run that contains the plate you want to export.
+2. Go to the **Plates** tab and click the plate's name or barcode to open its detail view.
+3. Click **Export** in the plate detail toolbar.
+4. Choose **CSV** or **Excel (.xlsx)**.
+5. The file downloads immediately.
+
+> 📷 *Screenshot: the plate detail view showing the Export (CSV/XLSX) dropdown in the toolbar, with the well map visible in the background.*
+
+### File format
+
+The exported file has five columns:
+
+| Column | Example | Description |
+|--------|---------|-------------|
+| `Well` | `A1` | Well address in alphanumeric format (row letter + column number). |
+| `Batch Number` | `CV-00001-B01` | The human-readable batch number for the compound in that well. |
+| `Concentration` | `10` | The concentration value assigned to the well, if set. |
+| `Unit` | `uM` | The concentration unit (e.g., `nM`, `uM`, `mM`). |
+| `Role` | `sample` | The well role: `sample`, `positive_control`, `negative_control`, or `blank`. |
+
+<Callout type="default" emoji="💡">
+Batch numbers in the exported file are the same identifiers you see in the compound list — not internal database IDs. This means you can open the export in Excel, correct an assignment, and re-import it without needing to look up any IDs.
+</Callout>
+
+### Re-importing an edited plate layout
+
+If you export a plate layout, make corrections in Excel, and need to re-import it:
+
+1. Navigate to the run.
+2. Go to the **Plates** tab and click **Register plate** (or open the existing plate and use the import option).
+3. Upload the edited file.
+4. chemcellar will validate the well assignments and update the plate.
+
+<Callout type="warning">
+Re-importing a plate layout overwrites the existing well assignments for that plate. The overwrite is recorded in the audit trail. If the run has been approved and data-locked, you cannot modify plate assignments without first unlocking the run.
+</Callout>
+
+---
+
+## Export screening readout data
+
+Raw readout values and [dose-response](/concepts/dose-response) results for a run can be exported from the run's **Readout Data** tab using the same grid export control described above. The export includes well addresses, readout values, and any computed dose-response parameters (IC50, Hill slope, top, bottom, R²) for wells that have curve fits.
+
+<Callout type="info">
+Dose-response curve parameters are exported as calculated values at the time of export. If you later refit curves, re-export to get the updated parameters.
+</Callout>
+
+---
+
+## Data formats reference
+
+| Format | Best for | Supported in |
+|--------|----------|-------------|
+| CSV | Data analysis (Python, R, Excel), archiving | All grid views, plate layout |
+| Excel (.xlsx) | Sharing with colleagues, editing and re-importing | All grid views, plate layout |
+| SDF | Cheminformatics tools, structure-based analysis | Molecule list |
+
+---
+
+## Related
+
+- [Saved searches](/guides/search/saved-searches) — filter molecules or batches before exporting.
+- [Plate data](/guides/screening/plate-data) — understand the plate structure before exporting.
+- [Import data](/guides/import) — bring data back into chemcellar, including re-importing edited plate layouts.
+- [Bulk registration](/guides/registration/bulk-registration) — upload your own CSV/SDF/XLSX to register new compounds.

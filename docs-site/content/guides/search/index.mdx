@@ -1,0 +1,103 @@
+import { Callout } from 'nextra/components'
+
+# Search overview
+
+**Who this is for:** Anyone who needs to find compounds in chemcellar — chemists looking for specific structures, biologists scanning activity data, or portfolio managers reviewing the compound pipeline.
+
+**What you'll accomplish:** Understand the three complementary ways to search the compound registry, and know which one to reach for in each situation.
+
+---
+
+## Three ways to find a compound
+
+chemcellar gives you three search modes. You can use them independently or combine them.
+
+### 1. Text and property search
+
+Type a [registration number](/reference/glossary#registration-number), compound name, or external identifier (CAS number, vendor ID) into the main search bar and chemcellar returns matching molecules instantly. You can narrow results further by filtering on computed descriptors — molecular weight, logP, [TPSA](/reference/glossary#tpsa), hydrogen bond donors and acceptors — or by metadata such as lifecycle stage, synthesis status, or tag.
+
+This is the fastest route when you already know what you are looking for by name or ID.
+
+**Learn more:** The steps below in this guide walk through text and property searching directly. For saving a complex filter set so you can run it again later, see [Saved searches](/guides/search/saved-searches).
+
+### 2. Substructure and exact-structure search
+
+Draw or paste a structure fragment in the built-in structure editor and chemcellar returns every registered molecule whose structure contains that fragment. You can also search for an exact structural match — useful for confirming whether a specific compound is already in the registry before registering it.
+
+Both modes rely on [SMARTS](/reference/glossary#smarts) pattern matching against the RDKit-powered molecule database. chemcellar uses the ChEMBL/PubChem canonicalization pipeline, so the structure you draw is compared to the same canonical representation used during registration.
+
+**Learn more:** [Structure search](/guides/search/structure-search)
+
+### 3. Similarity search
+
+Provide a reference structure and chemcellar ranks every registered molecule by its [Tanimoto](/reference/glossary#tanimoto) coefficient against that reference, using Morgan fingerprints precomputed at registration time. Results appear with a score from 0 (no shared features) to 1 (identical). You can set a threshold to hide low-scoring hits and focus on the closest analogs.
+
+Similarity search is the right tool when you have a lead compound and want to explore its structural neighborhood — for example, to find backup series or to check whether related compounds have already been tested.
+
+**Learn more:** [Similarity search](/guides/search/similarity-search)
+
+---
+
+## Text and property search — steps
+
+### Before you start
+
+You need at least Viewer access to the workspace. If you can see the molecule list, you can search it.
+
+### Steps
+
+1. Click **Molecules** in the left navigation panel. The molecule list opens with all active compounds in your workspace.
+
+2. Type in the **Search** field at the top of the list. chemcellar matches against:
+   - Registration number (e.g., `CV-00042`)
+   - Common name or IUPAC name
+   - External identifiers — CAS number, vendor ID, ChEMBL ID, PubChem CID, or any custom identifier linked to the molecule
+
+3. Press **Enter** or wait a moment. The list filters live as you type.
+
+4. To narrow by property, click **Filters** to open the filter panel. Available filters include:
+   - **Molecular weight** — enter a minimum, maximum, or both
+   - **logP** — the calculated octanol-water partition coefficient
+   - **TPSA** — topological polar surface area in Å²
+   - **HBD / HBA** — hydrogen bond donors and acceptors
+   - **Lifecycle stage** — registered, active, hit, lead, preclinical candidate, development candidate, deprioritized, or archived
+   - **Synthesis status** — virtual, designed, synthesized, or purchased
+   - **Tags** — one or more free-text labels applied to the molecule
+
+5. Select values for one or more filters and click **Apply**. The list updates to show only molecules matching all active filters.
+
+6. To clear a single filter, click the **×** next to its chip in the active-filter bar. To reset everything, click **Clear all**.
+
+> 📷 *Screenshot: the molecule list with the filter panel open, showing a molecular-weight range entered and two lifecycle-stage checkboxes selected.*
+
+### What happens next
+
+The filtered list respects all your active filters until you clear them or navigate away. Column headings (registration number, name, MW, logP, lifecycle stage) are sortable — click a heading to sort ascending, click again for descending.
+
+To export the current filtered result set, see the [Export guide](/guides/export).
+
+To save the current filter combination as a named query you can run again, see [Saved searches](/guides/search/saved-searches).
+
+---
+
+## Combining search modes
+
+You can layer text search, property filters, and a structure query together. For example:
+
+- Start with a substructure query to find all compounds containing a pyrimidine core.
+- Then add a MW filter (< 400 Da) to focus on fragment-like hits.
+- Then save the combined query as a named saved search so you can re-run it next week after new compounds have been registered.
+
+Each mode adds another constraint — all active constraints must be satisfied simultaneously.
+
+---
+
+## Related
+
+- [Structure search](/guides/search/structure-search) — draw a fragment and find every molecule containing it
+- [Similarity search](/guides/search/similarity-search) — rank compounds by Tanimoto score against a reference
+- [Saved searches](/guides/search/saved-searches) — name, save, and re-execute any search
+- [Export](/guides/export) — download search results as CSV, Excel, or SDF
+- [Glossary: registration number](/reference/glossary#registration-number)
+- [Glossary: Tanimoto](/reference/glossary#tanimoto)
+- [Glossary: SMARTS](/reference/glossary#smarts)

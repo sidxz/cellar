@@ -1,0 +1,170 @@
+import { Callout } from 'nextra/components'
+
+# SAR & Similarity Search
+
+**What you'll learn:** How chemcellar represents molecular structure as numbers, how it finds compounds that look alike, and how those capabilities power the similarity-search and substructure-search features you use every day.
+
+---
+
+## Why "similarity" needs a definition
+
+Two molecules can look alike in many ways — they might share the same scaffold, differ by only one functional group, or occupy the same region of chemical space even though their drawn structures look quite different.
+Chemistry has no single answer to "how similar are these two compounds?" Instead, practitioners choose a *representation* (a way of encoding the structure) and a *distance metric* (a way of scoring the comparison).
+chemcellar uses the representations and metrics that are standard in medicinal chemistry — the same ones you would encounter in the research literature or on public compound databases.
+
+---
+
+## Fingerprints
+
+A [fingerprint](/reference/glossary#fingerprint) is a fixed-length bit-vector — a string of ones and zeros — that encodes the structural features of a molecule.
+Each bit position represents the presence or absence of a particular substructural pattern (a path, a ring, a circular environment, etc.).
+Fingerprints are fast to compare because comparing two bit-vectors is arithmetic; you do not need to do a full graph-isomorphism search.
+
+chemcellar pre-computes and stores fingerprints for every [disclosed molecule](/reference/glossary#disclosed-molecule) at registration time.
+The computation runs in the same database transaction as registration, so a molecule is never findable in a search without its fingerprints already in place.
+If registration fails for any reason, the fingerprints are rolled back too — the database is never left in a half-indexed state.
+
+### Morgan fingerprints (circular fingerprints)
+
+The default fingerprint type in chemcellar is the **Morgan fingerprint**, sometimes called an ECFP (Extended Connectivity FingerPrint).
+
+The algorithm works outward from each heavy atom in concentric shells of radius *r*:
+
+- **Radius 0** — each atom's own identity (element, charge, isotope, …)
+- **Radius 1** — the atom plus its immediate neighbors
+- **Radius 2** — the atom plus neighbors-of-neighbors
+- … and so on up to the configured radius
+
+At each radius the algorithm hashes the accumulated environment into an integer, and that integer maps to a bit in the output vector.
+The default radius in chemcellar is **2** (ECFP4 in the literature), with a bit-vector length of **2048 bits**.
+
+<Callout type="info">
+Morgan fingerprints capture local chemical environments. Two atoms in different molecules that sit in the same chemical neighborhood will flip the same bit, regardless of what the rest of the molecule looks like. This is what makes them good for finding bioisosteres and close analogs.
+</Callout>
+
+### Other fingerprint types
+
+chemcellar also stores RDKit path fingerprints, MACCS keys, topological torsion fingerprints, and atom-pair fingerprints.
+Different fingerprint types emphasize different aspects of structure — path fingerprints capture linear fragments, MACCS keys encode 166 chemically meaningful features.
+The similarity-search UI defaults to Morgan (radius 2) because it performs well across a wide range of medicinal-chemistry use cases.
+
+---
+
+## Tanimoto similarity
+
+Once you have two bit-vectors, you need a score.
+The standard score in fingerprint-based similarity is the **[Tanimoto coefficient](/reference/glossary#tanimoto)** (also called the Jaccard index for sets):
+
+```
+Tanimoto(A, B) = |A ∩ B| / |A ∪ B|
+```
+
+In bit-vector terms:
+
+```
+Tanimoto(A, B) = (bits set in both A and B)
+              / (bits set in A or B or both)
+```
+
+The result is always between **0** (no shared features at all) and **1** (identical bit-vectors, meaning structurally identical neighborhoods at the fingerprint radius).
+
+In practice:
+
+| Tanimoto range | What it usually means |
+|---|---|
+| ≥ 0.85 | Very close analogs — often differ by one substituent |
+| 0.70–0.84 | Same scaffold family, more variation |
+| 0.50–0.69 | Loose structural similarity, possibly same target class |
+| < 0.50 | Structurally diverse |
+
+These thresholds are heuristics, not laws. A Tanimoto of 0.6 might still represent a meaningful bioisostere. chemcellar reports the score and lets you decide.
+
+Try the widget below to build intuition. Paste two SMILES strings — or edit the pre-filled aspirin and acetaminophen — and watch the score update as you change either structure.
+
+<SimilarityDemo
+  smilesA="CC(=O)Oc1ccccc1C(=O)O"
+  smilesB="CC(=O)Nc1ccc(O)cc1"
+  fingerprint="morgan"
+  radius={2}
+/>
+
+<Callout type="default" emoji="🧪">
+Try replacing one SMILES with a close analog of the other compound. Notice how adding or removing a methyl group or a ring substituent shifts the Tanimoto score.
+</Callout>
+
+---
+
+## How the similarity search works in chemcellar
+
+When you run a similarity search, chemcellar does the following:
+
+1. Computes the fingerprint for your query structure in-memory.
+2. Compares it against the pre-computed fingerprints stored in the database using an index-accelerated query (a GiST index on the `morgan_bfp` column).
+3. Returns every molecule whose Tanimoto score meets or exceeds the threshold you set, ranked by score descending.
+4. Displays each result as a compound card showing the 2D structure, the Tanimoto score, and key identifiers.
+
+Because chemcellar stores fingerprints in an indexed column, similarity searches across hundreds of thousands of compounds return in under a second on typical hardware.
+
+<Callout type="info">
+Only disclosed, non-tombstone molecules appear in similarity search results. Undisclosed molecules are fingerprinted internally but are not exposed to search until they are disclosed. See the [undisclosed molecules](/concepts/undisclosed-molecules) concept page for more.
+</Callout>
+
+> 📷 *Screenshot: the similarity-search results panel showing compound cards with Tanimoto scores, sorted highest-to-lowest, with the query structure pinned at the top.*
+
+---
+
+## Substructure search
+
+Substructure search answers a different question: "Which molecules contain this fragment?"
+
+Instead of comparing fingerprints, chemcellar performs a graph-isomorphism test — it checks whether the query pattern (expressed as a [SMARTS](/reference/glossary#smarts) string) matches as a subgraph of each candidate molecule.
+Because a full cartesian search over a large database would be slow, chemcellar uses the RDKit PostgreSQL cartridge's GiST-indexed structural search: the fingerprint index pre-screens candidates before the exact test runs.
+
+You draw or paste a query structure in the search panel and chemcellar translates it to a SMARTS pattern. The pattern supports:
+
+- **Atom queries** — any nitrogen, any halogen, aromatic carbon, etc.
+- **Bond queries** — single, double, aromatic, any-bond.
+- **Ring membership** — atoms marked as in-ring or chain.
+- **Stereo constraints** — optionally enforce R/S or E/Z.
+
+<Callout type="default" emoji="💡">
+If your query structure came from Ketcher's drawing canvas, chemcellar automatically handles aromatic kekulization before sending the SMARTS to the database. You do not need to toggle aromaticity manually.
+</Callout>
+
+> 📷 *Screenshot: the structure-search panel with a fragment drawn in Ketcher and substructure-search selected, showing a count of matching compounds.*
+
+---
+
+## Scaffolds
+
+A [scaffold](/reference/glossary#scaffold) is the core ring system of a molecule — what remains after you strip off the substituents (side chains) on the periphery.
+Scaffold analysis groups your compound collection by shared core frameworks, which helps you understand how chemically diverse your collection is and where your SAR effort is concentrated.
+
+The scaffold chemcellar uses is the **Bemis–Murcko scaffold**: the set of rings and the linker chains connecting them, with all side chains removed.
+Two molecules share a scaffold if their ring systems and linker topology are identical.
+
+chemcellar uses scaffold grouping in the molecule list and in Campaign pivot views so you can quickly see how many analogs you have around each core.
+
+<Callout type="info">
+Scaffold-tree clustering and matched-molecular-pair (MMP) analysis are on the roadmap for a future release. The shipped features are fingerprint similarity search and substructure search.
+</Callout>
+
+---
+
+## Putting it together: a typical SAR workflow
+
+1. **Register** your compound series. chemcellar computes fingerprints automatically.
+2. **Run similarity search** on your most active compound to find analogs already in the database (from your own collection or from an external data source you have imported).
+3. **Run substructure search** on the shared scaffold to pull every molecule in the database that contains your core.
+4. **Save the search** as a [saved search](/reference/glossary#saved-search) so you can re-run it after new registrations.
+5. **Curate results into a Collection** and attach it to a screening [Campaign](/concepts/projects-collections-campaigns) for the next round.
+
+---
+
+## Related
+
+- [Similarity search guide](/guides/search/similarity-search)
+- [Structure search guide](/guides/search/structure-search)
+- [Saved searches guide](/guides/search/saved-searches)
+- [Projects, collections & campaigns](/concepts/projects-collections-campaigns)
+- [Glossary: fingerprint](/reference/glossary#fingerprint), [Tanimoto](/reference/glossary#tanimoto), [SMARTS](/reference/glossary#smarts), [scaffold](/reference/glossary#scaffold)

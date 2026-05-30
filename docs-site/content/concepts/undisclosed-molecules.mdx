@@ -1,0 +1,158 @@
+import { Callout } from 'nextra/components'
+
+# Undisclosed molecules
+
+**What you'll learn:** What an undisclosed molecule is, why you might register one, and how it moves through the disclosure and merge lifecycle when a structure eventually becomes known.
+
+---
+
+## The problem undisclosed molecules solve
+
+Drug discovery often involves partnerships. A collaborator may send you batches of material and screening data before they are ready to share the chemical structure — for competitive, IP, or regulatory reasons. You need to record that material, track the inventory, and analyse the screening results, but you cannot enter the structure because you genuinely do not know it (or are not permitted to use it yet).
+
+An **undisclosed molecule** is a placeholder in the registry. It has a permanent [registration number](/reference/glossary#registration-number), can hold [batches](/reference/glossary#batch), can be plated in assays, and can accumulate dose-response data — all without having a structure attached. When the structure eventually arrives, chemcellar resolves it cleanly in one audited operation.
+
+<Callout type="info">
+  Undisclosed molecules are not a workaround or a partial record. They are a first-class entity in chemcellar's registry with their own lifecycle.
+</Callout>
+
+---
+
+## What an undisclosed molecule can and cannot do
+
+| Can do | Cannot do |
+|---|---|
+| Hold batches and samples | Participate in structure-based deduplication |
+| Be plated in screening assays | Appear in substructure or similarity search results |
+| Accumulate readout data and dose-response curves | Have molecular descriptors (MW, logP, TPSA, etc.) computed |
+| Belong to projects and collections | Be included in SAR analysis |
+| Have external identifiers (vendor ID, CAS number if known) | Generate a 2D structure image |
+| Have tags, custom fields, lifecycle stage | Have fingerprints indexed |
+
+The restriction makes sense: structural queries require a structure. Until you disclose the SMILES, chemcellar simply has no geometry to work with.
+
+---
+
+## Registering an undisclosed molecule
+
+You register an undisclosed molecule the same way you register any other compound, except you leave the structure field blank and set the structure status to **Undisclosed** in the registration form.
+
+> 📷 *Screenshot: the Register dialog with the structure editor empty and the "Undisclosed" toggle active, showing the molecule type, name, and vendor ID fields filled in.*
+
+Because there is no structure to normalise, chemcellar skips the [InChIKey](/reference/glossary#inchikey) deduplication step entirely and checks only that no other molecule in the workspace already claims the same external identifier.
+
+| External ID match? | Result |
+|---|---|
+| Not found | New undisclosed molecule + new batch |
+| Found (on another undisclosed molecule) | Existing undisclosed molecule — new batch added |
+| Found (on a disclosed molecule) | **Blocked** — investigate before proceeding |
+
+<Callout type="warning">
+  If an external identifier you provide already belongs to a disclosed (structured) molecule, registration is blocked. This protects against accidentally conflating a known compound with a partner compound.
+</Callout>
+
+---
+
+## The disclosure lifecycle
+
+When a structure arrives — typically from a partner, or when IP restrictions are lifted — you submit it through the **disclosure** workflow. chemcellar processes it in a single audited step.
+
+### Step 1: Validate and canonicalise
+
+chemcellar validates the submitted [SMILES](/reference/glossary#smiles), strips salts, and computes the canonical SMILES, InChI, and InChIKey. If the SMILES is malformed, the disclosure is rejected immediately with an error.
+
+### Step 2: Check for existing structures
+
+chemcellar compares the InChIKey against all active (non-merged) disclosed molecules in the workspace. Two outcomes are possible:
+
+**No match — new structure**
+
+The submitted structure is genuinely new to the workspace. chemcellar fills in the molecule's structural fields, computes molecular descriptors, generates fingerprints, and flips `structure_status` from `undisclosed` to `disclosed`. The molecule is now fully functional: it appears in structural searches and SAR analysis.
+
+**Match — merge required**
+
+The submitted structure's InChIKey already belongs to another molecule in the registry. This means your partner's undisclosed compound is structurally identical to something you already registered. chemcellar automatically initiates a merge.
+
+---
+
+## What happens during a merge
+
+A merge is the operation that collapses two molecule records into one. It is triggered automatically when disclosure reveals that an undisclosed molecule is structurally identical to an existing disclosed molecule. It can also be triggered manually by an administrator for duplicate cleanup.
+
+**The surviving molecule** is the one that already carries the structure (the disclosed record). The undisclosed molecule becomes the **source** that is absorbed.
+
+In a single database transaction, chemcellar transfers all data from the source to the surviving record:
+
+| Data type | What happens |
+|---|---|
+| Batches | Moved to the surviving molecule; original batch numbers are preserved |
+| Readout data | Moved; all assay history from both compounds is consolidated |
+| Dose-response curves | Moved to the surviving molecule |
+| External identifiers | Merged; duplicates are deduplicated, conflicts flagged |
+| Collection memberships | The surviving molecule is added wherever the source was a member |
+| Attachments | Re-pointed to the surviving molecule |
+| Synthesis requests (non-terminal) | Updated to reference the surviving molecule |
+
+After transfer, the source molecule's registration number is added as a `legacy` identifier on the surviving molecule. That means you can still look up the old number and find the right compound.
+
+The source molecule itself becomes a **tombstone**: it is marked with a pointer to the surviving molecule, excluded from all standard queries, and preserved only in audit and history views.
+
+<Callout type="warning">
+  Merges are recorded in the append-only audit trail and cannot be undone. A snapshot of the source molecule's state at merge time is stored permanently in the merge record. Before initiating a manual merge, verify that you have the correct source and target — the action is irreversible. This action is recorded in the append-only audit trail.
+</Callout>
+
+> 📷 *Screenshot: the merge confirmation dialog showing the source registration number, the surviving molecule's registration number and structure, and the list of data that will be transferred (batch count, assay count).*
+
+---
+
+## Bulk disclosure
+
+When a partner discloses many structures at once — for example, as part of a partnership milestone — you can upload a file rather than disclosing compounds one at a time. chemcellar processes the file sequentially, running the same validate → canonicalise → check pipeline for each line item.
+
+Sequencing matters: if two entries in the same file share the same InChIKey, the second one is detected as a duplicate of the first (even if both are new to the workspace) and is handled as a merge within the batch.
+
+A **bulk disclosure** record tracks the overall progress:
+
+| Counter | Meaning |
+|---|---|
+| Disclosed | Entries that resolved to a genuinely new structure |
+| Merged | Entries that matched an existing molecule and were merged |
+| Conflicts | Entries needing manual review (e.g., contradictory CAS numbers) |
+| Errors | Entries with invalid SMILES or other parsing failures |
+
+> 📷 *Screenshot: the Bulk Disclosure detail page showing the progress counters, a filterable table of individual disclosure requests, and their statuses (disclosed, merged, conflict, error).*
+
+<Callout type="info">
+  Conflicts are flagged, not silently dropped. For example, if a partner supplies a CAS number that differs from what you already have for the same InChIKey, the item is marked as a conflict and held for manual review rather than being auto-resolved.
+</Callout>
+
+---
+
+## Partial disclosure
+
+Sometimes a partner can share a molecular formula or other metadata but not the full structure. In that case, record what you know in the molecule's fields but leave the structure field blank and keep `structure_status` as `undisclosed`. Deduplication requires a complete InChI — a formula alone is not sufficient to prevent structural duplicates — so the molecule remains undisclosed until a full SMILES is available.
+
+---
+
+## Permanently undisclosed molecules
+
+Not every undisclosed molecule will ever be disclosed. A compound can remain in `undisclosed` status indefinitely. It continues to accrue assay data, track inventory, and participate in all non-structural workflows. There is no expiry or automatic archival.
+
+If you later determine that a permanently undisclosed molecule will never be disclosed, you can update its lifecycle stage to `deprioritized` or `archived` — the same transitions available to any molecule.
+
+---
+
+## What researchers see
+
+When browsing the molecule list, undisclosed molecules are shown with a placeholder icon in place of a 2D structure image. Structural properties (MW, logP, etc.) are blank. The compound is otherwise fully visible: its registration number, name, external identifiers, batch count, and assay history are all displayed.
+
+> 📷 *Screenshot: a molecule card grid with one card showing the undisclosed placeholder icon and a "Structure confidential" label, alongside cards with rendered structures for comparison.*
+
+---
+
+## Related
+
+- [Registration & identity](/concepts/registration-and-identity) — how registration numbers, deduplication, and the registration pipeline work
+- [Disclose a structure and handle merges](/guides/registration/disclosure-and-merge) — step-by-step guide
+- [Bulk registration](/guides/registration/bulk-registration) — importing many compounds at once, including undisclosed ones
+- [Batches and samples](/concepts/batches-and-samples) — the inventory layer that undisclosed molecules support from day one

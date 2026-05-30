@@ -1,0 +1,197 @@
+import { Callout } from 'nextra/components'
+
+# Batches & samples
+
+**What you'll learn:** How chemcellar separates the abstract identity of a compound from its physical
+incarnations — and why that separation matters for inventory tracking, screening, and compliance.
+
+---
+
+## The two-level model: molecule → batch → sample
+
+In chemcellar, physical material is tracked at two levels beneath the compound record:
+
+| Level | What it is | Example |
+|-------|-----------|---------|
+| **[Molecule](/reference/glossary#molecule)** | The abstract chemical entity — structure, name, registration number | CV-00123 |
+| **[Batch](/reference/glossary#batch)** | A specific physical preparation of that molecule | CV-00123-001 |
+| **[Sample](/reference/glossary#sample)** | A discrete container of material from a batch | Vial barcoded `TBX-00441` |
+
+Every batch belongs to exactly one molecule. Every sample belongs to exactly one batch.
+This chain lets you trace any tube in your freezer all the way back to its source compound and the
+scientist who made or procured it.
+
+---
+
+## Batches
+
+A **batch** (sometimes called a lot or preparation) represents a specific physical preparation of a
+molecule. Each time a compound is synthesized, purchased, or received as a donation, a new batch is
+created.
+
+### What a batch records
+
+- **Batch number** — an immutable identifier assigned at creation, formatted as
+  `<registration-number>-<sequence>` (for example, `CV-00123-001`, `CV-00123-002`).
+  Batch numbers never change, even if the molecule is later merged with another record, so external
+  lab notebooks and external system references remain valid.
+- **Source** — how the material was obtained: synthesized in-house, purchased from a supplier,
+  donated, or extracted from a natural source.
+- **Salt form** — for example, hydrochloride, sodium salt, or free base.
+- **Purity** — percentage purity as measured (e.g., by HPLC or NMR).
+- **Amount & concentration** — the quantity recorded at creation (solid in mg/g, solution in
+  mL/L, or molar amount in µmol) and, if the material is in solution, the starting concentration.
+- **Storage conditions** — temperature, humidity, and light sensitivity requirements.
+- **Supplier information** — vendor name, catalog number, and lot number for purchased material.
+- **Chemist** — the user who synthesized or received the batch.
+- **Synthesis date and expiry date.**
+
+<Callout type="info">
+Batch numbers are immutable. Once assigned, a batch number (`CV-00123-001`) stays fixed for the
+lifetime of the record — even if the parent molecule is merged with another compound.
+</Callout>
+
+### Why multiple batches?
+
+A single compound may have several batches for legitimate scientific reasons:
+
+- **Different salt forms** — the free base and its hydrochloride salt are the same molecule
+  but different physical preparations.
+- **Purity differences** — a crude synthesis batch (85% purity) and a purified batch (>99%)
+  warrant separate tracking.
+- **Different suppliers** — vendor lots may have different impurity profiles.
+- **Separate synthesis campaigns** — a scale-up batch and an original discovery batch.
+
+Having distinct batch records lets you know precisely which material was used in a given assay
+well — critical for troubleshooting unexpected activity data.
+
+> 📷 *Screenshot: the batch list panel on a molecule detail page, showing two batches with their
+> batch numbers, source labels, purity, and amounts.*
+
+---
+
+## Samples
+
+A **sample** is a discrete physical container of material drawn from a batch — the unit of day-to-day
+inventory management. Think of it as a single vial, tube, plate well, or ampule.
+
+### What a sample records
+
+- **Barcode** — a 1D or 2D barcode that uniquely identifies the container across the workspace.
+  Samples are always located by barcode, never by UUID.
+- **Container type** — vial, tube, plate well, ampule, or bag.
+- **Current amount** — updated each time material is consumed (aliquoted). Amount is always
+  non-negative; when it reaches zero the sample transitions automatically to **depleted**.
+- **Concentration and solvent** — if the sample is in solution (e.g., 10 mM in DMSO).
+- **Storage location** — where in the lab the container physically lives (see
+  [storage locations](#storage-locations) below).
+- **Status** — one of `available`, `depleted`, `expired`, `quarantined`, or `disposed`.
+- **Freeze-thaw count** — incremented each time the sample is thawed; relevant for stability-sensitive
+  compounds.
+- **Low-stock threshold** — an optional alert level; chemcellar notifies you when the amount drops
+  below this value.
+
+### Sample lifecycle
+
+Samples follow a defined lifecycle:
+
+```
+available ──[amount = 0]──► depleted
+available ──[past expiry]──► expired
+available ──[QC issue]───► quarantined
+available ──[manual]─────► disposed
+quarantined ──[cleared]──► available
+quarantined ──[manual]───► disposed
+expired ─────[manual]────► disposed
+```
+
+`depleted` and `disposed` are terminal states — no further material changes are possible.
+`quarantined` is recoverable: a QC administrator can clear the hold and return the sample to
+`available`.
+
+<Callout type="warning">
+Disposing of a sample is irreversible. Once a sample is marked `disposed`, it cannot be
+un-disposed. This action is recorded in the append-only audit trail.
+</Callout>
+
+> 📷 *Screenshot: a sample detail card showing barcode, amount remaining (with a progress bar),
+> status badge, storage location path, and freeze-thaw count.*
+
+---
+
+## Amount & concentration value objects
+
+chemcellar tracks quantities using two precise value types rather than bare numbers.
+
+### Amount
+
+An **[amount](/reference/glossary#amount)** is a mass, volume, or molar quantity paired with its unit:
+
+| Unit | Typical use |
+|------|-------------|
+| mg, g, kg | Solid material |
+| mL, L | Liquid volume |
+| µmol | Molar quantity |
+
+Amount values are always non-negative. chemcellar does not automatically convert between units
+(for example, it will not convert 1000 mg to 1 g) — the unit you record is the unit that appears
+in all reports and exports.
+
+### Concentration
+
+A **[concentration](/reference/glossary#concentration)** is a solution concentration paired with its unit:
+
+| Unit | Typical use |
+|------|-------------|
+| mM | Stock solutions |
+| µM | Working solutions |
+| nM | Ultra-dilute solutions |
+| mg/mL | Protein or formulation concentrations |
+
+Concentration must be strictly positive (zero concentration means no compound is present — that
+would be an empty container, not a sample).
+
+---
+
+## Storage locations
+
+chemcellar represents your lab's physical storage as a hierarchy that mirrors real infrastructure:
+
+```
+Site → Building → Room → Freezer / Refrigerator → Shelf → Rack → Box → Position
+```
+
+Every sample can be assigned a position in this hierarchy. The storage browser lets you navigate
+the tree and see which samples are at each location. Each storage node can optionally record a
+temperature (e.g., −80 °C, −20 °C, 4 °C, room temperature) and a barcode.
+
+> 📷 *Screenshot: the storage location browser, showing the tree hierarchy on the left and a box
+> grid view on the right with sample barcodes in each position.*
+
+---
+
+## Requesting material
+
+When you need material for an experiment, you submit a **[sample request](/reference/glossary#sample-request)** rather
+than directly consuming a sample. The request workflow:
+
+1. You specify which molecule (and optionally which batch) you need, plus the amount and purpose.
+2. The sample management team reviews the request and locates suitable available samples.
+3. They fulfil the request by aliquoting from an available sample, updating its amount, and
+   recording which sample was used.
+4. The request closes with a link back to the fulfilling sample — giving you a complete audit trail
+   from experiment back to physical tube.
+
+<Callout type="info">
+This action is recorded in the append-only audit trail.
+</Callout>
+
+---
+
+## Related
+
+- [Inventory guides](/guides/inventory) — step-by-step workflows for creating batches and samples
+- [Synthesis requests](/guides/inventory/synthesis-requests) — requesting new material to be made
+- [Sample requests](/guides/inventory/sample-requests) — requesting material from existing stock
+- [Shipments](/guides/inventory/shipments) — chain-of-custody when material moves to another lab or CRO
+- [Compliance & audit trail](/concepts/compliance) — how inventory events appear in the audit log

@@ -1,0 +1,149 @@
+import { Callout } from 'nextra/components'
+
+# Navigate chemcellar
+
+**Who this is for:** New users who have just logged in and want a map of the interface.
+
+**What you'll learn:** Where everything lives — the sidebar, the global search bar, the dashboards for each module, and the quick-action menus.
+
+---
+
+## The shell
+
+After you log in, you see the chemcellar application shell. It has three main regions:
+
+- **Sidebar** — the primary navigation on the left.
+- **Header** — workspace name, global search, notifications, and your avatar in the top bar.
+- **Main panel** — the content area that changes as you navigate.
+
+> 📷 *Screenshot: the full chemcellar application shell with the sidebar expanded, the header visible at the top, and a molecule list in the main panel.*
+
+---
+
+## Sidebar navigation
+
+The sidebar groups chemcellar's features into modules. Each module maps to a bounded part of the research workflow.
+
+| Sidebar item | What you'll find there |
+|---|---|
+| **Molecules** | The full compound registry — search, filter, view structures, and register new molecules. |
+| **Inventory** | [Batches](/reference/glossary#batch) and [samples](/reference/glossary#sample) of physical material; storage locations; sample requests; synthesis requests. |
+| **Screening** | Assay [protocols](/reference/glossary#protocol), experimental [runs](/reference/glossary#run), plate layouts, dose-response curves, and raw readout data. |
+| **Research** | [Projects](/reference/glossary#project), [collections](/reference/glossary#collection), saved searches, and screen campaigns. |
+| **Administration** | Workspace settings, organisation management, controlled vocabularies, data source connectors, and user/role management. Visible only to users with the admin role. |
+
+Click any item to expand it and reveal sub-pages. Click again to collapse. chemcellar remembers which section is open between page navigations.
+
+<Callout type="info">The sidebar items you see depend on your workspace role. A viewer with no admin permissions will not see the **Administration** section.</Callout>
+
+---
+
+## Global search
+
+The global search bar sits in the header. Use it to find any entity quickly without navigating to a specific module.
+
+> 📷 *Screenshot: the global search bar with the query "aspirin" typed, showing results grouped by molecule, batch, and protocol.*
+
+**What you can search:**
+
+- **Molecule names and registration numbers** — type a compound name (e.g., "aspirin") or a registration number (e.g., "CV-00123") and press Enter.
+- **SMILES structures** — paste a valid SMILES string to search by exact structure or similarity.
+- **Batch numbers** — type a batch identifier to jump straight to an inventory batch.
+- **Protocol names** — find a screening protocol by name.
+
+Results appear grouped by type. Click a result to open its detail page.
+
+<Callout type="default" emoji="💡">For more powerful searches — substructure queries, property ranges, multi-field filters — use the **Molecules** list page, which has an advanced search panel. Save searches you run regularly with the **Save search** button so you can re-run them with one click.</Callout>
+
+---
+
+## Molecule list and structure cards
+
+The Molecules module opens on a paginated, filterable grid. Each row represents one registered molecule. The grid shows:
+
+- the **registration number** (e.g., `CV-00001`) — a permanent, immutable identifier
+- the 2D **structure depiction**
+- key computed properties: molecular weight (MW), logP, and [TPSA](/reference/glossary#tpsa)
+- the current **lifecycle stage** (registered, active, hit, lead, preclinical candidate, and so on)
+- counts of linked batches, assay runs, and collection memberships
+
+Click any row to open the molecule detail page, which has tabs for structure, properties, batches, assay data, and attachments.
+
+> 📷 *Screenshot: the molecule list in grid view with three compound cards visible, each showing a structure image, registration number, MW, and batch count badge.*
+
+---
+
+## Inventory dashboard
+
+The Inventory module opens on a summary dashboard showing:
+
+- total batch and sample counts for your workspace
+- batches with **low stock** alerts
+- recent synthesis requests and their current status
+
+From the sidebar you can drill into **Batches**, **Samples**, **Sample Requests**, **Synthesis Requests**, and **Storage Locations**.
+
+---
+
+## Screening dashboard
+
+The Screening module opens on a list of assay protocols your workspace has defined. From here you can:
+
+- browse **Protocols** — the reusable templates that define how an assay is run, which targets it addresses, and what readouts it measures
+- open a protocol to see its associated **Runs** — each run is one execution of the protocol against a set of compounds
+- view **dose-response curves** and raw **plate heatmaps** on the run detail page
+
+<Callout type="info">A run is **locked** once a scientist approves it. Locked data cannot be edited without a documented, audited change. The lock icon on a run detail page shows the current state.</Callout>
+
+---
+
+## Research module
+
+The Research module is where you organise scientific context around your compounds:
+
+- **Projects** group related research programs. A project is the container for collections, saved searches, and screen campaigns.
+- **Collections** are curated sets of molecules inside a project. A collection might represent a lead series, a virtual library, or the output of a campaign.
+- **Saved searches** store search criteria so you can re-run a query at any time and always see the current matching compounds.
+- **Screen campaigns** aggregate dose-response measurements from multiple runs into a single compound-by-channel pivot view, letting the team make portfolio decisions.
+
+---
+
+## The detail page pattern
+
+Every entity in chemcellar — molecule, batch, protocol, run — follows the same detail page pattern:
+
+1. A **header band** with the entity's identifier, name, status badge, and primary actions (Edit, Export, Delete if permitted).
+2. A **tab row** that splits the detail into sections (Overview, Batches, Assay Data, Attachments, History).
+3. A **history / audit tab** that shows the append-only audit trail for that record.
+
+> 📷 *Screenshot: a molecule detail page with tabs — Overview, Batches, Assay Data, Attachments, History — with the Overview tab active.*
+
+---
+
+## Notifications and your profile
+
+The bell icon in the header shows system notifications — for example, when a bulk registration job finishes or a data import completes. Click the bell to see a list of recent notifications.
+
+Your avatar (top-right corner) opens a menu with:
+
+- **Switch workspace** — move to another workspace you belong to.
+- **Profile** — managed in Sentinel; opens the Sentinel profile page in a new tab.
+- **Sign out** — ends your session.
+
+---
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `/` | Focus the global search bar |
+| `Esc` | Close the current dialog or panel |
+| `?` | Open the keyboard shortcut reference |
+
+---
+
+## Related
+
+- [Register your first molecule](/getting-started/first-molecule) — hands-on walkthrough of the registration flow
+- [Concepts: registration and identity](/concepts/registration-and-identity) — how chemcellar assigns permanent compound identifiers
+- [Concepts: projects and collections](/concepts/projects-collections-campaigns) — deeper explanation of the research organisation model

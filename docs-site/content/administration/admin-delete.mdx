@@ -1,0 +1,162 @@
+import { Callout } from 'nextra/components'
+
+# Admin hard-delete
+
+**Who this is for:** Workspace owners and administrators who need to permanently remove a record that cannot simply be archived or deactivated.
+
+**What you'll accomplish:** You will understand when hard-delete is appropriate, how the two-tier delete procedure works, and what the audit trail preserves after a deletion.
+
+---
+
+## When to use hard-delete
+
+chemcellar is designed for an append-only, auditable workflow. The normal way to retire a record is to change its status:
+
+- A compound that is no longer active is **archived**, not deleted.
+- A batch with an error is **flagged** or **withdrawn**, not deleted.
+- An organization that is no longer relevant is **deactivated**, not deleted.
+
+Hard-delete is reserved for situations where a record must be fully removed and retaining it — even as an archived entry — is not acceptable. Typical reasons include:
+
+- A compound was registered by mistake and appears in no data or shipments.
+- A batch record was created as a test entry during system setup.
+- A regulatory or legal requirement to remove specific data (e.g., a privacy request for a record that contains personal information that was incorrectly entered).
+
+<Callout type="warning">
+Hard-delete is permanent and irreversible. Once a record is deleted, it cannot be restored from within chemcellar. The operation requires the **Owner** workspace role. It is recorded in the audit trail, but the record itself is gone.
+</Callout>
+
+---
+
+## The two-tier deletion model
+
+chemcellar uses a two-tier system to prevent cascading damage from accidental deletes:
+
+### Tier 1 — RESTRICT (the safe path)
+
+Before any deletion proceeds, chemcellar checks whether the record is referenced by other entities.
+
+- If the record is **referenced** (for example, a molecule that has batches, readouts, or audit entries linked to it), chemcellar **blocks the delete** and shows you a list of the referencing records.
+- If the record is **not referenced**, chemcellar allows the delete to proceed immediately after confirmation.
+
+This is the default behaviour. Most deletion attempts that reach admin-delete will hit a Tier 1 block — which is the intended outcome. The block forces you to investigate before anything is removed.
+
+### Tier 2 — Cascade preview
+
+If you need to remove a record that does have dependent records, Tier 2 is available as an explicit override.
+
+Before executing a cascade delete, chemcellar computes and displays a **cascade preview**: a full tree of every record that will be deleted as a consequence of removing the root record.
+
+You must review and confirm the preview before the deletion runs. The preview screen shows:
+
+- The root record being deleted.
+- Each category of dependent records (batches, readout data, audit entries, etc.) with the count.
+- Any records that are **protected** and cannot be cascade-deleted (for example, approved, locked readout data — see below).
+
+> 📷 *Screenshot: the cascade preview dialog showing a tree: root molecule "SAC-00042" → 2 batches → 0 readout data entries, with a count summary table and a "Confirm delete" button that requires typing the record identifier.*
+
+<Callout type="warning">
+Cascade delete removes all dependent records. This includes batches, samples, and any data linked to those entities. Review the preview carefully. If you see approved readout data or locked records in the cascade tree, the delete is blocked — see the section below on protected records.
+</Callout>
+
+---
+
+## Protected records
+
+Certain records cannot be hard-deleted regardless of the cascade option:
+
+| Record type | Protection reason |
+|---|---|
+| Approved screening runs | Data is locked and carries an electronic signature. Deleting it would retroactively invalidate a signed record. |
+| Audit entries | The audit trail is append-only by design and by database constraint. chemcellar never deletes audit records. |
+| Records referenced by a closed campaign | Campaign data is frozen at close time; removing a referenced record would corrupt the campaign's historical snapshot. |
+
+If the cascade preview reveals protected records in the dependency tree, you cannot proceed with the delete. You must first consult your quality or regulatory team about whether an exception process applies.
+
+---
+
+## Before you start
+
+- You need the **Owner** workspace role. Admins cannot perform hard-deletes; this action is intentionally restricted to the highest permission tier.
+- Understand the record's full history. Open the entity's detail page and review its audit log before initiating a delete.
+- Confirm that no active work depends on this record (no open synthesis requests, open sample requests, or in-progress screening runs referencing it).
+
+---
+
+## Steps
+
+### 1. Navigate to the record
+
+Open the record you want to delete from its normal location in chemcellar (e.g., navigate to the molecule detail page, or open the batch detail page).
+
+### 2. Open the admin actions menu
+
+Click the **...** (more actions) menu in the top-right corner of the record's detail page. This menu is only visible to users with the **Owner** role.
+
+Select **Admin: Delete record**. chemcellar opens the delete dialog.
+
+> 📷 *Screenshot: the molecule detail page with the "..." menu open, showing "Admin: Delete record" at the bottom of the list, highlighted with a red icon.*
+
+### 3. Review the Tier 1 check
+
+chemcellar immediately performs the Tier 1 reference check.
+
+- If the record has **no references**, you see a summary: "This record has no dependents. Deletion will remove it permanently." Proceed to step 5.
+- If the record **has references**, you see a list: "This record cannot be deleted because it is referenced by: [list of linked records and counts]." You must either resolve the references first (by deactivating or detaching the dependents), or request a Tier 2 cascade preview.
+
+> 📷 *Screenshot: the Tier 1 check panel showing two scenarios side-by-side: "No dependents — safe to delete" (green) and "2 batches, 1 sample — blocked" (red) with a list of the blocking records.*
+
+### 4. (If blocked) Request a cascade preview
+
+If you choose to proceed despite dependent records, click **Show cascade preview**. chemcellar computes the full dependency tree and presents the Tier 2 preview.
+
+Review every line. If you see protected records (locked runs, audit entries) in the tree, the delete is blocked here and no further action is possible without resolving those dependencies first.
+
+If the preview shows only unprotected records and you have confirmed with your team that the delete is appropriate, proceed to step 5.
+
+### 5. Confirm the deletion
+
+Type the record's identifier (registration number or name) into the confirmation field. This step is a deliberate friction measure — it ensures you cannot accidentally delete by clicking through a dialog.
+
+Click **Delete permanently**.
+
+> 📷 *Screenshot: the final confirmation step with the text "Type SAC-00042 to confirm deletion" and an input field, plus a red "Delete permanently" button.*
+
+<Callout type="warning">
+This action is recorded in the audit trail as a `lifecycle_change` operation attributed to your account. The audit entry records that the deletion occurred, who performed it, and when. The deleted record's data is gone, but the audit event itself persists permanently.
+</Callout>
+
+---
+
+## What the audit trail preserves
+
+Even after a hard-delete, the audit trail retains:
+
+- The `AuditOperation` recording the delete event (type, actor, timestamp, reason).
+- Any `AuditEntry` records created before the delete (the record's creation, edits, and prior status changes).
+
+The audit trail does **not** retain the record's data itself. If you deleted `SAC-00042` with a specific SMILES, the SMILES is gone. The audit log shows that `SAC-00042` was registered, potentially edited, and then deleted — but does not reconstruct the structure.
+
+This is why Tier 1 protection for approved and locked records matters: for regulated data, the audit trail being intact is not sufficient — the data itself must be preserved.
+
+---
+
+## Alternatives to hard-delete
+
+Before initiating a hard-delete, consider whether one of these options meets your need:
+
+| Situation | Recommended alternative |
+|---|---|
+| Compound registered in error, but has no data | Archive the molecule and add a note in the notes field explaining the error |
+| Test data from setup that should not appear in searches | Use the **workspace** filter or a separate test project to isolate test records; deactivate when done |
+| Batch entered with wrong lot number | Correct the lot number (the correction is audited) rather than deleting and re-creating |
+| Organization or vocabulary term no longer relevant | Deactivate the organization; remove the vocabulary term from the allowed list |
+
+---
+
+## Related
+
+- [Compliance, Audit Trail & Data Lock](/concepts/compliance)
+- [Users & Roles](/administration/users-and-roles)
+- [Workspace Configuration](/administration/workspace-config)
+- [Glossary: audit trail](/reference/glossary#audit-trail), [data lock](/reference/glossary#data-lock), [electronic signature](/reference/glossary#electronic-signature)

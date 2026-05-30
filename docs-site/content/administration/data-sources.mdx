@@ -1,0 +1,123 @@
+import { Callout } from 'nextra/components'
+
+# Configure data sources
+
+**Who this is for:** Workspace administrators connecting chemcellar to an external screening platform or compound repository.
+
+**What you'll accomplish:** You will create a data source record, configure the field mappings that tell chemcellar how to interpret incoming data, and set the re-registration batch policy for that source.
+
+---
+
+## What is a data source?
+
+A [data source](/reference/glossary#data-source) is an admin-configured record that describes a connection to an external system from which chemcellar imports compound or assay data. Instead of hard-coding field names from a specific vendor into the application, chemcellar reads field mappings from the data source configuration at import time. This lets you adapt to different external schemas without changing code.
+
+A data source record stores:
+
+- **Connection identity** — a name, type, and optional base URL or API token reference.
+- **Entity mappings** — a set of rules that map external field names to chemcellar's domain fields.
+- **Re-registration batch policy override** — whether importing duplicates from this source should create new [batch](/reference/glossary#batch) records (defaults to the workspace-level policy).
+
+<Callout type="info">
+chemcellar does not store credentials directly in the data source record. Credentials (API tokens, passwords) are managed through the secrets system configured by your infrastructure team. The data source record stores the identifier that the import pipeline uses to look up the credential at runtime.
+</Callout>
+
+---
+
+## Before you start
+
+You need the **admin** or **owner** workspace role, or the `cellar:admin_config` service action. See [Users & Roles](/administration/users-and-roles).
+
+---
+
+## Steps
+
+### 1. Open Data Sources
+
+Go to **Administration** in the left sidebar, then click **Data Sources**. The page shows all data sources configured in your workspace.
+
+> 📷 *Screenshot: the Data Sources list page with a table showing Name, Type, Last Sync, and Active columns, and an "Add Data Source" button.*
+
+### 2. Create a data source
+
+Click **Add Data Source**. Fill in:
+
+- **Name** — a human-readable label you will recognise (e.g., `Primary Screening Vault`, `ChEMBL Batch Import`).
+- **Type** — the connector type that tells chemcellar which import pipeline to use. Available types depend on your installation.
+- **Base URL** — the API root URL for the external system (if applicable).
+- **Credential key** — the identifier used to look up the API token from the secrets manager. Leave blank if the external system does not require authentication.
+
+Click **Save** to create the record. You can then configure field mappings on the detail page.
+
+> 📷 *Screenshot: the Add Data Source dialog with Name, Type dropdown, Base URL, and Credential Key fields.*
+
+### 3. Configure entity mappings
+
+Entity mappings tell chemcellar how to translate an external record's fields into chemcellar's domain model.
+
+Open the data source's detail page and click the **Entity Mappings** panel.
+
+For each entity type (Molecule, Batch, Protocol, Run), you can define:
+
+- **External field name** — the field key as it appears in the external system's API response or export file.
+- **Internal field** — the corresponding chemcellar domain field (e.g., `smiles`, `external_id`, `batch_id`).
+- **Transform** — an optional transformation rule (e.g., strip whitespace, convert units, map a status code to a chemcellar status enum).
+
+<Callout type="default" emoji="💡">
+When you first create a data source, chemcellar applies a default mapping template for the selected connector type. Review the defaults and adjust any fields that differ between the external system's naming and your workspace's conventions.
+</Callout>
+
+> 📷 *Screenshot: the Entity Mappings panel showing a table with External Field, Internal Field, and Transform columns, with rows for smiles, batch_id, compound_name, and external_id.*
+
+### 4. Set the re-registration batch policy override
+
+Scroll to the **Batch Policy** section of the data source detail page.
+
+The **Create batch on duplicate** toggle has three states:
+
+- **Use workspace default** — the import job follows the workspace-wide policy set in [Workspace Configuration](/administration/workspace-config).
+- **Always create batch** — every import event creates a new batch, even if the compound is already registered.
+- **Never create batch on duplicate** — duplicate compounds are recognised and linked to the existing record without creating a new batch.
+
+For scheduled or recurring imports from an external source (e.g., a nightly sync), set this explicitly rather than relying on the workspace default. A misconfigured workspace default could result in thousands of duplicate batches across a large re-sync.
+
+<Callout type="warning">
+Changing this setting only affects future import jobs. Batches that were already created during previous imports are not retroactively removed.
+</Callout>
+
+### 5. Activate and test the data source
+
+Toggle the **Active** switch to enable the data source. An inactive data source is ignored by all import pipelines, even if a job is triggered.
+
+After activating, run a small test import to verify the field mappings produce the expected results. Review the import job log for any field-mapping warnings.
+
+> 📷 *Screenshot: the data source detail page with the Active toggle on, showing a "Last sync: 2 hours ago" status, and a "Run import now" button.*
+
+---
+
+## Editing and disabling data sources
+
+- To update field mappings, open the data source and edit the Entity Mappings panel. The changes take effect on the next import run.
+- To pause imports without losing configuration, set the data source to **Inactive**.
+- You cannot delete a data source that has been used in a completed import job. Set it to inactive instead.
+
+<Callout type="info">
+Changes to entity mappings are recorded in the audit trail as `data_entry` operations on the `DataSource` entity.
+</Callout>
+
+---
+
+## Understanding external batch IDs
+
+When chemcellar imports a batch from an external source, it stores the external system's batch identifier in the batch record's `custom_fields` under a source-specific key (e.g., `cdd_batch_id` for a CDD connector). This allows you to trace any chemcellar batch back to its source record in the external system without requiring the external ID to be a first-class column in chemcellar's schema.
+
+The field name used for the external batch ID is configurable in the entity mapping for the `Batch` entity.
+
+---
+
+## Related
+
+- [Workspace Configuration](/administration/workspace-config)
+- [Import data](/guides/import)
+- [Batches and samples](/concepts/batches-and-samples)
+- [Glossary: data source](/reference/glossary#data-source), [batch](/reference/glossary#batch)

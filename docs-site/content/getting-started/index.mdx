@@ -1,0 +1,57 @@
+import { Callout } from 'nextra/components'
+
+# Getting started with chemcellar
+
+**Who this is for:** Everyone new to chemcellar — bench chemists, biologists, portfolio managers, and students joining a research team.
+
+**What you'll accomplish:** By the end of this section you'll have logged in, chosen a workspace, oriented yourself in the interface, and registered your first molecule.
+
+---
+
+## What is chemcellar?
+
+chemcellar is a chemical compound management and screening platform designed for drug-discovery teams. It gives every member of a research program — chemists, biologists, project managers — a single, shared record of:
+
+- every [molecule](/reference/glossary#molecule) the team has ever made or acquired,
+- every [batch](/reference/glossary#batch) of physical material and where it is stored,
+- every assay [protocol](/reference/glossary#protocol) and experimental [run](/reference/glossary#run) performed against those compounds, and
+- every [project](/reference/glossary#project) and [collection](/reference/glossary#collection) that organises the work.
+
+Because all data lives in one system, a hit from a screening run automatically links back to the exact compound, batch, and chemist who made it — without any copy-pasting between spreadsheets.
+
+---
+
+## The core workflow
+
+chemcellar follows a linear research loop:
+
+1. **Register** — A chemist draws or imports a structure. chemcellar canonicalizes it, assigns a permanent registration number (e.g., `CV-00001`), and checks for duplicates.
+2. **Organize** — Molecules are grouped into projects and collections. Saved searches let you revisit a subset of compounds any time.
+3. **Screen** — A biologist runs an assay against a plate of compounds. Results — raw readouts, dose-response curves, quality metrics — are attached to the run and linked back to each molecule.
+4. **Search & analyze** — Anyone can search by structure similarity, substructure, property range, or saved filter. Results can be exported to CSV, Excel, or SDF.
+
+Every step is logged in an append-only audit trail. Records that affect regulatory submissions carry electronic signatures under 21 CFR Part 11.
+
+---
+
+## In this section
+
+| Page | What you'll do |
+|---|---|
+| [Logging in](/getting-started/logging-in) | Authenticate via your institution's identity provider and pick a workspace. |
+| [Navigating chemcellar](/getting-started/navigating) | Tour the main navigation, global search, and dashboards. |
+| [Register your first molecule](/getting-started/first-molecule) | End-to-end walkthrough: draw a structure, fill in metadata, and confirm registration. |
+
+<Callout type="info">chemcellar is multi-tenant. Everything you do is scoped to the **workspace** you select at login. If you belong to more than one workspace (for example, a CRO account and an internal account), you can switch workspaces from the header without logging out.</Callout>
+
+---
+
+## Before you start
+
+You need:
+
+- An account in the **Sentinel** identity service used by your organisation. Your administrator creates this for you.
+- Membership in at least one chemcellar workspace with at least the **viewer** role.
+- To register or edit compounds you need the **editor** role or a custom role that includes the `cellar:register` permission.
+
+Ask your workspace administrator if you are unsure which role you have.

@@ -1,0 +1,147 @@
+import { Callout } from 'nextra/components'
+
+# Create and manage runs
+
+**Who this is for:** Scientists who execute assay experiments and need to record them in chemcellar.
+
+**What you'll accomplish:** You will create a [run](/reference/glossary#run), link it to a protocol, configure the plates and well assignments, enter readout values, and advance the run through its review lifecycle.
+
+## Before you start
+
+- You need the **Create run** permission on your workspace.
+- The [protocol](/reference/glossary#protocol) for your assay must be published (status: **Active**). If your protocol does not yet exist, contact a user with the Protocol admin permission to create and publish it.
+- Know which [batches](/reference/glossary#batch) you are screening — you will assign a specific batch to each sample well. Batches must already be registered in chemcellar's inventory.
+- Know the plate format (e.g., 96-well or 384-well) and whether you have a [plate template](/reference/glossary#plate-template) to apply.
+
+<Callout type="info">
+A run is tied to a specific version of a protocol. If the protocol is later updated and a new version is published, your run continues to reference the version that was active when the run was created. This preserves data integrity for audit and compliance purposes.
+</Callout>
+
+## What a run is
+
+A **run** represents one execution of an assay on one date. A single run can span multiple plates — for example, a 384-well screen of 352 compounds across one plate, or a 10-point dose-response series across four plates. All plates in a run share the same protocol, date, and operator.
+
+Runs move through a defined lifecycle:
+
+```
+draft ──► in_progress ──► completed ──► approved
+                                    ──► rejected ──► draft  (rework cycle)
+```
+
+Data can only be entered while the run is in `draft` or `in_progress` status. Once the run moves to `completed`, a reviewer must approve or reject it before the data is used downstream.
+
+## Step 1 — Open the run creation form
+
+1. In the top navigation, click **Screening**.
+2. Click **Runs** in the sidebar.
+3. Click **New run**.
+
+> 📷 *Screenshot: the Runs list page showing existing runs with status badges, and a "New run" button in the top right.*
+
+## Step 2 — Select the protocol and set run metadata
+
+1. In the **Protocol** field, search by name and select the protocol for this experiment. Only published (active) protocols appear. The list also shows the protocol version number — if multiple versions exist, select the most recent active version unless you are intentionally replicating an older run.
+2. Set the **Run date** to the date the experiment was (or will be) performed.
+3. The **Operator** field defaults to your own account. Change it only if you are entering data on behalf of someone else.
+4. If the experiment was performed at an external CRO or lab, select the organization from the **Performed at** field. If your lab performed it, leave this blank.
+5. If this run is a confirmation or repeat of a previous run, toggle **Link to parent run** and search for the parent run. Then choose the relationship type: `Confirmation of`, `Repeat of`, or `Follow-up to`.
+6. Fill in any **Condition values** the protocol requires — for example, "Cell line: HEK293" or "Time point: 24 h". Condition definitions are set by the protocol; only the values vary per run.
+7. Add any free-text **Notes** that help explain experimental context.
+8. Click **Next**.
+
+> 📷 *Screenshot: the run creation form showing the Protocol selector, Run date picker, Operator field, Conditions section, and a "Link to parent run" toggle.*
+
+<Callout type="default" emoji="💡">
+If your protocol defines condition definitions (categorical variables), fill them in carefully — they are used later to filter and compare runs of the same protocol across different experimental conditions.
+</Callout>
+
+## Step 3 — Add plates and assign the layout
+
+Each run must have at least one plate. Click **Add plate** to configure the first plate.
+
+### Configure the plate
+
+1. Choose the **Plate format** (must match or be consistent with the protocol's plate format setting).
+2. Enter the **Barcode** printed on the physical plate label.
+3. To apply a layout template, click **Apply template** and choose from the dropdown. Only templates whose format matches the plate format are shown. The well type grid fills in immediately.
+4. If you are not using a template, assign well types manually in the plate map grid by clicking individual wells or rows/columns and selecting the type from the panel.
+
+> 📷 *Screenshot: the plate configuration panel showing the plate format selector, barcode field, Apply template dropdown, and the plate map builder with color-coded well types.*
+
+### Assign compounds to sample wells
+
+For each well marked as a **Sample**:
+
+1. Click the well in the grid (or select a group of wells).
+2. In the well detail panel, search for a **Batch** by registration number, batch number, or compound name.
+3. Set the **Concentration** and its unit (e.g., 10 µM, 1 nM).
+
+For dose-response plates where the same compound appears at multiple concentrations across a row, you can select all the wells in that row and assign the same batch, then edit each well's concentration individually.
+
+<Callout type="info">
+Assigning a batch to a well creates a traceable link between the measured result and the physical material. If a purity issue is later discovered for that batch, you can immediately identify all wells — and therefore all data points — that were affected.
+</Callout>
+
+> 📷 *Screenshot: the well detail panel after a sample well is selected, showing the Batch search box with a compound result and the Concentration field.*
+
+### Add additional plates
+
+Click **Add plate** to add more plates to the same run. Plate numbers increment automatically. Repeat the layout and compound assignment steps for each plate.
+
+## Step 4 — Advance the run to "In progress"
+
+Once you have configured at least one plate, click **Start run**. The run status changes from `draft` to `in_progress`. You can continue editing plates, well assignments, and notes while the run is in progress.
+
+## Step 5 — Enter readout values manually
+
+If you are entering results by hand (rather than importing a plate-reader file), navigate to the run's **Readouts** tab:
+
+1. The readout grid shows one row per sample well, with columns for each readout definition the protocol defines.
+2. Click a cell and type the measured value.
+3. For text-type readouts (e.g., a qualitative outcome like "pass/fail"), the cell shows the expected values as a dropdown or free-text field, depending on the readout definition's data type.
+4. Press **Tab** to advance to the next cell, or click any cell to edit it directly.
+5. Changes are saved automatically as you type.
+
+<Callout type="default" emoji="💡">
+For large runs it is usually faster to import a plate-reader export file rather than entering values by hand. See [Plate data](./plate-data) for the import workflow.
+</Callout>
+
+## Step 6 — Mark the run as completed
+
+When all data has been entered and you are satisfied with the readout values:
+
+1. Navigate to the run header.
+2. Click **Mark complete**.
+3. chemcellar checks that at least one readout value has been recorded for the run and that all required condition values are filled in. If anything is missing, a validation message lists what needs attention.
+4. On success, the run status changes to `completed`.
+
+<Callout type="warning">
+Once a run is marked `completed`, it enters the review queue. You can still edit data if the reviewer sends the run back to `draft` via a rejection. However, you cannot undo the `completed` status yourself.
+</Callout>
+
+## Step 7 — Record QC metrics
+
+Before submitting the run for approval, record the QC metrics that summarize assay quality:
+
+1. On the run detail page, click **Edit QC metrics**.
+2. Enter the values your lab computed from the control wells:
+   - **Z′ factor** — a measure of assay quality based on the separation of positive and negative controls. Values above 0.5 indicate a good assay.
+   - **Signal-to-noise ratio** — the ratio of control signal to background noise.
+   - **CV (coefficient of variation)** — the percent variation of replicate controls.
+3. Click **Save**.
+
+QC metrics are required before approval. If a reviewer sees a Z′ factor below 0.5, they may reject the run and ask you to repeat the experiment.
+
+> 📷 *Screenshot: the QC metrics panel on a completed run, showing Z′ = 0.71, S/N = 9.2, and CV = 3.4%, with an Edit button.*
+
+## Rejecting and reworking a run
+
+If a reviewer rejects the run, its status returns to `draft`. You receive a notification with the reviewer's reason. Open the run, make the necessary corrections (add missing data, fix a misassigned well, update QC metrics), and mark it complete again.
+
+## Related
+
+- [Plate data](./plate-data) — importing plate-reader files and viewing heatmaps.
+- [Dose-response](./dose-response) — reviewing fitted IC50 / EC50 curves after data entry.
+- [Approval & data lock](./approval-and-data-lock) — the review and approval workflow for completed runs.
+- [Plate templates](./plate-templates) — creating and applying plate layout templates.
+- [Assays & screening](/concepts/assays-and-screening) — the full conceptual model for protocols, runs, and data.

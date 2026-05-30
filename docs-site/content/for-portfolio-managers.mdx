@@ -1,0 +1,131 @@
+import { Callout } from 'nextra/components'
+
+# For portfolio managers
+
+**Who this is for:** Program directors, project leads, and anyone who needs to understand the state of a compound portfolio — without needing to run assays or draw structures themselves.
+
+**What you'll find here:** How chemcellar exposes project status, screening decisions, and exports — and how to interpret the data your scientists produce.
+
+---
+
+## What chemcellar gives you
+
+As a portfolio manager, chemcellar is your single source of truth for:
+
+- Which compounds are registered, and what their status is.
+- Which projects are active, and which compounds belong to each.
+- What screening campaigns have concluded, and what decisions were made.
+- A full, auditable history of every data change.
+
+You do not need to understand organic chemistry to use the portfolio views. chemcellar is designed so you can navigate to any project, read a campaign summary, and export data for a stakeholder presentation — without touching the bench-science workflows.
+
+---
+
+## How the data is structured
+
+Understanding three levels of organization makes the rest of the platform intuitive.
+
+### Molecules, batches, and samples
+
+A [molecule](/reference/glossary#molecule) is a unique chemical entity. Think of it as the "idea" of a compound — defined by its structure and given a unique code like `CV-00042`. Scientists may synthesize that molecule multiple times; each synthesis run creates a [batch](/reference/glossary#batch) — a physical lot of material. A [sample](/reference/glossary#sample) is an individual vial drawn from that batch.
+
+From your perspective, the molecule is what you track across programs. Batches and samples are the physical logistics that bench scientists manage.
+
+### Projects and collections
+
+A [project](/reference/glossary#project) is a named research program. Within a project, compounds are organized into [collections](/reference/glossary#collection). A collection might represent a chemical series, a hit list from a screen, or a set of tool compounds.
+
+You can browse projects from the main navigation, see how many compounds are in each collection, and review their properties side by side.
+
+> 📷 *Screenshot: the Projects list page showing active projects with compound counts, creation dates, and quick-link buttons to open each project.*
+
+### Screen campaigns
+
+A [screen campaign](/reference/glossary#screen-campaign) is the formal output of an experiment series. Scientists run assays, collect data, and then consolidate the results into a campaign. For each compound tested, they record a decision — **active**, **inactive**, or **inconclusive** — and close the campaign with an electronic signature.
+
+Once closed, a campaign is immutable. Its data is locked and backed by an append-only audit trail. This is the record you can rely on for decision-making.
+
+> 📷 *Screenshot: a closed campaign summary page showing the compound decision table with columns for registration number, IC50, Hill slope, and decision badge.*
+
+---
+
+## Reading a campaign summary
+
+When you open a closed campaign you will see:
+
+- **Compound list** — every compound tested, with its registration number, batch, and a per-[readout](/reference/glossary#readout) summary of the measurements.
+- **Decision column** — active / inactive / inconclusive, set by the assay scientist.
+- **Curve quality indicators** — Z′ score (a statistical measure of assay quality; values above 0.5 indicate a well-behaved assay) and curve-fit quality per compound.
+- **Source protocols** — links back to the original runs so you can inspect raw data if needed.
+- **Signed by / closed at** — the scientist who approved the campaign and the timestamp, from the electronic signature.
+
+<Callout type="info">Z′ (Z-prime) is a standard measure of assay quality that compares the signal window between positive and negative controls against their variability. A Z′ above 0.5 is generally considered acceptable for a primary screen. Ask your assay scientist if a campaign has a low Z′ — it may mean results need cautious interpretation.</Callout>
+
+---
+
+## Tracking project health
+
+### Compound registration numbers
+
+Every molecule has a unique [registration number](/reference/glossary#registration-number) (e.g., `CV-00042`). Use it to unambiguously identify a compound in email threads, presentations, or external reports. The number never changes, even if the compound's name or synonyms are updated.
+
+### Lifecycle states
+
+Molecules move through lifecycle states that reflect their position in the portfolio:
+
+| State | Meaning |
+|-------|---------|
+| **Active** | In active development — being synthesized, screened, or optimized. |
+| **Archived** | No longer in active development; retained for reference. |
+| **Discontinued** | Development stopped for a documented reason. |
+
+You can filter the compound list by lifecycle state to see only what is currently in play.
+
+### Undisclosed molecules
+
+Some molecules are registered before their structure is publicly disclosed — for example, compounds shared under a confidentiality agreement. chemcellar tracks [undisclosed molecules](/concepts/undisclosed-molecules) with a placeholder registration number while the structure remains confidential. When a structure is disclosed, it is resolved into a full molecule record (or merged with an existing one if it turns out to be a duplicate).
+
+From a portfolio perspective, you will see these in project compound lists with a "structure pending" indicator.
+
+---
+
+## Exporting data
+
+chemcellar can export compound and screening data in formats your stakeholders can open immediately.
+
+| Format | Best for |
+|--------|---------|
+| **CSV** | Spreadsheet analysis, filtering by property in Excel or similar tools. |
+| **Excel (XLSX)** | Formatted reports ready to share directly. |
+| **SDF** | Sharing structures and data with other chemistry software. |
+
+<Callout type="default" emoji="💡">Every export grid in chemcellar lets you choose which columns to include. You can hide assay-specific columns like well coordinates or internal IDs so that the export contains only what your stakeholders need.</Callout>
+
+To export, open the molecule list or a collection in a project, use the column selector to configure the view, and click **Export** in the toolbar. The guide at [Guides → Export](/guides/export) walks through the full process.
+
+---
+
+## The audit trail
+
+chemcellar maintains an append-only audit log of every consequential action: compound registration, data entry, run approval, campaign closure, and administrative changes. You cannot delete or modify audit entries.
+
+For portfolio oversight this means:
+
+- You can always see who registered a compound and when.
+- You can see who approved a run, who signed a campaign closure, and when each happened.
+- If data is corrected after a run is approved, the correction creates a new audit entry referencing the original — there is no silent overwrite.
+
+<Callout type="warning">Data in approved runs and closed campaigns is **locked**. If a scientist needs to correct an error in locked data, an administrator must authorize the change. The correction is recorded in the audit trail alongside the original entry. This is required for 21 CFR Part 11 alignment.</Callout>
+
+---
+
+## Quick-reference: where to go
+
+| Task | Where to go |
+|------|-------------|
+| Browse all compounds in a project | Open the project from the main navigation → Collections tab |
+| Read a campaign summary | Open the project → Campaigns → select the closed campaign |
+| Export a compound list | [Guides → Export](/guides/export) |
+| Import data from an external screening platform | [Guides → Import](/guides/import) |
+| Understand audit records | [Concepts → Compliance](/concepts/compliance) |
+| Configure projects and workspaces | [Administration → Workspace config](/administration/workspace-config) |

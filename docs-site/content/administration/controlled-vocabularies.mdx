@@ -1,0 +1,107 @@
+import { Callout } from 'nextra/components'
+
+# Manage controlled vocabularies
+
+**Who this is for:** Workspace administrators maintaining consistent data entry standards across the lab.
+
+**What you'll accomplish:** You will create and update shared picklists — called controlled vocabularies — that scientists choose from when filling in categorical fields like species, route of administration, or assay type.
+
+---
+
+## What is a controlled vocabulary?
+
+A [controlled vocabulary](/reference/glossary#controlled-vocabulary) is a workspace-level, named list of allowed values. When a scientist fills in a picklist field in a protocol condition or a screening readout, the dropdown is sourced from the corresponding controlled vocabulary.
+
+Using controlled vocabularies instead of free-text fields prevents the data quality problems that come from unconstrained input: "Mouse", "mouse", "Mus musculus", and "in vivo (mouse)" all mean the same thing, but as free text they are four different values that break filters, exports, and SAR analyses.
+
+Think of a controlled vocabulary as a lab-wide standard — the agreed-upon set of terms that everyone uses.
+
+---
+
+## Before you start
+
+You need the **admin** or **owner** workspace role, or the `cellar:admin_config` service action. See [Users & Roles](/administration/users-and-roles).
+
+---
+
+## Steps
+
+### 1. Open Controlled Vocabularies
+
+Go to **Administration** in the left sidebar, then click **Controlled Vocabularies**. You see a list of all vocabularies in your workspace with their name, term count, and locked status.
+
+> 📷 *Screenshot: the Controlled Vocabularies list page with a table showing Name, Terms count, Locked, and Created by columns, and an "Add Vocabulary" button.*
+
+### 2. Create a new vocabulary
+
+Click **Add Vocabulary**. Enter:
+
+- **Name** — a unique identifier for this vocabulary within the workspace (e.g., `Species`, `Route of Administration`, `Assay Type`). This name is used when protocol designers link a condition field to the vocabulary.
+- **Terms** — the initial list of allowed values. Enter one term per line. You can reorder terms after creation by dragging rows.
+- **Locked** — if you check this box, only admins can add or remove terms. Leave it unchecked if you want any editor to be able to propose new terms.
+
+Click **Save** to create the vocabulary.
+
+> 📷 *Screenshot: the Add Vocabulary dialog with the Name field set to "Species", the Terms textarea containing "Mouse", "Rat", "Dog", "Cynomolgus Monkey", and the Locked checkbox unchecked.*
+
+### 3. Add terms to an existing vocabulary
+
+Click the vocabulary name to open its detail page. Click **Add Term**, type the new term, and press **Enter** or click **Add**.
+
+<Callout type="default" emoji="💡">
+If the vocabulary is linked to active protocol condition definitions, the new term becomes available in all those protocols immediately. There is no need to update each protocol individually.
+</Callout>
+
+### 4. Reorder terms
+
+Within a vocabulary's detail page, drag rows up or down to set the order in which terms appear in dropdowns. The order is cosmetic — it does not affect which terms are valid.
+
+### 5. Remove a term
+
+Click the **remove** icon next to a term. Before removing, chemcellar checks whether the term is currently in use on any protocol condition or readout record.
+
+- If the term is **not in use**, it is removed immediately.
+- If the term **is in use**, chemcellar shows a count of affected records and requires you to confirm. The term is removed from the vocabulary's allowed list, but existing records that already carry the value are not changed. The value remains on those records as a historical value; it is no longer selectable for new entries.
+
+<Callout type="warning">
+Removing a term from a locked vocabulary requires admin permission. Removing a term that is actively used on protocol conditions or readout data can make those records appear to have an "unknown" value if filters or exports compare against the current vocabulary list. Review usage before removing.
+</Callout>
+
+### 6. Lock or unlock a vocabulary
+
+On the vocabulary's detail page, toggle the **Locked** switch.
+
+- **Locked** — only users with the `cellar:admin_config` service action can modify the terms. Scientists with the `editor` role see the terms but cannot add or remove them.
+- **Unlocked** — any editor in the workspace can propose additions or removals.
+
+<Callout type="info">
+Locking is recommended for vocabularies that feed regulatory data entry (e.g., species, route of administration for in-vivo studies) where uncontrolled additions could compromise data integrity.
+</Callout>
+
+### 7. Link a vocabulary to a protocol condition
+
+Vocabularies are referenced by **ConditionDefinition** records on protocols. When a protocol designer sets up a condition with a picklist type, they select the vocabulary name instead of defining inline values. See the [protocols guide](/guides/screening/index) for detail.
+
+---
+
+## Vocabulary naming conventions
+
+A few guidelines that will save you trouble:
+
+- Use **title case** for vocabulary names (`Route of Administration`, not `route_of_administration`). They appear in UI dropdowns exactly as named.
+- Use **sentence case** for terms (`Intravenous` not `INTRAVENOUS`). Consistency matters when terms are exported to reports.
+- Avoid abbreviations in the vocabulary name itself; use them in terms if the domain uses them (`IV`, `PO`, `SC` are standard for route of administration).
+
+---
+
+## What happens next
+
+Changes to a vocabulary take effect immediately for all users in the workspace. If you add a term, it appears in all protocol condition dropdowns that reference this vocabulary on the next page load. If you remove a term, it disappears from dropdowns immediately but historical records retain their stored value.
+
+---
+
+## Related
+
+- [Workspace Configuration](/administration/workspace-config)
+- [Screening protocols](/guides/screening/index)
+- [Glossary: controlled vocabulary](/reference/glossary#controlled-vocabulary), [protocol](/reference/glossary#protocol)

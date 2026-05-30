@@ -1,0 +1,122 @@
+import { Callout } from 'nextra/components'
+
+# Build and use plate templates
+
+**Who this is for:** Scientists or lab managers who set up assay plates, and anyone who wants to standardize well assignments across multiple runs.
+
+**What you'll accomplish:** You will create a reusable [plate template](/reference/glossary#plate-template) that defines which well positions are samples, positive controls, negative controls, or blanks — and then apply that template when creating a run to pre-fill the plate map instantly.
+
+## Before you start
+
+- You need the **Manage plate templates** permission on your workspace.
+- Decide on the plate format (96-well or 384-well are the most common).
+- Know the layout convention your lab uses — for example, which columns hold your positive and negative controls.
+
+<Callout type="info">
+Plate templates are workspace-level resources. Any template you create is available to everyone in your workspace. Coordinate with your team before changing or deleting a template that is in active use.
+</Callout>
+
+## What a plate template is
+
+A plate template is a reusable layout definition. It assigns a **well type** to every position on a plate — `sample`, `positive_control`, `negative_control`, `blank`, or `reference` — without yet specifying which compound goes where. When you apply a template to a plate in a run, chemcellar pre-fills those type assignments. You then assign the specific [batch](/reference/glossary#batch) and concentration for each sample well.
+
+Standardizing plate layouts across runs has two practical benefits:
+
+- **Consistency** — every run using the same template has controls in the same positions, making cross-run comparison straightforward.
+- **QC reliability** — automatic QC metrics such as the [Z′ factor](/reference/glossary#z-prime) depend on identifying which wells are controls. A template ensures those positions are always correctly tagged.
+
+The interactive demo below shows a 96-well plate with a common layout: columns 1-2 reserved for controls, and columns 3-12 open for samples.
+
+<PlateHeatmapDemo format={96} colorScale="viridis" showLabels={true} />
+
+*The color gradient here is illustrative. In a real template view, wells are color-coded by type: green = positive control, red = negative control, grey = blank, blue = sample.*
+
+## Step 1 — Open the plate template manager
+
+1. In the top navigation, click **Screening**.
+2. In the sidebar, click **Plate templates**.
+3. The list shows all templates in your workspace. Click **New template** to create one.
+
+> 📷 *Screenshot: the Plate templates list page showing existing templates with name, format (96 / 384), and a "New template" button in the top right.*
+
+## Step 2 — Set the template name and format
+
+1. Enter a descriptive **Name** for the template (e.g., "96-well Standard HTS — Col 1/2 Controls").
+2. Choose the **Plate format** from the dropdown: 6, 12, 24, 48, 96, 384, or 1536 wells.
+3. Optionally add a **Description** to explain the layout convention and intended assay type.
+4. Click **Create** to open the plate map builder.
+
+> 📷 *Screenshot: the new template dialog with Name and Plate format fields, before the map builder loads.*
+
+## Step 3 — Assign well types in the plate map builder
+
+The plate map builder shows a visual grid of the plate. Each cell represents one well, labeled by row letter (A through H for 96-well, A through P for 384-well) and column number.
+
+### Assigning individual wells
+
+1. Click a well in the grid to select it.
+2. In the panel on the right, choose the **Well type** for that position: `Sample`, `Positive control`, `Negative control`, `Blank`, or `Reference`.
+3. The well updates its color in the grid immediately.
+
+### Assigning rows or columns at once
+
+To assign an entire row or column in one step:
+
+1. Click the row letter (e.g., **A**) or column number (e.g., **1**) in the axis label — this selects all wells in that row or column.
+2. Choose the **Well type** from the panel.
+
+To select a rectangular region, click and drag across the wells you want to assign.
+
+> 📷 *Screenshot: the plate map builder for a 96-well plate with columns 1 and 2 colored green (positive control) and red (negative control), and columns 3–12 colored blue (sample). The right panel shows the Well type selector.*
+
+<Callout type="default" emoji="💡">
+A common convention for 96-well inhibition assays: column 1 = negative control (vehicle only, 0% inhibition), column 2 = positive control (maximum inhibitor, 100% inhibition), columns 3–12 = samples. For 384-well plates, columns 1–2 and 23–24 are often reserved for controls, with columns 3–22 as samples.
+</Callout>
+
+## Step 4 — Save the template
+
+1. Click **Save template**.
+2. The template appears in the workspace template list immediately.
+
+<Callout type="warning">
+This action is recorded in the append-only audit trail with your user identity and the timestamp.
+</Callout>
+
+## Applying a template to a plate in a run
+
+When you create or edit a plate within a run, the **Plate layout** section lets you choose a template:
+
+1. In the run creation wizard, on the **Plates** step, select **Apply template** next to the plate you are configuring.
+2. Choose the template from the dropdown — only templates matching the plate format are shown.
+3. chemcellar fills in all well type assignments from the template. You then assign compounds and concentrations to the `Sample` wells.
+
+See [Runs](./runs) for the full run-creation flow.
+
+## Editing a template
+
+To edit an existing template:
+
+1. In **Plate templates**, click the template name.
+2. Click **Edit** to open the plate map builder.
+3. Make your changes and click **Save template**.
+
+<Callout type="warning">
+Editing a template does not retroactively change plates that were already created using it. Existing plates retain the well type assignments they had at the time of creation. Only new plates created from the edited template will reflect the new layout.
+</Callout>
+
+## Deleting a template
+
+To delete a template that is no longer needed:
+
+1. In **Plate templates**, open the template detail page.
+2. Click **Delete**.
+3. Confirm the deletion in the dialog.
+
+Deletion is permanent. If the template is referenced by historical plates, those plates retain their well type data — the template reference is not required for the plate data to remain valid.
+
+## Related
+
+- [Runs](./runs) — how to apply a template when creating a run and assigning compounds to wells.
+- [Plate data](./plate-data) — how the plate heatmap uses well type assignments for QC visualization.
+- [Assays & screening](/concepts/assays-and-screening) — overview of the plate and well model.
+- [Glossary](/reference/glossary)

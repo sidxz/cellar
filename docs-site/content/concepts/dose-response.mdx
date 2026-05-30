@@ -1,0 +1,229 @@
+import { Callout } from 'nextra/components'
+
+# Dose-response & potency
+
+**What you'll learn:** What a dose-response curve is, how chemcellar fits it, and what each
+parameter — IC50, EC50, Hill slope, top, bottom — tells you about a compound's potency and behavior.
+
+---
+
+## What is a dose-response experiment?
+
+In a **[dose-response experiment](/reference/glossary#dose-response)**, you test the same compound at several concentrations
+and measure a biological effect at each one. The goal is to find how much of the compound is needed
+to produce a defined level of response — typically 50% of the maximum possible effect.
+
+A typical experiment spans six to ten concentrations, usually in a geometric series (e.g., 0.001,
+0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30 µM). At low concentrations the compound has little
+effect; at high concentrations the effect plateaus. The curve that connects these points carries
+far more information than a single-concentration screen.
+
+> 📷 *Screenshot: a dose-response plate layout in chemcellar, showing the same compound in
+> ten wells across two rows, each at a successive dilution step.*
+
+---
+
+## The four-parameter logistic (4PL) model
+
+chemcellar fits dose-response data using the **four-parameter logistic (4PL)** equation — the
+industry-standard model for sigmoidal concentration-response relationships:
+
+```
+Response = Bottom + (Top - Bottom) / (1 + (IC50 / Concentration)^HillSlope)
+```
+
+The four parameters describe the full shape of the curve:
+
+| Parameter | What it means |
+|-----------|--------------|
+| **Bottom** | The lower asymptote — the response at very high compound concentration (typically 0% in an inhibition assay) |
+| **Top** | The upper asymptote — the response at zero compound concentration (typically 100%) |
+| **IC50 / EC50** | The inflection point — the concentration at which response is halfway between Bottom and Top |
+| **Hill slope** | The steepness of the sigmoidal transition |
+
+The interactive explorer below lets you adjust the IC50 and Hill slope and immediately see how the
+curve shape changes. Use it to build intuition before interpreting your data.
+
+<DoseResponseExplorer
+  initial={{ ic50: 1e-7, hillSlope: 1, bottom: 0, top: 100 }}
+  adjustable={["ic50", "hillSlope"]}
+  concentrationRange={[1e-10, 1e-4]}
+  showReadout={true}
+  height={340}
+/>
+
+*Try it: drag the IC50 slider left and right to see how the curve shifts along the concentration
+axis. Increase the Hill slope to sharpen the transition; decrease it to spread it out.*
+
+---
+
+## IC50 vs EC50
+
+**[IC50](/reference/glossary#ic50)** and **[EC50](/reference/glossary#ec50)** are the two most common potency metrics, and they describe
+opposite directions of response.
+
+- **IC50** (half-maximal inhibitory concentration) — the concentration that inhibits 50% of the
+  maximum response. Used in inhibition assays: enzyme inhibitors, ion channel blockers, cell
+  viability assays. **Lower IC50 = more potent.**
+- **EC50** (half-maximal effective concentration) — the concentration that produces 50% of the
+  maximum activation response. Used in agonist assays: receptor activation, cell stimulation.
+  **Lower EC50 = more potent.**
+
+chemcellar records the curve type for every fitted curve (`ic50`, `ec50`, `ki`, `kd`, `ld50`,
+`td50`). The curve type is set by the assay protocol and determines how the value is labelled in
+reports, tables, and campaign views.
+
+<Callout type="info">
+IC50 and EC50 are not interchangeable — they describe different biological questions. Always check
+the assay protocol type before comparing potency values across runs.
+</Callout>
+
+---
+
+## The Hill slope
+
+The **[Hill slope](/reference/glossary#hill-slope)** (also called the Hill coefficient) describes how steeply the
+response transitions from baseline to maximum. A slope of 1 is the theoretical expectation for a
+simple 1:1 ligand-receptor interaction.
+
+| Hill slope | What it often suggests |
+|------------|----------------------|
+| ≈ 1 | Simple, well-behaved dose-response |
+| > 1 | Cooperative binding, multiple sites, or a steep transition |
+| < 1 | Heterogeneous population, partial agonism, or a shallow curve |
+| < 0.5 or > 3 | Possible assay artefact; review raw data and QC metrics |
+
+<Callout type="default" emoji="💡">
+A Hill slope far from 1 does not automatically invalidate the result — some known drug classes
+(allosteric modulators, multi-target compounds) have characteristic slopes. However, it is always
+worth reviewing the raw data when you see extreme values.
+</Callout>
+
+---
+
+## Asymptotes: Top and Bottom
+
+The **Top** and **Bottom** parameters anchor the curve at its limits.
+
+- **Top** is the response at zero compound concentration — the "vehicle control" level.
+  In a well-controlled inhibition assay this should be close to 100% (or the positive control
+  signal, depending on normalization).
+- **Bottom** is the response at saturating compound concentration — the maximum inhibition
+  achievable. In a complete inhibitor this approaches 0%. If Bottom is substantially above 0%
+  (say, 30%) the compound may be a partial inhibitor or the assay may not cover a high enough
+  concentration range.
+
+Inspecting the Top and Bottom values helps you distinguish **full inhibitors** (Bottom ≈ 0%)
+from **partial inhibitors** (Bottom > 0%) — a pharmacologically important distinction that a
+single IC50 number hides.
+
+---
+
+## Confidence intervals and goodness of fit
+
+Every fitted curve in chemcellar carries:
+
+- **R²** (coefficient of determination) — how well the 4PL model fits the measured data.
+  R² > 0.95 is generally acceptable; R² < 0.90 warrants inspection.
+- **95% confidence interval** — the lower and upper bounds of the IC50 estimate.
+  A tight CI (e.g., 42 nM, CI 38–47 nM) means the data strongly constrain the fit.
+  A wide CI (e.g., 42 nM, CI 5–350 nM) indicates high uncertainty — perhaps too few
+  data points, or a shallow curve.
+
+> 📷 *Screenshot: a dose-response curve card in chemcellar showing the sigmoid curve with data
+> points, R² annotation, IC50 chip with CI, and Hill slope label.*
+
+---
+
+## Curve classes
+
+Not every compound produces a clean sigmoidal curve. chemcellar classifies each curve into one of
+four classes:
+
+| Class | Description |
+|-------|-------------|
+| **Full** | Both asymptotes are well defined; standard sigmoidal shape |
+| **Partial** | Only one asymptote is reached within the concentration range tested; IC50 may be extrapolated |
+| **Bell-shaped** | Response rises then falls at higher concentration — can indicate aggregation or cytotoxicity overlapping the assay signal |
+| **Inactive** | No significant response across the concentration range |
+
+Curve class is displayed prominently on every curve card. An `inactive` classification is not a
+curve fit failure — it is valid scientific information meaning the compound did not inhibit (or
+activate) the target at the tested concentrations.
+
+---
+
+## Qualifiers on potency values
+
+When a compound's potency falls outside the tested concentration range, chemcellar records a
+**[qualified value](/reference/glossary#qualified-value)** rather than a bare number.
+
+| Qualifier | Meaning |
+|-----------|---------|
+| `=` | The IC50 is determined within the tested range |
+| `<` | The compound is more potent than the lowest tested concentration (IC50 is below the range) |
+| `>` | The compound is less potent than the highest tested concentration (inactive at the maximum dose) |
+| `~` | The IC50 is an approximate extrapolation — treat with caution |
+
+For example, a report might show IC50 > 10 000 nM to indicate that the compound showed no
+meaningful inhibition at 10 µM, the assay ceiling. This is fundamentally different from IC50 =
+10 000 nM (which would imply the curve plateau was measured). The qualifier preserves this
+distinction throughout the database, in exports, and in campaign summaries.
+
+---
+
+## IC90 and other intercepts
+
+Beyond IC50, medicinal chemists often need the concentration required for 90% inhibition
+(**IC90**) — particularly relevant for compounds where the maximum effect matters as much as
+the midpoint potency. chemcellar derives IC90 from the same 4PL fit parameters:
+
+```
+IC90 = IC50 × (9 ^ (1 / HillSlope))
+```
+
+For a standard Hill slope of 1, IC90 is exactly 9× the IC50. For steeper curves (Hill slope > 1)
+the IC90/IC50 ratio is smaller — steep curves reach full inhibition more quickly.
+
+---
+
+## Excluded data points
+
+Before a curve is fitted, individual data points can be excluded from the fit (for example, a well
+that was flagged as an outlier due to a pipetting error). chemcellar stores which points were
+excluded and why, alongside the fitted curve. The raw data is always preserved — exclusions affect
+the fit but not the underlying measurement record.
+
+<Callout type="info">
+Excluded points are retained in the database and visible on the curve chart. They are shown as
+open symbols rather than filled ones so reviewers can assess whether the exclusion was justified.
+This action is recorded in the append-only audit trail.
+</Callout>
+
+---
+
+## How curves are produced
+
+chemcellar fits dose-response curves after readout data is imported into a run. The fitting
+pipeline:
+
+1. Groups readout data points by molecule, batch, and readout definition.
+2. Applies outlier exclusions (if any have been flagged).
+3. Runs the 4PL non-linear least-squares regression.
+4. Records the four parameters (Bottom, Top, IC50/EC50, Hill slope), R², confidence intervals,
+   number of points used, and the raw data array.
+5. Assigns a curve class based on the fitted asymptotes and the concentration range.
+
+Because each curve is linked to a specific run, protocol version, and batch, you can always
+trace back from a potency number to the exact experiment and physical material that produced it.
+
+---
+
+## Related
+
+- [Assays & screening](/concepts/assays-and-screening) — protocols, runs, plates, and readout data
+- [Screen campaigns](/guides/research-organization/screen-campaigns) — how potency values roll up
+  into portfolio-level activity summaries
+- [Batches & samples](/concepts/batches-and-samples) — the physical material behind every data point
+- [Compliance & audit trail](/concepts/compliance) — data locking and approval of run data under
+  21 CFR Part 11

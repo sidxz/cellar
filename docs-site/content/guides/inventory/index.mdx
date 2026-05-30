@@ -1,0 +1,119 @@
+import { Callout } from 'nextra/components'
+
+# Inventory guides
+
+**What you'll find here:** Step-by-step instructions for every task in chemcellar's inventory workflow — from registering a new batch of material to shipping samples to a contract research organisation.
+
+Inventory management in chemcellar bridges the abstract compound record and the physical tubes, vials, and plates in your lab. Before an assay well can be attributed to a specific lot, or before a sample request can be fulfilled, physical material must be tracked here.
+
+---
+
+## The two-level model in a nutshell
+
+Every physical item in chemcellar traces back through a two-level chain:
+
+| Level | Definition | Example identifier |
+|-------|-----------|-------------------|
+| **[Batch](/reference/glossary#batch)** | A specific physical preparation of a registered molecule — one synthesis run, one vendor purchase | `CV-00123-001` |
+| **[Sample](/reference/glossary#sample)** | A discrete container of material drawn from a batch — the unit of day-to-day inventory | Barcode `TBX-00441` |
+
+Every batch belongs to exactly one [molecule](/reference/glossary#molecule). Every sample belongs to exactly one batch. This chain lets you trace any tube in your freezer all the way back to the source compound and the scientist who made or procured it.
+
+<Callout type="info">
+If you are new to the batch/sample distinction, read [Batches & samples](/concepts/batches-and-samples) before following the step-by-step guides below. That concept page explains why chemcellar separates these two levels and how amounts, concentrations, and storage locations fit in.
+</Callout>
+
+---
+
+## Registering a batch
+
+A [batch](/reference/glossary#batch) is created whenever a compound is physically prepared or received. To register a new batch:
+
+1. Navigate to the molecule record for the compound (search by registration number, name, or structure).
+2. On the molecule detail page, open the **Batches** tab.
+3. Click **Add batch**.
+4. Fill in the batch form:
+   - **Source** — choose `synthesized`, `purchased`, `donated`, or `natural_extract`.
+   - **Salt form** — for example, `hydrochloride` or `free base`. Leave blank if unknown.
+   - **Purity** — percentage purity as measured (e.g., by HPLC or NMR).
+   - **Amount** — the quantity prepared, paired with its unit (mg, mL, µmol).
+   - **Concentration** — if the material is already in solution, record the starting concentration and solvent.
+   - **Storage conditions** — temperature range (−80 °C, −20 °C, 4 °C, room temperature), humidity sensitivity, and light sensitivity.
+   - **Supplier information** — if purchased, fill in the vendor name, catalog number, and lot number.
+   - **Synthesis date / expiry date** — ISO 8601 dates (YYYY-MM-DD).
+5. Click **Save batch**.
+
+chemcellar assigns the batch a permanent [batch number](/reference/glossary#batch-number) (e.g., `CV-00123-001`) that never changes, even if the parent molecule is later merged with another record.
+
+> 📷 *Screenshot: the Add batch form on a molecule detail page, showing the Source dropdown, Purity field, Amount field with unit selector, and Storage conditions section.*
+
+<Callout type="info">
+Batch numbers are immutable. The sequence number increments automatically within each molecule — you cannot choose your own. This ensures external lab notebook references and external system links remain valid after a molecule merge.
+</Callout>
+
+<Callout type="warning">
+Batch creation is recorded in the append-only audit trail. The creating user, timestamp, and all batch properties are captured at the moment of creation.
+</Callout>
+
+---
+
+## Registering a sample
+
+Once a batch exists, you create one or more [samples](/reference/glossary#sample) — individual containers holding a portion of that batch's material.
+
+1. Open the batch record (from the molecule's **Batches** tab, click the batch number).
+2. Click **Add sample**.
+3. Fill in the sample form:
+   - **Barcode** — scan or type the 1D or 2D barcode printed on the container. Barcodes must be unique across the workspace.
+   - **Container type** — vial, tube, plate well, ampule, or bag.
+   - **Amount** — the quantity in this container and its unit.
+   - **Concentration / Solvent** — if the sample is in solution.
+   - **Storage location** — select the box and position where this container lives. Use the location picker to navigate Site → Building → Room → Freezer → Shelf → Rack → Box → Position.
+   - **Low-stock threshold** — an optional alert level; chemcellar will notify you when the sample's remaining amount drops below this value.
+4. Click **Save sample**.
+
+> 📷 *Screenshot: the Add sample form with the barcode field and storage location picker open, showing the freezer hierarchy tree.*
+
+---
+
+## Updating sample amounts
+
+When material is consumed (aliquoted for an assay, dispensed for formulation, etc.), record the consumption so the sample's remaining amount stays accurate.
+
+1. Open the sample record by scanning its barcode or searching by barcode in **Inventory > Samples**.
+2. Click **Record consumption**.
+3. Enter the **Amount consumed** and its unit.
+4. Optionally record the **Purpose** (free text — for example, "plated for Run 2026-05-15 ALDH1A1 protocol").
+5. Click **Confirm**.
+
+chemcellar subtracts the consumed amount from the sample's current amount. When the amount reaches zero, the sample transitions automatically to **depleted**, and no further consumption is possible.
+
+<Callout type="warning">
+Depleted and disposed are terminal states. You cannot add material back to a depleted sample — create a new sample from the batch instead.
+</Callout>
+
+---
+
+## Guides in this section
+
+| Guide | What it covers |
+|-------|---------------|
+| [Storage locations](./storage) | Setting up the storage hierarchy and using the storage browser to locate material |
+| [Sample requests](./sample-requests) | Submitting and fulfilling requests for material from existing inventory |
+| [Shipments](./shipments) | Recording chain-of-custody when samples are shipped to another lab or CRO |
+| [Synthesis requests](./synthesis-requests) | Requesting the synthesis of a new compound when no material exists yet |
+
+---
+
+## Key concepts to read first
+
+If you are new to chemcellar's inventory model, these concept pages will give you the background you need:
+
+- [Batches & samples](/concepts/batches-and-samples) — the two-level model, amount tracking, and sample lifecycle in detail.
+- [Compliance & audit trail](/concepts/compliance) — how every inventory action is captured in the audit log.
+
+## Related
+
+- [Glossary](/reference/glossary)
+- [Screening guides](/guides/screening) — how batch and sample records are linked to assay wells.
+- [Registration guides](/guides/registration) — registering the molecule before adding a batch.

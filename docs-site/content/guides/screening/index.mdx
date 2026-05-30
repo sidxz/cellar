@@ -1,0 +1,47 @@
+import { Callout } from 'nextra/components'
+
+# Screening guides
+
+**What you'll find here:** Step-by-step instructions for every task in chemcellar's screening and assay workflow — from defining a reusable protocol to approving a completed run and locking its data.
+
+Screening in chemcellar is the structured process of running biological experiments against registered compounds, capturing the resulting measurements, and curating that data for downstream analysis. Every measured value is traceable back to the exact protocol, physical plate, and compound batch that produced it.
+
+## How screening is organized
+
+A complete screening experiment in chemcellar has four nested levels:
+
+| Level | What it represents |
+|-------|--------------------|
+| **[Protocol](/reference/glossary#protocol)** | A reusable, versioned description of an assay — what it measures, against which target, and how results are normalized |
+| **[Run](/reference/glossary#run)** | One execution of a protocol on a specific date |
+| **[Plate](/reference/glossary#plate)** | A physical microplate used in that run |
+| **[Well](/reference/glossary#well)** | A single position on a plate, holding one compound batch at one concentration |
+
+[Readout data](/reference/glossary#readout-data) records the measured result for each well. For concentration-response experiments, [dose-response curves](/concepts/dose-response) are fitted automatically from that data.
+
+## Guides in this section
+
+| Guide | What it covers |
+|-------|---------------|
+| [Plate templates](./plate-templates) | Building and managing reusable plate layouts that pre-assign well types to positions |
+| [Runs](./runs) | Creating a run, selecting a protocol, adding plates, and entering readout values |
+| [Plate data](./plate-data) | Viewing the plate heatmap, importing plate-reader files, and reviewing the activity data grid |
+| [Dose-response](./dose-response) | Reviewing fitted IC50 / EC50 curves, excluding outlier points, and understanding curve quality |
+| [Approval & data lock](./approval-and-data-lock) | Submitting a completed run for review, applying an electronic signature, and locking the data |
+
+## Key concepts to read first
+
+If you are new to screening in chemcellar, these concept pages give you the background you need:
+
+- [Assays & screening](/concepts/assays-and-screening) — protocols, runs, plates, wells, and readout data explained.
+- [Dose-response & potency](/concepts/dose-response) — what IC50 means, how the 4PL model works, and what curve parameters tell you.
+- [Compliance & audit trail](/concepts/compliance) — electronic signatures, data locking, and 21 CFR Part 11 alignment.
+- [Batches & samples](/concepts/batches-and-samples) — the physical material behind every well.
+
+<Callout type="info">
+Before you can run a screen, a **protocol** must be defined for your assay. Protocols are created and published by users with the Protocol admin permission. If you do not see the protocol you need, contact your workspace administrator.
+</Callout>
+
+## Related
+- [Screen campaigns](/guides/research-organization/screen-campaigns) — organizing runs and compounds into a portfolio-level activity summary.
+- [Glossary](/reference/glossary)

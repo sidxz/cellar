@@ -1,0 +1,144 @@
+import { Callout } from 'nextra/components'
+
+# Search by structural similarity
+
+**Who this is for:** Chemists exploring structural analogs of a known compound, biologists looking for backup series around a lead, or anyone asking "what else in the registry looks like this?"
+
+**What you'll accomplish:** Run a similarity search using a reference structure, interpret the Tanimoto scores in the results, and focus on the most relevant hits by adjusting the similarity threshold.
+
+---
+
+## Concepts
+
+### What is a similarity search?
+
+A [similarity search](/reference/glossary#similarity-search) measures how structurally similar every compound in the registry is to a reference structure you provide. chemcellar returns results ranked from most similar to least similar, each with a numerical score.
+
+Unlike a substructure search — which asks "does this molecule *contain* this fragment?" — a similarity search asks "how much does this molecule *resemble* this reference?" The two approaches are complementary. A close analog might not contain the exact query fragment but may still have a high similarity score because it shares many atomic features.
+
+### What is a Tanimoto coefficient?
+
+The [Tanimoto coefficient](/reference/glossary#tanimoto) (also called the Tanimoto similarity or Jaccard similarity in cheminformatics) is the most widely used metric for comparing molecular fingerprints. It is defined as:
+
+**Tanimoto = (bits in common) ÷ (bits in A + bits in B − bits in common)**
+
+The result ranges from **0** (no shared features) to **1** (identical fingerprints). In practice:
+
+| Tanimoto score | Rough interpretation |
+|---|---|
+| ≥ 0.85 | Very close analog — likely same scaffold or series |
+| 0.65 – 0.84 | Structurally related — same chemotype or similar ring system |
+| 0.40 – 0.64 | Somewhat related — shares functional groups or partial scaffold |
+| < 0.40 | Loosely related or unrelated |
+
+These ranges are rules of thumb, not hard boundaries. Domain knowledge always takes precedence over a raw score.
+
+### Which fingerprint does chemcellar use?
+
+chemcellar uses **Morgan fingerprints** (radius 2, 2048 bits) precomputed at registration time and stored in the database as indexed bit vectors. Morgan fingerprints encode the circular atomic environment around each heavy atom, making them sensitive to both atom identity and local connectivity. They are the same fingerprint type used by ChEMBL and PubChem for similarity searching.
+
+Because the fingerprints are precomputed and indexed with a GiST index, similarity searches across large registries (hundreds of thousands of compounds) return in well under a second.
+
+<Callout type="info">Fingerprints are computed only for disclosed, non-archived molecules. If a compound is registered without a structure (undisclosed status), it has no fingerprint and will not appear in similarity search results.</Callout>
+
+---
+
+## Before you start
+
+- You need at least Viewer access to the workspace.
+- You need a reference structure — either a compound already in the registry (you can pick it from the molecule list) or a new structure you draw or paste.
+
+---
+
+## Steps
+
+1. Click **Molecules** in the left navigation panel.
+
+2. Click **Structure search** (the hexagon icon next to the search bar) to open the structure search panel.
+
+3. Change the **Search type** selector to **Similarity**.
+
+4. Provide your reference structure using one of these methods:
+   - **Draw** the structure in the built-in editor.
+   - **Paste a SMILES** string by clicking **SMILES** in the editor toolbar.
+   - **Pick from the registry** by clicking **Choose from registry** and searching for an existing compound by name or registration number. chemcellar loads that compound's canonical structure as the query.
+
+5. Set the **Minimum similarity** threshold using the slider or the numeric input. The default is **0.7** (70%). Compounds with a Tanimoto score below this threshold are excluded from results. Lower the threshold to see more, less-similar hits; raise it to focus on very close analogs.
+
+   <Callout type="default" emoji="💡">If you are exploring a brand-new series and expect few close analogs, start at 0.5 and adjust upward. If you are deduplicating a lead compound, start at 0.8 to quickly spot near-identical structures.</Callout>
+
+6. Click **Search**. The molecule list reloads, showing matching compounds ordered by Tanimoto score (highest first). Each result card displays the score as a labeled badge.
+
+> 📷 *Screenshot: the structure search panel in Similarity mode with a reference structure drawn and the threshold slider set to 0.7, and the results list showing compound cards each with a Tanimoto score badge.*
+
+7. Click any result card to open the molecule detail page. On the detail page you can compare structures side-by-side, review all screening data, and check inventory availability.
+
+8. To refine your results, adjust the minimum similarity slider without redrawing the query. The list updates immediately.
+
+9. To apply additional property filters (MW, lifecycle stage, synthesis status), click **Filters** while a similarity search is active. Both the similarity threshold and the property filters apply simultaneously.
+
+---
+
+## Try it — interactive similarity widget
+
+Enter two structures below to see their Tanimoto score computed live in your browser.
+
+<SimilarityDemo
+  smilesA="c1ccc2[nH]cnc2c1"
+  smilesB="c1cnc2[nH]ccc2c1"
+/>
+
+*Try it: replace either SMILES with your reference compound and a candidate analog to preview the score before running a full registry search.*
+
+---
+
+## Reading the results
+
+### Score badges
+
+Each result card shows a **Tanimoto** badge. Scores are rounded to two decimal places (e.g., 0.84). The badge color reflects the score tier:
+
+- Green — ≥ 0.85 (very close analog)
+- Amber — 0.65 – 0.84 (structurally related)
+- Grey — below 0.65 (loosely related, shown only if the threshold is set below 0.65)
+
+### Sorting and exporting
+
+Results are always sorted by Tanimoto score descending. You cannot re-sort by a different column while a similarity search is active, because Tanimoto ordering is the primary purpose of this view.
+
+To export the ranked results — including the Tanimoto score column — see the [Export guide](/guides/export). The Tanimoto score is included as a column in CSV and Excel exports.
+
+---
+
+## Tips
+
+- **Compare analogs across lifecycle stages.** If you find a very close analog (≥ 0.85) that is already in a lead or preclinical-candidate stage, use that compound's detail page to review its activity data before investing in a new series.
+- **Combine with substructure search.** Similarity search and substructure search complement each other. A similarity search finds broad structural neighborhoods; a substructure search finds compounds that share a specific functional group or ring system. Run both to get a full picture.
+- **Save high-scoring hits to a collection.** Select the result rows you want to keep, then add them to an existing [collection](/guides/research-organization/collections) or create a new one. Collections let you track and re-visit a curated compound set.
+- **Use the result as a new query.** From a result card's detail page, click **Search similar** to launch a new similarity search using that compound as the reference. This lets you hop between structural neighborhoods progressively.
+
+---
+
+## Worked example — finding backup compounds
+
+Suppose your primary lead (CV-00234) is progressing through optimization, and you want a backup series with similar core chemistry but not identical to CV-00234.
+
+1. Open the molecule list and click the card for CV-00234.
+2. From the detail page, click **Search similar**.
+3. In the similarity search panel, set the threshold to **0.70** to include somewhat-related analogs.
+4. Review results with Tanimoto scores of 0.70 – 0.84. These are structurally related but distinct from the primary lead.
+5. Filter by **Lifecycle stage = registered** to focus on compounds that have not been tested yet.
+6. Save the filtered selection to a new collection named "CV-00234 backup candidates".
+
+---
+
+## Related
+
+- [Search overview](/guides/search) — text and property search
+- [Structure search](/guides/search/structure-search) — substructure and exact-structure matching
+- [Saved searches](/guides/search/saved-searches) — save a similarity query with a threshold for re-execution
+- [Collections](/guides/research-organization/collections) — curate and track hit lists
+- [Export](/guides/export) — download ranked results with Tanimoto scores
+- [Glossary: Tanimoto](/reference/glossary#tanimoto)
+- [Glossary: similarity search](/reference/glossary#similarity-search)
+- [Glossary: Morgan fingerprint](/reference/glossary#morgan-fingerprint)

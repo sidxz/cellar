@@ -1,0 +1,193 @@
+import { Callout } from 'nextra/components'
+
+# Chemical structures
+
+**What you'll learn:** How chemists and computers represent molecules as text strings, why there are several formats and when each matters, how chemcellar normalises every structure at registration time, and how stereochemistry and tautomers are handled.
+
+---
+
+## Why text representations exist
+
+Drawing a molecule on paper is intuitive for a human but meaningless to a database. Text representations convert a 2D chemical graph into a machine-readable string so structures can be stored, compared, searched, and exchanged without proprietary software.
+
+chemcellar stores every [molecule](/reference/glossary#molecule) in four complementary text formats — [SMILES](/reference/glossary#smiles), [InChI](/reference/glossary#inchi), [InChIKey](/reference/glossary#inchikey), and molfile — and derives each one from the others automatically when you register a compound.
+
+---
+
+## SMILES
+
+[SMILES](/reference/glossary#smiles) (Simplified Molecular-Input Line-Entry System) is the most widely used format for entering and exchanging chemical structures. It encodes connectivity, bond types, charges, and stereochemistry as a linear string.
+
+### Reading a SMILES string
+
+Each letter in a SMILES string represents an atom. Bonds, branches, ring closures, and stereo markers are encoded as punctuation. For example, aspirin is:
+
+```
+CC(=O)Oc1ccccc1C(=O)O
+```
+
+Hover over any token below to see what it means.
+
+<SmilesAnnotator smiles="CC(=O)Oc1ccccc1C(=O)O" showStructure={true} />
+
+*Try it: replace the SMILES with any molecule you know — for example, ethanol (`CCO`) or caffeine (`Cn1cnc2c1c(=O)n(c(=O)n2C)C`).*
+
+### Canonical SMILES
+
+The same molecule can be written as many valid SMILES strings. For aspirin alone, dozens of equivalent strings exist — all correct, but textually different. A **canonical SMILES** is the unique string produced by running a standardised algorithm (chemcellar uses RDKit's canonicaliser, which follows the same conventions as ChEMBL and PubChem).
+
+Canonical SMILES matter for deduplication: chemcellar converts every submitted structure to its canonical form before checking whether the compound already exists in your workspace.
+
+<Callout type="info">
+When you register a molecule, chemcellar canonicalises the SMILES you provide. The canonical form is what gets stored and what you will see in exports. Your original input is not retained.
+</Callout>
+
+### SMILES for stereochemistry
+
+SMILES encodes stereocentres with `@` and `@@` for tetrahedral centres, and `/` and `\` for double-bond geometry. See [Stereochemistry](#stereochemistry) below for how chemcellar handles these.
+
+---
+
+## InChI and InChIKey
+
+[InChI](/reference/glossary#inchi) (International Chemical Identifier) is an IUPAC-standardised text identifier that encodes a molecule's formula, connectivity, hydrogen positions, charge, and stereochemistry in a layered, hierarchical string. For aspirin:
+
+```
+InChI=1S/C9H8O4/c1-6(10)13-8-5-3-2-4-7(8)9(11)12/h2-5H,1H3,(H,11,12)
+```
+
+Unlike SMILES, InChI is not a drawing format — you cannot reconstruct a 2D structure from it. Its purpose is comparison and exchange: two structures with identical InChI strings are chemically the same compound (under the mobile-hydrogen rules described in [Tautomers](#tautomers)).
+
+### InChIKey
+
+[InChIKey](/reference/glossary#inchikey) is a fixed-length, 27-character hash of the InChI string:
+
+```
+BSYNRYMUTXBXSQ-UHFFFAOYSA-N
+```
+
+It follows the pattern `XXXXXXXXXXXXXX-XXXXXXXXXX-X` — 14 characters encoding the molecular skeleton, 10 encoding the rest of the InChI layers, and 1 check character.
+
+chemcellar uses the InChIKey as the **primary deduplication key**. When you register a molecule:
+
+1. Your SMILES is canonicalised.
+2. An InChI is computed from the canonical SMILES.
+3. The InChI is hashed to produce an InChIKey.
+4. chemcellar checks whether any active molecule in your workspace already carries that InChIKey.
+
+If a match exists, the new [batch](/reference/glossary#batch) is attached to the existing molecule record rather than creating a duplicate entry.
+
+<Callout type="info">
+InChIKey uniqueness is enforced per workspace. Two workspaces may independently register the same compound — they will each have their own molecule record with the same InChIKey, but the records are isolated.
+</Callout>
+
+---
+
+## Molfile
+
+A molfile (MDL MOL format) stores atoms, bonds, and 2D (or 3D) coordinates in a block-based text format. It is the format most structure-drawing tools produce natively, and it is what chemcellar uses to render 2D structure images.
+
+You will not normally write molfile text by hand. chemcellar accepts SMILES or a drawn structure as input, generates the canonical SMILES and InChI/InChIKey from that, and also stores the molfile for display purposes.
+
+---
+
+## Canonicalization pipeline
+
+Every time you submit a structure — whether by typing SMILES, drawing in the structure editor, or uploading a file — chemcellar runs the following pipeline before saving anything:
+
+1. **Parse.** Validate that the input is a legal structure.
+2. **Salt stripping.** Remove counter-ions and disconnected fragments (e.g., the HCl in a hydrochloride salt). The salt form is recorded on the batch.
+3. **Standardisation.** Apply chembl-structure-pipeline conventions: normalise unusual valences, neutralise where appropriate, apply consistent aromaticity perception.
+4. **Canonicalise.** Generate the unique RDKit canonical SMILES.
+5. **Compute InChI and InChIKey.** From the canonical SMILES.
+6. **Check for duplicates.** Query the workspace by InChIKey.
+7. **Generate molfile.** For 2D rendering.
+
+> 📷 *Screenshot: the registration form with the structure editor open, showing a SMILES being entered and the live 2D preview rendering below it.*
+
+---
+
+## Stereochemistry
+
+Stereochemistry describes the three-dimensional arrangement of atoms in a molecule. Two molecules with identical connectivity but different stereo configurations are different compounds — they may have dramatically different biological activities. chemcellar tracks stereochemistry explicitly.
+
+### Chiral centres (tetrahedral stereo)
+
+A carbon atom with four distinct substituents is a chiral centre. The two mirror-image arrangements are called enantiomers. In SMILES:
+
+- `C[C@@H](N)C(=O)O` — L-alanine (the natural amino acid)
+- `C[C@H](N)C(=O)O` — D-alanine
+
+chemcellar registers these as two distinct molecules. Their InChIKeys differ in the stereo layer, so the InChIKey deduplication correctly separates them.
+
+See the rendered difference below:
+
+<StructureViewer smiles="C[C@@H](N)C(=O)O" width={300} height={200} editable={true} />
+
+*Try it: change `@@` to `@` in the SMILES to switch from L- to D-alanine and see the stereo flip.*
+
+### Double-bond geometry (E/Z)
+
+Double bonds can exist in E (trans) or Z (cis) configurations, encoded in SMILES with `/` and `\`. For example, `F/C=C/F` is trans-1,2-difluoroethylene. chemcellar preserves this distinction.
+
+### Racemic mixtures and undefined stereo
+
+Not every compound has defined stereochemistry at registration time. chemcellar supports three additional stereo states on a molecule:
+
+| State | Meaning |
+|-------|---------|
+| `racemic` | Equal mixture of enantiomers |
+| `multi_stereo` | Multiple defined stereocentres |
+| `undefined` | Stereo present in the structure but not yet assigned |
+
+A racemic mixture is a separate molecule record from either pure enantiomer.
+
+---
+
+## Tautomers
+
+Tautomers are pairs of structures that interconvert rapidly in solution by the movement of a proton, often together with a shift of a double bond. Common examples include the keto/enol forms of carbonyl compounds and the 1H/2H forms of imidazoles.
+
+In practice, you want a search for either tautomeric form to find the same compound. chemcellar handles this through the InChI standard's **mobile-hydrogen layer**: InChI treats interconverting tautomers as the same compound for the purpose of the InChIKey it generates. A keto-form SMILES and its enol-form SMILES will produce the same InChIKey for simple tautomers, so deduplication works correctly.
+
+<Callout type="info">
+chemcellar does **not** run an explicit tautomer canonicaliser at registration time. RDKit's `TautomerEnumerator` aggressively removes stereo information from compounds that have chiral centres adjacent to enolizable carbonyls — a class that includes amino acids, sugars, profens, and β-lactams. Applying it would silently destroy valid stereochemistry. The InChI mobile-H layer handles the common cases safely, matching ChEMBL, PubChem, and CAS practice.
+</Callout>
+
+For tautomer-aware searches beyond what InChI handles, use the **tautomer-match** option in the [structure search](/guides/search/structure-search) interface. That search operates at query time only and never alters registered structures.
+
+---
+
+## SMARTS: structure search patterns
+
+[SMARTS](/reference/glossary#smarts) (SMILES ARbitrary Target Specification) is a query language for substructure matching. It extends SMILES with wildcards and logical operators so you can search for a chemical motif rather than an exact structure. For example, `c1ccccc1` matches any benzene ring, and `[OH]` matches any hydroxyl group.
+
+SMARTS are used in chemcellar's [substructure search](/guides/search/structure-search). You do not need to write SMARTS by hand — the structure editor can generate them from a drawn scaffold — but knowing the notation helps when you need a precise query.
+
+---
+
+## How chemcellar stores structure data
+
+Each molecule record in chemcellar holds five structural fields set as a unit:
+
+| Field | Content |
+|-------|---------|
+| `smiles` | Canonical SMILES (RDKit-computed) |
+| `cxsmiles` | Extended SMILES preserving enhanced stereo groups |
+| `inchi` | Full IUPAC InChI string |
+| `inchi_key` | 27-character hashed InChI key |
+| `molfile` | MDL MOL block with 2D coordinates |
+
+All five fields are populated together when a molecule is registered with a structure. For [undisclosed molecules](/concepts/undisclosed-molecules) — compounds registered by an external partner who has not yet revealed the structure — all five fields are null until disclosure occurs.
+
+---
+
+## Related
+
+- [Guide: drawing structures](/guides/registration/drawing-structures)
+- [Guide: bulk registration](/guides/registration/bulk-registration)
+- [Concept: registration & identity](/concepts/registration-and-identity)
+- [Concept: molecular properties](/concepts/molecular-properties)
+- [Guide: structure search](/guides/search/structure-search)
+- [Reference: chemistry standards](/reference/chemistry-standards)
+- [Reference: glossary](/reference/glossary)

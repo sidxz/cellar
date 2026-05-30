@@ -1,0 +1,172 @@
+import { Callout } from 'nextra/components'
+
+# Compliance, Audit Trail & Data Lock
+
+**What you'll learn:** How chemcellar records every change to your data, what an electronic signature means in this context, how data lock protects screening results, and how these features align with the 21 CFR Part 11 regulation that governs electronic records in regulated life-sciences research.
+
+---
+
+## Why compliance is built in
+
+Research data in drug discovery has real stakes: a compound decision based on bad data can send a program in the wrong direction, or worse, reach a regulatory filing.
+chemcellar treats the audit trail as a **first-class domain concern**, not an afterthought log table.
+Every change to every record — from registering a molecule to closing a campaign — is captured automatically. You do not need to do anything extra to enable it.
+
+---
+
+## The audit trail
+
+The [audit trail](/reference/glossary#audit-trail) in chemcellar is an **append-only record** of every mutation in the system.
+"Append-only" means that once a record is written, it cannot be changed or deleted — not by a user, not by an administrator, not by the application itself.
+The database enforces this constraint at the table level.
+
+### What gets recorded
+
+The audit trail has two levels:
+
+**AuditOperation** — the "why" and "who". One operation is created for each logical user action. Examples:
+- Registering a new molecule
+- Merging two duplicate entries
+- Approving a screening run
+- Closing a campaign
+
+**AuditEntry** — the "what". One or more entries are created within each operation, one per field that changed. Each entry records:
+- Which entity changed (e.g., molecule `SAC-001`)
+- Which field changed (e.g., `status`, `smiles`, `merged_into_id`)
+- The old value (null for creates)
+- The new value (null for deletes)
+- The timestamp
+
+This two-level structure means you can look at one AuditOperation and see the complete picture of a complex change — for example, a merge that rewired ten batches and five readout records all appears as a single operation with individual entries for each affected field.
+
+### Example: a merge
+
+When you merge a duplicate molecule into the canonical record:
+
+```
+AuditOperation: type=merge, entity=molecule/SAC-001
+  AuditEntry: molecule/ABBVIE-002  merged_into_id  null → SAC-001
+  AuditEntry: batch/B5             molecule_id     ABBVIE-002 → SAC-001
+  AuditEntry: batch/B6             molecule_id     ABBVIE-002 → SAC-001
+  AuditEntry: readout/R100         molecule_id     ABBVIE-002 → SAC-001
+```
+
+Every downstream record that was updated shows up as its own entry, all linked to the one operation. The full history of `SAC-001` is reconstructible.
+
+<Callout type="warning">
+The audit trail is append-only. chemcellar never modifies or removes an audit record, and no user role grants permission to do so. This is enforced at the database level, not just in application code.
+</Callout>
+
+### Required reasons
+
+For certain operation types, chemcellar requires you to enter a **reason** before it will accept the change.
+By default, reasons are required for:
+- Structure corrections
+- Rejections of screening runs
+- Data-unlock requests
+- Lifecycle changes (e.g., archiving a project)
+
+The reason is stored as part of the AuditOperation.
+Your workspace administrator can configure which operation types require a reason.
+
+---
+
+## Electronic signatures
+
+An [electronic signature](/reference/glossary#electronic-signature) in chemcellar means that before a regulated action completes, the system asks you to actively re-confirm your intent — typically by acknowledging a specific meaning statement.
+The signature is stored alongside the AuditOperation, so the record of who signed, what they attested to, and when is preserved in the audit trail.
+
+### Actions that require a signature
+
+| Action | Attestation meaning |
+|---|---|
+| Approving a screening run | "I approve this assay run" |
+| Rejecting a screening run | "I reject this assay run: `{reason}`" |
+| Closing a campaign | "I attest that the data and decisions in this campaign are accurate" |
+| Superseding a campaign | "I authorize replacing the prior campaign with this one" |
+| Unlocking locked data | "I authorize unlocking data for: `{reason}`" |
+
+<Callout type="warning">
+Applying an electronic signature is a regulated action. It is recorded in the audit trail and cannot be undone. If you approve a run or close a campaign by mistake, you must create a corrective record (a new run approval with a documented reason, or a superseding campaign). The original signed record remains in the audit trail permanently.
+</Callout>
+
+Your administrator can extend the list of signature-required actions in the workspace settings.
+
+---
+
+## Data lock
+
+[Data lock](/reference/glossary#data-lock) protects the results of a screening run from being changed after they have been reviewed and approved.
+
+When a run is approved, chemcellar sets its status to `approved` and marks the readout data as locked.
+Locked data cannot be edited through the normal UI or API.
+Any further change requires an administrator to perform an audited unlock, after which all edits are recorded, and the data can be re-locked and re-approved.
+
+<Callout type="warning">
+Once a run is approved, its data is **locked**. Further edits require an administrator to perform an audited data-unlock. The unlock, the edits, and the subsequent re-approval all appear in the audit trail.
+</Callout>
+
+### Data lock at the campaign level
+
+Closed campaigns are also locked in a similar way.
+When you close a campaign, all of its measurements and compound decisions are frozen.
+The only way to change the record is to create a new campaign that supersedes the old one — the old one remains intact as the historical record.
+
+---
+
+## 21 CFR Part 11
+
+[21 CFR Part 11](/reference/glossary#21-cfr-part-11) is the United States FDA regulation that sets requirements for electronic records and electronic signatures in FDA-regulated industries (pharmaceutical, biotech, medical device).
+The key requirements relevant to chemcellar are:
+
+| Requirement | How chemcellar addresses it |
+|---|---|
+| **Audit trail** — changes to regulated records must be timestamped and attributed to the individual who made the change | Every AuditEntry records the entity, field, old value, new value, timestamp, and the user_id of the actor |
+| **Audit trail is computer-generated** — not created or modified by the user | chemcellar creates audit records automatically in the application layer; no user can insert or modify audit records |
+| **Electronic signatures are linked to records** | Each ElectronicSignature is linked to an AuditOperation and to the record it covers |
+| **Signatures include meaning** | Each signature carries a `meaning` field (e.g., "I approve this assay run") |
+| **Record integrity** — electronic records cannot be altered after the fact without detection | The append-only constraint at the database level prevents any modification to audit records |
+
+<Callout type="info">
+chemcellar is designed to support 21 CFR Part 11 compliance. Whether a specific implementation in your organization meets regulatory requirements depends on your validation program, system configuration, and quality procedures. Consult your quality and regulatory teams.
+</Callout>
+
+### What "GLP-aligned" means in this context
+
+GLP (Good Laboratory Practice) is a set of principles for the conduct and reporting of non-clinical laboratory studies.
+chemcellar's audit model — append-only records, attributing every change to a named user, requiring documented reasons for corrections — is designed to align with GLP expectations for data integrity.
+This does not mean chemcellar is GLP-validated out of the box; validation is an organizational activity.
+
+---
+
+## What you see as a user
+
+You do not interact with the audit trail directly during normal work.
+chemcellar records changes behind the scenes.
+You will notice the compliance layer in two situations:
+
+1. **Signature prompts** — when you perform a regulated action (approve a run, close a campaign), a dialog appears asking you to confirm the action with a meaning statement. You must actively affirm before the action completes.
+
+2. **Locked records** — when you open an approved run or a closed campaign, the edit controls are disabled. A status badge indicates the record is locked.
+
+> 📷 *Screenshot: the run approval dialog showing the electronic-signature attestation ("I approve this assay run"), a required reason field, and the Approve and Cancel buttons.*
+
+> 📷 *Screenshot: a locked run's readout-data table with a "Locked — approved" badge at the top and the cell editors disabled.*
+
+---
+
+## Audit log access
+
+Administrators can view the audit trail for any entity from its detail page.
+The audit log panel shows each AuditOperation in reverse-chronological order, with expandable AuditEntry rows showing the field-level changes.
+
+> 📷 *Screenshot: the audit log panel on a molecule detail page, showing three operations — registration, structure correction, and merge — each expandable to reveal field-level change entries.*
+
+---
+
+## Related
+
+- [Screening run approval guide](/guides/screening/approval-and-data-lock)
+- [Screen campaigns guide](/guides/research-organization/screen-campaigns)
+- [Projects, collections & campaigns](/concepts/projects-collections-campaigns)
+- [Glossary: audit trail](/reference/glossary#audit-trail), [electronic signature](/reference/glossary#electronic-signature), [data lock](/reference/glossary#data-lock), [21 CFR Part 11](/reference/glossary#21-cfr-part-11)

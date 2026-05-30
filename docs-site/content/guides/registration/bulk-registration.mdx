@@ -1,0 +1,98 @@
+import { Callout } from 'nextra/components'
+
+# Register compounds in bulk
+
+**Who this is for:** Chemists or data managers who need to register a set of compounds from a file — for example, a vendor delivery, a library synthesis run, or a legacy dataset migration.
+
+**What you'll accomplish:** You will upload an SDF, CSV, or XLSX file and register each compound in it, ending with a summary report showing how many molecules were created, how many matched existing records, and whether any items encountered errors.
+
+## Before you start
+
+- You need the **Bulk register** permission on your workspace.
+- Prepare your file in one of the accepted formats: SDF, CSV, or XLSX.
+- Each row or structure block must contain at least a valid SMILES string (for CSV/XLSX) or a MOL block (for SDF). All other fields are optional.
+- Download a template before building your file from scratch (see step 1 below).
+
+<Callout type="info">
+chemcellar processes each compound against the same normalization and deduplication pipeline as single-molecule registration. Compounds that match an existing molecule will add a new batch, not a duplicate molecule record. Compounds within the same uploaded file also check against each other — if two rows in your file describe the same structure, only the first creates a new molecule.
+</Callout>
+
+## Step 1 — Download the import template
+
+Before you build your file, download the official template so your columns are in the right format and order.
+
+1. From the top navigation bar, click **Register** and choose **Bulk upload**.
+2. In the dialog that appears, click **Download template**.
+3. Choose **CSV template** or **XLSX template** depending on your preference.
+
+The template contains a header row and one example row. The example row shows the expected format for every supported column and can be deleted before you add your data.
+
+> 📷 *Screenshot: the Bulk upload dialog with the "Download template" button highlighted, and a preview of the CSV template file showing headers.*
+
+### Supported columns
+
+| Column | Required? | Example | Notes |
+|--------|-----------|---------|-------|
+| `smiles` | Yes (CSV/XLSX) | `CC(=O)Oc1ccccc1C(=O)O` | SMILES string. chemcellar canonicalizes it. |
+| `name` | No | `Aspirin` | Common or IUPAC name. |
+| `molecule_type` | No | `small_molecule` | `small_molecule`, `peptide`, `biologic`, `mixture`, `unknown`. Defaults to `small_molecule`. |
+| `synthesis_status` | No | `synthesized` | `synthesized`, `purchased`, `designed`, `virtual`. Defaults to `synthesized`. |
+| `vendor_id` | No | `TBDA-001` | External vendor identifier. Must be unique in the workspace. |
+| `cas_number` | No | `50-78-2` | CAS registry number. |
+| `tags` | No | `probe;backup` | Semicolon-separated list of tags. |
+| `invention_date` | No | `2026-01-15` | ISO 8601 date (YYYY-MM-DD). |
+
+For SDF files, chemcellar reads structure data from the MOL block and metadata from SDF property tags. The property tag names follow the same column names listed above (e.g., `>  <smiles>` for an inline SMILES, `>  <name>` for the compound name, etc.). If the SDF already contains a MOL block, the `smiles` tag is optional — chemcellar uses the MOL block for the structure.
+
+<Callout type="default" emoji="💡">
+If your SDF was exported from an external tool, the property tag names may differ. Map your tags to chemcellar's expected column names in the XLSX template's **column-map** sheet before uploading. You can also contact your administrator — they may have already configured a column mapping for your data source under **Administration > Data sources**.
+</Callout>
+
+## Step 2 — Upload the file
+
+1. In the **Bulk upload** dialog, click **Choose file** (or drag and drop your file into the upload zone).
+2. Select your SDF, CSV, or XLSX file.
+3. chemcellar validates the file format and shows a preview of the first five rows, including which columns it recognized.
+4. Review the preview. If columns are missing or misidentified, fix the file and re-upload.
+5. Click **Start import**.
+
+> 📷 *Screenshot: the Bulk upload dialog after a CSV file has been selected, showing the row count, column preview, and the Start import button.*
+
+## Step 3 — Monitor progress
+
+After you click **Start import**, chemcellar processes the file row by row. A progress bar shows how many items have been processed and the running counts for each outcome.
+
+You do not need to stay on the page — chemcellar continues processing in the background. You will see the result in your notifications when it completes, or you can return to **Register > Recent imports** at any time.
+
+> 📷 *Screenshot: the Recent imports list showing a completed import with counts for registered, duplicate, and error rows.*
+
+## Step 4 — Review the results
+
+When processing is complete, open the import result to see the full breakdown:
+
+| Count | Meaning |
+|-------|---------|
+| **Registered** | New molecule records created (with a new batch each). |
+| **Duplicate** | Structures that matched an existing molecule — a new batch was added to the existing record. |
+| **Errors** | Rows that could not be processed. Each error shows the row number and a specific reason. |
+
+Click **Download error report** to get a CSV of the error rows with the reason column filled in. Fix the issues and re-upload just the error rows if needed.
+
+<Callout type="warning">
+A completed import is recorded in the append-only audit trail, including the original file name, the submitting user, and the per-row outcomes. You cannot roll back a completed bulk import.
+</Callout>
+
+## Common errors and fixes
+
+| Error | Likely cause | Fix |
+|-------|-------------|-----|
+| `Invalid SMILES` | The SMILES string cannot be parsed by RDKit. | Validate the SMILES in a local tool, then correct and re-upload. |
+| `Identifier already registered` | A `vendor_id` or `cas_number` you provided belongs to a different molecule in the workspace. | Look up which molecule holds that ID, decide whether to merge or use a different ID. |
+| `Missing required field: smiles` | A CSV/XLSX row has an empty SMILES column. | Fill in the SMILES or remove the row. |
+| `Duplicate within file` | Two rows in the same file have the same InChIKey (same structure). Only the first was processed. | Deduplicate your file before re-uploading. |
+
+## Related
+- [Drawing structures](./drawing-structures) — register a single compound interactively.
+- [Identifiers](./identifiers) — understand how vendor IDs and CAS numbers are validated and stored.
+- [Chemistry standards reference](/reference/chemistry-standards) — SDF, SMILES, and InChI format details.
+- [Import guide](/guides/import) — importing data other than molecules (e.g., assay results).

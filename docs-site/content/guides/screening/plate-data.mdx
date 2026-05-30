@@ -1,0 +1,142 @@
+import { Callout } from 'nextra/components'
+
+# View and import plate data
+
+**Who this is for:** Scientists who need to review plate readout data, import results from a plate reader, or understand how the activity data grid and heatmap work.
+
+**What you'll accomplish:** You will import a plate-reader export file into a run, review the resulting well data on the plate heatmap, and use the activity data grid to inspect individual readout values.
+
+## Before you start
+
+- A [run](/reference/glossary#run) must already exist and be in `draft` or `in_progress` status. Data cannot be imported into a `completed`, `approved`, or locked run.
+- You need the **Edit run data** permission.
+- For file import: export a reader matrix from your plate reader software. chemcellar accepts CSV files in the plate-reader matrix format (rows = plate rows, columns = plate columns, values = raw signals).
+
+<Callout type="info">
+If you are entering data by hand rather than from a plate reader, see [Runs](./runs) for the manual readout entry workflow.
+</Callout>
+
+## Understanding the plate heatmap
+
+The **plate heatmap** is the primary way to inspect an entire plate's data at a glance. Each well is colored by its readout value — a color gradient (default: viridis, dark = low, bright = high) lets you spot spatial patterns, control drift, and outlier wells immediately.
+
+The demo below illustrates a 96-well plate heatmap with a simulated gradient. Your actual data will reflect the measured values from your assay.
+
+<PlateHeatmapDemo format={96} colorScale="viridis" showLabels={true} />
+
+*Hover over any well to see the compound name, batch number, concentration, and measured value. In a well-controlled inhibition assay, positive control wells will appear at one extreme of the color scale and negative controls at the other.*
+
+<Callout type="default" emoji="💡">
+A gradient that drifts from left to right or top to bottom across the plate is a common sign of evaporation or dispensing issues. Seeing a row or column that is consistently higher or lower than its neighbors often points to a pipetting error on that row or column.
+</Callout>
+
+### Reading the heatmap
+
+| What you see | What it might mean |
+|--------------|-------------------|
+| Positive controls all bright, negatives all dark | Good control separation — high Z′ factor |
+| Controls spread in the wrong direction | Assay may be measuring activation rather than inhibition, or the plate map is inverted |
+| A single anomalous well in an otherwise uniform row | Likely a pipetting error or a damaged well |
+| A rectangular block of anomalous wells | Possible dispensing head issue at that region of the plate |
+| Gradient from top-left to bottom-right | Evaporation artefact — plates may have sat open before reading |
+
+### Switching readout columns
+
+If the protocol defines more than one [readout definition](/reference/glossary#readout-definition), a column selector above the heatmap lets you choose which readout to color the wells by. Switch between readouts to compare, for example, primary inhibition and a counterscreen viability readout on the same plate.
+
+> 📷 *Screenshot: the plate heatmap for a 96-well plate, with column 1 green (positive controls), column 2 red (negative controls), and columns 3–12 showing a sample gradient. The readout-selector dropdown above the heatmap shows "% Inhibition" selected.*
+
+## Importing plate-reader data
+
+If your plate reader exports a grid file (a matrix of signal values, one row per plate row and one column per plate column), you can import that file directly into chemcellar rather than typing each value by hand.
+
+### Step 1 — Open the import dialog
+
+1. Navigate to the run detail page.
+2. Click the **Plates** tab and select the plate you want to import data for.
+3. Click **Import reader data**.
+
+> 📷 *Screenshot: the Plates tab on a run detail page, with an "Import reader data" button visible next to the plate entry.*
+
+### Step 2 — Download the import template (recommended for first use)
+
+If you are unsure of the expected file format:
+
+1. In the import dialog, click **Download template**.
+2. The template is a CSV file with row headers (A, B, C…) in the first column and column numbers (1, 2, 3…) across the header row. Each cell represents one well position.
+3. Fill in your signal values in the appropriate cells and save.
+
+<Callout type="default" emoji="💡">
+The template matches the standard matrix layout that most plate reader software can export directly — rows labeled A–H (for 96-well) or A–P (for 384-well), columns 1–12 (96) or 1–24 (384).
+</Callout>
+
+### Step 3 — Upload the reader file
+
+1. Click **Choose file** (or drag and drop) in the import dialog.
+2. Select your CSV file.
+3. chemcellar parses the matrix and shows a preview matching the uploaded values to the plate map:
+   - Each well position is validated against the plate's well assignments.
+   - Positions that are blank wells or unassigned positions are imported but flagged as non-sample.
+4. Choose which **Readout definition** the values correspond to — for example, "Raw fluorescence counts" maps to the "% Inhibition" readout after normalization, or the raw values feed a calculated readout.
+5. Click **Import**.
+
+> 📷 *Screenshot: the import dialog after a CSV is uploaded, showing a preview grid of parsed values with each well color-coded by the mapped value, and a Readout definition dropdown at the top.*
+
+<Callout type="warning">
+Importing data into a plate replaces any existing values for the wells in that plate. If you have already entered some values manually, they will be overwritten. This action is recorded in the append-only audit trail.
+</Callout>
+
+### Step 4 — Review the import result
+
+After import, the plate heatmap updates to show the imported values. Verify:
+
+- **Control wells** appear at the expected ends of the color scale.
+- **Sample wells** show the distribution you expect.
+- No unexpected blank or zero-value wells appear in sample positions (which might indicate dispensing failures).
+
+If the import contained errors (malformed values, unexpected row counts), chemcellar reports them in the dialog and does not import partial data.
+
+## Using the activity data grid
+
+The **Activity data grid** provides a tabular view of every readout value in the run — one row per molecule-batch-readout combination.
+
+### Navigating the grid
+
+1. On the run detail page, click the **Data** tab.
+2. The grid shows columns for: compound name, registration number, batch, well position, plate number, concentration, and one column per [readout definition](/reference/glossary#readout-definition) in the protocol.
+3. Sort any column by clicking its header. Filter by compound or batch using the search box above the grid.
+
+> 📷 *Screenshot: the activity data grid showing rows of compound data with columns for name, batch, concentration, plate, well, and "% Inhibition" values. Some rows are highlighted orange to indicate outlier flags.*
+
+### Flagging outliers
+
+To flag an individual data point as an outlier:
+
+1. Click the row in the grid.
+2. In the row detail panel that opens, toggle **Mark as outlier**.
+3. Optionally enter a reason (e.g., "Dispensing failure — well A3 visually empty").
+4. Click **Save**.
+
+Flagged outlier values are retained in the database — they are never deleted. They are excluded from aggregations and from dose-response curve fitting, but they remain visible on the heatmap (shown with a different symbol) and in exports. This preserves the complete raw experimental record.
+
+<Callout type="warning">
+Flagging a data point as an outlier is an audited action. The flag, the reason, and your user identity are recorded in the append-only audit trail.
+</Callout>
+
+### Exporting the data grid
+
+To export the current view to CSV or XLSX:
+
+1. In the top-right corner of the grid, click **Export**.
+2. Choose **CSV** or **Excel**.
+3. The exported file contains all visible rows and columns, including any active filters.
+
+The export is a snapshot of the current data state — locked or unlocked. For an official data export tied to a specific approval, use the export function on the approval record.
+
+## Related
+
+- [Runs](./runs) — creating a run and entering readouts manually.
+- [Plate templates](./plate-templates) — pre-assigning well types to plate positions.
+- [Dose-response](./dose-response) — how curve fitting uses the imported readout values.
+- [Approval & data lock](./approval-and-data-lock) — locking data after review.
+- [Assays & screening](/concepts/assays-and-screening) — the full model for plates, wells, and readout data.

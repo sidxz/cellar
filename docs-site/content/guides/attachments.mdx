@@ -1,0 +1,96 @@
+import { Callout } from 'nextra/components'
+
+# Attach files to records
+
+**Who this is for:** Scientists and data managers who need to store supporting documents — spectra, certificates of analysis, method files, images, or raw data files — alongside compound, batch, protocol, or run records.
+
+**What you'll accomplish:** You will upload one or more files to a chemcellar record and be able to download or delete them later.
+
+## Before you start
+
+- You need write access to the entity you want to attach files to. Read-only viewers can see and download existing attachments but cannot upload or delete.
+- There is no workspace-wide file size limit enforced by the application, but your administrator may have set one at the infrastructure level. Ask your admin if a large upload fails.
+
+---
+
+## What can have attachments
+
+Files can be attached to four types of records:
+
+| Record type | Where to find the Attachments section |
+|-------------|--------------------------------------|
+| **Molecule** | Molecule detail page → **Attachments** tab |
+| **Batch** | Batch detail page → **Attachments** tab |
+| **Protocol** | Protocol detail page → **Attachments** tab |
+| **Run** | Run detail page → **Attachments** tab |
+
+Every attachment is workspace-scoped: files you upload are visible to everyone in your workspace with access to that record, and are not visible to other workspaces.
+
+<Callout type="info">
+File names must be unique per record. If you upload a second file with the same name as an existing attachment on the same record, the upload will fail. Rename the new file before uploading.
+</Callout>
+
+---
+
+## Upload a file
+
+1. Open the record you want to attach a file to (a molecule, batch, protocol, or run).
+2. Click the **Attachments** tab.
+3. Click **Upload** (or drag and drop a file into the upload zone).
+4. Select the file from your computer. chemcellar accepts any file type.
+5. The file uploads immediately. When the upload is complete, the file appears in the attachment list with its name, size, type, and the date it was uploaded.
+
+> 📷 *Screenshot: the Attachments tab on a molecule detail page, showing the drag-and-drop upload zone and a list of two existing attachments — a PDF and a PNG — each with name, size, MIME type, upload date, and a Download button.*
+
+<Callout type="default" emoji="💡">
+You can drag and drop multiple files at once into the upload zone and chemcellar will queue them for upload. Each file is uploaded and saved individually, so a failure on one file does not affect the others.
+</Callout>
+
+### Uploading to a locked run
+
+If a [run](/reference/glossary#run) has been approved and data-locked, you can still upload attachments to it. Attachments are treated as supporting documentation rather than experimental data, so they are not subject to the data lock. However, deleting an attachment from a locked run is restricted to administrators.
+
+<Callout type="warning">
+Uploading a file to a record is recorded in the append-only audit trail, including the file name, the uploading user, and the timestamp.
+</Callout>
+
+---
+
+## Download a file
+
+1. Open the record and click the **Attachments** tab.
+2. Find the file you want in the attachment list.
+3. Click **Download**. The file downloads to your browser's default download location with its original file name.
+
+> 📷 *Screenshot: the attachment list showing one attachment selected with the Download button highlighted.*
+
+---
+
+## Delete a file
+
+<Callout type="warning">
+Deleting an attachment permanently removes the file from storage. This action cannot be undone and is recorded in the audit trail.
+</Callout>
+
+1. Open the record and click the **Attachments** tab.
+2. Find the file you want to remove.
+3. Click the **Delete** (trash) icon next to the file.
+4. Confirm the deletion in the dialog that appears.
+
+The file is removed from the attachment list immediately. Because chemcellar stores the deletion event in the audit trail, administrators can see that a file with that name existed and was deleted, along with who performed the action and when.
+
+---
+
+## Attachments and molecule merge
+
+When two molecule records are merged (for example, when an undisclosed molecule is disclosed and found to be a known compound), chemcellar automatically moves all attachments from the source molecule to the surviving target molecule. No manual re-attachment is needed. The merge event records this transfer in the audit trail.
+
+See [disclosure and merge](/guides/registration/disclosure-and-merge) for details on when and why merges occur.
+
+---
+
+## Related
+
+- [Disclosure and merge](/guides/registration/disclosure-and-merge) — understand how molecule merges affect attachments.
+- [Approval and data lock](/guides/screening/approval-and-data-lock) — how data lock interacts with run records and their attachments.
+- [Compliance and audit trail](/concepts/compliance) — understand what gets recorded and why.

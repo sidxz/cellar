@@ -1,0 +1,169 @@
+import { Callout } from 'nextra/components'
+
+# Record a synthesis route
+
+**Who this is for:** Synthetic chemists who want to document the reaction steps used — or planned — to make a target compound.
+
+**What you'll accomplish:** You will create a synthesis route for a registered molecule, add one or more reaction steps with reagents and conditions, and optionally record experimental outcomes such as yield and the batch produced.
+
+## What is a synthesis route?
+
+A [synthesis route](/reference/glossary#synthesis-route) is an ordered plan describing how to make a target molecule from starting materials. It consists of a sequence of **reaction steps**, where each step specifies:
+
+- The **reagents** (reactants, catalysts, solvents, and other materials).
+- The **reaction conditions** (temperature, solvent, atmosphere, time).
+- The **product** of the step (which may be an intermediate or the final target molecule).
+- Optionally, the **experimental outcome** (yield, purity) once the step has actually been run.
+
+Multiple routes can exist for the same molecule — for example, a short convergent route and a longer linear route — so you can compare strategies. Exactly one route can be designated the **preferred** route.
+
+Routes support two structural types:
+
+- **Linear** — each step has a single preceding step. Reactions proceed in a straight chain from starting materials to product.
+- **Convergent** — one or more steps combine products of separate branches. Used when two synthetic fragments are joined at a late stage.
+
+## Before you start
+
+- The target molecule must already be registered in chemcellar. If not, [register it first](./drawing-structures).
+- You need the **Edit** permission on molecules in your workspace.
+- Have your reaction SMILES or reaction name ready. You can also record a route without reaction SMILES for early planning stages.
+
+## Create a route
+
+1. Open the target molecule's detail page. Search for the molecule by registration number, name, or identifier.
+2. Click the **Synthesis routes** tab.
+3. Click **New route**.
+4. Fill in the route header:
+
+| Field | Required? | Notes |
+|-------|-----------|-------|
+| **Name** | Yes | A short label such as "Route A — Suzuki coupling" or "Literature route". |
+| **Route type** | Yes | *Linear* or *Convergent*. |
+| **Description** | No | A narrative overview of the synthetic strategy. |
+| **Scale** | No | Expected working scale: *milligram*, *gram*, *kilogram*, *pilot*, or *process*. |
+| **Source** | Yes | How this route was derived: *Manual* (you drew it up), *Literature* (from a publication), *Retrosynthetic analysis*, or *AI predicted*. |
+| **Source reference** | No | Publication DOI, tool name, or job reference for the source above. |
+| **Estimated cost** | No | Total estimated cost for one batch at the specified scale. |
+
+5. Click **Save route**. The route is created in **Draft** status.
+
+> 📷 *Screenshot: the New route form with fields for name, route type, and source filled in, before any steps have been added.*
+
+## Add reaction steps
+
+With the route created, you can now add the steps that make up the synthetic sequence.
+
+1. On the route detail page, click **Add step**.
+2. Fill in the step form:
+
+### Step identity
+
+| Field | Required? | Notes |
+|-------|-----------|-------|
+| **Step number** | Yes | Ordinal position in the sequence. chemcellar auto-fills this. For convergent routes, indicate which branch the step belongs to using the **Branch label** field. |
+| **Name** | No | A short name for the step, e.g., "Buchwald-Hartwig amination". |
+| **Named reaction** | No | The canonical reaction name from the literature (e.g., "Suzuki-Miyaura", "Mitsunobu"). |
+| **Reaction SMILES** | No | A reaction SMILES string of the form `reactants>>products`. Optional for draft routes. |
+| **Product** | No | Select a registered molecule as the product if the intermediate is already in chemcellar, or type a description if it is not. The final step's product must be the target molecule. |
+
+### Reagents
+
+Click **Add reagent** for each material used in the step:
+
+| Field | Notes |
+|-------|-------|
+| **Role** | *Reactant*, *Reagent*, *Catalyst*, *Solvent*, *Base*, or *Ligand*. |
+| **Molecule** | Search and select a registered molecule if the reagent is in chemcellar. Otherwise leave blank and fill in the name manually. |
+| **Name** | Always required — used as the display label regardless of whether a molecule record exists. |
+| **Amount** | How much is used (with unit). |
+| **Equivalents** | Molar equivalents relative to the limiting reagent. |
+| **CAS number / Catalog number / Supplier** | Optional — useful for catalog reagents that are not registered molecules. |
+
+### Conditions
+
+Click **Add conditions** to record the reaction conditions:
+
+| Field | Examples |
+|-------|---------|
+| **Solvent** | THF, DMF, EtOH |
+| **Temperature** | 80 °C |
+| **Atmosphere** | Nitrogen, Argon, Air |
+| **Time** | 16 h |
+| **Catalyst / Ligand loading** | 5 mol%, 10 mol% |
+
+3. Click **Save step**. The step is added to the route.
+4. Repeat for each step in the sequence.
+
+> 📷 *Screenshot: the Add step form showing the reagent section with two reagents filled in, and the Conditions section expanded.*
+
+<Callout type="default" emoji="💡">
+You do not need to record reaction SMILES or conditions for every step. A route in **Draft** status can be as sparse as a list of step names and reagent names — useful for planning before the chemistry is finalized.
+</Callout>
+
+## Record an experimental outcome
+
+Once a step has been run in the lab, you can record the result:
+
+1. On the route detail page, click on the step you want to update.
+2. Click **Record outcome**.
+3. Fill in the outcome fields:
+
+| Field | Notes |
+|-------|-------|
+| **Yield (%)** | Isolated yield as a percentage (1–100). |
+| **Purity** | Percentage purity from HPLC or NMR. |
+| **Actual scale** | How much limiting reagent was used. |
+| **Batch** | Select the [batch](/reference/glossary#batch) that was produced by this step, if the product is a registered molecule with a batch in chemcellar. |
+
+4. Click **Save outcome**.
+
+chemcellar recomputes the **overall yield** of the route after each step outcome is saved — it multiplies the yields of all steps along the longest linear sequence.
+
+> 📷 *Screenshot: the Record outcome panel showing yield, purity, and the batch picker dropdown.*
+
+## Validate and set as preferred
+
+When you are confident a route is correct and all referenced molecules are active:
+
+1. On the route detail page, click **Validate route**.
+2. chemcellar checks that the step graph has no cycles, that all referenced molecule IDs are active, and that the final step's product is the target molecule. If all checks pass, the route moves from **Draft** to **Validated** status.
+3. To mark this as the primary route for the molecule, click **Set as preferred**.
+
+<Callout type="warning">
+A molecule can have at most one preferred route. Setting a new route as preferred automatically demotes the current preferred route to **Validated** status. This change is recorded in the audit trail.
+</Callout>
+
+> 📷 *Screenshot: the synthesis route detail page in Validated status, with the Set as preferred button visible.*
+
+## Route statuses
+
+| Status | Meaning |
+|--------|---------|
+| **Draft** | Route is being built. Incomplete steps and missing data are allowed. Not shown in default route listings for other users. |
+| **Validated** | Route passes all structural checks. Suitable for comparison with other routes. |
+| **Preferred** | The recommended route for making this molecule. Only one per molecule. |
+| **Deprecated** | Route is no longer used or recommended. Kept for historical record. |
+
+## Convergent routes
+
+For a convergent route, you define multiple branches of steps that eventually converge. When adding steps:
+
+1. Set the **Route type** to *Convergent* when creating the route.
+2. For each step, set the **Branch label** (e.g., "main", "branch_A", "branch_B").
+3. For the convergent step that joins two branches, select multiple entries in the **Preceding steps** picker — one from each branch that feeds into it.
+
+chemcellar validates that the step graph forms a directed acyclic graph (no cycles) and that the final step produces the target molecule.
+
+## Explore a reaction
+
+The widget below illustrates aspirin's classic synthesis — an acetylation of salicylic acid. Paste a different SMILES to see the structure of your own starting material:
+
+<StructureViewer smiles="OC(=O)c1ccccc1O" editable={true} />
+
+*Try it: this is salicylic acid (aspirin's starting material). Replace the SMILES with a reagent from one of your own routes.*
+
+## Related
+- [Drawing structures](./drawing-structures) — register a molecule if your target is not yet in chemcellar.
+- [Identifiers](./identifiers) — reagents that are registered molecules can be looked up by any of their identifiers.
+- [Batches & samples](/concepts/batches-and-samples) — link a step's outcome to the batch it produced.
+- [Glossary — synthesis route](/reference/glossary#synthesis-route)

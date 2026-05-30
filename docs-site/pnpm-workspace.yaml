@@ -1,0 +1,16 @@
+# Standalone docs site (not part of any workspace). This file exists only to
+# carry pnpm settings.
+verifyDepsBeforeRun: false
+onlyBuiltDependencies:
+  - sharp
+# Nextra 4.6.1 declares `zod ^4.1.12`; zod 4.4.x tightened strictObject so that
+# `z.custom()` (without .optional()) requires the key to be present. Nextra's
+# Layout strips `children` before parsing its theme config against a schema that
+# lists `children` as required, which crashes on zod >= 4.2. Pin to the version
+# Nextra was built against.
+overrides:
+  zod: 4.1.12
+allowBuilds:
+  core-js: set this to true or false
+  es5-ext: set this to true or false
+  sharp: set this to true or false

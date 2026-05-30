@@ -1,0 +1,124 @@
+import { Callout } from 'nextra/components'
+
+# Import data from an external source
+
+**Who this is for:** Scientists and data managers who need to bring compound records, batch information, or assay plate data from an external screening platform into chemcellar — without losing field mappings or re-typing information by hand.
+
+**What you'll accomplish:** You will understand how chemcellar's [data source](/reference/glossary#data-source) system connects to an external platform, and how to trigger or monitor an import so that molecules, batches, and plate records appear in your workspace.
+
+## Before you start
+
+- An administrator must configure the data source under **Administration > Data sources** before you can import. If you do not see a data source listed there, ask your workspace admin to add one.
+- You need at least the **Run import** permission on your workspace.
+- For plate-reader grid imports (readout data from a plate reader), you additionally need write access to the target run. See [Import plate-reader data](#import-plate-reader-grid-data) below.
+
+<Callout type="info">
+chemcellar's import system is field-mapping–driven: an administrator defines exactly which fields from the external system map to which chemcellar fields. This means the same external system can be connected to multiple workspaces with different mappings, and no vendor-specific columns ever appear in the core database.
+</Callout>
+
+---
+
+## How data sources work
+
+A [data source](/reference/glossary#data-source) is a configured connection to an external system — for example, an external screening platform or a public chemistry database. Each data source stores:
+
+- **Connection details** — the external system's endpoint and (optionally) an API key reference managed by your administrator.
+- **Field mappings** — a set of rules that translate the external system's field names to chemcellar's internal fields. For example, the external platform may call its compound identifier `cdd_registry_number` while chemcellar expects a `name` field. The admin configures this mapping once, and every subsequent import uses it automatically.
+- **Re-registration policy** — whether importing a compound that already exists in the workspace should create a new [batch](/reference/glossary#batch) or only update identifiers. This is set per data source by the admin.
+
+> 📷 *Screenshot: the Administration > Data sources list, showing two configured data sources — one external screening platform and one public database — each with a status badge (active/inactive) and an Edit button.*
+
+Admins configure data sources at **Administration > Data sources**. As a scientist or data manager, you interact with the results of those imports: you see new molecules appearing in the molecule list, batches tagged with the external source's identifiers, and plate records linked to existing runs.
+
+---
+
+## Molecule and batch import
+
+When an administrator runs a full vault import from the external screening platform, chemcellar pulls molecule and batch records and registers them automatically using the same pipeline as [bulk registration](/guides/registration/bulk-registration).
+
+### What happens during import
+
+1. chemcellar fetches records from the external system in chunks.
+2. For each molecule, chemcellar canonicalizes the structure (SMILES normalization, salt stripping) and computes its [InChIKey](/reference/glossary#inchikey). If a molecule with the same InChIKey already exists in the workspace, the import merges the external identifiers onto the existing record rather than creating a duplicate.
+3. For each batch linked to the molecule, chemcellar creates a new [batch](/reference/glossary#batch) record (or skips it, depending on the data source's re-registration policy).
+4. External identifiers (such as the platform's compound ID or batch ID) are stored on the molecule and batch records according to the field mappings the admin defined.
+
+<Callout type="info">
+The import pipeline runs in the background. Large vaults with tens of thousands of compounds may take several minutes to complete. You do not need to stay on the page — you will receive a notification when the import finishes, and you can check progress under **Administration > Data sources > [source name] > Import history**.
+</Callout>
+
+### What to check after import
+
+After the import completes, open the import report. The report shows:
+
+| Count | Meaning |
+|-------|---------|
+| **Registered** | New molecule records created with at least one new batch. |
+| **Merged** | Structures that matched an existing molecule — external identifiers were added to the existing record. |
+| **Batch added** | An existing molecule received a new batch from the external source (only when the re-registration policy is on). |
+| **Errors** | Records that could not be processed — each entry shows the external ID and a specific reason. |
+
+If errors appear, review the reason column. Common causes:
+
+| Error | Likely cause | Fix |
+|-------|-------------|-----|
+| `Invalid SMILES` | The external platform's structure string could not be parsed. | Contact the person who manages the external platform — the source record may need correction there. |
+| `Missing required field` | A core field (typically structure or name) was empty in the external record. | Check the field mapping under **Administration > Data sources** and ensure the source field is populated in the external system. |
+| `Identifier conflict` | An external identifier (e.g., a platform compound ID) already exists on a different molecule in the workspace. | Look up which molecule holds that identifier and decide whether to merge them or leave them separate. |
+
+<Callout type="warning">
+A completed import is recorded in the append-only audit trail, including the data source name, the importing user, and the per-record outcomes. Imported records cannot be silently removed — use the [disclosure and merge](/guides/registration/disclosure-and-merge) workflow to consolidate duplicates if needed.
+</Callout>
+
+---
+
+## Import plate-reader grid data
+
+In addition to molecule and batch import, chemcellar supports importing raw plate-reader output directly into a [run's](/reference/glossary#run) readout data. This is separate from the data source system described above — it applies to files exported directly from a plate reader instrument (such as an EnVision, PHERAstar, or SpectraMax), not from an external database.
+
+### When to use grid import
+
+Use grid import when:
+- Your plate reader exports a matrix file where columns represent plate columns (1, 2, 3 …) and rows represent well rows (A, B, C …).
+- You want to import one readout type (e.g., raw fluorescence counts) for all wells in a single operation.
+
+If your file is already in a long "Well, Value" format (one row per well), use the standard long-format import wizard on the run detail page instead.
+
+### Steps
+
+1. Open the run you want to add readout data to.
+2. Go to the **Readout Data** tab.
+3. Click **Import Grid** in the top-right toolbar.
+4. In the dialog that opens, choose the **readout definition** you are importing data for. Every grid file contains exactly one readout type — if you are importing multiple readouts (e.g., raw counts and normalized inhibition), repeat this process for each.
+5. Click **Choose file** (or drag and drop) and select your plate reader's CSV or XLSX export.
+6. Click **Import**.
+
+chemcellar locates the numeric grid block in your file automatically. It skips title rows and text headers, then maps each cell to the corresponding well (A1, A2, B1, etc.) and attaches the values to the selected readout definition.
+
+> 📷 *Screenshot: the Import Grid dialog on the Readout Data tab, showing the readout definition picker, file upload zone, and Import button.*
+
+<Callout type="default" emoji="💡">
+If your plate reader adds a title row (e.g., "Plate 1 — raw counts") at the top of the file before the numeric grid, chemcellar skips it automatically. Both CSV and XLSX files are accepted. The file does not need any special preparation beyond what the instrument exports.
+</Callout>
+
+<Callout type="info">
+After a successful grid import, chemcellar automatically recalculates [dose-response curves](/concepts/dose-response) and refreshes the plate heatmap and QC metrics for the affected run. You do not need to trigger recalculation manually.
+</Callout>
+
+### What happens if the run is locked
+
+If the run has been approved and data-locked, the **Import Grid** button is disabled. You must contact a run manager or administrator to unlock the run before adding new readout data. Unlocking creates an audit entry.
+
+<Callout type="warning">
+Importing readout data into a run modifies that run's scientific record. This action is recorded in the append-only audit trail. Once a run is approved, its data is **locked** — further edits require an administrator and create a new audit entry.
+</Callout>
+
+---
+
+## Related
+
+- [Bulk registration](/guides/registration/bulk-registration) — upload your own SDF, CSV, or XLSX files to register compounds directly.
+- [Plate templates](/guides/screening/plate-templates) — define plate layouts before assigning compounds to wells.
+- [Plate data](/guides/screening/plate-data) — understand how well assignments and readout data are organized in a run.
+- [Data sources](/administration/data-sources) — administrator reference for configuring field mappings and connection settings.
+- [Export data](/guides/export) — download molecule, batch, or plate data back out of chemcellar.

@@ -1,0 +1,158 @@
+import { Callout } from 'nextra/components'
+
+# Save and reuse searches
+
+**Who this is for:** Anyone who runs the same search regularly — chemists tracking a compound series, biologists monitoring new screening hits, or portfolio managers watching the pipeline.
+
+**What you'll accomplish:** Save a named search, run it again at any time to see fresh results, edit or delete it, and optionally share it with your project team.
+
+---
+
+## Concepts
+
+### What is a saved search?
+
+A [saved search](/reference/glossary#saved-search) stores a set of search criteria — text filters, property ranges, structure queries, or any combination — under a name you choose. When you run a saved search, chemcellar re-executes the query against the current registry and returns up-to-date results. This means a saved search always reflects new molecules registered since you last ran it.
+
+Saved searches are not snapshots. They do not freeze a list of compounds at a point in time — that is what a [collection](/reference/glossary#collection) is for. If you want to lock a hit list, save it as a collection instead.
+
+### Visibility
+
+Each saved search has a visibility setting:
+
+- **Private** — only you can see and run it.
+- **Project** — visible to everyone who has access to the [project](/reference/glossary#project) the search is linked to.
+
+---
+
+## Before you start
+
+- You need at least Viewer access to the workspace to run saved searches.
+- You need Editor access (or higher) to create, edit, or delete a saved search.
+- To share a saved search with a project, the project must already exist. See [Projects](/guides/research-organization/projects).
+
+---
+
+## Save a search
+
+1. Run the search you want to save using any combination of the search tools:
+   - Text or identifier search (see [Search overview](/guides/search))
+   - Property filters (MW, logP, TPSA, HBD/HBA, lifecycle stage, synthesis status, tags)
+   - Structure query — substructure, exact, or similarity (see [Structure search](/guides/search/structure-search) and [Similarity search](/guides/search/similarity-search))
+
+2. Confirm the results look correct. The filter chips above the molecule list show every active constraint.
+
+3. Click **Save search** above the molecule list. A dialog opens.
+
+4. Enter a **Name** for the search. Use a name that describes the intent, not just the filter values — for example, "Lead-stage kinase inhibitors under 400 Da" rather than "MW&lt;400 AND stage=lead".
+
+5. Choose a **Visibility**:
+   - Select **Private** if this search is for your own workflow.
+   - Select **Project** to share it with your team, then pick the project from the dropdown.
+
+6. Click **Save**. The search is saved and appears in your saved search list.
+
+> 📷 *Screenshot: the Save search dialog with a name filled in, Visibility set to Project, and a project selected from the dropdown.*
+
+---
+
+## Run a saved search
+
+1. Click **Saved searches** in the left navigation panel, or click the **Saved searches** tab in the search panel on the molecule list page.
+
+2. Find the search you want to run. Private searches appear in the **My searches** section; project searches appear under the project name.
+
+3. Click **Run**. chemcellar executes the stored query against the current registry and shows the results in the molecule list.
+
+<Callout type="info">Results reflect the state of the registry at the moment you run the search. Compounds registered or modified after you saved the search will appear if they match the criteria.</Callout>
+
+> 📷 *Screenshot: the Saved searches panel listing several named searches, with a Run button next to each.*
+
+4. After running, you can apply additional temporary filters on top of the saved search results without modifying the saved query itself.
+
+---
+
+## Edit a saved search
+
+1. Open the **Saved searches** panel.
+
+2. Click the three-dot menu (**⋯**) next to the search you want to edit and select **Edit**.
+
+3. The molecule list loads with the saved criteria pre-applied. Adjust the filters, property values, or structure query as needed.
+
+4. When the results look correct, click **Update search** (the button replaces **Save search** when editing). The saved search is updated in place.
+
+<Callout type="warning">Editing a project-visible saved search changes what everyone in the project sees when they run it. If you want to experiment without affecting your teammates, duplicate the search first (see below) and edit the copy.</Callout>
+
+---
+
+## Duplicate a saved search
+
+1. Open the **Saved searches** panel.
+
+2. Click the three-dot menu (**⋯**) next to the search and select **Duplicate**.
+
+3. A copy is created with the same criteria and a name of "Copy of [original name]". The duplicate is private by default.
+
+4. Edit the duplicate as needed.
+
+---
+
+## Delete a saved search
+
+1. Open the **Saved searches** panel.
+
+2. Click the three-dot menu (**⋯**) next to the search and select **Delete**.
+
+3. Confirm the deletion in the dialog.
+
+<Callout type="warning">Deleting a saved search cannot be undone. If the search is project-visible, it is removed for everyone in the project immediately. Molecules themselves are not affected — only the saved query is deleted.</Callout>
+
+---
+
+## Link a saved search to a project
+
+When you save or edit a search, you can link it to a [project](/reference/glossary#project). Linking does two things:
+
+- Sets the visibility to **Project** so other project members can see and run it.
+- Groups the search under that project in the **Saved searches** panel.
+
+A saved search can be linked to at most one project. To move a search to a different project, edit it and change the project selection.
+
+---
+
+## Use saved searches as a campaign compound source
+
+When you create a [screen campaign](/guides/research-organization/screen-campaigns), one of the compound source options is a saved search. Choosing this option means the campaign re-executes the search at resolve time and uses the current result set as its compound list. This keeps the campaign's compound list current without manual curation.
+
+<Callout type="info">The saved-search compound source for campaigns is designed for dynamic compound sets that grow over time — for example, "all compounds in active or hit stage". Once a campaign is closed, its compound list is frozen regardless of the source type.</Callout>
+
+---
+
+## Export saved search results
+
+After running a saved search, you can export the results to CSV, Excel, or SDF using the standard export controls. See the [Export guide](/guides/export) for details. The export reflects the live result set at the time of export, not the set from a previous run.
+
+---
+
+## Tips
+
+- **Name for purpose, not for filter values.** "Fragment-like hits from kinase screen Q1" ages better than "MW&lt;250 logP&lt;3 stage=hit". You can always click into a saved search to see its filters.
+- **Use project visibility for shared standards.** Teams often maintain shared searches like "All active compounds" or "Compounds ready for inventory request". Saving these as project-visible means everyone works from the same definition.
+- **Combine with collections.** Run a saved search to find current hits, then add selected results to a [collection](/guides/research-organization/collections) to lock them for screening. Use the saved search to keep finding new hits; use the collection to record what you decided to act on.
+- **Review regularly.** Because a saved search always re-queries live data, it can grow over time. Schedule a periodic review of important searches to triage new results.
+
+---
+
+## Related
+
+- [Search overview](/guides/search) — text and property search
+- [Structure search](/guides/search/structure-search) — substructure and exact matching
+- [Similarity search](/guides/search/similarity-search) — rank by Tanimoto score
+- [Collections](/guides/research-organization/collections) — freeze a hit list for screening
+- [Projects](/guides/research-organization/projects) — organize shared searches and collections
+- [Screen campaigns](/guides/research-organization/screen-campaigns) — use a saved search as a campaign compound source
+- [Export](/guides/export) — download search results
+- [Glossary: saved search](/reference/glossary#saved-search)
+- [Glossary: collection](/reference/glossary#collection)
+- [Glossary: project](/reference/glossary#project)

@@ -1,0 +1,122 @@
+import { Callout } from 'nextra/components'
+
+# Search by structure
+
+**Who this is for:** Chemists and biologists who need to find registered compounds by their chemical structure rather than by name or ID.
+
+**What you'll accomplish:** Run a substructure search to find every compound whose structure contains a given fragment, or run an exact-structure search to confirm whether a specific compound is already registered.
+
+---
+
+## Concepts
+
+### What is a substructure search?
+
+A [substructure search](/reference/glossary#substructure-search) asks: "which registered molecules contain this structural pattern?" You draw or paste a query fragment — a ring system, a functional group, a partial scaffold — and chemcellar returns every molecule whose structure contains that pattern as a contiguous subgraph.
+
+For example, a substructure query for a benzimidazole ring will return all registered molecules that contain the benzimidazole motif, regardless of what substituents are attached to it.
+
+### What is an exact-structure search?
+
+An exact-structure search returns only molecules whose [canonical SMILES](/reference/glossary#canonical-smiles) and [InChIKey](/reference/glossary#inchikey) exactly match the query structure. It is effectively a deduplication check. This is what chemcellar itself runs internally before registering a new compound.
+
+### How does chemcellar canonicalize structures?
+
+When you register a compound, chemcellar normalizes its structure using the same pipeline as ChEMBL and PubChem: salt stripping, tautomer standardization (without stripping stereo), and canonical SMILES generation via RDKit. The query structure you draw for a structure search goes through the same normalization, so you do not need to draw the salt-free form manually — chemcellar handles it.
+
+<Callout type="info">Substructure matching uses the normalized, aromatic-perceived form of both query and target structures. If you draw a Kekulé structure (alternating single/double bonds in an aromatic ring), chemcellar automatically aromatizes it before matching. You will not miss aromatic compounds by drawing them in Kekulé form.</Callout>
+
+---
+
+## Before you start
+
+- You need at least Viewer access to the workspace.
+- For drawing the query structure, chemcellar uses an integrated structure editor (Ketcher). You can also paste a [SMILES](/reference/glossary#smiles) string or a [SMARTS](/reference/glossary#smarts) pattern directly if you prefer text input.
+
+---
+
+## Steps — substructure search
+
+1. Click **Molecules** in the left navigation panel to open the molecule list.
+
+2. Click **Structure search** (the hexagon icon next to the search bar). The structure search panel slides open.
+
+3. In the **Search type** selector, confirm that **Substructure** is selected (it is the default).
+
+4. Draw your query fragment in the structure editor:
+   - Use the editor tools to draw atoms, bonds, rings, and functional groups.
+   - Alternatively, click **SMILES** in the editor toolbar, paste a SMILES or SMARTS string, and click **Apply**.
+
+   <Callout type="default" emoji="💡">You do not need to draw the complete molecule — only the fragment you want every result to contain. Unspecified attachment points on ring atoms are treated as "any substituent allowed".</Callout>
+
+5. Click **Search**. The molecule list refreshes to show only compounds whose registered structure contains your query fragment.
+
+> 📷 *Screenshot: the structure search panel open with a pyrimidine ring drawn in the editor, and the molecule list showing filtered results with the matching substructure highlighted.*
+
+6. Optionally, combine the substructure query with property filters (MW, logP, lifecycle stage, etc.) by clicking **Filters**. All active constraints apply simultaneously.
+
+7. To clear the structure query, click **Clear** in the structure search panel. The molecule list returns to its unfiltered state.
+
+---
+
+## Steps — exact-structure search
+
+Exact-structure search is useful when you want to confirm whether a specific compound already exists in the registry before registering it yourself.
+
+1. Open the structure search panel as described above.
+
+2. Change the **Search type** selector to **Exact**.
+
+3. Draw or paste the full target structure.
+
+4. Click **Search**. chemcellar returns the matching molecule if it exists, or an empty result set if it does not.
+
+<Callout type="info">The exact match compares InChIKeys, so stereoisomers are treated as distinct compounds. A search for the R-enantiomer will not return the S-enantiomer. If the compound you draw is a salt form, chemcellar strips the counterion before comparing — so a free-base query will match the registered salt, and vice versa.</Callout>
+
+> 📷 *Screenshot: the structure search panel set to Exact mode with a complete molecule drawn, and the result showing a single matching compound card.*
+
+---
+
+## Try it — interactive structure viewer
+
+The widget below renders a 2D structure from a SMILES string. Use it to preview what you plan to draw before running a search in the full editor.
+
+<StructureViewer smiles="c1ccc2[nH]cnc2c1" editable={true} />
+
+*Try it: replace the SMILES with your query fragment — for example, `c1cnccn1` for pyrimidine.*
+
+---
+
+## Reading the results
+
+Structure search results appear in the same molecule grid as text searches. Each card shows:
+
+- The 2D structure depiction, with the matching subgraph highlighted in blue (substructure mode only)
+- Registration number and compound name
+- Molecular weight and logP
+- Lifecycle stage badge
+
+Click any card to open the full molecule detail page, where you can review all properties, batches, and screening data.
+
+<Callout type="info">Substructure matching runs against all active (non-archived, non-tombstone) disclosed molecules in your workspace. Undisclosed compounds — those registered without a structure — are excluded from structure searches because their structural content is not yet known.</Callout>
+
+---
+
+## Tips
+
+- **Draw the minimal query.** The smaller and more specific your fragment, the faster the search and the more actionable the results. A five-atom query on a 100,000-compound registry is much faster than a 30-atom query.
+- **Use SMARTS for variable positions.** If you want "any halogen at position 4", use a SMARTS atom query (`[F,Cl,Br,I]`) rather than drawing all four variants. Paste the SMARTS string into the editor's SMILES input field.
+- **Combine with similarity search.** After a substructure search, you may want to extend your analysis by running a [similarity search](/guides/search/similarity-search) on one of the hits to find structurally related analogs that do not contain the exact fragment.
+
+---
+
+## Related
+
+- [Search overview](/guides/search) — text and property search
+- [Similarity search](/guides/search/similarity-search) — rank compounds by structural similarity score
+- [Saved searches](/guides/search/saved-searches) — save your substructure query for reuse
+- [Register a single molecule](/guides/registration) — how chemcellar deduplicates on registration
+- [Glossary: SMILES](/reference/glossary#smiles)
+- [Glossary: SMARTS](/reference/glossary#smarts)
+- [Glossary: InChIKey](/reference/glossary#inchikey)
+- [Glossary: substructure search](/reference/glossary#substructure-search)

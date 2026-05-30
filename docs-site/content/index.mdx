@@ -1,0 +1,70 @@
+import { Callout } from 'nextra/components'
+
+# Introduction to chemcellar
+
+chemcellar is a compound management and screening platform built for medicinal chemistry teams. It gives every scientist, biologist, and portfolio manager a single place to register compounds, track physical samples, run assays, and analyze results — with a full audit trail baked in from the start.
+
+> 📷 *Screenshot: the chemcellar dashboard showing the main navigation, a molecule card grid, and the screening summary panel.*
+
+---
+
+## Who chemcellar is for
+
+| Role | What chemcellar helps you do |
+|------|------------------------------|
+| **Bench chemist / medicinal chemist** | Register new compounds, track batches, record synthesis routes, search by structure or property. |
+| **Biologist / assay scientist** | Define screening protocols, record run data, upload plate readouts, view dose-response curves. |
+| **Portfolio manager** | Track project progress, review campaign decisions, export data for stakeholders. |
+| **Student or new hire** | Learn how compound data flows from bench to data set — start with the on-ramp below. |
+
+---
+
+## The big-picture workflow
+
+Every compound in chemcellar moves through a predictable lifecycle. Understanding this flow helps you find the right section of the docs for whatever you need to do.
+
+```
+Register → Organize → Screen → Analyze → Report
+```
+
+### 1. Register
+
+You start by giving a compound an identity. You draw or paste its chemical structure, chemcellar standardizes it, checks for duplicates, and assigns a unique [registration number](/reference/glossary#registration-number). From that point on, every piece of data in the system traces back to that record.
+
+Physical material is tracked separately as a [batch](/reference/glossary#batch) — the actual powder or solution you weighed out — and further as [samples](/reference/glossary#sample) drawn from that batch for experiments.
+
+### 2. Organize
+
+You group compounds into [projects](/reference/glossary#project) and [collections](/reference/glossary#collection) to reflect your research goals. Collections can come from manual curation, saved searches, or the output of a screening campaign. Saved searches let you define a query once and re-run it any time to see which compounds now match.
+
+### 3. Screen
+
+You describe an experiment as a [protocol](/reference/glossary#protocol) — the assay conditions, plate format, and readout definitions — and then record one or more [runs](/reference/glossary#run) against that protocol. Each run captures per-well data from a microplate, and chemcellar computes [dose-response curves](/reference/glossary#dose-response-curve) automatically when concentration-series data is present.
+
+<Callout type="warning">When a run is approved, its data is **locked**. Further edits require an administrator and create a new audit entry. This is by design — it protects the integrity of your screening records.</Callout>
+
+### 4. Analyze
+
+Once data is in, you explore it. You can search by structure similarity, filter by property ranges, view dose-response curves side by side, and compare results across protocols. Screen campaigns let you gather measurements from multiple runs into a single decision surface: mark compounds as active, inactive, or inconclusive, then close the campaign with an electronic signature.
+
+### 5. Report
+
+Export your compound list, screening results, or plate layouts as CSV or Excel for downstream analysis, presentations, or hand-off to collaborators.
+
+---
+
+## Core concepts in one paragraph
+
+A **[molecule](/reference/glossary#molecule)** is the canonical chemical entity — one structure, one registration number, one identity. A **[batch](/reference/glossary#batch)** is a physical lot of material made from that molecule on a particular date by a particular chemist. A **[sample](/reference/glossary#sample)** is an aliquot drawn from a batch and placed in a vial at a specific storage location. A **[protocol](/reference/glossary#protocol)** describes how an assay is run; a **[run](/reference/glossary#run)** is a single execution of that protocol with actual data. **[Projects](/reference/glossary#project)** and **[collections](/reference/glossary#collection)** are the organizational containers that tie everything together.
+
+---
+
+## Start here
+
+Choose your role to go to a curated reading path:
+
+- [**For scientists & biochemists**](/for-scientists) — register compounds, track inventory, run assays.
+- [**For portfolio managers**](/for-portfolio-managers) — understand project status, campaigns, and exports.
+- [**For students & newcomers**](/for-students) — learn the domain from scratch with interactive examples.
+
+Or jump straight into [Getting started](/getting-started) for step-by-step instructions.

@@ -1,0 +1,363 @@
+import { Callout } from 'nextra/components'
+
+# Chemistry standards
+
+**What you'll find here:** How chemcellar canonicalizes and normalizes chemical structures, which external standards it follows, what the registration pipeline does step by step, and the business rules that govern deduplication, stereochemistry, tautomers, salts, and merging.
+
+This page is the technical reference for the behavior described in plain language in [Concepts: chemical structures](/concepts/chemical-structures) and [Concepts: registration and identity](/concepts/registration-and-identity).
+
+---
+
+## Alignment with industry standards
+
+chemcellar's canonicalization and normalization choices align with the conventions used by ChEMBL, PubChem, and CAS. This means:
+
+- A structure registered in chemcellar produces the same canonical SMILES, InChI, and InChIKey as the same structure in ChEMBL or PubChem (within any InChI standard version differences).
+- chemcellar does **not** invent its own normalization rules. Where an industry consensus exists, chemcellar follows it.
+
+The key alignment points are documented in the sections below.
+
+---
+
+## Structure representations stored per molecule
+
+Every disclosed [molecule](/reference/glossary#molecule) in chemcellar stores five structural fields set as a unit. Either all five are populated (disclosed molecule) or all five are null (undisclosed molecule). Partial population is invalid.
+
+| Field | Format | Purpose |
+|-------|--------|---------|
+| `smiles` | Canonical SMILES (RDKit) | Primary text representation; used for display and export |
+| `cxsmiles` | Extended SMILES | Preserves enhanced stereo groups that plain SMILES cannot represent |
+| `inchi` | IUPAC InChI (standard layer) | Human-readable layered identifier; used for tautomer-aware comparison |
+| `inchi_key` | 27-character hash of InChI | Primary deduplication key; indexed for fast lookup |
+| `molfile` | MDL MOL block | Stores 2D atom coordinates; used for structure rendering |
+
+The [InChIKey](/reference/glossary#inchikey) is the uniqueness constraint: no two active (non-tombstone) disclosed molecules in the same workspace may share the same InChIKey.
+
+---
+
+## Canonicalization pipeline
+
+Every time you submit a structure — typed as [SMILES](/reference/glossary#smiles), drawn in the structure editor, or uploaded in an SDF or CSV file — chemcellar runs the following pipeline before storing anything.
+
+### Step 1 — Validate
+
+The SMILES (or molfile) is parsed. Invalid SMILES strings are rejected immediately with an error message. The registration is not attempted.
+
+### Step 2 — Salt stripping
+
+Disconnected fragments are identified. The largest organic fragment is kept; counter-ions and solvate molecules are removed. For example:
+
+- `[Na+].[O-]C(=O)c1ccccc1` (sodium benzoate) → `OC(=O)c1ccccc1` (benzoic acid)
+- `CC(=O)O.CC(N)C(=O)O` (alanine acetate salt) → `CC(N)C(=O)O` (alanine)
+
+The salt form (e.g., "sodium", "hydrochloride", "free base") is recorded on the [batch](/reference/glossary#batch) — not on the molecule. This is the ChEMBL/PubChem convention: the parent structure is the canonical compound identity; the salt form is a physical property of a specific preparation.
+
+<Callout type="info">
+If your compound is intentionally a salt or a mixture (not a stripped parent), see the [Mixtures](#mixtures) and [Salts on batches](#salts-on-batches) sections below.
+</Callout>
+
+### Step 3 — Standardization
+
+chemcellar applies the ChEMBL structure pipeline standardization rules, including:
+
+- Normalizing unusual valences to the most common representation.
+- Neutralizing zwitterions where the neutral form is the appropriate parent.
+- Applying consistent aromaticity perception (Kekulé vs. aromatic notation).
+- Removing explicit hydrogens that are implicit from valence rules.
+- Correcting common input errors (e.g., incorrect bond orders from editor artifacts).
+
+This step matches what ChEMBL applies to all deposited structures, so the same compound submitted to chemcellar and to ChEMBL will produce the same parent structure.
+
+### Step 4 — Canonical SMILES generation
+
+The standardized structure is passed to RDKit's canonicalization algorithm, which produces a unique SMILES string — the same molecule will always produce exactly the same canonical SMILES on any machine and any run.
+
+<Callout type="info">
+Your original SMILES input is not retained. The canonical form is what chemcellar stores and shows in the UI, search results, and exports.
+</Callout>
+
+### Step 5 — InChI and InChIKey computation
+
+The canonical SMILES is passed to the IUPAC InChI library to compute:
+
+- The full InChI string (standard InChI, v1.06).
+- The 27-character [InChIKey](/reference/glossary#inchikey) hash.
+
+The InChIKey is the value used for all deduplication queries.
+
+### Step 6 — Duplicate check
+
+chemcellar queries the workspace for any active (non-tombstone) molecule with the same InChIKey. The outcome determines what happens next:
+
+| Situation | Action |
+|-----------|--------|
+| No existing molecule with this InChIKey | Create a new molecule record |
+| Existing molecule with this InChIKey | Add the new [batch](/reference/glossary#batch) to the existing molecule; no new molecule created |
+| External ID already claimed by a different molecule | Block the registration; return a conflict error |
+
+### Step 7 — Descriptor computation
+
+Once the canonical structure is established, chemcellar synchronously computes all [molecular descriptors](/reference/glossary#molecular-descriptors) via RDKit. This takes approximately 10 ms per molecule and is always completed before the registration response is returned.
+
+### Step 8 — Molfile generation
+
+A 2D coordinate molfile is generated from the canonical SMILES using RDKit's coordinate generator. This molfile is used to render the 2D structure image in the UI.
+
+> 📷 *Screenshot: the registration pipeline status in chemcellar — showing each step (validate, standardize, canonicalize, dedup, descriptors) in sequence with pass/fail indicators.*
+
+---
+
+## Deduplication rules
+
+### Disclosed molecules
+
+Deduplication is performed in three simultaneous checks:
+
+| InChIKey match? | External ID match? | Result |
+|----------------|--------------------|--------|
+| No match | No match | New molecule + new batch |
+| Match (to molecule A) | No match | New batch on molecule A |
+| No match | Match (to molecule B) | **Conflict** — the external ID is already claimed by a structurally different molecule. Registration is blocked. |
+| Match (to molecule A) | Match (to molecule A) | New batch on molecule A |
+| Match (to molecule A) | Match (to molecule B, A ≠ B) | **Conflict** — the external ID is claimed by a different molecule than the structure matches. Registration is blocked. |
+
+### Undisclosed molecules
+
+Undisclosed molecules have no structure, so InChIKey deduplication is not possible. Only the external identifier is checked:
+
+| External ID check | Result |
+|------------------|--------|
+| ID not found | New undisclosed molecule + batch |
+| ID found on an existing undisclosed molecule | New batch on the existing undisclosed molecule |
+| ID found on a disclosed molecule | **Blocked** — the ID is already associated with a known structure. Investigate. |
+
+---
+
+## Stereochemistry
+
+### Chiral centres (tetrahedral stereo)
+
+chemcellar registers each stereoisomer as a distinct molecule. Two enantiomers have different InChIKeys (the InChI stereo layer encodes the stereocentre configuration) and are therefore separate records.
+
+SMILES stereocentre notation:
+- `C[C@@H](N)C(=O)O` — L-alanine
+- `C[C@H](N)C(=O)O` — D-alanine
+
+These two SMILES produce different InChIKeys and will be registered as two separate molecules. This matches the ChEMBL and PubChem treatment of stereoisomers.
+
+### Double-bond geometry (E/Z)
+
+E and Z double-bond isomers are treated as separate molecules. The InChI double-bond stereo layer captures `/` and `\` notation from SMILES. For example, `F/C=C/F` (trans) and `F/C=C\F` (cis) are distinct records.
+
+### Racemic mixtures and undefined stereo
+
+| `stereochemistry` field | Meaning |
+|------------------------|---------|
+| `achiral` | Structure has no stereocentres |
+| `single_stereo` | One defined stereocentre |
+| `multi_stereo` | Multiple defined stereocentres |
+| `racemic` | Explicitly registered as a 50:50 mixture of enantiomers |
+| `undefined` | Stereocentre(s) present in the structure but not yet assigned |
+
+A racemic mixture is a separate molecule record from either pure enantiomer.
+
+<Callout type="info">
+When you register a SMILES with an unspecified stereocentre (no `@` or `@@`), chemcellar sets `stereochemistry = undefined`. This is recorded honestly rather than being automatically resolved to one enantiomer. You can update the assignment later.
+</Callout>
+
+---
+
+## Tautomers
+
+### What tautomers are
+
+[Tautomers](/reference/glossary#tautomer) are pairs of structural isomers that interconvert rapidly in solution by moving a proton and often shifting a double bond. Common examples:
+
+- Keto/enol (e.g., cyclohexanone ↔ cyclohex-1-en-1-ol)
+- 1H/2H imidazoles (e.g., 1H-imidazole ↔ 3H-imidazole)
+- Pyridone/hydroxypyridine
+- Tetrazole ring-chain tautomerism
+- Guanine lactam/lactim forms
+
+### How chemcellar handles tautomers
+
+chemcellar uses the **InChI mobile-H layer** for tautomer handling. For most common medicinal chemistry tautomers, the InChI standard assigns the same InChI string to all interconverting forms. This means their [InChIKey](/reference/glossary#inchikey) is identical, and they deduplicate correctly without any additional tautomer enumeration.
+
+<Callout type="warning">
+chemcellar does **not** run an explicit tautomer canonicalization step (such as RDKit's `TautomerEnumerator`) at registration time. RDKit's enumerator aggressively strips stereo information from compounds with chiral centres adjacent to enolizable carbonyls — this class includes amino acids, sugars, profens, β-lactams, and many other important pharmaceutical scaffolds. Applying it would silently destroy valid, registered stereochemistry. The InChI mobile-H layer handles the common cases safely and matches ChEMBL, PubChem, and CAS practice.
+</Callout>
+
+**For tautomer-aware searches beyond the InChI layer:** chemcellar provides an opt-in tautomer-match mode in the structure search interface. This operates at query time only — it never alters registered structures.
+
+---
+
+## Salts on batches
+
+The canonical molecule is always the parent structure (free acid or free base, after salt stripping). Salt forms are physical properties of specific preparations and are recorded on the [batch](/reference/glossary#batch):
+
+- **`salt_form` field on Batch** — free-text description of the salt form (e.g., "hydrochloride", "sodium", "free base", "TFA salt", "mesylate").
+
+This means all salt forms of a molecule share one molecule record but have separate batch records. Potency data from different salt forms of the same compound is therefore grouped under the same molecule, which is the correct scientific treatment (the pharmacologically active species is usually the same regardless of counter-ion).
+
+---
+
+## Mixtures
+
+When `molecule_type = mixture`, the molecule record represents the mixture itself, and individual component molecules are linked via `MixtureComponent` entries. Each component is a separate, independently registered molecule aggregate.
+
+- At least two components are required.
+- Each component carries a `stoichiometric_ratio` (e.g., 2.0 for a 2:1 mixture).
+- Each component carries a `role`: `active`, `counterion`, `coformer`, or `other`.
+
+<Callout type="info">
+Mixtures do not go through the salt-stripping step — they are registered as submitted. If your intent is to register a salt, register the parent structure (which chemcellar will strip to automatically) and record the salt form on the batch.
+</Callout>
+
+---
+
+## Undisclosed molecules
+
+An undisclosed molecule is registered with no structure. The registration pipeline skips all structure-related steps (validation, salt stripping, canonicalization, InChIKey computation, descriptor calculation). Only the external identifier is checked for uniqueness.
+
+| Capability | Disclosed molecule | Undisclosed molecule |
+|-----------|-------------------|---------------------|
+| Structure display | Yes | No |
+| Substructure search | Yes | No |
+| Similarity search | Yes | No |
+| SAR analysis | Yes | No |
+| Batches and samples | Yes | Yes |
+| Assay plating | Yes | Yes |
+| Readout data and dose-response curves | Yes | Yes |
+| Collection membership | Yes | Yes |
+
+Undisclosed molecules transition to disclosed via the [disclosure process](/guides/registration/disclosure-and-merge). The transition is **one-way**: once disclosed, a molecule cannot return to undisclosed status.
+
+---
+
+## Molecular descriptor reference
+
+chemcellar computes the following descriptors synchronously at registration using RDKit. All values are derived deterministically from the canonical SMILES — no external services are required.
+
+| Descriptor | Symbol | Method | Lipinski Ro5? |
+|-----------|--------|--------|--------------|
+| Molecular weight | MW | Standard atomic weights | Yes (≤ 500 Da) |
+| Exact mass | — | Monoisotopic (most abundant isotopes) | No |
+| Molecular formula | — | Element count | No |
+| Crippen logP | clogP | Crippen method (RDKit) | Yes (≤ 5) |
+| Topological polar surface area | TPSA | Ertl method (RDKit) | No |
+| Hydrogen bond donors | HBD | N–H + O–H count | Yes (≤ 5) |
+| Hydrogen bond acceptors | HBA | N + O count | Yes (≤ 10) |
+| Rotatable bonds | RotBonds | Non-terminal, non-ring single bonds | No |
+| Aromatic rings | ArRings | Count of aromatic ring systems | No |
+| Ring count | Rings | Total ring count | No |
+| Heavy atom count | HAC | Non-hydrogen atom count | No |
+| Rule of Five violations | Ro5 violations | Count of failed Ro5 criteria (0–4) | — |
+
+<Callout type="info">
+logP computed by the Crippen method is a structural approximation, not an experimental measurement. It uses the same method as RDKit and produces values consistent with ChEMBL and PubChem clogP fields. Experimental logP values, if measured, should be stored as custom fields.
+</Callout>
+
+---
+
+## Registration number format
+
+[Registration numbers](/reference/glossary#registration-number) are assigned sequentially at the workspace level. The default format is:
+
+```
+{PREFIX}-{ZERO-PADDED SEQUENCE}
+```
+
+Examples with prefix `CV` and five-digit padding: `CV-00001`, `CV-00002`, `CV-00003`, …
+
+The prefix and zero-padding width are configurable in workspace settings by an administrator. Registration numbers are immutable after assignment — they never change, even after a merge.
+
+**Batch number format:**
+
+```
+{MOLECULE REGISTRATION NUMBER}-{ZERO-PADDED BATCH SEQUENCE}
+```
+
+Example: `CV-00001-001`, `CV-00001-002`. Batch numbers are also immutable.
+
+---
+
+## Merge rules
+
+A merge occurs when two molecule records are found to represent the same structure — most commonly during [disclosure](/reference/glossary#disclosure) of an undisclosed molecule, but also possible as a manual operation or during duplicate cleanup.
+
+### What a merge does
+
+The merge is a single atomic transaction:
+
+1. All [batches](/reference/glossary#batch) on the source molecule are reassigned to the target molecule.
+2. All readout data and dose-response curves linked to the source are reassigned.
+3. All collection memberships are transferred (duplicates removed).
+4. Molecule identifiers from the source are transferred to the target.
+5. The source's registration number is added as an `internal_legacy` identifier on the target.
+6. The source molecule's `merged_into_id` field is set to the target's ID — it becomes a [tombstone](/reference/glossary#tombstone).
+7. A `MergeEvent` record is created, containing a snapshot of the source molecule's state at merge time.
+
+Batch numbers are never renumbered after a merge. Historical batch references (in notebooks, external databases, reports) remain valid.
+
+### Merge safety checks
+
+Certain conditions block or modify a merge:
+
+| Condition | Action |
+|-----------|--------|
+| Source has active SampleRequests | Merge is blocked until requests are fulfilled or cancelled. Physical material may be in transit. |
+| Source has in-transit Shipments | Merge is blocked until shipments are delivered or returned. |
+| Source and target have different CAS numbers | The merge proceeds, but the CAS conflict is flagged for manual review. |
+| Source is in a locked Run | Merge proceeds (readout data is reassigned); the locked run remains locked. |
+| Source has pending SynthesisRequests | `molecule_id` on non-terminal requests is updated to the target. Synthesis requests are intent, not physical material. |
+
+<Callout type="warning">
+A merge is an irreversible operation. The source molecule becomes a tombstone and cannot be restored. The entire operation is recorded in the append-only audit trail, including a snapshot of the source molecule's state before the merge.
+</Callout>
+
+---
+
+## Lifecycle stage transitions
+
+A molecule's lifecycle stage tracks its progression through drug discovery. Not all transitions are allowed — the rules below enforce scientific and organizational intent.
+
+| From | To | Notes |
+|------|------|-------|
+| `registered` | `active` | Happens automatically after approval (or immediately for internally registered compounds) |
+| `active` | `hit` | Assigned by a screener after hit-calling criteria are met |
+| `hit` | `lead` | Project team decision, typically after confirmation and selectivity data |
+| `lead` | `preclinical_candidate` | Governance review; requires multi-parameter profile |
+| `preclinical_candidate` | `development_candidate` | Formal executive decision |
+| Any active stage | `deprioritized` | Project team decision; reason is required and recorded |
+| Any active stage | `archived` | Admin action; reason is required and recorded |
+| `deprioritized` | `active` | Reactivation; reason is required and recorded |
+
+All lifecycle transitions are recorded in the audit trail.
+
+---
+
+## Chemical data format reference
+
+| Format | Extension | Primary use in chemcellar |
+|--------|-----------|--------------------------|
+| [SMILES](/reference/glossary#smiles) | — | Structure input, canonical storage, display |
+| [CXSmiles](/reference/glossary#cxsmiles) | — | Enhanced stereo group preservation |
+| [InChI](/reference/glossary#inchi) | — | Tautomer-aware comparison |
+| [InChIKey](/reference/glossary#inchikey) | — | Deduplication key, database index |
+| Molfile (MDL MOL) | `.mol` | 2D coordinate storage, structure rendering |
+| SDF | `.sdf` | Bulk import and export of compound libraries |
+| [SMARTS](/reference/glossary#smarts) | — | Substructure search queries |
+| SMIRKS | — | Reaction transformation templates (synthesis routes) |
+| CSV | `.csv` | Bulk registration with metadata columns |
+| XLSX | `.xlsx` | Bulk registration with metadata columns |
+
+---
+
+## Related
+
+- [Glossary](/reference/glossary) — plain-language definitions of all key terms
+- [Concepts: chemical structures](/concepts/chemical-structures) — how SMILES, InChI, and InChIKey work together, with interactive examples
+- [Concepts: registration and identity](/concepts/registration-and-identity) — the full registration and deduplication workflow
+- [Guide: drawing structures](/guides/registration/drawing-structures) — how to use the structure editor
+- [Guide: bulk registration](/guides/registration/bulk-registration) — importing SDF and CSV files
+- [Guide: disclosure and merge](/guides/registration/disclosure-and-merge) — the disclosure workflow for undisclosed compounds

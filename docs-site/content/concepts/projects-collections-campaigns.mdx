@@ -1,0 +1,185 @@
+import { Callout } from 'nextra/components'
+
+# Projects, Collections & Campaigns
+
+**What you'll learn:** How chemcellar structures research work into projects, how you curate compound sets as collections, and how campaigns tie screening data to compound decisions in a reproducible, auditable record.
+
+---
+
+## The three organizing layers
+
+chemcellar gives you three tools for organizing research work. They are designed to work together, but each can stand alone:
+
+| Layer | What it is | Typical use |
+|---|---|---|
+| **Project** | A named, access-controlled research program | "EGFR Inhibitor Program Q1", "COVID Antiviral Screen" |
+| **Collection** | A curated set of molecules | "Kinase Focused Library", "Hit list from Run 042" |
+| **Campaign** | A structured, closeable pivot of screening decisions | "Primary screen — EGFR — 2026-Q1" |
+
+Think of a project as a folder that contains everything related to one program.
+Collections are the compound lists you curate inside that program.
+Campaigns are the formal review moments — where you look at all the screening data, make compound decisions, and close the record.
+
+---
+
+## Projects
+
+A [project](/reference/glossary#project) is the top-level grouping in chemcellar.
+Everything that belongs to a research program — protocols, screening runs, compound collections, and campaigns — is associated with a project.
+
+### What a project contains
+
+A project has a name, an optional description, and a status (`active` or `archived`).
+It does not own its child entities directly; instead, protocols, runs, collections, and campaigns each carry a `project_id` reference.
+This means the same collection or protocol can be associated with at most one project, keeping the research organization clean.
+
+### Access control
+
+Each project is registered as a resource in the authentication system.
+Your administrator assigns roles at the project level — for example, a biologist might have read access to the compound list but not the ability to register new molecules.
+chemcellar enforces these permissions on every API call; the project is never visible to users who lack at least view access.
+
+### Archiving a project
+
+When a program ends, you archive the project rather than delete it.
+An archived project is **read-only** — you cannot link new entities to it and you cannot change any of its associated records without a documented, audited reason.
+The data remains fully visible and searchable; archiving is a status change, not a deletion.
+
+<Callout type="warning">
+Archiving a project is recorded in the audit trail. Any attempt to create or modify records within an archived project will be rejected.
+</Callout>
+
+> 📷 *Screenshot: the project list page showing active and archived projects, with status badges and molecule/run counts on each card.*
+
+---
+
+## Collections
+
+A [collection](/reference/glossary#collection) (sometimes called a compound library or compound list) is a curated set of [molecules](/reference/glossary#molecule).
+
+Collections are the bridge between your compound registration work and your screening work.
+You build a collection of compounds you want to test, attach it to a campaign as the source, and the campaign pulls the data for those specific molecules from the relevant screening runs.
+
+### Building a collection
+
+You can add molecules to a collection one at a time from the molecule detail page, or in bulk from any search result grid using the **Add to collection** action.
+You can also remove molecules — the collection tracks only the current membership; removed molecules remain in the database and are not deleted.
+
+<Callout type="info">
+A collection holds molecule references, not copies. If a molecule is updated (for example, its structure is corrected), the collection automatically reflects the latest version.
+</Callout>
+
+### Frozen collections
+
+When a campaign is closed (see below), it can optionally emit a **frozen collection** containing the compounds that were marked `selected`.
+A frozen collection is a permanent, immutable snapshot of that membership set at the moment of campaign closure.
+Frozen collections cannot be edited — this is intentional, because they represent a documented decision about which compounds advance.
+
+<Callout type="warning">
+Frozen collections are locked at campaign closure and cannot be modified. This action is recorded in the audit trail. If you need to build on a frozen collection, create a new collection and add from it.
+</Callout>
+
+> 📷 *Screenshot: the collection detail page showing the molecule membership grid, with a "Frozen" badge on the status chip and the "Add molecules" button disabled.*
+
+---
+
+## Campaigns
+
+A [campaign](/reference/glossary#campaign) is the most structured organizing concept in chemcellar.
+It is a formal, closeable record that answers the question: *"For this set of compounds, across these assays, what did we decide?"*
+
+### Why campaigns exist
+
+In a drug discovery program, you typically run multiple assay types (primary screen, counterscreen, selectivity panel) and then make a go/no-go decision for each compound based on its combined profile.
+Without a structured record, that decision lives in a spreadsheet or someone's memory.
+A campaign captures it in a way that is:
+
+- **Reproducible** — you can re-resolve the measurements from the original screening runs at any time.
+- **Auditable** — closing a campaign requires an electronic signature, and the closure is recorded in the append-only audit trail.
+- **Actionable** — the closed campaign optionally produces a frozen collection of selected compounds that feeds into the next campaign.
+
+### Anatomy of a campaign
+
+A campaign has:
+
+- **Channels** — each channel is one assay readout (one Protocol + one readout definition). A channel contributes one column of data to the compound pivot. You configure the label, unit, and optional pass/fail threshold for each channel.
+- **Results** — one row per compound. Each result holds the compound's measurements across all channels and the reviewer's decision: `selected`, `deprioritised`, or `undecided`.
+- **Measurements** — one cell per compound-channel combination. chemcellar resolves these automatically from the screening runs; you can also enter a manual override for any cell.
+
+> 📷 *Screenshot: the campaign builder showing the compound pivot grid — rows are compounds, columns are assay channels, cells show numeric measurements, and the decision panel is open on the right.*
+
+### Compound source
+
+When you create a campaign, you choose where the list of compounds comes from:
+
+| Source type | What it means |
+|---|---|
+| **Explicit list** | You provide the molecule IDs directly (or build the list interactively) |
+| **Collection** | chemcellar pulls the membership of a named collection at the time you reseed |
+| **Derived from campaign** | chemcellar takes the compounds from a prior campaign, filtered by their decision (e.g., take only `selected` compounds) |
+
+Using **Derived from campaign** as a source is the standard way to build a screening cascade: primary screen → counterscreen → lead optimization → campaign, each one feeding the next.
+
+### Campaign lifecycle
+
+```
+draft ──[close + e-sig]──> closed
+closed ──[supersede + e-sig]──> superseded
+```
+
+- **Draft** — the campaign is editable. You can add and remove channels, reseed the compound list, and adjust measurements.
+- **Closed** — the campaign is immutable. A closed campaign has a recorded signature, a timestamp, and a snapshot of which protocols contributed data. You cannot edit a closed campaign.
+- **Superseded** — an older closed campaign that has been replaced by a newer one. It remains visible and searchable as the historical record.
+
+<Callout type="warning">
+Closing a campaign applies an electronic signature. Once closed, the campaign data is locked. If you discover an error after closure, you must create a new campaign that supersedes the old one — you cannot edit the closed record. Both actions are recorded in the audit trail.
+</Callout>
+
+### Re-resolving measurements
+
+While a campaign is in draft, you can re-resolve its measurements at any time.
+**Re-resolve** tells chemcellar to go back to the underlying screening runs and re-compute each measurement cell from the raw readout data.
+This is useful when new runs complete after you created the campaign, or when you correct an error in the original readout data.
+
+Cells you have manually overridden are **preserved** across re-resolve — chemcellar marks them as manual overrides and skips them during re-resolution.
+This lets you correct outliers or enter data from an external assay without losing your corrections every time the automatic resolver runs.
+
+<Callout type="info">
+Re-resolve is only available while the campaign is in draft. Once closed, the measurements are locked.
+</Callout>
+
+### Published collection
+
+When you close a campaign with **Publish collection** enabled, chemcellar automatically creates a frozen collection containing every compound whose decision is `selected`.
+This collection is the compound list for the next campaign in the cascade.
+
+The frozen collection carries a reference back to the campaign that created it, so you always know where a set of compounds came from.
+
+> 📷 *Screenshot: the campaign close dialog, showing the electronic-signature attestation field, the "Publish collection" checkbox, and the count of selected compounds that will be in the new collection.*
+
+---
+
+## How the three layers work together
+
+Here is a typical research-program flow:
+
+1. **Create a project** called "EGFR Inhibitor Program".
+2. **Register molecules** and organise promising hits into a **collection** called "Primary hit list — 50 µM".
+3. **Create a campaign** using the collection as the compound source, with channels for the primary screen and the counterscreen.
+4. Add the screening runs and **re-resolve measurements**.
+5. Review the pivot and set **decisions** for each compound.
+6. **Close the campaign** with an electronic signature. chemcellar publishes a frozen collection called "Selected hits — EGFR primary" (20 compounds).
+7. **Create a second campaign** using "Derived from prior campaign: selected" as the source, and configure channels for the dose-response follow-up.
+
+Each closed campaign is a permanent, signed artifact that tells the regulatory story of how compounds were advanced or deprioritised.
+
+---
+
+## Related
+
+- [Projects guide](/guides/research-organization/projects)
+- [Collections guide](/guides/research-organization/collections)
+- [Screen campaigns guide](/guides/research-organization/screen-campaigns)
+- [Compliance & audit trail](/concepts/compliance)
+- [SAR & similarity search](/concepts/sar-and-similarity)
+- [Glossary: project](/reference/glossary#project), [collection](/reference/glossary#collection), [campaign](/reference/glossary#campaign), [molecule](/reference/glossary#molecule)

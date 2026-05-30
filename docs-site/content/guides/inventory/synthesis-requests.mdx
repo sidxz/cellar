@@ -1,0 +1,255 @@
+import { Callout } from 'nextra/components'
+
+# Request compound synthesis
+
+**Who this is for:** Scientists who need a compound synthesized that does not yet exist as physical material, and chemists or administrators who manage and fulfil those requests.
+
+**What you'll accomplish:** You will submit a [synthesis request](/reference/glossary#synthesis-request) for a target compound, follow it through approval and assignment, and understand how the request resolves when synthesis is complete and a new [batch](/reference/glossary#batch) is created.
+
+---
+
+## Before you start
+
+- You need the **Submit synthesis request** permission.
+- The target compound must already be registered in chemcellar (it may be a `designed` or `virtual` molecule with no physical material yet). If the compound is not yet registered, register it first — see [Registration guides](/guides/registration).
+- Prepare a clear scientific rationale. Synthesis requests compete for limited chemist or CRO time; a well-written purpose statement with a project reference speeds up approval.
+- Know the target amount and minimum acceptable purity — these are required fields that help the chemist plan the synthesis.
+
+<Callout type="info">
+A synthesis request is distinct from a [sample request](./sample-requests). A sample request asks for material that already exists in inventory. A synthesis request asks for new material to be made — there is no physical compound yet. If the compound already has available samples, use a sample request instead.
+</Callout>
+
+---
+
+## Understanding the synthesis request workflow
+
+A synthesis request passes through up to ten states before it is closed:
+
+```
+draft ──[Submit]──► submitted ──[Approve]──► approved ──[Assign]──► assigned
+                └──[Cancel]──► cancelled   └──[Reject]──► rejected    │
+                                           └──[Cancel]──► cancelled    ▼
+                                                                  in_progress
+                                                                 ╱           ╲
+                                                    synthesis_complete       failed
+                                                            │
+                                                      [Fulfil]
+                                                            │
+                                                        fulfilled
+```
+
+Terminal states: `fulfilled`, `rejected`, `cancelled`, `failed`
+
+Each transition is recorded in the audit trail with the user, timestamp, and any notes attached.
+
+---
+
+## Submitting a synthesis request
+
+### Step 1 — Open the synthesis request form
+
+1. In the top navigation bar, click **Inventory**.
+2. In the left sidebar, click **Synthesis requests**.
+3. Click **New synthesis request**.
+
+### Step 2 — Fill in the request details
+
+| Field | Required? | What to enter |
+|-------|-----------|--------------|
+| **Molecule** | Yes | Search by registration number, name, or structure. The target compound must already be registered. |
+| **Requested amount** | Yes | The quantity you need, with units (mg, mL, µmol). |
+| **Target purity** | No | Minimum acceptable purity as a percentage (for example, 95). The chemist will aim to meet or exceed this. |
+| **Purpose** | Yes | A concise scientific rationale — for example, "Activity confirmation panel for ALDH1A1 lead series; 10 µM spot-dose in TR-FRET assay." |
+| **Project** | No | The research project this request belongs to. Helps with prioritisation and cost attribution. |
+| **Priority** | Yes | `routine`, `urgent`, or `critical`. Use elevated priorities sparingly. |
+
+<Callout type="default" emoji="💡">
+Attaching a project lets portfolio managers track synthesis spend per programme and lets chemists see the context of the request. Even if you do not track costs formally, a project reference makes requests easier to prioritise.
+</Callout>
+
+### Step 3 — Save as draft or submit immediately
+
+- Click **Save as draft** to keep the request editable before sending it for approval. A draft is visible only to you.
+- Click **Submit** to send it immediately for approval.
+
+When you submit, the request status changes from `draft` to `submitted` and the approver(s) for your workspace receive a notification.
+
+> 📷 *Screenshot: the New synthesis request form showing the Molecule search field, Requested amount field with unit selector, Purpose text area, and Priority dropdown set to "routine".*
+
+<Callout type="warning">
+Submitting a synthesis request is recorded in the audit trail. The requester, molecule, requested amount, purpose, priority, and timestamp are all captured.
+</Callout>
+
+---
+
+## Editing or cancelling a draft
+
+If you saved as a draft, you can edit any field before submitting:
+
+1. Open **Inventory > Synthesis requests**.
+2. Filter by **Status = draft**.
+3. Click on your request and click **Edit**.
+4. Make your changes and click **Save** or **Submit**.
+
+You can cancel a request at any point before it reaches a terminal state (`fulfilled`, `rejected`, `cancelled`, `failed`):
+
+1. Open the request.
+2. Click **Cancel request** and confirm.
+
+<Callout type="info">
+Cancellation is recorded in the audit trail. If preparation or synthesis is already underway (`in_progress` status), inform the assigned chemist directly before cancelling in chemcellar.
+</Callout>
+
+---
+
+## Approval workflow (approver view)
+
+Workspace administrators or project leads with the **Approve synthesis request** permission review submitted requests.
+
+1. Go to **Inventory > Synthesis requests** and filter by **Status = submitted**.
+2. Open a request to review the molecule, requested amount, purpose, and priority.
+3. Click **Approve** or **Reject**.
+   - If rejecting, you must enter a rejection reason — the requester will see this reason so they know whether to revise and resubmit.
+
+<Callout type="info">
+Approval and rejection are recorded in the audit trail with the reviewer's identity and timestamp.
+</Callout>
+
+---
+
+## Assignment (chemistry manager or admin view)
+
+After approval, someone with the **Assign synthesis request** permission assigns the request to a chemist or a CRO.
+
+### Assigning to an internal chemist
+
+1. Open the approved request.
+2. Click **Assign**.
+3. In the assignment dialog, select **Internal** and choose the chemist from the team member dropdown.
+4. Click **Confirm assignment**.
+
+### Assigning to a CRO
+
+1. Open the approved request.
+2. Click **Assign**.
+3. In the assignment dialog, select **CRO** and choose the organisation from the registered CRO dropdown. Only organisations with type `cro` appear here.
+4. Click **Confirm assignment**.
+
+<Callout type="default" emoji="💡">
+When assigning to a CRO, you may also want to create a [shipment](./shipments) of any starting materials the CRO will need. Create the shipment under **Inventory > Shipments** and reference the synthesis request in the shipment notes.
+</Callout>
+
+The assigned chemist or CRO receives a notification. The request status advances to `assigned`.
+
+---
+
+## Synthesis in progress (chemist view)
+
+The assigned chemist sees all requests assigned to them in **Inventory > Synthesis requests**, filtered by **Assigned to me**.
+
+### Starting synthesis
+
+1. Open the assigned request.
+2. Review the target molecule structure, requested amount, target purity, and purpose.
+3. Click **Start synthesis** when you begin the lab work. The status changes to `in_progress`.
+
+### Flagging feasibility issues
+
+If you discover the synthesis is difficult, risky, or impossible as specified:
+
+1. Open the in-progress request.
+2. Click **Flag feasibility issue**.
+3. In the dialog, select a **Feasibility status**:
+   - `challenging` — possible but harder than expected; note any concerns.
+   - `infeasible` — cannot be done as specified.
+   - `alternative_proposed` — a different target or approach is suggested.
+4. Enter **Feasibility notes** explaining the issue and any proposed alternative.
+5. Click **Submit**.
+
+Flagging returns the request to `approved` status so it can be reassigned or modified.
+
+### Completing synthesis
+
+When synthesis is complete and you have characterised the material:
+
+1. Open the in-progress request.
+2. Click **Mark synthesis complete**.
+3. Enter any notes about the outcome (yield, actual purity, observations).
+4. Click **Confirm**.
+
+The status changes to `synthesis_complete`. The request is now ready to be fulfilled by creating a batch.
+
+---
+
+## Fulfilling the request — creating the batch
+
+When synthesis is complete, the final step is to register the new batch and close the request.
+
+1. Open the `synthesis_complete` request.
+2. Click **Fulfil — create batch**.
+3. chemcellar opens the **Add batch** form pre-filled with the molecule from the request. Review and complete the batch details:
+   - **Source** — set to `synthesized`.
+   - **Purity** — enter the measured purity.
+   - **Amount** — enter the quantity produced.
+   - **Synthesis date** — the date synthesis was completed.
+   - **Chemist** — pre-filled with the assigned chemist.
+4. Click **Save batch**.
+
+chemcellar links the new batch to the synthesis request and advances the request to `fulfilled`. If this is the molecule's first physical batch, chemcellar also updates the molecule's lifecycle status from `designed` or `virtual` to `synthesized`.
+
+> 📷 *Screenshot: the Fulfil synthesis request page showing the Add batch form pre-filled with molecule registration number and source set to "synthesized".*
+
+<Callout type="warning">
+Batch creation and request fulfilment are both recorded in the append-only audit trail. The new batch number, the fulfilling user, and the link back to the synthesis request are all captured. This action cannot be undone.
+</Callout>
+
+---
+
+## Recording a synthesis failure
+
+If the synthesis cannot be completed:
+
+1. Open the `in_progress` request.
+2. Click **Mark as failed**.
+3. Enter a **Failure reason** — this is required. Describe what went wrong clearly enough for the scientific record and for any future retry attempt.
+4. Click **Confirm**.
+
+The request status changes to `failed` (a terminal state). The requester receives a notification. If a retry is needed, they must submit a new synthesis request.
+
+---
+
+## Bulk synthesis requests
+
+When you need to request synthesis of many compounds at once — for example, a series of 50 analogs — chemcellar groups them into a **bulk synthesis request**:
+
+1. Go to **Inventory > Synthesis requests**.
+2. Click **New bulk request**.
+3. Give the bulk request a descriptive name (for example, "Q3 Analog Series Expansion — ALDH1A1").
+4. Add the target molecules one by one (search by registration number or name) and set the requested amount and purity for each.
+5. Click **Submit all**.
+
+chemcellar creates individual synthesis requests for each molecule, all linked to the bulk request record. You can track the overall progress on the bulk request overview page, which shows counts for each status:
+
+| Count | Meaning |
+|-------|---------|
+| **Approved** | Items in `approved` or later non-terminal states |
+| **Fulfilled** | Successfully synthesized and batch created |
+| **Failed** | Synthesis failed |
+| **Rejected** | Declined at approval |
+| **Cancelled** | Withdrawn before completion |
+
+The bulk request is marked `completed` when all individual items reach a terminal state.
+
+> 📷 *Screenshot: the Bulk synthesis request overview page showing a progress bar and counts for fulfilled, failed, rejected, and in-progress items.*
+
+---
+
+## Related
+
+- [Inventory overview](./index) — adding the resulting batch and samples after fulfilment.
+- [Sample requests](./sample-requests) — requesting material that already exists in inventory.
+- [Shipments](./shipments) — shipping starting materials to a CRO for synthesis.
+- [Registration guides](/guides/registration) — registering the target molecule if it is not yet in the system.
+- [Batches & samples](/concepts/batches-and-samples) — understanding the batch that synthesis produces.
+- [Compliance & audit trail](/concepts/compliance) — how synthesis events appear in the audit log.
+- [Glossary](/reference/glossary)

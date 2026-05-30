@@ -1,0 +1,120 @@
+import { Callout } from 'nextra/components'
+
+# Disclose a molecule and handle a merge
+
+**Who this is for:** Scientists and data managers working with [undisclosed molecules](/reference/glossary#undisclosed-molecule) — compounds registered without a structure because their chemistry was confidential at the time of registration.
+
+**What you'll accomplish:** You will provide a structure for an undisclosed molecule, resolve any match against an existing compound (which triggers a merge), and understand what data moves where after a merge completes.
+
+## Background: undisclosed molecules
+
+An [undisclosed molecule](/concepts/undisclosed-molecules) is a compound registered in chemcellar without a known structure. This is common in collaborative research where one organization screens compounds provided by a partner — the partner shares physical material (a [batch](/reference/glossary#batch)) but does not reveal the chemistry until a later milestone.
+
+An undisclosed molecule can participate fully in inventory and assay workflows. It can be plated, screened, and produce dose-response data — all without a structure. What it cannot do is participate in structural search, fingerprint-based similarity analysis, or structure-activity relationship work.
+
+When the partner eventually provides the structure, that event is called a **disclosure**.
+
+## What happens during disclosure
+
+1. You provide the [SMILES](/reference/glossary#smiles) string for the undisclosed molecule.
+2. chemcellar canonicalizes the SMILES and computes the [InChIKey](/reference/glossary#inchikey).
+3. chemcellar checks whether any existing active disclosed molecule in the workspace shares that InChIKey.
+
+| Outcome | What happens |
+|---------|-------------|
+| **No match** | The molecule's structural fields are filled in. Its status changes from `undisclosed` to `disclosed`. No merge occurs. |
+| **Match found** | The undisclosed molecule is merged into the existing molecule. All batches, assay data, and identifiers transfer to the existing record. The undisclosed molecule becomes a tombstone. |
+
+<Callout type="warning">
+A merge is an irreversible operation that executes in a single transaction. All data from the absorbed (source) molecule moves permanently to the surviving (target) molecule. The source record becomes a tombstone and is excluded from standard queries. This action is recorded in the append-only audit trail.
+</Callout>
+
+## Disclose a single molecule
+
+1. Find the undisclosed molecule. Search for it by its registration number, a vendor ID, or any other known identifier. Undisclosed molecules are marked with a **No structure** badge in search results.
+2. Open the molecule's detail page.
+3. Click **Disclose structure**.
+4. In the **Disclosure** dialog, enter the SMILES string for the compound.
+   - You can also draw the structure in the Ketcher editor by clicking **Switch to editor**.
+5. Review the 2D structure preview that appears — confirm this is the correct compound.
+6. Click **Submit disclosure**.
+
+> 📷 *Screenshot: the Disclosure dialog showing the SMILES input field, the 2D structure preview rendered below it, and the Submit disclosure button.*
+
+### If no match is found
+
+chemcellar fills in the structural fields on the molecule record: canonical SMILES, InChI, [InChIKey](/reference/glossary#inchikey), 2D depiction, and computed physicochemical descriptors. The molecule's status changes from `undisclosed` to `disclosed` and it immediately becomes searchable by structure.
+
+A [MoleculeDisclosed](/reference/glossary#domain-event) event is emitted and recorded in the audit trail.
+
+> 📷 *Screenshot: the molecule detail page after a successful disclosure showing the new 2D structure, the computed molecular weight and logP, and the "Disclosed" status badge.*
+
+### If a match is found — the merge dialog
+
+When the disclosed structure matches an existing molecule, chemcellar shows the **Merge confirmation** dialog before proceeding. The dialog shows:
+
+- The undisclosed molecule (source) on the left, with its registration number and all its batches, assay runs, and identifiers.
+- The existing disclosed molecule (target) on the right, with its registration number and current data.
+- A summary of what will move: batch count, readout count, identifier list, and collection memberships.
+
+Review this information carefully, then click **Confirm merge** to proceed or **Cancel** to stop.
+
+> 📷 *Screenshot: the Merge confirmation dialog with the source molecule panel on the left, target molecule panel on the right, and a checklist of data that will be transferred.*
+
+<Callout type="warning">
+If the source molecule has active sample requests or in-transit shipments, the merge is blocked until those are resolved. chemcellar will show you which requests are blocking the merge and link to them.
+</Callout>
+
+## What moves during a merge
+
+When two molecules are merged, chemcellar executes the following in a single database transaction:
+
+| Data | Action |
+|------|--------|
+| **Batches** | All batches from the source molecule are re-assigned to the target. Batch numbers are preserved — they are not renumbered. |
+| **Assay readouts and dose-response curves** | Re-assigned to the target molecule. |
+| **Identifiers** | All identifiers from the source are transferred to the target. If an identifier is shared by both, it is deduplicated. |
+| **Source registration number** | Added as an `internal_legacy` identifier on the target. |
+| **Collection memberships** | The target is added to any collections where the source was a member. The source is removed. |
+| **Synthesis routes** | Updated to reference the target molecule as their target compound. |
+| **Attachments** | Re-pointed to the target molecule. |
+| **Molecular fingerprints** | Source fingerprints are deleted; the target already has its own. |
+
+After the transaction:
+
+- The source molecule's `merged_into_id` field is set, making it a tombstone.
+- Tombstones are excluded from all standard search and listing queries.
+- You can still find the tombstone by its old registration number — it redirects to the target molecule's page with a note explaining the merge.
+
+<Callout type="info">
+Merged batches keep their original batch numbers. A batch numbered `CV-00010-B001` on the source remains `CV-00010-B001` after the merge — only the parent molecule pointer changes. This preserves external references such as notebook entries or inventory labels that use the batch number.
+</Callout>
+
+## Disclose in bulk
+
+If you have a file of structures to disclose for multiple undisclosed molecules at once (for example, a partner has sent a disclosure file containing many compounds):
+
+1. Click **Register** in the top navigation and select **Bulk disclosure**.
+2. Click **Download template** to get the expected file format: one row per molecule, with columns for the undisclosed molecule's registration number (or vendor ID) and the SMILES to disclose.
+3. Upload your completed file.
+4. chemcellar processes each row sequentially, running the same disclosure logic as for single disclosures — including checking each newly disclosed structure against all existing molecules and against other rows earlier in the same file.
+5. When processing completes, download the **Results report** to see per-row outcomes: disclosed, merged, conflict, or error.
+
+> 📷 *Screenshot: the Bulk disclosure results page showing a summary bar with counts for disclosed, merged, conflict, and error outcomes, with a Download results report button.*
+
+### Handling conflicts in bulk disclosure
+
+A conflict occurs when chemcellar cannot automatically determine the correct action — for example, when the disclosed structure's InChIKey matches a molecule but the CAS numbers differ between the two records. Conflicts require manual review.
+
+To review conflicts:
+
+1. On the bulk disclosure results page, click **View conflicts**.
+2. Each conflict shows the specific reason (e.g., "CAS number mismatch — source has 50-78-2, target has 50-00-0").
+3. Decide on each conflict individually: you can override and merge, reject the disclosure row, or update the identifier on one of the records first and then re-disclose.
+
+## Related
+- [Identifiers](./identifiers) — understand how identifiers move during a merge.
+- [Undisclosed molecules concept](/concepts/undisclosed-molecules) — why undisclosed molecules exist and how they behave in assays.
+- [Bulk registration](./bulk-registration) — registering many new compounds from a file.
+- [Glossary — merge](/reference/glossary#merge)
+- [Glossary — undisclosed molecule](/reference/glossary#undisclosed-molecule)

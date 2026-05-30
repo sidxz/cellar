@@ -1,0 +1,121 @@
+import { Callout } from 'nextra/components'
+
+# Manage organizations
+
+**Who this is for:** Workspace administrators setting up provenance tracking for compounds, batches, screening runs, and shipments.
+
+**What you'll accomplish:** You will create and maintain the organization records that chemcellar uses to track which company, lab, CRO, or vendor is associated with each compound record.
+
+---
+
+## What is an organization?
+
+An [organization](/reference/glossary#organization) in chemcellar is a workspace-scoped record representing a real-world company, institution, or laboratory that participates in your compound lifecycle. This is a **provenance entity**, not an authentication entity — it answers questions like "who supplied this batch?", "which CRO ran this assay?", and "which partner disclosed this compound?"
+
+Organizations are separate from user accounts. A scientist at Eurofins logs in via their Sentinel account; "Eurofins Munich" is an Organization record that you create and link to the runs they perform.
+
+<Callout type="info">
+Organization records are workspace-scoped. The same real-world company can appear in multiple workspaces with different contact details or relationship types, and the records remain independent. There is no cross-workspace data leakage.
+</Callout>
+
+---
+
+## Organization types
+
+| Type | Use when |
+|---|---|
+| `internal` | Your own lab or department |
+| `pharma_partner` | A pharmaceutical company you collaborate or disclose with |
+| `cro` | A contract research organization running assays or synthesis on your behalf |
+| `academic` | A university or academic institute |
+| `vendor` | A commercial supplier of compounds or materials |
+| `government` | A government agency or national laboratory |
+
+---
+
+## Where organizations are used
+
+Once you create an organization record, it becomes available as a selection in:
+
+| Field | What it tracks |
+|---|---|
+| **Molecule** — originating org | IP owner or first registrant of a compound |
+| **Batch** — supplier org | The vendor or lab that supplied the physical material |
+| **Disclosure request** — disclosing org | The organization that originally owned a disclosed compound |
+| **Bulk disclosure** — partner org | The partner sharing a large set of compounds |
+| **Screening run** — performed at org | The CRO or lab that ran the assay |
+| **Collection** — owned by org | The library curator organization |
+| **Shipment** — destination org | The receiving lab for a sample shipment |
+
+---
+
+## Before you start
+
+You need the **admin** or **owner** workspace role, or the `cellar:admin_config` service action. See [Users & Roles](/administration/users-and-roles).
+
+---
+
+## Steps
+
+### 1. Open the Organizations page
+
+Go to **Administration** in the left sidebar and click **Organizations**. The page shows a list of all active organizations in your workspace.
+
+> 📷 *Screenshot: the Organizations list page showing a table with columns for Name, Type, Contact, and Active status, with an "Add Organization" button in the top right.*
+
+### 2. Create a new organization
+
+Click **Add Organization**. Fill in the form:
+
+- **Name** — the display name as it should appear throughout chemcellar (e.g., `Eurofins Munich`, `SaccLabs`). This name is what scientists see when they pick an organization from a dropdown.
+- **Type** — choose the type that best matches the relationship (see table above).
+- **Contact name** — optional. The primary point of contact at this organization.
+- **Contact email** — optional. Used for reference; chemcellar does not send automated emails to this address.
+- **Notes** — optional. Free text for internal notes (e.g., contract reference numbers, relationship context).
+
+Click **Save** to create the record.
+
+> 📷 *Screenshot: the Add Organization dialog with the Name, Type, Contact name, Contact email, and Notes fields filled in for a CRO example, with Save and Cancel buttons.*
+
+<Callout type="info">
+This action is recorded in the audit trail.
+</Callout>
+
+### 3. Edit an organization
+
+Click the **edit** icon on any row in the organization list. Update the fields you want to change, then click **Save**.
+
+<Callout type="warning">
+Changing an organization's name changes how it appears on every linked compound, batch, run, and shipment record going forward. The audit trail preserves the historical values; the display in lists and exports updates to the new name. Rename with care if the old name appears in external documents or lab notebooks.
+</Callout>
+
+### 4. Deactivate an organization
+
+You cannot delete an organization that is linked to existing records. Instead, set it to **inactive** by toggling the **Active** switch to off.
+
+Inactive organizations:
+- No longer appear in selection dropdowns for new records.
+- Remain visible on historical records they are linked to.
+- Can be reactivated at any time.
+
+> 📷 *Screenshot: an organization detail page with the Active toggle switched off and a confirmation message "Organization deactivated. It will no longer appear in new record forms."*
+
+### 5. Track CRO testing sites
+
+If a CRO operates multiple sites and you want to track which site ran each assay, create a separate Organization record for each site (e.g., `Eurofins Munich`, `Eurofins Boston`) with `type = cro`. Link runs to the specific site record.
+
+---
+
+## What happens next
+
+Once you save an organization, it is immediately available in the selection dropdowns for new molecules, batches, runs, and shipments. Existing records are unchanged.
+
+---
+
+## Related
+
+- [Workspace Configuration](/administration/workspace-config)
+- [Screening runs](/guides/screening/runs)
+- [Batches and samples](/concepts/batches-and-samples)
+- [Disclosure and merge](/guides/registration/disclosure-and-merge)
+- [Glossary: organization](/reference/glossary#organization), [batch](/reference/glossary#batch)

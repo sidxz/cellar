@@ -1,0 +1,131 @@
+import { Callout } from 'nextra/components'
+
+# Configure workspace settings
+
+**Who this is for:** Workspace owners and administrators setting up or tuning chemcellar for their lab.
+
+**What you'll accomplish:** You will review and update the workspace-level domain configuration that governs compound numbering, batch creation policy, custom fields, audit requirements, and electronic signature triggers.
+
+---
+
+## Before you start
+
+You need the **owner** or **admin** workspace role in Sentinel Auth, or the `cellar:admin_config` service action assigned to your custom role. See [Users & Roles](/administration/users-and-roles).
+
+---
+
+## What workspace settings control
+
+Workspace settings are the domain configuration that chemcellar stores independently from Sentinel Auth. They do not affect who can log in — they control how the domain behaves once someone is logged in.
+
+Every setting in this section is scoped to your workspace. Changes here do not affect other workspaces.
+
+---
+
+## Steps
+
+### 1. Open workspace settings
+
+Navigate to **Administration** in the left sidebar, then click **Workspace Configuration**.
+
+> 📷 *Screenshot: the Administration sidebar expanded showing Workspace Configuration highlighted, with the settings form visible on the right.*
+
+### 2. Set the compound registration numbering scheme
+
+The **Registration Rules** panel controls how chemcellar assigns internal compound identifiers (for example, `SAC-00001`).
+
+- **Prefix** — the letter prefix prepended to every registration number (e.g., `SAC`).
+- **Zero-padding length** — the number of digits in the sequence (e.g., `5` produces `00001`).
+- **Salt stripping** — when enabled, salt components of a SMILES are stripped before deduplication and registration. Recommended: leave this on unless your program specifically needs to register salts as distinct compounds.
+
+<Callout type="warning">
+Changing the numbering prefix after compounds have already been registered does not renumber existing compounds. New compounds will use the new prefix; older ones keep their original numbers. Changing the prefix mid-project can create confusing mixed identifiers in exports and notebooks.
+</Callout>
+
+### 3. Configure the re-registration batch policy
+
+The **Create batch on duplicate** toggle controls what happens when a scientist registers a compound that is already in the system (same [InChIKey](/reference/glossary#inchikey)).
+
+- **Off (default)** — chemcellar recognises the duplicate and returns the existing compound record without creating a new [batch](/reference/glossary#batch). The API response includes `batch_skipped: true` so the UI can display a clear "compound already exists" message.
+- **On** — a new batch is created even when the compound already exists. Use this only if your workflow genuinely treats every registration event as a distinct physical lot.
+
+<Callout type="default" emoji="💡">
+Leave this **off** if you routinely re-import data from an external screening platform or bulk-upload CSVs that may include compounds you have already registered. A single accidental re-upload will not flood your batches table.
+</Callout>
+
+Individual import jobs and single-registration submissions can override this workspace default on a per-request basis. External [data source](/administration/data-sources) connectors can also set their own per-source override.
+
+### 4. Define custom fields
+
+The **Custom Field Definitions** panel lets you add workspace-specific properties to **Batch** and **Molecule** records beyond the standard schema.
+
+For each custom field, configure:
+
+- **Name** — the internal key (no spaces; use underscores, e.g., `purity_method`).
+- **Display label** — the human-readable label shown in the UI.
+- **Entity** — whether the field applies to `Batch` or `Molecule`.
+- **Type** — `text`, `number`, `date`, or `picklist`.
+- **Required** — whether users must fill the field on create.
+
+<Callout type="info">
+Custom field values are stored in a structured JSON column. They appear in the registration form, the compound detail page, and in AG Grid exports. They are also queryable via the search API.
+</Callout>
+
+### 5. Configure the audit reason policy
+
+Certain operations require users to enter a **reason** before they are allowed to proceed. The **Audit Reason Policy** panel lists which operation types require a reason.
+
+Default operations that require a reason:
+- Structure corrections
+- Rejections of screening runs
+- Data-unlock requests
+- Lifecycle changes (archiving a project, withdrawing a compound)
+
+To add or remove operation types from the required-reason list, click the **Edit** button and toggle the operations you want to include.
+
+<Callout type="warning">
+This action is recorded in the [append-only audit trail](/concepts/compliance). Changes to the audit reason policy take effect immediately; operations submitted after the change must comply with the new policy.
+</Callout>
+
+### 6. Configure electronic signature requirements
+
+The **Signature Required For** panel controls which operations trigger an [electronic signature](/reference/glossary#electronic-signature) prompt — a confirmation step where the user actively attests to the meaning of their action.
+
+Default signature-required operations:
+- Approving a screening run
+- Rejecting a screening run
+- Unlocking locked data
+
+Adding extra operations increases the friction of those actions but strengthens the audit trail. Removing an operation from this list reduces friction but removes the electronic-signature record for that action.
+
+<Callout type="warning">
+Electronic signature requirements have compliance implications. If your lab operates under 21 CFR Part 11 or GLP, consult your quality and regulatory team before reducing the default set.
+</Callout>
+
+### 7. Set the audit retention period
+
+By default, chemcellar retains audit records indefinitely. If your organisation has a defined data-retention policy (e.g., 10 years for GLP studies), set **Audit Retention Days** to the number of days. Records older than this threshold are eligible for archival by the system.
+
+<Callout type="info">
+Setting a retention period does not immediately delete old records. Records are marked eligible for archival and processed in a background job. Contact your system administrator to schedule or trigger archival runs.
+</Callout>
+
+### 8. Save changes
+
+Click **Save** at the bottom of the settings form. A confirmation toast confirms the update was applied.
+
+---
+
+## What happens next
+
+Changes take effect for all users in the workspace immediately after saving. The change itself is recorded in the audit trail as a `data_entry` operation on the `WorkspaceSettings` entity.
+
+---
+
+## Related
+
+- [Organizations](/administration/organizations)
+- [Controlled Vocabularies](/administration/controlled-vocabularies)
+- [Data Sources](/administration/data-sources)
+- [Compliance, Audit Trail & Data Lock](/concepts/compliance)
+- [Glossary: batch](/reference/glossary#batch), [InChIKey](/reference/glossary#inchikey), [electronic signature](/reference/glossary#electronic-signature)

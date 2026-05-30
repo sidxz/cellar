@@ -1,0 +1,172 @@
+import { Callout } from 'nextra/components'
+
+# Molecular properties
+
+**What you'll learn:** The key physicochemical descriptors chemcellar computes for every molecule, the difference between computed descriptors and predicted properties, how Lipinski's Rule of Five relates to drug-likeness, and how to use the live property calculator.
+
+---
+
+## Why molecular properties matter
+
+A compound's physical and chemical properties determine how it moves through biological systems — how well it is absorbed, how it distributes across tissues, whether it can cross a membrane, and how quickly the body eliminates it. Even before any biology is done, a handful of calculated numbers can flag whether a compound is likely to behave as an oral drug or whether it will have practical problems in an assay.
+
+chemcellar computes a standard set of properties for every [molecule](/reference/glossary#molecule) the moment it is registered. You can see these numbers on the molecule detail page, filter the compound list by them, and export them alongside screening data.
+
+---
+
+## Computed descriptors vs predicted properties
+
+chemcellar distinguishes two categories of molecular properties.
+
+### Computed descriptors
+
+**Computed descriptors** are derived deterministically from the molecular graph using RDKit. Given the same structure, the same algorithm always produces the same number — no external service, no model, no uncertainty. chemcellar computes these synchronously during registration, in roughly ten milliseconds per molecule.
+
+The full set of computed descriptors is described in the table below.
+
+### Predicted properties
+
+**Predicted properties** such as logD, pKa, and aqueous solubility (logS) require either a pH context, a specialised prediction engine, or a machine-learning model. They are not trivially derivable from the 2D structure alone. chemcellar stores these as optional fields (`logd`, `pka`, `logs`) that may be populated later — for example, from a connected prediction service or a manually uploaded result. They are nullable independently: a molecule may have logD but not pKa, or neither.
+
+When predicted properties are present, chemcellar also records which tool or model produced them and when, so you always know the provenance.
+
+<Callout type="info">
+The property values shown on the molecule detail page are **computed descriptors** unless explicitly labelled as predicted. Computed descriptors are always available for disclosed molecules. Predicted properties may be blank if no prediction service is configured.
+</Callout>
+
+---
+
+## The core computed descriptors
+
+### Molecular weight (MW)
+
+Molecular weight is the sum of the atomic masses of all atoms in the molecule, expressed in daltons (Da). It is one of the most fundamental properties: large molecules typically have poor oral absorption.
+
+Lipinski's guideline (see [Rule of Five](#rule-of-five) below) sets the upper limit at **500 Da** for orally absorbed drugs.
+
+chemcellar uses the average molecular weight (not the monoisotopic mass). The exact monoisotopic mass is also stored and available in exports.
+
+### logP (lipophilicity)
+
+logP is the logarithm of the partition coefficient between octanol and water — a measure of how hydrophobic (fat-loving) a molecule is. A high logP means the molecule prefers organic solvents over water; a low or negative logP means it prefers water.
+
+| logP range | Rough interpretation |
+|-----------|---------------------|
+| < 0 | Highly hydrophilic; may have poor membrane permeability |
+| 0 – 3 | Good balance; often associated with oral absorption |
+| 3 – 5 | Increasingly lipophilic; watch for solubility issues |
+| > 5 | Highly lipophilic; high risk of poor aqueous solubility and promiscuous binding |
+
+chemcellar computes logP using RDKit's Crippen method, which is a deterministic fragment-based calculation. This is **not** a predicted logD (which would require knowing the ionisation state at a specific pH). The Crippen logP assumes the neutral form of the molecule.
+
+### TPSA (topological polar surface area)
+
+[TPSA](/reference/glossary#tpsa) is the surface area of a molecule contributed by polar atoms — primarily oxygen, nitrogen, and their attached hydrogens. It is a 2D calculation (not a 3D surface) and is a strong predictor of membrane permeability and CNS penetration.
+
+- **TPSA < 60 Å²** — generally associated with CNS penetration.
+- **TPSA < 140 Å²** — associated with good oral absorption.
+- **TPSA > 140 Å²** — often correlates with poor absorption.
+
+### HBD (hydrogen bond donors)
+
+[HBD](/reference/glossary#hbd) counts the number of nitrogen and oxygen atoms that carry at least one hydrogen — these atoms can donate a hydrogen bond to a receptor. Each HBD costs energy to desolvate when crossing a lipophilic membrane.
+
+Lipinski's guideline: **≤ 5 HBD** for orally absorbed drugs.
+
+### HBA (hydrogen bond acceptors)
+
+[HBA](/reference/glossary#hba) counts the number of nitrogen and oxygen atoms in the molecule — these can accept a hydrogen bond. A high HBA count often correlates with high TPSA and poor membrane permeability.
+
+Lipinski's guideline: **≤ 10 HBA**.
+
+### Other descriptors
+
+chemcellar also computes and stores:
+
+| Descriptor | What it counts |
+|-----------|---------------|
+| **Rotatable bonds** | Bonds that allow free rotation; more rotatable bonds → more conformational flexibility → often worse oral bioavailability (Veber's rule: ≤ 10) |
+| **Aromatic rings** | Number of aromatic ring systems |
+| **Ring count** | Total number of rings of any kind |
+| **Heavy atom count** | Non-hydrogen atoms (a simple proxy for molecular size) |
+| **Molecular formula** | e.g., C₉H₈O₄ for aspirin |
+| **Exact mass** | Monoisotopic mass (used in mass spectrometry identification) |
+
+---
+
+## Rule of Five
+
+Lipinski's Rule of Five (Ro5) is an empirical rule of thumb proposed by Christopher Lipinski at Pfizer in 1997. It states that an orally absorbed drug is likely to have:
+
+- Molecular weight ≤ 500 Da
+- logP ≤ 5
+- HBD ≤ 5
+- HBA ≤ 10
+
+Each limit is a multiple of five — hence the name. A molecule that violates more than one of these rules is predicted to have poor oral bioavailability. The rule was derived from an analysis of approved drugs and is a widely used early filter in medicinal chemistry.
+
+chemcellar computes an **Ro5 violation count** (0–4) for every molecule. You can filter the compound list by this count to identify problematic compounds early.
+
+<Callout type="default" emoji="💡">
+The Rule of Five is a guideline, not a hard cutoff. Many excellent drugs violate one or more rules — for example, macrolide antibiotics and natural products. Use it as a flag for further investigation, not as a pass/fail decision.
+</Callout>
+
+---
+
+## Live property calculator
+
+Type or paste any SMILES below to see its computed descriptors instantly. The values update as you edit, using the same RDKit algorithms chemcellar runs at registration time.
+
+<PropertyCalculator smiles="CC(=O)Oc1ccccc1C(=O)O" editable={true} showStructure={true} />
+
+*Try it: paste the SMILES for a compound you are working on and check whether it falls within the Rule of Five boundaries.*
+
+---
+
+## Where properties appear in the UI
+
+### Molecule detail page
+
+The **Properties** panel on the molecule detail page shows all computed descriptors in a structured card. Predicted properties (when available) appear in a separate **Predicted** card with the source and date labelled.
+
+> 📷 *Screenshot: the molecule detail page Properties panel, showing MW, logP, TPSA, HBD, HBA, and Ro5 violation count for a representative compound.*
+
+### Molecule list (compound registry)
+
+You can add property columns — MW, logP, TPSA, HBD, HBA — to the compound list grid using the **Columns** menu. Once visible, the columns are sortable and filterable. This is useful for quick lead series triage.
+
+> 📷 *Screenshot: the compound registry AG Grid with MW and logP columns enabled, showing a filtered view of compounds with logP between 2 and 4.*
+
+### Search & filter
+
+The [search](/guides/search) interface lets you restrict results to a numerical range for any computed descriptor — for example, molecules with MW between 300 and 450 Da and TPSA below 90 Å². Combine property filters with structure filters (substructure or similarity) for multi-parameter screening.
+
+---
+
+## Properties for undisclosed molecules
+
+[Undisclosed molecules](/concepts/undisclosed-molecules) — compounds registered without a revealed structure — have no computed descriptors or predicted properties. All property fields are blank until the structure is disclosed. After disclosure (and any resulting merge), descriptors are computed immediately.
+
+<Callout type="info">
+An undisclosed molecule can still participate in screening assays and appear in runs. It simply will not appear in property-based filter results until its structure is revealed.
+</Callout>
+
+---
+
+## Accuracy and limitations
+
+- **Computed descriptors** are exact given the structure as drawn. Accuracy depends on the quality of the input — a wrong stereo assignment or an incorrect salt strip will produce a subtly wrong MW or logP.
+- **Crippen logP** is a fragment-based 2D calculation. It is fast and reproducible but may diverge from experimentally measured logP, especially for unusual functional groups or highly polar compounds.
+- **TPSA** as implemented is a topological (2D) approximation. It correlates well with 3D-computed PSA for drug-like molecules but is less accurate for macrocycles or unusual scaffolds.
+- **Predicted properties** carry the uncertainty of the underlying model. chemcellar records the source and date so you can judge how current and reliable the predictions are.
+
+---
+
+## Related
+
+- [Concept: chemical structures](/concepts/chemical-structures)
+- [Concept: registration & identity](/concepts/registration-and-identity)
+- [Guide: structure search and property filters](/guides/search)
+- [Guide: similarity search](/guides/search/similarity-search)
+- [Reference: glossary](/reference/glossary)
+- [Reference: chemistry standards](/reference/chemistry-standards)

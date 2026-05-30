@@ -1,0 +1,163 @@
+import { Callout } from 'nextra/components'
+
+# Review dose-response curves
+
+**Who this is for:** Scientists who need to interpret IC50 / EC50 curve fits, exclude outlier data points, and understand curve quality metrics.
+
+**What you'll accomplish:** You will navigate to a run's dose-response curves, read the curve card, assess the quality of each fit, exclude data points where justified, and understand when a curve should be flagged for re-testing.
+
+## Before you start
+
+- Dose-response curves are generated automatically after readout data is imported into a run that uses a concentration-response protocol. You do not trigger fitting manually — it happens as part of the data import pipeline.
+- You need the **View run data** permission to read curves, and **Edit run data** to exclude data points.
+- The run can be in any status (including approved and locked), but data-point exclusions can only be made while the run is unlocked.
+
+<Callout type="info">
+A [dose-response curve](/concepts/dose-response) in chemcellar is linked to a specific molecule, batch, protocol, and run. A potency value is never a free-floating number — it always carries full provenance back to the exact experiment that produced it.
+</Callout>
+
+## What chemcellar fits
+
+chemcellar fits every compound's concentration-response series using the **four-parameter logistic (4PL)** equation — the industry-standard sigmoidal model:
+
+```
+Response = Bottom + (Top − Bottom) / (1 + (IC50 / Concentration)^HillSlope)
+```
+
+The four parameters:
+
+| Parameter | What it describes |
+|-----------|------------------|
+| **Bottom** | The lower response asymptote (maximum effect at high concentration) |
+| **Top** | The upper response asymptote (baseline response at zero dose) |
+| **IC50 / EC50** | The inflection point — the concentration producing 50% of the maximum response |
+| **Hill slope** | The steepness of the sigmoidal transition |
+
+Use the interactive explorer below to build intuition about how each parameter shapes the curve before reviewing your data.
+
+<DoseResponseExplorer
+  initial={{ ic50: 5e-8, hillSlope: 1.2, bottom: 2, top: 98 }}
+  adjustable={["ic50", "hillSlope"]}
+  concentrationRange={[1e-10, 1e-4]}
+  showReadout={true}
+  height={340}
+/>
+
+*Try it: slide the IC50 value left and right to move the curve along the concentration axis. Increase the Hill slope to sharpen the transition; decrease it to flatten the sigmoid.*
+
+## Navigating to dose-response curves
+
+1. Open the run detail page.
+2. Click the **Dose-response** tab.
+3. The tab shows a list of all fitted curves in this run, one per compound-batch-readout-definition combination. Each row shows the compound name, batch, IC50 / EC50 value (with qualifier), Hill slope, R², and curve class.
+4. Click any row to open the full curve card.
+
+> 📷 *Screenshot: the Dose-response tab showing a list of fitted curves with columns for compound name, batch, potency value (e.g., "IC50 = 42 nM"), Hill slope, R², curve class badge, and a thumbnail of the sigmoid curve.*
+
+## Reading the curve card
+
+The curve card is the detailed view for a single fitted curve. It shows:
+
+- **The sigmoid plot** — the fitted 4PL curve overlaid on the measured data points. Each data point is a dot at the tested concentration and measured response. The curve passes through (or near) those dots.
+- **IC50 / EC50 chip** — the fitted potency value with its 95% confidence interval (e.g., "42 nM [38–47 nM]").
+- **Hill slope** — the fitted slope.
+- **R²** — goodness of fit (0 to 1, higher is better).
+- **Curve class badge** — Full, Partial, Bell-shaped, or Inactive.
+- **Top and Bottom values** — the fitted asymptotes.
+- **Data points table** — each concentration with its measured response, and whether the point is included or excluded from the fit.
+
+> 📷 *Screenshot: a curve card showing a clean sigmoidal curve with 10 data points, IC50 = 42 nM [38–47 nM] chip, Hill slope = 1.1, R² = 0.98, curve class "Full", and Top = 99%, Bottom = 1%.*
+
+## Understanding curve class
+
+chemcellar assigns one of four classes to each fitted curve:
+
+| Class | Description | What to do |
+|-------|-------------|------------|
+| **Full** | Both asymptotes are well defined within the tested concentration range | Standard interpretation — IC50 is reliable |
+| **Partial** | Only one asymptote is reached; IC50 may be extrapolated beyond the highest or lowest tested concentration | Treat the IC50 with caution; consider extending the concentration range in a follow-up run |
+| **Bell-shaped** | Response rises then falls at higher concentrations — unusual shape | Investigate for compound aggregation, cytotoxicity, or assay interference; consult a chemist |
+| **Inactive** | No significant response across the concentration range | The compound did not inhibit (or activate) the target at the tested concentrations — a valid scientific outcome |
+
+<Callout type="info">
+`Inactive` is not a fitting failure. It means the compound showed no detectable activity. This is important scientific information — do not assume an inactive compound was a data or assay error without evidence.
+</Callout>
+
+## Interpreting R² and confidence intervals
+
+| Metric | Good range | Caution zone |
+|--------|-----------|-------------|
+| **R²** | > 0.95 | < 0.90 — inspect the raw data; the model may not fit well |
+| **95% CI width** | Tight (e.g., IC50 42 nM, CI 38–47 nM) | Wide (e.g., IC50 42 nM, CI 5–350 nM) — too few points or a very shallow curve |
+
+A wide confidence interval means the IC50 estimate is uncertain. Common causes:
+
+- Too few concentration points (fewer than 6–8 is borderline for reliable fitting).
+- A shallow Hill slope (the curve transitions gradually, making the inflection point hard to pin down).
+- High within-compound variability at some concentrations (consider flagging outlier wells).
+
+<Callout type="default" emoji="💡">
+If R² is below 0.90 for multiple compounds in the same run, the issue is likely with the assay itself — not the individual compounds. Check the plate heatmap for spatial patterns, review control Z′ factor, and discuss with the scientist who ran the experiment before concluding anything about the compounds.
+</Callout>
+
+## Excluding data points
+
+If a specific concentration point was affected by a known experimental error (e.g., a pipetting failure, an evaporated well, or a clearly anomalous value that breaks the sigmoidal shape), you can exclude it from the fit:
+
+1. In the curve card, click the data point you want to exclude on the chart, or click the row in the **Data points table** below the chart.
+2. In the point detail panel, toggle **Exclude from fit**.
+3. Optionally enter a **Reason** (e.g., "Well B5 — pipetting failure noted in lab notebook").
+4. Click **Save exclusion**.
+
+chemcellar refits the curve immediately using the remaining points and updates all parameters (IC50, Hill slope, R², CI). The excluded point remains visible on the chart as an open symbol (not filled) so reviewers can see which points were excluded.
+
+<Callout type="warning">
+Excluding a data point from the fit is an audited action. Your identity, the point index, and the reason are recorded in the append-only audit trail. You cannot delete a data point — only exclude it. This preserves the complete raw record even when individual points are set aside for fitting purposes.
+</Callout>
+
+> 📷 *Screenshot: the curve card with one data point at the highest concentration shown as an open circle (excluded). The curve is refitted through the remaining nine filled points. The data points table shows the excluded row with a red "Excluded" badge and a reason tooltip.*
+
+## Qualified potency values
+
+When a compound's potency falls outside the tested concentration range, chemcellar records a **[qualified value](/reference/glossary#qualified-value)** rather than an exact number:
+
+| Qualifier | Meaning | Example |
+|-----------|---------|---------|
+| `=` | IC50 is within the tested range | IC50 = 42 nM |
+| `<` | More potent than the lowest concentration tested | IC50 < 1 nM |
+| `>` | Less potent than the highest concentration tested (inactive at max dose) | IC50 > 10 000 nM |
+| `~` | Approximate extrapolation — treat with caution | IC50 ~ 500 nM |
+
+Qualifiers are preserved everywhere: in the data table, in exports, in campaign views, and in SAR summaries. IC50 > 10 µM and IC50 = 10 µM are distinct records with different scientific meaning.
+
+## IC90 and other derived intercepts
+
+In addition to IC50, the curve card shows the **IC90** — the concentration producing 90% inhibition. chemcellar derives this from the 4PL parameters without additional fitting:
+
+```
+IC90 = IC50 × (9 ^ (1 / HillSlope))
+```
+
+For a Hill slope of 1 (the standard case), IC90 is exactly nine times the IC50. Steeper curves (Hill slope > 1) have a smaller IC90/IC50 ratio — they reach full inhibition more quickly above the IC50.
+
+IC90 is displayed on the curve card as a vertical line on the chart and a chip below the IC50 chip.
+
+## When to flag a curve for re-testing
+
+Consider requesting a repeat run if you observe:
+
+- R² below 0.90 with no obvious excluded-point explanation.
+- Curve class is **Bell-shaped** — this warrants a counterscreen for aggregation or cytotoxicity.
+- Confidence interval spans more than an order of magnitude.
+- Hill slope below 0.3 or above 3.0 — extreme slopes can indicate compound interference.
+- **Partial** curve class where the IC50 is extrapolated far beyond the tested range.
+
+In these cases, do not approve the run until the ambiguous compounds have been investigated or re-tested. Link the repeat run to the original using the **Parent run** field (relationship type: `Repeat of`) so the history is traceable.
+
+## Related
+
+- [Plate data](./plate-data) — importing the readout values that feed curve fitting.
+- [Approval & data lock](./approval-and-data-lock) — locking data after curves have been reviewed.
+- [Dose-response & potency](/concepts/dose-response) — the full conceptual explanation of IC50, EC50, the 4PL model, and curve classes.
+- [Screen campaigns](/guides/research-organization/screen-campaigns) — how IC50 values roll up into portfolio-level activity summaries.
+- [Assays & screening](/concepts/assays-and-screening) — the full screening data model.

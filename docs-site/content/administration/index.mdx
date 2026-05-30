@@ -1,0 +1,50 @@
+import { Callout } from 'nextra/components'
+
+# Administration
+
+**What you'll learn:** An overview of chemcellar's administration area — which settings live here, who can access them, and where to go for each configuration task.
+
+---
+
+Administration in chemcellar is the set of workspace-level controls that shape how the entire platform behaves: how compounds are numbered, which picklist values scientists can choose, which external data sources feed into the system, and which users can do what.
+
+All administration tasks require the **admin** or **owner** workspace role in Sentinel Auth, or the `cellar:admin_config` service action assigned to your custom role.
+
+<Callout type="info">
+chemcellar delegates identity and access management to Sentinel Auth. The Administration section in chemcellar covers domain configuration — numbering rules, vocabularies, organizations, data sources. User accounts, teams, and role definitions are managed in the Sentinel console. See [Users & Roles](/administration/users-and-roles) for the boundary.
+</Callout>
+
+---
+
+## What lives in Administration
+
+| Section | What you configure |
+|---|---|
+| [Workspace Configuration](/administration/workspace-config) | Compound numbering scheme, re-registration batch policy, custom field definitions, audit reason policy, electronic signature requirements, audit retention |
+| [Organizations](/administration/organizations) | Companies, partner labs, CROs, and vendors referenced throughout compound records |
+| [Controlled Vocabularies](/administration/controlled-vocabularies) | Shared picklists (species, route of administration, assay type, etc.) used across protocols and data entry |
+| [Data Sources](/administration/data-sources) | External data source connections and their field mappings; controls how imported records are interpreted |
+| [Users & Roles](/administration/users-and-roles) | Workspace membership tiers, custom RBAC roles, and the link to the Sentinel console |
+| [Admin Hard-Delete](/administration/admin-delete) | The audited, two-tier procedure for removing records that cannot simply be archived |
+
+---
+
+## Access control at a glance
+
+chemcellar uses a three-tier permission model managed by Sentinel Auth:
+
+1. **Workspace role** (owner / admin / editor / viewer) — broad tier carried in the login token. Admins and owners can reach all administration pages.
+2. **Service actions** (e.g., `cellar:admin_config`, `cellar:register`) — fine-grained permissions that can be granted to custom roles without elevating the whole workspace role.
+3. **Entity ACLs** — per-project and per-collection sharing, managed separately.
+
+The administration pages require the `cellar:admin_config` service action. A scientist with the `editor` workspace role does **not** automatically have admin access; an owner must explicitly grant the action.
+
+See [Users & Roles](/administration/users-and-roles) for more detail.
+
+---
+
+## Related
+
+- [Compliance, Audit Trail & Data Lock](/concepts/compliance)
+- [Users & Roles](/administration/users-and-roles)
+- [Workspace Configuration](/administration/workspace-config)

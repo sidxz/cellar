@@ -1,0 +1,451 @@
+import { Callout } from 'nextra/components'
+
+# Glossary
+
+A plain-language reference for every key term used across the chemcellar documentation. Terms are listed alphabetically. Click any anchor link from another page to jump directly to a definition.
+
+Students new to drug discovery: start with [molecule](#molecule), [batch](#batch), [assay](#assay), [plate](#plate), and [dose-response](#dose-response). That foundation covers most of what the rest of the platform builds on.
+
+---
+
+## A
+
+<h3 id="assay">Assay</h3>
+
+An **assay** is a scientific test that measures a biological or biochemical property of a compound. In drug discovery, assays answer questions like "does this molecule inhibit this enzyme?" or "how toxic is this compound to cells?" An assay is defined once as a [protocol](#protocol) in chemcellar and can be run many times, each time called a [run](#run).
+
+---
+
+## B
+
+<h3 id="barcode">Barcode</h3>
+
+A **barcode** is a unique physical identifier printed on a [sample](#sample), [plate](#plate), or storage location. chemcellar records 1D and 2D barcodes so that physical items can be scanned to retrieve their digital record without entering UUIDs or catalog numbers manually. Each barcode is unique across the workspace.
+
+<h3 id="batch">Batch</h3>
+
+A **batch** (sometimes called a *lot* or *preparation*) is a specific physical instance of a [molecule](#molecule). Every time a compound is synthesized, purchased, or otherwise obtained as a physical quantity of material, a new batch is created. Batches from the same molecule share the same structure but may differ in purity, salt form, amount, or source. The batch is the link between the abstract chemical identity and the physical material you put in a vial. See also [sample](#sample).
+
+<h3 id="batch-number">Batch number</h3>
+
+A **batch number** is a sequential, human-readable identifier for a batch, formatted as `{molecule registration number}-{sequence}` — for example, `CV-00001-001`. Batch numbers are immutable: they never change, even if the parent molecule is later merged with another record.
+
+---
+
+## C
+
+<h3 id="campaign">Campaign</h3>
+
+A **campaign** (or *screen campaign*) is an organized effort to test a set of [molecules](#molecule) against one or more [protocols](#protocol). Campaigns group related [runs](#run) under a named project for portfolio review and potency comparisons.
+
+<h3 id="canonical-smiles">Canonical SMILES</h3>
+
+A **canonical SMILES** is the unique [SMILES](#smiles) string produced by running a standardized algorithm on a molecule's structure. Because many different SMILES strings can describe the same molecule, canonicalization picks one definitive form. chemcellar uses RDKit's canonicalization algorithm, which follows the same conventions as ChEMBL and PubChem. Canonical SMILES is what chemcellar stores and what you will see in exports.
+
+<h3 id="canonicalization">Canonicalization</h3>
+
+**Canonicalization** is the process of converting a chemical structure into a single, unique, agreed-upon representation. In chemcellar it refers to the full pipeline that takes any submitted structure — drawn, typed as SMILES, or uploaded as an SDF — and converts it to a consistent form before storage or deduplication. The pipeline includes salt stripping, standardization, generating [canonical SMILES](#canonical-smiles), computing [InChI](#inchi) and [InChIKey](#inchikey), and checking for duplicates.
+
+<h3 id="cas-number">CAS number</h3>
+
+A **CAS number** (Chemical Abstracts Service registry number) is a widely used external identifier assigned to chemical substances by CAS, a division of the American Chemical Society. Format: up to ten digits separated by hyphens in a 2-4-1 pattern (e.g., `50-78-2` for aspirin). chemcellar stores CAS numbers as [molecule identifiers](#molecule-identifier) and uses them to link to external databases.
+
+<h3 id="collection">Collection</h3>
+
+A **collection** is a named, manually curated list of [molecules](#molecule) within a [project](#project). Think of it as a folder or tag set. You add molecules to a collection to track a series or compare a class of compounds. One molecule can belong to multiple collections.
+
+<h3 id="concentration">Concentration</h3>
+
+A **concentration** is a measurement of how much compound is dissolved in a given volume of solution. chemcellar records concentration in units of mM, µM, nM, or mg/mL. Concentration is recorded on [batches](#batch) (stock solution) and on individual [wells](#well) (the amount dispensed for testing).
+
+<h3 id="controlled-vocabulary">Controlled vocabulary</h3>
+
+A **controlled vocabulary** is an administrator-defined list of allowed values for a field. For example, a workspace might define a controlled vocabulary for "Cell Line" containing only approved cell line names. Using controlled vocabularies prevents free-text inconsistencies and makes data filterable.
+
+<h3 id="cxsmiles">CXSmiles</h3>
+
+**CXSmiles** (extended SMILES) is a superset of [SMILES](#smiles) that encodes additional information such as enhanced stereochemistry groups, atom coordinates, and polymer notation. chemcellar stores CXSmiles alongside canonical SMILES to preserve enhanced stereo group information that ordinary SMILES cannot represent.
+
+---
+
+## D
+
+<h3 id="data-lock">Data lock</h3>
+
+A **data lock** is the state a [run](#run) enters after it is formally approved. Once locked, no measurement data in that run can be edited. Further changes require administrator action and create a new, timestamped [audit trail](#audit-trail) entry. Data locking is a requirement for regulatory-grade screening data under 21 CFR Part 11.
+
+<Callout type="warning">
+Once a run is locked, its data is permanent. Any subsequent correction creates a new audit entry — the original values are always preserved in the append-only audit trail.
+</Callout>
+
+<h3 id="descriptor">Descriptor</h3>
+
+A **descriptor** is a numerical property calculated from a molecule's structure. Descriptors are computed deterministically from the structure — no experimental data is needed. chemcellar computes and stores a standard set of [molecular descriptors](#molecular-descriptors) at registration time. See also [predicted properties](#predicted-properties).
+
+<h3 id="disclosure">Disclosure</h3>
+
+**Disclosure** is the process by which a partner reveals the structure of an [undisclosed molecule](#undisclosed-molecule). The partner provides a SMILES string; chemcellar canonicalizes it, computes the [InChIKey](#inchikey), and checks whether the structure already exists in the workspace. If it does, the undisclosed molecule is [merged](#merge) into the existing record. If it does not, the structural fields are filled in and the molecule becomes a fully disclosed compound.
+
+<h3 id="dose-response">Dose-response</h3>
+
+A **dose-response** experiment tests a compound at several concentrations and measures a biological effect at each one. The resulting data is fitted to a sigmoidal mathematical model (the [4PL curve](#four-parameter-logistic)) to extract parameters such as [IC50](#ic50) and [Hill slope](#hill-slope). Dose-response experiments give far richer information than a single-concentration screen — they establish potency, efficacy, and the concentration range over which the compound acts.
+
+<h3 id="dose-response-curve">Dose-response curve (DRC)</h3>
+
+A **dose-response curve** is the fitted mathematical curve produced by a [dose-response](#dose-response) experiment. In chemcellar the curve is described by four parameters — [Bottom](#bottom), [Top](#top), [IC50](#ic50) / [EC50](#ec50), and [Hill slope](#hill-slope) — plus goodness-of-fit metrics (R², confidence intervals). Every curve is linked to the exact run, batch, and readout definition that produced it, so potency values are always traceable.
+
+---
+
+## E
+
+<h3 id="e-signature">E-signature</h3>
+
+An **e-signature** (electronic signature) is a legally binding record that a named, authenticated user has reviewed and approved a specific piece of data at a specific time. chemcellar applies e-signatures when a scientist approves a [run](#run). The signature is stored in the append-only [audit trail](#audit-trail) alongside the approver's identity, the timestamp, and the data state at the time of signing.
+
+<Callout type="warning">
+Approving a run applies an electronic signature under 21 CFR Part 11. The data is locked after approval. You cannot edit it without an administrator action and a new audit entry.
+</Callout>
+
+<h3 id="ec50">EC50</h3>
+
+**EC50** (half-maximal effective concentration) is the concentration of a compound that produces 50% of its maximum activating effect. EC50 is used in agonist assays (for example, a receptor activator or a compound that stimulates cell growth). A lower EC50 means the compound is more potent. Compare with [IC50](#ic50).
+
+---
+
+## F
+
+<h3 id="fingerprint">Fingerprint</h3>
+
+A **fingerprint** is a compact binary or integer vector that encodes the structural features of a molecule. chemcellar computes Morgan fingerprints (also called ECFP fingerprints) using RDKit. Fingerprints enable fast [similarity searching](#tanimoto): rather than comparing two full structures atom by atom, you compare their fingerprint vectors using the [Tanimoto coefficient](#tanimoto).
+
+<h3 id="four-parameter-logistic">Four-parameter logistic (4PL)</h3>
+
+The **four-parameter logistic model** (4PL) is the standard mathematical equation used to fit sigmoidal dose-response data. Its four parameters are [Bottom](#bottom), [Top](#top), [IC50](#ic50) / [EC50](#ec50), and [Hill slope](#hill-slope). chemcellar fits every dose-response dataset using 4PL non-linear regression and stores all four parameters alongside the raw data points.
+
+---
+
+## G
+
+<h3 id="goodness-of-fit">Goodness of fit (R²)</h3>
+
+**Goodness of fit** (measured by R²) describes how well the fitted [4PL curve](#four-parameter-logistic) matches the measured data points. An R² of 1.0 is a perfect fit. In practice, R² > 0.95 is generally acceptable for a dose-response curve; values below 0.90 warrant inspection of the raw data and QC flags.
+
+---
+
+## H
+
+<h3 id="hba">HBA (hydrogen bond acceptor)</h3>
+
+An **hydrogen bond acceptor** (HBA) is an atom that can accept a hydrogen bond from a donor, typically a nitrogen or oxygen atom with a lone pair of electrons. HBA count is one of [Lipinski's Rule of Five](#rule-of-five) descriptors and is associated with oral absorption. chemcellar computes HBA from the structure using RDKit.
+
+<h3 id="hbd">HBD (hydrogen bond donor)</h3>
+
+A **hydrogen bond donor** (HBD) is an atom that can donate a hydrogen bond, typically a nitrogen or oxygen carrying a hydrogen (NH, OH). HBD count is one of [Lipinski's Rule of Five](#rule-of-five) descriptors. chemcellar computes HBD from the structure using RDKit.
+
+<h3 id="hill-slope">Hill coefficient / Hill slope</h3>
+
+The **Hill slope** (Hill coefficient) is a parameter in the [4PL dose-response model](#four-parameter-logistic) that describes how steeply the response transitions from baseline to maximum. A value of 1 corresponds to a simple 1:1 ligand-receptor interaction. Values significantly greater than 1 suggest cooperative binding or multiple binding sites; values significantly less than 1 suggest heterogeneous populations or partial effects. Extreme values (< 0.5 or > 3) may indicate assay artefacts.
+
+---
+
+## I
+
+<h3 id="ic50">IC50</h3>
+
+**IC50** (half-maximal inhibitory concentration) is the concentration of a compound that inhibits 50% of a biological process (for example, reduces enzyme activity by 50%). IC50 is the most widely used measure of inhibitor potency in drug discovery. A lower IC50 means a more potent compound. IC50 is reported with a [qualifier](#qualified-value) when the value lies outside the tested concentration range.
+
+<h3 id="ic90">IC90</h3>
+
+**IC90** is the concentration required for 90% inhibition. chemcellar derives IC90 from the same [4PL](#four-parameter-logistic) fit used for IC50: `IC90 = IC50 × (9 ^ (1 / HillSlope))`. For a standard Hill slope of 1, IC90 is exactly 9× the IC50.
+
+<h3 id="inchi">InChI</h3>
+
+**InChI** (International Chemical Identifier) is an IUPAC-standardized text representation of a molecular structure. It encodes the molecular formula, connectivity, hydrogen positions, charge, and stereochemistry in a hierarchical layered string. For aspirin: `InChI=1S/C9H8O4/c1-6(10)13-8-5-3-2-4-7(8)9(11)12/h2-5H,1H3,(H,11,12)`. InChI is designed for comparison and exchange — two structures with identical InChI strings are the same compound. See also [InChIKey](#inchikey).
+
+<h3 id="inchikey">InChIKey</h3>
+
+**InChIKey** is a fixed-length, 27-character hash of an [InChI](#inchi) string, formatted as three blocks separated by hyphens (e.g., `BSYNRYMUTXBXSQ-UHFFFAOYSA-N`). The first 14 characters encode the molecular skeleton; the next 10 encode stereo and charge layers; the last character is a check digit. chemcellar uses the InChIKey as its primary deduplication key: two molecules with the same InChIKey are the same compound and will share a single molecule record. InChIKeys are safe to use in URLs and database indexes because they contain only ASCII letters.
+
+---
+
+## L
+
+<h3 id="lifecycle-stage">Lifecycle stage</h3>
+
+The **lifecycle stage** of a molecule describes its progression through the drug discovery pipeline. chemcellar tracks stages from initial registration through hit, lead, preclinical candidate, development candidate, and deprioritized or archived states. Transitions are controlled and audited, so the history of a molecule's progression is preserved.
+
+<h3 id="rule-of-five">Lipinski's Rule of Five</h3>
+
+**Lipinski's Rule of Five** (Ro5) is a guideline for predicting whether a molecule is likely to be orally bioavailable. A molecule passes Ro5 if: molecular weight ≤ 500 Da, clogP ≤ 5, [HBD](#hbd) ≤ 5, and [HBA](#hba) ≤ 10. Violations of any rule are recorded as `ro5_violations` (0–4). Ro5 is a rough filter, not a guarantee — many approved drugs violate one or more rules.
+
+<h3 id="logd">LogD</h3>
+
+**LogD** is the logarithm of the partition coefficient between octanol and water at a specified pH (typically 7.4), accounting for the ionization state of the molecule. Unlike [logP](#logp), which assumes the neutral form, logD reflects the actual distribution of the compound in a physiological environment. logD requires a pKa prediction engine and is not computed synchronously; it is stored as a [predicted property](#predicted-properties).
+
+<h3 id="logp">LogP</h3>
+
+**LogP** is the logarithm of the partition coefficient between octanol and water, measuring a molecule's lipophilicity in its neutral (un-ionized) form. A higher logP means a more lipophilic (fat-soluble) compound. chemcellar computes logP using RDKit's Crippen method at registration time — this is a deterministic calculation from the structure, not an experimental measurement.
+
+<h3 id="logs">LogS</h3>
+
+**LogS** is the logarithm of aqueous solubility (in mol/L). Low logS values indicate poor water solubility, which is a common cause of poor oral absorption. logS requires predictive models and is stored as a [predicted property](#predicted-properties) in chemcellar.
+
+---
+
+## M
+
+<h3 id="merge">Merge</h3>
+
+A **merge** is the process of combining two [molecule](#molecule) records into one when they are found to represent the same chemical structure. Merging is triggered most commonly during [disclosure](#disclosure) — when a partner reveals that their undisclosed compound has the same structure as a compound already in the workspace. All [batches](#batch), readout data, dose-response curves, collection memberships, and identifiers from the source molecule are physically transferred to the target molecule. The source becomes a tombstone.
+
+<h3 id="mobile-h-layer">Mobile-H layer</h3>
+
+The **mobile-H layer** is the part of the [InChI](#inchi) standard that handles [tautomers](#tautomer). It treats interconverting tautomers — for example, a keto form and its enol form — as the same compound for the purpose of InChI computation. This means both tautomeric forms produce the same [InChIKey](#inchikey) and are correctly deduplicated without requiring an explicit tautomer canonicalization step.
+
+<h3 id="molfile">Molfile</h3>
+
+A **molfile** (MDL MOL format) stores atoms, bonds, and 2D (or 3D) coordinates in a block-based text format. It is what structure-drawing software produces natively and what chemcellar uses to render 2D structure images. chemcellar generates a molfile automatically from the canonical SMILES at registration time; you do not write molfiles by hand.
+
+<h3 id="molecule">Molecule</h3>
+
+In chemcellar, a **molecule** is the unique, canonical record of a chemical structure (or an undisclosed compound placeholder). A molecule represents "what this compound is" — its structure, descriptors, identifiers, and lifecycle stage. The same molecule may have many [batches](#batch) (physical preparations) attached to it. Molecules are deduplicated by [InChIKey](#inchikey): registering the same structure twice simply adds a new batch to the existing molecule record.
+
+<h3 id="molecule-identifier">Molecule identifier</h3>
+
+A **molecule identifier** is an external or vendor-assigned identifier attached to a [molecule](#molecule). Examples include CAS numbers, ChEMBL IDs, PubChem CIDs, or internal identifiers from an external screening platform. Each identifier is unique across the workspace — no two molecules can claim the same identifier.
+
+<h3 id="molecular-descriptors">Molecular descriptors</h3>
+
+**Molecular descriptors** are numerical properties calculated directly from a molecule's structure at registration time. chemcellar computes: molecular formula, molecular weight, exact monoisotopic mass, [logP](#logp), [TPSA](#tpsa), [HBD](#hbd), [HBA](#hba), rotatable bond count, aromatic ring count, total ring count, heavy atom count, and [Ro5 violations](#rule-of-five). These are deterministic — given the same structure, they always produce the same values.
+
+<h3 id="molecular-formula">Molecular formula</h3>
+
+The **molecular formula** records the number of each element in a molecule (for example, C₉H₈O₄ for aspirin). It is computed automatically from the structure at registration time.
+
+<h3 id="molecular-weight">Molecular weight</h3>
+
+**Molecular weight** (MW) is the average mass of a molecule in Daltons (Da), computed from standard atomic weights. It is one of [Lipinski's Rule of Five](#rule-of-five) criteria. chemcellar also stores **exact mass** (the monoisotopic mass from the most abundant isotopes), which is what mass spectrometry instruments measure.
+
+<h3 id="morgan-fingerprint">Morgan fingerprint</h3>
+
+A **Morgan fingerprint** (also called an ECFP fingerprint) encodes the local chemical environment around each atom in a molecule to a specified radius. chemcellar uses Morgan fingerprints at radius 2 (equivalent to ECFP4) for similarity searching. The [Tanimoto coefficient](#tanimoto) between two Morgan fingerprints quantifies their structural similarity.
+
+---
+
+## N
+
+<h3 id="normalization">Normalization</h3>
+
+In the context of screening assays, **normalization** converts raw instrument readings into a standard scale. The most common normalizations are:
+
+- **Percent inhibition** — `(1 - signal/positive_control) × 100`
+- **Percent activation** — `(signal - negative_control) / (positive_control - negative_control) × 100`
+- **Z-score** — `(signal - plate_mean) / plate_SD`
+
+Normalization is defined per [readout definition](#readout-definition) in the [protocol](#protocol).
+
+---
+
+## P
+
+<h3 id="plate">Plate</h3>
+
+A **plate** (microplate) is a rectangular array of wells used in high-throughput screening. chemcellar supports 96-well plates (8 rows × 12 columns) and 384-well plates (16 rows × 24 columns). A plate belongs to a [run](#run) and each [well](#well) on a plate holds a compound at a defined concentration.
+
+<h3 id="plate-template">Plate template</h3>
+
+A **plate template** defines the layout of a plate: which wells hold test compounds, which hold positive controls, negative controls, and blank wells. Plate templates are defined on a [protocol](#protocol) and applied when setting up a [run](#run).
+
+<h3 id="pka">pKa</h3>
+
+**pKa** is the acid dissociation constant, measuring the tendency of a molecule to donate a proton. It determines the ionization state of a molecule at physiological pH, which in turn affects solubility, membrane permeability, and protein binding. pKa requires a specialized prediction engine and is stored as a [predicted property](#predicted-properties) in chemcellar.
+
+<h3 id="predicted-properties">Predicted properties</h3>
+
+**Predicted properties** are molecular properties that require external prediction models or ML tools and cannot be computed deterministically from structure alone. In chemcellar these include [logD](#logd), [pKa](#pka), and [logS](#logs). They are nullable independently — a molecule may have some predicted properties but not others, and they may be updated when better models become available.
+
+<h3 id="protocol">Protocol</h3>
+
+A **protocol** is a reusable, versioned template that defines an experimental procedure and what it measures. A protocol specifies the assay type, the biological [target](#target), [readout definitions](#readout-definition), plate layout templates, and condition variables. All [runs](#run) reference a protocol. Once a protocol has associated runs, its definition is immutable — you create a new version instead.
+
+<h3 id="project">Project</h3>
+
+A **project** in chemcellar is an organizational container for related research activities. Projects hold [collections](#collection) of molecules and group [runs](#run) and data for a specific research objective. Projects provide a workspace-within-a-workspace for a research team.
+
+---
+
+## Q
+
+<h3 id="qualified-value">Qualified value</h3>
+
+A **qualified value** pairs a number with a qualifier that describes the relationship of the measurement to the assay's detection range. Qualifiers used in chemcellar:
+
+| Qualifier | Meaning |
+|-----------|---------|
+| `=` | The value is determined within the tested range |
+| `<` | The true value is below the lower bound (e.g., IC50 < 1 nM — more potent than measured) |
+| `>` | The true value is above the upper bound (e.g., IC50 > 10 000 nM — inactive at the assay ceiling) |
+| `~` | The value is an approximate extrapolation outside the tested range — treat with caution |
+
+Qualified values preserve the scientific meaning of boundary measurements throughout the database and in exports. `IC50 > 10 000 nM` is fundamentally different from `IC50 = 10 000 nM`.
+
+---
+
+## R
+
+<h3 id="racemic-mixture">Racemic mixture</h3>
+
+A **racemic mixture** contains equal amounts of two mirror-image [enantiomers](#stereochemistry). In chemcellar, a racemic mixture is registered as a distinct molecule record — it is not the same record as either pure enantiomer. The `stereochemistry` field on a molecule is set to `racemic` to indicate this.
+
+<h3 id="readout">Readout</h3>
+
+A **readout** is a single measurement recorded in an assay well. A readout has a numeric (or text) value, a unit, and a qualifier. Multiple readouts can be collected per well when a protocol defines multiple [readout definitions](#readout-definition). For example, a single well might have readouts for "% inhibition" and "fluorescence raw counts."
+
+<h3 id="readout-definition">Readout definition</h3>
+
+A **readout definition** specifies one measurement column in a [protocol](#protocol). It names the measurement (e.g., "IC50", "% Inhibition"), defines the data type, unit, aggregation method, and normalization formula. All [readout data](#readout) in a run must match a readout definition from that run's protocol.
+
+<h3 id="registration-number">Registration number</h3>
+
+A **registration number** is the unique, human-readable identifier assigned to a [molecule](#molecule) at the time of registration. The default format is `{workspace-prefix}-{zero-padded sequence}` — for example, `CV-00001`. Registration numbers are immutable: they never change, even after a merge. After a merge, the source molecule's registration number is preserved as an identifier on the target molecule.
+
+<h3 id="run">Run</h3>
+
+A **run** is a single execution of a [protocol](#protocol) — one experiment conducted on a specific date, with specific [plates](#plate) and compounds. A run collects [readout data](#readout), may produce [dose-response curves](#dose-response-curve), and goes through a lifecycle from setup through data entry to review and [data lock](#data-lock).
+
+---
+
+## S
+
+<h3 id="salt-form">Salt form</h3>
+
+A **salt form** is the ionic form of a compound, created by reacting the parent acid or base with a counter-ion (for example, a hydrochloride salt forms when a basic amine is neutralized with hydrochloric acid). chemcellar registers the parent (free base or free acid) as the canonical structure. The salt form is recorded on the [batch](#batch), because different salt forms of the same parent are the same molecule with different physical properties.
+
+<h3 id="sample">Sample</h3>
+
+A **sample** is a discrete physical aliquot drawn from a [batch](#batch). A batch may have many samples — for example, multiple vials prepared from a bulk synthesis. Samples are tracked individually: they have their own barcodes, amounts, concentrations, and storage locations.
+
+<h3 id="sar">SAR (structure-activity relationship)</h3>
+
+**Structure-activity relationship** (SAR) analysis explores how changes to a molecule's structure affect its biological activity. SAR guides the iterative design cycles of medicinal chemistry — identifying which parts of the molecule are essential for potency and which can be modified to improve selectivity, solubility, or metabolic stability.
+
+<h3 id="scaffold">Scaffold</h3>
+
+A **scaffold** is the core ring system or backbone shared by a series of related [molecules](#molecule). Medicinal chemistry projects often work on "scaffold series," optimizing properties by modifying the substituents attached to a fixed scaffold. In chemcellar, scaffold-based grouping is available through [similarity search](#tanimoto) and the SAR analysis tools.
+
+<h3 id="sdf">SDF (Structure Data File)</h3>
+
+An **SDF** file contains one or more molecular structures in molfile format, separated by `$$$$` delimiters, with optional key-value data fields attached to each structure. SDF is the standard format for bulk importing and exporting compound libraries. chemcellar can import SDF files for [bulk registration](/guides/registration/bulk-registration) and export search results as SDF.
+
+<h3 id="smarts">SMARTS</h3>
+
+**SMARTS** (SMILES ARbitrary Target Specification) is a query language for substructure searching. It extends [SMILES](#smiles) syntax with wildcards (`*`), atom query features (`[#6]` for any carbon), and logical operators. For example, `c1ccccc1` matches any benzene ring. chemcellar uses SMARTS for substructure searches. The structure editor can generate SMARTS from a drawn scaffold so you do not need to write them by hand.
+
+<h3 id="smiles">SMILES</h3>
+
+**SMILES** (Simplified Molecular-Input Line-Entry System) is the most widely used text format for entering and exchanging chemical structures. It encodes atoms, bonds, ring closures, branches, charges, and stereochemistry as a compact linear string. For example, aspirin is `CC(=O)Oc1ccccc1C(=O)O`. SMILES is what you type or paste when registering a compound in chemcellar.
+
+Try entering a SMILES below to see the structure render:
+
+<StructureViewer smiles="CC(=O)Oc1ccccc1C(=O)O" editable={true} width={360} height={240} />
+
+*Try it: paste the SMILES for a compound you know — for example caffeine (`Cn1cnc2c1c(=O)n(c(=O)n2C)C`) or ibuprofen (`CC(C)Cc1ccc(cc1)C(C)C(=O)O`).*
+
+<h3 id="stereochemistry">Stereochemistry</h3>
+
+**Stereochemistry** describes the three-dimensional arrangement of atoms in a molecule. Two molecules with identical connectivity but different stereo arrangements are different compounds and may have very different biological activities. chemcellar registers enantiomers as separate molecule records. SMILES encodes stereocentres with `@`/`@@` (tetrahedral) and `/`/`\` (double bond geometry). chemcellar stores a `stereochemistry` classification on each molecule: `achiral`, `single_stereo`, `multi_stereo`, `racemic`, or `undefined`.
+
+<h3 id="structure-status">Structure status</h3>
+
+**Structure status** indicates whether a [molecule](#molecule)'s chemical structure is known to chemcellar. `disclosed` means the SMILES and derived representations are stored. `undisclosed` means the molecule exists as a named placeholder without structural data — it can be plated, screened, and tracked, but cannot participate in structural searches. Structure status transitions from undisclosed to disclosed are one-way.
+
+<h3 id="synthesis-status">Synthesis status</h3>
+
+**Synthesis status** tracks the physical existence of a molecule's first material. Values are `virtual` (designed on paper), `designed` (synthetic route planned), `synthesized` (material produced in-house), and `purchased` (material acquired from a supplier).
+
+---
+
+## T
+
+<h3 id="tanimoto">Tanimoto coefficient</h3>
+
+The **Tanimoto coefficient** (also called the Tanimoto similarity) measures the structural similarity between two molecules based on their [fingerprints](#fingerprint). It is calculated as the size of the intersection of the two fingerprint bit sets divided by the size of their union — a value between 0 (no shared features) and 1 (identical). In drug discovery, compounds with Tanimoto ≥ 0.7 are considered structurally similar.
+
+Try it below — edit either SMILES to see the similarity update:
+
+<SimilarityDemo
+  smilesA="CC(=O)Oc1ccccc1C(=O)O"
+  smilesB="CC(=O)Nc1ccc(O)cc1"
+  fingerprint="morgan"
+  radius={2}
+  editable={true}
+/>
+
+*Aspirin (left) vs. paracetamol (right). Both contain an acetyl group and a benzene ring, giving a moderate Tanimoto score. Replace either structure with one you expect to be similar or different.*
+
+<h3 id="target">Target</h3>
+
+A **target** is the biological entity — protein, enzyme, receptor, ion channel, or pathway — that an assay is designed to probe. Targets are referenced by [protocols](#protocol) and provide context for interpreting activity data. A target in chemcellar records the name, species, gene symbol, and target class.
+
+<h3 id="tautomer">Tautomer</h3>
+
+**Tautomers** are pairs of structural isomers that interconvert rapidly in solution by moving a proton, often together with shifting a double bond. Common examples are keto/enol forms and 1H/2H imidazoles. chemcellar handles tautomers through the [InChI mobile-H layer](#mobile-h-layer): most common tautomeric pairs produce the same InChIKey and are correctly treated as the same compound without requiring an explicit tautomer canonicalization step.
+
+<h3 id="tombstone">Tombstone</h3>
+
+A **tombstone** is a [molecule](#molecule) record that has been absorbed into another molecule through a [merge](#merge). Tombstones are excluded from all standard queries (`WHERE merged_into_id IS NULL`). They are retained in the database for [audit trail](#audit-trail) and history purposes and can be viewed in the merge history of the surviving molecule.
+
+<h3 id="tpsa">TPSA (topological polar surface area)</h3>
+
+**Topological polar surface area** (TPSA) is the sum of surfaces of polar atoms (typically oxygen, nitrogen, and their attached hydrogens) in a molecule, measured in Ų. TPSA is a predictor of oral absorption and blood-brain barrier penetration. A TPSA below 90 Ų is generally associated with good oral bioavailability; below 60 Ų suggests potential CNS penetration. chemcellar computes TPSA from the structure using RDKit.
+
+---
+
+## U
+
+<h3 id="undisclosed-molecule">Undisclosed molecule</h3>
+
+An **undisclosed molecule** is a compound registered in chemcellar without a known chemical structure. It is represented as a placeholder record — identified by an external partner's compound number but with all structural fields null. Undisclosed molecules can participate in assays (they can be plated and screened) and in inventory (batches and samples), but they cannot be used in structural searches, fingerprint computation, or SAR analysis. When a partner later provides the structure, the [disclosure](#disclosure) process fills in the structural fields.
+
+---
+
+## V
+
+<h3 id="protocol-version">Version (protocol)</h3>
+
+A **protocol version** is a new edition of a [protocol](#protocol) created when the original must change after runs have been executed. Versioning preserves the exact definition used for each historical run. Each version is linked to its predecessor by a parent reference, forming a version chain.
+
+---
+
+## W
+
+<h3 id="well">Well</h3>
+
+A **well** is one cell in a microplate. In a 96-well plate, wells are addressed by row letter and column number: A1 through H12. Each well holds a specific compound (linked to a [batch](#batch)) at a specific [concentration](#concentration). After the assay runs, each well receives one or more [readouts](#readout).
+
+<h3 id="workspace">Workspace</h3>
+
+A **workspace** is the top-level tenant boundary in chemcellar. All molecules, batches, runs, and other records belong to exactly one workspace. Workspaces are isolated — a user must have explicit access to a workspace to see its data. The registration number prefix, controlled vocabularies, and custom fields are all configured at the workspace level.
+
+---
+
+## Z
+
+<h3 id="z-score">Z-score</h3>
+
+A **Z-score** is a normalized screening readout that expresses how many standard deviations a well's signal is from the plate mean. It is one of the [normalization](#normalization) methods available in chemcellar's readout definitions. Z-scores are useful for comparing wells across plates with different absolute signal levels.
+
+<h3 id="z-prime">Z-prime (Z')</h3>
+
+**Z'** (Z-prime) is a statistical measure of assay quality for a high-throughput screen. It is calculated from the signal and variability of the positive and negative controls on a plate: `Z' = 1 – 3(σ_pos + σ_neg) / |µ_pos – µ_neg|`. A Z' ≥ 0.5 is generally considered an acceptable assay; Z' ≥ 0.6 is excellent. Z' is computed per plate in chemcellar and displayed in the run's QC summary.
+
+---
+
+## Related
+
+- [Chemistry standards](/reference/chemistry-standards) — canonicalization pipeline and registration rules in detail
+- [Concepts: chemical structures](/concepts/chemical-structures) — how SMILES, InChI, and InChIKey work together
+- [Concepts: dose-response and potency](/concepts/dose-response) — the 4PL model and IC50 explained
+- [Concepts: batches and samples](/concepts/batches-and-samples) — the physical material behind every data point
+- [Concepts: registration and identity](/concepts/registration-and-identity) — how molecules are registered and deduplicated
+- [Concepts: assays and screening](/concepts/assays-and-screening) — protocols, runs, plates, and readout data

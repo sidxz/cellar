@@ -1,0 +1,37 @@
+{
+  "name": "chemcellar-docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "User documentation site for chemcellar (Cellar) — built with Nextra.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "postinstall": "node ./scripts/copy-rdkit-wasm.mjs"
+  },
+  "dependencies": {
+    "next": "15.5.18",
+    "nextra": "4.6.1",
+    "nextra-theme-docs": "4.6.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "@rdkit/rdkit": "2025.3.4-1.0.0",
+    "ketcher-core": "^3.12.0",
+    "ketcher-react": "^3.12.0",
+    "ketcher-standalone": "^3.12.0",
+    "plotly.js": "^3.5.0",
+    "react-plotly.js": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/react-plotly.js": "^2.6.4",
+    "typescript": "^5.8.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "zod": "4.1.12"
+    }
+  }
+}

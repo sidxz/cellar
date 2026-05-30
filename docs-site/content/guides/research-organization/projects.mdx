@@ -1,0 +1,129 @@
+import { Callout } from 'nextra/components'
+
+# Work with projects
+
+**Who this is for:** Scientists, portfolio managers, and team leads who need to group research work, manage access, and keep programs organized as they grow.
+
+**What you'll accomplish:** You will create a [project](/reference/glossary#project), add collaborators, link research assets to it, and archive a project when a program ends.
+
+---
+
+## Before you start
+
+- You need a chemcellar account with at least **Workspace Editor** privileges to create projects.
+- Your workspace administrator controls which roles can create and archive projects. If you cannot see the **New project** button, ask your administrator to adjust your role.
+
+---
+
+## What is a project?
+
+A [project](/reference/glossary#project) is the top-level container for a research program in chemcellar. It gives a name and access boundary to everything related to one drug-discovery effort — for example, "EGFR Inhibitor Program" or "COVID Antiviral Screen".
+
+Projects do not own their contents by holding copies. Instead, every [collection](/reference/glossary#collection), screening protocol, [run](/reference/glossary#run), and [campaign](/reference/glossary#campaign) carries a `project_id` reference. This means:
+
+- The same molecule can appear in multiple projects via different collections.
+- Collections and campaigns each belong to exactly one project, keeping the record clean.
+- Archiving a project locks it without deleting the underlying data.
+
+For a broader explanation of how projects, collections, and campaigns fit together, see [Projects, Collections & Campaigns](/concepts/projects-collections-campaigns).
+
+---
+
+## Create a project
+
+1. In the left sidebar, click **Research** to open the research organization area.
+2. Click **Projects** in the sub-navigation.
+3. Click **New project** in the top-right corner of the project list.
+4. In the **Create project** dialog:
+   - Enter a **Project name**. Names must be unique within your workspace. Aim for something descriptive — for example, "EGFR Inhibitors — Phase 1" rather than "Project A".
+   - Optionally add a **Description** explaining the scientific goal, the target, or the relevant indication.
+5. Click **Create**.
+
+> 📷 *Screenshot: the Create project dialog with the Name field filled in as "EGFR Inhibitors — Phase 1", a description field below it, and the Create button.*
+
+chemcellar creates the project and takes you directly to its detail page. The project is now listed as **Active** in your project list.
+
+<Callout type="info">
+Project names must be unique within a workspace. If you try to create a project with the same name as an existing one, chemcellar will prompt you to choose a different name.
+</Callout>
+
+---
+
+## View and navigate a project
+
+The project detail page shows:
+
+- **Overview** — name, description, status, creation date, and the creator.
+- **Collections** — all compound collections associated with this project.
+- **Protocols** — screening protocols whose `project_id` points here.
+- **Campaigns** — all screen campaigns for this project.
+
+Click any item in those lists to go directly to its detail page.
+
+> 📷 *Screenshot: the project detail page for "EGFR Inhibitors — Phase 1" showing the Overview tab, with summary counts for Collections (3), Protocols (2), and Campaigns (1) displayed as tab badges.*
+
+---
+
+## Edit a project's name or description
+
+1. On the project detail page, click **Edit** next to the project name (or in the **Overview** section header).
+2. Update the **Name** or **Description** fields.
+3. Click **Save**.
+
+<Callout type="info">
+Editing a project's name or description is recorded in the append-only audit trail.
+</Callout>
+
+---
+
+## Link research assets to a project
+
+Most assets are linked to a project when they are created. When you create a [collection](/reference/glossary#collection), a protocol, or a [campaign](/reference/glossary#campaign), you choose the project during the creation dialog.
+
+You cannot move an existing asset from one project to another. If you need an asset to appear in a different project, create a new one under the target project. (For collections, you can bulk-add all the same molecules to the new collection.)
+
+---
+
+## Archive a project
+
+Archiving marks a project as finished. An archived project is **read-only**: you cannot create new collections, run new screens, or make any changes to records that belong to it. All existing data remains visible and fully searchable.
+
+1. Open the project detail page.
+2. Click **Archive project** in the project actions menu (the **⋯** menu in the top-right corner).
+3. chemcellar asks you to confirm. Review the summary of assets belonging to the project.
+4. Click **Confirm archive**.
+
+> 📷 *Screenshot: the archive confirmation dialog showing "EGFR Inhibitors — Phase 1" with a summary of assets: 3 collections, 2 protocols, 1 campaign, and a Confirm archive button.*
+
+<Callout type="warning">
+Archiving a project is recorded in the audit trail. Once archived, any attempt to create or modify records within the project will be rejected. You cannot undo an archive through the UI — contact your administrator if you need to restore an active status.
+</Callout>
+
+Archived projects appear in the project list with an **Archived** badge. You can filter the project list to show **Active only**, **Archived only**, or **All**.
+
+---
+
+## Access control
+
+Each project is a separate access-controlled resource. Your workspace administrator assigns roles at the project level. Common role configurations:
+
+| Role | Typical permissions |
+|------|-------------------|
+| **Project Owner** | Create, edit, archive the project; manage members |
+| **Project Editor** | Create and edit collections, campaigns, and protocols within the project |
+| **Project Viewer** | Read-only access to all project data |
+
+Roles are managed by your administrator in the workspace settings. If you cannot see a project you expect to have access to, or if the **New project** button is absent, ask your administrator to check your project-level role.
+
+<Callout type="info">
+chemcellar enforces permissions on every API call. A project is never visible to users who lack at least View access, even if they know the project's internal identifier.
+</Callout>
+
+---
+
+## Related
+
+- [Projects, Collections & Campaigns concept](/concepts/projects-collections-campaigns) — the big picture of how these three layers work together.
+- [Collections guide](./collections) — curate and manage compound sets within a project.
+- [Screen campaigns guide](./screen-campaigns) — run a structured compound decision review.
+- [Glossary: project](/reference/glossary#project), [collection](/reference/glossary#collection), [campaign](/reference/glossary#campaign)

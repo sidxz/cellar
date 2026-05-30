@@ -1,0 +1,202 @@
+import { Callout } from 'nextra/components'
+
+# Frequently Asked Questions
+
+These are the questions that come up most often from scientists, portfolio managers, and students who are new to chemcellar. If your question isn't here, check the [glossary](/reference/glossary) or [getting started](/getting-started) pages.
+
+---
+
+## Registration & structures
+
+### What happens when I register a molecule?
+
+When you submit a structure, chemcellar runs it through a standardization pipeline before storing it. That pipeline canonicalizes the SMILES, normalizes salts, assigns formal charges consistently, and computes a unique [InChIKey](/reference/glossary#inchikey). The InChIKey is the deduplication key — if a structure with the same key already exists in your workspace, chemcellar tells you rather than creating a duplicate.
+
+Once registration succeeds, chemcellar assigns a human-readable [registration number](/reference/glossary#registration-number) (for example, `CMPD-00042`) and computes structural fingerprints in the background. Those fingerprints power similarity search.
+
+<Callout type="info">chemcellar follows ChEMBL/PubChem-compatible canonicalization rules. The standardized structure you see after registration may look slightly different from what you drew — this is expected and correct.</Callout>
+
+### Can I register two molecules with the same structure?
+
+No. chemcellar treats the [InChIKey](/reference/glossary#inchikey) as the unique identity of a compound within a workspace. If you try to register a structure that already exists, chemcellar surfaces the existing record instead of creating a second one. This is intentional — duplicate records cause data consistency problems downstream in inventory and screening.
+
+If you believe two registered molecules should be merged (for example, because they were registered independently under different names), see the molecule merge workflow in [guides](/guides).
+
+### Can I register a molecule whose structure is confidential?
+
+Yes. chemcellar supports **undisclosed molecules** — records that exist in the system with a registration number and can be tracked through inventory and screening, but whose chemical structure is not revealed to most users. Disclosure is a separate, audited step. This is useful for CRO collaborations and early-stage work under IP restrictions.
+
+<Callout type="info">This action is recorded in the append-only audit trail.</Callout>
+
+### What is the difference between a molecule, a batch, and a sample?
+
+These three concepts represent different levels of abstraction:
+
+- A **[molecule](/reference/glossary#molecule)** is the chemical identity — one canonical structure, one registration number. It is not a physical object.
+- A **[batch](/reference/glossary#batch)** is a physical lot of material made from that molecule at a specific time, by a specific person, at a specific scale. It has a batch number, a mass, and a purity.
+- A **[sample](/reference/glossary#sample)** is an individual aliquot drawn from a batch — a vial or well containing a measured amount of material at a known location in storage.
+
+Think of it this way: a molecule is the recipe, a batch is a cooking run, and a sample is a portion served from that run.
+
+### What formats can I use to draw or paste a structure?
+
+chemcellar accepts [SMILES](/reference/glossary#smiles) strings (standard and CXSMILES), MDL MOL/SDF blocks, and structures drawn interactively in the built-in structure editor. For bulk registration, you can upload an SDF file or a CSV file with a SMILES column.
+
+---
+
+## Inventory & samples
+
+### How do I track where a sample is stored?
+
+Every [sample](/reference/glossary#sample) in chemcellar has a storage location — a hierarchy of building, room, freezer, shelf, rack, box, and position. When you create a sample, you assign it to a position. When you move it, you update its location record. chemcellar keeps a history of location changes.
+
+### What happens to my inventory when molecules are merged?
+
+When two molecule records are merged, chemcellar rewires all batch and sample records from the source molecule to the target molecule. The source molecule becomes a tombstone — it is retained in the audit trail but no longer appears in searches. No physical inventory is changed; only the references in the database are updated.
+
+<Callout type="warning">Merging molecules is an audited, irreversible action. The merge event is recorded in the append-only audit trail. Contact your workspace administrator if you need to review or dispute a merge.</Callout>
+
+### What is the difference between a sample request and a shipment?
+
+A **sample request** is an internal workflow — a scientist asks for a sample to be dispensed from a batch. A **shipment** packages one or more samples for physical transfer, either internally between teams or externally to a collaborator or CRO. Shipments carry a chain-of-custody record.
+
+---
+
+## Screening & assays
+
+### What is the difference between a protocol and a run?
+
+A **[protocol](/reference/glossary#protocol)** is the reusable description of an assay: the target, the plate format, the readout definitions (what you measure and in what units), and any quality-control thresholds. A **[run](/reference/glossary#run)** is a single execution of that protocol with real experimental data — specific compounds, actual readout values, and QC results.
+
+One protocol can have many runs. Runs inherit the structure of their protocol at the time they are created. When a protocol needs to change, chemcellar creates a new version and retires the old one, keeping the link intact for historical runs.
+
+### Can I edit a run after it has been approved?
+
+No. When a run is approved, its data is **locked**. This protects the integrity of your screening records and aligns with good data management practice.
+
+<Callout type="warning">Approving a run applies an electronic signature under 21 CFR Part 11. You cannot edit the data afterward without an administrator creating a new, audited change record.</Callout>
+
+If you need to correct a data entry error in a locked run, contact your workspace administrator. Any correction will appear as a new audit entry alongside the original.
+
+### What is a dose-response curve and how does chemcellar compute it?
+
+A **[dose-response curve](/reference/glossary#dose-response-curve)** summarizes how a compound's effect changes as its concentration changes. chemcellar fits a four-parameter logistic (4PL) model to your concentration-series data. The four parameters are the bottom asymptote, the top asymptote, the IC50 (the concentration at half-maximal effect), and the Hill slope (the steepness of the response).
+
+chemcellar computes the curve automatically when you upload readout data that includes concentration series. You can view the curve on the run detail page and on the campaign compound card.
+
+Try adjusting the parameters below to see how each one changes the curve shape:
+
+<DoseResponseExplorer initial={{ ic50: 1e-7, hillSlope: 1.2 }} adjustable={["ic50", "hillSlope"]} />
+
+*The IC50 slider moves the curve left and right; the Hill slope slider makes the transition steeper or shallower.*
+
+### What is Z' and why does it matter?
+
+[Z'](/reference/glossary#z-prime) (Z-prime) is a statistical measure of assay quality. It compares the signal separation between your positive controls and negative controls, accounting for the variability of each. A Z' above 0.5 indicates a good assay window. Z' below 0 means the controls overlap and the assay data is not reliable.
+
+chemcellar displays Z' on the run detail page and on each campaign channel, so you can see at a glance whether the run that contributed a measurement was high-quality.
+
+### What is a plate and a well?
+
+A **[plate](/reference/glossary#plate)** is a microplate — a rectangular plastic tray with a grid of small wells. Common formats are 96 wells (8 rows × 12 columns) and 384 wells (16 × 24). Each **[well](/reference/glossary#well)** holds a tiny volume of liquid, typically one compound at one concentration. Plate readout data is the raw signal measured from each well by an instrument.
+
+### What is a screen campaign?
+
+A **[campaign](/reference/glossary#campaign)** is a curated, per-compound view of results drawn from one or more protocols and runs. Instead of looking at one run at a time, a campaign gives you a pivot table: one row per compound, one column per assay channel. You can set a decision on each compound — selected, deprioritized, or undecided — then close the campaign with an electronic signature to lock in the decisions.
+
+Closing a campaign can optionally publish a frozen [collection](/reference/glossary#collection) of selected compounds, ready to use as the compound source for the next downstream campaign.
+
+<Callout type="warning">Closing a campaign applies an electronic signature. The campaign data is then locked. This action is recorded in the append-only audit trail.</Callout>
+
+---
+
+## Search & organization
+
+### How does similarity search work?
+
+Similarity search in chemcellar uses [Tanimoto](/reference/glossary#tanimoto) similarity computed from Morgan circular fingerprints. Morgan fingerprints encode the local chemical environment around each atom out to a defined radius. Two molecules with similar neighborhoods around their atoms will have high Tanimoto similarity.
+
+To run a similarity search, paste or draw a query structure and set a similarity threshold. chemcellar returns molecules above that threshold, ranked by score.
+
+Try comparing two structures below:
+
+<SimilarityDemo
+  smilesA="CC(=O)Oc1ccccc1C(=O)O"
+  smilesB="CC(=O)Nc1ccc(O)cc1"
+/>
+
+*Edit either SMILES to see how the Tanimoto score changes.*
+
+### What is a saved search?
+
+A **[saved search](/reference/glossary#saved-search)** stores a combination of search criteria — structure query, property filters, activity ranges — so you can re-run it any time. When you run a saved search again later, it queries the current database, so new compounds that now match the criteria will appear. Saved searches can be private or shared with your project team.
+
+### What is a collection?
+
+A **[collection](/reference/glossary#collection)** is a curated list of molecules. You can build one by hand, from a saved search, or from the selected compounds of a closed campaign. Collections are used as the compound source for screening campaigns and as the target for bulk exports.
+
+Large collections (libraries of tens of thousands of compounds) are supported. chemcellar uses a join table internally, not a flat array, so membership queries stay fast at scale.
+
+### What is a project?
+
+A **[project](/reference/glossary#project)** is a logical grouping of research work — protocols, runs, collections, campaigns, and (in future) ELN entries all live under a project. Projects have access controls: your workspace administrator can restrict who can view or edit each project. An archived project is read-only.
+
+---
+
+## Data import & export
+
+### Can I import data from an external screening platform?
+
+Yes. chemcellar can import protocol definitions and screening results from external screening platforms via a connector. The import wizard guides you through mapping columns from the external system to chemcellar's readout structure. Ask your workspace administrator to set up the data source connection.
+
+### What export formats are supported?
+
+From any compound list or search result, you can export:
+
+- **CSV** — plain comma-separated values, compatible with Excel and any data analysis tool.
+- **Excel (.xlsx)** — formatted spreadsheet.
+- **SDF** — structure-data file with embedded 2D coordinates and properties, compatible with most cheminformatics tools.
+
+From inventory, you can export plate layouts as CSV or Excel for instrument import.
+
+### Can I import a plate reader file directly?
+
+Yes. On a run detail page, you can upload a plate reader matrix file (a grid of rows and columns matching your plate format). chemcellar reshapes it into the per-well data model automatically. The run must be in draft state to accept new readout data.
+
+---
+
+## Audit trail & compliance
+
+### Is chemcellar compliant with 21 CFR Part 11?
+
+chemcellar is designed with 21 CFR Part 11 alignment as a first-class concern. The audit trail is append-only — no record is ever deleted or overwritten. Approvals (run data lock, campaign close) apply electronic signatures. Access is controlled by role-based permissions managed in the authentication service.
+
+Whether your specific use qualifies as 21 CFR Part 11 compliant depends on your validation processes, your SOPs, and your organization's quality system — not only on the software. Consult your quality team.
+
+### Can I delete a molecule or run?
+
+Standard users cannot delete molecules, runs, or other core records. Workspace administrators can perform hard deletes, which are recorded in the audit trail. Before a hard delete, chemcellar shows a preview of all dependent records that would be affected.
+
+<Callout type="warning">Hard deletes are irreversible and are recorded in the append-only audit trail. Only administrators can perform them.</Callout>
+
+### Who can see my data?
+
+Data in chemcellar is workspace-scoped — users in one workspace cannot see data from another. Within a workspace, project-level access controls determine who can view or modify each project. Your workspace administrator configures roles and permissions.
+
+---
+
+## Account & workspace
+
+### What is a workspace?
+
+A workspace is the top-level organizational boundary in chemcellar. It corresponds to your organization or team. All data — molecules, batches, protocols, runs — is scoped to a workspace. Users belong to one or more workspaces, and cannot see data across workspace boundaries.
+
+### How do I get access to a workspace?
+
+Access is managed by your workspace administrator. They invite users by email and assign roles. Contact your administrator if you need access or a role change.
+
+### I drew a structure but the registration number looks different from what I expected. Is something wrong?
+
+Probably not. chemcellar standardizes every structure on registration: it canonicalizes the SMILES, normalizes salts, removes explicit hydrogens, and may reorder atoms. The resulting structure is chemically equivalent to what you drew, but its representation in the database is the canonical form. The 2D depiction you see in the UI is generated from that canonical form.
+
+If the structure after registration looks genuinely wrong (different molecular formula, wrong stereochemistry), check the [chemistry standards](/reference/chemistry-standards) page or contact your administrator.

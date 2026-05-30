@@ -1,0 +1,288 @@
+import { Callout } from 'nextra/components'
+
+# Run a screen campaign
+
+**Who this is for:** Scientists and portfolio managers who need to review screening data across multiple assays, make compound advancement decisions, and produce a signed, auditable record of those decisions.
+
+**What you'll accomplish:** You will create a [campaign](/reference/glossary#campaign), configure assay channels, review the compound pivot, set per-compound decisions, close the campaign with an electronic signature, and — when needed — supersede a closed campaign with a corrected one.
+
+---
+
+## Before you start
+
+- You need at least **Project Editor** access to the [project](/reference/glossary#project) the campaign will belong to.
+- At least one screening [run](/reference/glossary#run) with readout data must exist in chemcellar so that the campaign can resolve measurements from it. See [Run a screening experiment](/guides/screening/runs) and [Import plate data](/guides/screening/plate-data).
+- The compounds you want to review must be in chemcellar. They do not need to be pre-organized in a [collection](/reference/glossary#collection) — you can also provide an explicit list or derive them from a prior campaign.
+
+---
+
+## What is a screen campaign?
+
+A [campaign](/reference/glossary#campaign) is a structured, closeable record that answers: *"For this set of compounds, across these assays, what did we decide?"*
+
+In a typical drug-discovery program, you run several assay types — a primary screen, a counterscreen to eliminate interference artifacts, and perhaps a selectivity panel. At the end of that process, someone has to decide which compounds advance. Without a structured record, that decision lives in a spreadsheet or an email thread.
+
+A campaign solves this by:
+
+- Pulling readout data from your screening runs into a single **compound pivot** (rows = compounds, columns = assays).
+- Letting you record a decision — `selected`, `deprioritised`, or `undecided` — for each compound.
+- Locking the entire record at closure under an electronic signature.
+- Optionally publishing a frozen [collection](/reference/glossary#collection) of the selected compounds so the next stage of the cascade has a clean, auditable compound list to start from.
+
+> 📷 *Screenshot: the campaign compound pivot grid showing rows for individual molecules, columns for two assay channels ("Primary screen — % inhibition" and "Counterscreen — % inhibition"), and a Decision column on the right with "Selected" / "Deprioritised" / "Undecided" dropdowns.*
+
+---
+
+## Campaign concepts for new users
+
+### Channels
+
+A **channel** is one assay readout contributing a column of data to the pivot. You define a channel by choosing:
+
+- A **Protocol** — the assay protocol the run belongs to.
+- A **Readout definition** — the specific measurement type within that protocol (for example, "% inhibition at 10 µM" or "IC₅₀").
+- A **Label** for the column header.
+- A **Unit** (for example, µM or %).
+- An optional **Threshold** — the pass/fail cut-off that chemcellar uses to highlight cells automatically.
+
+One campaign can have multiple channels. Each channel contributes one column to the pivot.
+
+### Compound source
+
+You choose where the list of compounds comes from when you create the campaign:
+
+| Source type | When to use it |
+|---|---|
+| **Explicit list** | You know exactly which molecules to review; you select them by registration number or from search results. |
+| **Collection** | You have already curated a [collection](/reference/glossary#collection) containing the compounds to review. |
+| **Derived from campaign** | You want to take the compounds from a prior campaign and filter them by decision — for example, take only the `selected` compounds from the primary campaign to feed into a dose-response follow-up. |
+
+**Derived from campaign** is the standard way to build a screening cascade: primary screen → counterscreen → lead optimization. Each campaign feeds the next without manual copying.
+
+### Measurements and manual overrides
+
+When you add a channel, chemcellar automatically resolves measurements by looking at the runs linked to the campaign's protocols. Each compound-channel cell is populated from the matching readout data.
+
+You can also **manually override** any cell — for example, to enter a value from an external assay not yet in chemcellar, or to correct an outlier. Manual overrides are preserved across re-resolve operations; chemcellar marks them distinctly so you can always tell which values came from the system and which you entered by hand.
+
+### Z-prime
+
+Each channel can display a **Z-prime** (Z′) value — a statistical measure of assay quality. A Z′ above 0.5 is generally considered acceptable for a high-throughput screen. chemcellar populates Z′ from the `qc_metrics` of the runs associated with each channel. It is shown in the channel header and in the channel configuration panel.
+
+---
+
+## Create a campaign
+
+1. Navigate to **Research → Campaigns** in the sidebar, or open a project and click **Campaigns** in the project tabs.
+2. Click **New campaign**.
+3. In the **Create campaign** dialog:
+   - Enter a **Campaign name** — for example, "EGFR Primary Screen — 2026-Q1".
+   - Optionally add a **Description**.
+   - Select the **Project** this campaign belongs to.
+   - Choose the **Compound source** (Explicit list, Collection, or Derived from campaign). You can change the source while the campaign is in draft, so starting with an explicit list and switching to a collection later is fine.
+   - Check **Publish collection on close** if you want chemcellar to automatically create a frozen [collection](/reference/glossary#collection) of selected compounds when you close the campaign. This is strongly recommended for any campaign that feeds a downstream stage.
+4. Click **Create campaign**.
+
+> 📷 *Screenshot: the Create campaign dialog with Name filled in as "EGFR Primary Screen — 2026-Q1", Compound source set to "Collection", a collection picker showing "Kinase Focused Library — 2026-Q1" selected, and the "Publish collection on close" checkbox ticked.*
+
+chemcellar creates the campaign in **draft** status and takes you to the campaign builder.
+
+<Callout type="info">
+A campaign starts empty. You add channels and reseed the compound list from within the builder. Nothing is permanent until you close the campaign.
+</Callout>
+
+---
+
+## Add and configure channels
+
+1. In the campaign builder, click **Add channel** in the **Channels** panel on the left.
+2. In the **Channel configuration** panel:
+   - Select the **Protocol** from the dropdown. Only protocols belonging to the same project (or shared workspace protocols) appear here.
+   - Select the **Readout definition** — one of the measurement types defined in that protocol.
+   - Enter a **Label** for the column header (for example, "% Inh @ 10 µM").
+   - Enter the **Unit** (for example, `%`, `µM`, `nM`).
+   - Optionally enter a **Threshold**. Cells above this threshold are highlighted green; cells below it are highlighted red (or vice versa, depending on the direction configured for that readout).
+   - Set the **Display order** if you want to control the column sequence.
+3. Click **Save channel**.
+
+Repeat for each assay readout you want to include in the pivot.
+
+> 📷 *Screenshot: the channel configuration panel open on the right side of the campaign builder, showing Protocol selected as "EGFR Kinase Assay v2", Readout as "% inhibition (10 µM)", Label as "% Inh @ 10 µM", Unit as "%", and Threshold as "50".*
+
+<Callout type="default" emoji="💡">
+You can update a channel's label, unit, or threshold at any time while the campaign is in draft. Updating the protocol or readout definition triggers a re-resolve of that channel's measurements.
+</Callout>
+
+### Remove a channel
+
+To remove a channel, click the **⋯** menu next to the channel name in the Channels panel and select **Remove channel**. This removes the channel's measurements column from the pivot. The action is reversible while the campaign is in draft.
+
+---
+
+## Reseed the compound list
+
+**Reseeding** tells chemcellar to resolve the compound list from the chosen source. If you selected a Collection as the source, reseeding pulls the current membership of that collection. If you selected Derived from campaign, it pulls compounds matching the chosen decision filter from the source campaign.
+
+1. In the campaign builder toolbar, click **Reseed**.
+2. chemcellar resolves the compound list and populates the pivot rows.
+
+> 📷 *Screenshot: the campaign builder after reseeding, showing 48 compound rows in the pivot grid, each with a registration number, a structure thumbnail, and empty or partially filled measurement cells.*
+
+<Callout type="info">
+Reseeding overwrites the current compound list. If you have manually entered any notes on individual results, those notes are preserved during reseed, as long as the compound remains in the new list. Compounds that no longer appear in the source after a reseed are removed from the pivot.
+</Callout>
+
+---
+
+## Resolve and review measurements
+
+After adding channels and reseeding, click **Refresh measurements** (or **Re-resolve**) to tell chemcellar to populate each compound-channel cell from the underlying screening runs.
+
+chemcellar scans the runs associated with each channel's protocol and readout, finds the matching readout data for each compound, and computes the cell value. If multiple runs exist for the same compound in the same channel, chemcellar uses the most recent approved run.
+
+> 📷 *Screenshot: the compound pivot grid after resolution, showing numeric values in all cells — for example, "72.4 %" and "8.3 %" in the two channel columns — with cells above threshold highlighted in green.*
+
+### Reading the pivot
+
+Each row is one compound. Each column after the structure columns is one channel. Cell colors:
+
+- **Green** — value meets or exceeds the threshold (indicates activity or passing the assay criterion).
+- **Red** — value falls below the threshold.
+- **Gray / empty** — no measurement resolved for this compound in this channel. This typically means the compound was not plated in any run linked to that channel, or the run has not yet been approved.
+
+### Enter a manual override
+
+To enter or correct a cell value manually:
+
+1. Click the cell you want to override.
+2. Type the new value in the inline editor that appears.
+3. Press **Enter** or click outside the cell.
+
+The cell is marked with a small **M** indicator to show it is a manual override. Manual overrides survive re-resolve operations — chemcellar will not overwrite them with automatically resolved values.
+
+<Callout type="warning">
+Manual overrides are recorded in the audit trail. Include a comment in the **Notes** field on the result row to document why you overrode the value (for example, "Re-plate data from external assay run 2026-04-14").
+</Callout>
+
+---
+
+## Set compound decisions
+
+The **Decision** column on the right of each row is where you record the outcome for each compound.
+
+1. Click the decision cell for a compound row.
+2. Select one of the three options:
+   - **Selected** — this compound advances to the next stage.
+   - **Deprioritised** — this compound does not advance; you have reviewed the data and decided against it.
+   - **Undecided** — you have not yet made a call on this compound.
+3. Optionally click the **Notes** icon on the row to add a free-text note explaining the decision (for example, "Potent but poor selectivity ratio in channel 2").
+
+> 📷 *Screenshot: the decision panel for a single compound showing the three decision radio buttons — Selected, Deprioritised, Undecided — with Selected highlighted, and a Notes text field below it.*
+
+<Callout type="default" emoji="💡">
+You can filter the pivot to show only **Undecided** compounds. This makes it easy to work through the list systematically — review undecided compounds, set decisions, then move to the next batch.
+</Callout>
+
+You do not need to make a decision for every compound before closing. Compounds left as `undecided` at closure are recorded as undecided in the closed campaign.
+
+---
+
+## Close a campaign
+
+Closing locks the campaign permanently and records a formal electronic signature. Only close a campaign when you are satisfied with the measurements and decisions.
+
+<Callout type="warning">
+Closing a campaign applies an electronic signature under 21 CFR Part 11. Once closed, the campaign data is **locked** — you cannot change any measurement, decision, or channel configuration. If you discover an error after closure, you must create a new campaign that supersedes the closed one. Both the original and the superseding campaign are retained as part of the audit record.
+</Callout>
+
+### Steps to close
+
+1. In the campaign builder, click **Close campaign** in the toolbar.
+2. Review the **Close campaign** dialog:
+   - It shows the count of compounds in each decision state (Selected: N, Deprioritised: N, Undecided: N).
+   - If **Publish collection** is enabled, it shows a preview of the frozen collection that will be created (the count of selected compounds).
+   - The **Protocols snapshot** section lists every protocol that contributed data, confirming the scientific provenance of the campaign.
+3. In the **Electronic signature** section, confirm your identity by entering your credential and typing the attestation statement: *"I confirm that this campaign record is accurate and complete."*
+4. Click **Sign and close**.
+
+> 📷 *Screenshot: the Close campaign dialog showing decision summary (Selected: 12, Deprioritised: 30, Undecided: 6), the Publish collection preview showing "12 compounds will be added to a new frozen collection", the Protocols snapshot listing two protocols, and the Electronic signature attestation field.*
+
+<Callout type="info">
+chemcellar requires at least one configured channel and at least one result row before you can close a campaign. If the campaign is empty, the Close button is disabled.
+</Callout>
+
+### What happens at closure
+
+- The campaign status changes from `draft` to `closed`.
+- The `source_protocols` snapshot is materialised — a list of all protocol IDs that contributed data is stored on the campaign record.
+- If **Publish collection** was enabled and any compounds are `selected`, a frozen [collection](/reference/glossary#collection) is created and linked to the campaign.
+- The electronic signature is recorded in the audit trail with the closing user's identity and the timestamp.
+- A PG-level database trigger prevents any further writes to the campaign or its child records.
+
+> 📷 *Screenshot: the closed campaign view showing the campaign name with a "Closed" status badge, a signed-by field with the user name and timestamp, and a link to the published frozen collection.*
+
+---
+
+## Supersede a closed campaign
+
+If you discover a significant error in a closed campaign — for example, a labelling mistake that affected which compounds were selected — you must create a new campaign that formally supersedes the old one.
+
+Superseding is not the same as editing. The closed campaign remains permanently in the record. The superseding campaign is a new draft with its own channel configuration, measurements, and decisions.
+
+1. Open the closed campaign you want to replace.
+2. Click **Supersede** in the campaign actions menu.
+3. In the **Supersede campaign** dialog:
+   - Optionally enter a description explaining why this campaign supersedes the previous one (strongly recommended for audit clarity).
+   - Confirm your electronic signature.
+4. Click **Sign and supersede**.
+
+> 📷 *Screenshot: the Supersede campaign dialog with a description field filled in as "Correcting plate-map labelling error in Run 047 — counterscreen column swap", the Electronic signature field, and the Sign and supersede button.*
+
+<Callout type="warning">
+Superseding a campaign applies an electronic signature. The original campaign's status changes to `superseded`. The superseded campaign is retained in full — it remains visible and searchable as the historical record. This action is recorded in the audit trail.
+</Callout>
+
+After you supersede, a new campaign is created in **draft** status. It carries forward the compound source configuration from the superseded campaign as a starting point. Add or adjust channels as needed, re-resolve measurements, review decisions, and then close and sign the new campaign.
+
+Both campaigns — the superseded original and the new one — are visible in the project's campaign list. The superseded campaign shows a **Superseded** badge and a link to the campaign that replaced it.
+
+---
+
+## Using the published frozen collection
+
+When a campaign is closed with **Publish collection** enabled, the resulting frozen [collection](/reference/glossary#collection) is the natural starting point for the next step in your screening cascade.
+
+To use it:
+
+1. Create a new campaign.
+2. For **Compound source**, choose **Collection**.
+3. Select the frozen collection (it will be named after the closing campaign, for example "Selected — EGFR Primary Screen — 2026-Q1").
+4. Proceed to configure channels and resolve measurements for the next assay stage.
+
+Alternatively, use **Derived from campaign** as the source type and select the closed campaign directly. With this approach, chemcellar re-derives the compound list from the campaign's decision records at reseed time, which stays synchronized with the campaign even if you later supersede it.
+
+---
+
+## Typical screening cascade example
+
+Here is how the campaign workflow looks across a full primary-to-lead cascade:
+
+| Stage | Campaign name | Source | Channels | Outcome |
+|---|---|---|---|---|
+| Primary screen | "EGFR Primary — 2026-Q1" | Collection: "Kinase Focused Library" | % inhibition @ 10 µM | 12 selected → frozen collection published |
+| Counterscreen | "EGFR Counter — 2026-Q1" | Derived from campaign: selected | % inhibition (target), % inhibition (counter) | 8 selected |
+| Dose-response follow-up | "EGFR DR — 2026-Q1" | Derived from campaign: selected | IC₅₀ (µM), Hill slope | 5 selected for lead optimization |
+
+Each row in the table is a closed, signed campaign. Each one feeds the next. The trail from 50,000-compound library to 5 lead candidates is fully auditable.
+
+---
+
+## Related
+
+- [Projects, Collections & Campaigns concept](/concepts/projects-collections-campaigns) — the full conceptual overview.
+- [Work with projects](./projects) — create and manage the project a campaign belongs to.
+- [Curate a compound collection](./collections) — build and manage the collection you feed into a campaign.
+- [Screening runs](/guides/screening/runs) — how run data becomes campaign measurements.
+- [Approval & data lock](/guides/screening/approval-and-data-lock) — how individual runs are approved before their data is available to campaigns.
+- [Compliance & audit trail](/concepts/compliance) — the regulatory context for electronic signatures.
+- [Glossary: campaign](/reference/glossary#campaign), [collection](/reference/glossary#collection), [project](/reference/glossary#project), [run](/reference/glossary#run), [electronic signature](/reference/glossary#electronic-signature)

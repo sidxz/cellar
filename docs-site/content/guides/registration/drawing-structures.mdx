@@ -1,0 +1,117 @@
+import { Callout } from 'nextra/components'
+
+# Draw or import a structure
+
+**Who this is for:** Bench chemists registering a new compound by drawing it or pasting a [SMILES](/reference/glossary#smiles) string.
+
+**What you'll accomplish:** You will enter a valid chemical structure into chemcellar's structure editor and submit it for registration, ending up with a new molecule record (or a new batch added to an existing one if the structure is already known).
+
+## Before you start
+
+- You need the **Register** permission on your workspace. Ask your administrator if you are unsure.
+- Have your structure ready. You can draw it, paste a SMILES string, or import a MOLFILE.
+- chemcellar normalizes all structures with RDKit and the ChEMBL structure pipeline. You do not need to compute canonical SMILES yourself — paste whatever form you have.
+
+## Steps
+
+### 1. Open the registration dialog
+
+From any page in chemcellar, click **Register** in the top navigation bar and select **Single molecule** from the dropdown menu.
+
+> 📷 *Screenshot: the top navigation bar with the Register dropdown open, showing "Single molecule" and "Bulk upload" options.*
+
+### 2. Enter the structure
+
+The **Structure** panel opens with the Ketcher editor embedded.
+
+**Option A — Draw the structure:**
+
+1. Use the toolbar on the left of the Ketcher canvas to select bond types, ring templates, atoms, and stereochemistry tools.
+2. Click on the canvas to place atoms; click and drag to draw bonds.
+3. Right-click any atom or bond for a context menu of quick edits (change atom symbol, flip stereo, etc.).
+4. When your structure is complete, confirm it is drawn as intended by checking the live property preview on the right panel.
+
+**Option B — Paste a SMILES:**
+
+1. Click the **SMILES** tab above the Ketcher canvas.
+2. Paste your SMILES string into the text field.
+3. Click **Apply**. The 2D depiction renders on the canvas immediately.
+
+**Option C — Import a MOLFILE:**
+
+1. Click the **Import** icon (folder icon, top-right of the Ketcher toolbar).
+2. Choose your `.mol` or `.sdf` file. For SDF files, chemcellar loads the first structure.
+3. The structure appears on the canvas.
+
+<Callout type="info">
+Ketcher may return SMILES in Kekulé form (alternating single/double bonds for aromatic rings). chemcellar re-aromatizes the structure during normalization, so Kekulé SMILES produce the same canonical form as aromatic SMILES.
+</Callout>
+
+> 📷 *Screenshot: the Ketcher canvas with a six-membered aromatic ring drawn, and the SMILES tab showing the corresponding string.*
+
+### 3. Assign stereochemistry (if applicable)
+
+If your compound has stereocenters:
+
+1. Select the **Stereo** tool in the Ketcher toolbar (wedge/dash bond).
+2. Click the bond attached to the stereocenter and choose **Wedge** (bold) for a bond coming toward you or **Dash** (striped) for a bond going away.
+3. Ketcher shows the stereo parity label (R/S) in the canvas when the stereo is fully specified.
+
+chemcellar treats each enantiomer as a distinct molecule. A racemic mixture is registered as a separate entry with `stereochemistry = racemic`.
+
+<Callout type="default" emoji="💡">
+If your compound's stereo configuration is not yet determined, leave the stereocenters unmarked. chemcellar will record `stereochemistry = undefined` and you can update it later when the configuration is confirmed.
+</Callout>
+
+### 4. Fill in molecule metadata
+
+Below the structure editor, complete the required and optional fields:
+
+| Field | Required? | Notes |
+|-------|-----------|-------|
+| **Name** | Optional | Common name or IUPAC name. |
+| **Molecule type** | Required | Defaults to *small molecule*. Change to *peptide*, *biologic*, *nucleic acid*, *antibody*, or *mixture* if appropriate. |
+| **Synthesis status** | Required | Choose *synthesized*, *purchased*, *designed*, or *virtual*. |
+| **Tags** | Optional | Free-text labels such as "backup series" or "chemical probe". |
+| **Invention date** | Optional | The date the compound was first conceived. Chemcellar records this separately from the registration date for IP documentation purposes. |
+| **External identifier** | Optional | A vendor ID, CAS number, or legacy system ID. See [Identifiers](./identifiers) for details. |
+
+### 5. Submit the registration
+
+Click **Register** at the bottom of the dialog.
+
+chemcellar runs the normalization and deduplication pipeline:
+
+- **New structure:** A new molecule record is created with a fresh registration number (e.g., `CV-00042`). A first batch is also created automatically.
+- **Known structure:** The existing molecule record is shown. A new [batch](/reference/glossary#batch) is added under that molecule — the structure data is not duplicated.
+- **Identifier conflict:** If the external ID you provided already belongs to a different molecule, registration is blocked. The dialog shows which molecule holds that ID so you can investigate.
+
+> 📷 *Screenshot: the success state of the registration dialog, showing the newly assigned registration number CV-00042 and a link to the molecule detail page.*
+
+<Callout type="warning">
+Registration is recorded in the append-only audit trail. The registration number assigned to a molecule never changes, even if the molecule is later merged with another record.
+</Callout>
+
+## What happens next
+
+You land on the molecule's detail page, which shows:
+
+- The canonical 2D structure depiction.
+- The computed registration number, InChIKey, molecular formula, and physicochemical descriptors.
+- The first batch record that was created alongside the molecule.
+
+From here you can add more identifiers, attach files, assign the molecule to a project or collection, or start building a synthesis route.
+
+## Try it — explore a structure
+
+Paste any SMILES below to see how chemcellar would render it:
+
+<StructureViewer smiles="CC(=O)Oc1ccccc1C(=O)O" editable={true} />
+
+*Try it: replace the SMILES with one of your own compounds. The widget uses the same RDKit.js renderer as chemcellar's structure depictions.*
+
+## Related
+- [Bulk registration](./bulk-registration) — register many molecules from a file in one step.
+- [Identifiers](./identifiers) — manage CAS numbers, vendor IDs, and other external references.
+- [Batches & samples](/concepts/batches-and-samples) — understand what the batch created at registration represents.
+- [Chemistry standards reference](/reference/chemistry-standards) — SMILES, MOLFILE, and InChI format details.

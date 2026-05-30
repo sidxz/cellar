@@ -1,0 +1,127 @@
+import { Callout } from 'nextra/components'
+
+# Users and roles
+
+**Who this is for:** Workspace owners and administrators managing who can access chemcellar and what they can do.
+
+**What you'll accomplish:** You will understand the permission model, know which controls live in chemcellar versus the Sentinel Auth console, and be able to direct users to the right place for account and role changes.
+
+---
+
+## The boundary: chemcellar vs. Sentinel Auth
+
+chemcellar delegates all identity and access management to **Sentinel Auth**, a separate service. This means:
+
+| Managed in **Sentinel Auth console** | Managed in **chemcellar Administration** |
+|---|---|
+| User accounts (create, deactivate, password reset) | Workspace-level domain configuration |
+| External identity provider setup (Google, GitHub, Entra ID) | Organization provenance records |
+| Workspace membership (who is in the workspace) | Controlled vocabularies |
+| Workspace roles (owner / admin / editor / viewer) | Data source field mappings |
+| Custom RBAC roles and service action assignments | Audit reason policy and signature requirements |
+| Team / group definitions | |
+| Per-project and per-collection sharing (entity ACLs) | |
+
+If you need to invite a new user, change someone's role, or define a custom role, open the Sentinel console. chemcellar reads the permissions from the login token at runtime; it does not store or manage them.
+
+<Callout type="info">
+Contact your infrastructure administrator for the URL of your Sentinel console. In a standard deployment it is accessible from the user menu in the top-right corner of chemcellar under **Workspace Settings → Manage Users**.
+</Callout>
+
+---
+
+## The permission model
+
+chemcellar enforces a three-tier permission model, all managed via Sentinel Auth:
+
+### Tier 1 — Workspace role
+
+Every workspace member has one of four roles. This role is the broadest tier and controls general access.
+
+| Role | What they can do |
+|---|---|
+| **Viewer** | Read all non-confidential records in the workspace. Cannot create or edit. |
+| **Editor** | Create and edit molecules, batches, protocols, runs, projects, and collections. Cannot perform regulated actions that require `cellar:approve_run` or `cellar:merge`. |
+| **Admin** | Everything an Editor can do, plus all Administration pages and regulated actions. |
+| **Owner** | Full control including billing, workspace deletion, and assigning the Owner role to others. |
+
+<Callout type="default" emoji="💡">
+Most scientists work as **Editors**. Portfolio managers who only review data often work as **Viewers**. Lab managers or IT administrators who configure the system are **Admins**. There is typically one **Owner** per workspace.
+</Callout>
+
+### Tier 2 — Service actions (custom RBAC)
+
+Service actions are fine-grained permissions that can be granted to custom roles without changing the workspace role. This lets you compose roles like "CRO Chemist" (can register and export, but not merge) or "Data Reviewer" (can approve runs, but nothing else).
+
+The complete set of chemcellar service actions:
+
+| Service action | What it permits |
+|---|---|
+| `cellar:register` | Register new molecules and batches |
+| `cellar:disclose` | Submit and review disclosure requests |
+| `cellar:merge` | Execute molecule merges |
+| `cellar:approve_run` | Approve or reject assay runs (triggers electronic signature) |
+| `cellar:export` | Export data to CSV, XLSX, or SDF |
+| `cellar:admin_config` | Modify workspace settings, organizations, vocabularies, data sources |
+| `cellar:manage_routes` | Create and edit synthesis routes |
+| `cellar:request_synthesis` | Submit synthesis requests |
+| `cellar:approve_synthesis` | Approve or reject synthesis requests |
+| `cellar:assign_synthesis` | Assign synthesis requests to chemists or CROs |
+
+Custom roles and their action assignments are defined in the Sentinel console. To create a "CRO Chemist" role, open Sentinel, create a role named `CRO Chemist`, and assign the `cellar:register` and `cellar:export` actions.
+
+### Tier 3 — Entity ACLs
+
+Projects and collections can be shared with specific users, teams, or organizations at the entity level. This is also managed in the Sentinel console via the share controls on each project or collection's settings page within chemcellar.
+
+A user who is a Viewer at the workspace level can be granted `editor` access on a specific project without being elevated across the whole workspace.
+
+---
+
+## Adding a user to the workspace
+
+1. Open the **Sentinel console** (link in the user menu).
+2. Navigate to **Workspace Members**.
+3. Click **Invite member**, enter the user's email address, and select their workspace role.
+4. The user receives an email invitation. Once they accept, they can log in to chemcellar.
+
+> 📷 *Screenshot: the Sentinel workspace members page showing a list of members with their roles, and the "Invite member" button.*
+
+---
+
+## Changing a user's role
+
+1. Open the **Sentinel console**.
+2. Navigate to **Workspace Members** and locate the user.
+3. Click the role dropdown next to their name and select the new role.
+
+Changes take effect on the user's next login (or on the next token refresh if they are currently logged in).
+
+<Callout type="warning">
+Downgrading a user from Admin to Editor or Viewer does not immediately revoke their current session. The new role applies when their token refreshes (typically within 15 minutes, depending on token lifetime). For immediate revocation, use the **Force logout** option in Sentinel.
+</Callout>
+
+---
+
+## Deactivating a user
+
+Deactivating a user prevents them from logging in. Their historical contributions (registered molecules, approved runs, audit entries) remain intact and attributed to them by name. chemcellar never removes attribution from audit records.
+
+To deactivate a user, open the **Sentinel console**, go to **Users**, find the user, and click **Deactivate**.
+
+---
+
+## Who can view the audit trail
+
+Any user with the **Admin** or **Owner** role can view the audit log for any entity from its detail page. Editors and Viewers see the record's current state but do not have access to the full audit history panel by default.
+
+To grant audit trail read access to a custom role without making the user an Admin, add a read-only audit viewer action in Sentinel. Contact your Sentinel administrator for configuration.
+
+---
+
+## Related
+
+- [Administration overview](/administration)
+- [Workspace Configuration](/administration/workspace-config)
+- [Compliance, Audit Trail & Data Lock](/concepts/compliance)
+- [Glossary: electronic signature](/reference/glossary#electronic-signature)

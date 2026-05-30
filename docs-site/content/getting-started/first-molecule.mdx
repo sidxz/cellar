@@ -1,0 +1,179 @@
+import { Callout } from 'nextra/components'
+
+# Register your first molecule
+
+**Who this is for:** Bench chemists and anyone with the `cellar:register` permission who wants to add a new compound to the registry.
+
+**What you'll accomplish:** You will draw or paste a chemical structure, fill in the required metadata, and confirm that chemcellar has created a permanent registration record with a unique registration number.
+
+## Before you start
+
+- You must be logged in to chemcellar and have selected your workspace. See [Logging in](/getting-started/logging-in) if you haven't done this yet.
+- Your workspace role must include the `cellar:register` permission. If you see no **Register** button, ask your administrator.
+- Have your compound's name and SMILES (or its drawn structure) ready. If you have a CAS number, vendor ID, or other external identifier, have those to hand as well.
+
+<Callout type="info">A [molecule](/reference/glossary#molecule) in chemcellar is a unique chemical structure, deduplicated by its [InChIKey](/reference/glossary#inchikey). If the same structure has already been registered, chemcellar creates a new [batch](/reference/glossary#batch) under the existing molecule record rather than duplicating it. You do not need to check for duplicates manually — chemcellar handles this automatically.</Callout>
+
+---
+
+## What is a molecule vs. a batch?
+
+Before you register, it helps to understand two core concepts:
+
+- A **molecule** is the chemical identity — the structure, the name, the permanent registration number. There is exactly one molecule record per unique structure in your workspace.
+- A **[batch](/reference/glossary#batch)** is a physical lot of that material — a specific synthesis run, purchase, or receipt. One molecule can have many batches made by different chemists at different times.
+
+When you register a new compound for the first time, chemcellar creates both a molecule record and a first batch record in a single step.
+
+---
+
+## Steps
+
+### 1. Open the registration form
+
+In the sidebar, click **Molecules**. The molecule list opens.
+
+In the top-right corner of the list, click **Register molecule**.
+
+> 📷 *Screenshot: the Molecules list page with the "Register molecule" button highlighted in the top-right corner.*
+
+The registration dialog opens. It has two sections: **Structure** on the left and **Metadata** on the right.
+
+---
+
+### 2. Enter the structure
+
+You have three ways to provide the structure:
+
+**Option A — Draw it with the structure editor.** The embedded structure editor (Ketcher) opens in the dialog. Use the drawing toolbar on the left to add atoms and bonds. When you are satisfied with the structure, click **Apply** to transfer it to the registration form.
+
+> 📷 *Screenshot: the structure editor (Ketcher) open in the registration dialog, with a benzene ring drawn and the Apply button visible.*
+
+**Option B — Paste a SMILES.** Click the **SMILES** tab above the structure editor and paste your SMILES string into the input. The structure renders instantly in the preview pane.
+
+**Option C — Paste an InChI or InChIKey.** Click the **InChI** tab and paste. chemcellar converts it to a canonical structure for display.
+
+Try the interactive structure viewer below to see how SMILES strings render:
+
+<StructureViewer smiles="CC(=O)Oc1ccccc1C(=O)O" editable={true} />
+
+*Try it: replace the SMILES above (aspirin) with your own compound.*
+
+<Callout type="default" emoji="💡">chemcellar always canonicalizes your structure on registration, following the ChEMBL/PubChem standard pipeline. The InChIKey displayed after you enter a structure is the canonical form — this is what deduplication checks against.</Callout>
+
+---
+
+### 3. Fill in the required metadata
+
+Switch focus to the **Metadata** panel on the right. The only required fields are marked with an asterisk.
+
+| Field | Required? | What to enter |
+|---|---|---|
+| **Name** | Yes | The common or IUPAC name. Can be updated later. |
+| **Molecule type** | Yes | Select from: small molecule, peptide, biologic, antibody, nucleic acid, mixture, unknown. |
+| **Originating organisation** | Yes | The organisation that first made or owns this compound. Select from the list. Contact your admin if the organisation is not listed. |
+
+<Callout type="info">The **Originating organisation** field tracks IP provenance. It records which organisation (your lab, a CRO partner, or a vendor) first created or disclosed this compound. This is distinct from who is registering it now.</Callout>
+
+---
+
+### 4. Add optional metadata
+
+These fields are optional but strongly recommended for any compound that will go through screening:
+
+| Field | What to enter |
+|---|---|
+| **External identifiers** | Vendor catalogue numbers, CAS numbers, legacy IDs from other systems. Click **Add identifier**, choose the type, and enter the value. |
+| **Lifecycle stage** | Default is `registered`. Change to `active`, `hit`, `lead`, etc. if you already know the compound's stage. |
+| **Synthesis status** | `virtual`, `designed`, `synthesized`, or `purchased`. |
+| **Tags** | Free-text labels, e.g., "tool compound", "series A", "BBB probe". Separate with Enter. |
+| **Custom fields** | Your workspace administrator may have defined additional fields (e.g., "Tumor model"). Fill these in if they appear. |
+| **Invention date** | The date the compound was first conceived (for IP purposes). Distinct from today's registration date. |
+
+---
+
+### 5. Add first batch details (optional but recommended)
+
+Below the molecule fields, expand the **First batch** section. Adding batch details now saves a separate step later.
+
+| Field | What to enter |
+|---|---|
+| **Batch number** | Auto-generated if you leave it blank; or enter your lab notebook batch number. |
+| **Amount** | The quantity of material (e.g., 50 mg). |
+| **Purity** | Percentage purity (e.g., 97.5%). |
+| **Storage location** | Select a location from inventory, or leave blank and assign later. |
+
+---
+
+### 6. Submit the registration
+
+Click **Register** at the bottom of the dialog.
+
+> 📷 *Screenshot: the completed registration form with a structure visible in the editor, name and molecule type filled in, and the Register button highlighted.*
+
+chemcellar runs the registration pipeline:
+
+1. Canonicalizes your structure (strips salts, normalises tautomers, computes the [InChIKey](/reference/glossary#inchikey)).
+2. Checks for an existing molecule with the same InChIKey in your workspace.
+3. Checks that any external identifiers you entered are not already claimed by another molecule.
+4. Creates the molecule record, assigns a permanent **registration number** (e.g., `CV-00001`), and creates the first batch.
+5. Computes and stores structural descriptors: molecular weight, logP, [TPSA](/reference/glossary#tpsa), H-bond donors and acceptors.
+
+This happens in under two seconds for a single molecule.
+
+<Callout type="warning">Registration is recorded in the append-only audit trail. The registration number assigned is permanent and will not change, even if you later correct the structure or merge this compound with another. This is by design — it preserves traceability for any data already associated with this record.</Callout>
+
+---
+
+## What happens next
+
+### If no duplicate was found
+
+chemcellar confirms with a success banner: **"CV-00001 registered successfully."** Click **View molecule** to open the detail page.
+
+> 📷 *Screenshot: the success confirmation banner showing the new registration number CV-00001 and a "View molecule" link.*
+
+The molecule detail page shows the structure, all properties, and the first batch listed under the **Batches** tab.
+
+### If the structure already exists
+
+chemcellar tells you: **"This structure matches existing molecule CV-00042."** You have two options:
+
+- **Add a batch to CV-00042** — the normal path. Your batch is added to the existing compound; no duplicate molecule is created.
+- **Cancel** — if you believe this is a different compound (stereo isomer, salt form), cancel and review your structure. Contact your administrator if you need to register a related structure as a distinct entity.
+
+### If an identifier conflict is found
+
+chemcellar blocks registration and shows: **"Identifier XYZ-001 is already assigned to molecule CV-00030."** Resolve the conflict by removing or correcting the conflicting identifier before re-submitting.
+
+---
+
+## See the registered molecule
+
+After registration, open the **Molecules** list and search for your registration number or name. Click the row to open the detail page.
+
+The **Overview** tab shows:
+
+- the canonical [SMILES](/reference/glossary#smiles) and InChIKey
+- the 2D structure depiction
+- computed descriptors (MW, logP, TPSA, HBD, HBA)
+- lifecycle stage, synthesis status, and tags
+
+The **Batches** tab lists the first batch you created.
+
+The **History** tab shows the `MoleculeRegistered` event in the audit trail, timestamped and attributed to your user account.
+
+---
+
+## Bulk registration
+
+If you have many compounds to register at once, use the **Bulk registration** feature instead of this form. Go to **Molecules → Bulk import** and upload an SDF or CSV file. chemcellar processes each row independently, deduplicates automatically, and shows a summary of how many molecules were created, how many matched existing records, and how many had errors.
+
+---
+
+## Related
+
+- [Concepts: registration and identity](/concepts/registration-and-identity) — how registration numbers, InChIKeys, and deduplication work
+- [Concepts: chemical structures](/concepts/chemical-structures) — SMILES, InChI, and how chemcellar normalises structures
+- [Guides: import molecules](/guides/import) — bulk import from SDF, CSV, or an external data source
+- [Concepts: batches and samples](/concepts/batches-and-samples) — physical material management after registration
