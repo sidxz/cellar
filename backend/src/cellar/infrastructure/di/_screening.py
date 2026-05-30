@@ -25,6 +25,7 @@ from cellar.application.inventory.registered_plates import (
     RegisterPlate,
     UpdatePlate,
 )
+from cellar.application.inventory.export_plate_layout import ExportPlateLayout
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.compound_curves_reader import CompoundCurvesReader
@@ -739,6 +740,16 @@ def register_screening(container: Container) -> None:
     container.define(GetPlate, _reg_plate_query(GetPlate))
     container.define(ListPlates, _reg_plate_query(ListPlates))
     container.define(ListChildren, _reg_plate_query(ListChildren))
+
+    def _export_plate_layout(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ExportPlateLayout(
+            uow,
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyBatchRepository(uow),
+        )
+
+    container.define(ExportPlateLayout, _export_plate_layout)
 
     def _delete_reg_plate(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

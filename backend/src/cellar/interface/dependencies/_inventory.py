@@ -36,6 +36,7 @@ from cellar.application.inventory.manage_storage import (
     ListStorageLocations,
     ListStorageLocationsWithCounts,
 )
+from cellar.application.inventory.export_plate_layout import ExportPlateLayout
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.registered_plates import (
     ChangeStatus,
@@ -95,6 +96,7 @@ __all__ = [
     "DerivePlateDep",
     "ListChildrenDep",
     "DeletePlateDep",
+    "ExportPlateLayoutDep",
     "PlateReadModelServiceDep",
     # Plate-import pipeline
     "ImportFileCacheDep",
@@ -165,6 +167,7 @@ ChangeStatusDep = Annotated[ChangeStatus, Depends(_get_use_case(ChangeStatus))]
 DerivePlateDep = Annotated[DerivePlate, Depends(_get_use_case(DerivePlate))]
 ListChildrenDep = Annotated[ListChildren, Depends(_get_use_case(ListChildren))]
 DeletePlateDep = Annotated[DeletePlate, Depends(_get_use_case(DeletePlate))]
+ExportPlateLayoutDep = Annotated[ExportPlateLayout, Depends(_get_use_case(ExportPlateLayout))]
 PlateReadModelServiceDep = Annotated[
     PlateReadModelService, Depends(_get_use_case(PlateReadModelService))
 ]

@@ -17,6 +17,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -27,12 +33,14 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { Copy, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
+import { showError } from "@/shared/lib/toast";
+import { Copy, Download, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useChangeStatus, useDerivePlate, usePlate, usePlateChildren } from "../hooks/use-plates";
 import { useStorageLocations } from "../hooks/use-storage-locations";
+import { downloadPlateLayout } from "../lib/download-plate-layout";
 import type { PlateType, WellMapping } from "../types/plates";
 import { plateTypeLabels } from "../types/plates";
 import { WellMappingDialog } from "./well-mapping-dialog";
@@ -185,6 +193,14 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
   const [deriveOpen, setDeriveOpen] = useState(false);
   const changeStatus = useChangeStatus(plateId);
 
+  const handleExport = async (id: string, format: "csv" | "xlsx") => {
+    try {
+      await downloadPlateLayout(id, format);
+    } catch (e) {
+      showError(e instanceof Error ? e.message : "Export failed");
+    }
+  };
+
   return (
     <>
       <DetailShell
@@ -212,6 +228,22 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
               <FileUp className="mr-1.5 h-3.5 w-3.5" />
               Import Data
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExport(p.id, "csv")}>
+                  CSV — round-trippable
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExport(p.id, "xlsx")}>
+                  Excel (.xlsx)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
               variant="outline"
               size="sm"

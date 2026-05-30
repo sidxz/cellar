@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from cellar.application.inventory.registered_plates import (
@@ -27,6 +28,11 @@ from cellar.application.inventory.registered_plates import (
     UpdatePlate,
     UpdatePlateCommand,
 )
+from cellar.application.inventory.export_plate_layout import (
+    ExportPlateLayoutQuery,
+    render_csv,
+    render_xlsx,
+)
 from cellar.application.inventory.plate_read_model import (
     MoleculePlateEntry,
     PlateReadModelService,
@@ -40,6 +46,7 @@ from cellar.interface.dependencies import (
     ChangeStatusDep,
     DeletePlateDep,
     DerivePlateDep,
+    ExportPlateLayoutDep,
     GetPlateDep,
     ListChildrenDep,
     ListPlatesDep,
@@ -284,6 +291,40 @@ async def map_wells(
     )
     plate = result_to_response(await uc(command, auth=auth))
     return PlateResponse.from_domain(plate)
+
+
+@router.get("/{plate_id}/export")
+async def export_plate_layout(
+    plate_id: uuid.UUID,
+    auth: AuthDep,
+    uc: ExportPlateLayoutDep,
+    fmt: str = Query("csv", alias="format", pattern="^(csv|xlsx)$"),
+) -> Response:
+    """Export a plate's well-map as a round-trippable CSV/XLSX download.
+
+    Columns match the well-mapping import exactly, with batch UUIDs resolved
+    back to batch numbers — so the file re-imports losslessly.
+    """
+    export = result_to_response(
+        await uc(
+            ExportPlateLayoutQuery(workspace_id=auth.workspace_id, plate_id=plate_id),
+            auth=auth,
+        )
+    )
+    if fmt == "xlsx":
+        content = render_xlsx(export.rows)
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ext = "xlsx"
+    else:
+        content = render_csv(export.rows)
+        media_type = "text/csv"
+        ext = "csv"
+    filename = f"{export.barcode}_well_map.{ext}"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.patch("/{plate_id}/status", response_model=PlateResponse)

@@ -63,3 +63,42 @@ class TestWellRoles:
     async def test_invalid_well_type_rejected(self, client: AsyncClient) -> None:
         resp = await _register(client, well_map={"A1": {"well_type": "bogus"}})
         assert resp.status_code >= 400
+
+
+class TestExport:
+    async def test_csv_export(self, client: AsyncClient) -> None:
+        reg = await _register(
+            client,
+            well_map={
+                "A1": {
+                    "well_type": "negative_control",
+                    "concentration_value": 5.0,
+                    "concentration_unit": "uM",
+                }
+            },
+        )
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        resp = await client.get(f"/api/v1/plates/{plate_id}/export?format=csv")
+        assert resp.status_code == 200, resp.text
+        assert resp.headers["content-type"].startswith("text/csv")
+        assert "attachment" in resp.headers.get("content-disposition", "")
+        body = resp.text
+        # Header order matches the well-mapping import exactly (round-trippable).
+        assert "Well,Batch Number,Concentration,Unit,Role" in body
+        assert "negative_control" in body
+
+    async def test_xlsx_export(self, client: AsyncClient) -> None:
+        reg = await _register(client, well_map={"A1": {"well_type": "blank"}})
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        resp = await client.get(f"/api/v1/plates/{plate_id}/export?format=xlsx")
+        assert resp.status_code == 200, resp.text
+        assert "spreadsheetml" in resp.headers["content-type"]
+        assert resp.content[:2] == b"PK"  # xlsx is a zip archive
+
+    async def test_export_missing_plate_404(self, client: AsyncClient) -> None:
+        resp = await client.get(f"/api/v1/plates/{uuid.uuid4()}/export?format=csv")
+        assert resp.status_code == 404
