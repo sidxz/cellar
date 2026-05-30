@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { flushSync } from "react-dom";
 import { Plot } from "@/shared/lib/plotly";
 import type {
   ClusterAssignment,
@@ -212,10 +213,18 @@ export function ClusterScatter({
       if (!hasSelectionGeometry(ev)) return;
       // Resolve via data-space geometry (robust on scatter + scattergl).
       const ids = selectedIdsFromPlotlyEvent(ev, points);
-      onSelected(ids.length > 0 ? ids : null);
+      // flushSync: plotly_selected fires from Plotly's OWN event emitter, a
+      // non-React context that React 18/19 does not reliably flush — so the
+      // setState in the parent ran but the component did not re-render until an
+      // unrelated event (e.g. window-focus refetch) forced one. flushSync forces
+      // the render now. Safe here: the geometry guard above means we only reach
+      // this for genuine user selections (never the redraw artifacts that fire
+      // during React's commit phase, where flushSync would no-op).
+      flushSync(() => onSelected(ids.length > 0 ? ids : null));
     },
     // Plotly fires plotly_deselect when user double-clicks outside a selection.
-    onDeselect: () => onSelected(null),
+    // Same emitter-context flush requirement as onSelected.
+    onDeselect: () => flushSync(() => onSelected(null)),
     onClick: (ev: any) => {
       const pt = ev?.points?.[0];
       const cd = pt?.customdata;
