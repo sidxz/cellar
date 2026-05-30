@@ -160,9 +160,16 @@ export function ClusterMapView({
   }, [colorMode, colorProtocolId]);
 
   // --- Handlers.
-  const handleLassoSelected = useCallback((ids: string[] | null) => {
-    setLassoedIds(new Set(ids ?? []));
-  }, []);
+  const handleLassoSelected = useCallback(
+    (ids: string[] | null) => {
+      setLassoedIds(new Set(ids ?? []));
+      // When the lasso clears (double-click deselect / empty drag), also drop
+      // any region-pick candidates — otherwise the violet stars stay stuck on
+      // the map with no RegionActionBar left to clear them.
+      if (!ids || ids.length === 0) region.reset();
+    },
+    [region.reset],
+  );
 
   const handlePointClick = useCallback((_moleculeId: string) => {
     // Future: open molecule detail panel.
@@ -176,29 +183,29 @@ export function ClusterMapView({
 
   const handlePickDiverse = useCallback(() => {
     if (lassoedIds.size > 0) region.pick([...lassoedIds], regionN);
-  }, [lassoedIds, regionN, region]);
+  }, [lassoedIds, regionN, region.pick]);
 
   const handleAddPicks = useCallback(() => {
     basket.addMany([...region.pickedIds]);
     region.reset();
-  }, [basket, region]);
+  }, [basket.addMany, region.pickedIds, region.reset]);
 
   const handleAddAll = useCallback(() => {
     basket.addMany([...lassoedIds]);
-  }, [basket, lassoedIds]);
+  }, [basket.addMany, lassoedIds]);
 
   const handleRemoveRegion = useCallback(() => {
     basket.removeMany([...lassoedIds]);
-  }, [basket, lassoedIds]);
+  }, [basket.removeMany, lassoedIds]);
 
   const handleClearRegion = useCallback(() => {
     setLassoedIds(new Set());
     region.reset();
-  }, [region]);
+  }, [region.reset]);
 
   const handleAddRepPicks = useCallback(() => {
     basket.addMany([...repIds]);
-  }, [basket, repIds]);
+  }, [basket.addMany, repIds]);
 
   const handleSave = useCallback(() => {
     if (basket.size > 0) setSaveOpen(true);

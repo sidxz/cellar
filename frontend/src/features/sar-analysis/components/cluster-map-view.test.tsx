@@ -19,10 +19,24 @@ vi.mock("@/shared/components/ui/resizable", () => ({
 
 vi.mock("@/shared/lib/plotly", () => ({ Plot: () => <div data-testid="plotly" /> }));
 
-// Stub ClusterScatter: clicking it simulates a lasso of {a, b}.
+// Stub ClusterScatter: clicking the surface simulates a lasso of {a, b};
+// the deselect button simulates Plotly's empty-drag / double-click deselect
+// (onSelected(null)).
 vi.mock("./cluster-scatter", () => ({
   ClusterScatter: ({ onSelected }: any) => (
-    <div data-testid="cluster-scatter" onClick={() => onSelected(["a", "b"])} />
+    <div>
+      <div
+        data-testid="cluster-scatter"
+        onClick={() => onSelected(["a", "b"])}
+      />
+      <button
+        type="button"
+        data-testid="deselect"
+        onClick={() => onSelected(null)}
+      >
+        deselect
+      </button>
+    </div>
   ),
 }));
 
@@ -67,7 +81,9 @@ vi.mock("@/features/sar-analysis/hooks/use-umap-cluster", () => ({
   })),
 }));
 
-// Region pick hook — idle by default.
+// Region pick hook — idle by default. `regionReset` is a stable spy (hoisted)
+// so a test can assert reset is called when the lasso clears.
+const { regionReset } = vi.hoisted(() => ({ regionReset: vi.fn() }));
 vi.mock("@/features/sar-analysis/hooks/use-region-diverse-pick", () => ({
   useRegionDiversePick: vi.fn(() => ({
     pickedIds: new Set<string>(),
@@ -75,7 +91,7 @@ vi.mock("@/features/sar-analysis/hooks/use-region-diverse-pick", () => ({
     error: null,
     active: false,
     pick: vi.fn(),
-    reset: vi.fn(),
+    reset: regionReset,
   })),
 }));
 
@@ -104,7 +120,10 @@ const wrapper = ({ children }: any) => {
 };
 
 describe("ClusterMapView", () => {
-  beforeEach(() => window.localStorage.clear());
+  beforeEach(() => {
+    window.localStorage.clear();
+    regionReset.mockClear();
+  });
 
   it("renders the scatter, basket pane, and split group", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
@@ -136,6 +155,16 @@ describe("ClusterMapView", () => {
     expect(
       screen.getByRole("button", { name: /save as collection/i }),
     ).not.toBeDisabled();
+  });
+
+  it("clearing the lasso (deselect) resets the region pick", () => {
+    render(<ClusterMapView {...defaultProps} />, { wrapper });
+    fireEvent.click(screen.getByTestId("cluster-scatter"));
+    expect(screen.getByText(/2 in region/i)).toBeInTheDocument();
+    // Deselect → onSelected(null): region pick must reset and the bar vanish.
+    fireEvent.click(screen.getByTestId("deselect"));
+    expect(regionReset).toHaveBeenCalled();
+    expect(screen.queryByText(/in region/i)).not.toBeInTheDocument();
   });
 
   it("opens the SaveSelectionDialog from the basket bar once non-empty", () => {
