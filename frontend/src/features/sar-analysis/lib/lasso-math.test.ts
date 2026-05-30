@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pointInPolygon, idsInsidePolygon } from "./lasso-math";
+import { pointInPolygon, idsInsidePolygon, selectedIdsFromPlotlyEvent } from "./lasso-math";
 
 const SQUARE = [
   { x: 0, y: 0 },
@@ -39,5 +39,37 @@ describe("idsInsidePolygon", () => {
     ];
     const ids = idsInsidePolygon(points, SQUARE);
     expect(new Set(ids)).toEqual(new Set(["a", "c"]));
+  });
+});
+
+describe("selectedIdsFromPlotlyEvent", () => {
+  const points = [
+    { moleculeId: "a", x: 0, y: 0 },
+    { moleculeId: "b", x: 10, y: 10 },
+  ];
+
+  it("resolves ids from a lasso polygon (lassoPoints, data space)", () => {
+    const ev = { lassoPoints: { x: [-1, 1, 1, -1], y: [-1, -1, 1, 1] } };
+    expect(selectedIdsFromPlotlyEvent(ev, points)).toEqual(["a"]);
+  });
+
+  it("resolves ids from a box selection (range corners)", () => {
+    const ev = { range: { x: [-1, 1], y: [-1, 1] } };
+    expect(selectedIdsFromPlotlyEvent(ev, points)).toEqual(["a"]);
+  });
+
+  it("falls back to pointNumber indexing on the base trace", () => {
+    const ev = { points: [{ curveNumber: 0, pointNumber: 1 }] };
+    expect(selectedIdsFromPlotlyEvent(ev, points)).toEqual(["b"]);
+  });
+
+  it("ignores non-base-trace points in the fallback path", () => {
+    const ev = { points: [{ curveNumber: 1, pointNumber: 0 }] };
+    expect(selectedIdsFromPlotlyEvent(ev, points)).toEqual([]);
+  });
+
+  it("returns [] for null / empty event", () => {
+    expect(selectedIdsFromPlotlyEvent(null, points)).toEqual([]);
+    expect(selectedIdsFromPlotlyEvent({}, points)).toEqual([]);
   });
 });

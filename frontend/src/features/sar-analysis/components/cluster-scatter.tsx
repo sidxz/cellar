@@ -11,6 +11,7 @@ import {
   colorForPoint,
   type ColorOption,
 } from "@/features/sar-analysis/lib/cluster-palette";
+import { selectedIdsFromPlotlyEvent } from "@/features/sar-analysis/lib/lasso-math";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -183,18 +184,8 @@ export function ClusterScatter({
     // on curveNumber === 1 don't carry molecule identity in any structured
     // way and would double-count selections.
     onSelected: (ev: any) => {
-      if (!ev || !Array.isArray(ev.points) || ev.points.length === 0) {
-        onSelected(null);
-        return;
-      }
-      const ids = ev.points
-        .filter((p: any) => p?.curveNumber === 0)
-        .map((p: any) => {
-          const idx = p?.pointNumber ?? p?.pointIndex;
-          if (typeof idx !== "number") return undefined;
-          return points[idx]?.moleculeId;
-        })
-        .filter((id: string | undefined): id is string => Boolean(id));
+      // Resolve via data-space geometry (robust on scatter + scattergl).
+      const ids = selectedIdsFromPlotlyEvent(ev, points);
       onSelected(ids.length > 0 ? ids : null);
     },
     // Plotly fires plotly_deselect when user double-clicks outside a selection.
