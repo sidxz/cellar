@@ -37,7 +37,11 @@ describe("useRegionDiversePick", () => {
   });
 
   it("pick() runs MaxMin over the subset and returns representative ids", async () => {
-    const startFn = vi.fn(async () => ({ result: resultDto, job: null }));
+    // Typed param so mock.calls[0][0] is inspectable under strict tsc.
+    const startFn = vi.fn(async (_input: { picker: string; molecule_ids?: string[]; n?: number | null }) => ({
+      result: resultDto,
+      job: null,
+    }));
     const { result } = renderHook(() => useRegionDiversePick({ startFn }), {
       wrapper,
     });

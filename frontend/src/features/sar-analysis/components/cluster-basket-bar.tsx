@@ -30,12 +30,7 @@ export function ClusterBasketBar({
         </span>
       )}
       <span className="ml-auto flex items-center gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onAddRepPicks}
-          disabled={repCount === 0}
-        >
+        <Button size="sm" variant="outline" onClick={onAddRepPicks} disabled={repCount === 0}>
           Add Diversify picks ({repCount})
         </Button>
         <Button size="sm" onClick={onSave} disabled={count === 0}>

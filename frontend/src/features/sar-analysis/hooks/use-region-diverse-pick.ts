@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-import { useUmapCluster, type UseUmapClusterInput } from "./use-umap-cluster";
+import { type UseUmapClusterInput, useUmapCluster } from "./use-umap-cluster";
 
 export interface UseRegionDiversePickOptions {
   /** Test override forwarded to useUmapCluster. */
@@ -28,12 +28,8 @@ export interface RegionDiversePick {
  * (which handles inline + async-poll) and surfaces only the representative ids.
  * The throwaway embedding of a small lasso region is cheap; we ignore the coords.
  */
-export function useRegionDiversePick(
-  opts: UseRegionDiversePickOptions = {},
-): RegionDiversePick {
-  const [request, setRequest] = useState<{ ids: string[]; n: number } | null>(
-    null,
-  );
+export function useRegionDiversePick(opts: UseRegionDiversePickOptions = {}): RegionDiversePick {
+  const [request, setRequest] = useState<{ ids: string[]; n: number } | null>(null);
 
   const { result, loading, error } = useUmapCluster({
     moleculeIds: request?.ids,
@@ -49,10 +45,7 @@ export function useRegionDiversePick(
     [result],
   );
 
-  const pick = useCallback(
-    (ids: string[], n: number) => setRequest({ ids, n }),
-    [],
-  );
+  const pick = useCallback((ids: string[], n: number) => setRequest({ ids, n }), []);
   const reset = useCallback(() => setRequest(null), []);
 
   return {

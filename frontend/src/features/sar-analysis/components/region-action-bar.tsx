@@ -20,9 +20,7 @@ interface RegionActionBarProps {
 export function RegionActionBar(props: RegionActionBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
-      <span className="font-medium text-foreground">
-        {props.regionCount} in region
-      </span>
+      <span className="font-medium text-foreground">{props.regionCount} in region</span>
       <span className="text-border">·</span>
 
       <Label htmlFor="region-n" className="text-muted-foreground">
@@ -46,11 +44,7 @@ export function RegionActionBar(props: RegionActionBarProps) {
         {props.picking ? "Picking…" : "Pick diverse"}
       </Button>
 
-      <Button
-        size="sm"
-        onClick={props.onAddPicks}
-        disabled={props.pickCount === 0}
-      >
+      <Button size="sm" onClick={props.onAddPicks} disabled={props.pickCount === 0}>
         Add picks ({props.pickCount})
       </Button>
       <Button size="sm" variant="outline" onClick={props.onAddAll}>
@@ -59,12 +53,7 @@ export function RegionActionBar(props: RegionActionBarProps) {
       <Button size="sm" variant="outline" onClick={props.onRemove}>
         Remove
       </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={props.onClear}
-        className="text-muted-foreground"
-      >
+      <Button size="sm" variant="ghost" onClick={props.onClear} className="text-muted-foreground">
         Clear
       </Button>
     </div>

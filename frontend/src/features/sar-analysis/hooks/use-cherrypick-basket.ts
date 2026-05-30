@@ -64,10 +64,7 @@ export function useCherrypickBasket(collectionId?: string): CherrypickBasket {
     [key],
   );
 
-  const add = useCallback(
-    (id: string) => mutate((p) => new Set(p).add(id)),
-    [mutate],
-  );
+  const add = useCallback((id: string) => mutate((p) => new Set(p).add(id)), [mutate]);
   const addMany = useCallback(
     (arr: string[]) =>
       mutate((p) => {
