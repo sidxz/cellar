@@ -235,6 +235,15 @@ export function ClusterScatter({
         yaxis: { showgrid: false, zeroline: false, visible: false },
         dragmode: "lasso",
         showlegend: false,
+        // Preserve the user's lasso selection across Plotly.react() redraws.
+        // react-plotly.js redraws on every render (our data/layout are new
+        // objects each time); without a stable uirevision, each redraw clears
+        // the selection and emits a spurious empty plotly_selected + a
+        // plotly_deselect, which wiped lassoedIds a frame after it was set.
+        // selectionrevision defaults to uirevision, so a constant value here
+        // keeps the selection (and zoom/pan) stable. See plotly.js layout ref
+        // + react-plotly.js#147. Bump this string to intentionally reset state.
+        uirevision: "cluster-map",
       }}
       config={{
         displaylogo: false,

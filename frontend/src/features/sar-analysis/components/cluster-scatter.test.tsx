@@ -6,7 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 // try to load the browser-only Plotly bundle.
 vi.mock("@/shared/lib/plotly", () => ({
   Plot: (props: any) => (
-    <div data-testid="plotly" data-traces={String(props.data?.length ?? 0)} />
+    <div
+      data-testid="plotly"
+      data-traces={String(props.data?.length ?? 0)}
+      data-uirevision={String(props.layout?.uirevision ?? "")}
+    />
   ),
 }));
 
@@ -43,5 +47,24 @@ describe("ClusterScatter", () => {
       />,
     );
     expect(screen.getByTestId("plotly").dataset.traces).toBe("1");
+  });
+
+  it("sets a stable uirevision so the lasso selection survives redraws", () => {
+    // react-plotly.js redraws on every render; without a constant uirevision,
+    // each redraw clears the selection and fires spurious deselect/empty-select
+    // events that wipe the user's lasso. This locks the fix.
+    render(
+      <ClusterScatter
+        points={[{ moleculeId: "a", x: 0, y: 0 }]}
+        clusters={[{ moleculeId: "a", clusterId: 0 }]}
+        representatives={[]}
+        colorMode={{ mode: "none" }}
+        activityPic50={{}}
+        scaffoldByMol={{}}
+        onSelected={() => {}}
+        onPointClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("plotly").dataset.uirevision).toBe("cluster-map");
   });
 });
