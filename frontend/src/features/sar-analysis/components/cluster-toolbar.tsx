@@ -87,9 +87,8 @@ export function ClusterToolbar(props: ClusterToolbarProps) {
         variant={props.diversifyDirty ? "default" : "outline"}
         onClick={props.onDiversify}
       >
-        {props.diversifyDirty ? "Apply changes" : "Recompute"}
+        {props.diversifyDirty ? "Apply changes" : "Diversify"}
       </Button>
-
     </div>
   );
 }

@@ -116,8 +116,10 @@ describe("ClusterMapView", () => {
 
   it("renders the Diversify button and an empty basket bar", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
+    // Exact-match: "Diversify" must not also match the basket bar's
+    // "Add Diversify picks (N)" button (getByRole throws on multiple matches).
     expect(
-      screen.getByRole("button", { name: /diversify/i }),
+      screen.getByRole("button", { name: "Diversify" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/basket: 0/i)).toBeInTheDocument();
     expect(
