@@ -11,7 +11,10 @@ import {
   colorForPoint,
   type ColorOption,
 } from "@/features/sar-analysis/lib/cluster-palette";
-import { selectedIdsFromPlotlyEvent } from "@/features/sar-analysis/lib/lasso-math";
+import {
+  hasSelectionGeometry,
+  selectedIdsFromPlotlyEvent,
+} from "@/features/sar-analysis/lib/lasso-math";
 import { buildOverlayTraces } from "@/features/sar-analysis/lib/cluster-overlay";
 
 // ---------------------------------------------------------------------------
@@ -201,6 +204,12 @@ export function ClusterScatter({
     // on curveNumber === 1 don't carry molecule identity in any structured
     // way and would double-count selections.
     onSelected: (ev: any) => {
+      // react-plotly.js calls Plotly.react() on every render (our data/layout
+      // are new objects each time), and each redraw RE-EMITS plotly_selected
+      // with an empty, geometry-less payload. Acting on that artifact would wipe
+      // the selection the user just made — so ignore geometry-less events. A
+      // genuine clear arrives via onDeselect (double-click).
+      if (!hasSelectionGeometry(ev)) return;
       // Resolve via data-space geometry (robust on scatter + scattergl).
       const ids = selectedIdsFromPlotlyEvent(ev, points);
       onSelected(ids.length > 0 ? ids : null);

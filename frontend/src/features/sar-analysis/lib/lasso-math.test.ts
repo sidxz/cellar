@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { pointInPolygon, idsInsidePolygon, selectedIdsFromPlotlyEvent } from "./lasso-math";
+import {
+  pointInPolygon,
+  idsInsidePolygon,
+  selectedIdsFromPlotlyEvent,
+  hasSelectionGeometry,
+} from "./lasso-math";
 
 const SQUARE = [
   { x: 0, y: 0 },
@@ -71,5 +76,28 @@ describe("selectedIdsFromPlotlyEvent", () => {
   it("returns [] for null / empty event", () => {
     expect(selectedIdsFromPlotlyEvent(null, points)).toEqual([]);
     expect(selectedIdsFromPlotlyEvent({}, points)).toEqual([]);
+  });
+});
+
+describe("hasSelectionGeometry", () => {
+  it("is true for a lasso event (lassoPoints present)", () => {
+    expect(
+      hasSelectionGeometry({ lassoPoints: { x: [0, 1, 2], y: [0, 1, 2] } }),
+    ).toBe(true);
+  });
+
+  it("is true for a box event (range present)", () => {
+    expect(hasSelectionGeometry({ range: { x: [0, 1], y: [0, 1] } })).toBe(true);
+  });
+
+  it("is FALSE for the geometry-less redraw artifact (empty points, no lassoPoints/range)", () => {
+    // This is the exact shape Plotly re-emits after a Plotly.react redraw.
+    expect(hasSelectionGeometry({ points: [] } as any)).toBe(false);
+  });
+
+  it("is false for null / undefined / empty", () => {
+    expect(hasSelectionGeometry(null)).toBe(false);
+    expect(hasSelectionGeometry(undefined)).toBe(false);
+    expect(hasSelectionGeometry({})).toBe(false);
   });
 });

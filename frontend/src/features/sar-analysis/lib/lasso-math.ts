@@ -84,3 +84,21 @@ export function selectedIdsFromPlotlyEvent(
 
   return [];
 }
+
+/**
+ * True when a `plotly_selected` event carries real selection geometry — a lasso
+ * polygon (`lassoPoints`) or a box range (`range`).
+ *
+ * WHY THIS EXISTS: react-plotly.js calls `Plotly.react()` on every update where
+ * `data`/`layout`/`config` identity changed (which is every React render here,
+ * since those are rebuilt fresh). Each such redraw RE-EMITS `plotly_selected`
+ * with an empty, geometry-less payload (`{ points: [], selections: [] }`).
+ * Acting on that artifact wipes the real selection the user just made. A genuine
+ * user selection always carries `lassoPoints`/`range`; a genuine clear comes via
+ * `plotly_deselect`. So: ignore `plotly_selected` events that have no geometry.
+ */
+export function hasSelectionGeometry(
+  ev: PlotlySelectionEvent | null | undefined,
+): boolean {
+  return Boolean(ev && (ev.lassoPoints || ev.range));
+}
