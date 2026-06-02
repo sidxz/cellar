@@ -1001,3 +1001,13 @@ git commit -m "test(tagging): API tests for admin tag operations"
 **Delivered:** admins can rename, merge, and delete tags through `/api/v1/tags/{id}` (PATCH / POST `/merge` / DELETE), all audited via `TagRenamed`/`TagMerged`/`TagDeleted`; merge re-points every link across all four taggable types and removes the source tag.
 
 **Next:** Phase 5 (frontend: chips, autocomplete editor, filter control, management page wiring rename/merge/delete + orval regen).
+
+---
+
+## Implementation Notes — execution findings (2026-06-02)
+
+- **`RenameTag` needed `self._uow.track(tag)`** (the plan's draft omitted it). It's required so the `TagRenamed` event is collected on commit (matches the established Phase-2 pattern; idempotent in production where `find_by_id_in_workspace` already tracks). Added during P4-2.
+- **Audit mapping (confirmed):** the catch-all `AuditEventHandler` records `TagMerged`→`OperationType.MERGE` and `TagRenamed`/`TagDeleted`→`DATA_ENTRY` with no per-event registration.
+- A no-op rename (new name == current) emits no event (the aggregate's `rename` guard) → no audit row; intentional.
+
+**Final state:** 5 implementation commits (`041e6929`…`7ee6952e`). Tagging admin suite: 9 unit + 2 integration + 7 API = green; full backend unit suite **2603 passed, 0 failed**. The 5 pre-existing non-tagging failures (backlog) are unchanged. Final review: READY TO MERGE.
