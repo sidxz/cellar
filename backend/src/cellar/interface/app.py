@@ -371,6 +371,12 @@ def create_app() -> FastAPI:
 
     app.include_router(admin_delete_router)
 
+    from cellar.interface.routes.tags import router as tags_router
+    from cellar.interface.routes.tags import assignment_router as tag_assignment_router
+
+    app.include_router(tags_router)
+    app.include_router(tag_assignment_router)
+
     # Health check (unauthenticated)
     @app.get("/health")
     async def health() -> dict[str, str]:
