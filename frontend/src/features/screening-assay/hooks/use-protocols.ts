@@ -24,15 +24,32 @@ const protocolHooks = createCrudHooks<
   queryKey: PROTOCOLS_KEY,
 });
 
-/** Custom list — supports optional projectId filter. */
-export function useProtocols(projectId?: string) {
+/**
+ * Custom list — supports optional projectId filter and tag filtering.
+ *
+ * - `projectId` scopes results to a single project.
+ * - `tags` + `tagLogic` filter protocols by assigned tags (passed to the
+ *   backend `tags` / `tag_logic` query params).
+ */
+export function useProtocols(
+  projectId?: string,
+  options?: { tags?: string[]; tagLogic?: "any" | "all" },
+) {
+  const tags = options?.tags?.length ? options.tags : null;
   return useQuery({
-    queryKey: projectId ? [...PROTOCOLS_KEY, { projectId }] : PROTOCOLS_KEY,
+    queryKey: [
+      ...PROTOCOLS_KEY,
+      ...(projectId ? [{ projectId }] : []),
+      ...(tags ? [{ tags, tagLogic: options?.tagLogic ?? "any" }] : []),
+    ],
     queryFn: async () => {
+      const params: Record<string, unknown> = {};
+      if (projectId) params.project_id = projectId;
+      if (tags) { params.tags = tags; params.tag_logic = options?.tagLogic ?? "any"; }
       const resp = await customInstance<Protocol[] | { items: Protocol[] }>({
         url: "/api/v1/protocols",
         method: "GET",
-        ...(projectId ? { params: { project_id: projectId } } : {}),
+        ...(Object.keys(params).length ? { params } : {}),
       });
       return Array.isArray(resp) ? resp : resp.items;
     },

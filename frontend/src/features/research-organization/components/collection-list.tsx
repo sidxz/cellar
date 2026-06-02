@@ -11,6 +11,7 @@ import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { MemberName } from "@/shared/components/entity-name";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
 import { useCollections } from "../hooks/use-collections";
 import { useProjects } from "../hooks/use-projects";
 import { BooleanCollectionsDialog } from "./boolean-collections-dialog";
@@ -25,8 +26,10 @@ interface CollectionListProps {
 export function CollectionList({ projectId }: CollectionListProps) {
   const router = useRouter();
   const { user } = useAuthz();
+  const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
   const { data: collections, isLoading, error } = useCollections(
     projectId ? [projectId] : undefined,
+    { tags: tagFilter.tagIds, tagLogic: tagFilter.tagLogic },
   );
   const { data: projects } = useProjects();
   const [createOpen, setCreateOpen] = useState(false);
@@ -104,6 +107,7 @@ export function CollectionList({ projectId }: CollectionListProps) {
     <div>
       {/* Toolbar */}
       <div className="mb-4 flex items-center justify-end gap-2">
+        <TagFilter value={tagFilter} onChange={setTagFilter} />
         <Button
           variant={myOnly ? "secondary" : "outline"}
           size="sm"

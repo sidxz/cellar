@@ -12,13 +12,18 @@ import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { MemberName } from "@/shared/components/entity-name";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
 import { useProjects } from "../hooks/use-projects";
 import { CreateProjectDialog } from "./create-project-dialog";
 import type { Project } from "../types";
 
 export function ProjectListPage() {
   const router = useRouter();
-  const { data: projects, isLoading, error } = useProjects();
+  const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
+  const { data: projects, isLoading, error } = useProjects({
+    tags: tagFilter.tagIds,
+    tagLogic: tagFilter.tagLogic,
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -82,6 +87,7 @@ export function ProjectListPage() {
 
       {/* Toolbar */}
       <div className="mb-4 flex items-center gap-3">
+        <TagFilter value={tagFilter} onChange={setTagFilter} />
         <div className="flex items-center gap-2">
           <Switch
             id="show-archived"

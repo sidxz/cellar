@@ -24,17 +24,30 @@ const collectionHooks = createCrudHooks<Collection, CreateCollectionInput, Updat
  * - `includeAll = true` overrides project scoping and returns the
  *   workspace-wide list — backs the per-picker "Show all (across projects)"
  *   toggle for chemists doing scaffold-hop / cross-program lookups.
+ * - `tags` + `tagLogic` filter collections by assigned tags (passed to
+ *   the backend `tags` / `tag_logic` query params).
  */
-export function useCollections(projectIds?: string[], options?: { includeAll?: boolean }) {
+export function useCollections(
+  projectIds?: string[],
+  options?: { includeAll?: boolean; tags?: string[]; tagLogic?: "any" | "all" },
+) {
   const includeAll = options?.includeAll ?? false;
   const scope = !includeAll && projectIds && projectIds.length > 0 ? [...projectIds].sort() : null;
+  const tags = options?.tags?.length ? options.tags : null;
   return useQuery({
-    queryKey: scope ? [...COLLECTIONS_KEY, { projectIds: scope }] : COLLECTIONS_KEY,
+    queryKey: [
+      ...COLLECTIONS_KEY,
+      ...(scope ? [{ projectIds: scope }] : []),
+      ...(tags ? [{ tags, tagLogic: options?.tagLogic ?? "any" }] : []),
+    ],
     queryFn: async () => {
+      const params: Record<string, unknown> = {};
+      if (scope) params.project_ids = scope;
+      if (tags) { params.tags = tags; params.tag_logic = options?.tagLogic ?? "any"; }
       const resp = await customInstance<Collection[] | { items: Collection[] }>({
         url: "/api/v1/collections",
         method: "GET",
-        ...(scope ? { params: { project_ids: scope } } : {}),
+        ...(Object.keys(params).length ? { params } : {}),
       });
       return Array.isArray(resp) ? resp : resp.items;
     },
