@@ -9,6 +9,7 @@ import {
   FlaskConical,
   FlaskRound,
   FolderKanban,
+  FormInput,
   Grid3x3,
   KeyRound,
   LayoutGrid,
@@ -19,9 +20,9 @@ import {
   Settings,
   ShieldCheck,
   SlidersHorizontal,
+  Tag,
   TestTubes,
   Truck,
-  FormInput,
 } from "lucide-react";
 
 export interface NavItem {
@@ -87,6 +88,7 @@ export const navigation: NavGroup[] = [
         children: [
           { title: "Vocabularies", href: "/admin/vocabularies", icon: BookOpen },
           { title: "Ontology Slots", href: "/admin/ontology-slots", icon: BookOpen },
+          { title: "Tags", href: "/admin/tags", icon: Tag },
         ],
       },
       {
@@ -105,9 +107,7 @@ export const navigation: NavGroup[] = [
         title: "Data Import",
         href: "/admin/data-import/cdd",
         icon: DatabaseZap,
-        children: [
-          { title: "CDD Vault", href: "/admin/data-import/cdd", icon: DatabaseZap },
-        ],
+        children: [{ title: "CDD Vault", href: "/admin/data-import/cdd", icon: DatabaseZap }],
       },
     ],
   },
