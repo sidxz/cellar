@@ -51,6 +51,8 @@ class ListCollectionsQuery(Query):
     # Keyset cursor: (updated_at, id) of the last row of the prior page.
     cursor: tuple[datetime, uuid.UUID] | None = None
     limit: int | None = None
+    tags: list[uuid.UUID] | None = None
+    tag_logic: str = "any"
 
 
 class ListCollections:
@@ -70,6 +72,8 @@ class ListCollections:
                 project_ids=list(input.project_ids) if input.project_ids else None,
                 cursor=input.cursor,
                 limit=fetch_limit,
+                tags=input.tags,
+                tag_logic=input.tag_logic,
             )
 
             next_cursor: str | None = None

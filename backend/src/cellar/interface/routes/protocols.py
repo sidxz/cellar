@@ -430,6 +430,8 @@ async def list_protocols(
     project_id: uuid.UUID | None = Query(default=None),
     cursor: str | None = None,
     limit: int | None = None,
+    tags: list[uuid.UUID] | None = Query(default=None),
+    tag_logic: str = Query(default="any"),
 ) -> PaginatedResponse[ProtocolResponse]:
     parsed_cursor = parse_cursor(cursor)
     clamped_limit = clamp_limit(limit)
@@ -440,6 +442,8 @@ async def list_protocols(
                 project_id=project_id,
                 cursor_id=parsed_cursor,
                 limit=clamped_limit,
+                tags=tags,
+                tag_logic=tag_logic,
             ),
             auth=auth,
         )
@@ -453,6 +457,8 @@ async def list_protocols(
             workspace_id=auth.workspace_id,
             cursor_id=parsed_cursor,
             limit=clamped_limit,
+            tags=tags,
+            tag_logic=tag_logic,
         ),
         auth=auth,
     )

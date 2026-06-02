@@ -175,12 +175,16 @@ async def list_collections(
     project_ids: list[uuid.UUID] | None = Query(default=None),
     cursor: str | None = None,
     limit: int | None = None,
+    tags: list[uuid.UUID] | None = Query(default=None),
+    tag_logic: str = Query(default="any"),
 ) -> PaginatedResponse[CollectionResponse]:
     query = ListCollectionsQuery(
         workspace_id=auth.workspace_id,
         project_ids=tuple(project_ids) if project_ids else None,
         cursor=parse_ts_cursor(cursor),
         limit=clamp_limit(limit),
+        tags=tags,
+        tag_logic=tag_logic,
     )
     page = result_to_response(await use_case(query, auth=auth))
     return PaginatedResponse(

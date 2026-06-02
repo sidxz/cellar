@@ -19,6 +19,12 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     RunModel,
     protocol_projects,
 )
+from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
+    ProjectTagLinkModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
+    tag_filter_subquery,
+)
 
 
 class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
@@ -65,12 +71,22 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
         *,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
     ) -> list[Project]:
         stmt = (
             select(ProjectModel)
             .where(ProjectModel.workspace_id == workspace_id)
-            .order_by(ProjectModel.id)
         )
+        if tags:
+            stmt = stmt.where(
+                ProjectModel.id.in_(
+                    tag_filter_subquery(
+                        ProjectTagLinkModel, "project_id", tags, match_all=tag_logic == "all"
+                    )
+                )
+            )
+        stmt = stmt.order_by(ProjectModel.id)
         if cursor_id is not None:
             stmt = stmt.where(ProjectModel.id > cursor_id)
         if limit is not None:

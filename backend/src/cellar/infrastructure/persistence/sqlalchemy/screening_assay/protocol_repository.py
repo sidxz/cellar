@@ -38,6 +38,12 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     ReadoutDefinitionModel,
     protocol_projects,
 )
+from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
+    ProtocolTagLinkModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
+    tag_filter_subquery,
+)
 
 
 class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]):
@@ -80,13 +86,23 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         *,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
     ) -> list[Protocol]:
         """List protocols in a workspace, ordered by id for stable cursor paging."""
         stmt = (
             select(ProtocolModel)
             .where(ProtocolModel.workspace_id == workspace_id)
-            .order_by(ProtocolModel.id)
         )
+        if tags:
+            stmt = stmt.where(
+                ProtocolModel.id.in_(
+                    tag_filter_subquery(
+                        ProtocolTagLinkModel, "protocol_id", tags, match_all=tag_logic == "all"
+                    )
+                )
+            )
+        stmt = stmt.order_by(ProtocolModel.id)
         if cursor_id is not None:
             stmt = stmt.where(ProtocolModel.id > cursor_id)
         if limit is not None:
@@ -175,6 +191,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         *,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
     ) -> list[Protocol]:
         """Return protocols linked to a project, ordered by id for stable cursor paging."""
         subq = select(protocol_projects.c.protocol_id).where(
@@ -186,8 +204,16 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 ProtocolModel.workspace_id == workspace_id,
                 ProtocolModel.id.in_(subq),
             )
-            .order_by(ProtocolModel.id)
         )
+        if tags:
+            stmt = stmt.where(
+                ProtocolModel.id.in_(
+                    tag_filter_subquery(
+                        ProtocolTagLinkModel, "protocol_id", tags, match_all=tag_logic == "all"
+                    )
+                )
+            )
+        stmt = stmt.order_by(ProtocolModel.id)
         if cursor_id is not None:
             stmt = stmt.where(ProtocolModel.id > cursor_id)
         if limit is not None:

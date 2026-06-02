@@ -45,6 +45,8 @@ class ListProjectsQuery(Query):
     workspace_id: uuid.UUID
     cursor_id: uuid.UUID | None = None
     limit: int | None = None
+    tags: list[uuid.UUID] | None = None
+    tag_logic: str = "any"
 
 
 class ListProjects:
@@ -63,6 +65,8 @@ class ListProjects:
                 input.workspace_id,
                 cursor_id=input.cursor_id,
                 limit=fetch_limit,
+                tags=input.tags,
+                tag_logic=input.tag_logic,
             )
 
             next_cursor: str | None = None

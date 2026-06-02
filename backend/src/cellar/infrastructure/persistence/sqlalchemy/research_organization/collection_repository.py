@@ -19,6 +19,12 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CollectionModel,
     CollectionMoleculeModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
+    CollectionTagLinkModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
+    tag_filter_subquery,
+)
 
 
 class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, CollectionModel]):
@@ -103,6 +109,8 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         project_ids: list[uuid.UUID] | None = None,
         cursor: tuple[datetime, uuid.UUID] | None = None,
         limit: int | None = None,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
     ) -> list[Collection]:
         # Subquery for molecule counts
         count_sq = (
@@ -121,6 +129,17 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         )
         if project_ids:
             stmt = stmt.where(CollectionModel.project_id.in_(project_ids))
+        if tags:
+            stmt = stmt.where(
+                CollectionModel.id.in_(
+                    tag_filter_subquery(
+                        CollectionTagLinkModel,
+                        "collection_id",
+                        tags,
+                        match_all=tag_logic == "all",
+                    )
+                )
+            )
         # Newest-activity-first. Keyset on (updated_at, id) so pagination stays
         # stable under the DESC ordering: the next page is everything strictly
         # "older" than the last row of the previous page.

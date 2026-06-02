@@ -88,11 +88,15 @@ async def list_projects(
     use_case: ListProjectsDep,
     cursor: str | None = None,
     limit: int | None = None,
+    tags: list[uuid.UUID] | None = Query(default=None),
+    tag_logic: str = Query(default="any"),
 ) -> PaginatedResponse[ProjectResponse]:
     query = ListProjectsQuery(
         workspace_id=auth.workspace_id,
         cursor_id=parse_cursor(cursor),
         limit=clamp_limit(limit),
+        tags=tags,
+        tag_logic=tag_logic,
     )
     page = result_to_response(await use_case(query, auth=auth))
     return PaginatedResponse(
