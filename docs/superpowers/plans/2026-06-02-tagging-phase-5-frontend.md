@@ -704,3 +704,17 @@ git commit -m "feat(tagging-ui): admin tag management page (rename/merge/delete)
 **Deferred (note, don't block):** `orval` regen (needs a live backend) to generate the tag client + drop the stale `tags`/`add_tags`/`remove_tags` types from the molecule models; Playwright E2E (needs the full stack running).
 
 **Delivered:** end-to-end tag UX — key-hued chips, an explicit Key+Value editor, tag filtering on dashboards + advanced search (round-tripping via SavedSearch), and an admin management page — all consistent with Cellar's design system and the standing UX conventions.
+
+---
+
+## Implementation Notes — execution findings (2026-06-02)
+
+- **Tests use `fireEvent`** (the repo convention), NOT `@testing-library/user-event` — an early task added that dep; it was reverted. Don't reintroduce it.
+- **`TagAutocomplete` is a plain `Input` + inline suggestion list** (not a popover-gated combobox) — a truer free-type autocomplete for the separate-fields editor, and testable (the input is always in the DOM).
+- **Palette hoisted** to `shared/lib/category-colors.ts`; `screening-assay/lib/pick-list-colors.ts` re-exports it under the old names (`PICK_LIST_COLORS`/`resolvePickListColor`/`PickListColor`) — zero call-site churn, and `TagChip` stays a pure shared component.
+- **`useProjects` rewritten** from `createCrudHooks.useList` (scalar params only) to a hand-rolled `customInstance`+`useQuery` to support the repeated-array `tags` param. The `["projects"]` query-key base is preserved, so `createCrudHooks` project mutations still invalidate the list (verified across 13 callsites).
+- **`orval` regen deferred** — hand-rolled hooks per the plan (regen needs a live backend; do it at deploy to also drop the stale `tags`/`add_tags`/`remove_tags` molecule-model types).
+- **Pre-existing lint (NOT Phase 5):** the repo's `pnpm lint` (biome) is already red repo-wide (~1105 issues, on `main` too); `compound-detail.tsx` + `collection-detail.tsx` carry pre-existing format/import-order errors. Phase 5's new files are biome-clean. `pnpm build` + `tsc` pass regardless.
+- **Minor deferred:** `TagFilter`'s trigger shows a *selected-tag* count, not a live "N results" number (filtering is live; AG Grid shows row counts) — cosmetic.
+
+**Final state:** 8 implementation commits (`73e97be9`…`7281b900`). `pnpm build` succeeds (34/34 routes incl. `/admin/tags`); `pnpm tsc --noEmit` zero errors; 15 tagging vitest tests pass. Final review: READY TO MERGE.
