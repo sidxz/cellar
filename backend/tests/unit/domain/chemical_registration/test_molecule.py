@@ -20,7 +20,6 @@ from cellar.domain.chemical_registration.events import (
     MoleculeLifecycleChanged,
     MoleculeMerged,
     MoleculeRegistered,
-    MoleculeTagsUpdated,
 )
 from cellar.domain.chemical_registration.mixture_component import MixtureComponent
 from cellar.domain.chemical_registration.molecule import Molecule
@@ -228,12 +227,10 @@ class TestRegisterDisclosed:
             aspirin_structure,
             aspirin_descriptors,
             stereochemistry=Stereochemistry.ACHIRAL,
-            tags=["tool compound"],
             invention_date=date(2024, 1, 15),
             custom_fields={"project": "oncology"},
         )
         assert mol.stereochemistry == Stereochemistry.ACHIRAL
-        assert mol.tags == ["tool compound"]
         assert mol.invention_date == date(2024, 1, 15)
         assert mol.custom_fields == {"project": "oncology"}
 
@@ -336,22 +333,6 @@ class TestInvariants:
                 structure_status=StructureStatus.DISCLOSED,
                 originating_org_id=org_id,
             )
-
-    def test_tombstone_immutability(
-        self,
-        ws_id: uuid.UUID,
-        org_id: uuid.UUID,
-        aspirin_structure: ChemicalStructure,
-        aspirin_descriptors: ComputedDescriptors,
-    ) -> None:
-        mol = _make_disclosed(ws_id, org_id, aspirin_structure, aspirin_descriptors)
-        mol.mark_as_tombstone(
-            merged_into_id=uuid.uuid4(),
-            merge_event_id=uuid.uuid4(),
-            reason="Duplicate",
-        )
-        with pytest.raises(ValidationError, match="tombstone"):
-            mol.update_tags(added=["new_tag"])
 
     def test_tombstone_cannot_be_merged_again(
         self,
@@ -871,69 +852,6 @@ class TestTombstone:
                     registered_by=user_id,
                 )
             )
-
-
-# ---------------------------------------------------------------------------
-# Tags
-# ---------------------------------------------------------------------------
-
-
-class TestTags:
-    def test_update_tags_add(
-        self,
-        ws_id: uuid.UUID,
-        org_id: uuid.UUID,
-        aspirin_structure: ChemicalStructure,
-        aspirin_descriptors: ComputedDescriptors,
-    ) -> None:
-        mol = _make_disclosed(ws_id, org_id, aspirin_structure, aspirin_descriptors)
-        mol.clear_events()
-        mol.update_tags(added=["probe", "backup"])
-        assert "probe" in mol.tags
-        assert "backup" in mol.tags
-
-    def test_update_tags_remove(
-        self,
-        ws_id: uuid.UUID,
-        org_id: uuid.UUID,
-        aspirin_structure: ChemicalStructure,
-        aspirin_descriptors: ComputedDescriptors,
-    ) -> None:
-        mol = _make_disclosed(
-            ws_id, org_id, aspirin_structure, aspirin_descriptors, tags=["probe", "old"]
-        )
-        mol.update_tags(removed=["old"])
-        assert "old" not in mol.tags
-        assert "probe" in mol.tags
-
-    def test_update_tags_emits_event(
-        self,
-        ws_id: uuid.UUID,
-        org_id: uuid.UUID,
-        aspirin_structure: ChemicalStructure,
-        aspirin_descriptors: ComputedDescriptors,
-    ) -> None:
-        mol = _make_disclosed(ws_id, org_id, aspirin_structure, aspirin_descriptors)
-        mol.clear_events()
-        mol.update_tags(added=["new"], removed=["old"])
-        events = mol.collect_events()
-        assert len(events) == 1
-        assert isinstance(events[0], MoleculeTagsUpdated)
-        assert events[0].added_tags == ("new",)
-        assert events[0].removed_tags == ("old",)
-
-    def test_no_duplicate_tags(
-        self,
-        ws_id: uuid.UUID,
-        org_id: uuid.UUID,
-        aspirin_structure: ChemicalStructure,
-        aspirin_descriptors: ComputedDescriptors,
-    ) -> None:
-        mol = _make_disclosed(
-            ws_id, org_id, aspirin_structure, aspirin_descriptors, tags=["probe"]
-        )
-        mol.update_tags(added=["probe"])
-        assert mol.tags.count("probe") == 1
 
 
 # ---------------------------------------------------------------------------

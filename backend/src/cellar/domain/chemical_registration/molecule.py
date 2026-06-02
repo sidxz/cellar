@@ -19,7 +19,6 @@ from cellar.domain.chemical_registration.events import (
     MoleculeLifecycleChanged,
     MoleculeMerged,
     MoleculeRegistered,
-    MoleculeTagsUpdated,
     MoleculeUpdated,
 )
 from cellar.domain.chemical_registration.mixture_component import MixtureComponent
@@ -114,7 +113,6 @@ class Molecule(AggregateRoot):
         registration_status: RegistrationStatus = RegistrationStatus.APPROVED,
         synthesis_status: SynthesisStatus = SynthesisStatus.SYNTHESIZED,
         lifecycle_stage: LifecycleStage = LifecycleStage.REGISTERED,
-        tags: list[str] | None = None,
         invention_date: date | None = None,
         disclosed_at: datetime | None = None,
         disclosed_by: uuid.UUID | None = None,
@@ -148,7 +146,6 @@ class Molecule(AggregateRoot):
         self.registration_status = registration_status
         self.synthesis_status = synthesis_status
         self.lifecycle_stage = lifecycle_stage
-        self.tags: list[str] = list(tags) if tags else []
         self.invention_date = invention_date
         self.disclosed_at = disclosed_at
         self.disclosed_by = disclosed_by
@@ -248,7 +245,6 @@ class Molecule(AggregateRoot):
         sequence: str | None = None,
         registration_status: RegistrationStatus = RegistrationStatus.APPROVED,
         synthesis_status: SynthesisStatus = SynthesisStatus.SYNTHESIZED,
-        tags: list[str] | None = None,
         invention_date: date | None = None,
         custom_fields: dict[str, Any] | None = None,
     ) -> Molecule:
@@ -266,7 +262,6 @@ class Molecule(AggregateRoot):
             structure_status=StructureStatus.DISCLOSED,
             registration_status=registration_status,
             synthesis_status=synthesis_status,
-            tags=tags,
             invention_date=invention_date,
             custom_fields=custom_fields,
         )
@@ -294,7 +289,6 @@ class Molecule(AggregateRoot):
         sequence: str | None = None,
         registration_status: RegistrationStatus = RegistrationStatus.APPROVED,
         synthesis_status: SynthesisStatus = SynthesisStatus.VIRTUAL,
-        tags: list[str] | None = None,
         invention_date: date | None = None,
         custom_fields: dict[str, Any] | None = None,
     ) -> Molecule:
@@ -311,7 +305,6 @@ class Molecule(AggregateRoot):
             structure_status=StructureStatus.UNDISCLOSED,
             registration_status=registration_status,
             synthesis_status=synthesis_status,
-            tags=tags,
             invention_date=invention_date,
             custom_fields=custom_fields,
         )
@@ -471,33 +464,6 @@ class Molecule(AggregateRoot):
     @property
     def is_tombstone(self) -> bool:
         return self.merged_into_id is not None
-
-    # ------------------------------------------------------------------
-    # Mutations — tags
-    # ------------------------------------------------------------------
-
-    def update_tags(
-        self, *, added: list[str] | None = None, removed: list[str] | None = None
-    ) -> None:
-        self._guard_tombstone()
-        added = added or []
-        removed = removed or []
-        for tag in removed:
-            if tag in self.tags:
-                self.tags.remove(tag)
-        for tag in added:
-            if tag not in self.tags:
-                self.tags.append(tag)
-        self.updated_at = datetime.now(UTC)
-        self.register_event(
-            MoleculeTagsUpdated(
-                aggregate_id=self.id,
-                aggregate_type="Molecule",
-                workspace_id=self.workspace_id,
-                added_tags=tuple(added),
-                removed_tags=tuple(removed),
-            )
-        )
 
     # ------------------------------------------------------------------
     # Mutations — predicted properties

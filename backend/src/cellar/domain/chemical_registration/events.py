@@ -46,12 +46,6 @@ class MoleculeStructureCorrected(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MoleculeTagsUpdated(DomainEvent):
-    added_tags: tuple[str, ...]
-    removed_tags: tuple[str, ...]
-
-
-@dataclass(frozen=True, kw_only=True)
 class DisclosureRequested(DomainEvent):
     molecule_id: uuid.UUID
     disclosing_org_id: uuid.UUID | None
