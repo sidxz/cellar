@@ -523,3 +523,17 @@ git commit -m "feat(tagging): migration 048 — drop legacy molecules.tags colum
 **Delivered:** tags are filterable through the molecule advanced search (round-tripping via SavedSearch with no schema change) and via `tags`/`tag_logic` on the project/collection/protocol lists; the legacy `molecules.tags` column and its read/write path are fully retired — the tagging system is now the single source of truth.
 
 **Next:** Phase 4 (admin: rename/merge/delete) and Phase 5 (frontend: chips, editor, filter control, management page + orval regen to drop the stale `tags`/`add_tags`/`remove_tags` types).
+
+---
+
+## Implementation Notes — execution findings (2026-06-02)
+
+- **F2** also threaded `tags`/`tag_logic` through `application/screening/manage_protocol.py` (where `ListProtocolsByProjectQuery` + the protocol use cases live) — one more file than the plan listed. Protocols filter on both `find_by_workspace` and `find_by_project`; the by-project path is wired but its dedicated repo test was deferred (identical helper to the tested by-workspace path).
+- **R3** removed the Phase-1 `TestBackfill` class from `tests/integration/test_tagging.py` — necessary (it wrote to the now-dropped `molecules.tags`) and safe: migration `047_tagging` + `tagging/backfill_sql.py` remain intact (the backfill is frozen migration history that already ran).
+- **Entity-insert test columns:** raw-SQL inserts need `status` (projects), `protocol_type`/`protocol_version` (protocols) — Python-side defaults without server defaults.
+
+**Pre-existing branch failures (NOT caused by the tagging work — proven by running the full integration suite at the pre-tagging baseline `5554e342`, where they already fail):**
+- `tests/api/test_molecules.py`: `test_register_disclosed_molecule` (reg-prefix `CC-` vs `CV-` config), `test_tested_molecule_returns_count` (missing `dose_response_curves.intercept_values` column), `test_project_scoped_count` (missing `projects.visibility` column) — schema-drift / config issues.
+- `tests/integration/test_backfill_bemis_murcko.py`: `test_backfill_populates_null_rows`, `test_backfill_idempotent` — the test asserts a **global** NULL-`bemis_murcko_smiles` count (`backfill_batch` is called without a `workspace_id`), so any molecule-inserting test contaminates it. **Root-cause fix (optional, separate):** scope the test to its own workspace — `backfill_batch(session, workspace_id=ws_id)` and assert within `ws_id`. (The tagging tests are among many contaminators but not the originators; cleaning up only tagging rows would not fix the test.)
+
+**Final state:** 5 implementation commits (`f0c6ff9f`…`4e96d26c`); migration 048 is the single alembic head; `molecules.tags` gone, no backend reference remains. Targeted regression at HEAD: unit **2594 passed**; integration **211 passed** (+2 pre-existing bemis); api **252 passed** (+3 pre-existing). Reviewed READY.
