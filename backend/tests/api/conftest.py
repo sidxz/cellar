@@ -164,3 +164,17 @@ async def editor_client(
         yield ac
     engine = app.state.container[AsyncEngine]
     await engine.dispose()
+
+
+@pytest.fixture
+async def viewer_client(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID, user_id: uuid.UUID
+) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client scoped to a viewer role (for 403 tests)."""
+    viewer_auth = FakeAuth(role="viewer", workspace_id=workspace_id, user_id=user_id)
+    app = _create_test_app(database_url, viewer_auth)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    engine = app.state.container[AsyncEngine]
+    await engine.dispose()
