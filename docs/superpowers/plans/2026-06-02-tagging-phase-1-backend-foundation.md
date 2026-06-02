@@ -1770,3 +1770,19 @@ git commit -m "test(tagging): migration 047 backfill integration tests"
 **Delivered:** A `Tag` aggregate + registry repository with race-safe, case-insensitive `get_or_create` and autocomplete `search`; four per-entity link tables with cascade + a generic link repository + factory; a `tag_links_all` view; and migration 047 that creates the schema and backfills existing molecule tags (legacy `molecules.tags` column intentionally retained until Phase 3).
 
 **Next (Phase 2 — Application + API, written after this lands):** `AssignTag` / `UnassignTag` / `SetEntityTags` / `ListTags` / `GetTagsForEntity` use cases (emitting `TagAssigned`/`TagUnassigned` for audit), DI wiring, and the nested assignment + management API routes with tests.
+
+---
+
+## Implementation Notes — deviations discovered during execution (2026-06-02)
+
+Phase 1 was executed via subagent-driven development. Running against the live dev DB + testcontainers surfaced three facts the plan got wrong; all were fixed in code, and the final state is recorded here so Phases 2–3 don't re-trip on them:
+
+1. **`molecules` has no `created_by` column.** `EntityModelMixin` provides only `id`/`created_at`/`updated_at`, and `MoleculeModel` adds no creator column (the `created_by` in that module belongs to `MoleculeRelationshipModel`). The backfill (`backfill_sql.py`) therefore stamps a sentinel zero UUID (`00000000-0000-0000-0000-000000000000`) as `tags.created_by` / `molecule_tags.assigned_by` for migrated rows.
+2. **`molecules.tags` stores JSON `null` scalars** (~61k rows in the dev vault), which `WHERE tags IS NOT NULL` does not exclude. The backfill guards with `WHERE json_typeof(m.tags) = 'array'` — a base-relation restriction applied (proven via `EXPLAIN`) before the `LATERAL json_array_elements_text`, so scalar/null rows never reach the set-returning function.
+3. **`molecules.originating_org_id` is a NOT-NULL FK to `organizations`.** The `_insert_molecule` test helper seeds a minimal org per (fresh) workspace and supplies `originating_org_id`.
+
+**Bonus finding (de-risks §7/§14 of the spec):** the existing `keyword_list` search criterion (`_field_clauses.py`) filters `registration_number`/`inchi_key`/`name`/`uuid` — **not** `Molecule.tags`. So the Phase 3 "readers to repoint before dropping `molecules.tags`" list is just the UI/serializer fields + the CDD import mapping; no `keyword_list` search-DSL change is needed.
+
+**Minor follow-ups for Phase 2:** `TagLinkRepositoryProvider` (protocol) is currently a forward-declaration — wire DI to it or drop it. `search()` uses `LIKE %…%`; the trigram GIN indexes accelerate ≥3-char patterns but very short autocomplete queries fall back to a scan (fine at current scale; revisit if load-tested).
+
+**Final state:** 8 commits (`32b24c68`…`ef54da0d`), 17 unit + 15 integration tagging tests green, full backend unit suite (2588) green. Reviewed READY TO MERGE.
