@@ -54,7 +54,7 @@ class SQLAlchemyTagLinkRepository:
     def _entity_col(self):  # noqa: ANN202 - InstrumentedAttribute
         return getattr(self.link_model, self.entity_id_attr)
 
-    async def _entity_in_workspace(
+    async def entity_exists_in_workspace(
         self, workspace_id: uuid.UUID, entity_id: uuid.UUID
     ) -> bool:
         stmt = select(self.entity_model.id).where(
@@ -71,7 +71,7 @@ class SQLAlchemyTagLinkRepository:
         tag_id: uuid.UUID,
         assigned_by: uuid.UUID,
     ) -> None:
-        if not await self._entity_in_workspace(workspace_id, entity_id):
+        if not await self.entity_exists_in_workspace(workspace_id, entity_id):
             return
         stmt = (
             pg_insert(self.link_model)
@@ -87,7 +87,7 @@ class SQLAlchemyTagLinkRepository:
     async def remove(
         self, workspace_id: uuid.UUID, entity_id: uuid.UUID, tag_id: uuid.UUID
     ) -> None:
-        if not await self._entity_in_workspace(workspace_id, entity_id):
+        if not await self.entity_exists_in_workspace(workspace_id, entity_id):
             return
         stmt = delete(self.link_model).where(
             self._entity_col == entity_id, self.link_model.tag_id == tag_id
@@ -101,7 +101,7 @@ class SQLAlchemyTagLinkRepository:
         tag_ids: list[uuid.UUID],
         assigned_by: uuid.UUID,
     ) -> None:
-        if not await self._entity_in_workspace(workspace_id, entity_id):
+        if not await self.entity_exists_in_workspace(workspace_id, entity_id):
             return
         del_stmt = delete(self.link_model).where(self._entity_col == entity_id)
         if tag_ids:
@@ -197,3 +197,13 @@ def get_tag_link_repository(
 ) -> SQLAlchemyTagLinkRepository:
     """Factory: the link repository bound to ``entity_type``'s table."""
     return _REGISTRY[entity_type](uow)
+
+
+class SQLAlchemyTagLinkRepositoryProvider:
+    """Resolves the right link repository for an entity type, bound to a uow."""
+
+    def __init__(self, uow: AsyncUnitOfWork) -> None:
+        self._uow = uow
+
+    def for_type(self, entity_type: TaggableEntityType) -> SQLAlchemyTagLinkRepository:
+        return get_tag_link_repository(entity_type, self._uow)

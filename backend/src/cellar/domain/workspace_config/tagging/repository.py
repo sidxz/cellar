@@ -54,6 +54,10 @@ class TagLinkRepository(Protocol):
     right one from a ``TagLinkRepositoryProvider``.
     """
 
+    async def entity_exists_in_workspace(
+        self, workspace_id: uuid.UUID, entity_id: uuid.UUID
+    ) -> bool: ...
+
     async def add(
         self,
         workspace_id: uuid.UUID,
