@@ -65,3 +65,57 @@ class TestRepoint:
                 {"id": a.id},
             )
             assert res.scalar_one() == 0
+
+
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
+    SQLAlchemyTagLinkRepositoryProvider,
+)
+
+
+class TestMergeIntegration:
+    async def test_merge_moves_links_and_drops_source_tag(
+        self, uow: AsyncUnitOfWork
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from cellar.application.workspace_config.tagging.merge_tags import (
+            MergeTags,
+            MergeTagsCommand,
+        )
+
+        ws, user = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            tag_repo = SQLAlchemyTagRepository(uow)
+            src = await tag_repo.get_or_create(ws, TagName(key="src"), user)
+            tgt = await tag_repo.get_or_create(ws, TagName(key="tgt"), user)
+            m1 = await _org_and_molecule(uow, ws, "MG-1")
+            links = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            await links.add(ws, m1, src.id, user)
+            await uow.commit()
+
+        class _Auth:
+            user_id = user
+            workspace_id = ws
+            workspace_role = "admin"
+            is_admin = True
+
+            def has_role(self, m: str) -> bool:
+                return True
+
+        uc = MergeTags(
+            uow,
+            SQLAlchemyTagRepository(uow),
+            SQLAlchemyTagLinkRepositoryProvider(uow),
+            AsyncMock(),
+        )
+        result = await uc(
+            MergeTagsCommand(workspace_id=ws, source_tag_id=src.id, target_tag_id=tgt.id),
+            auth=_Auth(),
+        )
+        assert result.unwrap().id == tgt.id
+
+        async with uow:
+            tag_repo = SQLAlchemyTagRepository(uow)
+            assert await tag_repo.find_by_id_in_workspace(ws, src.id) is None
+            links = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            assert {t.key for t in await links.find_tags_for_entity(ws, m1)} == {"tgt"}
