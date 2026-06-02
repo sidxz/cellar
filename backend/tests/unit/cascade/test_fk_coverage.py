@@ -36,6 +36,7 @@ import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # no
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.tagging.models  # noqa: F401
 
 from cellar.infrastructure.persistence.sqlalchemy.base import Base
 from cellar.infrastructure.cascade.registry import all_rules, _clear_for_test as _clear_cascade_registry
@@ -241,6 +242,21 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # No Tier-2 rule or TIER1_PARENT_TABLE registration needed — the DB CASCADE
     # ondelete clause handles this automatically.
     ("batch_identifiers", "derived_from_molecule_identifier_id", "molecule_identifiers"),
+
+    # -------------------------------------------------------------------------
+    # Tag link tables → tags: DB CASCADE clears links on tag delete
+    # -------------------------------------------------------------------------
+    # The four per-entity tag link tables (molecule_tags, protocol_tags,
+    # project_tags, collection_tags) have ondelete=CASCADE on tag_id -> tags.
+    # `tags` is not a Tier-1 admin-deletable entity; tags are deleted via the
+    # tagging admin use cases (Phase 4) and the DB engine cascades the delete to
+    # the link rows automatically (verified by test_cascade_on_tag_delete). The
+    # <entity>_id side of each link table points at a Tier-1 parent
+    # (molecules/protocols/projects/collections) and is covered by Tier-1 RESTRICT.
+    ("molecule_tags", "tag_id", "tags"),
+    ("protocol_tags", "tag_id", "tags"),
+    ("project_tags", "tag_id", "tags"),
+    ("collection_tags", "tag_id", "tags"),
 }
 
 
