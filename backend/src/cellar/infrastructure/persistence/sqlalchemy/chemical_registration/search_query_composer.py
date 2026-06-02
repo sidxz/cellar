@@ -45,6 +45,7 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._field_c
     _project_clause,
     _property_clause,
     _run_date_clause,
+    _tag_clause,
     _text_clause,
     escape_like,
 )
@@ -91,6 +92,7 @@ __all__ = [
     "_batch_clause",
     "_selectivity_clause",
     "_custom_field_clause",
+    "_tag_clause",
     "_group_clause",
 ]
 
@@ -137,6 +139,8 @@ def compose_criteria(query: dict[str, Any], *, workspace_id: uuid.UUID) -> Colum
             clause = _group_clause(criterion, workspace_id)
         elif ctype == "custom_field":
             clause = _custom_field_clause(criterion)
+        elif ctype == "tag":
+            clause = _tag_clause(criterion)
         else:
             msg = f"Unknown criterion type: {ctype}"
             raise ValueError(msg)
@@ -214,6 +218,8 @@ def _group_clause(
             clause = _selectivity_clause(sub, workspace_id)
         elif ctype == "custom_field":
             clause = _custom_field_clause(sub)
+        elif ctype == "tag":
+            clause = _tag_clause(sub)
         else:
             msg = f"Unknown criterion type in group: {ctype}"
             raise ValueError(msg)

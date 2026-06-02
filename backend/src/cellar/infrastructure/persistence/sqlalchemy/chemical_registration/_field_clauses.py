@@ -27,6 +27,12 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     ReadoutDataModel,
     RunModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
+    MoleculeTagLinkModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
+    tag_filter_subquery,
+)
 
 # Mappings of query field names -> SA column references
 TEXT_FIELDS: dict[str, Any] = {
@@ -113,6 +119,23 @@ def _collection_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> Co
             CollectionMoleculeModel.collection_id == collection_id,
             CollectionModel.workspace_id == workspace_id,
         )
+    )
+
+
+def _tag_clause(criterion: dict[str, Any]) -> ColumnElement:
+    """Filter molecules to those carrying the given tag ids (any/all).
+
+    Workspace scoping is already enforced by the outer molecule query (and a
+    molecule can only link to tags in its own workspace), so no extra join.
+    """
+    raw_ids = criterion["tag_ids"]
+    if not raw_ids:
+        msg = "tag criterion requires at least one tag_id"
+        raise ValueError(msg)
+    tag_ids = [uuid.UUID(str(t)) for t in raw_ids]
+    match_all = criterion.get("tag_logic", "any") == "all"
+    return MoleculeModel.id.in_(
+        tag_filter_subquery(MoleculeTagLinkModel, "molecule_id", tag_ids, match_all=match_all)
     )
 
 
