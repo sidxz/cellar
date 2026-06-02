@@ -8,10 +8,6 @@ from sqlalchemy import text
 
 from cellar.domain.workspace_config.tagging.events import TagCreated
 from cellar.domain.workspace_config.tagging.tag import TagName, TaggableEntityType
-from cellar.infrastructure.persistence.sqlalchemy.tagging.backfill_sql import (
-    BACKFILL_LINKS_SQL,
-    BACKFILL_TAGS_SQL,
-)
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
     get_tag_link_repository,
 )
@@ -266,71 +262,3 @@ class TestTagLinkRepository:
                 {"id": tag.id},
             )
             assert res.scalar_one() == 0
-
-
-class TestBackfill:
-    async def test_backfill_creates_tags_and_links_with_dedup(
-        self, uow: AsyncUnitOfWork
-    ) -> None:
-        ws_id = uuid.uuid4()
-        async with uow:
-            m1 = await _insert_molecule(uow, ws_id, "BF-1")
-            await uow.session.execute(
-                text("UPDATE molecules SET tags = CAST(:t AS json) WHERE id = :id"),
-                {"t": '["Kinase", "hit"]', "id": m1},
-            )
-            m2 = await _insert_molecule(uow, ws_id, "BF-2")
-            await uow.session.execute(
-                text("UPDATE molecules SET tags = CAST(:t AS json) WHERE id = :id"),
-                {"t": '["kinase"]', "id": m2},
-            )
-            await uow.session.execute(text(BACKFILL_TAGS_SQL))
-            await uow.session.execute(text(BACKFILL_LINKS_SQL))
-            await uow.commit()
-
-        async with uow:
-            # "Kinase"/"kinase" dedup to ONE tag; "hit" is a second → 2 total.
-            res = await uow.session.execute(
-                text(
-                    "SELECT count(*) FROM tags WHERE workspace_id = :ws "
-                    "AND normalized_key IN ('kinase', 'hit')"
-                ),
-                {"ws": ws_id},
-            )
-            assert res.scalar_one() == 2
-
-            link_repo = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
-            m1_tags = await link_repo.find_tags_for_entity(ws_id, m1)
-            m2_tags = await link_repo.find_tags_for_entity(ws_id, m2)
-            assert {t.normalized_key for t in m1_tags} == {"kinase", "hit"}
-            assert {t.normalized_key for t in m2_tags} == {"kinase"}
-
-            # Both molecules link to the SAME canonical kinase tag (cross-molecule dedup).
-            m1_kinase = next(t.id for t in m1_tags if t.normalized_key == "kinase")
-            m2_kinase = next(t.id for t in m2_tags if t.normalized_key == "kinase")
-            assert m1_kinase == m2_kinase
-
-    async def test_backfill_is_idempotent(self, uow: AsyncUnitOfWork) -> None:
-        ws_id = uuid.uuid4()
-        async with uow:
-            m1 = await _insert_molecule(uow, ws_id, "BF-3")
-            await uow.session.execute(
-                text("UPDATE molecules SET tags = CAST(:t AS json) WHERE id = :id"),
-                {"t": '["solubility"]', "id": m1},
-            )
-            for _ in range(2):  # run twice — ON CONFLICT DO NOTHING
-                await uow.session.execute(text(BACKFILL_TAGS_SQL))
-                await uow.session.execute(text(BACKFILL_LINKS_SQL))
-            await uow.commit()
-
-        async with uow:
-            res = await uow.session.execute(
-                text(
-                    "SELECT count(*) FROM tags WHERE workspace_id = :ws "
-                    "AND normalized_key = 'solubility'"
-                ),
-                {"ws": ws_id},
-            )
-            assert res.scalar_one() == 1
-            link_repo = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
-            assert len(await link_repo.find_tags_for_entity(ws_id, m1)) == 1

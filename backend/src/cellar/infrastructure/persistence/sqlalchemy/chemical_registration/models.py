@@ -90,7 +90,6 @@ class MoleculeModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     stereochemistry: Mapped[str | None] = mapped_column(String(20))
     sequence: Mapped[str | None] = mapped_column(Text)
     structure_image_key: Mapped[str | None] = mapped_column(String(500))
-    tags: Mapped[list | None] = mapped_column(JSON)
     custom_fields: Mapped[dict | None] = mapped_column(JSON)
     invention_date: Mapped[date | None] = mapped_column(Date)
     disclosed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
