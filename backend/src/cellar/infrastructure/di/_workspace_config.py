@@ -89,6 +89,17 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_set
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.application.admin.admin_delete_registry import register_admin_delete
+from cellar.application.workspace_config.tagging.assign_tag import AssignTag
+from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
+from cellar.application.workspace_config.tagging.list_tags import ListTags
+from cellar.application.workspace_config.tagging.set_entity_tags import SetEntityTags
+from cellar.application.workspace_config.tagging.unassign_tag import UnassignTag
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
+    SQLAlchemyTagLinkRepositoryProvider,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import (
+    SQLAlchemyTagRepository,
+)
 
 
 def register_workspace_config(container: Container) -> None:
@@ -340,6 +351,35 @@ def register_workspace_config(container: Container) -> None:
     container.define(UpdateProtocolForm, _pf_cmd(UpdateProtocolForm))
     container.define(DeleteProtocolForm, _pf_cmd(DeleteProtocolForm))
     container.define(ListProtocolForms, _pf_query(ListProtocolForms))
+
+    # --- Tags ---
+    def _tag_assign(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                SQLAlchemyTagRepository(uow),
+                SQLAlchemyTagLinkRepositoryProvider(uow),
+                c[EventDispatcher],
+            )
+
+        return _f
+
+    container.define(AssignTag, _tag_assign(AssignTag))
+    container.define(UnassignTag, _tag_assign(UnassignTag))
+    container.define(SetEntityTags, _tag_assign(SetEntityTags))
+
+    def _list_tags(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListTags(uow, SQLAlchemyTagRepository(uow))
+
+    container.define(ListTags, _list_tags)
+
+    def _get_tags_for_entity(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetTagsForEntity(uow, SQLAlchemyTagLinkRepositoryProvider(uow))
+
+    container.define(GetTagsForEntity, _get_tags_for_entity)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

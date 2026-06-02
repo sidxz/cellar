@@ -59,6 +59,11 @@ from cellar.application.workspace_config.update_registration_form import UpdateR
 from cellar.application.workspace_config.update_salt_entry import UpdateSaltEntry
 from cellar.application.workspace_config.update_vocabulary import UpdateVocabulary
 from cellar.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
+from cellar.application.workspace_config.tagging.assign_tag import AssignTag
+from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
+from cellar.application.workspace_config.tagging.list_tags import ListTags
+from cellar.application.workspace_config.tagging.set_entity_tags import SetEntityTags
+from cellar.application.workspace_config.tagging.unassign_tag import UnassignTag
 
 from ._core import _get_use_case
 
@@ -112,6 +117,12 @@ __all__ = [
     "ListProtocolFormsDep",
     "UpdateProtocolFormDep",
     "DeleteProtocolFormDep",
+    # Tags
+    "AssignTagDep",
+    "UnassignTagDep",
+    "SetEntityTagsDep",
+    "ListTagsDep",
+    "GetTagsForEntityDep",
 ]
 
 # --- Workspace Config dependencies ---
@@ -200,3 +211,10 @@ UpdateProtocolFormDep = Annotated[
 DeleteProtocolFormDep = Annotated[
     DeleteProtocolFormUC, Depends(_get_use_case(DeleteProtocolFormUC))
 ]
+
+# --- Tag dependencies ---
+AssignTagDep = Annotated[AssignTag, Depends(_get_use_case(AssignTag))]
+UnassignTagDep = Annotated[UnassignTag, Depends(_get_use_case(UnassignTag))]
+SetEntityTagsDep = Annotated[SetEntityTags, Depends(_get_use_case(SetEntityTags))]
+ListTagsDep = Annotated[ListTags, Depends(_get_use_case(ListTags))]
+GetTagsForEntityDep = Annotated[GetTagsForEntity, Depends(_get_use_case(GetTagsForEntity))]
