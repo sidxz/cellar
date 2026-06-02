@@ -182,7 +182,8 @@ export type CriterionType =
   | "project"
   | "selectivity"
   | "group"
-  | "custom_field";
+  | "custom_field"
+  | "tag";
 export type CustomFieldMode = "text" | "numeric";
 export type TextOperator = "contains" | "equals" | "starts_with";
 export type PropertyOperator = "eq" | "lt" | "lte" | "gt" | "gte" | "between";
@@ -386,6 +387,12 @@ export interface CustomFieldCriterion {
   max?: number;
 }
 
+export interface TagCriterion {
+  type: "tag";
+  tag_ids: string[];
+  tag_logic?: "any" | "all";
+}
+
 export type SearchCriterionBase =
   | TextCriterion
   | PropertyCriterion
@@ -399,7 +406,8 @@ export type SearchCriterionBase =
   | ProjectCriterion
   | SelectivityCriterion
   | GroupCriterion
-  | CustomFieldCriterion;
+  | CustomFieldCriterion
+  | TagCriterion;
 
 export type SearchCriterion = SearchCriterionBase & { negate?: boolean };
 

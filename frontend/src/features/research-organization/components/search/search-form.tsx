@@ -29,6 +29,13 @@ import {
   termsToCollectionCriteria,
 } from "./collection-section";
 import { KeywordSection } from "./keyword-section";
+import {
+  TagSection,
+  type TagSectionValue,
+  defaultTagSectionValue,
+  tagCriteriaToSection,
+  tagSectionToCriteria,
+} from "./tag-section";
 import { ProjectFilter } from "./project-filter";
 import { PropertySection } from "./property-section";
 import { type ProtocolConjunction, ProtocolSection } from "./protocol-section";
@@ -58,6 +65,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
   let structureCriterion: StructureCriterion | null = null;
   const collectionCriteria: SearchCriterion[] = [];
   const scaffoldCriteria: ScaffoldCriterion[] = [];
+  const tagCriteria: SearchCriterion[] = [];
   const advanced: AdvancedFiltersState = emptyAdvancedFilters();
   // Hoisted out so saved searches that include a project criterion can
   // re-populate the project chips at the top of the panel.
@@ -72,6 +80,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
       structureCriterion,
       collectionCriteria,
       scaffoldCriteria,
+      tagCriteria,
       advanced,
       projectIds,
     };
@@ -129,6 +138,9 @@ function decomposeQuery(query: SearchQuery | undefined) {
       case "keyword_list":
         advanced.keywordLists.push(c);
         break;
+      case "tag":
+        tagCriteria.push(c);
+        break;
       default:
         break;
     }
@@ -142,6 +154,7 @@ function decomposeQuery(query: SearchQuery | undefined) {
     structureCriterion,
     collectionCriteria,
     scaffoldCriteria,
+    tagCriteria,
     advanced,
     projectIds,
   };
@@ -297,6 +310,9 @@ export function SearchForm({
   );
   const [textCriteria, setTextCriteria] = useState<TextCriterion[]>(initial.textCriteria);
   const [advanced, setAdvanced] = useState<AdvancedFiltersState>(initial.advanced);
+  const [tagValue, setTagValue] = useState<TagSectionValue>(
+    tagCriteriaToSection(initial.tagCriteria),
+  );
 
   // Re-parse when initialQuery changes externally (e.g., loading a saved search).
   // We intentionally don't depend on projectIds / onProjectsChange — re-parse
@@ -316,6 +332,7 @@ export function SearchForm({
     setScaffoldCriteria(parsed.scaffoldCriteria);
     setTextCriteria(parsed.textCriteria);
     setAdvanced(parsed.advanced);
+    setTagValue(tagCriteriaToSection(parsed.tagCriteria));
     // Round-trip saved searches: a stored project criterion repopulates the
     // chip(s) at the top of the panel so the chemist sees the same scope they
     // saved with. Only push when it actually changed to avoid re-fetch loops.
@@ -423,6 +440,11 @@ export function SearchForm({
       criteria.push(c);
     }
 
+    // Tags
+    for (const c of tagSectionToCriteria(tagValue)) {
+      criteria.push(c);
+    }
+
     // Scaffold — emitted as-is; exact_match rows without a smiles are skipped
     // so a half-filled row doesn't reach the BE as a 422.
     for (const c of scaffoldCriteria) {
@@ -470,6 +492,7 @@ export function SearchForm({
     propertyCriteria,
     collectionTerms,
     scaffoldCriteria,
+    tagValue,
     textCriteria,
     advanced,
   ]);
@@ -490,6 +513,7 @@ export function SearchForm({
     setScaffoldCriteria([]);
     setTextCriteria([]);
     setAdvanced(emptyAdvancedFilters());
+    setTagValue(defaultTagSectionValue());
     onProjectsChange([]);
   }
 
@@ -574,6 +598,11 @@ export function SearchForm({
           />
           <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
         </div>
+
+        <Separator className="my-3" />
+
+        {/* Tags */}
+        <TagSection value={tagValue} onChange={setTagValue} />
 
         <Separator className="my-3" />
 
