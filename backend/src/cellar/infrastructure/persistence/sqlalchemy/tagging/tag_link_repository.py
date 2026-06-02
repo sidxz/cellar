@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, distinct, func, select
+from sqlalchemy import delete, distinct, func, literal, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.workspace_config.tagging.tag import Tag, TaggableEntityType
@@ -158,6 +158,34 @@ class SQLAlchemyTagLinkRepository:
             stmt = stmt.distinct()
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def repoint(
+        self, from_tag_id: uuid.UUID, to_tag_id: uuid.UUID
+    ) -> None:
+        """Move every link from ``from_tag_id`` to ``to_tag_id`` (merge).
+
+        Copies the source links onto the target tag (skipping rows where the
+        entity already carries the target — composite-PK conflict), then deletes
+        the source links.
+        """
+        col = self._entity_col
+        src = select(
+            col,
+            literal(to_tag_id),
+            self.link_model.assigned_by,
+            self.link_model.assigned_at,
+        ).where(self.link_model.tag_id == from_tag_id)
+        ins = (
+            pg_insert(self.link_model)
+            .from_select(
+                [self.entity_id_attr, "tag_id", "assigned_by", "assigned_at"], src
+            )
+            .on_conflict_do_nothing()
+        )
+        await self._session.execute(ins)
+        await self._session.execute(
+            delete(self.link_model).where(self.link_model.tag_id == from_tag_id)
+        )
 
 
 class MoleculeTagLinkRepository(SQLAlchemyTagLinkRepository):
