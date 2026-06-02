@@ -90,8 +90,11 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_set
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
+from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
 from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
 from cellar.application.workspace_config.tagging.list_tags import ListTags
+from cellar.application.workspace_config.tagging.merge_tags import MergeTags
+from cellar.application.workspace_config.tagging.rename_tag import RenameTag
 from cellar.application.workspace_config.tagging.set_entity_tags import SetEntityTags
 from cellar.application.workspace_config.tagging.unassign_tag import UnassignTag
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
@@ -380,6 +383,27 @@ def register_workspace_config(container: Container) -> None:
         return GetTagsForEntity(uow, SQLAlchemyTagLinkRepositoryProvider(uow))
 
     container.define(GetTagsForEntity, _get_tags_for_entity)
+
+    def _rename_or_delete(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyTagRepository(uow), c[EventDispatcher])
+
+        return _f
+
+    container.define(RenameTag, _rename_or_delete(RenameTag))
+    container.define(DeleteTag, _rename_or_delete(DeleteTag))
+
+    def _merge_tags(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return MergeTags(
+            uow,
+            SQLAlchemyTagRepository(uow),
+            SQLAlchemyTagLinkRepositoryProvider(uow),
+            c[EventDispatcher],
+        )
+
+    container.define(MergeTags, _merge_tags)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

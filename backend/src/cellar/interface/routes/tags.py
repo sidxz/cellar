@@ -9,10 +9,13 @@ from fastapi import APIRouter, Response
 from pydantic import BaseModel
 
 from cellar.application.workspace_config.tagging.assign_tag import AssignTagCommand
+from cellar.application.workspace_config.tagging.delete_tag import DeleteTagCommand
 from cellar.application.workspace_config.tagging.get_tags_for_entity import (
     GetTagsForEntityQuery,
 )
 from cellar.application.workspace_config.tagging.list_tags import ListTagsQuery
+from cellar.application.workspace_config.tagging.merge_tags import MergeTagsCommand
+from cellar.application.workspace_config.tagging.rename_tag import RenameTagCommand
 from cellar.application.workspace_config.tagging.set_entity_tags import (
     SetEntityTagsCommand,
     TagInput,
@@ -23,8 +26,11 @@ from cellar.domain.workspace_config.tagging.tag import Tag, TaggableEntityType
 from cellar.interface.dependencies import AuthDep
 from cellar.interface.dependencies._workspace_config import (
     AssignTagDep,
+    DeleteTagDep,
     GetTagsForEntityDep,
     ListTagsDep,
+    MergeTagsDep,
+    RenameTagDep,
     SetEntityTagsDep,
     UnassignTagDep,
 )
@@ -54,6 +60,15 @@ class TagResponse(BaseModel):
 class AssignTagBody(BaseModel):
     key: str
     value: str | None = None
+
+
+class RenameTagBody(BaseModel):
+    key: str
+    value: str | None = None
+
+
+class MergeTagBody(BaseModel):
+    target_tag_id: uuid.UUID
 
 
 class TagItemBody(BaseModel):
@@ -100,6 +115,47 @@ async def list_tags(
     )
     tags = result_to_response(await use_case(query, auth=auth))
     return [TagResponse.from_domain(t) for t in tags]
+
+
+@router.patch("/{tag_id}", response_model=TagResponse)
+async def rename_tag(
+    tag_id: uuid.UUID,
+    body: RenameTagBody,
+    auth: AuthDep,
+    use_case: RenameTagDep,
+) -> TagResponse:
+    command = RenameTagCommand(
+        workspace_id=auth.workspace_id, tag_id=tag_id, key=body.key, value=body.value
+    )
+    tag = result_to_response(await use_case(command, auth=auth))
+    return TagResponse.from_domain(tag)
+
+
+@router.post("/{tag_id}/merge", response_model=TagResponse)
+async def merge_tag(
+    tag_id: uuid.UUID,
+    body: MergeTagBody,
+    auth: AuthDep,
+    use_case: MergeTagsDep,
+) -> TagResponse:
+    command = MergeTagsCommand(
+        workspace_id=auth.workspace_id,
+        source_tag_id=tag_id,
+        target_tag_id=body.target_tag_id,
+    )
+    tag = result_to_response(await use_case(command, auth=auth))
+    return TagResponse.from_domain(tag)
+
+
+@router.delete("/{tag_id}", status_code=204)
+async def delete_tag(
+    tag_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: DeleteTagDep,
+) -> Response:
+    command = DeleteTagCommand(workspace_id=auth.workspace_id, tag_id=tag_id)
+    result_to_response(await use_case(command, auth=auth))
+    return Response(status_code=204)
 
 
 # --- Per-entity assignment (generic over entity collection) ---
