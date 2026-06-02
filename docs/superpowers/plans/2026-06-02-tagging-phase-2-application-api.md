@@ -1572,3 +1572,17 @@ git commit -m "test(tagging): API tests for assignment + listing + auth"
 **Delivered:** Working tag API — assign/unassign/set/list/get behind `editor`-guarded mutations and workspace-scoped reads, audited via `TagAssigned`/`TagUnassigned` on the `Tag` aggregate, wired through DI and registered in both the production and test apps.
 
 **Next (Phase 3):** the `tag` search criterion + `tags`/`tag_logic` params on the list endpoints, repoint the UI/CDD readers of `molecules.tags`, then migration 048 dropping the legacy column.
+
+---
+
+## Implementation Notes — execution findings (2026-06-02)
+
+Two adjustments surfaced during subagent-driven execution; both are recorded so Phase 3+ doesn't re-trip:
+
+1. **Query base class.** Every query-input dataclass in this codebase extends `cellar.application.shared.query.Query` (an empty frozen-dataclass marker), not just a bare frozen dataclass. `ListTagsQuery`/`GetTagsForEntityQuery` were updated to inherit it for consistency (the plan originally omitted this).
+
+2. **FK-coverage guard (`tests/unit/cascade/test_fk_coverage.py`).** Phase 2's DI imports pull the tagging ORM models into `Base.metadata` during the unit run, which exposed that the guard (a) didn't list the tagging models in its explicit import block and (b) hadn't categorized the four `*_tags.tag_id → tags` FKs. Fixed by adding the tagging-models import + listing the four FKs in `IGNORED_FKS` (with a comment) — matching how every other DB-`CASCADE` child FK (`shipment_items`, `campaign_*`, `batch_identifiers`, …) is categorized. The schema was correct (the spec-intended DB CASCADE is tested by `test_cascade_on_tag_delete`). **Phase 3+ rule:** when a new taggable entity type is added, add its `<type>_tags.tag_id → tags` FK to `IGNORED_FKS` too.
+
+**Minor follow-ups (non-blocking, deferred):** no API test for `SetEntityTags` clear-all (empty list); the new DI imports sit just after the alphabetized import group (cosmetic). `require_same_workspace` is not called in the use cases — acceptable because `workspace_id` is always sourced from `auth` (never user-supplied) and the link repo guards every write on workspace.
+
+**Final state:** 7 implementation commits (`cd56d480`…`ead79a5d`) + 1 test-guard fix (`fced7b10`). Tagging suite: 11 application-unit + 2 provider-integration + 11 API = green; full backend unit suite **2599 passed**. Final review: READY TO MERGE after the FK-guard fix (now applied).
