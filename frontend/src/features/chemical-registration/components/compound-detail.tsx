@@ -26,6 +26,7 @@ import {
   TabsContent,
 } from "@/shared/components/ui/tabs";
 import { DetailShell } from "@/shared/components/detail-shell";
+import { TagEditor } from "@/features/tagging/components/tag-editor";
 import { useMolecule } from "../hooks/use-molecules";
 import {
   LIFECYCLE_LABELS,
@@ -69,6 +70,7 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
   const router = useRouter();
   const query = useMolecule(compoundId);
   const isAdmin = useAuthzHasRole("admin");
+  const canEditTags = useAuthzHasRole("editor");
 
   const [activeTab, setActiveTab] = useHashTab("overview");
 
@@ -99,6 +101,11 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
               {mol.name && (
                 <span className="text-lg text-muted-foreground">{mol.name}</span>
               )}
+            </div>
+
+            {/* Tags */}
+            <div className="mt-0.5">
+              <TagEditor entity="molecules" entityId={mol.id} canEdit={canEditTags} />
             </div>
 
             {/* Tombstone banner */}

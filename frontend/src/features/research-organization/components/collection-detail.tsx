@@ -27,6 +27,7 @@ import { useProtocolTestCounts } from "../hooks/use-protocol-test-counts";
 import { useProject, useProjects } from "../hooks/use-projects";
 import { useViewMode } from "../lib/use-view-mode";
 import type { ViewMode } from "../lib/use-view-mode";
+import { TagEditor } from "@/features/tagging/components/tag-editor";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
 import { CollectionHeader } from "./collection/collection-header";
@@ -42,6 +43,7 @@ interface CollectionDetailProps {
 export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const router = useRouter();
   const isAdmin = useAuthzHasRole("admin");
+  const canEditTags = useAuthzHasRole("editor");
   const query = useCollection(collectionId);
   const { data: project } = useProject(query.data?.project_id ?? undefined);
   const { data: allProjects } = useProjects();
@@ -213,6 +215,10 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
                 </>
               }
             />
+
+            <div className="mt-0.5">
+              <TagEditor entity="collections" entityId={collection.id} canEdit={canEditTags} />
+            </div>
 
             <ResultsSurface
               molecules={molecules}
