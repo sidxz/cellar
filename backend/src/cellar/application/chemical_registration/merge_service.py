@@ -54,7 +54,6 @@ def _build_snapshot(molecule: Molecule) -> dict:
             {"identifier": ident.identifier, "type": ident.identifier_type}
             for ident in molecule.identifiers
         ],
-        "tags": list(molecule.tags),
     }
 
 

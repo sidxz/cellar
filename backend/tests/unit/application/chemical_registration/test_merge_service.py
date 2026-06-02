@@ -438,7 +438,6 @@ class TestMergeSnapshot:
         assert snap["molecule_type"] == "small_molecule"
         assert snap["structure_status"] == "undisclosed"
         assert isinstance(snap["identifiers"], list)
-        assert isinstance(snap["tags"], list)
 
     def test_build_snapshot_helper(self) -> None:
         """Direct test of _build_snapshot utility."""
@@ -457,4 +456,3 @@ class TestMergeSnapshot:
         assert snap["identifiers"] == [
             {"identifier": "CAS-123", "type": "cas_number"}
         ]
-        assert snap["tags"] == []

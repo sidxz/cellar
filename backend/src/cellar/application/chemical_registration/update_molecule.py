@@ -25,9 +25,6 @@ from cellar.domain.workspace_config.enums import FieldTarget
 class UpdateMoleculeCommand(Command):
     workspace_id: uuid.UUID
     molecule_id: uuid.UUID
-    # Tags
-    add_tags: list[str] | None = None
-    remove_tags: list[str] | None = None
     # Lifecycle
     lifecycle_stage: str | None = None
     lifecycle_reason: str | None = None
@@ -63,9 +60,6 @@ class UpdateMolecule:
                 return Failure(NotFoundError("Molecule", str(input.molecule_id)))
 
             try:
-                if input.add_tags or input.remove_tags:
-                    mol.update_tags(added=input.add_tags, removed=input.remove_tags)
-
                 if input.lifecycle_stage is not None:
                     try:
                         stage = LifecycleStage(input.lifecycle_stage)

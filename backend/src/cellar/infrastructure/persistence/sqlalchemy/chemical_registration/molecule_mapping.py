@@ -112,7 +112,6 @@ def model_to_molecule(model: MoleculeModel) -> Molecule:
         registration_status=RegistrationStatus(model.registration_status),
         synthesis_status=SynthesisStatus(model.synthesis_status),
         lifecycle_stage=LifecycleStage(model.lifecycle_stage),
-        tags=model.tags,
         invention_date=model.invention_date,
         disclosed_at=model.disclosed_at,
         disclosed_by=model.disclosed_by,

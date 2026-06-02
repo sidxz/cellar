@@ -149,7 +149,6 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         )
         model.sequence = aggregate.sequence
         model.structure_image_key = aggregate.structure_image_key
-        model.tags = aggregate.tags if aggregate.tags else None
         model.custom_fields = aggregate.custom_fields
         model.invention_date = aggregate.invention_date
         model.disclosed_at = aggregate.disclosed_at

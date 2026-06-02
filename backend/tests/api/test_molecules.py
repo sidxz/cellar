@@ -278,27 +278,6 @@ class TestGetMolecule:
 
 
 class TestUpdateMolecule:
-    async def test_update_tags(
-        self, client: AsyncClient, seed_org: str
-    ) -> None:
-        reg_resp = await client.post(
-            "/api/v1/molecules",
-            json={
-                "name": "Paracetamol",
-                "smiles": "CC(=O)Nc1ccc(O)cc1",
-                "originating_org_id": seed_org,
-            },
-        )
-        mol_id = reg_resp.json()["molecule"]["id"]
-
-        resp = await client.patch(
-            f"/api/v1/molecules/{mol_id}",
-            json={"add_tags": ["tool_compound", "probe"]},
-        )
-        assert resp.status_code == 200
-        assert "tool_compound" in resp.json()["tags"]
-        assert "probe" in resp.json()["tags"]
-
     async def test_update_lifecycle_stage(
         self, client: AsyncClient, seed_org: str
     ) -> None:

@@ -165,7 +165,6 @@ class MoleculeResponse(BaseModel):
     synthesis_status: str
     lifecycle_stage: str
     stereochemistry: str | None = None
-    tags: list[str]
     invention_date: date | None = None
     disclosed_at: datetime | None = None
     merged_into_id: uuid.UUID | None = None
@@ -216,7 +215,6 @@ class MoleculeResponse(BaseModel):
             synthesis_status=mol.synthesis_status.value,
             lifecycle_stage=mol.lifecycle_stage.value,
             stereochemistry=mol.stereochemistry.value if mol.stereochemistry else None,
-            tags=mol.tags,
             invention_date=mol.invention_date,
             disclosed_at=mol.disclosed_at,
             merged_into_id=mol.merged_into_id,
@@ -358,8 +356,6 @@ class RegisterMoleculeBody(BaseModel):
 
 
 class UpdateMoleculeBody(BaseModel):
-    add_tags: list[str] | None = None
-    remove_tags: list[str] | None = None
     lifecycle_stage: str | None = None
     lifecycle_reason: str | None = None
     custom_fields: dict | None = None
@@ -713,8 +709,6 @@ async def update_molecule(
     command = UpdateMoleculeCommand(
         workspace_id=auth.workspace_id,
         molecule_id=molecule_id,
-        add_tags=body.add_tags,
-        remove_tags=body.remove_tags,
         lifecycle_stage=body.lifecycle_stage,
         lifecycle_reason=body.lifecycle_reason,
         custom_fields=body.custom_fields if "custom_fields" in body.model_fields_set else UNSET,
