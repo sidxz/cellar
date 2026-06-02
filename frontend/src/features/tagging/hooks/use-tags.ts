@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
 import type { Tag } from "../types";
 
 const tagHooks = createCrudHooks<
@@ -26,7 +26,6 @@ export function useTags(params?: { q?: string; mine?: boolean; limit?: number })
   if (params?.limit) search.limit = String(params.limit);
   return useQuery({
     queryKey: ["tags", search],
-    queryFn: () =>
-      customInstance<Tag[]>({ url: "/api/v1/tags", method: "GET", params: search }),
+    queryFn: () => customInstance<Tag[]>({ url: "/api/v1/tags", method: "GET", params: search }),
   });
 }

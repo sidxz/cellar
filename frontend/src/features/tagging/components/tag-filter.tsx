@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Tag as TagIcon } from "lucide-react";
+import { TagChip } from "@/shared/components/tag-chip";
 import { Button } from "@/shared/components/ui/button";
 import {
   Command,
@@ -12,8 +11,9 @@ import {
   CommandList,
 } from "@/shared/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
-import { TagChip } from "@/shared/components/tag-chip";
 import { cn } from "@/shared/lib/utils";
+import { Check, Tag as TagIcon } from "lucide-react";
+import { useState } from "react";
 import { useTags } from "../hooks/use-tags";
 
 export interface TagFilterValue {
@@ -49,9 +49,16 @@ export function TagFilter({ value, onChange }: TagFilterProps) {
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">
         <Command shouldFilter={false}>
-          <CommandInput value={q} onValueChange={setQ} placeholder="Search tags…" className="h-8 text-sm" />
+          <CommandInput
+            value={q}
+            onValueChange={setQ}
+            placeholder="Search tags…"
+            className="h-8 text-sm"
+          />
           <CommandList>
-            <CommandEmpty className="px-3 py-2 text-xs text-muted-foreground">No tags.</CommandEmpty>
+            <CommandEmpty className="px-3 py-2 text-xs text-muted-foreground">
+              No tags.
+            </CommandEmpty>
             <CommandGroup>
               {tags?.map((t) => (
                 <CommandItem
@@ -60,7 +67,12 @@ export function TagFilter({ value, onChange }: TagFilterProps) {
                   onSelect={() => toggle(t.id)}
                   className="gap-1.5 text-sm"
                 >
-                  <Check className={cn("h-3 w-3", value.tagIds.includes(t.id) ? "opacity-100" : "opacity-0")} />
+                  <Check
+                    className={cn(
+                      "h-3 w-3",
+                      value.tagIds.includes(t.id) ? "opacity-100" : "opacity-0",
+                    )}
+                  />
                   <TagChip tagKey={t.key} value={t.value} />
                 </CommandItem>
               ))}
@@ -77,7 +89,9 @@ export function TagFilter({ value, onChange }: TagFilterProps) {
                     onClick={() => onChange({ ...value, tagLogic: mode })}
                     className={cn(
                       "rounded px-2 py-0.5 capitalize",
-                      value.tagLogic === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent",
+                      value.tagLogic === mode
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent",
                     )}
                   >
                     {mode}

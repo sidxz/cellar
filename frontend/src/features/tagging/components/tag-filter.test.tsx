@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { TagFilter } from "./tag-filter";
 import type { TagFilterValue } from "./tag-filter";
 
@@ -19,8 +19,22 @@ beforeAll(() => {
 vi.mock("../hooks/use-tags", () => ({
   useTags: () => ({
     data: [
-      { id: "tag-1", key: "assay", value: "primary", workspace_id: "w", created_by: "u", created_at: "" },
-      { id: "tag-2", key: "status", value: "hit", workspace_id: "w", created_by: "u", created_at: "" },
+      {
+        id: "tag-1",
+        key: "assay",
+        value: "primary",
+        workspace_id: "w",
+        created_by: "u",
+        created_at: "",
+      },
+      {
+        id: "tag-2",
+        key: "status",
+        value: "hit",
+        workspace_id: "w",
+        created_by: "u",
+        created_at: "",
+      },
     ],
   }),
 }));
@@ -34,12 +48,7 @@ describe("TagFilter", () => {
   });
 
   it("trigger shows count when tags are selected", () => {
-    render(
-      <TagFilter
-        value={{ tagIds: ["tag-1"], tagLogic: "any" }}
-        onChange={vi.fn()}
-      />,
-    );
+    render(<TagFilter value={{ tagIds: ["tag-1"], tagLogic: "any" }} onChange={vi.fn()} />);
     expect(screen.getByRole("button", { name: /tags \(1\)/i })).toBeInTheDocument();
   });
 
@@ -65,12 +74,7 @@ describe("TagFilter", () => {
 
   it("clicking a selected tag deselects it", () => {
     const onChange = vi.fn();
-    render(
-      <TagFilter
-        value={{ tagIds: ["tag-1"], tagLogic: "any" }}
-        onChange={onChange}
-      />,
-    );
+    render(<TagFilter value={{ tagIds: ["tag-1"], tagLogic: "any" }} onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: /tags \(1\)/i }));
     const tagItem = screen.getByText("assay").closest("[data-slot='command-item']") as HTMLElement;
     fireEvent.click(tagItem);

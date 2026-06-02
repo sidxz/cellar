@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { Input } from "@/shared/components/ui/input";
+import { useState } from "react";
 import { useTags } from "../hooks/use-tags";
 
 interface TagAutocompleteProps {
@@ -13,7 +13,13 @@ interface TagAutocompleteProps {
   onEnter?: () => void;
 }
 
-export function TagAutocomplete({ value, onChange, placeholder, field, onEnter }: TagAutocompleteProps) {
+export function TagAutocomplete({
+  value,
+  onChange,
+  placeholder,
+  field,
+  onEnter,
+}: TagAutocompleteProps) {
   const [focused, setFocused] = useState(false);
   const { data: tags } = useTags({ q: value || undefined, limit: 25 });
 

@@ -101,10 +101,7 @@ function hashLabel(label: string): number {
 
 /** Resolve a label + optional color hex to one of the palette entries.
  *  Unknown hex → falls back to hash. Null/undefined hex → hash. */
-export function resolveCategoryColor(
-  label: string,
-  color?: string | null,
-): CategoryColor {
+export function resolveCategoryColor(label: string, color?: string | null): CategoryColor {
   if (color) {
     const found = HEX_TO_COLOR[color.toLowerCase()];
     if (found) return found;

@@ -1,5 +1,6 @@
 "use client";
 
+import { TagFilter } from "@/features/tagging/components/tag-filter";
 import {
   Select,
   SelectContent,
@@ -7,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { TagFilter } from "@/features/tagging/components/tag-filter";
 import type { SearchCriterion, TagCriterion } from "../../types";
 
 export interface TagSectionValue {
@@ -70,9 +70,7 @@ export function tagSectionToCriteria(v: TagSectionValue): SearchCriterion[] {
 }
 
 export function tagCriteriaToSection(criteria: SearchCriterion[]): TagSectionValue {
-  const c = criteria.find(
-    (x): x is TagCriterion & { negate?: boolean } => x.type === "tag",
-  );
+  const c = criteria.find((x): x is TagCriterion & { negate?: boolean } => x.type === "tag");
   return c
     ? { tagIds: [...c.tag_ids], tagLogic: c.tag_logic ?? "any", negate: !!c.negate }
     : defaultTagSectionValue();

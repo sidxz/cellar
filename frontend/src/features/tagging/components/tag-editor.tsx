@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Plus } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
 import { TagChip } from "@/shared/components/tag-chip";
-import type { TaggableEntity } from "../types";
+import { Button } from "@/shared/components/ui/button";
+import { Plus } from "lucide-react";
+import { useState } from "react";
 import { useAssignTag, useEntityTags, useUnassignTag } from "../hooks/use-entity-tags";
+import type { TaggableEntity } from "../types";
 import { TagAutocomplete } from "./tag-autocomplete";
 
 interface TagEditorProps {
@@ -49,7 +49,13 @@ export function TagEditor({ entity, entityId, canEdit = true }: TagEditorProps) 
       {canEdit && (
         <div className="flex items-end gap-2">
           <div className="w-40">
-            <TagAutocomplete value={key} onChange={setKey} placeholder="key" field="key" onEnter={add} />
+            <TagAutocomplete
+              value={key}
+              onChange={setKey}
+              placeholder="key"
+              field="key"
+              onEnter={add}
+            />
           </div>
           <span className="pb-1.5 text-muted-foreground">=</span>
           <div className="w-40">

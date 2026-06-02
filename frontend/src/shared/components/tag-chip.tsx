@@ -1,6 +1,6 @@
-import { X } from "lucide-react";
 import { resolveCategoryColor } from "@/shared/lib/category-colors";
 import { cn } from "@/shared/lib/utils";
+import { X } from "lucide-react";
 
 interface TagChipProps {
   tagKey: string;

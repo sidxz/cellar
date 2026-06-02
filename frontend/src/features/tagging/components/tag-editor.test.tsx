@@ -7,7 +7,14 @@ const unassignMutate = vi.fn();
 vi.mock("../hooks/use-entity-tags", () => ({
   useEntityTags: () => ({
     data: [
-      { id: "t1", key: "project", value: "alpha", workspace_id: "w", created_by: "u", created_at: "" },
+      {
+        id: "t1",
+        key: "project",
+        value: "alpha",
+        workspace_id: "w",
+        created_by: "u",
+        created_at: "",
+      },
     ],
     isLoading: false,
   }),

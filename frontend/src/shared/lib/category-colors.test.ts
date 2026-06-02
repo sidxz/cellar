@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveCategoryColor, CATEGORY_COLORS } from "./category-colors";
+import { CATEGORY_COLORS, resolveCategoryColor } from "./category-colors";
 
 describe("resolveCategoryColor", () => {
   it("is stable for the same label", () => {
