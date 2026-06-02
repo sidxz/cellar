@@ -35,6 +35,7 @@ import cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_mod
 import cellar.infrastructure.persistence.sqlalchemy.inventory.shipment_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.tagging.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.user_preferences  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_model  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.sar_analysis.models  # noqa: F401
