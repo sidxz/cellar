@@ -122,6 +122,7 @@ from cellar.application.screening.plate_templates import (
     UpdatePlateTemplate,
 )
 from cellar.application.screening.preview_summary_file import PreviewSummaryFile
+from cellar.application.screening.preview_summary_import import PreviewSummaryImport
 from cellar.application.screening.protocol_activity_reader import ProtocolActivityReader
 from cellar.application.screening.protocol_stats_reader import ProtocolStatsReader
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
@@ -704,6 +705,22 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(ImportSummaryFile, _import_summary_file)
+
+    def _preview_summary_import(c: Container):
+        # Dry-run forecast: owns + enters its own read UoW (no bulk_uc, no
+        # writes). Mirrors ``_import_summary_file`` minus the bulk write path.
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewSummaryImport(
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            parser=c[TabularParser],
+            uow=uow,
+        )
+
+    container.define(PreviewSummaryImport, _preview_summary_import)
 
     # --- Run import templates (CRUD) ---
     def _run_import_template_cmd(uc_cls: type):

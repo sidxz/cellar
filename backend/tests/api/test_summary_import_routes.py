@@ -177,6 +177,85 @@ class TestSummaryImportRoutes:
         )
         assert resp.status_code == 404, resp.text
 
+    async def test_resolve_summary_file_forecasts_inserts(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        fake_auth: FakeAuth,
+    ) -> None:
+        """Dry-run forecasts an insert and writes NOTHING to readout_data."""
+        ws = fake_auth.workspace_id
+        run_id, ic50_id, reg = await _seed(session_factory, ws)
+        csv = f"Compound,IC50\n{reg},5.2\n".encode()
+        mapping = {"compound_ref": "Compound", "readout_columns": {"IC50": str(ic50_id)}}
+
+        resp = await client.post(
+            f"/api/v1/runs/{run_id}/resolve-summary-file",
+            files={"file": ("summary.csv", csv, "text/csv")},
+            data={"mapping": json.dumps(mapping)},
+        )
+        assert resp.status_code == 200, resp.text
+        out = resp.json()
+        assert out["values_to_insert"] >= 1
+        assert out["values_to_update"] == 0
+        assert out["unmatched_compound_refs"] == []
+
+        # CRITICAL: the dry-run must NOT have persisted any readout_data rows.
+        uow = AsyncUnitOfWork(session_factory)
+        async with uow:
+            count = await uow.session.scalar(
+                sa.text("SELECT count(*) FROM readout_data WHERE run_id = :rid"),
+                {"rid": run_id},
+            )
+        assert count == 0
+
+    async def test_resolve_summary_file_reports_unmatched(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        fake_auth: FakeAuth,
+    ) -> None:
+        """A compound_ref not in the DB lands in unmatched_compound_refs."""
+        ws = fake_auth.workspace_id
+        run_id, ic50_id, _reg = await _seed(session_factory, ws)
+        unknown = f"NOPE-{uuid.uuid4().hex[:8]}"
+        csv = f"Compound,IC50\n{unknown},5.2\n".encode()
+        mapping = {"compound_ref": "Compound", "readout_columns": {"IC50": str(ic50_id)}}
+
+        resp = await client.post(
+            f"/api/v1/runs/{run_id}/resolve-summary-file",
+            files={"file": ("summary.csv", csv, "text/csv")},
+            data={"mapping": json.dumps(mapping)},
+        )
+        assert resp.status_code == 200, resp.text
+        out = resp.json()
+        assert unknown in out["unmatched_compound_refs"]
+
+    async def test_resolve_malformed_mapping_returns_422(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        fake_auth: FakeAuth,
+    ) -> None:
+        """Malformed mapping form field must return 422, never a 500."""
+        ws = fake_auth.workspace_id
+        run_id, _ic50_id, reg = await _seed(session_factory, ws)
+        csv = f"Compound,IC50\n{reg},5.2\n".encode()
+
+        bad_json_resp = await client.post(
+            f"/api/v1/runs/{run_id}/resolve-summary-file",
+            files={"file": ("summary.csv", csv, "text/csv")},
+            data={"mapping": "{not valid json"},
+        )
+        assert bad_json_resp.status_code == 422, bad_json_resp.text
+
+        bad_uuid_resp = await client.post(
+            f"/api/v1/runs/{run_id}/resolve-summary-file",
+            files={"file": ("summary.csv", csv, "text/csv")},
+            data={"mapping": json.dumps({"readout_columns": {"IC50": "not-a-uuid"}})},
+        )
+        assert bad_uuid_resp.status_code == 422, bad_uuid_resp.text
+
     async def test_import_malformed_mapping_returns_422(
         self,
         client: AsyncClient,

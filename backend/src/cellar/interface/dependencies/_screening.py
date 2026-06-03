@@ -80,6 +80,7 @@ from cellar.application.screening.plate_templates import (
     UpdatePlateTemplate,
 )
 from cellar.application.screening.preview_summary_file import PreviewSummaryFile
+from cellar.application.screening.preview_summary_import import PreviewSummaryImport
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
 from cellar.application.screening.refit_dose_response_preview import (
@@ -172,6 +173,7 @@ __all__ = [
     "SetUpRunPlateDep",
     "ImportRunReadoutsDep",
     "PreviewSummaryFileDep",
+    "PreviewSummaryImportDep",
     "ImportSummaryFileDep",
 ]
 
@@ -319,6 +321,9 @@ SetUpRunPlateDep = Annotated[SetUpRunPlate, Depends(_get_use_case(SetUpRunPlate)
 ImportRunReadoutsDep = Annotated[ImportRunReadouts, Depends(_get_use_case(ImportRunReadouts))]
 PreviewSummaryFileDep = Annotated[
     PreviewSummaryFile, Depends(_get_use_case(PreviewSummaryFile))
+]
+PreviewSummaryImportDep = Annotated[
+    PreviewSummaryImport, Depends(_get_use_case(PreviewSummaryImport))
 ]
 ImportSummaryFileDep = Annotated[
     ImportSummaryFile, Depends(_get_use_case(ImportSummaryFile))

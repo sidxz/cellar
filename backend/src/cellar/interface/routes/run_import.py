@@ -18,6 +18,7 @@ from cellar.application.screening.import_run_file import (
     RepreviewRunFileQuery,
 )
 from cellar.application.screening.import_summary_file import ImportSummaryFileCommand
+from cellar.application.screening.preview_summary_import import PreviewSummaryImportCommand
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
     ReadoutColumn,
@@ -30,6 +31,7 @@ from cellar.application.screening.run_import_templates import (
 )
 from cellar.application.screening.summary_import_models import (
     SummaryColumnMapping,
+    SummaryImportPlanPreview,
     SummaryImportResult,
     SummaryPreviewResult,
 )
@@ -43,6 +45,7 @@ from cellar.interface.dependencies import (
     ListRunImportTemplatesDep,
     PreviewRunFileDep,
     PreviewSummaryFileDep,
+    PreviewSummaryImportDep,
     ReadoutCalculationEngineDep,
     RepreviewRunFileDep,
     UpdateRunImportTemplateDep,
@@ -667,6 +670,35 @@ class SummaryImportResponse(BaseModel):
         )
 
 
+class SummaryResolveResponse(BaseModel):
+    """Dry-run forecast of a summary import — resolve refs + count writes (no writes)."""
+
+    total_rows: int
+    matched_compound_count: int
+    unmatched_compound_refs: list[str] = Field(default_factory=list)
+    unmatched_batch_refs: list[str] = Field(default_factory=list)
+    values_to_insert: int
+    values_to_update: int
+    rows_skipped: int
+    errors: list[SummaryImportErrorModel] = Field(default_factory=list)
+
+    @classmethod
+    def from_result(cls, result: SummaryImportPlanPreview) -> SummaryResolveResponse:
+        return cls(
+            total_rows=result.total_rows,
+            matched_compound_count=result.matched_compound_count,
+            unmatched_compound_refs=list(result.unmatched_compound_refs),
+            unmatched_batch_refs=list(result.unmatched_batch_refs),
+            values_to_insert=result.values_to_insert,
+            values_to_update=result.values_to_update,
+            rows_skipped=result.rows_skipped,
+            errors=[
+                SummaryImportErrorModel(row=e.get("row", ""), error=e.get("error", ""))
+                for e in result.errors
+            ],
+        )
+
+
 class SummaryColumnMappingRequest(BaseModel):
     """Confirmed column mapping the chemist sends back on import.
 
@@ -763,3 +795,43 @@ async def import_summary_file(
     await engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
 
     return SummaryImportResponse.from_result(out)
+
+
+@router.post(
+    "/runs/{run_id}/resolve-summary-file",
+    response_model=SummaryResolveResponse,
+    status_code=200,
+)
+async def resolve_summary_file(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    uc: PreviewSummaryImportDep,
+    file: Annotated[UploadFile, File()],
+    mapping: Annotated[str, Form()],
+) -> SummaryResolveResponse:
+    """Dry-run a wide-format summary import: resolve refs + forecast writes (no writes).
+
+    The Preview step (step 3 of the wizard) calls this with the confirmed
+    ``SummaryColumnMappingRequest`` JSON in the ``mapping`` form field. It
+    resolves every compound/batch ref the SAME way the real import would and
+    forecasts insert-vs-update counts WITHOUT writing anything (no calc engine,
+    no readout-data rows). Mirrors ``import-summary-file`` minus the commit.
+    """
+    content = await file.read()
+    # Parse the mapping form field here so malformed JSON / non-UUID readout ids
+    # surface as a domain ValidationError (HTTP 422) instead of a raw pydantic
+    # ValidationError bubbling out as a 500.
+    try:
+        parsed_map = SummaryColumnMappingRequest.model_validate_json(mapping)
+    except PydanticValidationError as exc:
+        raise ValidationError(f"Invalid mapping: {exc}") from exc
+    cmd = PreviewSummaryImportCommand(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        filename=file.filename or "upload",
+        content=content,
+        mapping=parsed_map.to_domain(),
+    )
+    result = await uc(cmd, auth=auth)
+    out: SummaryImportPlanPreview = result_to_response(result)
+    return SummaryResolveResponse.from_result(out)
