@@ -10,9 +10,11 @@ import { useProtocol } from "./use-protocols";
 import {
   type SummaryImportResponse,
   type SummaryPreviewResponse,
+  type SummaryResolveResponse,
   type SummaryRole,
   useImportSummaryFile,
   usePreviewSummaryFile,
+  useResolveSummaryFile,
 } from "./use-summary-import";
 
 // ─── Options / result ─────────────────────────────────────────────────────────
@@ -26,16 +28,18 @@ export interface UseSummaryImportWizardOptions {
 
 export interface UseSummaryImportWizardResult {
   // State
-  step: 1 | 2 | 3;
+  step: 1 | 2 | 3 | 4;
   file: File | null;
   preview: SummaryPreviewResponse | null;
   draft: SummaryMappingDraft;
+  resolvePreview: SummaryResolveResponse | null;
   result: SummaryImportResponse | null;
   isDragging: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
 
   // Mutations (expose for pending/data inspection in the component)
   previewMutation: ReturnType<typeof usePreviewSummaryFile>;
+  resolveMutation: ReturnType<typeof useResolveSummaryFile>;
   importMutation: ReturnType<typeof useImportSummaryFile>;
 
   // Protocol data — options for the per-readout-column Select
@@ -43,11 +47,13 @@ export interface UseSummaryImportWizardResult {
 
   // Derived
   canContinueMapping: boolean;
+  canImport: boolean;
   isPreviewing: boolean;
+  isResolving: boolean;
   isImporting: boolean;
 
   // Actions
-  setStep: (s: 1 | 2 | 3) => void;
+  setStep: (s: 1 | 2 | 3 | 4) => void;
   setIsDragging: (v: boolean) => void;
   reset: () => void;
   handleOpenChange: (next: boolean) => void;
@@ -55,6 +61,7 @@ export interface UseSummaryImportWizardResult {
   handleDrop: (e: React.DragEvent) => void;
   setRole: (header: string, role: SummaryRole) => void;
   setReadoutDef: (header: string, defId: string) => void;
+  handleContinueToPreview: () => void;
   handleImport: () => void;
 }
 
@@ -72,10 +79,11 @@ export function useSummaryImportWizard({
   onOpenChange,
 }: UseSummaryImportWizardOptions): UseSummaryImportWizardResult {
   // ─── State ──────────────────────────────────────────────────────────────────
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<SummaryPreviewResponse | null>(null);
   const [draft, setDraft] = useState<SummaryMappingDraft>(emptyDraft());
+  const [resolvePreview, setResolvePreview] = useState<SummaryResolveResponse | null>(null);
   const [result, setResult] = useState<SummaryImportResponse | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -83,6 +91,7 @@ export function useSummaryImportWizard({
 
   // ─── Mutations / queries ─────────────────────────────────────────────────────
   const previewMutation = usePreviewSummaryFile(runId);
+  const resolveMutation = useResolveSummaryFile(runId);
   const importMutation = useImportSummaryFile(runId);
   const { data: protocol } = useProtocol(protocolId);
 
@@ -99,6 +108,8 @@ export function useSummaryImportWizard({
   // refs to call .reset() from a stable callback (mirrors use-run-import-wizard).
   const previewMutationRef = useRef(previewMutation);
   previewMutationRef.current = previewMutation;
+  const resolveMutationRef = useRef(resolveMutation);
+  resolveMutationRef.current = resolveMutation;
   const importMutationRef = useRef(importMutation);
   importMutationRef.current = importMutation;
 
@@ -108,8 +119,10 @@ export function useSummaryImportWizard({
     setFile(null);
     setPreview(null);
     setDraft(emptyDraft());
+    setResolvePreview(null);
     setResult(null);
     previewMutationRef.current.reset();
+    resolveMutationRef.current.reset();
     importMutationRef.current.reset();
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
@@ -173,7 +186,34 @@ export function useSummaryImportWizard({
 
   const canContinueMapping = useMemo(() => buildMapping(draft) !== null, [draft]);
 
-  // ─── Step 3 — submit ─────────────────────────────────────────────────────────
+  // ─── Step 2 → 3 — dry-run resolve with the chemist's confirmed mapping ────────
+  const handleContinueToPreview = useCallback(() => {
+    if (!file) return;
+    const mapping = buildMapping(draft);
+    if (!mapping) {
+      showError("Mapping incomplete — assign a compound/batch column and bind every readout");
+      return;
+    }
+    resolveMutation.mutate(
+      { file, mapping },
+      {
+        onSuccess: (data) => {
+          setResolvePreview(data);
+          setStep(3);
+        },
+        onError: () => showError("Could not resolve the import"),
+      },
+    );
+  }, [file, draft, resolveMutation]);
+
+  // ─── Step 3 → 4 — commit ─────────────────────────────────────────────────────
+  const canImport = useMemo(
+    () =>
+      resolvePreview != null &&
+      resolvePreview.values_to_insert + resolvePreview.values_to_update > 0,
+    [resolvePreview],
+  );
+
   const handleImport = useCallback(() => {
     if (!file) return;
     const mapping = buildMapping(draft);
@@ -187,7 +227,7 @@ export function useSummaryImportWizard({
         onSuccess: (data) => {
           setResult(data);
           showSuccess(`Imported ${data.values_inserted + data.values_updated} values`);
-          setStep(3);
+          setStep(4);
         },
         onError: () => showError("Import failed"),
       },
@@ -200,14 +240,18 @@ export function useSummaryImportWizard({
     file,
     preview,
     draft,
+    resolvePreview,
     result,
     isDragging,
     fileInputRef,
     previewMutation,
+    resolveMutation,
     importMutation,
     readoutDefOptions,
     canContinueMapping,
+    canImport,
     isPreviewing: previewMutation.isPending,
+    isResolving: resolveMutation.isPending,
     isImporting: importMutation.isPending,
     setStep,
     setIsDragging,
@@ -217,6 +261,7 @@ export function useSummaryImportWizard({
     handleDrop,
     setRole,
     setReadoutDef,
+    handleContinueToPreview,
     handleImport,
   };
 }
