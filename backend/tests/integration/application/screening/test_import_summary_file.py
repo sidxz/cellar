@@ -340,3 +340,178 @@ class TestImportSummaryFile:
         assert rows[0].value is not None
         assert rows[0].value.value == 100.0
         assert rows[0].value.qualifier.value == ">"
+
+    async def test_duplicate_key_within_file_last_wins(
+        self, session_factory, workspace_id
+    ) -> None:
+        """Two rows with the same reg+readout collapse to ONE well-less row (last
+        value wins), accounting reports a single insert, and a later re-import of
+        the same compound updates in place instead of raising MultipleResultsFound
+        (proving no duplicate row was planted)."""
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        ic50_id = uuid.uuid4()
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id = uuid.uuid4()
+        protocol_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        mapping = SummaryColumnMapping(
+            compound_ref="Compound", readout_columns={"IC50": ic50_id}
+        )
+
+        first = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},5.0\n{reg},7.0\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(first, Success)
+        res = first.unwrap()
+        assert res.values_inserted == 1
+        assert res.values_updated == 0
+        assert res.errors == []
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 1
+        assert rows[0].value is not None
+        assert rows[0].value.value == 7.0  # last occurrence wins
+
+        # Re-import must NOT raise (no duplicate well-less row was planted) and
+        # must update the single existing row in place.
+        second = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},8.0\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(second, Success)
+        res2 = second.unwrap()
+        assert res2.values_inserted == 0
+        assert res2.values_updated == 1
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 1
+        assert rows[0].value.value == 8.0
+
+    async def test_row_with_no_refs_is_skipped(self, session_factory, workspace_id) -> None:
+        """A row whose compound and batch cells are both empty increments
+        rows_skipped and stores nothing for it."""
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        ic50_id = uuid.uuid4()
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id = uuid.uuid4()
+        protocol_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        mapping = SummaryColumnMapping(
+            compound_ref="Compound", readout_columns={"IC50": ic50_id}
+        )
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},5.2\n,9.9\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(result, Success)
+        res = result.unwrap()
+        assert res.rows_skipped == 1
+        assert res.values_inserted == 1
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 1
+        assert rows[0].value.value == 5.2
+
+    async def test_multiple_readout_columns_one_row(
+        self, session_factory, workspace_id
+    ) -> None:
+        """A single row with two readout columns stores two values for the
+        compound (one per readout definition)."""
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        ic50_id = uuid.uuid4()
+        mic_id = uuid.uuid4()
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id = uuid.uuid4()
+        protocol_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+            )
+            await _insert_readout_def_typed(
+                seed_uow, mic_id, protocol_id, name="MIC", data_type="numeric", display_order=1
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        mapping = SummaryColumnMapping(
+            compound_ref="Compound",
+            readout_columns={"IC50": ic50_id, "MIC": mic_id},
+        )
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50,MIC\n{reg},5.2,1.5\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(result, Success)
+        res = result.unwrap()
+        assert res.values_inserted == 2
+        assert res.errors == []
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 2
+        by_def = {r.readout_definition_id: r for r in rows}
+        assert by_def[ic50_id].value.value == 5.2
+        assert by_def[mic_id].value.value == 1.5

@@ -35,6 +35,7 @@ from cellar.application.screening.summary_import_models import (
     SummaryColumnMapping,
     SummaryImportResult,
 )
+from cellar.application.shared.command import Command
 from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.domain.screening_assay.enums import ReadoutDataType
 from cellar.domain.screening_assay.repository import (
@@ -49,9 +50,17 @@ _log = structlog.get_logger(__name__)
 # Optional qualifier symbol + a signed int/float/scientific number.
 _NUMERIC_RE = re.compile(r"^\s*(<=|>=|<|>|=)?\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*$")
 
+# Defense-in-depth row cap (mirrors PreviewSummaryFile; preview & import are
+# separate requests, so neither can assume the other validated the file).
+_MAX_ROWS = 50_000
+
+# File-level identity tuple used to de-duplicate items within one import so two
+# rows sharing the same upsert key never double-insert.
+_DedupKey = tuple[str | None, str | None, uuid.UUID]
+
 
 @dataclass(frozen=True, kw_only=True)
-class ImportSummaryFileCommand:
+class ImportSummaryFileCommand(Command):
     workspace_id: uuid.UUID
     run_id: uuid.UUID
     filename: str
@@ -102,7 +111,22 @@ class ImportSummaryFile:
         except TabularParseError as exc:
             return Failure(ValidationError(f"File parse error: {exc}"))
 
-        items: list[ReadoutDataItem] = []
+        if table.row_count > _MAX_ROWS:
+            return Failure(
+                ValidationError(
+                    f"File has {table.row_count} rows; sync import limit is {_MAX_ROWS}"
+                )
+            )
+
+        # Last-wins dedup by file-level upsert key. Two rows in one file with the
+        # same (reg, batch, readout-def) would otherwise both insert as new rows
+        # (the bulk UC's per-item existence check runs before the first is
+        # saved), planting duplicate well-less rows that break re-imports and
+        # corrupt the snapshot-based accounting. We keep only the LAST occurrence
+        # so a later row overrides an earlier one (matches "latest value wins").
+        # ``deduped`` maps key -> (item, source_row); insertion order is first-seen
+        # but the value is the last item, which is sufficient for error reporting.
+        deduped: dict[_DedupKey, tuple[ReadoutDataItem, int]] = {}
         errors: list[dict[str, str]] = []
         rows_skipped = 0
 
@@ -113,6 +137,7 @@ class ImportSummaryFile:
                 rows_skipped += 1
                 continue
 
+            source_row = ridx + 1
             for header, rdef_id in mapping.readout_columns.items():
                 raw = (row.get(header) or "").strip()
                 if not raw:
@@ -120,7 +145,7 @@ class ImportSummaryFile:
 
                 d = defs_by_id.get(rdef_id)
                 if d is None:
-                    errors.append({"row": str(ridx + 1), "error": "unknown readout def"})
+                    errors.append({"row": str(source_row), "error": "unknown readout def"})
                     continue
 
                 value_numeric: float | None = None
@@ -134,7 +159,7 @@ class ImportSummaryFile:
                     if m is None:
                         errors.append(
                             {
-                                "row": str(ridx + 1),
+                                "row": str(source_row),
                                 "error": f"'{raw}' not numeric for {d.name}",
                             }
                         )
@@ -142,18 +167,25 @@ class ImportSummaryFile:
                     value_qualifier = m.group(1) or "="
                     value_numeric = float(m.group(2))
 
-                items.append(
-                    ReadoutDataItem(
-                        run_id=run_id,
-                        well_id=None,
-                        registration_number=(reg or None),
-                        batch_number=(batch or None),
-                        readout_definition_id=rdef_id,
-                        value_numeric=value_numeric,
-                        value_qualifier=value_qualifier,
-                        value_text=value_text,
-                    )
+                item = ReadoutDataItem(
+                    run_id=run_id,
+                    well_id=None,
+                    registration_number=(reg or None),
+                    batch_number=(batch or None),
+                    readout_definition_id=rdef_id,
+                    value_numeric=value_numeric,
+                    value_qualifier=value_qualifier,
+                    value_text=value_text,
                 )
+                key: _DedupKey = (reg or None, batch or None, rdef_id)
+                deduped[key] = (item, source_row)  # last occurrence wins
+
+        # Parallel lists: ``items`` is what we hand to the bulk UC, ``item_rows``
+        # maps each item's bulk index back to its source file row for error
+        # reporting. After dedup no two items share a key, so the before/after
+        # snapshot diff yields exact insert/update counts.
+        items: list[ReadoutDataItem] = [item for item, _ in deduped.values()]
+        item_rows: list[int] = [src for _, src in deduped.values()]
 
         before = await self._wellless_keys(ws, run_id)
 
@@ -174,7 +206,10 @@ class ImportSummaryFile:
             values_inserted = len(after - before)
             values_updated = max(0, bulk.success_count - values_inserted)
             for err in bulk.errors:
-                errors.append({k: str(v) for k, v in err.items()})
+                idx = err.get("index")
+                in_range = isinstance(idx, int) and idx < len(item_rows)
+                src: int | str = item_rows[idx] if in_range else ""
+                errors.append({"row": str(src), "error": str(err.get("error", ""))})
 
         _log.info(
             "summary_file.imported",
