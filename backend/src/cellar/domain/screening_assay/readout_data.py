@@ -53,3 +53,21 @@ class ReadoutData(Entity):
         # Identifies which normalization formula produced this row.
         # None for raw rows (is_computed=False); the formula for computed rows.
         self.normalization_applied = normalization_applied
+
+    def update_value(
+        self,
+        *,
+        value: QualifiedValue | None,
+        value_text: str | None,
+        is_outlier: bool = False,
+    ) -> None:
+        """Overwrite the recorded value in place (keeps the same identity).
+
+        Used by the summary-results re-import upsert: an existing endpoint row is
+        located by its upsert key and its measurement is replaced so the row is
+        UPDATEd by PK rather than duplicated. A re-import also resets the outlier
+        flag to the incoming value (default ``False``).
+        """
+        self.value = value
+        self.value_text = value_text
+        self.is_outlier = is_outlier

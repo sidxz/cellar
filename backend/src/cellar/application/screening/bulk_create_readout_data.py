@@ -203,8 +203,20 @@ class BulkCreateReadoutData:
             )
         )
 
+    @staticmethod
+    def _build_value(item: ReadoutDataItem) -> QualifiedValue | None:
+        """Map an item's numeric value + qualifier to a QualifiedValue (or None)."""
+        if item.value_numeric is None:
+            return None
+        qualifier = Qualifier(item.value_qualifier) if item.value_qualifier else Qualifier.EQUAL
+        return QualifiedValue(value=item.value_numeric, qualifier=qualifier)
+
     async def __call__(
-        self, input: BulkCreateReadoutDataCommand, auth: AuthContext | None = None
+        self,
+        input: BulkCreateReadoutDataCommand,
+        auth: AuthContext | None = None,
+        *,
+        upsert: bool = False,
     ) -> Result[BulkReadoutResult, DomainError]:
         require_editor(auth)
 
@@ -255,28 +267,45 @@ class BulkCreateReadoutData:
                     )
                     continue
 
-                try:
-                    value: QualifiedValue | None = None
-                    if item.value_numeric is not None:
-                        qualifier = (
-                            Qualifier(item.value_qualifier)
-                            if item.value_qualifier
-                            else Qualifier.EQUAL
-                        )
-                        value = QualifiedValue(value=item.value_numeric, qualifier=qualifier)
+                molecule_id = molecule_result.unwrap()
+                batch_id = batch_result.unwrap()
+                readout_definition_id = readout_def_result.unwrap()
 
-                    rd = ReadoutData(
-                        workspace_id=input.workspace_id,
-                        run_id=item.run_id,
-                        well_id=item.well_id,
-                        molecule_id=molecule_result.unwrap(),
-                        batch_id=batch_result.unwrap(),
-                        readout_definition_id=readout_def_result.unwrap(),
-                        value=value,
-                        value_text=item.value_text,
-                        is_outlier=item.is_outlier,
-                    )
-                    entities.append(rd)
+                try:
+                    value = self._build_value(item)
+
+                    existing: ReadoutData | None = None
+                    if upsert:
+                        existing = await self._repo.find_wellless_by_keys(
+                            workspace_id=input.workspace_id,
+                            run_id=item.run_id,
+                            molecule_id=molecule_id,
+                            batch_id=batch_id,
+                            readout_definition_id=readout_definition_id,
+                        )
+
+                    if existing is not None:
+                        # Overwrite the existing endpoint value in place; the row
+                        # keeps its PK so the repo UPDATEs (latest-wins).
+                        existing.update_value(
+                            value=value,
+                            value_text=item.value_text,
+                            is_outlier=item.is_outlier,
+                        )
+                        await self._repo.save(existing)
+                    else:
+                        rd = ReadoutData(
+                            workspace_id=input.workspace_id,
+                            run_id=item.run_id,
+                            well_id=item.well_id,
+                            molecule_id=molecule_id,
+                            batch_id=batch_id,
+                            readout_definition_id=readout_definition_id,
+                            value=value,
+                            value_text=item.value_text,
+                            is_outlier=item.is_outlier,
+                        )
+                        entities.append(rd)
                     result.success_count += 1
                 except (ValueError, TypeError) as e:
                     result.error_count += 1
