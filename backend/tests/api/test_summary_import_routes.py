@@ -73,6 +73,23 @@ async def _insert_molecule(
         ),
         {"id": mol_id, "ws": ws_id, "name": f"M-{reg}", "reg": reg, "org": org_id},
     )
+    # Summary import now resolves compound_ref via ``find_by_identifier`` (which
+    # JOINs molecule_identifiers, NOT the registration_number column), so seed an
+    # identifier row equal to the reg value the file's compound_ref carries.
+    await uow.session.execute(
+        sa.text(
+            "INSERT INTO molecule_identifiers "
+            "(id, molecule_id, workspace_id, identifier, identifier_type, source, registered_by) "
+            "VALUES (:id, :mol, :ws, :ident, 'custom', 'test', :by)"
+        ),
+        {
+            "id": uuid.uuid4(),
+            "mol": mol_id,
+            "ws": ws_id,
+            "ident": reg,
+            "by": uuid.uuid4(),
+        },
+    )
 
 
 async def _seed(

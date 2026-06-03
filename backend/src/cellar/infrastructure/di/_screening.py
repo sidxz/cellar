@@ -697,6 +697,8 @@ def register_screening(container: Container) -> None:
             run_repo=SQLAlchemyRunRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
             parser=c[TabularParser],
             bulk_uc=c[BulkCreateReadoutData],
         )

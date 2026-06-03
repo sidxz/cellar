@@ -26,6 +26,9 @@ from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
+    SQLAlchemyBatchRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
 )
@@ -68,9 +71,51 @@ async def _insert_readout_def_typed(
     )
 
 
-async def _insert_molecule(
-    uow: AsyncUnitOfWork, mol_id: uuid.UUID, ws_id: uuid.UUID, reg: str
+async def _insert_molecule_identifier(
+    uow: AsyncUnitOfWork,
+    mol_id: uuid.UUID,
+    ws_id: uuid.UUID,
+    identifier: str,
+    *,
+    identifier_type: str = "custom",
 ) -> None:
+    """Add a ``molecule_identifiers`` row.
+
+    Resolution now goes through ``find_by_identifier``, which JOINs
+    ``molecule_identifiers`` (it does NOT match the ``molecules.registration_number``
+    column), so a molecule is only resolvable by a value that has an identifier row.
+    """
+    await uow.session.execute(
+        sa.text(
+            "INSERT INTO molecule_identifiers "
+            "(id, molecule_id, workspace_id, identifier, identifier_type, source, registered_by) "
+            "VALUES (:id, :mol, :ws, :ident, :itype, 'test', :by)"
+        ),
+        {
+            "id": uuid.uuid4(),
+            "mol": mol_id,
+            "ws": ws_id,
+            "ident": identifier,
+            "itype": identifier_type,
+            "by": uuid.uuid4(),
+        },
+    )
+
+
+async def _insert_molecule(
+    uow: AsyncUnitOfWork,
+    mol_id: uuid.UUID,
+    ws_id: uuid.UUID,
+    reg: str,
+    *,
+    identifier: str | None = None,
+) -> None:
+    """Insert a molecule and an identifier row so it is resolvable.
+
+    ``identifier`` defaults to ``reg`` (the registration number is the value the
+    file's compound_ref column carries in most tests). Pass a distinct
+    ``identifier`` to prove identifier-based (not reg-number) resolution.
+    """
     org_id = uuid.uuid4()
     await uow.session.execute(
         sa.text(
@@ -89,6 +134,9 @@ async def _insert_molecule(
             "'approved', 'virtual', 'registered', :reg, :org, 1)"
         ),
         {"id": mol_id, "ws": ws_id, "name": f"M-{reg}", "reg": reg, "org": org_id},
+    )
+    await _insert_molecule_identifier(
+        uow, mol_id, ws_id, identifier if identifier is not None else reg
     )
 
 
@@ -117,6 +165,8 @@ def _build_use_case(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummary
         run_repo=run_repo,
         protocol_repo=protocol_repo,
         readout_repo=readout_repo,
+        molecule_repo=SQLAlchemyMoleculeRepository(read_uow),
+        batch_repo=SQLAlchemyBatchRepository(read_uow),
         parser=TabularFileParser(),
         bulk_uc=bulk,
     )
@@ -516,3 +566,65 @@ class TestImportSummaryFile:
         by_def = {r.readout_definition_id: r for r in rows}
         assert by_def[ic50_id].value.value == 5.2
         assert by_def[mic_id].value.value == 1.5
+
+    async def test_resolves_by_custom_identifier_not_reg_number(
+        self, session_factory, workspace_id
+    ) -> None:
+        """THE FIX: a compound_ref that is a custom identifier (NOT the
+        registration number) resolves to the right molecule.
+
+        The molecule's registration_number is ``CC-...`` but its custom
+        identifier is ``SACC-TEST-1``; the file's compound_ref column carries the
+        custom identifier. The old reg-number-only path would silently drop this
+        row; the identifier-aware path must store the readout against the right
+        molecule."""
+        molecule_id = uuid.uuid4()
+        reg = f"CC-{uuid.uuid4().hex[:8]}"
+        custom_ident = f"SACC-TEST-{uuid.uuid4().hex[:6]}"
+        ic50_id = uuid.uuid4()
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id = uuid.uuid4()
+        protocol_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            # Identifier differs from the registration number.
+            await _insert_molecule(
+                seed_uow, molecule_id, workspace_id, reg, identifier=custom_ident
+            )
+            await seed_uow.commit()
+
+        mapping = SummaryColumnMapping(
+            compound_ref="Compound", readout_columns={"IC50": ic50_id}
+        )
+
+        # compound_ref carries the CUSTOM identifier, not the reg number.
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{custom_ident},4.2\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(result, Success)
+        res = result.unwrap()
+        assert res.values_inserted == 1
+        assert res.errors == []
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 1
+        # Resolution succeeded via identifier → stored against the right molecule.
+        assert rows[0].molecule_id == molecule_id
+        assert rows[0].value is not None
+        assert rows[0].value.value == 4.2
