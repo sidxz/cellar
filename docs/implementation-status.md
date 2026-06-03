@@ -130,6 +130,7 @@
 |---------|------|--------|-------|
 | Admin Hard Delete (Tier 1 + Tier 2) | 2026-05-08 | SHIPPED | Generic hard-delete use case + RESTRICT guard (Tier 1) for all 23 registered entity types; cascade preview + force-delete (Tier 2) for Protocol/Run/Plate subtrees. FK-coverage gate (test_fk_coverage.py) enforces every FK is categorised. Admin UI wired into entity detail pages. |
 | Screen Campaign (Phases 1-10) | 2026-05-11 | SHIPPED | See detail below. |
+| Summary Results Import | 2026-06-02 | SHIPPED | Purely-additive, well-less `ReadoutData` import for wide-format summary files (compound/batch ref + endpoint readout columns; no plate/well). Reached via the "Import Summary Results" entry on the Run page (split button alongside plate "Import Run File", which is untouched). Lightweight wizard (Upload → Map → Preview → Confirm) offering only Compound Ref / Batch Ref / Readout / Ignore roles; writes well-less `ReadoutData` (`well_id = NULL`) into the current Run via the existing `BulkCreateReadoutData` resolver (opt-in upsert mode). Re-import upserts on `(run_id, molecule_id, batch_id, readout_definition_id)` — latest file wins. Backed by `POST /runs/{id}/preview-summary-file` (parse + suggest readout-def matches + dry-run) + `POST /runs/{id}/import-summary-file` (commit). Plan: `docs/superpowers/plans/2026-06-02-summary-results-import.md`. |
 
 ## Screen Campaign Feature (Branch `fe2`, 2026-05-11)
 

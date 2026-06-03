@@ -1,6 +1,8 @@
 # Pre-existing test failures on `kvt` (not tagging-related)
 
-**Status:** open · **Found:** 2026-06-02 (during tagging Phases 1–3) · **Origin:** predates the tagging work
+**Status:** open · **Found:** 2026-06-02 (during tagging Phases 1–3; re-confirmed during summary-results-import final verification) · **Origin:** predates the tagging work
+
+> Re-confirmed 2026-06-02 during the summary-results-import feature's final verification (Task 13). The full backend suite reported `6 failed, 3102 passed`: the three `test_molecules.py` failures and the three `test_backfill_bemis_murcko.py` failures below. None touch any summary-import file (verified by inspection + git history) — all unrelated to the summary-import feature. One variant observed this run: `test_tested_molecule_returns_count` / `test_project_scoped_count` surfaced a `dose_response_curves.batch_id` NOT-NULL violation rather than the `intercept_values` column error, but it is the same shared-testcontainer / model↔migration fragility family already tracked here.
 
 These failures were **empirically proven pre-existing** — they already fail in the full suite at commit `5554e342` (the `kvt` HEAD before any tagging work began). They are unrelated to the tagging feature and were deliberately left untouched so the tagging branch stays scoped. Recording them here so they're tracked.
 
