@@ -45,6 +45,20 @@ class SummaryPreviewResult:
 
 
 @dataclass(frozen=True, kw_only=True)
+class SummaryImportPlanPreview:
+    """Dry-run forecast of a summary import (resolve + insert/update), no writes."""
+
+    total_rows: int
+    matched_compound_count: int
+    unmatched_compound_refs: list[str] = field(default_factory=list)
+    unmatched_batch_refs: list[str] = field(default_factory=list)
+    values_to_insert: int = 0
+    values_to_update: int = 0
+    rows_skipped: int = 0
+    errors: list[dict[str, str]] = field(default_factory=list)
+
+
+@dataclass(frozen=True, kw_only=True)
 class SummaryImportResult:
     rows_processed: int = 0
     values_inserted: int = 0
