@@ -37,6 +37,7 @@ from cellar.application.screening.summary_import_models import (
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.parsers import TabularParseError, TabularParser
+from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import ReadoutDataType
 from cellar.domain.screening_assay.repository import (
     ProtocolRepository,
@@ -73,12 +74,14 @@ class ImportSummaryFile:
 
     def __init__(
         self,
+        uow: UnitOfWork,
         run_repo: RunRepository,
         protocol_repo: ProtocolRepository,
         readout_repo: ReadoutDataRepository,
         parser: TabularParser,
         bulk_uc: BulkCreateReadoutData,
     ) -> None:
+        self._uow = uow
         self._run_repo = run_repo
         self._protocol_repo = protocol_repo
         self._readout_repo = readout_repo
@@ -92,6 +95,17 @@ class ImportSummaryFile:
     ) -> Result[SummaryImportResult, DomainError]:
         require_editor(auth)
 
+        # Own + enter the read UoW for run/protocol/snapshot reads. ``self._bulk``
+        # opens its OWN write UoW (separate instance) that commits + closes
+        # independently, so the read session is never torn down underneath us.
+        async with self._uow:
+            return await self._execute(command, auth)
+
+    async def _execute(
+        self,
+        command: ImportSummaryFileCommand,
+        auth: AuthContext | None = None,
+    ) -> Result[SummaryImportResult, DomainError]:
         ws = command.workspace_id
         run_id = command.run_id
         mapping = command.mapping

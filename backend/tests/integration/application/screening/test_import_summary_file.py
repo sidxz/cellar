@@ -93,10 +93,10 @@ async def _insert_molecule(
 
 
 def _build_use_case(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummaryFile:
-    # The orchestrating use case reads through ``read_uow`` (entered by the
-    # caller); the delegated bulk use case opens its own write UoW. They MUST be
-    # separate instances so the bulk's commit/close does not tear down the read
-    # session used for the before/after snapshots.
+    # The orchestrating use case owns + enters ``read_uow`` itself; the delegated
+    # bulk use case opens its own write UoW. They MUST be separate instances so
+    # the bulk's commit/close does not tear down the read session used for the
+    # before/after snapshots.
     run_repo = SQLAlchemyRunRepository(read_uow)
     readout_repo = SQLAlchemyReadoutDataRepository(read_uow)
     protocol_repo = SQLAlchemyProtocolRepository(read_uow)
@@ -113,6 +113,7 @@ def _build_use_case(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummary
         protocol_repo=SQLAlchemyProtocolRepository(bulk_uow),
     )
     return ImportSummaryFile(
+        uow=read_uow,
         run_repo=run_repo,
         protocol_repo=protocol_repo,
         readout_repo=readout_repo,
@@ -130,11 +131,11 @@ async def _wellless(session_factory, workspace_id, run_id):
 
 
 async def _run_import(session_factory, command, auth):
-    """Run the import inside a freshly-entered read UoW (the route's responsibility)."""
+    """Run the import. The use case now owns + enters its own read UoW, so the
+    caller just builds it and awaits (mirrors how the route calls it)."""
     read_uow = AsyncUnitOfWork(session_factory)
-    async with read_uow:
-        uc = _build_use_case(read_uow, session_factory)
-        return await uc(command, auth=auth)
+    uc = _build_use_case(read_uow, session_factory)
+    return await uc(command, auth=auth)
 
 
 class TestImportSummaryFile:

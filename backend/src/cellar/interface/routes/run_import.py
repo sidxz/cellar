@@ -16,6 +16,7 @@ from cellar.application.screening.import_run_file import (
     PreviewRunFileResult,
     RepreviewRunFileQuery,
 )
+from cellar.application.screening.import_summary_file import ImportSummaryFileCommand
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
     ReadoutColumn,
@@ -26,13 +27,21 @@ from cellar.application.screening.run_import_templates import (
     ListRunImportTemplatesQuery,
     UpdateRunImportTemplateCommand,
 )
+from cellar.application.screening.summary_import_models import (
+    SummaryColumnMapping,
+    SummaryImportResult,
+    SummaryPreviewResult,
+)
 from cellar.interface.dependencies import (
     AuthDep,
     CreateRunImportTemplateDep,
     DeleteRunImportTemplateDep,
     ImportRunFileDep,
+    ImportSummaryFileDep,
     ListRunImportTemplatesDep,
     PreviewRunFileDep,
+    PreviewSummaryFileDep,
+    ReadoutCalculationEngineDep,
     RepreviewRunFileDep,
     UpdateRunImportTemplateDep,
 )
@@ -582,3 +591,164 @@ async def delete_run_import_template(
     )
     result = await uc(cmd, auth=auth)
     result_to_response(result)
+
+
+# ---------------------------------------------------------------------------
+# Summary-results import (wide format: one value per compound x readout)
+# ---------------------------------------------------------------------------
+
+
+class SummaryHeaderSuggestionModel(BaseModel):
+    header: str
+    role: str
+    confidence: str
+    # Set when role == "readout" and the header's name matched a protocol
+    # readout definition; the wizard pre-binds the select from this id.
+    readout_definition_id: uuid.UUID | None = None
+    note: str = ""
+
+
+class SummaryPreviewResponse(BaseModel):
+    headers: list[str]
+    suggestions: list[SummaryHeaderSuggestionModel]
+    sample_rows: list[dict[str, str]]
+    total_rows: int
+    matched_refs: int = 0
+    unmatched_refs: list[str] = Field(default_factory=list)
+    validation_errors: list[str] = Field(default_factory=list)
+
+    @classmethod
+    def from_result(cls, preview: SummaryPreviewResult) -> SummaryPreviewResponse:
+        return cls(
+            headers=list(preview.headers),
+            suggestions=[
+                SummaryHeaderSuggestionModel(
+                    header=s.header,
+                    role=s.role.value,
+                    confidence=s.confidence,
+                    readout_definition_id=s.readout_definition_id,
+                    note=s.note,
+                )
+                for s in preview.suggestions
+            ],
+            sample_rows=list(preview.sample_rows),
+            total_rows=preview.total_rows,
+            matched_refs=preview.matched_refs,
+            unmatched_refs=list(preview.unmatched_refs),
+            validation_errors=list(preview.validation_errors),
+        )
+
+
+class SummaryImportErrorModel(BaseModel):
+    row: str
+    error: str
+
+
+class SummaryImportResponse(BaseModel):
+    rows_processed: int
+    values_inserted: int
+    values_updated: int
+    rows_skipped: int
+    errors: list[SummaryImportErrorModel] = Field(default_factory=list)
+
+    @classmethod
+    def from_result(cls, out: SummaryImportResult) -> SummaryImportResponse:
+        return cls(
+            rows_processed=out.rows_processed,
+            values_inserted=out.values_inserted,
+            values_updated=out.values_updated,
+            rows_skipped=out.rows_skipped,
+            errors=[
+                SummaryImportErrorModel(row=e.get("row", ""), error=e.get("error", ""))
+                for e in out.errors
+            ],
+        )
+
+
+class SummaryColumnMappingRequest(BaseModel):
+    """Confirmed column mapping the chemist sends back on import.
+
+    ``readout_columns`` maps a file header to the readout-definition UUID the
+    FE already holds (we never ask the user to type a UUID; the wizard picks a
+    readout def by name and sends its id). Pydantic coerces the values to UUID.
+    """
+
+    compound_ref: str | None = None
+    batch_ref: str | None = None
+    readout_columns: dict[str, uuid.UUID] = Field(default_factory=dict)
+
+    def to_domain(self) -> SummaryColumnMapping:
+        return SummaryColumnMapping(
+            compound_ref=self.compound_ref,
+            batch_ref=self.batch_ref,
+            readout_columns=dict(self.readout_columns),
+        )
+
+
+@router.post(
+    "/runs/{run_id}/preview-summary-file",
+    response_model=SummaryPreviewResponse,
+    status_code=200,
+)
+async def preview_summary_file(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    uc: PreviewSummaryFileDep,
+    file: Annotated[UploadFile, File()],
+) -> SummaryPreviewResponse:
+    """Parse a wide-format summary file and suggest a per-column role mapping.
+
+    Accepts ``.xlsx`` or ``.csv`` uploads. Returns the headers, a suggested
+    role per column (compound_ref / batch_ref / readout / ignore, with the
+    matched ``readout_definition_id`` when a header name lines up with a
+    protocol readout), and a few sample rows. No writes — the chemist confirms
+    the mapping and POSTs ``import-summary-file`` to commit.
+    """
+    content = await file.read()
+    result = await uc(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        filename=file.filename or "upload",
+        content=content,
+        auth=auth,
+    )
+    preview: SummaryPreviewResult = result_to_response(result)
+    return SummaryPreviewResponse.from_result(preview)
+
+
+@router.post(
+    "/runs/{run_id}/import-summary-file",
+    response_model=SummaryImportResponse,
+    status_code=201,
+)
+async def import_summary_file(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    uc: ImportSummaryFileDep,
+    engine: ReadoutCalculationEngineDep,
+    file: Annotated[UploadFile, File()],
+    mapping: Annotated[str, Form()],
+) -> SummaryImportResponse:
+    """Commit wide-format summary endpoint values for a run (upsert, well-less).
+
+    The ``mapping`` form field is the confirmed
+    ``SummaryColumnMappingRequest`` JSON. After a successful import we trigger
+    the readout calculation engine for the run so calculated readouts and
+    dose-response artifacts refresh (mirrors ``/readout-data/bulk``).
+    """
+    content = await file.read()
+    parsed_map = SummaryColumnMappingRequest.model_validate_json(mapping)
+    cmd = ImportSummaryFileCommand(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        filename=file.filename or "upload",
+        content=content,
+        mapping=parsed_map.to_domain(),
+    )
+    result = await uc(cmd, auth=auth)
+    out: SummaryImportResult = result_to_response(result)
+
+    # Refresh calculated readouts / DR artifacts for the affected run.
+    await engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
+
+    return SummaryImportResponse.from_result(out)

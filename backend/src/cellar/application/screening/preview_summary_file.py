@@ -24,6 +24,7 @@ from cellar.application.screening.summary_import_models import (
     SummaryRole,
 )
 from cellar.application.shared.parsers import TabularParseError, TabularParser
+from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import (
     ProtocolRepository,
     RunRepository,
@@ -76,10 +77,12 @@ class PreviewSummaryFile:
 
     def __init__(
         self,
+        uow: UnitOfWork,
         run_repo: RunRepository,
         protocol_repo: ProtocolRepository,
         parser: TabularParser,
     ) -> None:
+        self._uow = uow
         self._run_repo = run_repo
         self._protocol_repo = protocol_repo
         self._parser = parser
@@ -95,6 +98,24 @@ class PreviewSummaryFile:
     ) -> Result[SummaryPreviewResult, DomainError]:
         require_editor(auth)
 
+        # Own + enter the read UoW so the repos have an active session
+        # (mirrors PreviewRunFile). Read-only: no commit.
+        async with self._uow:
+            return await self._execute(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename=filename,
+                content=content,
+            )
+
+    async def _execute(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        filename: str,
+        content: bytes,
+    ) -> Result[SummaryPreviewResult, DomainError]:
         run = await self._run_repo.find_by_id_in_workspace(workspace_id, run_id)
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))

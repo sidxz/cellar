@@ -675,8 +675,11 @@ def register_screening(container: Container) -> None:
 
     # --- Summary-file import (wide format) ---
     def _preview_summary_file(c: Container):
+        # The use case owns + enters this read UoW (mirrors PreviewRunFile),
+        # giving its repos an active session for the request.
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return PreviewSummaryFile(
+            uow=uow,
             run_repo=SQLAlchemyRunRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             parser=c[TabularParser],
@@ -685,10 +688,12 @@ def register_screening(container: Container) -> None:
     container.define(PreviewSummaryFile, _preview_summary_file)
 
     def _import_summary_file(c: Container):
-        # Read repos use this request-scoped read UoW; ``bulk_uc`` resolves its
-        # own write UoW (it commits + closes its session), so they are NOT shared.
+        # The use case owns + enters this read UoW for run/protocol/snapshot
+        # reads; ``bulk_uc`` resolves its own write UoW (it commits + closes its
+        # session), so they are NOT shared.
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ImportSummaryFile(
+            uow=uow,
             run_repo=SQLAlchemyRunRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             readout_repo=SQLAlchemyReadoutDataRepository(uow),

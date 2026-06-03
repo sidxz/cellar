@@ -74,7 +74,10 @@ async def _seed(
 
 
 def _build_use_case(uow: AsyncUnitOfWork) -> PreviewSummaryFile:
+    # The use case now owns + enters ``uow`` itself; the caller no longer wraps
+    # it in ``async with`` (the route's only job is ``await uc(...)``).
     return PreviewSummaryFile(
+        uow=uow,
         run_repo=SQLAlchemyRunRepository(uow),
         protocol_repo=SQLAlchemyProtocolRepository(uow),
         parser=TabularFileParser(),
@@ -100,16 +103,14 @@ class TestPreviewSummaryFile:
             run_id, ic50_id, notes_id = await _seed(seed_uow, workspace_id=workspace_id)
             await seed_uow.commit()
 
-        read_uow = AsyncUnitOfWork(session_factory)
-        async with read_uow:
-            uc = _build_use_case(read_uow)
-            result = await uc(
-                workspace_id=workspace_id,
-                run_id=run_id,
-                filename="summary.csv",
-                content=_CSV,
-                auth=auth,
-            )
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            workspace_id=workspace_id,
+            run_id=run_id,
+            filename="summary.csv",
+            content=_CSV,
+            auth=auth,
+        )
 
         assert isinstance(result, Success)
         preview = result.unwrap()
@@ -146,16 +147,14 @@ class TestPreviewSummaryFile:
 
         csv = b"Compound,Solvent\nCMP-1,DMSO\nCMP-2,water\n"
 
-        read_uow = AsyncUnitOfWork(session_factory)
-        async with read_uow:
-            uc = _build_use_case(read_uow)
-            result = await uc(
-                workspace_id=workspace_id,
-                run_id=run_id,
-                filename="summary.csv",
-                content=csv,
-                auth=auth,
-            )
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            workspace_id=workspace_id,
+            run_id=run_id,
+            filename="summary.csv",
+            content=csv,
+            auth=auth,
+        )
 
         assert isinstance(result, Success)
         by_header = {s.header: s for s in result.unwrap().suggestions}
@@ -179,16 +178,14 @@ class TestPreviewSummaryFile:
 
         csv = b"Batch,IC50\nB-1,5.2\nB-2,12.7\n"
 
-        read_uow = AsyncUnitOfWork(session_factory)
-        async with read_uow:
-            uc = _build_use_case(read_uow)
-            result = await uc(
-                workspace_id=workspace_id,
-                run_id=run_id,
-                filename="summary.csv",
-                content=csv,
-                auth=auth,
-            )
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            workspace_id=workspace_id,
+            run_id=run_id,
+            filename="summary.csv",
+            content=csv,
+            auth=auth,
+        )
 
         assert isinstance(result, Success)
         by_header = {s.header: s for s in result.unwrap().suggestions}
@@ -226,16 +223,14 @@ class TestPreviewSummaryFile:
 
         csv = b"Name\nfoo\nbar\n"
 
-        read_uow = AsyncUnitOfWork(session_factory)
-        async with read_uow:
-            uc = _build_use_case(read_uow)
-            result = await uc(
-                workspace_id=workspace_id,
-                run_id=run_id,
-                filename="summary.csv",
-                content=csv,
-                auth=auth,
-            )
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            workspace_id=workspace_id,
+            run_id=run_id,
+            filename="summary.csv",
+            content=csv,
+            auth=auth,
+        )
 
         assert isinstance(result, Success)
         by_header = {s.header: s for s in result.unwrap().suggestions}
@@ -248,14 +243,12 @@ class TestPreviewSummaryFile:
         self, session_factory, workspace_id
     ) -> None:
         auth = FakeAuth(role="editor", workspace_id=workspace_id)
-        read_uow = AsyncUnitOfWork(session_factory)
-        async with read_uow:
-            uc = _build_use_case(read_uow)
-            result = await uc(
-                workspace_id=workspace_id,
-                run_id=uuid.uuid4(),
-                filename="summary.csv",
-                content=_CSV,
-                auth=auth,
-            )
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            workspace_id=workspace_id,
+            run_id=uuid.uuid4(),
+            filename="summary.csv",
+            content=_CSV,
+            auth=auth,
+        )
         assert isinstance(result, Failure)
