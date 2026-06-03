@@ -114,8 +114,16 @@ class BulkCreateReadoutData:
         workspace_id: uuid.UUID,
         item: ReadoutDataItem,
         idx: int,
-    ) -> Result[uuid.UUID, DomainError]:
-        """Resolve batch_id from the item, looking up by batch_number if needed."""
+        *,
+        require_batch: bool = True,
+    ) -> Result[uuid.UUID | None, DomainError]:
+        """Resolve batch_id from the item, looking up by batch_number if needed.
+
+        When ``require_batch`` is False, an item carrying neither ``batch_id`` nor
+        ``batch_number`` resolves to ``Success(None)`` (a compound-only row) rather
+        than failing. A batch identifier, if supplied, is always resolved (and any
+        resolution failure surfaced) regardless of ``require_batch``.
+        """
         if item.batch_id is not None:
             return Success(item.batch_id)
         if item.batch_number is not None:
@@ -133,6 +141,8 @@ class BulkCreateReadoutData:
                     )
                 )
             return Success(batch.id)
+        if not require_batch:
+            return Success(None)
         return Failure(ValidationError(f"Item {idx}: either batch_id or batch_number is required"))
 
     async def _ensure_run_protocol_loaded(
@@ -217,6 +227,7 @@ class BulkCreateReadoutData:
         auth: AuthContext | None = None,
         *,
         upsert: bool = False,
+        require_batch: bool = True,
     ) -> Result[BulkReadoutResult, DomainError]:
         require_editor(auth)
 
@@ -244,6 +255,18 @@ class BulkCreateReadoutData:
             run_protocol_cache: dict[uuid.UUID, dict[str, Any]] = {}
 
             for idx, item in enumerate(input.items):
+                has_batch = item.batch_id is not None or item.batch_number is not None
+                has_molecule = item.molecule_id is not None or item.registration_number is not None
+
+                # When batch is optional, a batch-less item must still carry a
+                # molecule so we never persist a row with neither identity.
+                if not require_batch and not has_batch and not has_molecule:
+                    result.error_count += 1
+                    result.errors.append(
+                        {"index": idx, "error": f"Item {idx}: a molecule or batch is required"}
+                    )
+                    continue
+
                 # Resolve human-readable identifiers to UUIDs
                 molecule_result = await self._resolve_molecule_id(input.workspace_id, item, idx)
                 if isinstance(molecule_result, Failure):
@@ -251,7 +274,9 @@ class BulkCreateReadoutData:
                     result.errors.append({"index": idx, "error": str(molecule_result.failure())})
                     continue
 
-                batch_result = await self._resolve_batch_id(input.workspace_id, item, idx)
+                batch_result = await self._resolve_batch_id(
+                    input.workspace_id, item, idx, require_batch=require_batch
+                )
                 if isinstance(batch_result, Failure):
                     result.error_count += 1
                     result.errors.append({"index": idx, "error": str(batch_result.failure())})
