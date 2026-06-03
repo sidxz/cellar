@@ -26,7 +26,6 @@ import {
   TabsContent,
 } from "@/shared/components/ui/tabs";
 import { DetailShell } from "@/shared/components/detail-shell";
-import { TagEditor } from "@/features/tagging/components/tag-editor";
 import { useMolecule } from "../hooks/use-molecules";
 import {
   LIFECYCLE_LABELS,
@@ -103,11 +102,6 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
               )}
             </div>
 
-            {/* Tags */}
-            <div className="mt-0.5">
-              <TagEditor entity="molecules" entityId={mol.id} canEdit={canEditTags} />
-            </div>
-
             {/* Tombstone banner */}
             {isTombstone && (
               <div className="flex items-center gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4">
@@ -181,7 +175,7 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
               </TabsList>
 
               <TabsContent value="overview">
-                <OverviewTab molecule={mol} compoundId={compoundId} />
+                <OverviewTab molecule={mol} compoundId={compoundId} canEditTags={canEditTags} />
               </TabsContent>
 
               <TabsContent value="batches">

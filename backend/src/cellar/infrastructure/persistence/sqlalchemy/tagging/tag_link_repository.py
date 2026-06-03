@@ -12,7 +12,11 @@ import uuid
 from sqlalchemy import delete, distinct, func, literal, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from cellar.domain.workspace_config.tagging.tag import Tag, TaggableEntityType
+from cellar.domain.workspace_config.tagging.tag import (
+    AssignedTag,
+    Tag,
+    TaggableEntityType,
+)
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
@@ -130,6 +134,25 @@ class SQLAlchemyTagLinkRepository:
         )
         result = await self._session.execute(stmt)
         return [tag_model_to_domain(m) for m in result.scalars()]
+
+    async def find_assigned_tags_for_entity(
+        self, workspace_id: uuid.UUID, entity_id: uuid.UUID
+    ) -> list[AssignedTag]:
+        stmt = (
+            select(TagModel, self.link_model.assigned_by, self.link_model.assigned_at)
+            .join(self.link_model, TagModel.id == self.link_model.tag_id)
+            .where(self._entity_col == entity_id, TagModel.workspace_id == workspace_id)
+            .order_by(TagModel.normalized_key, TagModel.normalized_value)
+        )
+        result = await self._session.execute(stmt)
+        return [
+            AssignedTag(
+                tag=tag_model_to_domain(model),
+                assigned_by=assigned_by,
+                assigned_at=assigned_at,
+            )
+            for model, assigned_by, assigned_at in result.all()
+        ]
 
     async def find_entity_ids_for_tags(
         self,

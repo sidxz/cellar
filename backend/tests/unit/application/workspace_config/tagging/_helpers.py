@@ -8,7 +8,11 @@ from typing import Self
 from unittest.mock import AsyncMock
 
 from cellar.domain.shared.events import DomainEvent
-from cellar.domain.workspace_config.tagging.tag import Tag, TaggableEntityType, TagName
+from cellar.domain.workspace_config.tagging.tag import (
+    AssignedTag,
+    Tag,
+    TagName,
+)
 
 
 class FakeUnitOfWork:
@@ -75,12 +79,19 @@ def make_tag_repo(*, get_or_create: Tag, find_by_id: Tag | None = None) -> Async
 def make_link_provider(
     *, entity_exists: bool = True, current_tags: list[Tag] | None = None
 ) -> AsyncMock:
+    tags = current_tags or []
     link_repo = AsyncMock()
     link_repo.entity_exists_in_workspace = AsyncMock(return_value=entity_exists)
     link_repo.add = AsyncMock()
     link_repo.remove = AsyncMock()
     link_repo.set_for_entity = AsyncMock()
-    link_repo.find_tags_for_entity = AsyncMock(return_value=current_tags or [])
+    link_repo.find_tags_for_entity = AsyncMock(return_value=tags)
+    link_repo.find_assigned_tags_for_entity = AsyncMock(
+        return_value=[
+            AssignedTag(tag=t, assigned_by=t.created_by, assigned_at=t.created_at)
+            for t in tags
+        ]
+    )
     provider = AsyncMock()
     provider.for_type = lambda _et: link_repo
     provider.link_repo = link_repo  # exposed for assertions

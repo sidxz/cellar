@@ -44,6 +44,7 @@ import {
 import type { Molecule } from "../../types";
 import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
 import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
+import { TagTable } from "@/features/tagging/components/tag-table";
 
 // ---------------------------------------------------------------------------
 // Identifier type options
@@ -275,9 +276,10 @@ function CustomFieldsSection({ molecule }: { molecule: Molecule }) {
 interface OverviewTabProps {
   molecule: Molecule;
   compoundId: string;
+  canEditTags: boolean;
 }
 
-export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
+export function OverviewTab({ molecule, compoundId, canEditTags }: OverviewTabProps) {
   const router = useRouter();
   const [showAddId, setShowAddId] = useState(false);
   const removeMutation = useRemoveIdentifier(compoundId);
@@ -447,6 +449,9 @@ export function OverviewTab({ molecule, compoundId }: OverviewTabProps) {
 
       {/* Custom Fields */}
       <CustomFieldsSection molecule={molecule} />
+
+      {/* Tags */}
+      <TagTable entity="molecules" entityId={molecule.id} canEdit={canEditTags} />
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showError } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Tag, TagInput, TaggableEntity } from "../types";
+import type { EntityTag, Tag, TagInput, TaggableEntity } from "../types";
 
 const entityTagsKey = (entity: TaggableEntity, id: string) => ["entity-tags", entity, id];
 
@@ -11,7 +11,8 @@ export function useEntityTags(entity: TaggableEntity, id: string | undefined) {
   return useQuery({
     queryKey: id ? entityTagsKey(entity, id) : ["entity-tags", entity, "none"],
     enabled: !!id,
-    queryFn: () => customInstance<Tag[]>({ url: `/api/v1/${entity}/${id}/tags`, method: "GET" }),
+    queryFn: () =>
+      customInstance<EntityTag[]>({ url: `/api/v1/${entity}/${id}/tags`, method: "GET" }),
   });
 }
 

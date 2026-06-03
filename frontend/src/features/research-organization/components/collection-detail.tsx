@@ -27,7 +27,7 @@ import { useProtocolTestCounts } from "../hooks/use-protocol-test-counts";
 import { useProject, useProjects } from "../hooks/use-projects";
 import { useViewMode } from "../lib/use-view-mode";
 import type { ViewMode } from "../lib/use-view-mode";
-import { TagEditor } from "@/features/tagging/components/tag-editor";
+import { TagTable } from "@/features/tagging/components/tag-table";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
 import { CollectionHeader } from "./collection/collection-header";
@@ -217,7 +217,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
             />
 
             <div className="mt-0.5">
-              <TagEditor entity="collections" entityId={collection.id} canEdit={canEditTags} />
+              <TagTable entity="collections" entityId={collection.id} canEdit={canEditTags} />
             </div>
 
             <ResultsSurface

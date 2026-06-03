@@ -57,4 +57,5 @@ class TestGetTagsForEntity:
         result = await uc(query, auth=auth)
 
         assert isinstance(result, Success)
-        assert result.unwrap() == [tag]
+        assigned = result.unwrap()
+        assert [a.tag for a in assigned] == [tag]

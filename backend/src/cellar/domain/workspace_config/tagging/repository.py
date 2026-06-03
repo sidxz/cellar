@@ -5,7 +5,12 @@ from __future__ import annotations
 import uuid
 from typing import Protocol, runtime_checkable
 
-from cellar.domain.workspace_config.tagging.tag import Tag, TaggableEntityType, TagName
+from cellar.domain.workspace_config.tagging.tag import (
+    AssignedTag,
+    Tag,
+    TaggableEntityType,
+    TagName,
+)
 
 
 @runtime_checkable
@@ -81,6 +86,12 @@ class TagLinkRepository(Protocol):
     async def find_tags_for_entity(
         self, workspace_id: uuid.UUID, entity_id: uuid.UUID
     ) -> list[Tag]: ...
+
+    async def find_assigned_tags_for_entity(
+        self, workspace_id: uuid.UUID, entity_id: uuid.UUID
+    ) -> list[AssignedTag]:
+        """Tags on the entity, each with its assignment provenance."""
+        ...
 
     async def find_entity_ids_for_tags(
         self,

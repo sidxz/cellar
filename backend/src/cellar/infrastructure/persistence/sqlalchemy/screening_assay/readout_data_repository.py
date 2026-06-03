@@ -192,6 +192,42 @@ class SQLAlchemyReadoutDataRepository:
         result = await self._uow.session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
 
+    async def find_wellless_by_keys(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        molecule_id: uuid.UUID | None,
+        batch_id: uuid.UUID | None,
+        readout_definition_id: uuid.UUID,
+    ) -> ReadoutData | None:
+        """Find the single well-less, non-computed row matching the summary key.
+
+        ``molecule_id`` and ``batch_id`` are nullable; ``None`` is matched with
+        ``IS NULL`` (not ``= NULL``) so summary rows with no molecule/batch are
+        located correctly.
+        """
+        stmt = select(ReadoutDataModel).where(
+            ReadoutDataModel.workspace_id == workspace_id,
+            ReadoutDataModel.run_id == run_id,
+            ReadoutDataModel.well_id.is_(None),
+            ReadoutDataModel.readout_definition_id == readout_definition_id,
+            ReadoutDataModel.is_computed.is_(False),
+            (
+                ReadoutDataModel.molecule_id == molecule_id
+                if molecule_id is not None
+                else ReadoutDataModel.molecule_id.is_(None)
+            ),
+            (
+                ReadoutDataModel.batch_id == batch_id
+                if batch_id is not None
+                else ReadoutDataModel.batch_id.is_(None)
+            ),
+        )
+        result = await self._uow.session.execute(stmt)
+        model = result.scalars().first()
+        return self._to_domain(model) if model is not None else None
+
     async def find_grouped_by_condition(
         self,
         workspace_id: uuid.UUID,

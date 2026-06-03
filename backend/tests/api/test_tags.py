@@ -28,6 +28,19 @@ class TestAssignAndRead:
         assert got.status_code == 200
         assert [t["key"] for t in got.json()] == ["Project"]
 
+    async def test_get_includes_assignment_provenance(self, client: AsyncClient) -> None:
+        cid = await _make_collection(client, "TagCol-prov")
+        await client.post(
+            f"/api/v1/collections/{cid}/tags", json={"key": "Project", "value": "Alpha"}
+        )
+        got = await client.get(f"/api/v1/collections/{cid}/tags")
+        assert got.status_code == 200, got.text
+        row = got.json()[0]
+        # Who/when THIS entity was tagged (assignment provenance), not the tag's own creation.
+        assert row.get("assigned_by"), row
+        assert row.get("assigned_at"), row
+        uuid.UUID(row["assigned_by"])  # parses as a UUID
+
     async def test_assign_valueless(self, client: AsyncClient) -> None:
         cid = await _make_collection(client, "TagCol-2")
         resp = await client.post(f"/api/v1/collections/{cid}/tags", json={"key": "favorite"})

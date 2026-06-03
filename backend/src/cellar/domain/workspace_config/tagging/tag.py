@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
 
@@ -154,3 +155,18 @@ class Tag(AggregateRoot):
                 value=new.value,
             )
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class AssignedTag:
+    """A :class:`Tag` as applied to one entity, with assignment provenance.
+
+    Read model for the per-entity tag list: ``assigned_by`` / ``assigned_at``
+    capture who linked the tag to this entity and when — distinct from the
+    tag's own ``created_by`` / ``created_at`` (when the tag itself was first
+    created in the workspace).
+    """
+
+    tag: Tag
+    assigned_by: uuid.UUID
+    assigned_at: datetime

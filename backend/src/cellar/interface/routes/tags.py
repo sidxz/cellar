@@ -22,7 +22,11 @@ from cellar.application.workspace_config.tagging.set_entity_tags import (
 )
 from cellar.application.workspace_config.tagging.unassign_tag import UnassignTagCommand
 from cellar.domain.shared.errors import NotFoundError
-from cellar.domain.workspace_config.tagging.tag import Tag, TaggableEntityType
+from cellar.domain.workspace_config.tagging.tag import (
+    AssignedTag,
+    Tag,
+    TaggableEntityType,
+)
 from cellar.interface.dependencies import AuthDep
 from cellar.interface.dependencies._workspace_config import (
     AssignTagDep,
@@ -54,6 +58,32 @@ class TagResponse(BaseModel):
             value=tag.value,
             created_by=tag.created_by,
             created_at=tag.created_at,
+        )
+
+
+class EntityTagResponse(BaseModel):
+    """A tag on an entity, plus the assignment provenance (who/when tagged it)."""
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    key: str
+    value: str | None
+    created_by: uuid.UUID
+    created_at: datetime
+    assigned_by: uuid.UUID
+    assigned_at: datetime
+
+    @classmethod
+    def from_domain(cls, assigned: AssignedTag) -> EntityTagResponse:
+        return cls(
+            id=assigned.tag.id,
+            workspace_id=assigned.tag.workspace_id,
+            key=assigned.tag.key,
+            value=assigned.tag.value,
+            created_by=assigned.tag.created_by,
+            created_at=assigned.tag.created_at,
+            assigned_by=assigned.assigned_by,
+            assigned_at=assigned.assigned_at,
         )
 
 
@@ -163,21 +193,21 @@ assignment_router = APIRouter(prefix="/api/v1", tags=["tags"])
 
 
 @assignment_router.get(
-    "/{entity_collection}/{entity_id}/tags", response_model=list[TagResponse]
+    "/{entity_collection}/{entity_id}/tags", response_model=list[EntityTagResponse]
 )
 async def get_entity_tags(
     entity_collection: str,
     entity_id: uuid.UUID,
     auth: AuthDep,
     use_case: GetTagsForEntityDep,
-) -> list[TagResponse]:
+) -> list[EntityTagResponse]:
     query = GetTagsForEntityQuery(
         workspace_id=auth.workspace_id,
         entity_type=_resolve_entity_type(entity_collection),
         entity_id=entity_id,
     )
-    tags = result_to_response(await use_case(query, auth=auth))
-    return [TagResponse.from_domain(t) for t in tags]
+    assigned = result_to_response(await use_case(query, auth=auth))
+    return [EntityTagResponse.from_domain(a) for a in assigned]
 
 
 @assignment_router.post(

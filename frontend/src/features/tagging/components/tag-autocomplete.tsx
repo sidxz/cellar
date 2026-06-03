@@ -11,6 +11,7 @@ interface TagAutocompleteProps {
   /** "key" suggests distinct keys; "value" suggests distinct values. */
   field: "key" | "value";
   onEnter?: () => void;
+  autoFocus?: boolean;
 }
 
 export function TagAutocomplete({
@@ -19,6 +20,7 @@ export function TagAutocomplete({
   placeholder,
   field,
   onEnter,
+  autoFocus,
 }: TagAutocompleteProps) {
   const [focused, setFocused] = useState(false);
   const { data: tags } = useTags({ q: value || undefined, limit: 25 });
@@ -34,6 +36,7 @@ export function TagAutocomplete({
   return (
     <div className="relative">
       <Input
+        autoFocus={autoFocus}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setFocused(true)}

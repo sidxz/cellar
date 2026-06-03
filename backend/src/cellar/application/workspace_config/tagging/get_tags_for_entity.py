@@ -12,7 +12,7 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError
 from cellar.domain.workspace_config.tagging.repository import TagLinkRepositoryProvider
-from cellar.domain.workspace_config.tagging.tag import Tag, TaggableEntityType
+from cellar.domain.workspace_config.tagging.tag import AssignedTag, TaggableEntityType
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -31,10 +31,10 @@ class GetTagsForEntity:
 
     async def __call__(
         self, input: GetTagsForEntityQuery, auth: AuthContext | None = None
-    ) -> Result[list[Tag], DomainError]:
+    ) -> Result[list[AssignedTag], DomainError]:
         async with self._uow:
             link_repo = self._link_provider.for_type(input.entity_type)
-            tags = await link_repo.find_tags_for_entity(
+            assigned = await link_repo.find_assigned_tags_for_entity(
                 input.workspace_id, input.entity_id
             )
-        return Success(tags)
+        return Success(assigned)
