@@ -24,7 +24,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost,
   BodyPreviewRunFileApiV1RunsRunIdPreviewFilePost,
+  BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost,
   CreateRunImportTemplateRequest,
   HTTPValidationError,
   ImportRunFileRequest,
@@ -32,6 +34,8 @@ import type {
   PreviewRunFileResponse,
   RepreviewRunFileRequest,
   RunImportTemplateResponse,
+  SummaryImportResponse,
+  SummaryPreviewResponse,
   UpdateRunImportTemplateRequest
 } from '.././model';
 
@@ -531,6 +535,154 @@ export const useDeleteRunImportTemplateApiV1RunImportTemplatesTemplateIdDelete =
       > => {
 
       const mutationOptions = getDeleteRunImportTemplateApiV1RunImportTemplatesTemplateIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Parse a wide-format summary file and suggest a per-column role mapping.
+
+Accepts ``.xlsx`` or ``.csv`` uploads. Returns the headers, a suggested
+role per column (compound_ref / batch_ref / readout / ignore, with the
+matched ``readout_definition_id`` when a header name lines up with a
+protocol readout), and a few sample rows. No writes — the chemist confirms
+the mapping and POSTs ``import-summary-file`` to commit.
+ * @summary Preview Summary File
+ */
+export const previewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost = (
+    runId: string,
+    bodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost: BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost,
+ signal?: AbortSignal
+) => {
+      
+      const formData = new FormData();
+formData.append(`file`, bodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost.file)
+
+      return customInstance<SummaryPreviewResponse>(
+      {url: `/api/v1/runs/${runId}/preview-summary-file`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      );
+    }
+  
+
+
+export const getPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost>>, TError,{runId: string;data: BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof previewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost>>, TError,{runId: string;data: BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost}, TContext> => {
+
+const mutationKey = ['previewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost>>, {runId: string;data: BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  previewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePostMutationResult = NonNullable<Awaited<ReturnType<typeof previewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost>>>
+    export type PreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePostMutationBody = BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost
+    export type PreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Preview Summary File
+ */
+export const usePreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost>>, TError,{runId: string;data: BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof previewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost>>,
+        TError,
+        {runId: string;data: BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost},
+        TContext
+      > => {
+
+      const mutationOptions = getPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Commit wide-format summary endpoint values for a run (upsert, well-less).
+
+The ``mapping`` form field is the confirmed
+``SummaryColumnMappingRequest`` JSON. After a successful import we trigger
+the readout calculation engine for the run so calculated readouts and
+dose-response artifacts refresh (mirrors ``/readout-data/bulk``).
+ * @summary Import Summary File
+ */
+export const importSummaryFileApiV1RunsRunIdImportSummaryFilePost = (
+    runId: string,
+    bodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost: BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost,
+ signal?: AbortSignal
+) => {
+      
+      const formData = new FormData();
+formData.append(`file`, bodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost.file)
+formData.append(`mapping`, bodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost.mapping)
+
+      return customInstance<SummaryImportResponse>(
+      {url: `/api/v1/runs/${runId}/import-summary-file`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      );
+    }
+  
+
+
+export const getImportSummaryFileApiV1RunsRunIdImportSummaryFilePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importSummaryFileApiV1RunsRunIdImportSummaryFilePost>>, TError,{runId: string;data: BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof importSummaryFileApiV1RunsRunIdImportSummaryFilePost>>, TError,{runId: string;data: BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost}, TContext> => {
+
+const mutationKey = ['importSummaryFileApiV1RunsRunIdImportSummaryFilePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importSummaryFileApiV1RunsRunIdImportSummaryFilePost>>, {runId: string;data: BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  importSummaryFileApiV1RunsRunIdImportSummaryFilePost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportSummaryFileApiV1RunsRunIdImportSummaryFilePostMutationResult = NonNullable<Awaited<ReturnType<typeof importSummaryFileApiV1RunsRunIdImportSummaryFilePost>>>
+    export type ImportSummaryFileApiV1RunsRunIdImportSummaryFilePostMutationBody = BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost
+    export type ImportSummaryFileApiV1RunsRunIdImportSummaryFilePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Import Summary File
+ */
+export const useImportSummaryFileApiV1RunsRunIdImportSummaryFilePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importSummaryFileApiV1RunsRunIdImportSummaryFilePost>>, TError,{runId: string;data: BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof importSummaryFileApiV1RunsRunIdImportSummaryFilePost>>,
+        TError,
+        {runId: string;data: BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost},
+        TContext
+      > => {
+
+      const mutationOptions = getImportSummaryFileApiV1RunsRunIdImportSummaryFilePostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
