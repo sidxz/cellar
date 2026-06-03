@@ -67,6 +67,7 @@ from cellar.application.screening.import_run_file import (
     RepreviewRunFile,
 )
 from cellar.application.screening.import_run_readouts import ImportRunReadouts
+from cellar.application.screening.import_summary_file import ImportSummaryFile
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
@@ -120,6 +121,7 @@ from cellar.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from cellar.application.screening.preview_summary_file import PreviewSummaryFile
 from cellar.application.screening.protocol_activity_reader import ProtocolActivityReader
 from cellar.application.screening.protocol_stats_reader import ProtocolStatsReader
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
@@ -670,6 +672,31 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(ImportRunFile, _import_run_file)
+
+    # --- Summary-file import (wide format) ---
+    def _preview_summary_file(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewSummaryFile(
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            parser=c[TabularParser],
+        )
+
+    container.define(PreviewSummaryFile, _preview_summary_file)
+
+    def _import_summary_file(c: Container):
+        # Read repos use this request-scoped read UoW; ``bulk_uc`` resolves its
+        # own write UoW (it commits + closes its session), so they are NOT shared.
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ImportSummaryFile(
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            parser=c[TabularParser],
+            bulk_uc=c[BulkCreateReadoutData],
+        )
+
+    container.define(ImportSummaryFile, _import_summary_file)
 
     # --- Run import templates (CRUD) ---
     def _run_import_template_cmd(uc_cls: type):

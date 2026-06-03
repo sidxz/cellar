@@ -32,6 +32,7 @@ from cellar.application.screening.get_readout_data import ListReadoutDataByRun
 from cellar.application.screening.get_run import GetRun, ListRunsByProtocol
 from cellar.application.screening.get_target import GetTarget, ListTargets
 from cellar.application.screening.import_run_readouts import ImportRunReadouts
+from cellar.application.screening.import_summary_file import ImportSummaryFile
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
 from cellar.application.screening.list_protocol_summaries import ListProtocolSummaries
@@ -78,6 +79,7 @@ from cellar.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from cellar.application.screening.preview_summary_file import PreviewSummaryFile
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
 from cellar.application.screening.refit_dose_response_preview import (
@@ -169,6 +171,8 @@ __all__ = [
     "ParsePlateMapFileDep",
     "SetUpRunPlateDep",
     "ImportRunReadoutsDep",
+    "PreviewSummaryFileDep",
+    "ImportSummaryFileDep",
 ]
 
 # --- Screening dependencies ---
@@ -313,3 +317,9 @@ ListPlateTemplatesDep = Annotated[ListPlateTemplates, Depends(_get_use_case(List
 ParsePlateMapFileDep = Annotated[ParsePlateMapFile, Depends(_get_use_case(ParsePlateMapFile))]
 SetUpRunPlateDep = Annotated[SetUpRunPlate, Depends(_get_use_case(SetUpRunPlate))]
 ImportRunReadoutsDep = Annotated[ImportRunReadouts, Depends(_get_use_case(ImportRunReadouts))]
+PreviewSummaryFileDep = Annotated[
+    PreviewSummaryFile, Depends(_get_use_case(PreviewSummaryFile))
+]
+ImportSummaryFileDep = Annotated[
+    ImportSummaryFile, Depends(_get_use_case(ImportSummaryFile))
+]
