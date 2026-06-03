@@ -1,0 +1,342 @@
+"""Integration test: ImportSummaryFile use case (wide-format summary import).
+
+Exercises the real parser + BulkCreateReadoutData (upsert, require_batch=False)
++ SQLAlchemy repos against a registered molecule so ``registration_number``
+resolves. Mirrors ``test_bulk_readout_upsert.py`` seed-helper style.
+
+Covers: insert vs. update accounting, text readouts, bad-numeric error
+reporting, and qualifier parsing.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+import sqlalchemy as sa
+from returns.result import Success
+
+from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
+from cellar.application.screening.import_summary_file import (
+    ImportSummaryFile,
+    ImportSummaryFileCommand,
+)
+from cellar.application.screening.summary_import_models import SummaryColumnMapping
+from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
+from cellar.infrastructure.parsers.tabular_file import TabularFileParser
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
+    SQLAlchemyMoleculeRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+    SQLAlchemyProtocolRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
+    SQLAlchemyReadoutDataRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
+    SQLAlchemyRunRepository,
+)
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from tests.fakes.fake_auth import FakeAuth
+from tests.fixtures.dose_response_curves import (
+    _insert_org,
+    _insert_protocol,
+    _insert_run,
+)
+
+
+class _NoOpDispatcher:
+    async def dispatch_all(self, events: list) -> None:
+        return None
+
+
+async def _insert_readout_def_typed(
+    uow: AsyncUnitOfWork,
+    rd_id: uuid.UUID,
+    protocol_id: uuid.UUID,
+    *,
+    name: str,
+    data_type: str,
+    display_order: int,
+) -> None:
+    await uow.session.execute(
+        sa.text(
+            "INSERT INTO readout_definitions "
+            "(id, protocol_id, name, data_type, display_order, is_calculated) "
+            "VALUES (:id, :proto, :name, :dt, :ord, false)"
+        ),
+        {"id": rd_id, "proto": protocol_id, "name": name, "dt": data_type, "ord": display_order},
+    )
+
+
+async def _insert_molecule(
+    uow: AsyncUnitOfWork, mol_id: uuid.UUID, ws_id: uuid.UUID, reg: str
+) -> None:
+    org_id = uuid.uuid4()
+    await uow.session.execute(
+        sa.text(
+            "INSERT INTO organizations (id, workspace_id, name, org_type, is_active, version) "
+            "VALUES (:id, :ws, :name, 'internal', true, 1)"
+        ),
+        {"id": org_id, "ws": ws_id, "name": f"Org-{reg}"},
+    )
+    await uow.session.execute(
+        sa.text(
+            "INSERT INTO molecules "
+            "(id, workspace_id, name, molecule_type, structure_status, "
+            "registration_status, synthesis_status, lifecycle_stage, "
+            "registration_number, originating_org_id, version) "
+            "VALUES (:id, :ws, :name, 'small_molecule', 'undisclosed', "
+            "'approved', 'virtual', 'registered', :reg, :org, 1)"
+        ),
+        {"id": mol_id, "ws": ws_id, "name": f"M-{reg}", "reg": reg, "org": org_id},
+    )
+
+
+def _build_use_case(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummaryFile:
+    # The orchestrating use case reads through ``read_uow`` (entered by the
+    # caller); the delegated bulk use case opens its own write UoW. They MUST be
+    # separate instances so the bulk's commit/close does not tear down the read
+    # session used for the before/after snapshots.
+    run_repo = SQLAlchemyRunRepository(read_uow)
+    readout_repo = SQLAlchemyReadoutDataRepository(read_uow)
+    protocol_repo = SQLAlchemyProtocolRepository(read_uow)
+
+    bulk_uow = AsyncUnitOfWork(session_factory)
+    bulk_run_repo = SQLAlchemyRunRepository(bulk_uow)
+    bulk = BulkCreateReadoutData(
+        uow=bulk_uow,
+        repo=SQLAlchemyReadoutDataRepository(bulk_uow),
+        guard=DataLockGuard(bulk_run_repo),
+        dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
+        molecule_repo=SQLAlchemyMoleculeRepository(bulk_uow),
+        run_repo=bulk_run_repo,
+        protocol_repo=SQLAlchemyProtocolRepository(bulk_uow),
+    )
+    return ImportSummaryFile(
+        run_repo=run_repo,
+        protocol_repo=protocol_repo,
+        readout_repo=readout_repo,
+        parser=TabularFileParser(),
+        bulk_uc=bulk,
+    )
+
+
+async def _wellless(session_factory, workspace_id, run_id):
+    check_uow = AsyncUnitOfWork(session_factory)
+    async with check_uow:
+        repo = SQLAlchemyReadoutDataRepository(check_uow)
+        rows = await repo.find_by_run(workspace_id, run_id)
+        return [r for r in rows if r.well_id is None and not r.is_computed]
+
+
+async def _run_import(session_factory, command, auth):
+    """Run the import inside a freshly-entered read UoW (the route's responsibility)."""
+    read_uow = AsyncUnitOfWork(session_factory)
+    async with read_uow:
+        uc = _build_use_case(read_uow, session_factory)
+        return await uc(command, auth=auth)
+
+
+class TestImportSummaryFile:
+    async def test_insert_then_update_accounting(self, session_factory, workspace_id) -> None:
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        ic50_id = uuid.uuid4()
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id = uuid.uuid4()
+        protocol_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        mapping = SummaryColumnMapping(
+            compound_ref="Compound", readout_columns={"IC50": ic50_id}
+        )
+
+        first = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},5.2\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(first, Success)
+        res = first.unwrap()
+        assert res.values_inserted == 1
+        assert res.values_updated == 0
+        assert res.errors == []
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 1
+        assert rows[0].value is not None
+        assert rows[0].value.value == 5.2
+
+        # Re-import the same key with a new value → update, no insert.
+        second = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},9.9\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(second, Success)
+        res2 = second.unwrap()
+        assert res2.values_inserted == 0
+        assert res2.values_updated == 1
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 1
+        assert rows[0].value.value == 9.9
+
+    async def test_text_readout_stores_value_text(self, session_factory, workspace_id) -> None:
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        ic50_id = uuid.uuid4()
+        notes_id = uuid.uuid4()
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id = uuid.uuid4()
+        protocol_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+            )
+            await _insert_readout_def_typed(
+                seed_uow, notes_id, protocol_id, name="Notes", data_type="text", display_order=1
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        mapping = SummaryColumnMapping(
+            compound_ref="Compound",
+            readout_columns={"Notes": notes_id},
+        )
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,Notes\n{reg},clean curve\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(result, Success)
+        assert result.unwrap().values_inserted == 1
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 1
+        assert rows[0].value_text == "clean curve"
+        assert rows[0].value is None
+
+    async def test_bad_numeric_reported_not_stored(self, session_factory, workspace_id) -> None:
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        ic50_id = uuid.uuid4()
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id = uuid.uuid4()
+        protocol_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        mapping = SummaryColumnMapping(
+            compound_ref="Compound", readout_columns={"IC50": ic50_id}
+        )
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},not-a-number\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(result, Success)
+        res = result.unwrap()
+        assert res.values_inserted == 0
+        assert len(res.errors) == 1
+        assert "not numeric" in res.errors[0]["error"]
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 0
+
+    async def test_qualifier_parsed(self, session_factory, workspace_id) -> None:
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        ic50_id = uuid.uuid4()
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id = uuid.uuid4()
+        protocol_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        mapping = SummaryColumnMapping(
+            compound_ref="Compound", readout_columns={"IC50": ic50_id}
+        )
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},>100\n".encode(),
+                mapping=mapping,
+            ),
+            auth,
+        )
+        assert isinstance(result, Success)
+        assert result.unwrap().values_inserted == 1
+
+        rows = await _wellless(session_factory, workspace_id, run_id)
+        assert len(rows) == 1
+        assert rows[0].value is not None
+        assert rows[0].value.value == 100.0
+        assert rows[0].value.qualifier.value == ">"
