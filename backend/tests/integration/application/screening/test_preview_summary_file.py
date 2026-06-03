@@ -132,6 +132,118 @@ class TestPreviewSummaryFile:
         assert notes.role == SummaryRole.READOUT
         assert notes.readout_definition_id == notes_id
 
+    async def test_unmatched_column_suggests_ignore(
+        self, session_factory, workspace_id
+    ) -> None:
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            run_id, _ic50_id, _notes_id = await _seed(
+                seed_uow, workspace_id=workspace_id
+            )
+            await seed_uow.commit()
+
+        csv = b"Compound,Solvent\nCMP-1,DMSO\nCMP-2,water\n"
+
+        read_uow = AsyncUnitOfWork(session_factory)
+        async with read_uow:
+            uc = _build_use_case(read_uow)
+            result = await uc(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=csv,
+                auth=auth,
+            )
+
+        assert isinstance(result, Success)
+        by_header = {s.header: s for s in result.unwrap().suggestions}
+
+        solvent = by_header["Solvent"]
+        assert solvent.role == SummaryRole.IGNORE
+        assert solvent.confidence == "low"
+        assert solvent.note == "no confident role match"
+
+    async def test_batch_column_suggests_batch_ref(
+        self, session_factory, workspace_id
+    ) -> None:
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            run_id, _ic50_id, _notes_id = await _seed(
+                seed_uow, workspace_id=workspace_id
+            )
+            await seed_uow.commit()
+
+        csv = b"Batch,IC50\nB-1,5.2\nB-2,12.7\n"
+
+        read_uow = AsyncUnitOfWork(session_factory)
+        async with read_uow:
+            uc = _build_use_case(read_uow)
+            result = await uc(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=csv,
+                auth=auth,
+            )
+
+        assert isinstance(result, Success)
+        by_header = {s.header: s for s in result.unwrap().suggestions}
+
+        batch = by_header["Batch"]
+        assert batch.role == SummaryRole.BATCH_REF
+        assert batch.confidence == "high"
+
+    async def test_readout_name_takes_precedence_over_compound_family(
+        self, session_factory, workspace_id
+    ) -> None:
+        # "Name" is in the compound-header family, but a readout def named
+        # "Name" must win: readout matching gates ahead of the compound family.
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id = uuid.uuid4()
+        protocol_id = uuid.uuid4()
+        run_id = uuid.uuid4()
+        name_rd_id = uuid.uuid4()
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_named_readout_def(
+                seed_uow,
+                name_rd_id,
+                protocol_id,
+                name="Name",
+                data_type="text",
+                display_order=0,
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await seed_uow.commit()
+
+        csv = b"Name\nfoo\nbar\n"
+
+        read_uow = AsyncUnitOfWork(session_factory)
+        async with read_uow:
+            uc = _build_use_case(read_uow)
+            result = await uc(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=csv,
+                auth=auth,
+            )
+
+        assert isinstance(result, Success)
+        by_header = {s.header: s for s in result.unwrap().suggestions}
+
+        name = by_header["Name"]
+        assert name.role == SummaryRole.READOUT
+        assert name.readout_definition_id == name_rd_id
+
     async def test_missing_run_returns_not_found(
         self, session_factory, workspace_id
     ) -> None:
