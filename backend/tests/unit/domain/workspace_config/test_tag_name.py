@@ -4,6 +4,30 @@ import pytest
 from pydantic import ValidationError
 
 from cellar.domain.workspace_config.tagging.tag import TagName
+from cellar.infrastructure.persistence.sqlalchemy.tagging.backfill_sql import (
+    _normalize_key,
+)
+
+
+class TestBackfillNormalizationParity:
+    """The legacy backfill must normalize keys identically to the runtime
+    domain — otherwise a backfilled tag won't match a later get_or_create and a
+    duplicate registry row is created (defeating case-insensitive identity)."""
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "Kinase",
+            "KINASE",
+            "  Env  ",
+            "Straße",  # casefold -> 'strasse', lower() would leave 'ß'
+            "İstanbul",  # Turkish dotted capital I
+            "ΣΟΦΟΣ",  # Greek final sigma
+            "café",
+        ],
+    )
+    def test_backfill_key_matches_tagname(self, raw: str) -> None:
+        assert _normalize_key(raw) == TagName(key=raw).normalized_key
 
 
 class TestTagNameNormalization:

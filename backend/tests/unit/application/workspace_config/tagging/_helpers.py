@@ -77,12 +77,17 @@ def make_tag_repo(*, get_or_create: Tag, find_by_id: Tag | None = None) -> Async
 
 
 def make_link_provider(
-    *, entity_exists: bool = True, current_tags: list[Tag] | None = None
+    *,
+    entity_exists: bool = True,
+    current_tags: list[Tag] | None = None,
+    add_inserted: bool = True,
 ) -> AsyncMock:
     tags = current_tags or []
     link_repo = AsyncMock()
     link_repo.entity_exists_in_workspace = AsyncMock(return_value=entity_exists)
-    link_repo.add = AsyncMock()
+    # add() returns True when a new link row was inserted, False if it already
+    # existed (so AssignTag can suppress the duplicate assignment event).
+    link_repo.add = AsyncMock(return_value=add_inserted)
     link_repo.remove = AsyncMock()
     link_repo.set_for_entity = AsyncMock()
     link_repo.find_tags_for_entity = AsyncMock(return_value=tags)

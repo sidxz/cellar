@@ -69,7 +69,9 @@ class TagLinkRepository(Protocol):
         entity_id: uuid.UUID,
         tag_id: uuid.UUID,
         assigned_by: uuid.UUID,
-    ) -> None: ...
+    ) -> bool:
+        """Returns True iff a new link row was inserted (False if it existed)."""
+        ...
 
     async def remove(
         self, workspace_id: uuid.UUID, entity_id: uuid.UUID, tag_id: uuid.UUID

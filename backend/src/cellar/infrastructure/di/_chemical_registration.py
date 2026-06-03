@@ -140,6 +140,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository imp
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_merge_side_effect import (
     CollectionMergeSideEffect,
 )
+from cellar.infrastructure.persistence.sqlalchemy.tagging.molecule_tag_merge_side_effect import (
+    MoleculeTagMergeSideEffect,
+)
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (
     SQLAlchemyCustomFieldDefinitionRepository,
 )
@@ -323,6 +326,7 @@ def register_chemical_registration(container: Container) -> None:
                 SynthesisRouteMergeSideEffect(),
                 SynthesisRequestMergeSideEffect(),
                 CollectionMergeSideEffect(),
+                MoleculeTagMergeSideEffect(),
                 AttachmentMergeSideEffect(c[FsspecStorageClient]),
             ]
         )

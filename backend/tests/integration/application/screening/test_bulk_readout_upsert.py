@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 import sqlalchemy as sa
 from returns.result import Success
+from sqlalchemy.exc import IntegrityError
 
 from cellar.application.screening.bulk_create_readout_data import (
     BulkCreateReadoutData,
@@ -195,10 +197,13 @@ class TestBulkCreateReadoutDataUpsert:
             assert wellless[0].value is not None
             assert wellless[0].value.value == 42.0
 
-    async def test_default_path_inserts_duplicate(
+    async def test_wellless_unique_index_blocks_duplicate_on_non_upsert_path(
         self, session_factory, workspace_id
     ) -> None:
-        """Without upsert, re-importing the same key inserts a second row."""
+        """The partial unique index (migration 049) prevents a second well-less
+        raw row for the same key even on the non-upsert path, so a re-import that
+        forgets ``upsert=True`` errors at the DB instead of silently duplicating.
+        """
         molecule_id = uuid.uuid4()
         batch_id = uuid.uuid4()
         auth = FakeAuth(role="editor", workspace_id=workspace_id)
@@ -208,9 +213,27 @@ class TestBulkCreateReadoutDataUpsert:
             run_id, rd_id = await _seed_run_and_def(seed_uow, workspace_id=workspace_id)
             await seed_uow.commit()
 
-        for value in (10.0, 42.0):
-            uc = _build_use_case(AsyncUnitOfWork(session_factory))
-            result = await uc(
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        first = await uc(
+            BulkCreateReadoutDataCommand(
+                workspace_id=workspace_id,
+                items=[
+                    _item(
+                        run_id=run_id,
+                        molecule_id=molecule_id,
+                        batch_id=batch_id,
+                        readout_def_id=rd_id,
+                        value=10.0,
+                    )
+                ],
+            ),
+            auth=auth,  # upsert defaults to False
+        )
+        assert isinstance(first, Success)
+
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        with pytest.raises(IntegrityError):
+            await uc(
                 BulkCreateReadoutDataCommand(
                     workspace_id=workspace_id,
                     items=[
@@ -219,21 +242,70 @@ class TestBulkCreateReadoutDataUpsert:
                             molecule_id=molecule_id,
                             batch_id=batch_id,
                             readout_def_id=rd_id,
-                            value=value,
+                            value=42.0,
                         )
                     ],
                 ),
                 auth=auth,
-                # upsert defaults to False
             )
-            assert isinstance(result, Success)
 
         check_uow = AsyncUnitOfWork(session_factory)
         async with check_uow:
             repo = SQLAlchemyReadoutDataRepository(check_uow)
             rows = await repo.find_by_run(workspace_id, run_id)
             wellless = [r for r in rows if r.well_id is None and not r.is_computed]
-            assert len(wellless) == 2
+            assert len(wellless) == 1
+
+    async def test_upsert_dedups_duplicate_keys_within_one_call(
+        self, session_factory, workspace_id
+    ) -> None:
+        """Two items in ONE upsert call resolving to the same key collapse to a
+        single row (latest-wins) — not a duplicate the unflushed lookup misses,
+        which would otherwise violate the unique index in save_bulk."""
+        molecule_id = uuid.uuid4()
+        batch_id = uuid.uuid4()
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            run_id, rd_id = await _seed_run_and_def(seed_uow, workspace_id=workspace_id)
+            await seed_uow.commit()
+
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            BulkCreateReadoutDataCommand(
+                workspace_id=workspace_id,
+                items=[
+                    _item(
+                        run_id=run_id,
+                        molecule_id=molecule_id,
+                        batch_id=batch_id,
+                        readout_def_id=rd_id,
+                        value=10.0,
+                    ),
+                    _item(
+                        run_id=run_id,
+                        molecule_id=molecule_id,
+                        batch_id=batch_id,
+                        readout_def_id=rd_id,
+                        value=42.0,
+                    ),
+                ],
+            ),
+            auth=auth,
+            upsert=True,
+        )
+        assert isinstance(result, Success)
+        assert result.unwrap().success_count == 2
+
+        check_uow = AsyncUnitOfWork(session_factory)
+        async with check_uow:
+            repo = SQLAlchemyReadoutDataRepository(check_uow)
+            rows = await repo.find_by_run(workspace_id, run_id)
+            wellless = [r for r in rows if r.well_id is None and not r.is_computed]
+            assert len(wellless) == 1
+            assert wellless[0].value is not None
+            assert wellless[0].value.value == 42.0
 
 
 class TestBulkCreateReadoutDataRequireBatch:

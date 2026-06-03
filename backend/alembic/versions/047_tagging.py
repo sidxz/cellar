@@ -15,8 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 
 from cellar.infrastructure.persistence.sqlalchemy.tagging.backfill_sql import (
-    BACKFILL_LINKS_SQL,
-    BACKFILL_TAGS_SQL,
+    backfill_molecule_tags,
 )
 
 revision = "047_tagging"
@@ -112,8 +111,9 @@ def upgrade() -> None:
     )
 
     # --- backfill legacy molecules.tags ---
-    op.execute(BACKFILL_TAGS_SQL)
-    op.execute(BACKFILL_LINKS_SQL)
+    # Python-driven so normalized keys match TagName.normalized_key (casefold)
+    # exactly — a SQL lower() would diverge on non-ASCII keys.
+    backfill_molecule_tags(op.get_bind())
 
 
 def downgrade() -> None:

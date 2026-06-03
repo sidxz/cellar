@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from sqlalchemy import text
 
 from cellar.domain.workspace_config.tagging.events import TagCreated
 from cellar.domain.workspace_config.tagging.tag import TagName, TaggableEntityType
+from cellar.infrastructure.persistence.sqlalchemy.tagging.backfill_sql import (
+    backfill_molecule_tags,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.molecule_tag_merge_side_effect import (
+    MoleculeTagMergeSideEffect,
+)
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
     get_tag_link_repository,
 )
@@ -262,3 +269,145 @@ class TestTagLinkRepository:
                 {"id": tag.id},
             )
             assert res.scalar_one() == 0
+
+    async def test_add_returns_whether_row_inserted(self, uow: AsyncUnitOfWork) -> None:
+        ws_id, user_id = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            tag_repo = SQLAlchemyTagRepository(uow)
+            tag = await tag_repo.get_or_create(ws_id, TagName(key="x"), user_id)
+            mol_id = await _insert_molecule(uow, ws_id, "M-add")
+            link_repo = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            first = await link_repo.add(ws_id, mol_id, tag.id, user_id)
+            second = await link_repo.add(ws_id, mol_id, tag.id, user_id)
+            await uow.commit()
+        assert first is True  # new row inserted
+        assert second is False  # already linked — no insert
+
+    async def test_tombstoned_molecule_is_not_a_valid_tag_target(
+        self, uow: AsyncUnitOfWork
+    ) -> None:
+        ws_id, user_id = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            tag_repo = SQLAlchemyTagRepository(uow)
+            tag = await tag_repo.get_or_create(ws_id, TagName(key="x"), user_id)
+            mol_id = await _insert_molecule(uow, ws_id, "M-tomb")
+            await uow.session.execute(
+                text("UPDATE molecules SET merged_into_id = :t WHERE id = :id"),
+                {"t": uuid.uuid4(), "id": mol_id},
+            )
+            link_repo = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            assert await link_repo.entity_exists_in_workspace(ws_id, mol_id) is False
+            assert await link_repo.add(ws_id, mol_id, tag.id, user_id) is False
+            await uow.commit()
+        async with uow:
+            link_repo = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            assert await link_repo.find_tags_for_entity(ws_id, mol_id) == []
+
+
+class TestTagSearchEscaping:
+    async def test_like_metacharacters_are_literal(self, uow: AsyncUnitOfWork) -> None:
+        # '%' in the query must match literally, not act as a wildcard, or the
+        # autocomplete/filter pickers return the wrong candidate set.
+        ws_id, user_id = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            repo = SQLAlchemyTagRepository(uow)
+            await repo.get_or_create(ws_id, TagName(key="50%"), user_id)
+            await repo.get_or_create(ws_id, TagName(key="500"), user_id)
+            await uow.commit()
+        async with uow:
+            repo = SQLAlchemyTagRepository(uow)
+            hits = await repo.search(ws_id, q="50%")
+        assert {t.key for t in hits} == {"50%"}
+
+
+class TestMoleculeTagMergeSideEffect:
+    async def test_transfers_tags_from_source_to_target(
+        self, uow: AsyncUnitOfWork
+    ) -> None:
+        ws_id, user_id = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            tag_repo = SQLAlchemyTagRepository(uow)
+            shared = await tag_repo.get_or_create(ws_id, TagName(key="shared"), user_id)
+            only_src = await tag_repo.get_or_create(ws_id, TagName(key="onlysrc"), user_id)
+            only_tgt = await tag_repo.get_or_create(ws_id, TagName(key="onlytgt"), user_id)
+            src = await _insert_molecule(uow, ws_id, "MERGE-SRC")
+            tgt = await _insert_molecule(uow, ws_id, "MERGE-TGT")
+            link_repo = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            await link_repo.add(ws_id, src, shared.id, user_id)
+            await link_repo.add(ws_id, src, only_src.id, user_id)
+            await link_repo.add(ws_id, tgt, shared.id, user_id)
+            await link_repo.add(ws_id, tgt, only_tgt.id, user_id)
+            await uow.commit()
+        async with uow:
+            await MoleculeTagMergeSideEffect().on_merge(uow, src, tgt)
+            await uow.commit()
+        async with uow:
+            link_repo = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            tgt_tags = {t.key for t in await link_repo.find_tags_for_entity(ws_id, tgt)}
+            src_tags = {t.key for t in await link_repo.find_tags_for_entity(ws_id, src)}
+        # Survivor gains the union; source keeps none (dedup avoids PK clash).
+        assert tgt_tags == {"shared", "onlysrc", "onlytgt"}
+        assert src_tags == set()
+
+
+class TestBackfillMoleculeTags:
+    async def test_casefold_parity_dedup_and_links(self, uow: AsyncUnitOfWork) -> None:
+        # The whole transaction (incl. the temporary tags column) rolls back on
+        # exit because we never commit — keeping migration 048's drop intact.
+        ws_id = uuid.uuid4()
+        async with uow:
+            await uow.session.execute(
+                text("ALTER TABLE molecules ADD COLUMN IF NOT EXISTS tags JSON")
+            )
+            m1 = await _insert_molecule(uow, ws_id, "BK-1")
+            m2 = await _insert_molecule(uow, ws_id, "BK-2")
+            await uow.session.execute(
+                text("UPDATE molecules SET tags = CAST(:t AS JSON) WHERE id = :id"),
+                {"t": json.dumps(["Kinase", "kinase", "Straße", " "]), "id": m1},
+            )
+            await uow.session.execute(
+                text("UPDATE molecules SET tags = CAST(:t AS JSON) WHERE id = :id"),
+                {"t": json.dumps(["KINASE"]), "id": m2},
+            )
+
+            conn = await uow.session.connection()
+            await conn.run_sync(backfill_molecule_tags)
+
+            # Casefold dedup: 'Kinase'/'kinase'/'KINASE' -> one tag; 'Straße' uses
+            # casefold ('strasse'), matching the runtime domain. Whitespace skipped.
+            norm = (
+                await uow.session.execute(
+                    text(
+                        "SELECT normalized_key FROM tags "
+                        "WHERE workspace_id = :ws ORDER BY normalized_key"
+                    ),
+                    {"ws": ws_id},
+                )
+            ).scalars().all()
+            assert norm == ["kinase", "strasse"]
+
+            # Parity: runtime get_or_create with the same display matches the
+            # backfilled row (no duplicate), which the old SQL lower() would miss.
+            repo = SQLAlchemyTagRepository(uow)
+            await repo.get_or_create(ws_id, TagName(key="Straße"), uuid.uuid4())
+            cnt = (
+                await uow.session.execute(
+                    text(
+                        "SELECT count(*) FROM tags "
+                        "WHERE workspace_id = :ws AND normalized_key = 'strasse'"
+                    ),
+                    {"ws": ws_id},
+                )
+            ).scalar_one()
+            assert cnt == 1
+
+            link_repo = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            m1_keys = {
+                t.normalized_key for t in await link_repo.find_tags_for_entity(ws_id, m1)
+            }
+            m2_keys = {
+                t.normalized_key for t in await link_repo.find_tags_for_entity(ws_id, m2)
+            }
+            assert m1_keys == {"kinase", "strasse"}
+            assert m2_keys == {"kinase"}
+            # intentionally no commit -> rollback drops the temp column + rows

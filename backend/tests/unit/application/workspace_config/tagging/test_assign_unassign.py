@@ -57,6 +57,25 @@ class TestAssignTag:
         assert any(isinstance(e, TagAssigned) for e in events)
 
     @pytest.mark.asyncio
+    async def test_reassigning_existing_link_emits_no_assignment_event(self) -> None:
+        # The link already exists: add() reports no insert, so no TagAssigned
+        # audit event should be emitted (append-only trail must not be polluted).
+        auth = fake_auth()
+        tag = make_tag(auth.workspace_id, "env", "prod", auth.user_id)
+        tag.clear_events()  # tag already exists (get_or_create returns existing)
+        repo = make_tag_repo(get_or_create=tag)
+        provider = make_link_provider(entity_exists=True, add_inserted=False)
+        dispatcher = AsyncMock()
+        uc = AssignTag(FakeUnitOfWork(), repo, provider, dispatcher)
+
+        result = await uc(_assign_cmd(auth), auth=auth)
+
+        assert isinstance(result, Success)
+        provider.link_repo.add.assert_awaited_once()
+        events = dispatcher.dispatch_all.call_args.args[0]
+        assert not any(isinstance(e, TagAssigned) for e in events)
+
+    @pytest.mark.asyncio
     async def test_missing_entity_returns_not_found(self) -> None:
         auth = fake_auth()
         tag = make_tag(auth.workspace_id, "env", "prod", auth.user_id)

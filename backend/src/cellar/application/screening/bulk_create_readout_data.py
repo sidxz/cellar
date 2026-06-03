@@ -253,6 +253,13 @@ class BulkCreateReadoutData:
             result = BulkReadoutResult(total_count=len(input.items))
             entities: list[ReadoutData] = []
             run_protocol_cache: dict[uuid.UUID, dict[str, Any]] = {}
+            # Upsert only: track entities created earlier in THIS call by their
+            # well-less key, so a later row resolving to the same key overwrites
+            # the pending entity (latest-wins) instead of inserting a duplicate
+            # the DB lookup can't yet see (it isn't flushed until save_bulk).
+            pending_by_key: dict[
+                tuple[uuid.UUID, uuid.UUID | None, uuid.UUID | None, uuid.UUID], ReadoutData
+            ] = {}
 
             for idx, item in enumerate(input.items):
                 has_batch = item.batch_id is not None or item.batch_number is not None
@@ -299,6 +306,20 @@ class BulkCreateReadoutData:
                 try:
                     value = self._build_value(item)
 
+                    key = (item.run_id, molecule_id, batch_id, readout_definition_id)
+                    pending = pending_by_key.get(key) if upsert else None
+                    if pending is not None:
+                        # A row from THIS call already targets this key and hasn't
+                        # been flushed yet — overwrite it in place (latest-wins) so
+                        # save_bulk inserts a single row, not a duplicate.
+                        pending.update_value(
+                            value=value,
+                            value_text=item.value_text,
+                            is_outlier=item.is_outlier,
+                        )
+                        result.success_count += 1
+                        continue
+
                     existing: ReadoutData | None = None
                     if upsert:
                         existing = await self._repo.find_wellless_by_keys(
@@ -331,6 +352,8 @@ class BulkCreateReadoutData:
                             is_outlier=item.is_outlier,
                         )
                         entities.append(rd)
+                        if upsert and item.well_id is None:
+                            pending_by_key[key] = rd
                     result.success_count += 1
                 except (ValueError, TypeError) as e:
                     result.error_count += 1

@@ -11,6 +11,9 @@ from cellar.domain.workspace_config.tagging.tag import Tag, TagName
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._field_clauses import (
+    escape_like,
+)
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import TagModel
 
 
@@ -108,11 +111,14 @@ class SQLAlchemyTagRepository(SQLAlchemyRepository[Tag, TagModel]):
     ) -> list[Tag]:
         stmt = select(TagModel).where(TagModel.workspace_id == workspace_id)
         if q and q.strip():
-            pattern = f"%{q.strip().casefold()}%"
+            # Escape LIKE metacharacters so a literal % or _ in the query does
+            # not act as a wildcard. Columns are pre-casefolded, so .like (not
+            # .ilike) is correct for case-insensitive matching.
+            pattern = f"%{escape_like(q.strip().casefold())}%"
             stmt = stmt.where(
                 or_(
-                    TagModel.normalized_key.like(pattern),
-                    TagModel.normalized_value.like(pattern),
+                    TagModel.normalized_key.like(pattern, escape="\\"),
+                    TagModel.normalized_value.like(pattern, escape="\\"),
                 )
             )
         if created_by is not None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
@@ -431,7 +431,7 @@ async def list_protocols(
     cursor: str | None = None,
     limit: int | None = None,
     tags: list[uuid.UUID] | None = Query(default=None),
-    tag_logic: str = Query(default="any"),
+    tag_logic: Literal["any", "all"] = Query(default="any"),
 ) -> PaginatedResponse[ProtocolResponse]:
     parsed_cursor = parse_cursor(cursor)
     clamped_limit = clamp_limit(limit)

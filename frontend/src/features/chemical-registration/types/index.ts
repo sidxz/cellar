@@ -84,7 +84,6 @@ export interface Molecule {
   synthesis_status: string;
   lifecycle_stage: LifecycleStage;
   stereochemistry: string | null;
-  tags: string[];
   invention_date: string | null;
   disclosed_at: string | null;
   merged_into_id: string | null;

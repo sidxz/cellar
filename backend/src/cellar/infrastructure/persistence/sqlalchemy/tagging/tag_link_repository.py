@@ -74,9 +74,12 @@ class SQLAlchemyTagLinkRepository:
         entity_id: uuid.UUID,
         tag_id: uuid.UUID,
         assigned_by: uuid.UUID,
-    ) -> None:
+    ) -> bool:
+        """Link ``tag_id`` to the entity. Returns ``True`` iff a new row was
+        inserted (``False`` when the entity is absent or the link already
+        existed) so callers can avoid emitting a spurious assignment event."""
         if not await self.entity_exists_in_workspace(workspace_id, entity_id):
-            return
+            return False
         stmt = (
             pg_insert(self.link_model)
             .values(
@@ -86,7 +89,8 @@ class SQLAlchemyTagLinkRepository:
             )
             .on_conflict_do_nothing()
         )
-        await self._session.execute(stmt)
+        result = await self._session.execute(stmt)
+        return result.rowcount > 0
 
     async def remove(
         self, workspace_id: uuid.UUID, entity_id: uuid.UUID, tag_id: uuid.UUID
@@ -215,6 +219,20 @@ class MoleculeTagLinkRepository(SQLAlchemyTagLinkRepository):
     link_model = MoleculeTagLinkModel
     entity_model = MoleculeModel
     entity_id_attr = "molecule_id"
+
+    async def entity_exists_in_workspace(
+        self, workspace_id: uuid.UUID, entity_id: uuid.UUID
+    ) -> bool:
+        """A tombstoned (merged) molecule is not a valid tag target — its links
+        would be invisible in normal views and lost on the next merge. Treat it
+        as non-existent so assign/set/remove reject it."""
+        stmt = select(MoleculeModel.id).where(
+            MoleculeModel.id == entity_id,
+            MoleculeModel.workspace_id == workspace_id,
+            MoleculeModel.merged_into_id.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none() is not None
 
 
 class ProtocolTagLinkRepository(SQLAlchemyTagLinkRepository):

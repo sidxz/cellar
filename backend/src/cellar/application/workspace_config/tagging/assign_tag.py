@@ -62,19 +62,23 @@ class AssignTag:
             tag = await self._tag_repo.get_or_create(
                 input.workspace_id, name, input.assigned_by
             )
-            tag.register_event(
-                TagAssigned(
-                    aggregate_id=tag.id,
-                    aggregate_type="Tag",
-                    workspace_id=input.workspace_id,
-                    target_type=input.entity_type.value,
-                    target_id=input.entity_id,
-                )
-            )
-            self._uow.track(tag)
-            await link_repo.add(
+            inserted = await link_repo.add(
                 input.workspace_id, input.entity_id, tag.id, input.assigned_by
             )
+            # Only emit the assignment audit event when a link was actually
+            # created — re-assigning an existing tag is a no-op, not a state
+            # change, and must not pollute the append-only audit trail.
+            if inserted:
+                tag.register_event(
+                    TagAssigned(
+                        aggregate_id=tag.id,
+                        aggregate_type="Tag",
+                        workspace_id=input.workspace_id,
+                        target_type=input.entity_type.value,
+                        target_id=input.entity_id,
+                    )
+                )
+                self._uow.track(tag)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)

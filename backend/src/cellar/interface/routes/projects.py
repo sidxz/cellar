@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -89,7 +90,7 @@ async def list_projects(
     cursor: str | None = None,
     limit: int | None = None,
     tags: list[uuid.UUID] | None = Query(default=None),
-    tag_logic: str = Query(default="any"),
+    tag_logic: Literal["any", "all"] = Query(default="any"),
 ) -> PaginatedResponse[ProjectResponse]:
     query = ListProjectsQuery(
         workspace_id=auth.workspace_id,

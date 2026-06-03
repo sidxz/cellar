@@ -201,35 +201,45 @@ class SQLAlchemyReadoutDataRepository:
         batch_id: uuid.UUID | None,
         readout_definition_id: uuid.UUID,
     ) -> ReadoutData | None:
-        """Find the single well-less, non-computed row matching the summary key.
+        """Find the well-less, non-computed row matching the summary key (for upsert).
 
         ``molecule_id`` and ``batch_id`` are nullable; ``None`` is matched with
         ``IS NULL`` (not ``= NULL``) so summary rows with no molecule/batch are
         located correctly.
 
+        A partial unique index (``uq_readout_data_wellless``) guarantees at most
+        one such row per key, but this finder still selects the most recent row
+        defensively — it must never raise ``MultipleResultsFound`` on legacy data
+        predating the index, since that would abort the whole import.
+
         Outlier-flagged rows are intentionally NOT filtered out (unlike sibling
         finders): a re-import must be able to overwrite an existing endpoint value
         even if it was previously flagged as an outlier.
         """
-        stmt = select(ReadoutDataModel).where(
-            ReadoutDataModel.workspace_id == workspace_id,
-            ReadoutDataModel.run_id == run_id,
-            ReadoutDataModel.well_id.is_(None),
-            ReadoutDataModel.readout_definition_id == readout_definition_id,
-            ReadoutDataModel.is_computed.is_(False),
-            (
-                ReadoutDataModel.molecule_id == molecule_id
-                if molecule_id is not None
-                else ReadoutDataModel.molecule_id.is_(None)
-            ),
-            (
-                ReadoutDataModel.batch_id == batch_id
-                if batch_id is not None
-                else ReadoutDataModel.batch_id.is_(None)
-            ),
+        stmt = (
+            select(ReadoutDataModel)
+            .where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.run_id == run_id,
+                ReadoutDataModel.well_id.is_(None),
+                ReadoutDataModel.readout_definition_id == readout_definition_id,
+                ReadoutDataModel.is_computed.is_(False),
+                (
+                    ReadoutDataModel.molecule_id == molecule_id
+                    if molecule_id is not None
+                    else ReadoutDataModel.molecule_id.is_(None)
+                ),
+                (
+                    ReadoutDataModel.batch_id == batch_id
+                    if batch_id is not None
+                    else ReadoutDataModel.batch_id.is_(None)
+                ),
+            )
+            .order_by(ReadoutDataModel.created_at.desc())
+            .limit(1)
         )
         result = await self._uow.session.execute(stmt)
-        model = result.scalar_one_or_none()
+        model = result.scalars().first()
         return self._to_domain(model) if model is not None else None
 
     async def find_grouped_by_condition(

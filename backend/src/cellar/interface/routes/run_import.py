@@ -791,8 +791,12 @@ async def import_summary_file(
     result = await uc(cmd, auth=auth)
     out: SummaryImportResult = result_to_response(result)
 
-    # Refresh calculated readouts / DR artifacts for the affected run.
-    await engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
+    # Refresh calculated readouts / DR artifacts only when raw values actually
+    # changed. compute_for_run deletes-and-recomputes the run's computed/DR rows,
+    # so triggering it for a zero-write import (empty file, all rows unmatched)
+    # would needlessly churn artifacts — and can fail on a run with no raw data.
+    if out.values_inserted + out.values_updated > 0:
+        await engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
 
     return SummaryImportResponse.from_result(out)
 
