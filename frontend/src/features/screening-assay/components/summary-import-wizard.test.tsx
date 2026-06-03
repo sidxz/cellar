@@ -38,16 +38,20 @@ function baseHook(
     file: null,
     preview: null,
     draft: { roles: {}, readoutDefByHeader: {} },
+    resolvePreview: null,
     result: null,
     isDragging: false,
     fileInputRef: { current: null },
     // mutations are only read for pending/data in the hook itself; the
     // component reads the derived flags below, so a cast is fine here.
     previewMutation: {} as UseSummaryImportWizardResult["previewMutation"],
+    resolveMutation: {} as UseSummaryImportWizardResult["resolveMutation"],
     importMutation: {} as UseSummaryImportWizardResult["importMutation"],
     readoutDefOptions: [],
     canContinueMapping: false,
+    canImport: false,
     isPreviewing: false,
+    isResolving: false,
     isImporting: false,
     setStep: vi.fn(),
     setIsDragging: vi.fn(),
@@ -57,6 +61,7 @@ function baseHook(
     handleDrop: vi.fn(),
     setRole: vi.fn(),
     setReadoutDef: vi.fn(),
+    handleContinueToPreview: vi.fn(),
     handleImport: vi.fn(),
     ...overrides,
   };
@@ -82,7 +87,7 @@ describe("SummaryImportWizard", () => {
     expect(screen.getByRole("button", { name: /choose file/i })).toBeInTheDocument();
   });
 
-  it("step 2 shows the mapping grid with summary roles and disables Import until mapping is valid", () => {
+  it("step 2 shows the mapping grid with summary roles and disables Continue until mapping is valid", () => {
     hookState.value = baseHook({
       step: 2,
       canContinueMapping: false,
@@ -104,12 +109,58 @@ describe("SummaryImportWizard", () => {
     renderWizard();
     expect(screen.getByText("Compound")).toBeInTheDocument();
     expect(screen.getByText("IC50")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /import/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
   });
 
-  it("step 3 shows the result summary counts", () => {
+  it("step 3 shows the dry-run forecast and warns about unmatched compounds", () => {
     hookState.value = baseHook({
       step: 3,
+      canImport: true,
+      resolvePreview: {
+        total_rows: 5,
+        matched_compound_count: 3,
+        unmatched_compound_refs: ["CPD-999", "CPD-888"],
+        unmatched_batch_refs: [],
+        values_to_insert: 6,
+        values_to_update: 1,
+        rows_skipped: 2,
+        errors: [],
+      },
+    });
+    renderWizard();
+    expect(screen.getByText("3 matched")).toBeInTheDocument();
+    expect(screen.getByText(/unmatched compound refs/i)).toBeInTheDocument();
+    expect(screen.getByText(/CPD-999/)).toBeInTheDocument();
+    expect(screen.getByText("New values")).toBeInTheDocument();
+    expect(screen.getByText("Overwrites")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^import$/i })).toBeEnabled();
+  });
+
+  it("step 3 disables Import when nothing will be written", () => {
+    hookState.value = baseHook({
+      step: 3,
+      canImport: false,
+      resolvePreview: {
+        total_rows: 2,
+        matched_compound_count: 0,
+        unmatched_compound_refs: ["CPD-1"],
+        unmatched_batch_refs: [],
+        values_to_insert: 0,
+        values_to_update: 0,
+        rows_skipped: 2,
+        errors: [],
+      },
+    });
+    renderWizard();
+    expect(screen.getByRole("button", { name: /^import$/i })).toBeDisabled();
+    expect(
+      screen.getByText(/nothing to import — check your compound column mapping/i),
+    ).toBeInTheDocument();
+  });
+
+  it("step 4 shows the result summary counts", () => {
+    hookState.value = baseHook({
+      step: 4,
       result: {
         rows_processed: 10,
         values_inserted: 8,

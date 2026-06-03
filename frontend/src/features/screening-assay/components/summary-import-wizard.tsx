@@ -23,6 +23,7 @@ import { cn } from "@/shared/lib/utils";
 import type {
   SummaryImportResponse,
   SummaryPreviewResponse,
+  SummaryResolveResponse,
   SummaryRole,
 } from "../hooks/use-summary-import";
 import { useSummaryImportWizard } from "../hooks/use-summary-import-wizard";
@@ -73,12 +74,15 @@ export function SummaryImportWizard({
     file,
     preview,
     draft,
+    resolvePreview,
     result,
     isDragging,
     fileInputRef,
     readoutDefOptions,
     canContinueMapping,
+    canImport,
     isPreviewing,
+    isResolving,
     isImporting,
     setStep,
     setIsDragging,
@@ -87,6 +91,7 @@ export function SummaryImportWizard({
     handleDrop,
     setRole,
     setReadoutDef,
+    handleContinueToPreview,
     handleImport,
   } = useSummaryImportWizard({ runId, protocolId, open, onOpenChange });
 
@@ -127,11 +132,18 @@ export function SummaryImportWizard({
           />
         )}
 
-        {step === 3 && result && <ConfirmStep result={result} />}
+        {step === 3 && resolvePreview && <PreviewStep preview={resolvePreview} />}
+
+        {step === 4 && result && <ConfirmStep result={result} />}
 
         <DialogFooter className="gap-2">
           {step === 2 && (
-            <Button variant="ghost" onClick={() => setStep(1)} disabled={isImporting}>
+            <Button variant="ghost" onClick={() => setStep(1)} disabled={isResolving}>
+              <ChevronLeft className="h-4 w-4" /> Back
+            </Button>
+          )}
+          {step === 3 && (
+            <Button variant="ghost" onClick={() => setStep(2)} disabled={isImporting}>
               <ChevronLeft className="h-4 w-4" /> Back
             </Button>
           )}
@@ -141,12 +153,18 @@ export function SummaryImportWizard({
             </Button>
           )}
           {step === 2 && (
-            <Button onClick={handleImport} disabled={!canContinueMapping || isImporting}>
+            <Button onClick={handleContinueToPreview} disabled={!canContinueMapping || isResolving}>
+              {isResolving ? "Resolving…" : "Continue"}
+              {!isResolving && <ChevronRight className="h-4 w-4" />}
+            </Button>
+          )}
+          {step === 3 && (
+            <Button onClick={handleImport} disabled={!canImport || isImporting}>
               {isImporting ? "Importing…" : "Import"}
               {!isImporting && <ChevronRight className="h-4 w-4" />}
             </Button>
           )}
-          {step === 3 && <Button onClick={() => handleOpenChange(false)}>Done</Button>}
+          {step === 4 && <Button onClick={() => handleOpenChange(false)}>Done</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -155,12 +173,12 @@ export function SummaryImportWizard({
 
 // ─── Step indicator ──────────────────────────────────────────────────────────
 
-function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
-  const steps = ["Upload", "Map", "Confirm"];
+function StepIndicator({ step }: { step: 1 | 2 | 3 | 4 }) {
+  const steps = ["Upload", "Map", "Preview", "Confirm"];
   return (
     <div className="flex items-center gap-2 text-xs">
       {steps.map((label, i) => {
-        const n = (i + 1) as 1 | 2 | 3;
+        const n = (i + 1) as 1 | 2 | 3 | 4;
         const active = step === n;
         const done = step > n;
         return (
@@ -371,7 +389,125 @@ function MappingStep({
   );
 }
 
-// ─── Step 3 — Confirm ────────────────────────────────────────────────────────
+// ─── Step 3 — Preview (dry-run forecast) ─────────────────────────────────────
+
+function UnmatchedRefsCard({
+  count,
+  refs,
+  title,
+  help,
+}: {
+  count: number;
+  refs: string[];
+  title: string;
+  help: string;
+}) {
+  const shown = refs.slice(0, 20);
+  const extra = refs.length - shown.length;
+  return (
+    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+      <div className="mb-1 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
+        <AlertCircle className="h-4 w-4" />
+        {count} {title}
+      </div>
+      <p className="text-xs text-muted-foreground">{help}</p>
+      <p className="mt-2 break-words font-mono text-xs">
+        {shown.join(", ")}
+        {extra > 0 && ` … +${extra} more`}
+      </p>
+    </div>
+  );
+}
+
+function PreviewStep({ preview }: { preview: SummaryResolveResponse }) {
+  const unmatchedCompounds = preview.unmatched_compound_refs ?? [];
+  const unmatchedBatches = preview.unmatched_batch_refs ?? [];
+  const errors = preview.errors ?? [];
+  const willWrite = preview.values_to_insert + preview.values_to_update;
+  const shownErrors = errors.slice(0, 20);
+
+  return (
+    <div className="space-y-4 py-2">
+      {/* Compound match summary */}
+      <div className="flex items-center gap-2 rounded-md border p-3 text-sm">
+        <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30">
+          {preview.matched_compound_count} matched
+        </Badge>
+        <span className="text-muted-foreground">
+          compound{preview.matched_compound_count === 1 ? "" : "s"} matched across{" "}
+          {preview.total_rows} row{preview.total_rows === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {unmatchedCompounds.length > 0 && (
+        <UnmatchedRefsCard
+          count={unmatchedCompounds.length}
+          refs={unmatchedCompounds}
+          title={`unmatched compound ref${unmatchedCompounds.length === 1 ? "" : "s"}`}
+          help="No molecule matches these identifiers. Their rows will be skipped. Register the compounds first if they should be included."
+        />
+      )}
+
+      {unmatchedBatches.length > 0 && (
+        <UnmatchedRefsCard
+          count={unmatchedBatches.length}
+          refs={unmatchedBatches}
+          title={`unmatched batch ref${unmatchedBatches.length === 1 ? "" : "s"}`}
+          help="No batch matches these identifiers. Their rows will be skipped. Register the batches first if they should be included."
+        />
+      )}
+
+      {/* Value forecast */}
+      <div className="grid grid-cols-3 gap-3">
+        <ResultCard
+          label="New values"
+          value={preview.values_to_insert}
+          accent={preview.values_to_insert > 0 ? "ok" : undefined}
+        />
+        <ResultCard
+          label="Overwrites"
+          value={preview.values_to_update}
+          accent={preview.values_to_update > 0 ? "warn" : undefined}
+        />
+        <ResultCard
+          label="Rows skipped"
+          value={preview.rows_skipped}
+          accent={preview.rows_skipped > 0 ? "warn" : undefined}
+        />
+      </div>
+
+      {willWrite === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Nothing to import — check your compound column mapping.
+        </p>
+      )}
+
+      {errors.length > 0 && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
+            <AlertCircle className="h-4 w-4" />
+            {errors.length} row error{errors.length === 1 ? "" : "s"}
+          </div>
+          <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
+            {shownErrors.map((e, i) => (
+              <li key={`${e.row}-${i}`}>
+                <span className="text-foreground">Row {e.row}</span>
+                <span className="ml-2 text-muted-foreground">— {e.error}</span>
+              </li>
+            ))}
+            {errors.length > shownErrors.length && (
+              <li className="text-muted-foreground">
+                …and {errors.length - shownErrors.length} more
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Step 4 — Confirm ────────────────────────────────────────────────────────
 
 function ConfirmStep({ result }: { result: SummaryImportResponse }) {
   const errors = result.errors ?? [];
