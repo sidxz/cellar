@@ -159,11 +159,13 @@ class ReadoutDataRepository(Protocol):
         molecule_id: uuid.UUID | None,
         batch_id: uuid.UUID | None,
         readout_definition_id: uuid.UUID,
-    ) -> "ReadoutData | None":
+    ) -> ReadoutData | None:
         """Find a well-less (well_id IS NULL) readout row matching the summary upsert key.
 
         Returns the single matching row or None. Used by summary-results import to
         overwrite an existing endpoint value instead of inserting a duplicate.
+        Outlier-flagged rows are intentionally NOT filtered out, so a re-import can
+        overwrite an existing endpoint value even if it was previously flagged.
         """
         ...
     async def find_grouped_by_condition(

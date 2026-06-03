@@ -206,6 +206,10 @@ class SQLAlchemyReadoutDataRepository:
         ``molecule_id`` and ``batch_id`` are nullable; ``None`` is matched with
         ``IS NULL`` (not ``= NULL``) so summary rows with no molecule/batch are
         located correctly.
+
+        Outlier-flagged rows are intentionally NOT filtered out (unlike sibling
+        finders): a re-import must be able to overwrite an existing endpoint value
+        even if it was previously flagged as an outlier.
         """
         stmt = select(ReadoutDataModel).where(
             ReadoutDataModel.workspace_id == workspace_id,
@@ -225,7 +229,7 @@ class SQLAlchemyReadoutDataRepository:
             ),
         )
         result = await self._uow.session.execute(stmt)
-        model = result.scalars().first()
+        model = result.scalar_one_or_none()
         return self._to_domain(model) if model is not None else None
 
     async def find_grouped_by_condition(

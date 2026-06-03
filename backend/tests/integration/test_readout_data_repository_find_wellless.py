@@ -191,3 +191,100 @@ class TestFindWelllessByKeys:
             )
 
         assert found is None
+
+    async def test_returns_none_for_different_workspace(self, uow, workspace_id):
+        """Workspace isolation: a row in another workspace must not be returned."""
+        other_workspace_id = uuid.uuid4()
+        molecule_id = uuid.uuid4()
+        batch_id = uuid.uuid4()
+        async with uow:
+            run_id, rd_id = await _seed_run_and_def(uow, workspace_id=workspace_id)
+            row = ReadoutData(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                well_id=None,
+                molecule_id=molecule_id,
+                batch_id=batch_id,
+                readout_definition_id=rd_id,
+                value=QualifiedValue(value=12.5, qualifier=Qualifier.EQUAL),
+                is_computed=False,
+            )
+            repo = SQLAlchemyReadoutDataRepository(uow)
+            await repo.save(row)
+            await uow.commit()
+
+        repo = SQLAlchemyReadoutDataRepository(uow)
+        async with uow:
+            found = await repo.find_wellless_by_keys(
+                workspace_id=other_workspace_id,  # different workspace
+                run_id=run_id,
+                molecule_id=molecule_id,
+                batch_id=batch_id,
+                readout_definition_id=rd_id,
+            )
+
+        assert found is None
+
+    async def test_returns_none_for_different_run(self, uow, workspace_id):
+        """A row matching everything but run_id must not be returned."""
+        molecule_id = uuid.uuid4()
+        batch_id = uuid.uuid4()
+        async with uow:
+            run_id, rd_id = await _seed_run_and_def(uow, workspace_id=workspace_id)
+            row = ReadoutData(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                well_id=None,
+                molecule_id=molecule_id,
+                batch_id=batch_id,
+                readout_definition_id=rd_id,
+                value=QualifiedValue(value=12.5, qualifier=Qualifier.EQUAL),
+                is_computed=False,
+            )
+            repo = SQLAlchemyReadoutDataRepository(uow)
+            await repo.save(row)
+            await uow.commit()
+
+        repo = SQLAlchemyReadoutDataRepository(uow)
+        async with uow:
+            found = await repo.find_wellless_by_keys(
+                workspace_id=workspace_id,
+                run_id=uuid.uuid4(),  # different run
+                molecule_id=molecule_id,
+                batch_id=batch_id,
+                readout_definition_id=rd_id,
+            )
+
+        assert found is None
+
+    async def test_returns_none_for_different_readout_definition(self, uow, workspace_id):
+        """A row matching everything but readout_definition_id must not be returned."""
+        molecule_id = uuid.uuid4()
+        batch_id = uuid.uuid4()
+        async with uow:
+            run_id, rd_id = await _seed_run_and_def(uow, workspace_id=workspace_id)
+            row = ReadoutData(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                well_id=None,
+                molecule_id=molecule_id,
+                batch_id=batch_id,
+                readout_definition_id=rd_id,
+                value=QualifiedValue(value=12.5, qualifier=Qualifier.EQUAL),
+                is_computed=False,
+            )
+            repo = SQLAlchemyReadoutDataRepository(uow)
+            await repo.save(row)
+            await uow.commit()
+
+        repo = SQLAlchemyReadoutDataRepository(uow)
+        async with uow:
+            found = await repo.find_wellless_by_keys(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                molecule_id=molecule_id,
+                batch_id=batch_id,
+                readout_definition_id=uuid.uuid4(),  # different readout def
+            )
+
+        assert found is None
