@@ -9,4 +9,6 @@ export type ListProtocolsApiV1ProtocolsGetParams = {
 project_id?: string | null;
 cursor?: string | null;
 limit?: number | null;
+tags?: string[] | null;
+tag_logic?: string;
 };

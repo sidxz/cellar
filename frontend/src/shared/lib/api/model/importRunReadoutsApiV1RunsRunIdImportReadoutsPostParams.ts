@@ -7,4 +7,5 @@
 
 export type ImportRunReadoutsApiV1RunsRunIdImportReadoutsPostParams = {
 readout_definition_id?: string | null;
+layout?: string;
 };

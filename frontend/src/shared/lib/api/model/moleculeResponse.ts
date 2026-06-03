@@ -29,7 +29,6 @@ export interface MoleculeResponse {
   synthesis_status: string;
   lifecycle_stage: string;
   stereochemistry?: MoleculeResponseStereochemistry;
-  tags: string[];
   invention_date?: MoleculeResponseInventionDate;
   disclosed_at?: MoleculeResponseDisclosedAt;
   merged_into_id?: MoleculeResponseMergedIntoId;

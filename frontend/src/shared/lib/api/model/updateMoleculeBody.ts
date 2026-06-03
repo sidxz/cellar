@@ -4,15 +4,11 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
-import type { UpdateMoleculeBodyAddTags } from './updateMoleculeBodyAddTags';
-import type { UpdateMoleculeBodyRemoveTags } from './updateMoleculeBodyRemoveTags';
 import type { UpdateMoleculeBodyLifecycleStage } from './updateMoleculeBodyLifecycleStage';
 import type { UpdateMoleculeBodyLifecycleReason } from './updateMoleculeBodyLifecycleReason';
 import type { UpdateMoleculeBodyCustomFields } from './updateMoleculeBodyCustomFields';
 
 export interface UpdateMoleculeBody {
-  add_tags?: UpdateMoleculeBodyAddTags;
-  remove_tags?: UpdateMoleculeBodyRemoveTags;
   lifecycle_stage?: UpdateMoleculeBodyLifecycleStage;
   lifecycle_reason?: UpdateMoleculeBodyLifecycleReason;
   custom_fields?: UpdateMoleculeBodyCustomFields;

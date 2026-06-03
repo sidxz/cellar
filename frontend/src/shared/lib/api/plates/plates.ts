@@ -26,6 +26,7 @@ import type {
 import type {
   ChangeStatusBody,
   DerivePlateBody,
+  ExportPlateLayoutApiV1PlatesPlateIdExportGetParams,
   HTTPValidationError,
   ListPlatesApiV1PlatesGetParams,
   MapWellsBody,
@@ -484,6 +485,110 @@ export const useMapWellsApiV1PlatesPlateIdWellsPut = <TError = HTTPValidationErr
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * Export a plate's well-map as a round-trippable CSV/XLSX download.
+
+Columns match the well-mapping import exactly, with batch UUIDs resolved
+back to batch numbers — so the file re-imports losslessly.
+ * @summary Export Plate Layout
+ */
+export const exportPlateLayoutApiV1PlatesPlateIdExportGet = (
+    plateId: string,
+    params?: ExportPlateLayoutApiV1PlatesPlateIdExportGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<unknown>(
+      {url: `/api/v1/plates/${plateId}/export`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getExportPlateLayoutApiV1PlatesPlateIdExportGetQueryKey = (plateId?: string,
+    params?: ExportPlateLayoutApiV1PlatesPlateIdExportGetParams,) => {
+    return [
+    `/api/v1/plates/${plateId}/export`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getExportPlateLayoutApiV1PlatesPlateIdExportGetQueryOptions = <TData = Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError = HTTPValidationError>(plateId: string,
+    params?: ExportPlateLayoutApiV1PlatesPlateIdExportGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportPlateLayoutApiV1PlatesPlateIdExportGetQueryKey(plateId,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>> = ({ signal }) => exportPlateLayoutApiV1PlatesPlateIdExportGet(plateId,params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(plateId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportPlateLayoutApiV1PlatesPlateIdExportGetQueryResult = NonNullable<Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>>
+export type ExportPlateLayoutApiV1PlatesPlateIdExportGetQueryError = HTTPValidationError
+
+
+export function useExportPlateLayoutApiV1PlatesPlateIdExportGet<TData = Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError = HTTPValidationError>(
+ plateId: string,
+    params: undefined |  ExportPlateLayoutApiV1PlatesPlateIdExportGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>,
+          TError,
+          Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportPlateLayoutApiV1PlatesPlateIdExportGet<TData = Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError = HTTPValidationError>(
+ plateId: string,
+    params?: ExportPlateLayoutApiV1PlatesPlateIdExportGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>,
+          TError,
+          Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportPlateLayoutApiV1PlatesPlateIdExportGet<TData = Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError = HTTPValidationError>(
+ plateId: string,
+    params?: ExportPlateLayoutApiV1PlatesPlateIdExportGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Export Plate Layout
+ */
+
+export function useExportPlateLayoutApiV1PlatesPlateIdExportGet<TData = Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError = HTTPValidationError>(
+ plateId: string,
+    params?: ExportPlateLayoutApiV1PlatesPlateIdExportGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportPlateLayoutApiV1PlatesPlateIdExportGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportPlateLayoutApiV1PlatesPlateIdExportGetQueryOptions(plateId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
  * Transition a plate to a new lifecycle status.
  * @summary Change Status
  */

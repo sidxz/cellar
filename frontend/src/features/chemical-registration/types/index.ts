@@ -137,8 +137,6 @@ export interface RegisterMoleculeInput {
 }
 
 export interface UpdateMoleculeInput {
-  add_tags?: string[];
-  remove_tags?: string[];
   lifecycle_stage?: string;
   lifecycle_reason?: string;
   custom_fields?: Record<string, unknown> | null;

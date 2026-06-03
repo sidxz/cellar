@@ -8,4 +8,6 @@
 export type ListProjectsApiV1ProjectsGetParams = {
 cursor?: string | null;
 limit?: number | null;
+tags?: string[] | null;
+tag_logic?: string;
 };

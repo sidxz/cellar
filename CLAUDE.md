@@ -55,6 +55,17 @@ Auth delegated to Sentinel (external, `~/workspace/identity-service/`).
 
 ---
 
+## Frontend API Layer (orval)
+
+**Backend types are generated; hooks are hand-written. Never hand-roll a TypeScript interface that mirrors a backend DTO — it silently drifts the moment the backend changes.**
+
+- **Types:** orval generates them into `frontend/src/shared/lib/api/model/` from the live OpenAPI. Regenerate with `pnpm generate:api` (run from `frontend/`, backend up on `:8000`). Import the generated type; if a feature wants a domain name, **alias** it (`export type Tag = TagResponse`) — don't redefine its shape.
+- **Hooks:** hand-written per feature, calling `customInstance` (the dominant convention; orval's generated react-query hooks under `api/<tag>/` are mostly unused). Write the query/mutation by hand, reuse the generated type.
+- **Adding/changing a backend route or DTO:** regenerate orval (or at least add the alias) in the *same* change — never ship a hand-written duplicate payload shape.
+- **Gotchas:** regen is all-or-nothing for `model/` (one fetch rewrites the dir — a full refresh is normally safe since changes are additive, but review the diff). orval **never prunes** `model/index.ts`, so deleting a schema file leaves a dangling barrel export — remove that line by hand.
+
+---
+
 ## Project Layout
 
 ```

@@ -4,5 +4,6 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { WellEntryModel } from './wellEntryModel';
 
-export type PlateResponseWellMapAnyOf = { [key: string]: unknown };
+export type PlateResponseWellMapAnyOf = {[key: string]: WellEntryModel};

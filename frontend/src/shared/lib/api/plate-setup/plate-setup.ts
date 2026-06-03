@@ -288,6 +288,9 @@ Supported layouts:
 - Single-value: ``Well, Value`` columns with ``readout_definition_id`` query param.
 - Multi-column: ``Well, <ReadoutDefName1>, <ReadoutDefName2>, ...`` — headers
   matched case-insensitively to readout definition names.
+- Grid (``layout=grid``): a plate matrix (column numbers across the top, row
+  letters down the side) for a single ``readout_definition_id``; reshaped to
+  ``Well, Value`` before import.
  * @summary Import Run Readouts
  */
 export const importRunReadoutsApiV1RunsRunIdImportReadoutsPost = (
