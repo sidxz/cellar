@@ -201,6 +201,8 @@ class ImportSummaryFile:
         items: list[ReadoutDataItem] = [item for item, _ in deduped.values()]
         item_rows: list[int] = [src for _, src in deduped.values()]
 
+        # Before/after snapshot diff assumes READ COMMITTED isolation (the default);
+        # a stricter isolation level would break the inserted/updated accounting below.
         before = await self._wellless_keys(ws, run_id)
 
         values_inserted = 0

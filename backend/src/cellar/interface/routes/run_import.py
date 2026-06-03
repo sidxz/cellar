@@ -8,6 +8,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel, Field
+from pydantic import ValidationError as PydanticValidationError
 
 from cellar.application.screening.import_run_file import (
     ImportRunFileCommand,
@@ -32,6 +33,7 @@ from cellar.application.screening.summary_import_models import (
     SummaryImportResult,
     SummaryPreviewResult,
 )
+from cellar.domain.shared.errors import ValidationError
 from cellar.interface.dependencies import (
     AuthDep,
     CreateRunImportTemplateDep,
@@ -737,7 +739,16 @@ async def import_summary_file(
     dose-response artifacts refresh (mirrors ``/readout-data/bulk``).
     """
     content = await file.read()
-    parsed_map = SummaryColumnMappingRequest.model_validate_json(mapping)
+    # Parse the mapping form field here so malformed JSON / non-UUID readout ids
+    # surface as a domain ValidationError (HTTP 422) instead of a raw pydantic
+    # ValidationError bubbling out as a 500.
+    try:
+        parsed_map = SummaryColumnMappingRequest.model_validate_json(mapping)
+    except PydanticValidationError as exc:
+        raise ValidationError(f"Invalid mapping: {exc}") from exc
+    # NOTE: the use case's inserted/updated accounting compares a well-less-key
+    # snapshot taken before/after the bulk upsert; this relies on READ COMMITTED
+    # isolation (the default). A stricter isolation level would break the diff.
     cmd = ImportSummaryFileCommand(
         workspace_id=auth.workspace_id,
         run_id=run_id,

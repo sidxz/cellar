@@ -159,3 +159,38 @@ class TestSummaryImportRoutes:
             data={"mapping": json.dumps(mapping)},
         )
         assert resp.status_code == 404, resp.text
+
+    async def test_import_malformed_mapping_returns_422(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        fake_auth: FakeAuth,
+    ) -> None:
+        """Malformed mapping form field must return 4xx (422), never a 500.
+
+        Covers two bad-input shapes:
+          * invalid JSON syntax
+          * a readout_columns value that isn't a UUID
+        Both should be caught and mapped to a domain ValidationError -> 422.
+        """
+        ws = fake_auth.workspace_id
+        run_id, _ic50_id, reg = await _seed(session_factory, ws)
+        csv = f"Compound,IC50\n{reg},5.2\n".encode()
+
+        # --- Invalid JSON syntax ---
+        bad_json_resp = await client.post(
+            f"/api/v1/runs/{run_id}/import-summary-file",
+            files={"file": ("summary.csv", csv, "text/csv")},
+            data={"mapping": "{not valid json"},
+        )
+        assert bad_json_resp.status_code == 422, bad_json_resp.text
+        assert bad_json_resp.status_code != 500
+
+        # --- Valid JSON, but readout id is not a UUID ---
+        bad_uuid_resp = await client.post(
+            f"/api/v1/runs/{run_id}/import-summary-file",
+            files={"file": ("summary.csv", csv, "text/csv")},
+            data={"mapping": json.dumps({"readout_columns": {"IC50": "not-a-uuid"}})},
+        )
+        assert bad_uuid_resp.status_code == 422, bad_uuid_resp.text
+        assert bad_uuid_resp.status_code != 500
