@@ -8,6 +8,7 @@ import type {
   SummaryImportErrorModel,
   SummaryImportResponse,
   SummaryPreviewResponse,
+  SummaryResolveResponse,
 } from "@/shared/lib/api/model";
 
 // ─── Backend DTOs (orval-generated; re-exported under domain names) ──────────────
@@ -18,6 +19,7 @@ export type {
   SummaryImportErrorModel,
   SummaryImportResponse,
   SummaryPreviewResponse,
+  SummaryResolveResponse,
 };
 
 // ─── FE-local types (NOT backend DTOs) ───────────────────────────────────────────
@@ -45,6 +47,31 @@ export function usePreviewSummaryFile(runId: string) {
       formData.append("file", file);
       return customInstance<SummaryPreviewResponse>({
         url: `/api/v1/runs/${runId}/preview-summary-file`,
+        method: "POST",
+        data: formData,
+      });
+    },
+  });
+}
+
+/** Dry-run a wide-format summary import: resolve refs + forecast writes (no writes).
+ *  POST /api/v1/runs/{runId}/resolve-summary-file
+ *  (multipart: file + mapping = JSON.stringify(SummaryColumnMapping)).
+ *  No queries are invalidated — this is a preview and performs no writes. */
+export function useResolveSummaryFile(runId: string) {
+  return useMutation({
+    mutationFn: async ({
+      file,
+      mapping,
+    }: {
+      file: File;
+      mapping: SummaryColumnMapping;
+    }) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("mapping", JSON.stringify(mapping));
+      return customInstance<SummaryResolveResponse>({
+        url: `/api/v1/runs/${runId}/resolve-summary-file`,
         method: "POST",
         data: formData,
       });

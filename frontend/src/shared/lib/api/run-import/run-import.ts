@@ -27,6 +27,7 @@ import type {
   BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost,
   BodyPreviewRunFileApiV1RunsRunIdPreviewFilePost,
   BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost,
+  BodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost,
   CreateRunImportTemplateRequest,
   HTTPValidationError,
   ImportRunFileRequest,
@@ -36,6 +37,7 @@ import type {
   RunImportTemplateResponse,
   SummaryImportResponse,
   SummaryPreviewResponse,
+  SummaryResolveResponse,
   UpdateRunImportTemplateRequest
 } from '.././model';
 
@@ -683,6 +685,81 @@ export const useImportSummaryFileApiV1RunsRunIdImportSummaryFilePost = <TError =
       > => {
 
       const mutationOptions = getImportSummaryFileApiV1RunsRunIdImportSummaryFilePostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Dry-run a wide-format summary import: resolve refs + forecast writes (no writes).
+
+The Preview step (step 3 of the wizard) calls this with the confirmed
+``SummaryColumnMappingRequest`` JSON in the ``mapping`` form field. It
+resolves every compound/batch ref the SAME way the real import would and
+forecasts insert-vs-update counts WITHOUT writing anything (no calc engine,
+no readout-data rows). Mirrors ``import-summary-file`` minus the commit.
+ * @summary Resolve Summary File
+ */
+export const resolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost = (
+    runId: string,
+    bodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost: BodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost,
+ signal?: AbortSignal
+) => {
+      
+      const formData = new FormData();
+formData.append(`file`, bodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost.file)
+formData.append(`mapping`, bodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost.mapping)
+
+      return customInstance<SummaryResolveResponse>(
+      {url: `/api/v1/runs/${runId}/resolve-summary-file`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      );
+    }
+  
+
+
+export const getResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost>>, TError,{runId: string;data: BodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof resolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost>>, TError,{runId: string;data: BodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost}, TContext> => {
+
+const mutationKey = ['resolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost>>, {runId: string;data: BodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  resolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePostMutationResult = NonNullable<Awaited<ReturnType<typeof resolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost>>>
+    export type ResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePostMutationBody = BodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost
+    export type ResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Resolve Summary File
+ */
+export const useResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost>>, TError,{runId: string;data: BodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost>>,
+        TError,
+        {runId: string;data: BodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost},
+        TContext
+      > => {
+
+      const mutationOptions = getResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
