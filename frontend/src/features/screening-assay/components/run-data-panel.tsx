@@ -4,6 +4,12 @@ import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { cn } from "@/shared/lib/utils";
@@ -21,6 +27,7 @@ import { ReadoutDataTable } from "./readout-data-table";
 import { RunDoseResponseResults } from "./run-dr-results";
 import { RunHeatmapPanel } from "./run-heatmap-panel";
 import { RunImportWizard } from "./run-import-wizard";
+import { SummaryImportWizard } from "./summary-import-wizard";
 
 const Z_PRIME_BADGE: Record<ZPrimeQuality, { label: string; className: string }> = {
   excellent: {
@@ -170,6 +177,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
 
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
+  const [summaryWizardOpen, setSummaryWizardOpen] = useState(false);
   const [gridImportOpen, setGridImportOpen] = useState(false);
 
   const plates = plateMap?.plates ?? [];
@@ -201,13 +209,21 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
               protocolId={run.protocol_id}
               toolbarActions={
                 <>
-                  <Button
-                    size="sm"
-                    onClick={() => setRunImportWizardOpen(true)}
-                    disabled={run.is_locked}
-                  >
-                    <Upload className="mr-2 h-4 w-4" /> Import Run File
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" disabled={run.is_locked}>
+                        <Upload className="mr-2 h-4 w-4" /> Import
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setRunImportWizardOpen(true)}>
+                        Import Run File (plate/well)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setSummaryWizardOpen(true)}>
+                        Import Summary Results (compound + endpoints)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <Button
                     size="sm"
                     variant="outline"
@@ -324,6 +340,12 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         protocolId={run.protocol_id}
         open={runImportWizardOpen}
         onOpenChange={setRunImportWizardOpen}
+      />
+      <SummaryImportWizard
+        runId={run.id}
+        protocolId={run.protocol_id}
+        open={summaryWizardOpen}
+        onOpenChange={setSummaryWizardOpen}
       />
       <GridImportDialog
         runId={run.id}
