@@ -11,6 +11,7 @@ import {
   CommandList,
 } from "@/shared/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { useDebounce } from "@/shared/hooks/use-debounce";
 import { cn } from "@/shared/lib/utils";
 import { Check, Tag as TagIcon } from "lucide-react";
 import { useState } from "react";
@@ -29,7 +30,8 @@ interface TagFilterProps {
 export function TagFilter({ value, onChange }: TagFilterProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const { data: tags } = useTags({ q: q || undefined, limit: 50 });
+  const debouncedQ = useDebounce(q, 200);
+  const { data: tags } = useTags({ q: debouncedQ || undefined, limit: 50 });
 
   const toggle = (id: string) =>
     onChange({

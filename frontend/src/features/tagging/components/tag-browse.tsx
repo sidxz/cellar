@@ -14,6 +14,7 @@ import {
   CommandList,
 } from "@/shared/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { useDebounce } from "@/shared/hooks/use-debounce";
 import { formatDate } from "@/shared/lib/format-date";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { AlertTriangle, Tag as TagIcon } from "lucide-react";
@@ -58,11 +59,15 @@ const TYPE_STYLE: Record<string, string> = {
 
 function TagPicker({
   tags,
+  q,
+  onQChange,
   active,
   onSelect,
   onClear,
 }: {
   tags: Tag[];
+  q: string;
+  onQChange: (q: string) => void;
   active: Tag | null;
   onSelect: (t: Tag) => void;
   onClear: () => void;
@@ -79,15 +84,22 @@ function TagPicker({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-72 p-0" align="start">
-          <Command>
-            <CommandInput placeholder="Search tags…" />
+          {/* Server-side search (shouldFilter=false): the typed query goes to the
+              backend, so it scales past the loaded page, matches key OR value, and
+              supports the "key=value" form. */}
+          <Command shouldFilter={false}>
+            <CommandInput
+              value={q}
+              onValueChange={onQChange}
+              placeholder="Search tags… (e.g. own=44)"
+            />
             <CommandList>
               <CommandEmpty>No tags found.</CommandEmpty>
               <CommandGroup>
                 {tags.map((t) => (
                   <CommandItem
                     key={t.id}
-                    value={`${t.key}${t.value ? `=${t.value}` : ""}`}
+                    value={t.id}
                     onSelect={() => {
                       onSelect(t);
                       setOpen(false);
@@ -134,10 +146,16 @@ export function TagBrowse() {
   const router = useRouter();
   const params = useSearchParams();
   const [activeTagId, setActiveTagId] = useState<string | null>(params.get("tag"));
+  const [pickedTag, setPickedTag] = useState<Tag | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const debouncedQ = useDebounce(q, 200);
 
-  const { data: tags } = useTags({ limit: 200 });
-  const active = (tags ?? []).find((t) => t.id === activeTagId) ?? null;
+  const { data: tags } = useTags({ q: debouncedQ || undefined, limit: 50 });
+  // Chip resolves from the just-picked tag (always), or — on a ?tag= deep-link —
+  // best-effort from the loaded list. With server-side search the full set isn't
+  // all loaded, so an unresolved deep-link simply shows no chip (results still load).
+  const active = pickedTag ?? (tags ?? []).find((t) => t.id === activeTagId) ?? null;
   const { data, isLoading, error } = useTagEntities(activeTagId ?? undefined);
 
   const counts = useMemo(() => {
@@ -153,11 +171,15 @@ export function TagBrowse() {
 
   const pickTag = (t: Tag) => {
     setActiveTagId(t.id);
+    setPickedTag(t);
     setTypeFilter(null);
+    setQ("");
   };
   const clearTag = () => {
     setActiveTagId(null);
+    setPickedTag(null);
     setTypeFilter(null);
+    setQ("");
   };
 
   const columnDefs = useMemo<ColDef<TaggedEntity>[]>(
@@ -202,7 +224,14 @@ export function TagBrowse() {
   return (
     <div className="space-y-4">
       <PageHeader title="Browse by Tag" subtitle="Pick a tag to see everything that carries it.">
-        <TagPicker tags={tags ?? []} active={active} onSelect={pickTag} onClear={clearTag} />
+        <TagPicker
+          tags={tags ?? []}
+          q={q}
+          onQChange={setQ}
+          active={active}
+          onSelect={pickTag}
+          onClear={clearTag}
+        />
       </PageHeader>
 
       {!activeTagId && (
