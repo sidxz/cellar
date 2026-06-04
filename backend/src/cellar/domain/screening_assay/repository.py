@@ -119,7 +119,12 @@ class RunRepository(Protocol):
         ...
 
     async def find_by_protocol(
-        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        *,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
     ) -> list[Run]: ...
     async def aggregate_stats_by_protocol(
         self, workspace_id: uuid.UUID
