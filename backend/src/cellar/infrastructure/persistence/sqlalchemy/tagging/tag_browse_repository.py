@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import String, cast, literal, select, union_all
 
@@ -46,6 +47,7 @@ class TaggedEntityRow:
     entity_type: str
     entity_id: uuid.UUID
     label: str
+    assigned_at: datetime
 
 
 class SQLAlchemyTagBrowseRepository:
@@ -73,6 +75,7 @@ class SQLAlchemyTagBrowseRepository:
                 literal(entity_type).label("entity_type"),
                 entity_model.id.label("entity_id"),
                 label_col.label("label"),
+                link_model.assigned_at.label("assigned_at"),
             )
             .join(link_model, link_fk == entity_model.id)
             .where(link_model.tag_id == tag_id, entity_model.workspace_id == workspace_id)
@@ -97,6 +100,7 @@ class SQLAlchemyTagBrowseRepository:
                 (ProtocolModel.name + literal(" · ") + cast(RunModel.run_date, String)).label(
                     "label"
                 ),
+                RunTagLinkModel.assigned_at.label("assigned_at"),
             )
             .join(RunTagLinkModel, RunTagLinkModel.run_id == RunModel.id)
             .join(ProtocolModel, ProtocolModel.id == RunModel.protocol_id)
@@ -174,12 +178,22 @@ class SQLAlchemyTagBrowseRepository:
             return []
         unioned = union_all(*selected).subquery()
         stmt = (
-            select(unioned.c.entity_type, unioned.c.entity_id, unioned.c.label)
-            .order_by(unioned.c.entity_type, unioned.c.label)
+            select(
+                unioned.c.entity_type,
+                unioned.c.entity_id,
+                unioned.c.label,
+                unioned.c.assigned_at,
+            )
+            .order_by(unioned.c.assigned_at.desc(), unioned.c.entity_type, unioned.c.label)
             .limit(limit)
         )
         result = await self._session.execute(stmt)
         return [
-            TaggedEntityRow(entity_type=r.entity_type, entity_id=r.entity_id, label=r.label)
+            TaggedEntityRow(
+                entity_type=r.entity_type,
+                entity_id=r.entity_id,
+                label=r.label,
+                assigned_at=r.assigned_at,
+            )
             for r in result.all()
         ]

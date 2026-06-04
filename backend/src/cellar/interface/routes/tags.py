@@ -69,6 +69,7 @@ class TaggedEntityResponse(BaseModel):
     entity_type: str
     entity_id: uuid.UUID
     label: str
+    assigned_at: datetime
 
 
 class EntityTagResponse(BaseModel):
@@ -215,7 +216,12 @@ async def list_tag_entities(
     )
     rows = result_to_response(await use_case(query, auth=auth))
     return [
-        TaggedEntityResponse(entity_type=r.entity_type, entity_id=r.entity_id, label=r.label)
+        TaggedEntityResponse(
+            entity_type=r.entity_type,
+            entity_id=r.entity_id,
+            label=r.label,
+            assigned_at=r.assigned_at,
+        )
         for r in rows
     ]
 

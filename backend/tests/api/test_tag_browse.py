@@ -62,6 +62,8 @@ async def test_browse_returns_entities_across_types(client: AsyncClient) -> None
     assert ("Collection", collection_id) in pairs
     assert ("Run", run_id) in pairs
     assert all(r["label"] for r in rows)
+    # Every row carries the assignment timestamp (drives the "Tagged on" column).
+    assert all(r["assigned_at"] for r in rows)
     # Run-branch label SQL executed: "<protocol name> · <run_date>".
     run_label = next(r["label"] for r in rows if r["entity_type"] == "Run")
     assert "BrowseProto" in run_label
