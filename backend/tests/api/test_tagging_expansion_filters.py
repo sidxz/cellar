@@ -147,3 +147,41 @@ class TestCampaignTagFilter:
         result_ids = [c["id"] for c in listed.json()["items"]]
         assert campaign_id in result_ids
         assert untagged_id not in result_ids
+
+
+class TestPlateTagFilter:
+    async def test_filter_plates_by_tag(self, client: AsyncClient) -> None:
+        p1 = await client.post(
+            "/api/v1/plates",
+            json={
+                "barcode": "PLATE-TAG-1",
+                "plate_label": "Tagged",
+                "format": "96",
+                "plate_type": "compound_storage",
+            },
+        )
+        assert p1.status_code in (200, 201), p1.text
+        plate_id = p1.json()["id"]
+        p2 = await client.post(
+            "/api/v1/plates",
+            json={
+                "barcode": "PLATE-TAG-2",
+                "plate_label": "Untagged",
+                "format": "96",
+                "plate_type": "compound_storage",
+            },
+        )
+        assert p2.status_code in (200, 201), p2.text
+        untagged_id = p2.json()["id"]
+
+        assign = await client.post(
+            f"/api/v1/plates/{plate_id}/tags", json={"key": "assay-ready"}
+        )
+        assert assign.status_code == 201, assign.text
+        tag_id = assign.json()["id"]
+
+        listed = await client.get("/api/v1/plates", params={"tags": [tag_id]})
+        assert listed.status_code == 200, listed.text
+        ids = [p["id"] for p in listed.json()]
+        assert plate_id in ids
+        assert untagged_id not in ids

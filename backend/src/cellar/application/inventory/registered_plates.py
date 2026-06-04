@@ -109,6 +109,8 @@ class ListPlatesQuery(Query):
     format: str | None = None
     storage_location_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
+    tags: list[uuid.UUID] | None = None
+    tag_logic: str = "any"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -220,6 +222,8 @@ class ListPlates:
                 format=input.format,
                 storage_location_id=input.storage_location_id,
                 project_id=input.project_id,
+                tags=input.tags,
+                tag_logic=input.tag_logic,
             )
             return Success(plates)
 

@@ -23,6 +23,12 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory._vo_mappers import (
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     RegisteredPlateModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
+    RegisteredPlateTagLinkModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
+    tag_filter_subquery,
+)
 
 
 class SQLAlchemyRegisteredPlateRepository(
@@ -102,6 +108,8 @@ class SQLAlchemyRegisteredPlateRepository(
         format: str | None = None,
         storage_location_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
     ) -> list[RegisteredPlate]:
         stmt = select(RegisteredPlateModel).where(
             RegisteredPlateModel.workspace_id == workspace_id
@@ -126,6 +134,17 @@ class SQLAlchemyRegisteredPlateRepository(
             stmt = stmt.where(RegisteredPlateModel.storage_location_id == storage_location_id)
         if project_id is not None:
             stmt = stmt.where(RegisteredPlateModel.project_id == project_id)
+        if tags:
+            stmt = stmt.where(
+                RegisteredPlateModel.id.in_(
+                    tag_filter_subquery(
+                        RegisteredPlateTagLinkModel,
+                        "registered_plate_id",
+                        tags,
+                        match_all=tag_logic == "all",
+                    )
+                )
+            )
         stmt = stmt.order_by(RegisteredPlateModel.created_at.desc())
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]

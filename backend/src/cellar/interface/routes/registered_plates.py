@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
@@ -222,6 +223,8 @@ async def list_plates(
     format: str | None = None,
     storage_location_id: uuid.UUID | None = None,
     project_id: uuid.UUID | None = None,
+    tags: list[uuid.UUID] | None = Query(default=None),
+    tag_logic: Literal["any", "all"] = Query(default="any"),
 ) -> list[PlateResponse]:
     """List registered plates with optional filters."""
     query = ListPlatesQuery(
@@ -233,6 +236,8 @@ async def list_plates(
         format=format,
         storage_location_id=storage_location_id,
         project_id=project_id,
+        tags=tags,
+        tag_logic=tag_logic,
     )
     plates = result_to_response(await uc(query, auth=auth))
     return [PlateResponse.from_domain(p) for p in plates]
