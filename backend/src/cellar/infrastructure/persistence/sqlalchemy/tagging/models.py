@@ -123,3 +123,55 @@ class CollectionTagLinkModel(Base, TagLinkMixin):
     )
 
     __table_args__ = (Index("ix_collection_tags_tag_id", "tag_id"),)
+
+
+class RunTagLinkModel(Base, TagLinkMixin):
+    __tablename__ = "run_tags"
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    __table_args__ = (Index("ix_run_tags_tag_id", "tag_id"),)
+
+
+class CampaignTagLinkModel(Base, TagLinkMixin):
+    __tablename__ = "campaign_tags"
+
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("campaign.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    __table_args__ = (Index("ix_campaign_tags_tag_id", "tag_id"),)
+
+
+class BatchTagLinkModel(Base, TagLinkMixin):
+    __tablename__ = "batch_tags"
+
+    batch_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("batches.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    __table_args__ = (Index("ix_batch_tags_tag_id", "tag_id"),)
+
+
+class RegisteredPlateTagLinkModel(Base, TagLinkMixin):
+    __tablename__ = "registered_plate_tags"
+
+    registered_plate_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("registered_plates.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    __table_args__ = (Index("ix_registered_plate_tags_tag_id", "tag_id"),)

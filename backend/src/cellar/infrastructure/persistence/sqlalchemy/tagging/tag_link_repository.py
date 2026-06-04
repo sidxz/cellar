@@ -20,18 +20,28 @@ from cellar.domain.workspace_config.tagging.tag import (
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
+    BatchModel,
+    RegisteredPlateModel,
+)
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
+    CampaignModel,
     CollectionModel,
     ProjectModel,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     ProtocolModel,
+    RunModel,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
+    BatchTagLinkModel,
+    CampaignTagLinkModel,
     CollectionTagLinkModel,
     MoleculeTagLinkModel,
     ProjectTagLinkModel,
     ProtocolTagLinkModel,
+    RegisteredPlateTagLinkModel,
+    RunTagLinkModel,
     TagModel,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import (
@@ -253,11 +263,39 @@ class CollectionTagLinkRepository(SQLAlchemyTagLinkRepository):
     entity_id_attr = "collection_id"
 
 
+class RunTagLinkRepository(SQLAlchemyTagLinkRepository):
+    link_model = RunTagLinkModel
+    entity_model = RunModel
+    entity_id_attr = "run_id"
+
+
+class CampaignTagLinkRepository(SQLAlchemyTagLinkRepository):
+    link_model = CampaignTagLinkModel
+    entity_model = CampaignModel
+    entity_id_attr = "campaign_id"
+
+
+class BatchTagLinkRepository(SQLAlchemyTagLinkRepository):
+    link_model = BatchTagLinkModel
+    entity_model = BatchModel
+    entity_id_attr = "batch_id"
+
+
+class RegisteredPlateTagLinkRepository(SQLAlchemyTagLinkRepository):
+    link_model = RegisteredPlateTagLinkModel
+    entity_model = RegisteredPlateModel
+    entity_id_attr = "registered_plate_id"
+
+
 _REGISTRY: dict[TaggableEntityType, type[SQLAlchemyTagLinkRepository]] = {
     TaggableEntityType.MOLECULE: MoleculeTagLinkRepository,
     TaggableEntityType.PROTOCOL: ProtocolTagLinkRepository,
     TaggableEntityType.PROJECT: ProjectTagLinkRepository,
     TaggableEntityType.COLLECTION: CollectionTagLinkRepository,
+    TaggableEntityType.RUN: RunTagLinkRepository,
+    TaggableEntityType.CAMPAIGN: CampaignTagLinkRepository,
+    TaggableEntityType.BATCH: BatchTagLinkRepository,
+    TaggableEntityType.PLATE: RegisteredPlateTagLinkRepository,
 }
 
 

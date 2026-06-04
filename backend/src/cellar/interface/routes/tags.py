@@ -115,6 +115,10 @@ _ENTITY_COLLECTIONS: dict[str, TaggableEntityType] = {
     "protocols": TaggableEntityType.PROTOCOL,
     "projects": TaggableEntityType.PROJECT,
     "collections": TaggableEntityType.COLLECTION,
+    "runs": TaggableEntityType.RUN,
+    "campaigns": TaggableEntityType.CAMPAIGN,
+    "batches": TaggableEntityType.BATCH,
+    "plates": TaggableEntityType.PLATE,
 }
 
 

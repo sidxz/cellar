@@ -32,6 +32,10 @@ class TaggableEntityType(str, Enum):
     PROTOCOL = "Protocol"
     PROJECT = "Project"
     COLLECTION = "Collection"
+    RUN = "Run"
+    CAMPAIGN = "Campaign"
+    BATCH = "Batch"
+    PLATE = "Plate"
 
 
 class TagName(BaseModel):
