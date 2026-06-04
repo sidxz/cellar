@@ -1,23 +1,25 @@
 "use client";
 
+import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
-import { groupBy } from "@/shared/lib/group-by";
+import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { type ReactNode, useMemo } from "react";
+import { Hexagon } from "lucide-react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
 import {
   findInterceptValue,
   formatInterceptDisplay,
-  interceptLabel,
   interceptOptionLabel,
   maxDoseFromRawData,
 } from "../lib/intercept-label";
 import { resolvePickListColor } from "../lib/pick-list-colors";
+import { type PivotRow, pivotReadoutData, valueKey } from "../lib/readout-data-pivot";
 import {
   type DoseResponseCurve,
   type InterceptSpec,
@@ -34,29 +36,6 @@ interface ReadoutDataTableProps {
   /** Extra controls rendered in the table toolbar (e.g. Import Run File). */
   toolbarActions?: ReactNode;
 }
-
-interface PivotRow {
-  key: string;
-  label: string;
-  registrationNumber: string;
-  moleculeName: string;
-  /** molecule.name + custom synonyms, deduped against the registration number. */
-  aliases: string[];
-  batchNumber: string;
-  moleculeId: string;
-  batchId: string;
-  wellId: string | null;
-  /** Keyed by `${readout_def_id}::${"raw"|"computed"}` so the raw and
-   * post-normalization layers stay separate (they share readout_def_id).
-   * Per-molecule calculated readouts are merged into every well row of the
-   * same (molecule, batch) group. */
-  values: Map<string, ReadoutData>;
-  /** dose_response readout def id -> curve. Same value for every row in the
-   * (molecule, batch) group — DR is not per-well. */
-  curves: Map<string, DoseResponseCurve>;
-}
-
-const valueKey = (defId: string, isComputed: boolean) => `${defId}::${isComputed ? "c" : "r"}`;
 
 /** First non-NONE normalization on a readout def, or null. When a def emits
  * multiple formulas (e.g. raw + %inh + z-score) we surface the first as the
@@ -88,25 +67,6 @@ function formatValue(row: ReadoutData): string {
   }
   const prefix = row.value_qualifier && row.value_qualifier !== "=" ? row.value_qualifier : "";
   return `${prefix}${row.value_numeric.toFixed(3)}`;
-}
-
-/** Aliases for a row from its enriched name + synonyms, deduped against the
- * registration number so the Compound column doesn't echo Aliases. */
-function buildAliases(row: ReadoutData): string[] {
-  const aliases: string[] = [];
-  if (
-    row.molecule_name &&
-    row.molecule_name !== row.registration_number &&
-    !aliases.includes(row.molecule_name)
-  ) {
-    aliases.push(row.molecule_name);
-  }
-  for (const s of row.synonyms ?? []) {
-    if (s && s !== row.registration_number && !aliases.includes(s)) {
-      aliases.push(s);
-    }
-  }
-  return aliases;
 }
 
 export function ReadoutDataTable({
@@ -150,62 +110,11 @@ export function ReadoutDataTable({
     return map;
   }, [curves, readoutDefs]);
 
-  // Pivot readout data into rows
-  const pivotRows = useMemo<PivotRow[]>(() => {
-    if (!data) return [];
+  const pivotRows = useMemo(() => pivotReadoutData(data, curveLookup), [data, curveLookup]);
 
-    // 1. Bucket per-molecule rows (no well_id) — these are calculated
-    // readouts that the engine produced once per (mol, batch). They get
-    // merged into every well row of the same group below.
-    const perMolRows = data.filter((row) => row.molecule_id && !row.well_id);
-    const perMol = groupBy(perMolRows, (row) => `${row.molecule_id}::${row.batch_id ?? ""}`);
-
-    // 2. Group per-well rows by (molecule, batch, well).
-    const groups = new Map<string, PivotRow>();
-    for (const row of data) {
-      if (!row.molecule_id) continue;
-      if (!row.well_id) continue; // per-mol rows handled in step 3
-      const key = `${row.molecule_id}::${row.batch_id}::${row.well_id}`;
-      let group = groups.get(key);
-      if (!group) {
-        const curveKey = `${row.molecule_id}::${row.batch_id ?? ""}`;
-        const rowCurves = new Map<string, DoseResponseCurve>();
-        for (const [defId, byKey] of curveLookup) {
-          const c = byKey.get(curveKey);
-          if (c) rowCurves.set(defId, c);
-        }
-        group = {
-          key,
-          label: row.registration_number ?? "Unknown",
-          registrationNumber: row.registration_number ?? "",
-          moleculeName: row.molecule_name ?? "",
-          aliases: buildAliases(row),
-          batchNumber: row.batch_number ?? "",
-          moleculeId: row.molecule_id,
-          batchId: row.batch_id ?? "",
-          wellId: row.well_id,
-          values: new Map(),
-          curves: rowCurves,
-        };
-        groups.set(key, group);
-      }
-      // Raw and computed layers share readout_definition_id but differ on
-      // is_computed — key them separately so neither overwrites the other.
-      group.values.set(valueKey(row.readout_definition_id, row.is_computed), row);
-    }
-
-    // 3. Merge per-(mol, batch) calculated readouts into every well of
-    // that group so they show on every row that compound appears on.
-    for (const group of groups.values()) {
-      const molRows = perMol.get(`${group.moleculeId}::${group.batchId}`);
-      if (!molRows) continue;
-      for (const row of molRows) {
-        group.values.set(valueKey(row.readout_definition_id, row.is_computed), row);
-      }
-    }
-
-    return Array.from(groups.values());
-  }, [data, curveLookup]);
+  // Off by default; toggled from the toolbar. Adds a Structure column (and
+  // grows rows via autoHeight) without affecting other run-detail tabs.
+  const [showStructures, setShowStructures] = useState(false);
 
   // Dynamic columns: Compound + one per readout definition
   const columnDefs = useMemo<ColDef<PivotRow>[]>(() => {
@@ -256,6 +165,28 @@ export function ReadoutDataTable({
         width: 100,
       },
     ];
+
+    // Optional structure column (toggled): right after Compound so the
+    // thumbnail sits next to its identifier, mirroring the DR table.
+    // `autoHeight` grows the row to fit the 104px thumbnail.
+    if (showStructures) {
+      cols.splice(1, 0, {
+        headerName: "Structure",
+        colId: "structure",
+        width: 130,
+        sortable: false,
+        autoHeight: true,
+        cellRenderer: (params: ICellRendererParams<PivotRow>) => {
+          const smiles = params.data?.smiles;
+          if (!smiles) return <span className="text-muted-foreground">{"—"}</span>;
+          return (
+            <div className="flex justify-center py-1">
+              <StructureThumbnail smiles={smiles} size={104} />
+            </div>
+          );
+        },
+      });
+    }
 
     for (const rd of readoutDefs) {
       // Dose-response readouts: one denormalized column per protocol
@@ -315,8 +246,7 @@ export function ReadoutDataTable({
                   ),
                 });
                 const showUnit = display.kind === "scalar" || display.kind === "qualifier";
-                const unitSuffix =
-                  showUnit && curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
+                const unitSuffix = showUnit && curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
                 if (display.warning) {
                   return (
                     <Badge
@@ -476,7 +406,22 @@ export function ReadoutDataTable({
       }
     }
     return cols;
-  }, [readoutDefs]);
+  }, [readoutDefs, showStructures]);
+
+  const structuresToggle = (
+    <Button
+      type="button"
+      variant={showStructures ? "secondary" : "outline"}
+      size="sm"
+      aria-pressed={showStructures}
+      onClick={() => setShowStructures((v) => !v)}
+      className="h-9"
+      title={showStructures ? "Hide compound structures" : "Show compound structures"}
+    >
+      <Hexagon className="mr-1.5 h-4 w-4" />
+      Structures
+    </Button>
+  );
 
   return (
     <div className={className}>
@@ -486,7 +431,12 @@ export function ReadoutDataTable({
         loading={isLoading}
         height="500px"
         suppressFilters
-        toolbarActions={toolbarActions}
+        toolbarActions={
+          <>
+            {structuresToggle}
+            {toolbarActions}
+          </>
+        }
         getRowId={(params) => params.data.key}
         emptyState={
           <p className="py-8 text-center text-sm text-muted-foreground">

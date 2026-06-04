@@ -8,6 +8,7 @@ import type { ReadoutDataResponseWellId } from './readoutDataResponseWellId';
 import type { ReadoutDataResponseMoleculeId } from './readoutDataResponseMoleculeId';
 import type { ReadoutDataResponseRegistrationNumber } from './readoutDataResponseRegistrationNumber';
 import type { ReadoutDataResponseMoleculeName } from './readoutDataResponseMoleculeName';
+import type { ReadoutDataResponseSmiles } from './readoutDataResponseSmiles';
 import type { ReadoutDataResponseBatchId } from './readoutDataResponseBatchId';
 import type { ReadoutDataResponseBatchNumber } from './readoutDataResponseBatchNumber';
 import type { ReadoutDataResponseValueNumeric } from './readoutDataResponseValueNumeric';
@@ -23,6 +24,7 @@ export interface ReadoutDataResponse {
   registration_number?: ReadoutDataResponseRegistrationNumber;
   molecule_name?: ReadoutDataResponseMoleculeName;
   synonyms?: string[];
+  smiles?: ReadoutDataResponseSmiles;
   batch_id?: ReadoutDataResponseBatchId;
   batch_number?: ReadoutDataResponseBatchNumber;
   readout_definition_id: string;

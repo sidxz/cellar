@@ -887,6 +887,7 @@ export * from './readoutDataResponseBatchNumber';
 export * from './readoutDataResponseMoleculeId';
 export * from './readoutDataResponseMoleculeName';
 export * from './readoutDataResponseRegistrationNumber';
+export * from './readoutDataResponseSmiles';
 export * from './readoutDataResponseValueNumeric';
 export * from './readoutDataResponseValueQualifier';
 export * from './readoutDataResponseValueText';

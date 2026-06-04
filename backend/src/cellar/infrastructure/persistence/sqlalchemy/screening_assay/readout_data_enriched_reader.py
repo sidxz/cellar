@@ -57,6 +57,7 @@ class SQLAlchemyReadoutDataEnrichedReader:
                         MoleculeModel.id,
                         MoleculeModel.registration_number,
                         MoleculeModel.name,
+                        MoleculeModel.smiles,
                     ).where(
                         MoleculeModel.workspace_id == workspace_id,
                         MoleculeModel.id.in_(molecule_ids),
@@ -86,8 +87,9 @@ class SQLAlchemyReadoutDataEnrichedReader:
                 registration_number=reg or "",
                 name=name or "",
                 synonyms=synonyms_by_mol.get(mid, []),
+                smiles=smiles,
             )
-            for mid, reg, name in mol_rows
+            for mid, reg, name, smiles in mol_rows
         }
 
     async def resolve_batch_numbers(

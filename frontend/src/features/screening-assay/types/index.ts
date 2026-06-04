@@ -44,13 +44,7 @@ export const READOUT_DATA_TYPE_LABELS: Record<ReadoutDataType, string> = {
   batch_link: "Batch Link",
 };
 
-export type ReadoutAggregation =
-  | "none"
-  | "mean"
-  | "median"
-  | "geometric_mean"
-  | "min"
-  | "max";
+export type ReadoutAggregation = "none" | "mean" | "median" | "geometric_mean" | "min" | "max";
 
 export const READOUT_AGGREGATION_LABELS: Record<ReadoutAggregation, string> = {
   none: "None",
@@ -107,12 +101,7 @@ export const PLATE_FORMAT_LABELS: Record<PlateFormat, string> = {
   "1536": "1536-Well",
 };
 
-export type WellType =
-  | "sample"
-  | "positive_control"
-  | "negative_control"
-  | "blank"
-  | "reference";
+export type WellType = "sample" | "positive_control" | "negative_control" | "blank" | "reference";
 
 export const WELL_TYPE_LABELS: Record<WellType, string> = {
   sample: "Sample",
@@ -122,12 +111,7 @@ export const WELL_TYPE_LABELS: Record<WellType, string> = {
   reference: "Reference",
 };
 
-export type RunStatus =
-  | "draft"
-  | "in_progress"
-  | "completed"
-  | "approved"
-  | "rejected";
+export type RunStatus = "draft" | "in_progress" | "completed" | "approved" | "rejected";
 
 export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
   draft: "Draft",
@@ -137,10 +121,7 @@ export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
   rejected: "Rejected",
 };
 
-export type RunRelationshipType =
-  | "confirmation_of"
-  | "repeat_of"
-  | "follow_up_to";
+export type RunRelationshipType = "confirmation_of" | "repeat_of" | "follow_up_to";
 
 export const RUN_RELATIONSHIP_TYPE_LABELS: Record<RunRelationshipType, string> = {
   confirmation_of: "Confirmation Of",
@@ -401,6 +382,8 @@ export interface ReadoutData {
   molecule_name: string | null;
   /** Custom-type identifiers (synonyms / common names) for the molecule. */
   synonyms: string[];
+  /** Canonical structure (SMILES) for optional inline thumbnails; null if unavailable. */
+  smiles: string | null;
   batch_id: string | null;
   batch_number: string | null;
   readout_definition_id: string;
@@ -463,11 +446,7 @@ export interface DoseResponseCurve {
 
 // ─── Plate Template ─────────────────────────────────────────────────────────
 
-export type WellDesignation =
-  | "compound"
-  | "positive_control"
-  | "negative_control"
-  | "empty";
+export type WellDesignation = "compound" | "positive_control" | "negative_control" | "empty";
 
 export const WELL_DESIGNATION_LABELS: Record<WellDesignation, string> = {
   compound: "Compound",

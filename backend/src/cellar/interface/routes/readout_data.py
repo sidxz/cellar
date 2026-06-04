@@ -79,6 +79,7 @@ class ReadoutDataResponse(BaseModel):
     registration_number: str | None = None
     molecule_name: str | None = None
     synonyms: list[str] = []
+    smiles: str | None = None
     batch_id: uuid.UUID | None = None
     batch_number: str | None = None
     readout_definition_id: uuid.UUID
@@ -95,6 +96,7 @@ class ReadoutDataResponse(BaseModel):
         registration_number: str | None = None,
         molecule_name: str | None = None,
         synonyms: list[str] | None = None,
+        smiles: str | None = None,
         batch_number: str | None = None,
     ) -> ReadoutDataResponse:
         return cls(
@@ -106,6 +108,7 @@ class ReadoutDataResponse(BaseModel):
             registration_number=registration_number,
             molecule_name=molecule_name,
             synonyms=synonyms or [],
+            smiles=smiles,
             batch_id=rd.batch_id,
             batch_number=batch_number,
             readout_definition_id=rd.readout_definition_id,
@@ -493,6 +496,7 @@ async def list_readout_data(
             registration_number=item.registration_number,
             molecule_name=item.molecule_name,
             synonyms=item.synonyms,
+            smiles=item.smiles,
             batch_number=item.batch_number,
         )
         for item in items

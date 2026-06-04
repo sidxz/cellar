@@ -29,16 +29,18 @@ class BatchNumberRow:
 
 @dataclass(frozen=True)
 class MoleculeDisplayRow:
-    """Per-molecule display info: reg id, name, custom synonyms.
+    """Per-molecule display info: reg id, name, custom synonyms, structure.
 
     Used to populate the readout-data table without forcing the client to
     page through ``/molecules`` (which only returns the first ~100, missing
-    most compounds in larger screens).
+    most compounds in larger screens). ``smiles`` drives the optional inline
+    structure thumbnails in that table.
     """
 
     registration_number: str
     name: str
     synonyms: list[str]
+    smiles: str | None = None
 
 
 @runtime_checkable

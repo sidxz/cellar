@@ -31,6 +31,7 @@ class EnrichedReadoutData:
     molecule_name: str | None
     synonyms: list[str]
     batch_number: str | None
+    smiles: str | None = None
 
 
 class ListReadoutDataEnriched:
@@ -82,6 +83,11 @@ class ListReadoutDataEnriched:
                             mol_info[rd.molecule_id].synonyms
                             if rd.molecule_id and rd.molecule_id in mol_info
                             else []
+                        ),
+                        smiles=(
+                            mol_info[rd.molecule_id].smiles
+                            if rd.molecule_id and rd.molecule_id in mol_info
+                            else None
                         ),
                         batch_number=batch_map.get(rd.batch_id) if rd.batch_id else None,
                     )
