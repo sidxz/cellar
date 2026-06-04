@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from cellar.application.screening.create_run import CreateRun, CreateRunCommand
@@ -188,9 +188,16 @@ async def list_runs_by_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
     uc: ListRunsWithCountsDep,
+    tags: list[uuid.UUID] | None = Query(default=None),
+    tag_logic: Literal["any", "all"] = Query(default="any"),
 ) -> list[RunResponse]:
     result = await uc(
-        ListRunsWithCountsQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
+        ListRunsWithCountsQuery(
+            workspace_id=auth.workspace_id,
+            protocol_id=protocol_id,
+            tags=tags,
+            tag_logic=tag_logic,
+        ),
         auth=auth,
     )
     items = result_to_response(result)

@@ -23,6 +23,8 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     RunModel,
     WellModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.tagging.models import RunTagLinkModel
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import tag_filter_subquery
 
 
 class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
@@ -50,16 +52,28 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         result = await self._session.execute(stmt)
         return {m.id: self._to_domain_tracked(m) for m in result.scalars().all()}
 
-    async def find_by_protocol(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[Run]:
+    async def find_by_protocol(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        *,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
+    ) -> list[Run]:
         """List all runs for a protocol in a workspace, newest first."""
-        stmt = (
-            select(RunModel)
-            .where(
-                RunModel.workspace_id == workspace_id,
-                RunModel.protocol_id == protocol_id,
-            )
-            .order_by(RunModel.created_at.desc())
+        stmt = select(RunModel).where(
+            RunModel.workspace_id == workspace_id,
+            RunModel.protocol_id == protocol_id,
         )
+        if tags:
+            stmt = stmt.where(
+                RunModel.id.in_(
+                    tag_filter_subquery(
+                        RunTagLinkModel, "run_id", tags, match_all=tag_logic == "all"
+                    )
+                )
+            )
+        stmt = stmt.order_by(RunModel.created_at.desc())
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 

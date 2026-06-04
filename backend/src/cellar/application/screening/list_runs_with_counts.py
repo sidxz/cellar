@@ -19,6 +19,8 @@ from cellar.domain.shared.errors import DomainError
 class ListRunsWithCountsQuery(Query):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
+    tags: list[uuid.UUID] | None = None
+    tag_logic: str = "any"
 
 
 @dataclass(frozen=True)
@@ -47,7 +49,12 @@ class ListRunsWithCounts:
     ) -> Result[list[RunWithCounts], DomainError]:
         require_workspace_role(auth, "viewer")
         async with self._uow:
-            runs = await self._run_repo.find_by_protocol(input.workspace_id, input.protocol_id)
+            runs = await self._run_repo.find_by_protocol(
+                input.workspace_id,
+                input.protocol_id,
+                tags=input.tags,
+                tag_logic=input.tag_logic,
+            )
             counts = await self._rd_repo.get_molecule_counts(
                 input.workspace_id, [r.id for r in runs]
             )
