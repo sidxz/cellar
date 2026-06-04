@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { FlaskConical } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Badge } from "@/shared/components/ui/badge";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { EmptyState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
 import { useRunsByProtocol } from "../hooks/use-runs";
 import {
   PLATE_FORMAT_LABELS,
@@ -20,7 +21,11 @@ interface RunListProps {
 }
 
 export function RunList({ protocolId, onSelect }: RunListProps) {
-  const { data: runs, isLoading } = useRunsByProtocol(protocolId);
+  const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
+  const { data: runs, isLoading } = useRunsByProtocol(protocolId, {
+    tags: tagFilter.tagIds,
+    tagLogic: tagFilter.tagLogic,
+  });
 
   const columnDefs = useMemo<ColDef<Run>[]>(
     () => [
@@ -64,20 +69,25 @@ export function RunList({ protocolId, onSelect }: RunListProps) {
   );
 
   return (
-    <DataGrid<Run>
-      rowData={runs}
-      columnDefs={columnDefs}
-      loading={isLoading}
-      height="300px"
-      suppressFilters
-      onRowClick={onSelect ? (run) => onSelect(run.id) : undefined}
-      emptyState={
-        <EmptyState
-          icon={FlaskConical}
-          title="No runs"
-          description="Create a run to start collecting screening data."
-        />
-      }
-    />
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <TagFilter value={tagFilter} onChange={setTagFilter} />
+      </div>
+      <DataGrid<Run>
+        rowData={runs}
+        columnDefs={columnDefs}
+        loading={isLoading}
+        height="300px"
+        suppressFilters
+        onRowClick={onSelect ? (run) => onSelect(run.id) : undefined}
+        emptyState={
+          <EmptyState
+            icon={FlaskConical}
+            title="No runs"
+            description="Create a run to start collecting screening data."
+          />
+        }
+      />
+    </div>
   );
 }

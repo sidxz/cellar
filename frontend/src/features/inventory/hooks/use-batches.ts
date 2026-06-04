@@ -67,24 +67,28 @@ export interface BatchGlobalParams {
   expiring_within_days?: number;
   cursor?: string;
   page_size?: number;
+  tags?: string[];
+  tagLogic?: "any" | "all";
 }
 
 export function useBatchesGlobal(params: BatchGlobalParams = {}) {
-  const searchParams: Record<string, string> = {};
-  if (params.search) searchParams.search = params.search;
-  if (params.source?.length) searchParams.source = params.source.join(",");
+  const tags = params.tags?.length ? params.tags : null;
+  const reqParams: Record<string, unknown> = {};
+  if (params.search) reqParams.search = params.search;
+  if (params.source?.length) reqParams.source = params.source.join(",");
   if (params.expiring_within_days != null)
-    searchParams.expiring_within_days = String(params.expiring_within_days);
-  if (params.cursor) searchParams.cursor = params.cursor;
-  if (params.page_size) searchParams.page_size = String(params.page_size);
+    reqParams.expiring_within_days = String(params.expiring_within_days);
+  if (params.cursor) reqParams.cursor = params.cursor;
+  if (params.page_size) reqParams.page_size = String(params.page_size);
+  if (tags) { reqParams.tags = tags; reqParams.tag_logic = params.tagLogic ?? "any"; }
 
   return useQuery({
-    queryKey: ["batches", "global", searchParams],
+    queryKey: ["batches", "global", reqParams],
     queryFn: () =>
       customInstance<PaginatedResponse<BatchListItem>>({
         url: "/api/v1/batches",
         method: "GET",
-        params: searchParams,
+        params: Object.keys(reqParams).length > 0 ? reqParams : undefined,
       }),
     placeholderData: keepPreviousData,
   });

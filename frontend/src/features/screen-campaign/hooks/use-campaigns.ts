@@ -11,10 +11,10 @@ import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 
 import {
-  listCampaignsApiV1CampaignsGet,
   getCampaignApiV1CampaignsCampaignIdGet,
 } from "@/shared/lib/api/campaigns/campaigns";
-import type { CampaignResponse } from "@/shared/lib/api/model";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import type { CampaignResponse, PaginatedResponseCampaignResponse } from "@/shared/lib/api/model";
 
 // ─── Query key factory ───────────────────────────────────────────────────────
 
@@ -28,26 +28,45 @@ export const campaignKeys = {
 // ─── List hook ───────────────────────────────────────────────────────────────
 
 /**
- * Fetches all campaigns, optionally filtered to a given project.
+ * Fetches all campaigns, optionally filtered to a given project and/or tags.
  * If `projectId` is provided the query is workspace-scoped to that project
  * by the auth middleware on the backend.
+ * `tags` + `tagLogic` filter campaigns by assigned tags (passed to the
+ * backend `tags` / `tag_logic` query params).
  */
 export function useCampaigns(
   projectId?: string,
-  options?: Partial<
-    UseQueryOptions<CampaignResponse[], Error, CampaignResponse[]>
-  >,
+  options?: {
+    tags?: string[];
+    tagLogic?: "any" | "all";
+  } & Partial<UseQueryOptions<CampaignResponse[], Error, CampaignResponse[]>>,
 ) {
+  const { tags: rawTags, tagLogic, ...queryOptions } = options ?? {};
+  const tags = rawTags?.length ? rawTags : null;
+
+  const queryKey = projectId
+    ? tags
+      ? [...campaignKeys.byProject(projectId), { tags, tagLogic: tagLogic ?? "any" }]
+      : campaignKeys.byProject(projectId)
+    : tags
+      ? [...campaignKeys.all, { tags, tagLogic: tagLogic ?? "any" }]
+      : campaignKeys.all;
+
   return useQuery({
-    queryKey: projectId ? campaignKeys.byProject(projectId) : campaignKeys.all,
+    queryKey,
     queryFn: async () => {
-      const page = await listCampaignsApiV1CampaignsGet(
-        projectId ? { project_id: projectId } : {},
-      );
+      const params: Record<string, unknown> = {};
+      if (projectId) params.project_id = projectId;
+      if (tags) { params.tags = tags; params.tag_logic = tagLogic ?? "any"; }
+      const page = await customInstance<PaginatedResponseCampaignResponse>({
+        url: "/api/v1/campaigns",
+        method: "GET",
+        ...(Object.keys(params).length ? { params } : {}),
+      });
       return page.items;
     },
     enabled: projectId !== undefined ? !!projectId : true,
-    ...options,
+    ...queryOptions,
   });
 }
 

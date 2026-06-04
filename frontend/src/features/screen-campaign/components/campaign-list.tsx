@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Loader2, Plus } from "lucide-react";
 
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
 
 import { useCampaigns } from "../hooks/use-campaigns";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
@@ -32,7 +34,11 @@ interface CampaignListProps {
  * will be wired in Phase 8.
  */
 export function CampaignList({ projectId }: CampaignListProps) {
-  const { data, isLoading, error } = useCampaigns(projectId);
+  const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
+  const { data, isLoading, error } = useCampaigns(projectId, {
+    tags: tagFilter.tagIds,
+    tagLogic: tagFilter.tagLogic,
+  });
   const { data: project } = useProject(projectId);
 
   useBreadcrumbTrail([
@@ -79,7 +85,8 @@ export function CampaignList({ projectId }: CampaignListProps) {
 
   return (
     <>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex items-center gap-3 justify-between">
+        <TagFilter value={tagFilter} onChange={setTagFilter} />
         <CreateCampaignDialog
           projectId={projectId}
           trigger={

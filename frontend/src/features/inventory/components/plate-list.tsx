@@ -18,6 +18,7 @@ import {
 } from "@/shared/components/ui/select";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { StatusBadge } from "@/shared/components/status-badge";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
 import { usePlates, useDeletePlate } from "../hooks/use-plates";
 import { RegisterPlateDialog } from "./register-plate-dialog";
 import type { RegisteredPlate, PlateStatus, PlateType } from "../types/plates";
@@ -32,11 +33,14 @@ export function PlateList() {
   const [filterType, setFilterType] = useState<string>("__all__");
   const [filterStatus, setFilterStatus] = useState<string>("__all__");
   const [filterFormat, setFilterFormat] = useState<string>("__all__");
+  const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
 
   const { data: plates, isLoading, error } = usePlates({
     plate_type: filterType === "__all__" ? undefined : filterType,
     status: filterStatus === "__all__" ? undefined : filterStatus,
     format: filterFormat === "__all__" ? undefined : filterFormat,
+    tags: tagFilter.tagIds,
+    tagLogic: tagFilter.tagLogic,
   });
   const deleteMutation = useDeletePlate();
 
@@ -199,6 +203,8 @@ export function PlateList() {
             ))}
           </SelectContent>
         </Select>
+
+        <TagFilter value={tagFilter} onChange={setTagFilter} />
       </div>
 
       <DataGrid<RegisteredPlate>

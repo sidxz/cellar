@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Boxes } from "lucide-react";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
@@ -8,6 +8,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { EmptyState } from "@/shared/components/empty-state";
 import { formatDate } from "@/shared/lib/format-date";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
 import {
   useBatchesByMolecule,
   useBatchesGlobal,
@@ -133,7 +134,12 @@ interface GlobalBatchListProps {
 
 export function GlobalBatchList({ params }: GlobalBatchListProps) {
   const router = useRouter();
-  const { data, isLoading } = useBatchesGlobal(params);
+  const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
+  const { data, isLoading } = useBatchesGlobal({
+    ...params,
+    tags: tagFilter.tagIds,
+    tagLogic: tagFilter.tagLogic,
+  });
 
   const columnDefs = useMemo<ColDef<BatchListItem>[]>(
     () => [
@@ -209,19 +215,24 @@ export function GlobalBatchList({ params }: GlobalBatchListProps) {
   );
 
   return (
-    <DataGrid<BatchListItem>
-      rowData={data?.items}
-      columnDefs={columnDefs}
-      loading={isLoading}
-      height="500px"
-      onRowClick={(batch) => router.push(`/inventory/batches/${batch.id}`)}
-      emptyState={
-        <EmptyState
-          icon={Boxes}
-          title="No batches"
-          description="No batches have been registered yet."
-        />
-      }
-    />
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <TagFilter value={tagFilter} onChange={setTagFilter} />
+      </div>
+      <DataGrid<BatchListItem>
+        rowData={data?.items}
+        columnDefs={columnDefs}
+        loading={isLoading}
+        height="500px"
+        onRowClick={(batch) => router.push(`/inventory/batches/${batch.id}`)}
+        emptyState={
+          <EmptyState
+            icon={Boxes}
+            title="No batches"
+            description="No batches have been registered yet."
+          />
+        }
+      />
+    </div>
   );
 }

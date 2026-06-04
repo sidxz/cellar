@@ -17,15 +17,28 @@ const runHooks = createCrudHooks<Run, CreateRunInput, Record<string, unknown>>({
 export const useRun = runHooks.useGet;
 export const useCreateRun = runHooks.useCreate;
 
-/** Custom list — runs are nested under protocols. */
-export function useRunsByProtocol(protocolId: string | undefined) {
+/** Custom list — runs are nested under protocols. Supports optional tag filtering. */
+export function useRunsByProtocol(
+  protocolId: string | undefined,
+  options?: { tags?: string[]; tagLogic?: "any" | "all" },
+) {
+  const tags = options?.tags?.length ? options.tags : null;
   return useQuery({
-    queryKey: [...RUNS_KEY, "protocol", protocolId],
-    queryFn: () =>
-      customInstance<Run[]>({
+    queryKey: [
+      ...RUNS_KEY,
+      "protocol",
+      protocolId,
+      ...(tags ? [{ tags, tagLogic: options?.tagLogic ?? "any" }] : []),
+    ],
+    queryFn: () => {
+      const params: Record<string, unknown> = {};
+      if (tags) { params.tags = tags; params.tag_logic = options?.tagLogic ?? "any"; }
+      return customInstance<Run[]>({
         url: `/api/v1/protocols/${protocolId}/runs`,
         method: "GET",
-      }),
+        ...(Object.keys(params).length ? { params } : {}),
+      });
+    },
     enabled: !!protocolId,
   });
 }
