@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("tag=tag-1"),
@@ -11,6 +11,9 @@ vi.mock("next/link", () => ({
     <a href={href}>{children}</a>
   ),
 }));
+
+// The picker is now the shared TagFilter (covered by tag-filter.test.tsx); stub it.
+vi.mock("./tag-filter", () => ({ TagFilter: () => null }));
 
 // Avoid AG Grid in jsdom — assert via a stub that renders the rows it receives.
 vi.mock("@/shared/components/data-grid/data-grid", () => ({
@@ -25,21 +28,6 @@ vi.mock("@/shared/components/data-grid/data-grid", () => ({
   ),
 }));
 
-vi.mock("../hooks/use-tags", () => ({
-  useTags: () => ({
-    data: [
-      {
-        id: "tag-1",
-        key: "theme",
-        value: "kinase",
-        workspace_id: "w",
-        created_by: "u",
-        created_at: "",
-      },
-    ],
-  }),
-}));
-
 const rows = [
   { entity_type: "Molecule", entity_id: "m1", label: "CC-1", assigned_at: "2026-06-04T00:00:00Z" },
   { entity_type: "Molecule", entity_id: "m2", label: "CC-2", assigned_at: "2026-06-03T00:00:00Z" },
@@ -48,13 +36,6 @@ const rows = [
 vi.mock("../hooks/use-tag-entities", () => ({
   useTagEntities: () => ({ data: rows, isLoading: false, error: null }),
 }));
-
-beforeAll(() => {
-  // Radix popover trigger needs these in jsdom.
-  Element.prototype.scrollIntoView ??= vi.fn();
-  Element.prototype.hasPointerCapture ??= vi.fn(() => false);
-  Element.prototype.releasePointerCapture ??= vi.fn();
-});
 
 import { TagBrowse, hrefFor } from "./tag-browse";
 

@@ -2,28 +2,16 @@
 
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { PageHeader } from "@/shared/components/page-header";
-import { TagChip } from "@/shared/components/tag-chip";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/shared/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
-import { useDebounce } from "@/shared/hooks/use-debounce";
 import { formatDate } from "@/shared/lib/format-date";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { AlertTriangle, Tag as TagIcon } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { type TaggedEntity, useTagEntities } from "../hooks/use-tag-entities";
-import { useTags } from "../hooks/use-tags";
-import type { Tag } from "../types";
+import { TagFilter, type TagFilterValue } from "./tag-filter";
 
 // Verified against backend tag_browse_repository.py (entity_type literals) and
 // app/(dashboard)/ route dirs. `null` => no detail route constructable from
@@ -57,66 +45,6 @@ const TYPE_STYLE: Record<string, string> = {
   Plate: "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
 };
 
-function TagPicker({
-  tags,
-  q,
-  onQChange,
-  active,
-  onSelect,
-  onClear,
-}: {
-  tags: Tag[];
-  q: string;
-  onQChange: (q: string) => void;
-  active: Tag | null;
-  onSelect: (t: Tag) => void;
-  onClear: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="flex items-center gap-2">
-      {active && <TagChip tagKey={active.key} value={active.value} onRemove={onClear} />}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <TagIcon className="h-4 w-4" />
-            {active ? "Change tag" : "Select a tag"}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-72 p-0" align="start">
-          {/* Server-side search (shouldFilter=false): the typed query goes to the
-              backend, so it scales past the loaded page, matches key OR value, and
-              supports the "key=value" form. */}
-          <Command shouldFilter={false}>
-            <CommandInput
-              value={q}
-              onValueChange={onQChange}
-              placeholder="Search tags… (e.g. own=44)"
-            />
-            <CommandList>
-              <CommandEmpty>No tags found.</CommandEmpty>
-              <CommandGroup>
-                {tags.map((t) => (
-                  <CommandItem
-                    key={t.id}
-                    value={t.id}
-                    onSelect={() => {
-                      onSelect(t);
-                      setOpen(false);
-                    }}
-                  >
-                    <TagChip tagKey={t.key} value={t.value} />
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    </div>
-  );
-}
-
 function FacetChip({
   label,
   count,
@@ -145,18 +73,15 @@ function FacetChip({
 export function TagBrowse() {
   const router = useRouter();
   const params = useSearchParams();
-  const [activeTagId, setActiveTagId] = useState<string | null>(params.get("tag"));
-  const [pickedTag, setPickedTag] = useState<Tag | null>(null);
+  const initialTag = params.get("tag");
+  const [filter, setFilter] = useState<TagFilterValue>({
+    tagIds: initialTag ? [initialTag] : [],
+    tagLogic: "any",
+  });
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
-  const [q, setQ] = useState("");
-  const debouncedQ = useDebounce(q, 200);
 
-  const { data: tags } = useTags({ q: debouncedQ || undefined, limit: 50 });
-  // Chip resolves from the just-picked tag (always), or — on a ?tag= deep-link —
-  // best-effort from the loaded list. With server-side search the full set isn't
-  // all loaded, so an unresolved deep-link simply shows no chip (results still load).
-  const active = pickedTag ?? (tags ?? []).find((t) => t.id === activeTagId) ?? null;
-  const { data, isLoading, error } = useTagEntities(activeTagId ?? undefined);
+  const hasTags = filter.tagIds.length > 0;
+  const { data, isLoading, error } = useTagEntities(filter.tagIds, filter.tagLogic);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -168,19 +93,6 @@ export function TagBrowse() {
     () => (data ?? []).filter((r) => !typeFilter || r.entity_type === typeFilter),
     [data, typeFilter],
   );
-
-  const pickTag = (t: Tag) => {
-    setActiveTagId(t.id);
-    setPickedTag(t);
-    setTypeFilter(null);
-    setQ("");
-  };
-  const clearTag = () => {
-    setActiveTagId(null);
-    setPickedTag(null);
-    setTypeFilter(null);
-    setQ("");
-  };
 
   const columnDefs = useMemo<ColDef<TaggedEntity>[]>(
     () => [
@@ -223,32 +135,34 @@ export function TagBrowse() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Browse by Tag" subtitle="Pick a tag to see everything that carries it.">
-        <TagPicker
-          tags={tags ?? []}
-          q={q}
-          onQChange={setQ}
-          active={active}
-          onSelect={pickTag}
-          onClear={clearTag}
+      <PageHeader
+        title="Browse by Tag"
+        subtitle="Pick one or more tags to see everything that carries them."
+      >
+        <TagFilter
+          value={filter}
+          onChange={(v) => {
+            setFilter(v);
+            setTypeFilter(null);
+          }}
         />
       </PageHeader>
 
-      {!activeTagId && (
+      {!hasTags && (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          Select a tag above to see every molecule, protocol, run, batch, plate and more that
-          carries it.
+          Select one or more tags above to see every molecule, protocol, run, batch, plate and more
+          that carries them.
         </div>
       )}
 
-      {activeTagId && error && (
+      {hasTags && error && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           Couldn’t load tagged items: {(error as Error).message}
         </div>
       )}
 
-      {activeTagId && !error && (
+      {hasTags && !error && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="mr-1 text-sm text-muted-foreground">
@@ -287,7 +201,7 @@ export function TagBrowse() {
             searchPlaceholder="Filter results…"
             emptyState={
               <p className="py-10 text-center text-sm text-muted-foreground">
-                Nothing carries this tag yet.
+                Nothing carries {filter.tagIds.length > 1 ? "these tags" : "this tag"} yet.
               </p>
             }
           />

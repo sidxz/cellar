@@ -7,15 +7,24 @@ import { useQuery } from "@tanstack/react-query";
 /** A tagged entity row from the cross-entity browse endpoint. */
 export type TaggedEntity = TaggedEntityResponse;
 
-export function useTagEntities(tagId: string | undefined, types?: string[]) {
+export function useTagEntities(
+  tagIds: string[],
+  tagLogic: "any" | "all" = "any",
+  types?: string[],
+) {
+  const ids = tagIds.length ? tagIds : null;
   return useQuery({
-    queryKey: ["tag-entities", tagId, types ?? null],
-    enabled: !!tagId,
+    queryKey: ["tag-entities", ids, tagLogic, types ?? null],
+    enabled: !!ids,
     queryFn: () =>
       customInstance<TaggedEntity[]>({
-        url: `/api/v1/tags/${tagId}/entities`,
+        url: "/api/v1/tags/entities",
         method: "GET",
-        ...(types?.length ? { params: { types } } : {}),
+        params: {
+          tags: tagIds,
+          tag_logic: tagLogic,
+          ...(types?.length ? { types } : {}),
+        },
       }),
   });
 }

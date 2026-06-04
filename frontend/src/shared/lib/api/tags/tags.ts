@@ -27,7 +27,7 @@ import type {
   AssignTagBody,
   EntityTagResponse,
   HTTPValidationError,
-  ListTagEntitiesApiV1TagsTagIdEntitiesGetParams,
+  ListTagEntitiesApiV1TagsEntitiesGetParams,
   ListTagsApiV1TagsGetParams,
   MergeTagBody,
   RenameTagBody,
@@ -327,15 +327,14 @@ export const useMergeTagApiV1TagsTagIdMergePost = <TError = HTTPValidationError,
     /**
  * @summary List Tag Entities
  */
-export const listTagEntitiesApiV1TagsTagIdEntitiesGet = (
-    tagId: string,
-    params?: ListTagEntitiesApiV1TagsTagIdEntitiesGetParams,
+export const listTagEntitiesApiV1TagsEntitiesGet = (
+    params?: ListTagEntitiesApiV1TagsEntitiesGetParams,
  signal?: AbortSignal
 ) => {
       
       
       return customInstance<TaggedEntityResponse[]>(
-      {url: `/api/v1/tags/${tagId}/entities`, method: 'GET',
+      {url: `/api/v1/tags/entities`, method: 'GET',
         params, signal
     },
       );
@@ -344,75 +343,69 @@ export const listTagEntitiesApiV1TagsTagIdEntitiesGet = (
 
 
 
-export const getListTagEntitiesApiV1TagsTagIdEntitiesGetQueryKey = (tagId?: string,
-    params?: ListTagEntitiesApiV1TagsTagIdEntitiesGetParams,) => {
+export const getListTagEntitiesApiV1TagsEntitiesGetQueryKey = (params?: ListTagEntitiesApiV1TagsEntitiesGetParams,) => {
     return [
-    `/api/v1/tags/${tagId}/entities`, ...(params ? [params]: [])
+    `/api/v1/tags/entities`, ...(params ? [params]: [])
     ] as const;
     }
 
     
-export const getListTagEntitiesApiV1TagsTagIdEntitiesGetQueryOptions = <TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError = HTTPValidationError>(tagId: string,
-    params?: ListTagEntitiesApiV1TagsTagIdEntitiesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError, TData>>, }
+export const getListTagEntitiesApiV1TagsEntitiesGetQueryOptions = <TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError = HTTPValidationError>(params?: ListTagEntitiesApiV1TagsEntitiesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListTagEntitiesApiV1TagsTagIdEntitiesGetQueryKey(tagId,params);
+  const queryKey =  queryOptions?.queryKey ?? getListTagEntitiesApiV1TagsEntitiesGetQueryKey(params);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>> = ({ signal }) => listTagEntitiesApiV1TagsTagIdEntitiesGet(tagId,params, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>> = ({ signal }) => listTagEntitiesApiV1TagsEntitiesGet(params, signal);
 
       
 
       
 
-   return  { queryKey, queryFn, enabled: !!(tagId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type ListTagEntitiesApiV1TagsTagIdEntitiesGetQueryResult = NonNullable<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>>
-export type ListTagEntitiesApiV1TagsTagIdEntitiesGetQueryError = HTTPValidationError
+export type ListTagEntitiesApiV1TagsEntitiesGetQueryResult = NonNullable<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>>
+export type ListTagEntitiesApiV1TagsEntitiesGetQueryError = HTTPValidationError
 
 
-export function useListTagEntitiesApiV1TagsTagIdEntitiesGet<TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError = HTTPValidationError>(
- tagId: string,
-    params: undefined |  ListTagEntitiesApiV1TagsTagIdEntitiesGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError, TData>> & Pick<
+export function useListTagEntitiesApiV1TagsEntitiesGet<TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError = HTTPValidationError>(
+ params: undefined |  ListTagEntitiesApiV1TagsEntitiesGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>,
+          Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>,
           TError,
-          Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>
+          Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>
         > , 'initialData'
       >, }
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListTagEntitiesApiV1TagsTagIdEntitiesGet<TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError = HTTPValidationError>(
- tagId: string,
-    params?: ListTagEntitiesApiV1TagsTagIdEntitiesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError, TData>> & Pick<
+export function useListTagEntitiesApiV1TagsEntitiesGet<TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError = HTTPValidationError>(
+ params?: ListTagEntitiesApiV1TagsEntitiesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>,
+          Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>,
           TError,
-          Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>
+          Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>
         > , 'initialData'
       >, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useListTagEntitiesApiV1TagsTagIdEntitiesGet<TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError = HTTPValidationError>(
- tagId: string,
-    params?: ListTagEntitiesApiV1TagsTagIdEntitiesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError, TData>>, }
+export function useListTagEntitiesApiV1TagsEntitiesGet<TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError = HTTPValidationError>(
+ params?: ListTagEntitiesApiV1TagsEntitiesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
  * @summary List Tag Entities
  */
 
-export function useListTagEntitiesApiV1TagsTagIdEntitiesGet<TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError = HTTPValidationError>(
- tagId: string,
-    params?: ListTagEntitiesApiV1TagsTagIdEntitiesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsTagIdEntitiesGet>>, TError, TData>>, }
+export function useListTagEntitiesApiV1TagsEntitiesGet<TData = Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError = HTTPValidationError>(
+ params?: ListTagEntitiesApiV1TagsEntitiesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listTagEntitiesApiV1TagsEntitiesGet>>, TError, TData>>, }
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListTagEntitiesApiV1TagsTagIdEntitiesGetQueryOptions(tagId,params,options)
+  const queryOptions = getListTagEntitiesApiV1TagsEntitiesGetQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

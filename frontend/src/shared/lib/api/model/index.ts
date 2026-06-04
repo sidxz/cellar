@@ -689,7 +689,7 @@ export * from './listShipmentsApiV1ShipmentsGetParams';
 export * from './listStorageLocationsApiV1StorageLocationsGetParams';
 export * from './listSynthesisRequestsApiV1SynthesisRequestsGetParams';
 export * from './listSynthesisRoutesApiV1SynthesisRoutesGetParams';
-export * from './listTagEntitiesApiV1TagsTagIdEntitiesGetParams';
+export * from './listTagEntitiesApiV1TagsEntitiesGetParams';
 export * from './listTagsApiV1TagsGetParams';
 export * from './listTargetsApiV1TargetsGetParams';
 export * from './listWorkspaceMembersApiV1UserWorkspaceMembersGetParams';

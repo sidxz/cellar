@@ -5,7 +5,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ListTagEntitiesApiV1TagsTagIdEntitiesGetParams = {
+export type ListTagEntitiesApiV1TagsEntitiesGetParams = {
+tags?: string[] | null;
+tag_logic?: string;
 types?: string[] | null;
 limit?: number;
 };
