@@ -64,6 +64,58 @@ class TestRunTagFilter:
         assert none.json() == []
 
 
+class TestBatchTagFilter:
+    async def test_filter_global_batches_by_tag(self, client: AsyncClient) -> None:
+        org = await client.post(
+            "/api/v1/organizations", json={"name": "BatchTagOrg", "org_type": "internal"}
+        )
+        assert org.status_code == 201, org.text
+        org_id = org.json()["id"]
+
+        mol = await client.post(
+            "/api/v1/molecules",
+            json={"smiles": "CCO", "name": "ethanol-tag", "originating_org_id": org_id},
+        )
+        assert mol.status_code in (200, 201), mol.text
+        molecule_id = mol.json()["molecule"]["id"]
+
+        b1 = await client.post(
+            "/api/v1/batches",
+            json={
+                "molecule_id": molecule_id,
+                "source": "synthesized",
+                "amount_value": 10.0,
+                "amount_unit": "mg",
+            },
+        )
+        assert b1.status_code in (200, 201), b1.text
+        batch_id = b1.json()["batch"]["id"]
+
+        b2 = await client.post(
+            "/api/v1/batches",
+            json={
+                "molecule_id": molecule_id,
+                "source": "synthesized",
+                "amount_value": 5.0,
+                "amount_unit": "mg",
+            },
+        )
+        assert b2.status_code in (200, 201), b2.text
+        untagged_id = b2.json()["batch"]["id"]
+
+        assign = await client.post(
+            f"/api/v1/batches/{batch_id}/tags", json={"key": "freezer", "value": "A3"}
+        )
+        assert assign.status_code == 201, assign.text
+        tag_id = assign.json()["id"]
+
+        listed = await client.get("/api/v1/batches", params={"tags": [tag_id]})
+        assert listed.status_code == 200, listed.text
+        ids = [row["id"] for row in listed.json()["items"]]
+        assert batch_id in ids
+        assert untagged_id not in ids
+
+
 class TestCampaignTagFilter:
     async def test_filter_campaigns_by_tag(self, client: AsyncClient) -> None:
         proj = await client.post("/api/v1/projects", json={"name": "TagCampProj"})

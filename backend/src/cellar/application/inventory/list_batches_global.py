@@ -21,6 +21,8 @@ class ListBatchesGlobalQuery(Query):
     search: str | None = None
     sources: list[str] | None = None
     expiring_within_days: int | None = None
+    tags: list[uuid.UUID] | None = None
+    tag_logic: str = "any"
     cursor: str | None = None
     limit: int | None = None
 
@@ -43,6 +45,8 @@ class ListBatchesGlobal:
                 search=input.search,
                 sources=input.sources,
                 expiring_within_days=input.expiring_within_days,
+                tags=input.tags,
+                tag_logic=input.tag_logic,
                 cursor=parse_cursor(input.cursor),
                 limit=clamp_limit(input.limit),
             )

@@ -53,6 +53,8 @@ class BatchRepository(Protocol):
         search: str | None = None,
         sources: list[str] | None = None,
         expiring_within_days: int | None = None,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
         cursor: uuid.UUID | None = None,
         limit: int = 50,
     ) -> PageResult[dict]: ...

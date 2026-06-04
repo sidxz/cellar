@@ -31,6 +31,12 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     BatchModel,
     SampleModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
+    BatchTagLinkModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
+    tag_filter_subquery,
+)
 
 
 class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
@@ -122,6 +128,8 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
         search: str | None = None,
         sources: list[str] | None = None,
         expiring_within_days: int | None = None,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
         cursor: uuid.UUID | None = None,
         limit: int = 50,
     ) -> PageResult[dict]:
@@ -190,6 +198,15 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
             stmt = stmt.where(
                 BatchModel.expiry_date.isnot(None),
                 BatchModel.expiry_date <= deadline,
+            )
+
+        if tags:
+            stmt = stmt.where(
+                BatchModel.id.in_(
+                    tag_filter_subquery(
+                        BatchTagLinkModel, "batch_id", tags, match_all=tag_logic == "all"
+                    )
+                )
             )
 
         # --- cursor pagination (keyset on created_at DESC, id DESC) ---

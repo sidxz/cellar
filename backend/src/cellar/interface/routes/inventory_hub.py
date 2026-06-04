@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -117,6 +118,8 @@ async def list_batches_global(
     search: str | None = None,
     source: list[str] | None = Query(None),
     expiring_within_days: int | None = None,
+    tags: list[uuid.UUID] | None = Query(default=None),
+    tag_logic: Literal["any", "all"] = Query(default="any"),
     cursor: str | None = None,
     page_size: int | None = None,
 ) -> PaginatedResponse[BatchListItemResponse]:
@@ -126,6 +129,8 @@ async def list_batches_global(
         search=search,
         sources=source,
         expiring_within_days=expiring_within_days,
+        tags=tags,
+        tag_logic=tag_logic,
         cursor=cursor,
         limit=page_size,
     )
