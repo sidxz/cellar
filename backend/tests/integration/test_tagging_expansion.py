@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import text
 
 from cellar.domain.workspace_config.tagging.tag import TaggableEntityType
@@ -10,9 +9,6 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository im
     get_tag_link_repository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-
-pytestmark = pytest.mark.asyncio
-
 
 NEW_TYPES = [
     TaggableEntityType.RUN,

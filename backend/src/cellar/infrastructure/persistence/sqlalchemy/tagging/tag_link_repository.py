@@ -1,6 +1,6 @@
 """Lightweight (non-aggregate) repositories for tag↔entity links.
 
-One generic base, four type-bound subclasses, and a factory. Mirrors
+One generic base, eight type-bound subclasses, and a factory. Mirrors
 SQLAlchemyProjectMemberRepository: direct SQL, on_conflict_do_nothing,
 workspace defense via a subquery to the entity table.
 """
