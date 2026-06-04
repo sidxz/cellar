@@ -46,7 +46,6 @@ export const navigation: NavGroup[] = [
       { title: "Protocols", href: "/assays", icon: TestTubes },
       { title: "Projects", href: "/projects", icon: FolderKanban },
       { title: "Collections", href: "/collections", icon: Library },
-      { title: "Browse by Tag", href: "/tags", icon: Tag },
       { title: "Saved Searches", href: "/saved-searches", icon: BookOpen },
     ],
   },
@@ -58,6 +57,7 @@ export const navigation: NavGroup[] = [
       { title: "Sample Requests", href: "/inventory/sample-requests", icon: ClipboardList },
       { title: "Shipments", href: "/inventory/shipments", icon: Truck },
       { title: "Synthesis Requests", href: "/inventory/synthesis-requests", icon: FlaskRound },
+      { title: "Browse by Tag", href: "/tags", icon: Tag },
     ],
   },
   {
