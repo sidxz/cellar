@@ -26,6 +26,7 @@ import {
 } from "@/shared/components/ui/table";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { GitMerge, Pencil, Tag as TagIcon, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { useDeleteTag, useTags } from "../hooks/use-tags";
 import type { Tag } from "../types";
@@ -71,7 +72,13 @@ export function TagList() {
               {tags.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell>
-                    <TagChip tagKey={t.key} value={t.value} />
+                    <Link
+                      href={`/tags?tag=${t.id}`}
+                      className="inline-block rounded hover:opacity-80"
+                      title="Browse entities with this tag"
+                    >
+                      <TagChip tagKey={t.key} value={t.value} />
+                    </Link>
                   </TableCell>
                   <TableCell>
                     {isAdmin && (
