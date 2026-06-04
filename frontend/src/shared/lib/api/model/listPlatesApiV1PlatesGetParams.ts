@@ -4,6 +4,7 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { ListPlatesApiV1PlatesGetTagLogic } from './listPlatesApiV1PlatesGetTagLogic';
 
 export type ListPlatesApiV1PlatesGetParams = {
 barcode?: string | null;
@@ -13,4 +14,6 @@ status?: string | null;
 format?: string | null;
 storage_location_id?: string | null;
 project_id?: string | null;
+tags?: string[] | null;
+tag_logic?: ListPlatesApiV1PlatesGetTagLogic;
 };

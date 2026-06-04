@@ -4,11 +4,14 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { ListBatchesGlobalApiV1BatchesGetTagLogic } from './listBatchesGlobalApiV1BatchesGetTagLogic';
 
 export type ListBatchesGlobalApiV1BatchesGetParams = {
 search?: string | null;
 source?: string[] | null;
 expiring_within_days?: number | null;
+tags?: string[] | null;
+tag_logic?: ListBatchesGlobalApiV1BatchesGetTagLogic;
 cursor?: string | null;
 page_size?: number | null;
 };

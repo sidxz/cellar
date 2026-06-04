@@ -4,11 +4,12 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { ListProtocolsApiV1ProtocolsGetTagLogic } from './listProtocolsApiV1ProtocolsGetTagLogic';
 
 export type ListProtocolsApiV1ProtocolsGetParams = {
 project_id?: string | null;
 cursor?: string | null;
 limit?: number | null;
 tags?: string[] | null;
-tag_logic?: string;
+tag_logic?: ListProtocolsApiV1ProtocolsGetTagLogic;
 };

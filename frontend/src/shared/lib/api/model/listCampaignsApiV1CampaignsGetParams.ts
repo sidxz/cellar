@@ -4,9 +4,12 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { ListCampaignsApiV1CampaignsGetTagLogic } from './listCampaignsApiV1CampaignsGetTagLogic';
 
 export type ListCampaignsApiV1CampaignsGetParams = {
 project_id?: string | null;
 cursor?: string | null;
 limit?: number | null;
+tags?: string[] | null;
+tag_logic?: ListCampaignsApiV1CampaignsGetTagLogic;
 };

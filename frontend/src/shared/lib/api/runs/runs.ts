@@ -27,6 +27,7 @@ import type {
   CompleteRunRequest,
   CreateRunRequest,
   HTTPValidationError,
+  ListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetParams,
   LockRequest,
   RejectRequest,
   ResetRunDataResponse,
@@ -109,12 +110,14 @@ export const useCreateRunApiV1RunsPost = <TError = HTTPValidationError,
  */
 export const listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet = (
     protocolId: string,
+    params?: ListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetParams,
  signal?: AbortSignal
 ) => {
       
       
       return customInstance<RunResponse[]>(
-      {url: `/api/v1/protocols/${protocolId}/runs`, method: 'GET', signal
+      {url: `/api/v1/protocols/${protocolId}/runs`, method: 'GET',
+        params, signal
     },
       );
     }
@@ -122,23 +125,25 @@ export const listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet = (
 
 
 
-export const getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryKey = (protocolId?: string,) => {
+export const getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryKey = (protocolId?: string,
+    params?: ListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetParams,) => {
     return [
-    `/api/v1/protocols/${protocolId}/runs`
+    `/api/v1/protocols/${protocolId}/runs`, ...(params ? [params]: [])
     ] as const;
     }
 
     
-export const getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryOptions = <TData = Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError = HTTPValidationError>(protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>>, }
+export const getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryOptions = <TData = Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError = HTTPValidationError>(protocolId: string,
+    params?: ListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>>, }
 ) => {
 
 const {query: queryOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryKey(protocolId);
+  const queryKey =  queryOptions?.queryKey ?? getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryKey(protocolId,params);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>> = ({ signal }) => listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet(protocolId, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>> = ({ signal }) => listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet(protocolId,params, signal);
 
       
 
@@ -152,7 +157,8 @@ export type ListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryError = HTTPVa
 
 
 export function useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet<TData = Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError = HTTPValidationError>(
- protocolId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>> & Pick<
+ protocolId: string,
+    params: undefined |  ListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>,
           TError,
@@ -162,7 +168,8 @@ export function useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet<TData = Awa
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet<TData = Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError = HTTPValidationError>(
- protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>> & Pick<
+ protocolId: string,
+    params?: ListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>,
           TError,
@@ -172,7 +179,8 @@ export function useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet<TData = Awa
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet<TData = Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError = HTTPValidationError>(
- protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>>, }
+ protocolId: string,
+    params?: ListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>>, }
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
@@ -180,11 +188,12 @@ export function useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet<TData = Awa
  */
 
 export function useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet<TData = Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError = HTTPValidationError>(
- protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>>, }
+ protocolId: string,
+    params?: ListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRunsByProtocolApiV1ProtocolsProtocolIdRunsGet>>, TError, TData>>, }
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryOptions(protocolId,options)
+  const queryOptions = getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryOptions(protocolId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

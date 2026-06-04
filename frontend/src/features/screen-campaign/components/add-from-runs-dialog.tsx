@@ -172,6 +172,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
   } as Parameters<typeof useProtocol>[1]);
   const { data: runs } = useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet(
     protocolId ?? "",
+    undefined,
     { query: { enabled: !!protocolId } },
   );
 
