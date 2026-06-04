@@ -62,3 +62,36 @@ class TestRunTagFilter:
         )
         assert none.status_code == 200, none.text
         assert none.json() == []
+
+
+class TestCampaignTagFilter:
+    async def test_filter_campaigns_by_tag(self, client: AsyncClient) -> None:
+        proj = await client.post("/api/v1/projects", json={"name": "TagCampProj"})
+        assert proj.status_code in (200, 201), proj.text
+        project_id = proj.json()["id"]
+        camp = await client.post(
+            "/api/v1/campaigns", json={"project_id": project_id, "name": "C-tag"}
+        )
+        assert camp.status_code in (200, 201), camp.text
+        campaign_id = camp.json()["id"]
+
+        # A second campaign in the same project, left untagged — filter must exclude it.
+        camp2 = await client.post(
+            "/api/v1/campaigns", json={"project_id": project_id, "name": "C-untagged"}
+        )
+        assert camp2.status_code in (200, 201), camp2.text
+        untagged_id = camp2.json()["id"]
+
+        assign = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/tags", json={"key": "lead-series"}
+        )
+        assert assign.status_code == 201, assign.text
+        tag_id = assign.json()["id"]
+
+        listed = await client.get(
+            "/api/v1/campaigns", params={"project_id": project_id, "tags": [tag_id]}
+        )
+        assert listed.status_code == 200, listed.text
+        result_ids = [c["id"] for c in listed.json()["items"]]
+        assert campaign_id in result_ids
+        assert untagged_id not in result_ids

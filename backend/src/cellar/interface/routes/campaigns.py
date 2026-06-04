@@ -8,7 +8,7 @@ All shared Pydantic DTOs live in ``_campaign_dtos.py``.
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Query
 
@@ -105,6 +105,8 @@ async def list_campaigns(
     project_id: uuid.UUID | None = Query(default=None),
     cursor: str | None = None,
     limit: int | None = None,
+    tags: list[uuid.UUID] | None = Query(default=None),
+    tag_logic: Literal["any", "all"] = Query(default="any"),
 ) -> PaginatedResponse[CampaignResponse]:
     """List campaigns in the workspace, optionally filtered by project."""
     query = ListCampaignsQuery(
@@ -112,6 +114,8 @@ async def list_campaigns(
         project_id=project_id,
         cursor_id=parse_cursor(cursor),
         limit=clamp_limit(limit),
+        tags=tags,
+        tag_logic=tag_logic,
     )
     page = result_to_response(await uc(query, auth=auth))
     return PaginatedResponse(

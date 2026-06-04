@@ -22,6 +22,8 @@ class ListCampaignsQuery(Query):
     project_id: uuid.UUID | None = None
     cursor_id: uuid.UUID | None = None
     limit: int | None = None
+    tags: list[uuid.UUID] | None = None
+    tag_logic: str = "any"
 
 
 class ListCampaigns:
@@ -43,12 +45,16 @@ class ListCampaigns:
                     input.project_id,
                     cursor_id=input.cursor_id,
                     limit=fetch_limit,
+                    tags=input.tags,
+                    tag_logic=input.tag_logic,
                 )
             else:
                 campaigns = await self._campaign_repo.find_by_workspace(
                     input.workspace_id,
                     cursor_id=input.cursor_id,
                     limit=fetch_limit,
+                    tags=input.tags,
+                    tag_logic=input.tag_logic,
                 )
 
             next_cursor: str | None = None

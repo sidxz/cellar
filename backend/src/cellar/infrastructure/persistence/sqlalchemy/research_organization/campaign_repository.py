@@ -7,6 +7,12 @@ import uuid
 from sqlalchemy import select
 
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
+    CampaignTagLinkModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
+    tag_filter_subquery,
+)
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
@@ -340,15 +346,22 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         *,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
     ) -> list[Campaign]:
-        stmt = (
-            select(CampaignModel)
-            .where(
-                CampaignModel.workspace_id == workspace_id,
-                CampaignModel.project_id == project_id,
-            )
-            .order_by(CampaignModel.id)
+        stmt = select(CampaignModel).where(
+            CampaignModel.workspace_id == workspace_id,
+            CampaignModel.project_id == project_id,
         )
+        if tags:
+            stmt = stmt.where(
+                CampaignModel.id.in_(
+                    tag_filter_subquery(
+                        CampaignTagLinkModel, "campaign_id", tags, match_all=tag_logic == "all"
+                    )
+                )
+            )
+        stmt = stmt.order_by(CampaignModel.id)
         if cursor_id is not None:
             stmt = stmt.where(CampaignModel.id > cursor_id)
         if limit is not None:
@@ -362,12 +375,19 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         *,
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
+        tags: list[uuid.UUID] | None = None,
+        tag_logic: str = "any",
     ) -> list[Campaign]:
-        stmt = (
-            select(CampaignModel)
-            .where(CampaignModel.workspace_id == workspace_id)
-            .order_by(CampaignModel.id)
-        )
+        stmt = select(CampaignModel).where(CampaignModel.workspace_id == workspace_id)
+        if tags:
+            stmt = stmt.where(
+                CampaignModel.id.in_(
+                    tag_filter_subquery(
+                        CampaignTagLinkModel, "campaign_id", tags, match_all=tag_logic == "all"
+                    )
+                )
+            )
+        stmt = stmt.order_by(CampaignModel.id)
         if cursor_id is not None:
             stmt = stmt.where(CampaignModel.id > cursor_id)
         if limit is not None:
