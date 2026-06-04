@@ -7,12 +7,6 @@ import uuid
 from sqlalchemy import select
 
 from cellar.domain.research_organization.campaign import Campaign
-from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
-    CampaignTagLinkModel,
-)
-from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
-    tag_filter_subquery,
-)
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
@@ -37,6 +31,12 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CampaignMeasurementModel,
     CampaignModel,
     CampaignResultModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
+    CampaignTagLinkModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
+    tag_filter_subquery,
 )
 
 
