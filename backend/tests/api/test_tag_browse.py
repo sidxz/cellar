@@ -54,7 +54,7 @@ async def test_browse_returns_entities_across_types(client: AsyncClient) -> None
     )
     assert rt.status_code == 201, rt.text
 
-    resp = await client.get(f"/api/v1/tags/{tag_id}/entities")
+    resp = await client.get("/api/v1/tags/entities", params={"tags": [tag_id]})
     assert resp.status_code == 200, resp.text
     rows = resp.json()
     pairs = {(r["entity_type"], r["entity_id"]) for r in rows}
@@ -70,7 +70,36 @@ async def test_browse_returns_entities_across_types(client: AsyncClient) -> None
     assert " · " in run_label
 
     only_proj = await client.get(
-        f"/api/v1/tags/{tag_id}/entities", params={"types": ["Project"]}
+        "/api/v1/tags/entities", params={"tags": [tag_id], "types": ["Project"]}
     )
     assert only_proj.status_code == 200, only_proj.text
     assert {r["entity_type"] for r in only_proj.json()} == {"Project"}
+
+
+async def test_browse_multi_tag_any_and_all(client: AsyncClient) -> None:
+    c1 = (await client.post("/api/v1/collections", json={"name": "MT-1"})).json()["id"]
+    c2 = (await client.post("/api/v1/collections", json={"name": "MT-2"})).json()["id"]
+    # Both carry tag A; only c1 also carries tag B (unique keys keep them this test's).
+    a = (
+        await client.post(f"/api/v1/collections/{c1}/tags", json={"key": "mtany-alpha"})
+    ).json()["id"]
+    await client.post(f"/api/v1/collections/{c2}/tags", json={"key": "mtany-alpha"})
+    b = (
+        await client.post(f"/api/v1/collections/{c1}/tags", json={"key": "mtany-beta"})
+    ).json()["id"]
+
+    # ANY: A or B → both collections; c1 appears once despite carrying both (GROUP BY).
+    any_resp = await client.get(
+        "/api/v1/tags/entities", params={"tags": [a, b], "tag_logic": "any"}
+    )
+    assert any_resp.status_code == 200, any_resp.text
+    any_rows = any_resp.json()
+    assert {r["entity_id"] for r in any_rows if r["entity_type"] == "Collection"} == {c1, c2}
+    assert len([r for r in any_rows if r["entity_id"] == c1]) == 1
+
+    # ALL: A and B → only c1.
+    all_resp = await client.get(
+        "/api/v1/tags/entities", params={"tags": [a, b], "tag_logic": "all"}
+    )
+    assert all_resp.status_code == 200, all_resp.text
+    assert {r["entity_id"] for r in all_resp.json() if r["entity_type"] == "Collection"} == {c1}

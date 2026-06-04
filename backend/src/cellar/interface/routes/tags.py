@@ -203,16 +203,21 @@ async def delete_tag(
     return Response(status_code=204)
 
 
-@router.get("/{tag_id}/entities", response_model=list[TaggedEntityResponse])
+@router.get("/entities", response_model=list[TaggedEntityResponse])
 async def list_tag_entities(
-    tag_id: uuid.UUID,
     auth: AuthDep,
     use_case: ListTagEntitiesDep,
+    tags: list[uuid.UUID] | None = Query(default=None),  # noqa: B008 - FastAPI query idiom
+    tag_logic: str = "any",
     types: list[str] | None = Query(default=None),  # noqa: B008 - FastAPI query idiom
     limit: int = 200,
 ) -> list[TaggedEntityResponse]:
     query = ListTagEntitiesQuery(
-        workspace_id=auth.workspace_id, tag_id=tag_id, types=types, limit=limit
+        workspace_id=auth.workspace_id,
+        tag_ids=tags or [],
+        match_all=tag_logic == "all",
+        types=types,
+        limit=limit,
     )
     rows = result_to_response(await use_case(query, auth=auth))
     return [

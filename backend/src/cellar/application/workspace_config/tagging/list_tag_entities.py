@@ -20,7 +20,8 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_browse_repository 
 @dataclass(frozen=True, kw_only=True)
 class ListTagEntitiesQuery(Query):
     workspace_id: uuid.UUID
-    tag_id: uuid.UUID
+    tag_ids: list[uuid.UUID]
+    match_all: bool = False
     types: list[str] | None = None
     limit: int = 200
 
@@ -34,7 +35,11 @@ class ListTagEntities:
         self, input: ListTagEntitiesQuery, auth: AuthContext | None = None
     ) -> Result[list[TaggedEntityRow], DomainError]:
         async with self._uow:
-            rows = await self._repo.find_entities_for_tag(
-                input.workspace_id, input.tag_id, types=input.types, limit=input.limit
+            rows = await self._repo.find_entities_for_tags(
+                input.workspace_id,
+                input.tag_ids,
+                match_all=input.match_all,
+                types=input.types,
+                limit=input.limit,
             )
         return Success(rows)

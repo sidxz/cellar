@@ -11,7 +11,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import String, cast, literal, select, union_all
+from sqlalchemy import String, cast, distinct, func, literal, select, union_all
 
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
@@ -65,33 +65,45 @@ class SQLAlchemyTagBrowseRepository:
         entity_id_attr,
         entity_model,
         label_col,
-        tag_id,
+        tag_ids,
         workspace_id,
+        *,
+        match_all,
         extra_where=None,
     ):
         link_fk = getattr(link_model, entity_id_attr)
+        # GROUP BY the entity PK so an entity tagged with several of the selected
+        # tags collapses to one row; max(assigned_at) is the most recent matching
+        # assignment. `match_all` keeps only entities carrying every selected tag.
         stmt = (
             select(
                 literal(entity_type).label("entity_type"),
                 entity_model.id.label("entity_id"),
                 label_col.label("label"),
-                link_model.assigned_at.label("assigned_at"),
+                func.max(link_model.assigned_at).label("assigned_at"),
             )
             .join(link_model, link_fk == entity_model.id)
-            .where(link_model.tag_id == tag_id, entity_model.workspace_id == workspace_id)
+            .where(link_model.tag_id.in_(tag_ids), entity_model.workspace_id == workspace_id)
+            .group_by(entity_model.id)
         )
         if extra_where is not None:
             stmt = stmt.where(extra_where)
+        if match_all:
+            stmt = stmt.having(func.count(distinct(link_model.tag_id)) == len(tag_ids))
         return stmt
 
-    async def find_entities_for_tag(
+    async def find_entities_for_tags(
         self,
         workspace_id: uuid.UUID,
-        tag_id: uuid.UUID,
+        tag_ids: list[uuid.UUID],
         *,
+        match_all: bool = False,
         types: list[str] | None = None,
         limit: int = 200,
     ) -> list[TaggedEntityRow]:
+        if not tag_ids:
+            return []
+        ids = list(dict.fromkeys(tag_ids))  # dedup, preserve order
         b = self._branch
         run_branch = (
             select(
@@ -100,12 +112,17 @@ class SQLAlchemyTagBrowseRepository:
                 (ProtocolModel.name + literal(" · ") + cast(RunModel.run_date, String)).label(
                     "label"
                 ),
-                RunTagLinkModel.assigned_at.label("assigned_at"),
+                func.max(RunTagLinkModel.assigned_at).label("assigned_at"),
             )
             .join(RunTagLinkModel, RunTagLinkModel.run_id == RunModel.id)
             .join(ProtocolModel, ProtocolModel.id == RunModel.protocol_id)
-            .where(RunTagLinkModel.tag_id == tag_id, RunModel.workspace_id == workspace_id)
+            .where(RunTagLinkModel.tag_id.in_(ids), RunModel.workspace_id == workspace_id)
+            .group_by(RunModel.id, ProtocolModel.id)
         )
+        if match_all:
+            run_branch = run_branch.having(
+                func.count(distinct(RunTagLinkModel.tag_id)) == len(ids)
+            )
         branches = {
             "Molecule": b(
                 "Molecule",
@@ -113,8 +130,9 @@ class SQLAlchemyTagBrowseRepository:
                 "molecule_id",
                 MoleculeModel,
                 MoleculeModel.registration_number,
-                tag_id,
+                ids,
                 workspace_id,
+                match_all=match_all,
                 extra_where=MoleculeModel.merged_into_id.is_(None),
             ),
             "Protocol": b(
@@ -123,8 +141,9 @@ class SQLAlchemyTagBrowseRepository:
                 "protocol_id",
                 ProtocolModel,
                 ProtocolModel.name,
-                tag_id,
+                ids,
                 workspace_id,
+                match_all=match_all,
             ),
             "Project": b(
                 "Project",
@@ -132,8 +151,9 @@ class SQLAlchemyTagBrowseRepository:
                 "project_id",
                 ProjectModel,
                 ProjectModel.name,
-                tag_id,
+                ids,
                 workspace_id,
+                match_all=match_all,
             ),
             "Collection": b(
                 "Collection",
@@ -141,8 +161,9 @@ class SQLAlchemyTagBrowseRepository:
                 "collection_id",
                 CollectionModel,
                 CollectionModel.name,
-                tag_id,
+                ids,
                 workspace_id,
+                match_all=match_all,
             ),
             "Run": run_branch,
             "Campaign": b(
@@ -151,8 +172,9 @@ class SQLAlchemyTagBrowseRepository:
                 "campaign_id",
                 CampaignModel,
                 CampaignModel.name,
-                tag_id,
+                ids,
                 workspace_id,
+                match_all=match_all,
             ),
             "Batch": b(
                 "Batch",
@@ -160,8 +182,9 @@ class SQLAlchemyTagBrowseRepository:
                 "batch_id",
                 BatchModel,
                 BatchModel.batch_number,
-                tag_id,
+                ids,
                 workspace_id,
+                match_all=match_all,
             ),
             "Plate": b(
                 "Plate",
@@ -169,8 +192,9 @@ class SQLAlchemyTagBrowseRepository:
                 "registered_plate_id",
                 RegisteredPlateModel,
                 RegisteredPlateModel.plate_label,
-                tag_id,
+                ids,
                 workspace_id,
+                match_all=match_all,
             ),
         }
         selected = [s for name, s in branches.items() if not types or name in types]
