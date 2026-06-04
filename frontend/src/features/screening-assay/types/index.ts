@@ -1,3 +1,5 @@
+import type { ReadoutDataResponse } from "@/shared/lib/api/model";
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 export type ProtocolType =
@@ -370,29 +372,11 @@ export interface Run {
   conditions: Record<string, unknown> | null;
 }
 
-export interface ReadoutData {
-  id: string;
-  workspace_id: string;
-  run_id: string;
-  well_id: string | null;
-  molecule_id: string | null;
-  registration_number: string | null;
-  /** Molecule.name (free-text label). May equal registration_number for
-   * compounds registered without a meaningful name. */
-  molecule_name: string | null;
-  /** Custom-type identifiers (synonyms / common names) for the molecule. */
-  synonyms: string[];
-  /** Canonical structure (SMILES) for optional inline thumbnails; null if unavailable. */
-  smiles: string | null;
-  batch_id: string | null;
-  batch_number: string | null;
-  readout_definition_id: string;
-  value_numeric: number | null;
-  value_qualifier: string | null;
-  value_text: string | null;
-  is_outlier: boolean;
-  is_computed: boolean;
-}
+/** A readout-data row for a run. Alias of the generated API type — do not
+ * hand-roll the shape (it silently drifts from the backend DTO). Note the
+ * generated type marks DTO-defaulted fields optional (`well_id?`, `smiles?`,
+ * `is_computed?`, …), so consumers must treat them as `T | null | undefined`. */
+export type ReadoutData = ReadoutDataResponse;
 
 export interface DoseResponseCurve {
   id: string;

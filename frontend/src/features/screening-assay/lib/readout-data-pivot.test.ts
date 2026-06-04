@@ -244,3 +244,24 @@ describe("pivotReadoutData — structure smiles", () => {
     expect(result[0].smiles).toBe("CCO");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Optional API fields — `is_computed` is optional on the generated type (the
+// DTO defaults it to False), so an absent value must be treated as raw.
+// ---------------------------------------------------------------------------
+
+describe("pivotReadoutData — optional API fields", () => {
+  it("treats an absent is_computed as raw (not computed)", () => {
+    const rows = [
+      makeRow({
+        well_id: "w1",
+        readout_definition_id: "def-1",
+        value_numeric: 10,
+        is_computed: undefined,
+      }),
+    ];
+    const result = pivotReadoutData(rows, NO_CURVES);
+    expect(result[0].values.get(valueKey("def-1", false))?.value_numeric).toBe(10);
+    expect(result[0].values.get(valueKey("def-1", true))).toBeUndefined();
+  });
+});

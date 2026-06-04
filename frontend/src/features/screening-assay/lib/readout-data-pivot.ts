@@ -89,7 +89,7 @@ export function pivotReadoutData(
         moleculeName: row.molecule_name ?? "",
         aliases: buildAliases(row),
         batchNumber: row.batch_number ?? "",
-        smiles: row.smiles,
+        smiles: row.smiles ?? null,
         moleculeId: row.molecule_id,
         batchId: row.batch_id ?? "",
         wellId: row.well_id,
@@ -103,7 +103,7 @@ export function pivotReadoutData(
     }
     // Raw and computed layers share readout_definition_id but differ on
     // is_computed — key them separately so neither overwrites the other.
-    group.values.set(valueKey(row.readout_definition_id, row.is_computed), row);
+    group.values.set(valueKey(row.readout_definition_id, row.is_computed ?? false), row);
   }
 
   // 3. Merge per-(mol, batch) calculated readouts into every well of
@@ -112,7 +112,7 @@ export function pivotReadoutData(
     const molRows = perMol.get(`${group.moleculeId}::${group.batchId}`);
     if (!molRows) continue;
     for (const row of molRows) {
-      group.values.set(valueKey(row.readout_definition_id, row.is_computed), row);
+      group.values.set(valueKey(row.readout_definition_id, row.is_computed ?? false), row);
     }
   }
 
@@ -137,7 +137,7 @@ export function pivotReadoutData(
       moleculeName: first.molecule_name ?? "",
       aliases: buildAliases(first),
       batchNumber: first.batch_number ?? "",
-      smiles: first.smiles,
+      smiles: first.smiles ?? null,
       moleculeId: first.molecule_id,
       batchId: first.batch_id ?? "",
       wellId: null,
@@ -145,7 +145,7 @@ export function pivotReadoutData(
       curves: rowCurves,
     };
     for (const row of molRows) {
-      group.values.set(valueKey(row.readout_definition_id, row.is_computed), row);
+      group.values.set(valueKey(row.readout_definition_id, row.is_computed ?? false), row);
     }
     groups.set(group.key, group);
   }
