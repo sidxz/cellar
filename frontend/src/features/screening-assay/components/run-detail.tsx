@@ -69,6 +69,7 @@ import { RunDataPanel } from "./run-data-panel";
 import { ResetRunDataDialog } from "./reset-run-data-dialog";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
+import { TagTable } from "@/features/tagging/components/tag-table";
 
 interface RunDetailProps {
   runId: string;
@@ -77,6 +78,7 @@ interface RunDetailProps {
 export function RunDetail({ runId }: RunDetailProps) {
   const router = useRouter();
   const isAdmin = useAuthzHasRole("admin");
+  const canEditTags = useAuthzHasRole("editor");
   const query = useRun(runId);
   const { data: protocol } = useProtocol(query.data?.protocol_id ?? "");
   const startMutation = useStartRun();
@@ -613,6 +615,9 @@ export function RunDetail({ runId }: RunDetailProps) {
                 )}
               </CardContent>
             </Card>
+
+            {/* Tags */}
+            <TagTable entity="runs" entityId={runId} canEdit={canEditTags} />
 
             {/* Data visualizations + files */}
             <RunDataPanel run={run} />

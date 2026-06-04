@@ -1,6 +1,8 @@
 "use client";
 
 import { AttachmentList, FileUploadZone } from "@/features/attachment";
+import { TagTable } from "@/features/tagging/components/tag-table";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
 import { usePlateTemplate } from "@/features/screening-assay/hooks/use-plate-templates";
 import { WELL_TYPE_LABELS, type WellType } from "@/features/screening-assay/types";
@@ -192,6 +194,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
   const [wellMapOpen, setWellMapOpen] = useState(false);
   const [deriveOpen, setDeriveOpen] = useState(false);
   const changeStatus = useChangeStatus(plateId);
+  const canEditTags = useAuthzHasRole("editor");
 
   const handleExport = async (id: string, format: "csv" | "xlsx") => {
     try {
@@ -341,6 +344,9 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Tags */}
+              <TagTable entity="plates" entityId={plateId} canEdit={canEditTags} />
 
               {/* Well map visualization */}
               <Card>

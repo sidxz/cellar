@@ -12,6 +12,7 @@
  */
 
 import { useState } from "react";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 
 import {
   Card,
@@ -48,6 +49,7 @@ interface CampaignViewProps {
 
 export function CampaignView({ campaign }: CampaignViewProps) {
   const [supersedeOpen, setSupersedeOpen] = useState(false);
+  const canEditTags = useAuthzHasRole("editor");
   const [filters, setFilters] = useState<CampaignFilters>(() =>
     closedCampaignFilters(),
   );
@@ -116,6 +118,7 @@ export function CampaignView({ campaign }: CampaignViewProps) {
             ? () => setSupersedeOpen(true)
             : undefined
         }
+        canEditTags={canEditTags}
       />
       <SourcesSection
         campaign={campaign}

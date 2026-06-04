@@ -12,6 +12,7 @@ import {
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { formatDate } from "@/shared/lib/format-date";
+import { TagTable } from "@/features/tagging/components/tag-table";
 import { useProtocolStats } from "../../hooks/use-protocol-stats";
 import {
   PROTOCOL_TYPE_LABELS,
@@ -20,6 +21,7 @@ import {
   type Protocol,
   type ProtocolType,
 } from "../../types";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 
 // ---------------------------------------------------------------------------
 // Z' quality badge helper
@@ -102,6 +104,7 @@ export function OverviewTab({
   onTabChange,
 }: OverviewTabProps) {
   const { data: stats, isLoading } = useProtocolStats(protocolId);
+  const canEditTags = useAuthzHasRole("editor");
 
   return (
     <div className="space-y-6">
@@ -246,6 +249,9 @@ export function OverviewTab({
           </div>
         </CardContent>
       </Card>
+
+      {/* Tags */}
+      <TagTable entity="protocols" entityId={protocolId} canEdit={canEditTags} />
     </div>
   );
 }

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { Archive, FolderKanban, Library, Pencil, Plus, TestTubes } from "lucide-react";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { TagTable } from "@/features/tagging/components/tag-table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +46,7 @@ interface ProjectDetailProps {
 export function ProjectDetail({ projectId }: ProjectDetailProps) {
   const query = useProject(projectId);
   const archiveMutation = useArchiveProject();
+  const canEditTags = useAuthzHasRole("editor");
 
   const [tab, setTab] = useHashTab("overview");
   const [editOpen, setEditOpen] = useState(false);
@@ -156,6 +159,9 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
                   <ProjectMembers projectId={projectId} />
                 </CardContent>
               </Card>
+
+              {/* Tags */}
+              <TagTable entity="projects" entityId={projectId} canEdit={canEditTags} />
             </TabsContent>
 
             <TabsContent value="protocols" className="space-y-3">

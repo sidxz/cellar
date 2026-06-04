@@ -1,7 +1,15 @@
 import type { AssignTagBody, EntityTagResponse, TagResponse } from "@/shared/lib/api/model";
 
 /** URL collection segment for a taggable entity (frontend routing concept). */
-export type TaggableEntity = "molecules" | "protocols" | "projects" | "collections";
+export type TaggableEntity =
+  | "molecules"
+  | "protocols"
+  | "projects"
+  | "collections"
+  | "runs"
+  | "campaigns"
+  | "batches"
+  | "plates";
 
 /** A workspace tag (key + optional value). Alias of the generated API type. */
 export type Tag = TagResponse;

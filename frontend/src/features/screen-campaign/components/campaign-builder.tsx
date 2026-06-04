@@ -17,6 +17,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, AlertCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 
 import { useCampaign, campaignKeys } from "../hooks/use-campaigns";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
@@ -108,6 +109,7 @@ function CampaignBuilderV2({
   projectId: string;
 }) {
   const qc = useQueryClient();
+  const canEditTags = useAuthzHasRole("editor");
 
   const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -132,6 +134,7 @@ function CampaignBuilderV2({
         onRefresh={onRefresh}
         onPreview={() => setPreviewOpen(true)}
         onCloseAndSign={() => setCloseSignOpen(true)}
+        canEditTags={canEditTags}
       />
       <SourcesSection
         campaign={campaign}

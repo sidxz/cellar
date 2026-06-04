@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { TagTable } from "@/features/tagging/components/tag-table";
 import { Paperclip, Pencil } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -44,6 +46,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
   const { data: orgs } = useOrganizations();
   const { data: members } = useWorkspaceMembers();
   const [editOpen, setEditOpen] = useState(false);
+  const canEditTags = useAuthzHasRole("editor");
 
   return (
     <>
@@ -136,6 +139,9 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
                   )}
                 </div>
               </Card>
+
+              {/* Tags */}
+              <TagTable entity="batches" entityId={batchId} canEdit={canEditTags} />
 
               {/* Identifiers */}
               <BatchIdentifiersCard batchId={batchId} />
