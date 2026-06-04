@@ -62,6 +62,7 @@ from cellar.application.workspace_config.update_workspace_settings import Update
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
 from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
+from cellar.application.workspace_config.tagging.list_tag_entities import ListTagEntities
 from cellar.application.workspace_config.tagging.list_tags import ListTags
 from cellar.application.workspace_config.tagging.merge_tags import MergeTags
 from cellar.application.workspace_config.tagging.rename_tag import RenameTag
@@ -125,6 +126,7 @@ __all__ = [
     "UnassignTagDep",
     "SetEntityTagsDep",
     "ListTagsDep",
+    "ListTagEntitiesDep",
     "GetTagsForEntityDep",
     "RenameTagDep",
     "MergeTagsDep",
@@ -223,6 +225,7 @@ AssignTagDep = Annotated[AssignTag, Depends(_get_use_case(AssignTag))]
 UnassignTagDep = Annotated[UnassignTag, Depends(_get_use_case(UnassignTag))]
 SetEntityTagsDep = Annotated[SetEntityTags, Depends(_get_use_case(SetEntityTags))]
 ListTagsDep = Annotated[ListTags, Depends(_get_use_case(ListTags))]
+ListTagEntitiesDep = Annotated[ListTagEntities, Depends(_get_use_case(ListTagEntities))]
 GetTagsForEntityDep = Annotated[GetTagsForEntity, Depends(_get_use_case(GetTagsForEntity))]
 RenameTagDep = Annotated[RenameTag, Depends(_get_use_case(RenameTag))]
 MergeTagsDep = Annotated[MergeTags, Depends(_get_use_case(MergeTags))]

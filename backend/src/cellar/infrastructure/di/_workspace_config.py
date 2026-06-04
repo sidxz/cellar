@@ -92,11 +92,15 @@ from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
 from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
+from cellar.application.workspace_config.tagging.list_tag_entities import ListTagEntities
 from cellar.application.workspace_config.tagging.list_tags import ListTags
 from cellar.application.workspace_config.tagging.merge_tags import MergeTags
 from cellar.application.workspace_config.tagging.rename_tag import RenameTag
 from cellar.application.workspace_config.tagging.set_entity_tags import SetEntityTags
 from cellar.application.workspace_config.tagging.unassign_tag import UnassignTag
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_browse_repository import (
+    SQLAlchemyTagBrowseRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
     SQLAlchemyTagLinkRepositoryProvider,
 )
@@ -377,6 +381,12 @@ def register_workspace_config(container: Container) -> None:
         return ListTags(uow, SQLAlchemyTagRepository(uow))
 
     container.define(ListTags, _list_tags)
+
+    def _list_tag_entities(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListTagEntities(uow, SQLAlchemyTagBrowseRepository(uow))
+
+    container.define(ListTagEntities, _list_tag_entities)
 
     def _get_tags_for_entity(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

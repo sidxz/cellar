@@ -5,13 +5,16 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 from cellar.application.workspace_config.tagging.assign_tag import AssignTagCommand
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTagCommand
 from cellar.application.workspace_config.tagging.get_tags_for_entity import (
     GetTagsForEntityQuery,
+)
+from cellar.application.workspace_config.tagging.list_tag_entities import (
+    ListTagEntitiesQuery,
 )
 from cellar.application.workspace_config.tagging.list_tags import ListTagsQuery
 from cellar.application.workspace_config.tagging.merge_tags import MergeTagsCommand
@@ -32,6 +35,7 @@ from cellar.interface.dependencies._workspace_config import (
     AssignTagDep,
     DeleteTagDep,
     GetTagsForEntityDep,
+    ListTagEntitiesDep,
     ListTagsDep,
     MergeTagsDep,
     RenameTagDep,
@@ -59,6 +63,12 @@ class TagResponse(BaseModel):
             created_by=tag.created_by,
             created_at=tag.created_at,
         )
+
+
+class TaggedEntityResponse(BaseModel):
+    entity_type: str
+    entity_id: uuid.UUID
+    label: str
 
 
 class EntityTagResponse(BaseModel):
@@ -190,6 +200,24 @@ async def delete_tag(
     command = DeleteTagCommand(workspace_id=auth.workspace_id, tag_id=tag_id)
     result_to_response(await use_case(command, auth=auth))
     return Response(status_code=204)
+
+
+@router.get("/{tag_id}/entities", response_model=list[TaggedEntityResponse])
+async def list_tag_entities(
+    tag_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListTagEntitiesDep,
+    types: list[str] | None = Query(default=None),  # noqa: B008 - FastAPI query idiom
+    limit: int = 200,
+) -> list[TaggedEntityResponse]:
+    query = ListTagEntitiesQuery(
+        workspace_id=auth.workspace_id, tag_id=tag_id, types=types, limit=limit
+    )
+    rows = result_to_response(await use_case(query, auth=auth))
+    return [
+        TaggedEntityResponse(entity_type=r.entity_type, entity_id=r.entity_id, label=r.label)
+        for r in rows
+    ]
 
 
 # --- Per-entity assignment (generic over entity collection) ---
