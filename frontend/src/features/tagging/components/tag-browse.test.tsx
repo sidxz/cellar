@@ -1,62 +1,92 @@
-import { render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
-// Drive the active tag via ?tag=tag-1 so results render without the picker.
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams("tag=tag-1"),
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
-// next/link → plain anchor so href is assertable in jsdom.
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: ReactNode }) => (
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
     <a href={href}>{children}</a>
   ),
 }));
 
-// The picker is covered by tag-filter.test.tsx; stub it here.
-vi.mock("./tag-filter", () => ({ TagFilter: () => null }));
-
-// Cross-type result set for one tag — includes the nested-route Campaign.
-const mockRows = [
-  { entity_type: "Project", entity_id: "p1", label: "Kinase Project" },
-  { entity_type: "Collection", entity_id: "c1", label: "Hit Collection" },
-  { entity_type: "Run", entity_id: "r1", label: "AssayProto · 2026-06-04" },
-  { entity_type: "Campaign", entity_id: "cmp1", label: "Lead Campaign" },
-  { entity_type: "Batch", entity_id: "b1", label: "BT-1" },
-];
-
-vi.mock("../hooks/use-tag-entities", () => ({
-  useTagEntities: () => ({ data: mockRows, isLoading: false }),
+// Avoid AG Grid in jsdom — assert via a stub that renders the rows it receives.
+vi.mock("@/shared/components/data-grid/data-grid", () => ({
+  DataGrid: ({ rowData }: { rowData: Array<{ entity_id: string; label: string }> }) => (
+    <div data-testid="grid">
+      {rowData.map((r) => (
+        <div key={r.entity_id} data-testid="grid-row">
+          {r.label}
+        </div>
+      ))}
+    </div>
+  ),
 }));
 
-import { TagBrowse } from "./tag-browse";
+vi.mock("../hooks/use-tags", () => ({
+  useTags: () => ({
+    data: [
+      {
+        id: "tag-1",
+        key: "theme",
+        value: "kinase",
+        workspace_id: "w",
+        created_by: "u",
+        created_at: "",
+      },
+    ],
+  }),
+}));
+
+const rows = [
+  { entity_type: "Molecule", entity_id: "m1", label: "CC-1", assigned_at: "2026-06-04T00:00:00Z" },
+  { entity_type: "Molecule", entity_id: "m2", label: "CC-2", assigned_at: "2026-06-03T00:00:00Z" },
+  { entity_type: "Protocol", entity_id: "p1", label: "Proto", assigned_at: "2026-06-02T00:00:00Z" },
+];
+vi.mock("../hooks/use-tag-entities", () => ({
+  useTagEntities: () => ({ data: rows, isLoading: false, error: null }),
+}));
+
+beforeAll(() => {
+  // Radix popover trigger needs these in jsdom.
+  Element.prototype.scrollIntoView ??= vi.fn();
+  Element.prototype.hasPointerCapture ??= vi.fn(() => false);
+  Element.prototype.releasePointerCapture ??= vi.fn();
+});
+
+import { TagBrowse, hrefFor } from "./tag-browse";
+
+describe("hrefFor", () => {
+  it("links flat-route types to their detail page", () => {
+    expect(hrefFor({ entity_type: "Molecule", entity_id: "m1" })).toBe("/compounds/m1");
+    expect(hrefFor({ entity_type: "Protocol", entity_id: "p1" })).toBe("/assays/protocols/p1");
+    expect(hrefFor({ entity_type: "Project", entity_id: "pr1" })).toBe("/projects/pr1");
+    expect(hrefFor({ entity_type: "Collection", entity_id: "co1" })).toBe("/collections/co1");
+    expect(hrefFor({ entity_type: "Run", entity_id: "r1" })).toBe("/assays/runs/r1");
+    expect(hrefFor({ entity_type: "Batch", entity_id: "b1" })).toBe("/inventory/batches/b1");
+    expect(hrefFor({ entity_type: "Plate", entity_id: "pl1" })).toBe("/inventory/plates/pl1");
+  });
+
+  it("returns null for the nested-route Campaign (not directly linkable)", () => {
+    expect(hrefFor({ entity_type: "Campaign", entity_id: "c1" })).toBeNull();
+  });
+});
 
 describe("TagBrowse", () => {
-  it("groups tagged entities by type with counts", () => {
+  it("summarizes results and shows per-type facets", () => {
     render(<TagBrowse />);
-    expect(screen.getByText("Project (1)")).toBeInTheDocument();
-    expect(screen.getByText("Collection (1)")).toBeInTheDocument();
-    expect(screen.getByText("Run (1)")).toBeInTheDocument();
-    expect(screen.getByText("Campaign (1)")).toBeInTheDocument();
-    expect(screen.getByText("Batch (1)")).toBeInTheDocument();
+    expect(screen.getByText("3 items across 2 types")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Molecule/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Protocol/ })).toBeInTheDocument();
+    // All three rows reach the grid before any facet is applied.
+    expect(screen.getAllByTestId("grid-row")).toHaveLength(3);
   });
 
-  it("links entities that have a flat detail route to that route", () => {
+  it("filters the grid to one type when its facet is clicked", () => {
     render(<TagBrowse />);
-    expect(screen.getByText("Kinase Project").closest("a")).toHaveAttribute("href", "/projects/p1");
-    expect(screen.getByText("BT-1").closest("a")).toHaveAttribute("href", "/inventory/batches/b1");
-    // The Run label exercises the backend's non-trivial composed label too.
-    expect(screen.getByText("AssayProto · 2026-06-04").closest("a")).toHaveAttribute(
-      "href",
-      "/assays/runs/r1",
-    );
-  });
-
-  it("renders Campaign as a non-clickable label (nested route, no projectId in v1)", () => {
-    render(<TagBrowse />);
-    const campaign = screen.getByText("Lead Campaign");
-    expect(campaign.closest("a")).toBeNull();
-    expect(campaign.tagName).toBe("SPAN");
+    fireEvent.click(screen.getByRole("button", { name: /Protocol/ }));
+    expect(screen.getAllByTestId("grid-row").map((e) => e.textContent)).toEqual(["Proto"]);
   });
 });

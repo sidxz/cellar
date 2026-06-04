@@ -9,4 +9,5 @@ export interface TaggedEntityResponse {
   entity_type: string;
   entity_id: string;
   label: string;
+  assigned_at: string;
 }
