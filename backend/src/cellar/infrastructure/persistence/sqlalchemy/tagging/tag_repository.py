@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import column, delete, func, or_, select, table
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.workspace_config.tagging.tag import Tag, TagName
@@ -15,6 +15,11 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._field_c
     escape_like,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import TagModel
+
+# Read-only handle to the cross-type assignment view (created in migrations
+# 047/050). Declared via table()/column() so it is NOT registered in the ORM
+# metadata — alembic won't try to manage it.
+_tag_links_all = table("tag_links_all", column("tag_id"))
 
 
 def tag_model_to_domain(model: TagModel) -> Tag:
@@ -109,22 +114,57 @@ class SQLAlchemyTagRepository(SQLAlchemyRepository[Tag, TagModel]):
         created_by: uuid.UUID | None = None,
         limit: int = 50,
     ) -> list[Tag]:
-        stmt = select(TagModel).where(TagModel.workspace_id == workspace_id)
+        # Usage count per tag across every entity type — drives most-used-first
+        # ordering. Aggregated from the cross-type view; the per-table tag_id
+        # indexes back it. If ever measured slow at very high assignment
+        # cardinality, a maintained usage_count column is the documented next step.
+        usage = (
+            select(_tag_links_all.c.tag_id, func.count().label("n"))
+            .group_by(_tag_links_all.c.tag_id)
+            .subquery()
+        )
+        stmt = (
+            select(TagModel)
+            .outerjoin(usage, usage.c.tag_id == TagModel.id)
+            .where(TagModel.workspace_id == workspace_id)
+        )
         if q and q.strip():
-            # Escape LIKE metacharacters so a literal % or _ in the query does
-            # not act as a wildcard. Columns are pre-casefolded, so .like (not
-            # .ilike) is correct for case-insensitive matching.
-            pattern = f"%{escape_like(q.strip().casefold())}%"
-            stmt = stmt.where(
-                or_(
-                    TagModel.normalized_key.like(pattern, escape="\\"),
-                    TagModel.normalized_value.like(pattern, escape="\\"),
+            # Escape LIKE metacharacters so a literal % or _ in the query does not
+            # act as a wildcard. Columns are pre-casefolded, so .like (not .ilike)
+            # is correct for case-insensitive matching.
+            term = q.strip().casefold()
+            if "=" in term:
+                # "key=value" → match the key part AND the value part separately,
+                # so `own=44` narrows to tags whose key contains "own" and value
+                # contains "44" (rather than the literal substring "own=44").
+                key_part, _, value_part = term.partition("=")
+                key_part, value_part = key_part.strip(), value_part.strip()
+                if key_part:
+                    stmt = stmt.where(
+                        TagModel.normalized_key.like(f"%{escape_like(key_part)}%", escape="\\")
+                    )
+                if value_part:
+                    stmt = stmt.where(
+                        TagModel.normalized_value.like(
+                            f"%{escape_like(value_part)}%", escape="\\"
+                        )
+                    )
+            else:
+                # Plain term → substring match on key OR value.
+                pattern = f"%{escape_like(term)}%"
+                stmt = stmt.where(
+                    or_(
+                        TagModel.normalized_key.like(pattern, escape="\\"),
+                        TagModel.normalized_value.like(pattern, escape="\\"),
+                    )
                 )
-            )
         if created_by is not None:
             stmt = stmt.where(TagModel.created_by == created_by)
         stmt = stmt.order_by(
-            TagModel.normalized_key, TagModel.normalized_value, TagModel.id
+            func.coalesce(usage.c.n, 0).desc(),
+            TagModel.normalized_key,
+            TagModel.normalized_value,
+            TagModel.id,
         ).limit(limit)
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars()]

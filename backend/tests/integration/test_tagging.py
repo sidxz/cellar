@@ -91,6 +91,42 @@ class TestTagRepository:
         assert {t.key for t in kin} == {"kinase", "kinetics"}
         assert {t.key for t in mine} == {"kinase", "solubility"}
 
+    async def test_search_key_equals_value(self, uow: AsyncUnitOfWork) -> None:
+        ws_id, user = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            repo = SQLAlchemyTagRepository(uow)
+            await repo.get_or_create(ws_id, TagName(key="own", value="dd"), user)
+            await repo.get_or_create(ws_id, TagName(key="own", value="zz"), user)
+            await repo.get_or_create(ws_id, TagName(key="tes", value="44"), user)
+            await uow.commit()
+        async with uow:
+            repo = SQLAlchemyTagRepository(uow)
+            own_dd = await repo.search(ws_id, q="own=dd")
+            own_all = await repo.search(ws_id, q="own")
+        # "own=dd" matches key AND value separately — not the literal "own=dd".
+        assert {(t.key, t.value) for t in own_dd} == {("own", "dd")}
+        assert {(t.key, t.value) for t in own_all} == {("own", "dd"), ("own", "zz")}
+
+    async def test_search_orders_most_used_first(self, uow: AsyncUnitOfWork) -> None:
+        ws_id, user = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            repo = SQLAlchemyTagRepository(uow)
+            # 'zzz-popular' sorts last alphabetically but is used more.
+            popular = await repo.get_or_create(ws_id, TagName(key="zzz-popular"), user)
+            rare = await repo.get_or_create(ws_id, TagName(key="aaa-rare"), user)
+            m1 = await _insert_molecule(uow, ws_id, "UM1")
+            m2 = await _insert_molecule(uow, ws_id, "UM2")
+            link = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            await link.add(ws_id, m1, popular.id, user)
+            await link.add(ws_id, m2, popular.id, user)
+            await link.add(ws_id, m1, rare.id, user)
+            await uow.commit()
+        async with uow:
+            repo = SQLAlchemyTagRepository(uow)
+            results = await repo.search(ws_id)
+        # 2 uses beats 1 use, overriding alphabetical order (zzz before aaa).
+        assert [t.key for t in results] == ["zzz-popular", "aaa-rare"]
+
     async def test_find_by_id_in_workspace_scoping(self, uow: AsyncUnitOfWork) -> None:
         ws_id, other_ws, user_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
         async with uow:
