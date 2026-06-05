@@ -91,6 +91,7 @@ class CollectionModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     visibility: Mapped[str] = mapped_column(String(20), nullable=False, server_default="private")
+    type: Mapped[str] = mapped_column(String(32), nullable=False, server_default="generic")
     is_frozen: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     derived_from_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
