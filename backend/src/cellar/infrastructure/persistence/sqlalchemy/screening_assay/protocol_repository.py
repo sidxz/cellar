@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.application.screening._dose_response_config_serde import (
@@ -26,6 +26,7 @@ from cellar.domain.screening_assay.protocol import (
     Protocol,
     ReadoutDefinition,
 )
+from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.ontology import OntologyTerm
@@ -36,7 +37,11 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     ConditionDefinitionModel,
     ProtocolModel,
     ReadoutDefinitionModel,
+    RunModel,
+    TargetModel,
     protocol_projects,
+    protocol_targets,
+    run_targets,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
     ProtocolTagLinkModel,
@@ -250,6 +255,154 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         return list(result.scalars().all())
 
     # ------------------------------------------------------------------
+    # Target association methods
+    # ------------------------------------------------------------------
+
+    async def _owns(
+        self, model: type, id_: uuid.UUID, workspace_id: uuid.UUID
+    ) -> bool:
+        result = await self._session.execute(
+            select(model.id).where(model.id == id_, model.workspace_id == workspace_id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def add_direct_target(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
+    ) -> None:
+        """Link a direct target to a protocol (idempotent via ON CONFLICT DO NOTHING).
+
+        Defense-in-depth: only inserts if BOTH the protocol AND the target
+        belong to the workspace.
+        """
+        if not await self._owns(ProtocolModel, protocol_id, workspace_id):
+            return
+        if not await self._owns(TargetModel, target_id, workspace_id):
+            return
+        await self._session.execute(
+            pg_insert(protocol_targets)
+            .values(protocol_id=protocol_id, target_id=target_id)
+            .on_conflict_do_nothing()
+        )
+
+    async def remove_direct_target(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
+    ) -> None:
+        """Unlink a direct target. Defense-in-depth: workspace-scoped."""
+        await self._session.execute(
+            protocol_targets.delete().where(
+                protocol_targets.c.protocol_id == protocol_id,
+                protocol_targets.c.target_id == target_id,
+                protocol_targets.c.protocol_id.in_(
+                    select(ProtocolModel.id).where(ProtocolModel.workspace_id == workspace_id)
+                ),
+            )
+        )
+
+    async def find_direct_target_ids(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        result = await self._session.execute(
+            select(protocol_targets.c.target_id)
+            .join(ProtocolModel, protocol_targets.c.protocol_id == ProtocolModel.id)
+            .where(
+                protocol_targets.c.protocol_id == protocol_id,
+                ProtocolModel.workspace_id == workspace_id,
+            )
+        )
+        return list(result.scalars().all())
+
+    async def _direct_ids(self, protocol_id: uuid.UUID) -> set[uuid.UUID]:
+        result = await self._session.execute(
+            select(protocol_targets.c.target_id).where(
+                protocol_targets.c.protocol_id == protocol_id
+            )
+        )
+        return set(result.scalars().all())
+
+    async def find_effective_targets(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> list[EffectiveTarget]:
+        direct_ids = await self._direct_ids(protocol_id)
+
+        run_count_rows = await self._session.execute(
+            select(run_targets.c.target_id, func.count(run_targets.c.run_id))
+            .select_from(run_targets.join(RunModel, run_targets.c.run_id == RunModel.id))
+            .where(RunModel.protocol_id == protocol_id)
+            .group_by(run_targets.c.target_id)
+        )
+        run_counts = {tid: count for tid, count in run_count_rows.all()}
+
+        all_ids = direct_ids | set(run_counts)
+        if not all_ids:
+            return []
+
+        target_rows = await self._session.execute(
+            select(TargetModel).where(
+                TargetModel.workspace_id == workspace_id,
+                TargetModel.id.in_(all_ids),
+            )
+        )
+        out = [
+            EffectiveTarget(
+                id=t.id,
+                name=t.name,
+                target_type=t.target_type,
+                is_direct=t.id in direct_ids,
+                run_count=run_counts.get(t.id, 0),
+            )
+            for t in target_rows.scalars().all()
+        ]
+        out.sort(key=lambda e: e.name.lower())
+        return out
+
+    async def find_effective_targets_for_protocols(
+        self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[TargetRef]]:
+        if not protocol_ids:
+            return {}
+
+        # protocol_id -> set(target_id): direct
+        direct_rows = await self._session.execute(
+            select(protocol_targets.c.protocol_id, protocol_targets.c.target_id).where(
+                protocol_targets.c.protocol_id.in_(protocol_ids)
+            )
+        )
+        by_protocol: dict[uuid.UUID, set[uuid.UUID]] = {pid: set() for pid in protocol_ids}
+        for pid, tid in direct_rows.all():
+            by_protocol[pid].add(tid)
+
+        # protocol_id -> set(target_id): inherited via runs
+        inherited_rows = await self._session.execute(
+            select(RunModel.protocol_id, run_targets.c.target_id)
+            .select_from(run_targets.join(RunModel, run_targets.c.run_id == RunModel.id))
+            .where(RunModel.protocol_id.in_(protocol_ids))
+        )
+        for pid, tid in inherited_rows.all():
+            by_protocol.setdefault(pid, set()).add(tid)
+
+        all_ids = {tid for ids in by_protocol.values() for tid in ids}
+        if not all_ids:
+            return {pid: [] for pid in protocol_ids}
+
+        target_rows = await self._session.execute(
+            select(TargetModel.id, TargetModel.name, TargetModel.target_type).where(
+                TargetModel.workspace_id == workspace_id,
+                TargetModel.id.in_(all_ids),
+            )
+        )
+        ref_by_id = {
+            tid: TargetRef(id=tid, name=name, target_type=tt)
+            for tid, name, tt in target_rows.all()
+        }
+        return {
+            pid: sorted(
+                (ref_by_id[tid] for tid in ids if tid in ref_by_id),
+                key=lambda r: r.name.lower(),
+            )
+            for pid, ids in by_protocol.items()
+        }
+
+    # ------------------------------------------------------------------
     # Mapping: SA model <-> domain aggregate
     # ------------------------------------------------------------------
 
@@ -332,7 +485,6 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             name=model.name,
             description=model.description,
             protocol_type=ProtocolType(model.protocol_type),
-            target_id=model.target_id,
             category=model.category,
             protocol_version=model.protocol_version,
             parent_protocol_id=model.parent_protocol_id,
@@ -391,7 +543,6 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             name=aggregate.name,
             description=aggregate.description,
             protocol_type=aggregate.protocol_type.value,
-            target_id=aggregate.target_id,
             category=aggregate.category,
             protocol_version=aggregate.protocol_version,
             parent_protocol_id=aggregate.parent_protocol_id,
@@ -424,7 +575,6 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.name = aggregate.name
         model.description = aggregate.description
         model.protocol_type = aggregate.protocol_type.value
-        model.target_id = aggregate.target_id
         model.category = aggregate.category
         model.protocol_version = aggregate.protocol_version
         model.parent_protocol_id = aggregate.parent_protocol_id

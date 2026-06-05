@@ -57,6 +57,51 @@ protocol_projects = Table(
 )
 
 
+# Direct biological targets attached at the protocol level. The protocol's
+# *effective* target list is this set unioned with the distinct targets of all
+# its runs (see run_targets) — computed at read time, never stored. A target
+# present here is "direct" and survives auto-prune; one present only via the run
+# union is "inherited" and disappears when its last run drops it.
+protocol_targets = Table(
+    "protocol_targets",
+    Base.metadata,
+    Column(
+        "protocol_id",
+        Uuid(as_uuid=True),
+        ForeignKey("protocols.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "target_id",
+        Uuid(as_uuid=True),
+        ForeignKey("targets.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Index("ix_protocol_targets_target", "target_id"),
+)
+
+
+# Each run's independent target set — the source of truth for run targets and
+# the feed for a protocol's inherited targets.
+run_targets = Table(
+    "run_targets",
+    Base.metadata,
+    Column(
+        "run_id",
+        Uuid(as_uuid=True),
+        ForeignKey("runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "target_id",
+        Uuid(as_uuid=True),
+        ForeignKey("targets.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Index("ix_run_targets_target", "target_id"),
+)
+
+
 # ---------------------------------------------------------------------------
 # Reference entities (no VersionMixin — not aggregate roots)
 # ---------------------------------------------------------------------------
@@ -107,7 +152,6 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     protocol_type: Mapped[str] = mapped_column(String(30), nullable=False)
-    target_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("targets.id"))
     category: Mapped[str | None] = mapped_column(String(100))
     protocol_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     parent_protocol_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("protocols.id"))
