@@ -107,8 +107,7 @@ class MoleculeActivityDetailResponse(BaseModel):
                             excluded_points=c.excluded_points,
                             fit_quality_warnings=c.fit_quality_warnings,
                             intercept_values=[
-                                InterceptValueResponse.from_domain(iv)
-                                for iv in c.intercept_values
+                                InterceptValueResponse.from_domain(iv) for iv in c.intercept_values
                             ],
                         )
                         for c in g.curves

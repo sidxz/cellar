@@ -8,9 +8,8 @@ infrastructure/persistence/sqlalchemy/screening_assay/models.py.
 """
 
 from cellar.domain.shared.cascade.actions import CascadeAction as A
-from cellar.infrastructure.cascade.rules import CascadeRule
 from cellar.infrastructure.cascade.registry import register_rules
-
+from cellar.infrastructure.cascade.rules import CascadeRule
 
 register_rules(
     # -------------------------------------------------------------------------
@@ -45,7 +44,7 @@ register_rules(
         parent_table="protocols",
         action=A.CASCADE,
         label_field=None,
-        display_label="Protocol–project links",
+        display_label="Protocol-project links",
     ),
     # RunModel.protocol_id → protocols (no ondelete clause — application-level)
     # Run is its own aggregate root; protocol deletion must cascade through runs

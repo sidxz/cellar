@@ -16,7 +16,6 @@ from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.value_objects import Amount
 
-
 _VALID_TRANSITIONS: dict[SampleRequestStatus, set[SampleRequestStatus]] = {
     SampleRequestStatus.SUBMITTED: {
         SampleRequestStatus.APPROVED,
@@ -142,14 +141,12 @@ class SampleRequest(AggregateRoot):
                 raise ValidationError("Purpose is required")
             if purpose is not None:
                 self.purpose = purpose
-        if priority is not ...:
-            if priority is not None:
-                self.priority = priority
-        if requested_amount is not ...:
-            if requested_amount is not None:
-                if requested_amount.value <= 0:
-                    raise ValidationError("Requested amount must be positive")
-                self.requested_amount = requested_amount
+        if priority is not ... and priority is not None:
+            self.priority = priority
+        if requested_amount is not ... and requested_amount is not None:
+            if requested_amount.value <= 0:
+                raise ValidationError("Requested amount must be positive")
+            self.requested_amount = requested_amount
         self.updated_at = datetime.now(UTC)
 
     # -- State transitions --

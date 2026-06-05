@@ -49,7 +49,8 @@ class MoleculeRepository(Protocol):
         """Find a single undisclosed molecule whose identifiers overlap with the given set.
 
         Returns None if no match or if identifiers map to multiple different molecules (ambiguous).
-        Only matches molecules with structure_status == UNDISCLOSED and no tombstone (merged_into_id is None).
+        Only matches molecules with structure_status == UNDISCLOSED and no tombstone
+        (merged_into_id is None).
         """
         ...
 
@@ -77,7 +78,6 @@ class MoleculeRepository(Protocol):
 @runtime_checkable
 class MoleculeRelationshipRepository(Protocol):
     """Repository for MoleculeRelationship entities."""
-
 
     async def find_by_source(
         self, workspace_id: uuid.UUID, source_molecule_id: uuid.UUID

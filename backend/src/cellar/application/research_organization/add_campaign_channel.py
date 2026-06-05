@@ -144,13 +144,12 @@ class AddCampaignChannel:
                         (c for c in name_matches if c.intercept_key == input.intercept_key),
                         None,
                     )
-                    if matched is None:
-                        # Fall back to first name-match (legacy behavior) only
-                        # when the channel targets the primary intercept; a
-                        # non-primary channel without an exact criterion match
-                        # gets no auto-threshold.
-                        if input.intercept_key is None and name_matches:
-                            matched = name_matches[0]
+                    # Fall back to first name-match (legacy behavior) only
+                    # when the channel targets the primary intercept; a
+                    # non-primary channel without an exact criterion match
+                    # gets no auto-threshold.
+                    if matched is None and input.intercept_key is None and name_matches:
+                        matched = name_matches[0]
                     effective_threshold = matched  # None if no match — that is fine
 
             try:

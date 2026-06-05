@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete as sa_delete, select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import select
 
 from cellar.domain.chemical_registration.enums import (
     ReagentRole,
@@ -23,7 +24,8 @@ from cellar.domain.shared.value_objects import Amount, ReactionConditions, React
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_models import (
+
+from .synthesis_route_models import (
     ReactionStepModel,
     SynthesisRouteModel,
 )

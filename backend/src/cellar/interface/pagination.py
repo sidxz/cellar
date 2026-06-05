@@ -9,7 +9,7 @@ layer agree on a single source of truth. The Pydantic response wrapper
 
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 from pydantic import BaseModel
 
@@ -37,7 +37,7 @@ __all__ = [
 T = TypeVar("T")
 
 
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse[T](BaseModel):
     """Generic paginated response wrapper.
 
     Attributes:

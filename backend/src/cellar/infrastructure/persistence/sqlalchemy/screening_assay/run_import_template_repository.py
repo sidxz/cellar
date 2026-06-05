@@ -56,9 +56,7 @@ class SQLAlchemyRunImportTemplateRepository(
             created_by=entity.created_by,
         )
 
-    def _update_model(
-        self, model: RunImportTemplateModel, entity: RunImportTemplate
-    ) -> None:
+    def _update_model(self, model: RunImportTemplateModel, entity: RunImportTemplate) -> None:
         model.name = entity.name
         model.description = entity.description
         model.column_mapping = entity.column_mapping

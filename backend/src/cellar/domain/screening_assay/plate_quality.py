@@ -65,10 +65,7 @@ class PlateQualityCalculator:
         lower = min(pos_mean, neg_mean)
         s2b = higher / lower if lower != 0 else 0.0
 
-        if separation == 0:
-            z_prime = 0.0
-        else:
-            z_prime = 1.0 - (3.0 * pos_sd + 3.0 * neg_sd) / separation
+        z_prime = 0.0 if separation == 0 else 1.0 - (3.0 * pos_sd + 3.0 * neg_sd) / separation
 
         if z_prime >= 0.5:
             classification = "excellent"

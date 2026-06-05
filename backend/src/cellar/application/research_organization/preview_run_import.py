@@ -166,9 +166,7 @@ def _apply_selection_rule(
         intercept_key,
     )
 
-    rep = result.representative_run or max(
-        candidates, key=lambda c: c.run_date or date.min
-    )
+    rep = result.representative_run or max(candidates, key=lambda c: c.run_date or date.min)
     is_aggregate = rule in _AGGREGATE_RULES
 
     if is_aggregate and result.value is not None:
@@ -318,9 +316,7 @@ class PreviewRunImport:
                     ]
                     if not candidates:
                         continue
-                picked = _apply_selection_rule(
-                    candidates, cfg.selection_rule, cfg.intercept_key
-                )
+                picked = _apply_selection_rule(candidates, cfg.selection_rule, cfg.intercept_key)
                 if picked is None:
                     cell = _nd_cell(key)
                 else:
@@ -443,9 +439,7 @@ def _qc_pass(c: ResolvedCandidate) -> bool:
     """Default QC heuristic: run must be approved + z_prime, when present, >= 0.5."""
     if not c.run_approved:
         return False
-    if c.z_prime is not None and c.z_prime < 0.5:
-        return False
-    return True
+    return not (c.z_prime is not None and c.z_prime < 0.5)
 
 
 def _qc_reason(c: ResolvedCandidate) -> str | None:

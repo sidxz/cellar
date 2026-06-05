@@ -21,18 +21,14 @@ class ButinaClusterer:
     def cluster(
         self, fingerprints: list, *, threshold: float | None = None
     ) -> tuple[list[int], list[int]]:
-        effective_threshold = (
-            threshold if threshold is not None else self._default_threshold
-        )
+        effective_threshold = threshold if threshold is not None else self._default_threshold
         n = len(fingerprints)
         dists: list[float] = []
         for i in range(1, n):
             sims = DataStructs.BulkTanimotoSimilarity(fingerprints[i], fingerprints[:i])
             dists.extend(1.0 - s for s in sims)
 
-        cluster_tuples = Butina.ClusterData(
-            dists, n, effective_threshold, isDistData=True
-        )
+        cluster_tuples = Butina.ClusterData(dists, n, effective_threshold, isDistData=True)
         cluster_ids = [0] * n
         medoid_indices: list[int] = []
         for cid, members in enumerate(cluster_tuples):

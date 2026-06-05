@@ -21,9 +21,7 @@ class TagRepository(Protocol):
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Tag | None: ...
 
-    async def find_by_normalized(
-        self, workspace_id: uuid.UUID, name: TagName
-    ) -> Tag | None: ...
+    async def find_by_normalized(self, workspace_id: uuid.UUID, name: TagName) -> Tag | None: ...
 
     async def get_or_create(
         self, workspace_id: uuid.UUID, name: TagName, created_by: uuid.UUID
@@ -103,9 +101,7 @@ class TagLinkRepository(Protocol):
         match_all: bool,
     ) -> list[uuid.UUID]: ...
 
-    async def repoint(
-        self, from_tag_id: uuid.UUID, to_tag_id: uuid.UUID
-    ) -> None: ...
+    async def repoint(self, from_tag_id: uuid.UUID, to_tag_id: uuid.UUID) -> None: ...
 
 
 @runtime_checkable

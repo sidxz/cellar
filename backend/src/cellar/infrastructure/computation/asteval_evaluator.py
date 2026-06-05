@@ -73,7 +73,7 @@ def _expand_brackets(
     aliases: dict[str, str] = {}  # original name -> alias
     expanded: dict[str, float] = dict(bindings)
 
-    def _replace(m: "re.Match[str]") -> str:
+    def _replace(m: re.Match[str]) -> str:
         name = m.group(1).strip()
         if not name:
             # Empty `[]` is invalid — leave the original text so asteval
@@ -260,4 +260,4 @@ class AstevalFormulaEvaluator:
         # A None result here could mean division by zero with all-1.0 inputs
         # (e.g. `x - x`). That's still a syntactically valid formula, so we
         # only reject None when it accompanies errors (already handled above).
-        _ = result  # noqa: F841
+        _ = result

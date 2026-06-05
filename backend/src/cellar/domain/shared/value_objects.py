@@ -152,9 +152,10 @@ class PredictedProperties(_FrozenModel):
 
     @model_validator(mode="after")
     def _source_requires_property(self) -> PredictedProperties:
-        if self.prediction_source is not None:
-            if all(v is None for v in (self.logd, self.pka, self.logs)):
-                raise ValueError("prediction_source requires at least one predicted property")
+        if self.prediction_source is not None and all(
+            v is None for v in (self.logd, self.pka, self.logs)
+        ):
+            raise ValueError("prediction_source requires at least one predicted property")
         return self
 
 

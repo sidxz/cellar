@@ -16,7 +16,6 @@ from cellar.domain.screening_assay.enums import ReadoutAggregation
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.shared.errors import ValidationError
 
-
 # ---------------------------------------------------------------------------
 # Output value object
 # ---------------------------------------------------------------------------

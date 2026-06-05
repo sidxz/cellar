@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -113,14 +114,13 @@ class ExecuteSearch:
             # Total count — only on first page to avoid repeated full scans
             total_count: int | None = None
             if input.cursor_id is None:
-                try:
+                # Non-critical — skip count on composer errors
+                with contextlib.suppress(ValueError):
                     total_count = await self._mol_reader.count_by_query(
                         input.workspace_id,
                         query_dict,
                         project_ids=input.project_ids,
                     )
-                except ValueError:
-                    pass  # Non-critical — skip count on composer errors
 
             # Determine next_cursor
             next_cursor: str | None = None
@@ -149,12 +149,8 @@ class ExecuteSearch:
                 mol_ids = [m.id for m in molecules]
                 # Per-column run scopes — pulled from each activity criterion
                 # and keyed by ``drc:<rd_id>`` to feed enrich_molecules.
-                drc_cols = [
-                    c for c in (input.protocol_columns or []) if c.startswith("drc:")
-                ]
-                criteria = (
-                    query_dict.get("criteria", []) if query_dict else []
-                )
+                drc_cols = [c for c in (input.protocol_columns or []) if c.startswith("drc:")]
+                criteria = query_dict.get("criteria", []) if query_dict else []
                 run_scopes = _collect_run_scopes(criteria, drc_cols)
                 activity_data_raw = await self._activity_service.enrich_molecules(
                     input.workspace_id,
@@ -189,8 +185,10 @@ def _query_has_similarity(criteria: list[dict]) -> bool:
     """Return True if any criterion (recursively) is a similarity structure search."""
     return any_match(
         criteria,
-        lambda c: c.get("type") == "structure"
-        and (c.get("kind") or c.get("search_type")) == "similarity",
+        lambda c: (
+            c.get("type") == "structure"
+            and (c.get("kind") or c.get("search_type")) == "similarity"
+        ),
     )
 
 

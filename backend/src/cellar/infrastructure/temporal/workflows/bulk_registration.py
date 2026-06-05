@@ -19,16 +19,16 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from cellar.infrastructure.temporal.activities.bulk_tracking import BulkTrackingActivities
-    from cellar.infrastructure.temporal.activities.file_parsing import (
-        FileParsingActivities,
-        ParseFileInput,
-    )
     from cellar.infrastructure.temporal.activities.dtos import (
         ChunkInput,
         ChunkItem,
         CompleteBulkRegInput,
         CreateBulkRegInput,
         PersistChunkItemsInput,
+    )
+    from cellar.infrastructure.temporal.activities.file_parsing import (
+        FileParsingActivities,
+        ParseFileInput,
     )
     from cellar.infrastructure.temporal.activities.registration import RegistrationActivities
 
@@ -153,8 +153,6 @@ class BulkRegistrationWorkflow:
             start_chunk = 0
 
         # --- Phase 3: Process chunks ---
-        chunks_in_this_run = 0
-
         for i, chunk_data in enumerate(chunks[start_chunk:], start=start_chunk):
             if self._cancel_requested:
                 break
@@ -222,7 +220,10 @@ class BulkRegistrationWorkflow:
 
             self._progress.chunks_processed = (input.resume_chunk_index or 0) + i + 1
 
-            chunks_in_this_run += 1
+            # Chunks processed in THIS workflow run (0-based since loop start,
+            # resets after continue-as-new); derived from the loop index so we
+            # don't hand-maintain a separate counter.
+            chunks_in_this_run = (i - start_chunk) + 1
 
             # Continue-as-new for very large files
             if chunks_in_this_run >= _CONTINUE_AS_NEW_EVERY and i + 1 < len(chunks):

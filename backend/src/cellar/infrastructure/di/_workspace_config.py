@@ -7,6 +7,7 @@ from __future__ import annotations
 from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.workspace_config.create_custom_field import CreateCustomField
 from cellar.application.workspace_config.create_data_source import CreateDataSource
 from cellar.application.workspace_config.create_external_api_key import CreateExternalApiKey
@@ -43,6 +44,15 @@ from cellar.application.workspace_config.list_protocol_forms import ListProtocol
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.tagging.assign_tag import AssignTag
+from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
+from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
+from cellar.application.workspace_config.tagging.list_tag_entities import ListTagEntities
+from cellar.application.workspace_config.tagging.list_tags import ListTags
+from cellar.application.workspace_config.tagging.merge_tags import MergeTags
+from cellar.application.workspace_config.tagging.rename_tag import RenameTag
+from cellar.application.workspace_config.tagging.set_entity_tags import SetEntityTags
+from cellar.application.workspace_config.tagging.unassign_tag import UnassignTag
 from cellar.application.workspace_config.update_custom_field import UpdateCustomField
 from cellar.application.workspace_config.update_data_source import UpdateDataSource
 from cellar.application.workspace_config.update_external_api_key import UpdateExternalApiKey
@@ -57,47 +67,6 @@ from cellar.application.workspace_config.update_workspace_settings import (
 )
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.controlled_vocabulary_repository import (
-    SQLAlchemyControlledVocabularyRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (
-    SQLAlchemyCustomFieldDefinitionRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.data_source_repository import (
-    SQLAlchemyDataSourceRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.external_api_key_repository import (
-    SQLAlchemyExternalApiKeyRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.ontology_slot_definition_repository import (
-    SQLAlchemyOntologySlotDefinitionRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.organization_repository import (
-    SQLAlchemyOrganizationRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_form_repository import (
-    SQLAlchemyProtocolFormRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.registration_form_repository import (
-    SQLAlchemyRegistrationFormRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
-    SQLAlchemySaltEntryRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
-    SQLAlchemyWorkspaceSettingsRepository,
-)
-from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from cellar.application.admin.admin_delete_registry import register_admin_delete
-from cellar.application.workspace_config.tagging.assign_tag import AssignTag
-from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
-from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
-from cellar.application.workspace_config.tagging.list_tag_entities import ListTagEntities
-from cellar.application.workspace_config.tagging.list_tags import ListTags
-from cellar.application.workspace_config.tagging.merge_tags import MergeTags
-from cellar.application.workspace_config.tagging.rename_tag import RenameTag
-from cellar.application.workspace_config.tagging.set_entity_tags import SetEntityTags
-from cellar.application.workspace_config.tagging.unassign_tag import UnassignTag
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_browse_repository import (
     SQLAlchemyTagBrowseRepository,
 )
@@ -107,6 +76,37 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository im
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import (
     SQLAlchemyTagRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.controlled_vocabulary_repository import (  # noqa: E501
+    SQLAlchemyControlledVocabularyRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (  # noqa: E501
+    SQLAlchemyCustomFieldDefinitionRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.data_source_repository import (
+    SQLAlchemyDataSourceRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.external_api_key_repository import (  # noqa: E501
+    SQLAlchemyExternalApiKeyRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.ontology_slot_definition_repository import (  # noqa: E501
+    SQLAlchemyOntologySlotDefinitionRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.organization_repository import (
+    SQLAlchemyOrganizationRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_form_repository import (  # noqa: E501
+    SQLAlchemyProtocolFormRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.registration_form_repository import (  # noqa: E501
+    SQLAlchemyRegistrationFormRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
+    SQLAlchemySaltEntryRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (  # noqa: E501
+    SQLAlchemyWorkspaceSettingsRepository,
+)
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 def register_workspace_config(container: Container) -> None:

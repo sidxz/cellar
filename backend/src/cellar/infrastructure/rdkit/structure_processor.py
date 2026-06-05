@@ -47,8 +47,12 @@ def _classify_stereochemistry(mol: object) -> Stereochemistry:
         if stereo == Chem.BondStereo.STEREONONE:
             continue
         bond_total += 1
-        if stereo in (Chem.BondStereo.STEREOE, Chem.BondStereo.STEREOZ,
-                      Chem.BondStereo.STEREOCIS, Chem.BondStereo.STEREOTRANS):
+        if stereo in (
+            Chem.BondStereo.STEREOE,
+            Chem.BondStereo.STEREOZ,
+            Chem.BondStereo.STEREOCIS,
+            Chem.BondStereo.STEREOTRANS,
+        ):
             bond_defined += 1
 
     total = atom_total + bond_total

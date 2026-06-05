@@ -1,4 +1,7 @@
-"""BulkRegistration aggregate root — groups multiple molecule registrations from a single file upload."""
+"""BulkRegistration aggregate root.
+
+Groups multiple molecule registrations from a single file upload.
+"""
 
 from __future__ import annotations
 

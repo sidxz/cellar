@@ -7,11 +7,11 @@ runs it inline for environments without a Temporal cluster.
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import AsyncIterator, Callable
 
 import structlog
 
@@ -125,7 +125,7 @@ class RenderExport:
                 await self.repo.save(job)
                 await self.uow.commit()
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("export.failed", job_id=str(job_id))
             async with self.uow:
                 job = await self.repo.find_by_id_in_workspace(workspace_id, job_id)
@@ -161,7 +161,11 @@ def _title_for(job: ExportJob) -> str:
 
 
 def _image_size_for(job: ExportJob) -> str:
-    rc = (job.query_snapshot or {}).get("reportConfig") or (job.query_snapshot or {}).get("report_config") or {}
+    rc = (
+        (job.query_snapshot or {}).get("reportConfig")
+        or (job.query_snapshot or {}).get("report_config")
+        or {}
+    )
     size = rc.get("imageSize")
     return size if size in ("small", "medium", "large") else "medium"
 

@@ -24,7 +24,6 @@ from cellar.domain.research_organization.saved_search import SavedSearch
 class ProjectRepository(Protocol):
     """Repository for Project aggregates."""
 
-
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Project | None: ...
@@ -52,7 +51,6 @@ class CollectionRepository(Protocol):
 
     Membership (molecule join table) is managed here, not in the aggregate.
     """
-
 
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
@@ -119,7 +117,6 @@ class CollectionRepository(Protocol):
 class SavedSearchRepository(Protocol):
     """Repository for SavedSearch aggregates."""
 
-
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> SavedSearch | None: ...
@@ -181,7 +178,6 @@ class CampaignRepository(Protocol):
     CampaignLockChecker Protocol structurally.
     """
 
-
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Campaign | None: ...
@@ -218,7 +214,6 @@ class CampaignRepository(Protocol):
 class CollectionImportTemplateRepository(Protocol):
     """Repository for CollectionImportTemplate aggregates."""
 
-
     async def save(self, template: CollectionImportTemplate) -> None: ...
 
     async def find_by_id_in_workspace(
@@ -229,6 +224,4 @@ class CollectionImportTemplateRepository(Protocol):
         self, workspace_id: uuid.UUID
     ) -> list[CollectionImportTemplate]: ...
 
-    async def delete(
-        self, workspace_id: uuid.UUID, template_id: uuid.UUID
-    ) -> None: ...
+    async def delete(self, workspace_id: uuid.UUID, template_id: uuid.UUID) -> None: ...

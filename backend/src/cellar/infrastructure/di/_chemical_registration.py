@@ -107,49 +107,49 @@ from cellar.infrastructure.parsers.chemical_file_parser import BulkFileParserAda
 from cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_merge_side_effect import (
     AttachmentMergeSideEffect,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_item_reader import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_item_reader import (  # noqa: E501
     SQLAlchemyBulkRegistrationItemReader,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (  # noqa: E501
     SQLAlchemyBulkRegistrationRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (  # noqa: E501
     SQLAlchemyDisclosureRequestRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.merge_event_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.merge_event_repository import (  # noqa: E501
     SQLAlchemyMergeEventRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.merge_impact_reader import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.merge_impact_reader import (  # noqa: E501
     SQLAlchemyMergeImpactReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
     SQLAlchemyMoleculeReader,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_relationship_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_relationship_repository import (  # noqa: E501
     SQLAlchemyMoleculeRelationshipRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_repository import (  # noqa: E501
     SQLAlchemySynthesisRouteRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_merge_side_effect import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_merge_side_effect import (  # noqa: E501
     CollectionMergeSideEffect,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.molecule_tag_merge_side_effect import (
     MoleculeTagMergeSideEffect,
 )
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (  # noqa: E501
     SQLAlchemyCustomFieldDefinitionRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
     SQLAlchemySaltEntryRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (  # noqa: E501
     SQLAlchemyWorkspaceSettingsRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
@@ -245,6 +245,7 @@ def register_chemical_registration(container: Container) -> None:
     container.define(ListMolecules, _mol_query(ListMolecules))
     container.define(ListMoleculesByIds, _mol_query(ListMoleculesByIds))
     container.define(GetMoleculeByIdentifier, _mol_query(GetMoleculeByIdentifier))
+
     def _add_identifier(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         mol_repo = SQLAlchemyMoleculeRepository(uow)
@@ -584,7 +585,7 @@ def register_chemical_registration(container: Container) -> None:
 def build_chemical_registration_admin_repos(uow) -> dict:
     """Build the repo map for chemical-registration Tier-1 admin deletes."""
     from cellar.application.admin._adapter import RepoAdapter
-    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (  # noqa: E501
         SQLAlchemyCompoundFlagRepository,
     )
 

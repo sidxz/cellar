@@ -8,12 +8,13 @@ best-effort.
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 
 import sqlalchemy as sa
 
-from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.application.attachment.storage import StorageClient
+from cellar.application.shared.unit_of_work import UnitOfWork
 
 
 class AttachmentMergeSideEffect:
@@ -79,7 +80,5 @@ class AttachmentMergeSideEffect:
 
         # Step 4: Best-effort blob cleanup
         for key in orphaned_keys:
-            try:
+            with contextlib.suppress(Exception):
                 await self._storage.delete(key)
-            except Exception:
-                pass  # Best-effort blob cleanup

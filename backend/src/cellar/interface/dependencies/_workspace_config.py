@@ -47,6 +47,15 @@ from cellar.application.workspace_config.list_protocol_forms import (
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.tagging.assign_tag import AssignTag
+from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
+from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
+from cellar.application.workspace_config.tagging.list_tag_entities import ListTagEntities
+from cellar.application.workspace_config.tagging.list_tags import ListTags
+from cellar.application.workspace_config.tagging.merge_tags import MergeTags
+from cellar.application.workspace_config.tagging.rename_tag import RenameTag
+from cellar.application.workspace_config.tagging.set_entity_tags import SetEntityTags
+from cellar.application.workspace_config.tagging.unassign_tag import UnassignTag
 from cellar.application.workspace_config.update_custom_field import UpdateCustomField
 from cellar.application.workspace_config.update_data_source import UpdateDataSource
 from cellar.application.workspace_config.update_external_api_key import UpdateExternalApiKey
@@ -59,78 +68,69 @@ from cellar.application.workspace_config.update_registration_form import UpdateR
 from cellar.application.workspace_config.update_salt_entry import UpdateSaltEntry
 from cellar.application.workspace_config.update_vocabulary import UpdateVocabulary
 from cellar.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
-from cellar.application.workspace_config.tagging.assign_tag import AssignTag
-from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
-from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
-from cellar.application.workspace_config.tagging.list_tag_entities import ListTagEntities
-from cellar.application.workspace_config.tagging.list_tags import ListTags
-from cellar.application.workspace_config.tagging.merge_tags import MergeTags
-from cellar.application.workspace_config.tagging.rename_tag import RenameTag
-from cellar.application.workspace_config.tagging.set_entity_tags import SetEntityTags
-from cellar.application.workspace_config.tagging.unassign_tag import UnassignTag
 
 from ._core import _get_use_case
 
 __all__ = [
-    # Workspace config
-    "CreateOrganizationDep",
-    "UpdateOrganizationDep",
-    "GetOrganizationDep",
-    "ListOrganizationsDep",
-    "GetWorkspaceSettingsDep",
-    "UpdateWorkspaceSettingsDep",
-    "CreateVocabularyDep",
-    "UpdateVocabularyDep",
-    "ListVocabulariesDep",
-    "DeleteVocabularyDep",
-    "CreateCustomFieldDep",
-    "ListCustomFieldsDep",
-    "UpdateCustomFieldDep",
-    "DeleteCustomFieldDep",
-    "CreateSaltEntryDep",
-    "ListSaltEntriesDep",
-    "UpdateSaltEntryDep",
-    "DeleteSaltEntryDep",
-    "CreateRegistrationFormDep",
-    "GetRegistrationFormDep",
-    "ListRegistrationFormsDep",
-    "UpdateRegistrationFormDep",
-    "DeleteRegistrationFormDep",
-    # External API keys
-    "CreateExternalApiKeyDep",
-    "ListExternalApiKeysDep",
-    "UpdateExternalApiKeyDep",
-    "DeleteExternalApiKeyDep",
-    # Data source
-    "CreateDataSourceDep",
-    "GetDataSourceDep",
-    "ListDataSourcesDep",
-    "UpdateDataSourceDep",
-    "DeleteDataSourceDep",
-    # Ontology slots
-    "CreateOntologySlotDep",
-    "ListOntologySlotsDep",
-    "UpdateOntologySlotDep",
-    "DeleteOntologySlotDep",
-    # Ontology search + annotations
-    "SearchOntologyDep",
-    "SetOntologyAnnotationDep",
-    "RemoveOntologyAnnotationDep",
-    # Protocol forms
-    "CreateProtocolFormDep",
-    "ListProtocolFormsDep",
-    "UpdateProtocolFormDep",
-    "DeleteProtocolFormDep",
     # Tags
     "AssignTagDep",
-    "UnassignTagDep",
-    "SetEntityTagsDep",
-    "ListTagsDep",
-    "ListTagEntitiesDep",
-    "GetTagsForEntityDep",
-    "RenameTagDep",
-    "MergeTagsDep",
+    "CreateCustomFieldDep",
+    # Data source
+    "CreateDataSourceDep",
+    # External API keys
+    "CreateExternalApiKeyDep",
+    # Ontology slots
+    "CreateOntologySlotDep",
+    # Workspace config
+    "CreateOrganizationDep",
+    # Protocol forms
+    "CreateProtocolFormDep",
+    "CreateRegistrationFormDep",
+    "CreateSaltEntryDep",
+    "CreateVocabularyDep",
+    "DeleteCustomFieldDep",
+    "DeleteDataSourceDep",
+    "DeleteExternalApiKeyDep",
+    "DeleteOntologySlotDep",
+    "DeleteProtocolFormDep",
+    "DeleteRegistrationFormDep",
+    "DeleteSaltEntryDep",
     "DeleteTagDep",
+    "DeleteVocabularyDep",
+    "GetDataSourceDep",
+    "GetOrganizationDep",
+    "GetRegistrationFormDep",
+    "GetTagsForEntityDep",
+    "GetWorkspaceSettingsDep",
+    "ListCustomFieldsDep",
+    "ListDataSourcesDep",
+    "ListExternalApiKeysDep",
+    "ListOntologySlotsDep",
+    "ListOrganizationsDep",
+    "ListProtocolFormsDep",
+    "ListRegistrationFormsDep",
+    "ListSaltEntriesDep",
+    "ListTagEntitiesDep",
+    "ListTagsDep",
+    "ListVocabulariesDep",
+    "MergeTagsDep",
+    "RemoveOntologyAnnotationDep",
+    "RenameTagDep",
+    # Ontology search + annotations
+    "SearchOntologyDep",
+    "SetEntityTagsDep",
+    "SetOntologyAnnotationDep",
+    "UnassignTagDep",
+    "UpdateCustomFieldDep",
+    "UpdateDataSourceDep",
+    "UpdateExternalApiKeyDep",
+    "UpdateOntologySlotDep",
+    "UpdateOrganizationDep",
+    "UpdateProtocolFormDep",
+    "UpdateRegistrationFormDep",
+    "UpdateSaltEntryDep",
+    "UpdateVocabularyDep",
+    "UpdateWorkspaceSettingsDep",
 ]
 
 # --- Workspace Config dependencies ---

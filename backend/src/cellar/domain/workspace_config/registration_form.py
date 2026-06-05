@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from cellar.domain.shared.entity import AggregateRoot
@@ -80,7 +79,7 @@ class RegistrationForm(AggregateRoot):
         applies_to: FieldTarget,
         is_default: bool = False,
         field_overrides: list[FieldOverride] | None = None,
-    ) -> "RegistrationForm":
+    ) -> RegistrationForm:
         """Create and validate a new RegistrationForm."""
         if not name or not name.strip():
             raise ValidationError("name must not be empty")

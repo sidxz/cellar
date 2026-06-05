@@ -28,10 +28,10 @@ from cellar.application.inventory.sample_requests import (
     UpdateSampleRequest,
     UpdateSampleRequestCommand,
 )
+from cellar.application.shared.sentinel import UNSET
 from cellar.domain.inventory.sample_request import SampleRequest
 from cellar.interface.dependencies import AuthDep, _get_use_case
 from cellar.interface.error_handlers import result_to_response
-from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["sample-requests"])
 

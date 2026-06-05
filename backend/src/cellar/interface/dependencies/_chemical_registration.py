@@ -56,48 +56,46 @@ from cellar.application.chemical_registration.update_molecule import UpdateMolec
 from ._core import _get_use_case
 
 __all__ = [
-    # Chemical registration
-    "RegisterMoleculeDep",
-    "GetMoleculeDep",
-    "ListMoleculesDep",
-    "ListMoleculesByIdsDep",
-    "UpdateMoleculeDep",
-    "SearchMoleculesDep",
-    "DepictMoleculesDep",
-    "ExportMoleculesSDFDep",
-    "GetMoleculeByIdentifierDep",
     "AddIdentifierDep",
-    "RemoveIdentifierDep",
-    "ListIdentifiersDep",
-    "CreateRelationshipDep",
-    "ListRelationshipsDep",
-    "DeleteRelationshipDep",
-    # Disclosure + merge
-    "DisclosureServiceDep",
-    "MergeServiceDep",
-    "GetDisclosureDep",
-    "ListDisclosuresDep",
-    "ListDisclosuresByWorkspaceDep",
-    "ResolveDisclosureConflictDep",
-    "GetMergeHistoryDep",
-    "ConfirmDisclosureDep",
-    "RejectDisclosureDep",
-    "GetMergeImpactDep",
     # Bulk registration
     "BulkRegistrationServiceDep",
-    "StartBulkRegistrationDep",
+    "ConfirmDisclosureDep",
+    "CreateRelationshipDep",
+    "DeleteRelationshipDep",
+    "DepictMoleculesDep",
+    # Disclosure + merge
+    "DisclosureServiceDep",
+    "ExportMoleculesSDFDep",
     "GetBulkRegistrationRuntimeStatusDep",
-    "PreviewBulkRegistrationFileDep",
+    "GetDisclosureDep",
+    "GetMergeHistoryDep",
+    "GetMergeImpactDep",
+    "GetMoleculeByIdentifierDep",
+    "GetMoleculeDep",
     "ListBulkRegistrationItemsDep",
+    "ListDisclosuresByWorkspaceDep",
+    "ListDisclosuresDep",
+    "ListIdentifiersDep",
+    "ListMoleculesByIdsDep",
+    "ListMoleculesDep",
+    "ListRelationshipsDep",
+    "MergeServiceDep",
+    "PreviewBulkRegistrationFileDep",
+    # Chemical registration
+    "RegisterMoleculeDep",
+    "RejectDisclosureDep",
+    "RemoveIdentifierDep",
+    "ResolveDisclosureConflictDep",
+    "SearchMoleculesDep",
+    "StartBulkRegistrationDep",
+    "UpdateMoleculeDep",
 ]
 
 # --- Chemical Registration dependencies ---
 RegisterMoleculeDep = Annotated[RegisterMolecule, Depends(_get_use_case(RegisterMolecule))]
 GetMoleculeDep = Annotated[GetMolecule, Depends(_get_use_case(GetMolecule))]
 ListMoleculesDep = Annotated[ListMolecules, Depends(_get_use_case(ListMolecules))]
-ListMoleculesByIdsDep = Annotated[
-    ListMoleculesByIds, Depends(_get_use_case(ListMoleculesByIds))
-]
+ListMoleculesByIdsDep = Annotated[ListMoleculesByIds, Depends(_get_use_case(ListMoleculesByIds))]
 UpdateMoleculeDep = Annotated[UpdateMolecule, Depends(_get_use_case(UpdateMolecule))]
 SearchMoleculesDep = Annotated[SearchMolecules, Depends(_get_use_case(SearchMolecules))]
 DepictMoleculesDep = Annotated[DepictMolecules, Depends(_get_use_case(DepictMolecules))]

@@ -95,12 +95,8 @@ class ExportPlateLayout:
                 rows.append(
                     PlateLayoutRow(
                         well=pos,
-                        batch_number=(
-                            number_by_id.get(wa.batch_id, "") if wa.batch_id else ""
-                        ),
-                        concentration_value=(
-                            wa.concentration.value if wa.concentration else None
-                        ),
+                        batch_number=(number_by_id.get(wa.batch_id, "") if wa.batch_id else ""),
+                        concentration_value=(wa.concentration.value if wa.concentration else None),
                         concentration_unit=(
                             wa.concentration.unit.value if wa.concentration else None
                         ),

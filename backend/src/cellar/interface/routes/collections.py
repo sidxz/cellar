@@ -369,8 +369,8 @@ async def bulk_add_to_collection(
 async def _run_bulk(
     collection_id: uuid.UUID,
     body: BulkAddRequestBody,
-    auth,  # noqa: ANN001
-    use_case,  # noqa: ANN001
+    auth,
+    use_case,
     *,
     dry_run: bool,
 ) -> BulkAddResponse:
@@ -398,7 +398,7 @@ async def _run_bulk(
     return bulk_add_result_to_response(result)
 
 
-def bulk_add_result_to_response(result) -> BulkAddResponse:  # noqa: ANN001
+def bulk_add_result_to_response(result) -> BulkAddResponse:
     """Map a BulkAddResult (domain) to the BulkAddResponse wire model.
 
     Shared by the preview/commit endpoints and the preview re-resolve endpoint

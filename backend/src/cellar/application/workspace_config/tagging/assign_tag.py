@@ -54,14 +54,10 @@ class AssignTag:
 
         async with self._uow:
             link_repo = self._link_provider.for_type(input.entity_type)
-            if not await link_repo.entity_exists_in_workspace(
-                input.workspace_id, input.entity_id
-            ):
+            if not await link_repo.entity_exists_in_workspace(input.workspace_id, input.entity_id):
                 return Failure(NotFoundError(input.entity_type.value, str(input.entity_id)))
 
-            tag = await self._tag_repo.get_or_create(
-                input.workspace_id, name, input.assigned_by
-            )
+            tag = await self._tag_repo.get_or_create(input.workspace_id, name, input.assigned_by)
             inserted = await link_repo.add(
                 input.workspace_id, input.entity_id, tag.id, input.assigned_by
             )

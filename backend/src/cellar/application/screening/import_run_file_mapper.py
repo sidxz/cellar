@@ -96,7 +96,8 @@ async def _auto_create_missing_batches(
     unmatched_batch_refs: frozenset[str],
     batch_index: dict[str, tuple[uuid.UUID, uuid.UUID]],
     compound_index: dict[str, CompoundCandidate],
-    ensure_batch_exists,  # EnsureBatchExists use case (type-annotated loosely to avoid circular import)
+    # EnsureBatchExists use case (type-annotated loosely to avoid circular import)
+    ensure_batch_exists,
     workspace_id: uuid.UUID,
     importing_user_id: uuid.UUID,
     source_label: str,
@@ -118,9 +119,13 @@ async def _auto_create_missing_batches(
     # Build a map: batch_ref → compound_ref for the first matching row.
     ref_to_compound: dict[str, str] = {}
     for r in rows:
-        if r.batch_ref and r.batch_ref in unmatched_batch_refs:
-            if r.batch_ref not in ref_to_compound and r.compound_ref:
-                ref_to_compound[r.batch_ref] = r.compound_ref
+        if (
+            r.batch_ref
+            and r.batch_ref in unmatched_batch_refs
+            and r.batch_ref not in ref_to_compound
+            and r.compound_ref
+        ):
+            ref_to_compound[r.batch_ref] = r.compound_ref
 
     from returns.result import Success
 

@@ -11,6 +11,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from cellar.domain.shared.entity import AggregateRoot
+from cellar.domain.workspace_config.events import WorkspaceSettingsUpdated
+
 _PREFIX_PATTERN = re.compile(r"^[A-Z]{2,8}-$")
 _DEFAULT_PREFIX = "CC-"
 _DEFAULT_WIDTH = 6
@@ -19,9 +22,6 @@ _WIDTH_MAX = 8
 _DEFAULT_BATCH_WIDTH = 3
 _BATCH_WIDTH_MIN = 2
 _BATCH_WIDTH_MAX = 6
-
-from cellar.domain.shared.entity import AggregateRoot
-from cellar.domain.workspace_config.events import WorkspaceSettingsUpdated
 
 
 class WorkspaceSettings(AggregateRoot):
@@ -130,8 +130,7 @@ class WorkspaceSettings(AggregateRoot):
                     pfx = rules["registration_number_prefix"]
                     if not isinstance(pfx, str) or not _PREFIX_PATTERN.match(pfx):
                         raise ValueError(
-                            "registration_number_prefix must match ^[A-Z]{2,8}-$ "
-                            f"(got: {pfx!r})"
+                            f"registration_number_prefix must match ^[A-Z]{{2,8}}-$ (got: {pfx!r})"
                         )
                 if "registration_number_width" in rules:
                     w = rules["registration_number_width"]
@@ -152,8 +151,8 @@ class WorkspaceSettings(AggregateRoot):
                         )
                     if not (_BATCH_WIDTH_MIN <= bw <= _BATCH_WIDTH_MAX):
                         raise ValueError(
-                            f"batch_sequence_width must be in [{_BATCH_WIDTH_MIN}, {_BATCH_WIDTH_MAX}] "
-                            f"(got: {bw})"
+                            f"batch_sequence_width must be in "
+                            f"[{_BATCH_WIDTH_MIN}, {_BATCH_WIDTH_MAX}] (got: {bw})"
                         )
 
         for key in (

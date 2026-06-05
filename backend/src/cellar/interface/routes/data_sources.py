@@ -8,24 +8,20 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from cellar.application.shared.sentinel import UNSET
 from cellar.application.workspace_config.create_data_source import (
-    CreateDataSource,
     CreateDataSourceCommand,
 )
 from cellar.application.workspace_config.delete_data_source import (
-    DeleteDataSource,
     DeleteDataSourceCommand,
 )
 from cellar.application.workspace_config.get_data_source import (
-    GetDataSource,
     GetDataSourceQuery,
 )
 from cellar.application.workspace_config.list_data_sources import (
-    ListDataSources,
     ListDataSourcesQuery,
 )
 from cellar.application.workspace_config.update_data_source import (
-    UpdateDataSource,
     UpdateDataSourceCommand,
 )
 from cellar.domain.workspace_config.data_source import (
@@ -43,7 +39,6 @@ from cellar.interface.dependencies import (
 )
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
-from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1/data-sources", tags=["data-sources"])
 

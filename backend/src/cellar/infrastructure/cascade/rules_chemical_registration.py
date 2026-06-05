@@ -26,9 +26,8 @@ Schema notes / deviations from plan:
 """
 
 from cellar.domain.shared.cascade.actions import CascadeAction as A
-from cellar.infrastructure.cascade.rules import CascadeRule
 from cellar.infrastructure.cascade.registry import register_rules
-
+from cellar.infrastructure.cascade.rules import CascadeRule
 
 register_rules(
     # -------------------------------------------------------------------------

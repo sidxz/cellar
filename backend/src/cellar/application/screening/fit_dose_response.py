@@ -227,7 +227,8 @@ class FitDoseResponseCurves:
         if protocol.workspace_id != workspace_id:
             return Failure(
                 AuthorizationError(
-                    "Protocol workspace mismatch — protocol does not belong to the caller's workspace"
+                    "Protocol workspace mismatch — protocol does not belong to "
+                    "the caller's workspace"
                 )
             )
 

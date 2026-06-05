@@ -18,10 +18,10 @@ from cellar.infrastructure.temporal.orchestrators.cdd_plate_import import (
 )
 
 __all__ = [
-    "TemporalCddMoleculeImportOrchestrator",
+    "NullBulkRegistrationOrchestrator",
     "NullCddMoleculeImportOrchestrator",
-    "TemporalCddPlateImportOrchestrator",
     "NullCddPlateImportOrchestrator",
     "TemporalBulkRegistrationOrchestrator",
-    "NullBulkRegistrationOrchestrator",
+    "TemporalCddMoleculeImportOrchestrator",
+    "TemporalCddPlateImportOrchestrator",
 ]

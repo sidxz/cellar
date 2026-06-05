@@ -6,15 +6,15 @@ from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.admin.admin_hard_delete import AdminHardDelete
-from cellar.application.admin.cascade_preview import CascadePreview
 from cellar.application.admin.cascade_delete import CascadeDelete
+from cellar.application.admin.cascade_preview import CascadePreview
 from cellar.application.audit.audit_recording_service import AuditRecordingService
 from cellar.infrastructure.cascade.cascade_service_impl import UoWBackedCascadeService
-from cellar.infrastructure.di._workspace_config import build_workspace_config_admin_repos
 from cellar.infrastructure.di._chemical_registration import build_chemical_registration_admin_repos
-from cellar.infrastructure.di._screening import build_screening_admin_repos
 from cellar.infrastructure.di._inventory import build_inventory_admin_repos
 from cellar.infrastructure.di._research_organization import build_research_org_admin_repos
+from cellar.infrastructure.di._screening import build_screening_admin_repos
+from cellar.infrastructure.di._workspace_config import build_workspace_config_admin_repos
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 

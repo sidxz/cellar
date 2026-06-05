@@ -10,7 +10,7 @@ Three paths:
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response, status
@@ -20,15 +20,12 @@ from cellar.application.research_organization.collection_membership import (
     ListCollectionMoleculesQuery,
 )
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import (
-    CancelScaffoldTreeJob,
     CancelScaffoldTreeJobInput,
 )
 from cellar.application.sar_analysis.get_scaffold_tree_job import (
-    GetScaffoldTreeJob,
     GetScaffoldTreeJobInput,
 )
 from cellar.application.sar_analysis.start_scaffold_tree_job import (
-    StartScaffoldTreeJob,
     StartScaffoldTreeJobInput,
 )
 from cellar.domain.sar_analysis.scaffold_tree_job import ScaffoldTreeJob
@@ -114,8 +111,7 @@ def _serialize_tree(tree: ScaffoldTreeResult) -> dict:
             for n in tree.nodes
         ],
         "edges": [
-            {"parent_smiles": e.parent_smiles, "child_smiles": e.child_smiles}
-            for e in tree.edges
+            {"parent_smiles": e.parent_smiles, "child_smiles": e.child_smiles} for e in tree.edges
         ],
         "stats": dataclasses.asdict(tree.stats),
     }
@@ -182,7 +178,7 @@ async def start_scaffold_tree(
             molecule_ids=molecule_ids,
             workspace_id=auth.workspace_id,
             requested_by=auth.user_id,
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
         )
     )
     if out.tree is not None:
@@ -202,9 +198,7 @@ async def get_scaffold_tree_job(
     Returns the computed tree once ``status == "ready"``.
     """
     job = result_to_response(
-        await uc.execute(
-            GetScaffoldTreeJobInput(job_id=job_id, workspace_id=auth.workspace_id)
-        )
+        await uc.execute(GetScaffoldTreeJobInput(job_id=job_id, workspace_id=auth.workspace_id))
     )
     return JobDetailResponse(
         id=job.id,
@@ -230,7 +224,7 @@ async def cancel_scaffold_tree_job(
             CancelScaffoldTreeJobInput(
                 job_id=job_id,
                 workspace_id=auth.workspace_id,
-                now=datetime.now(timezone.utc),
+                now=datetime.now(UTC),
             )
         )
     )

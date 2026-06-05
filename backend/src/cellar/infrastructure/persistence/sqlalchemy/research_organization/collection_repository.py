@@ -154,9 +154,7 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
                     ),
                 )
             )
-        stmt = stmt.order_by(
-            CollectionModel.updated_at.desc(), CollectionModel.id.desc()
-        )
+        stmt = stmt.order_by(CollectionModel.updated_at.desc(), CollectionModel.id.desc())
         if limit is not None:
             stmt = stmt.limit(limit)
 

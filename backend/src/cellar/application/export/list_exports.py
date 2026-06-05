@@ -58,9 +58,7 @@ def _to_view(job: ExportJob) -> ExportStatusView:
         progress=job.progress,
         error_message=job.error_message,
         download_url=(
-            f"/api/v1/exports/{job.id}/download"
-            if job.status == ExportStatus.READY
-            else None
+            f"/api/v1/exports/{job.id}/download" if job.status == ExportStatus.READY else None
         ),
         byte_size=job.byte_size,
         filename=job.filename,

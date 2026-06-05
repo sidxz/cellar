@@ -12,7 +12,6 @@ from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
-from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.screening_assay.enums import (
     ConditionDataType,
     PosControlSignal,
@@ -28,6 +27,7 @@ from cellar.domain.screening_assay.protocol import (
     ReadoutDefinition,
 )
 from cellar.domain.shared.enums import ConcentrationUnit
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.ontology import OntologyTerm
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -90,10 +90,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         tag_logic: str = "any",
     ) -> list[Protocol]:
         """List protocols in a workspace, ordered by id for stable cursor paging."""
-        stmt = (
-            select(ProtocolModel)
-            .where(ProtocolModel.workspace_id == workspace_id)
-        )
+        stmt = select(ProtocolModel).where(ProtocolModel.workspace_id == workspace_id)
         if tags:
             stmt = stmt.where(
                 ProtocolModel.id.in_(
@@ -198,12 +195,9 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         subq = select(protocol_projects.c.protocol_id).where(
             protocol_projects.c.project_id == project_id
         )
-        stmt = (
-            select(ProtocolModel)
-            .where(
-                ProtocolModel.workspace_id == workspace_id,
-                ProtocolModel.id.in_(subq),
-            )
+        stmt = select(ProtocolModel).where(
+            ProtocolModel.workspace_id == workspace_id,
+            ProtocolModel.id.in_(subq),
         )
         if tags:
             stmt = stmt.where(

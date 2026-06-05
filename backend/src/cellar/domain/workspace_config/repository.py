@@ -6,8 +6,8 @@ import uuid
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
-from cellar.domain.workspace_config.data_source import DataSource
 from cellar.domain.workspace_config.custom_field_definition import CustomFieldDefinition
+from cellar.domain.workspace_config.data_source import DataSource
 from cellar.domain.workspace_config.enums import FieldTarget
 from cellar.domain.workspace_config.external_api_key import ExternalApiKey
 from cellar.domain.workspace_config.ontology_slot_definition import OntologySlotDefinition

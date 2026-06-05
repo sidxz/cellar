@@ -72,11 +72,7 @@ class ScaffoldNetworkBuilder:
         Returns:
             RawScaffoldNetwork with node_smiles and (parent, child) edges.
         """
-        ringed = [
-            m
-            for m in mols
-            if m is not None and m.GetRingInfo().NumRings() > 0
-        ]
+        ringed = [m for m in mols if m is not None and m.GetRingInfo().NumRings() > 0]
         if not ringed:
             return RawScaffoldNetwork(node_smiles=[], edges=[])
 

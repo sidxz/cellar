@@ -223,9 +223,7 @@ def _jsonb_intercept_value(kind: str, level: float) -> ColumnElement:
     # navigator works on the unpacked element. Without an explicit type the
     # ColumnClause is unspec'd and `iv.c.value["spec"]` raises.
     iv_col = column("value", JSONB())
-    iv = sa.func.jsonb_array_elements(
-        DoseResponseCurveModel.intercept_values
-    ).table_valued(iv_col)
+    iv = sa.func.jsonb_array_elements(DoseResponseCurveModel.intercept_values).table_valued(iv_col)
     return (
         sa.select(sa.cast(iv.c.value["value"].astext, sa.Float))
         .where(
@@ -267,7 +265,8 @@ def _activity_presence_clause(
             if dt:
                 conds.append(RunModel.run_date <= _date.fromisoformat(dt))
         elif mode == "past_n_days":
-            from datetime import date as _date, timedelta
+            from datetime import date as _date
+            from datetime import timedelta
 
             try:
                 days = int(run_scope.get("days", 30))
@@ -344,7 +343,10 @@ def _run_scope_filter(
         try:
             days = int(run_scope.get("days", 30))
         except (TypeError, ValueError) as e:
-            msg = f"run_scope mode='past_n_days' requires integer days, got {run_scope.get('days')!r}"
+            msg = (
+                "run_scope mode='past_n_days' requires integer days, "
+                f"got {run_scope.get('days')!r}"
+            )
             raise ValueError(msg) from e
         cutoff = date.today() - timedelta(days=max(days, 0))
         return run_id_col.in_(

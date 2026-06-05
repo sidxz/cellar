@@ -9,7 +9,7 @@ Three paths:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response, status
@@ -19,15 +19,12 @@ from cellar.application.research_organization.collection_membership import (
     ListCollectionMoleculesQuery,
 )
 from cellar.application.sar_analysis.cancel_umap_cluster_job import (
-    CancelUmapClusterJob,
     CancelUmapClusterJobInput,
 )
 from cellar.application.sar_analysis.get_umap_cluster_job import (
-    GetUmapClusterJob,
     GetUmapClusterJobInput,
 )
 from cellar.application.sar_analysis.start_umap_cluster_job import (
-    StartUmapClusterJob,
     StartUmapClusterJobInput,
 )
 from cellar.domain.sar_analysis.umap_job import UmapJob
@@ -76,7 +73,7 @@ class StartUmapClusterBody(BaseModel):
     threshold: float | None = Field(None, ge=0.05, le=0.95)
 
     @model_validator(mode="after")
-    def _check_exactly_one_source(self) -> "StartUmapClusterBody":
+    def _check_exactly_one_source(self) -> StartUmapClusterBody:
         has_collection = self.collection_id is not None
         has_mols = bool(self.molecule_ids)
         if has_collection == has_mols:
@@ -84,7 +81,7 @@ class StartUmapClusterBody(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _check_picker_params(self) -> "StartUmapClusterBody":
+    def _check_picker_params(self) -> StartUmapClusterBody:
         if self.picker == "maxmin" and self.n is None:
             raise ValueError("n is required when picker=maxmin.")
         return self
@@ -235,7 +232,7 @@ async def start_umap_cluster(
             picker_params=picker_params,
             workspace_id=auth.workspace_id,
             requested_by=auth.user_id,
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
         )
     )
 
@@ -257,9 +254,7 @@ async def get_umap_cluster_job(
     Returns the computed result once ``status == "ready"``.
     """
     job = result_to_response(
-        await uc.execute(
-            GetUmapClusterJobInput(job_id=job_id, workspace_id=auth.workspace_id)
-        )
+        await uc.execute(GetUmapClusterJobInput(job_id=job_id, workspace_id=auth.workspace_id))
     )
     return StartUmapClusterResponse(
         result=_result_to_dto(job.result) if job.result is not None else None,
@@ -279,7 +274,5 @@ async def cancel_umap_cluster_job(
     error handler. The 204 response body stays empty regardless.
     """
     result_to_response(
-        await uc.execute(
-            CancelUmapClusterJobInput(job_id=job_id, workspace_id=auth.workspace_id)
-        )
+        await uc.execute(CancelUmapClusterJobInput(job_id=job_id, workspace_id=auth.workspace_id))
     )

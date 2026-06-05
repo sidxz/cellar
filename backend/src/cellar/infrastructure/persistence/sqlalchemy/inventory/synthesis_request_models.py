@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import DateTime, Date, Float, Index, String, Text, Uuid
+from sqlalchemy import Date, DateTime, Float, Index, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from cellar.infrastructure.persistence.sqlalchemy.base import (

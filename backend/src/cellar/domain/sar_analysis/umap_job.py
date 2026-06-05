@@ -19,7 +19,7 @@ from uuid import UUID
 from cellar.domain.sar_analysis.umap_types import UmapResult
 
 
-class UmapJobStatus(str, enum.Enum):
+class UmapJobStatus(enum.StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     READY = "ready"
@@ -66,7 +66,7 @@ class UmapJob:
         picker_params: dict[str, Any],
         picker_param_hash: str,
         now: datetime,
-    ) -> "UmapJob":
+    ) -> UmapJob:
         return cls(
             id=uuid.uuid4(),
             workspace_id=workspace_id,
@@ -78,12 +78,12 @@ class UmapJob:
             requested_at=now,
         )
 
-    def mark_running(self, now: datetime) -> "UmapJob":
+    def mark_running(self, now: datetime) -> UmapJob:
         if self.status != UmapJobStatus.PENDING:
             raise InvalidUmapJobTransition(f"Cannot mark RUNNING from {self.status}")
         return replace(self, status=UmapJobStatus.RUNNING, started_at=now)
 
-    def mark_ready(self, result: UmapResult, now: datetime) -> "UmapJob":
+    def mark_ready(self, result: UmapResult, now: datetime) -> UmapJob:
         if self.status != UmapJobStatus.RUNNING:
             raise InvalidUmapJobTransition(f"Cannot mark READY from {self.status}")
         return replace(
@@ -93,7 +93,7 @@ class UmapJob:
             result=result,
         )
 
-    def mark_failed(self, error: str, now: datetime) -> "UmapJob":
+    def mark_failed(self, error: str, now: datetime) -> UmapJob:
         if self.status not in {UmapJobStatus.PENDING, UmapJobStatus.RUNNING}:
             raise InvalidUmapJobTransition(f"Cannot mark FAILED from {self.status}")
         return replace(
@@ -103,7 +103,7 @@ class UmapJob:
             error_message=error,
         )
 
-    def mark_cancelled(self, now: datetime) -> "UmapJob":
+    def mark_cancelled(self, now: datetime) -> UmapJob:
         if self.status in _TERMINAL:
             raise InvalidUmapJobTransition(f"Cannot CANCEL terminal {self.status}")
         return replace(

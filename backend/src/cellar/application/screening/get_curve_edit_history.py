@@ -92,9 +92,7 @@ def _event_timestamp(op: AuditOperation) -> datetime:
 
 def _to_event(op: AuditOperation) -> CurveEditHistoryEvent:
     operation_type = (
-        op.operation_type.value
-        if hasattr(op.operation_type, "value")
-        else str(op.operation_type)
+        op.operation_type.value if hasattr(op.operation_type, "value") else str(op.operation_type)
     )
     return CurveEditHistoryEvent(
         id=op.id,

@@ -16,4 +16,4 @@ class CascadeNode:
     samples: list[dict]  # [{"id": str, "label": str | None}]
     truncated: bool
     action: CascadeAction
-    children: list["CascadeNode"] = field(default_factory=list)
+    children: list[CascadeNode] = field(default_factory=list)

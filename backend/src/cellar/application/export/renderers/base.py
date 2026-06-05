@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator, Protocol
+from typing import Protocol
 
 from cellar.application.export.row_streams.base import ColumnSpec, ExportRow
 
@@ -10,7 +11,7 @@ from cellar.application.export.row_streams.base import ColumnSpec, ExportRow
 @dataclass(frozen=True)
 class RenderOptions:
     include_sparklines: bool = True
-    image_size: str = "small"   # "small" | "medium" | "large"
+    image_size: str = "small"  # "small" | "medium" | "large"
     page_size: str = "A4"
     page_orientation: str = "landscape"
     title: str = "Cellar Export"

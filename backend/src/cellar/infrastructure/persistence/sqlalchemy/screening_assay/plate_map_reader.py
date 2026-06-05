@@ -28,7 +28,6 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     WellModel,
 )
 
-
 _SAMPLE = "sample"
 _ALIAS_TYPES = ("custom", "synonym", "common_name")
 

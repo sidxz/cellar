@@ -22,22 +22,22 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models
+
+# Import models referenced by ForeignKeys so they are registered in
+# Base.metadata before the mapper resolves cross-context FK targets.
+import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
 from cellar.infrastructure.persistence.sqlalchemy.base import (
     Base,
     EntityModelMixin,
     VersionMixin,
     WorkspaceIdMixin,
 )
-
-# Import models referenced by ForeignKeys so they are registered in
-# Base.metadata before the mapper resolves cross-context FK targets.
-import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401,E402
-import cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models  # noqa: F401,E402
-
 
 # ---------------------------------------------------------------------------
 # Association tables
@@ -297,9 +297,7 @@ class CollectionImportTemplateModel(Base, EntityModelMixin, WorkspaceIdMixin):
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint(
-            "workspace_id", "name", name="uq_collection_import_template_ws_name"
-        ),
+        UniqueConstraint("workspace_id", "name", name="uq_collection_import_template_ws_name"),
         Index("ix_collection_import_template_ws", "workspace_id"),
     )
 

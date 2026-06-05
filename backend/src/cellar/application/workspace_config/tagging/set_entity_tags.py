@@ -59,14 +59,10 @@ class SetEntityTags:
 
         async with self._uow:
             link_repo = self._link_provider.for_type(input.entity_type)
-            if not await link_repo.entity_exists_in_workspace(
-                input.workspace_id, input.entity_id
-            ):
+            if not await link_repo.entity_exists_in_workspace(input.workspace_id, input.entity_id):
                 return Failure(NotFoundError(input.entity_type.value, str(input.entity_id)))
 
-            current = await link_repo.find_tags_for_entity(
-                input.workspace_id, input.entity_id
-            )
+            current = await link_repo.find_tags_for_entity(input.workspace_id, input.entity_id)
             current_by_id = {t.id: t for t in current}
 
             desired: dict[uuid.UUID, Tag] = {}

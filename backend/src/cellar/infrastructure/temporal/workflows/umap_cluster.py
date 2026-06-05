@@ -18,8 +18,8 @@ from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
     from cellar.infrastructure.temporal.activities.umap_cluster import (
-        UmapClusterActivities,
         RunUmapClusterActivityInput,
+        UmapClusterActivities,
     )
 
 

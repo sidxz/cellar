@@ -7,7 +7,6 @@ from dataclasses import dataclass
 
 from cellar.domain.shared.events import DomainEvent
 
-
 # ---------------------------------------------------------------------------
 # Protocol events
 # ---------------------------------------------------------------------------

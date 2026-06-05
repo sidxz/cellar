@@ -39,42 +39,42 @@ from cellar.domain.shared.value_objects import (
 )
 
 __all__ = [
-    # Entity
-    "Entity",
     "AggregateRoot",
-    # Events
-    "DomainEvent",
-    # Errors
-    "DomainError",
-    "NotFoundError",
-    "ConflictError",
-    "ConcurrencyConflictError",
-    "ValidationError",
-    "AuthorizationError",
-    "DataLockedError",
-    # Repository
-    "Repository",
+    # Value Objects
+    "Amount",
     # Enums
     "AmountUnit",
     "AssignmentType",
-    "ConcentrationUnit",
-    "LightCondition",
-    "LinkedEntityType",
-    "Qualifier",
-    # Value Objects
-    "Amount",
+    "AuthorizationError",
     "Barcode",
     "BatchNumber",
     "ChemicalStructure",
-    "Concentration",
     "ComputedDescriptors",
+    "Concentration",
+    "ConcentrationUnit",
+    "ConcurrencyConflictError",
+    "ConflictError",
+    "DataLockedError",
+    # Errors
+    "DomainError",
+    # Events
+    "DomainEvent",
+    # Entity
+    "Entity",
     "FormulationNumber",
+    "LightCondition",
     "LinkedEntityRef",
+    "LinkedEntityType",
+    "NotFoundError",
     "PredictedProperties",
     "QualifiedValue",
+    "Qualifier",
     "ReactionConditions",
     "ReactionOutcome",
     "RegistrationNumber",
+    # Repository
+    "Repository",
     "StorageCondition",
     "SynthesisAssignment",
+    "ValidationError",
 ]

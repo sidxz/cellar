@@ -201,7 +201,7 @@ def _norm(s: str) -> str:
 
 
 def score_template_against_headers(template: RunImportTemplate, headers: list[str]) -> float:
-    """Return a 0–1 score for how well a template's mapping matches headers.
+    """Return a 0-1 score for how well a template's mapping matches headers.
 
     A template scores 1.0 when every header it references is present in the
     file; partial matches are weighted by the fraction of references found.

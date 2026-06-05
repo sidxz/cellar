@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 
-from lagom import Container, Singleton
+from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 from cellar.application.export.cancel_export import CancelExport
 from cellar.application.export.get_export_status import GetExportStatus
 from cellar.application.export.list_exports import ListExports
@@ -23,7 +24,10 @@ from cellar.domain.export.repository import ExportJobRepository
 from cellar.infrastructure.persistence.sqlalchemy.export.export_job_repository import (
     SqlAlchemyExportJobRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (  # noqa: E501
+    SQLAlchemySavedSearchRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
     SQLAlchemyDoseResponseCurveRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
@@ -35,12 +39,8 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_r
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
     SQLAlchemyRunRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (
-    SQLAlchemySavedSearchRepository,
-)
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.storage.fsspec_client import FsspecStorageClient
-from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 
 
 def register_export(container: Container) -> None:

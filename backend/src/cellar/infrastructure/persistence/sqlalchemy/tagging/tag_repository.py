@@ -59,9 +59,7 @@ class SQLAlchemyTagRepository(SQLAlchemyRepository[Tag, TagModel]):
         model.normalized_key = aggregate.normalized_key
         model.normalized_value = aggregate.normalized_value
 
-    async def find_by_normalized(
-        self, workspace_id: uuid.UUID, name: TagName
-    ) -> Tag | None:
+    async def find_by_normalized(self, workspace_id: uuid.UUID, name: TagName) -> Tag | None:
         stmt = select(TagModel).where(
             TagModel.workspace_id == workspace_id,
             TagModel.normalized_key == name.normalized_key,
@@ -145,9 +143,7 @@ class SQLAlchemyTagRepository(SQLAlchemyRepository[Tag, TagModel]):
                     )
                 if value_part:
                     stmt = stmt.where(
-                        TagModel.normalized_value.like(
-                            f"%{escape_like(value_part)}%", escape="\\"
-                        )
+                        TagModel.normalized_value.like(f"%{escape_like(value_part)}%", escape="\\")
                     )
             else:
                 # Plain term → substring match on key OR value.
@@ -170,7 +166,5 @@ class SQLAlchemyTagRepository(SQLAlchemyRepository[Tag, TagModel]):
         return [self._to_domain_tracked(m) for m in result.scalars()]
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
-        stmt = delete(TagModel).where(
-            TagModel.workspace_id == workspace_id, TagModel.id == id
-        )
+        stmt = delete(TagModel).where(TagModel.workspace_id == workspace_id, TagModel.id == id)
         await self._session.execute(stmt)

@@ -22,9 +22,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
 )
 
 
-class SQLAlchemyPlateTemplateRepository(
-    EntityRepository[PlateTemplate, PlateTemplateModel]
-):
+class SQLAlchemyPlateTemplateRepository(EntityRepository[PlateTemplate, PlateTemplateModel]):
     """Persists PlateTemplate entities to PostgreSQL."""
 
     model_class = PlateTemplateModel
@@ -41,9 +39,7 @@ class SQLAlchemyPlateTemplateRepository(
         result = await self._session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
 
-    async def count_references(
-        self, workspace_id: uuid.UUID, template_id: uuid.UUID
-    ) -> int:
+    async def count_references(self, workspace_id: uuid.UUID, template_id: uuid.UUID) -> int:
         """Count how many plates/runs reference this template within the workspace."""
         from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
             RegisteredPlateModel,

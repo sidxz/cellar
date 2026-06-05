@@ -19,13 +19,12 @@ Output ``hill_slope`` carries the signed value directly; the legacy
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 import lmfit
 import numpy as np
 from returns.result import Failure, Result, Success
-
-import math
 
 from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
@@ -270,18 +269,14 @@ class LmfitCurveFitter:
                 # ``_detect_outliers`` that actually flagged the candidate
                 # — the docstring on ``OutlierSuggestion.residual_z_full_sd``
                 # spells out the distinction.
-                if len(residuals) >= 2:
-                    full_sd = float(np.std(residuals, ddof=1))
-                else:  # pragma: no cover — guarded by min-points check above
-                    full_sd = 0.0
+                # 0.0 branch guarded by min-points check above (no cover)
+                full_sd = float(np.std(residuals, ddof=1)) if len(residuals) >= 2 else 0.0
                 suggestions: list[OutlierSuggestion] = []
                 for i, is_outlier in enumerate(outlier_mask):
                     if not is_outlier:
                         continue
                     pt = active_points[i]
-                    residual_z_full_sd = (
-                        abs(float(residuals[i])) / full_sd if full_sd > 0 else 0.0
-                    )
+                    residual_z_full_sd = abs(float(residuals[i])) / full_sd if full_sd > 0 else 0.0
                     suggestions.append(
                         OutlierSuggestion(
                             idx=i,

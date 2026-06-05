@@ -125,9 +125,7 @@ def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
     return not (min_z is not None and (c.z_prime is None or c.z_prime < min_z))
 
 
-def _threshold_input_value(
-    c: ResolvedCandidate, threshold: HitCriterion | None
-) -> float | None:
+def _threshold_input_value(c: ResolvedCandidate, threshold: HitCriterion | None) -> float | None:
     """Back-compat shim: scalar for the threshold's intercept_key.
 
     Pre-Option-A callers pass a ``HitCriterion`` whose ``intercept_key``
@@ -241,11 +239,7 @@ class ChannelResolver:
         # limit on a readout) is overridden by the resolver-derived
         # qualifier (ND from inactive, GT from at_bound). Otherwise carry it
         # through.
-        qualifier = (
-            result.qualifier
-            if result.qualifier != ValueQualifier.EQ
-            else pick.qualifier
-        )
+        qualifier = result.qualifier if result.qualifier != ValueQualifier.EQ else pick.qualifier
 
         # Aggregate modes (mean / geometric_mean) don't have a single source
         # run / curve to pin onto the measurement — the value is synthesized.
@@ -266,9 +260,7 @@ class ChannelResolver:
         # shape (additional_curves / aggregate absent).
         if is_aggregate:
             marker_label = (
-                "gmean"
-                if channel.selection_rule == SelectionRule.GEOMETRIC_MEAN
-                else "mean"
+                "gmean" if channel.selection_rule == SelectionRule.GEOMETRIC_MEAN else "mean"
             )
             curve_snapshot = _build_aggregate_curve_snapshot(
                 candidates,

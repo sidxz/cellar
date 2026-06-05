@@ -76,14 +76,14 @@ from cellar.application.research_organization.manage_project_members import (
     RemoveProjectMember,
     UpdateProjectMemberRole,
 )
+from cellar.application.research_organization.mirror_protocol_channels import (
+    MirrorProtocolChannels,
+)
 from cellar.application.research_organization.override_result_cell import OverrideResultCell
 from cellar.application.research_organization.preview_run_import import PreviewRunImport
 from cellar.application.research_organization.recompute_channel import RecomputeChannel
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSources,
-)
-from cellar.application.research_organization.mirror_protocol_channels import (
-    MirrorProtocolChannels,
 )
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
@@ -105,7 +105,7 @@ from cellar.domain.research_organization.repository import (
     CampaignRepository,
     CollectionRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
     SQLAlchemyCollectionRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
@@ -113,74 +113,74 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from ._core import _get_use_case, get_container
 
 __all__ = [
-    # Research org — projects
-    "CreateProjectDep",
-    "UpdateProjectDep",
-    "ArchiveProjectDep",
-    "GetProjectDep",
-    "ListProjectsDep",
-    "GetProjectScopeStatsDep",
-    # Collections
-    "ComposeCollectionsDep",
-    "CreateCollectionDep",
-    "UpdateCollectionDep",
-    "DeleteCollectionDep",
-    "GetCollectionDep",
-    "ListCollectionsDep",
+    "AddCampaignChannelDep",
+    "AddMoleculeToProjectDep",
     "AddMoleculesToCollectionDep",
-    "RemoveMoleculesFromCollectionDep",
-    "ListCollectionMoleculesDep",
-    "ListCollectionsForMoleculeDep",
-    "BulkAddToCollectionDep",
-    "CreateCollectionImportTemplateDep",
-    "UpdateCollectionImportTemplateDep",
-    "DeleteCollectionImportTemplateDep",
-    "ListCollectionImportTemplatesDep",
-    # Saved searches
-    "CreateSavedSearchDep",
-    "UpdateSavedSearchDep",
-    "DeleteSavedSearchDep",
-    "GetSavedSearchDep",
-    "ListSavedSearchesDep",
-    "ExecuteSearchDep",
-    "CountSearchDep",
     # Project members + molecule-project links
     "AddProjectMemberDep",
-    "RemoveProjectMemberDep",
-    "UpdateProjectMemberRoleDep",
-    "ListProjectMembersDep",
-    "AddMoleculeToProjectDep",
-    "RemoveMoleculeFromProjectDep",
-    "ListMoleculeProjectsDep",
-    # Collection repository (for the unregistered-rows handoff endpoint)
-    "get_collection_repo_uow",
+    "AddResultRowDep",
+    "AddResultsFromCampaignDep",
+    "AddResultsFromCollectionDep",
+    "AddResultsFromRunsDep",
+    "ArchiveProjectDep",
+    "BulkAddToCollectionDep",
+    "BulkSetResultDecisionsDep",
+    "CampaignRepositoryDep",
+    "CloseCampaignDep",
     "CollectionRepoUoWDep",
+    # Collections
+    "ComposeCollectionsDep",
+    "CountSearchDep",
+    "CreateCampaignDep",
+    "CreateCollectionDep",
+    "CreateCollectionImportTemplateDep",
+    # Research org — projects
+    "CreateProjectDep",
+    # Saved searches
+    "CreateSavedSearchDep",
+    "DeleteCollectionDep",
+    "DeleteCollectionImportTemplateDep",
+    "DeleteSavedSearchDep",
+    "ExecuteSearchDep",
+    "GetCampaignDep",
+    "GetCollectionDep",
+    "GetDoseResponseCurvesBatchDep",
+    "GetProjectDep",
+    "GetProjectScopeStatsDep",
+    "GetPublishedCampaignDep",
+    "GetSavedSearchDep",
+    "ListCampaignsDep",
+    "ListCollectionImportTemplatesDep",
+    "ListCollectionMoleculesDep",
+    "ListCollectionsDep",
+    "ListCollectionsForMoleculeDep",
+    "ListMoleculeProjectsDep",
+    "ListProjectMembersDep",
+    "ListProjectsDep",
+    "ListSavedSearchesDep",
+    "MirrorProtocolChannelsDep",
+    "OverrideResultCellDep",
+    "PreviewRunImportDep",
+    "RecomputeChannelDep",
+    "RefreshFromSourcesDep",
+    "RemoveCampaignChannelDep",
+    "RemoveMoleculeFromProjectDep",
+    "RemoveMoleculesFromCollectionDep",
+    "RemoveProjectMemberDep",
+    "RemoveResultRowDep",
+    "SetResultDecisionDep",
+    "SupersedeCampaignDep",
+    "UpdateCampaignChannelDep",
+    "UpdateCampaignMetadataDep",
+    "UpdateCollectionDep",
+    "UpdateCollectionImportTemplateDep",
+    "UpdateProjectDep",
+    "UpdateProjectMemberRoleDep",
+    "UpdateSavedSearchDep",
     # Campaigns
     "get_campaign_repo",
-    "CampaignRepositoryDep",
-    "CreateCampaignDep",
-    "AddResultsFromCollectionDep",
-    "AddResultsFromCampaignDep",
-    "AddResultsFromRunsDep",
-    "PreviewRunImportDep",
-    "AddCampaignChannelDep",
-    "UpdateCampaignChannelDep",
-    "MirrorProtocolChannelsDep",
-    "RemoveCampaignChannelDep",
-    "SetResultDecisionDep",
-    "BulkSetResultDecisionsDep",
-    "OverrideResultCellDep",
-    "AddResultRowDep",
-    "RemoveResultRowDep",
-    "RefreshFromSourcesDep",
-    "CloseCampaignDep",
-    "SupersedeCampaignDep",
-    "GetPublishedCampaignDep",
-    "ListCampaignsDep",
-    "GetCampaignDep",
-    "GetDoseResponseCurvesBatchDep",
-    "RecomputeChannelDep",
-    "UpdateCampaignMetadataDep",
+    # Collection repository (for the unregistered-rows handoff endpoint)
+    "get_collection_repo_uow",
 ]
 
 # --- Research Organization dependencies ---

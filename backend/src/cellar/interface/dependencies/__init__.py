@@ -16,21 +16,6 @@ without caring about the internal split.
 
 from __future__ import annotations
 
-from ._admin import *  # noqa: F401, F403
-from ._attachment import *  # noqa: F401, F403
-from ._audit import *  # noqa: F401, F403
-from ._cdd_import import *  # noqa: F401, F403
-from ._chemical_registration import *  # noqa: F401, F403
-from ._core import *  # noqa: F401, F403
-from ._dashboard import *  # noqa: F401, F403
-from ._export import *  # noqa: F401, F403
-from ._inventory import *  # noqa: F401, F403
-from ._research_organization import *  # noqa: F401, F403
-from ._run_import import *  # noqa: F401, F403
-from ._sar_analysis import *  # noqa: F401, F403
-from ._screening import *  # noqa: F401, F403
-from ._workspace_config import *  # noqa: F401, F403
-
 from . import (
     _admin,
     _attachment,
@@ -47,6 +32,20 @@ from . import (
     _screening,
     _workspace_config,
 )
+from ._admin import *  # noqa: F403
+from ._attachment import *  # noqa: F403
+from ._audit import *  # noqa: F403
+from ._cdd_import import *  # noqa: F403
+from ._chemical_registration import *  # noqa: F403
+from ._core import *  # noqa: F403
+from ._dashboard import *  # noqa: F403
+from ._export import *  # noqa: F403
+from ._inventory import *  # noqa: F403
+from ._research_organization import *  # noqa: F403
+from ._run_import import *  # noqa: F403
+from ._sar_analysis import *  # noqa: F403
+from ._screening import *  # noqa: F403
+from ._workspace_config import *  # noqa: F403
 
 __all__ = (
     _core.__all__

@@ -7,11 +7,11 @@ import uuid
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from cellar.application.shared.sentinel import UNSET
 from cellar.application.workspace_config.create_vocabulary import CreateVocabularyCommand
 from cellar.application.workspace_config.delete_vocabulary import DeleteVocabularyCommand
 from cellar.application.workspace_config.list_vocabularies import ListVocabulariesQuery
 from cellar.application.workspace_config.update_vocabulary import UpdateVocabularyCommand
-from cellar.application.shared.sentinel import UNSET
 from cellar.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
 from cellar.interface.dependencies import (
     AuthDep,

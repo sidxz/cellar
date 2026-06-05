@@ -125,16 +125,12 @@ class RegisterMolecule:
             ids.add(input.name)
         return ids
 
-    async def _resolve_reg_number_config(
-        self, workspace_id: uuid.UUID
-    ) -> tuple[str, int]:
+    async def _resolve_reg_number_config(self, workspace_id: uuid.UUID) -> tuple[str, int]:
         """Read prefix + width from WorkspaceSettings; fall back to defaults."""
         if self._workspace_settings_repo is None:
             settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
         else:
-            settings = await self._workspace_settings_repo.find_by_workspace_id(
-                workspace_id
-            )
+            settings = await self._workspace_settings_repo.find_by_workspace_id(workspace_id)
             if settings is None:
                 settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
         return settings.registration_number_prefix, settings.registration_number_width
@@ -431,7 +427,7 @@ class RegisterMolecule:
             matched_molecule: Molecule | None = None
             matched_id: uuid.UUID | None = None
 
-            for identifier, owner_id in existing_map.items():
+            for _identifier, owner_id in existing_map.items():
                 if matched_id is None:
                     matched_id = owner_id
                 elif owner_id != matched_id:

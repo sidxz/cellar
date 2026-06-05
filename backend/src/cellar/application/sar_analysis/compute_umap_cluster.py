@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable, Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 import numpy as np
@@ -97,17 +98,13 @@ class ComputeUmapCluster:
         # cluster threshold is also a chemist knob — for MaxMin it controls
         # the color partition; for Butina it controls the picks too.
         cluster_threshold = float(payload.picker_params.get("threshold", 0.4))
-        cluster_ids, medoid_indices = self._clusterer.cluster(
-            fps, threshold=cluster_threshold
-        )
+        cluster_ids, medoid_indices = self._clusterer.cluster(fps, threshold=cluster_threshold)
 
         # Pick.
         if payload.picker == "maxmin":
             n = int(payload.picker_params.get("n", 50))
             pick_indices = self._maxmin.pick(fps, n=n)
-            rep_assignments = [
-                (idx, cluster_ids[idx]) for idx in pick_indices
-            ]
+            rep_assignments = [(idx, cluster_ids[idx]) for idx in pick_indices]
         elif payload.picker == "butina":
             rep_assignments = [(idx, cluster_ids[idx]) for idx in medoid_indices]
         else:  # pragma: no cover - guarded at API layer
@@ -167,8 +164,7 @@ class ComputeUmapCluster:
                 # FP availability shifted since the cache was built — fall back
                 # to the full path by raising. The caller can catch + redo.
                 raise RuntimeError(
-                    "Fingerprint availability changed since cache built; "
-                    "cannot do pick-only path."
+                    "Fingerprint availability changed since cache built; cannot do pick-only path."
                 )
             n = int(picker_params.get("n", 50))
             pick_indices = self._maxmin.pick(fps, n=n)
@@ -179,9 +175,7 @@ class ComputeUmapCluster:
             for idx, cid in enumerate(cluster_ids):
                 if cid not in seen:
                     seen[cid] = idx
-            rep_assignments = sorted(
-                ((idx, cid) for cid, idx in seen.items()), key=lambda x: x[1]
-            )
+            rep_assignments = sorted(((idx, cid) for cid, idx in seen.items()), key=lambda x: x[1])
         else:  # pragma: no cover - guarded at API layer
             raise ValueError(f"Unknown picker: {picker}")
 

@@ -15,9 +15,6 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models i
     MoleculeModel,
     MoleculeRelationshipModel,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.synthesis_route_models import (
-    SynthesisRouteModel,
-)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     BatchModel,
 )
@@ -36,6 +33,10 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     ReadoutDataModel,
+)
+
+from .synthesis_route_models import (
+    SynthesisRouteModel,
 )
 
 

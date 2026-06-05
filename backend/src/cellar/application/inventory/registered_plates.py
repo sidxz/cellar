@@ -301,7 +301,7 @@ class MapWells:
             # Validate and resolve batch references (accept UUID or batch number)
             resolved_map = dict(input.well_map)
             seen_refs: dict[str, uuid.UUID] = {}
-            for pos, entry in resolved_map.items():
+            for _pos, entry in resolved_map.items():
                 if not isinstance(entry, dict) or not entry.get("batch_id"):
                     continue
                 raw = entry["batch_id"].strip()
@@ -437,7 +437,8 @@ class DeletePlate:
             if children:
                 return Failure(
                     ConflictError(
-                        f"Cannot delete plate '{plate.barcode.value}': it has {len(children)} child plate(s)"
+                        f"Cannot delete plate '{plate.barcode.value}': "
+                        f"it has {len(children)} child plate(s)"
                     )
                 )
 

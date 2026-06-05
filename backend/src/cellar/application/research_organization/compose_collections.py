@@ -11,10 +11,8 @@ from cellar.application.auth import AuthContext, require_editor
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.research_organization.collection import (
-    Collection,
-    CollectionBooleanOp,
-)
+from cellar.domain.research_organization.collection import Collection
+from cellar.domain.research_organization.enums import CollectionBooleanOp
 from cellar.domain.research_organization.repository import CollectionRepository
 from cellar.domain.shared.errors import DomainError, ValidationError
 

@@ -15,9 +15,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_
 )
 
 
-class SQLAlchemyCompoundFlagRepository(
-    EntityRepository[CompoundFlag, CompoundFlagModel]
-):
+class SQLAlchemyCompoundFlagRepository(EntityRepository[CompoundFlag, CompoundFlagModel]):
     """Persists CompoundFlag entities to PostgreSQL."""
 
     model_class = CompoundFlagModel

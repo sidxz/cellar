@@ -13,14 +13,14 @@ from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 
 from cellar.application.admin.admin_hard_delete import AdminHardDeleteCommand
-from cellar.application.admin.cascade_preview import CascadePreviewQuery
 from cellar.application.admin.cascade_delete import CascadeDeleteCommand
+from cellar.application.admin.cascade_preview import CascadePreviewQuery
 from cellar.domain.shared.cascade import CascadeNode
 from cellar.interface.dependencies import (
     AdminHardDeleteDep,
     AuthDep,
-    CascadePreviewDep,
     CascadeDeleteDep,
+    CascadePreviewDep,
 )
 from cellar.interface.error_handlers import result_to_response
 
@@ -85,10 +85,10 @@ class CascadeNodeResponse(BaseModel):
     samples: list[dict]
     truncated: bool
     action: str
-    children: list["CascadeNodeResponse"] = []
+    children: list[CascadeNodeResponse] = []
 
     @classmethod
-    def from_domain(cls, n: CascadeNode) -> "CascadeNodeResponse":
+    def from_domain(cls, n: CascadeNode) -> CascadeNodeResponse:
         return cls(
             entity_type=n.entity_type,
             table=n.table,

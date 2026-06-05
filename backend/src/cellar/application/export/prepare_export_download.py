@@ -68,14 +68,10 @@ class PrepareExportDownload:
             return Failure(NotFoundError("ExportJob", str(q.job_id)))
 
         if job.status == ExportStatus.EXPIRED:
-            return Failure(
-                GoneError("Export expired — re-export the same query.")
-            )
+            return Failure(GoneError("Export expired — re-export the same query."))
 
         if job.status != ExportStatus.READY:
-            return Failure(
-                ConflictError(f"Export not ready (status={job.status}).")
-            )
+            return Failure(ConflictError(f"Export not ready (status={job.status})."))
 
         if not job.file_key:
             return Failure(ValidationError("Export file missing."))

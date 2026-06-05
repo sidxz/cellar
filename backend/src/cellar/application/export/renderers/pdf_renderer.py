@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -45,7 +46,8 @@ class PdfRenderer:
     ) -> None:
         if row_count_hint > PDF_ROW_CAP:
             raise ValueError(
-                f"PDF row count {row_count_hint} exceeds {PDF_ROW_CAP} cap — use XLSX for larger exports."
+                f"PDF row count {row_count_hint} exceeds {PDF_ROW_CAP} cap — "
+                "use XLSX for larger exports."
             )
 
         # Materialize batches once — WeasyPrint needs the full body.
@@ -62,7 +64,9 @@ class PdfRenderer:
             )
 
         size_preset = options.image_size if options.image_size in SIZE_PRESETS else "medium"
-        struct_size = options.image_size if options.image_size in STRUCTURE_SIZE_PRESETS else "medium"
+        struct_size = (
+            options.image_size if options.image_size in STRUCTURE_SIZE_PRESETS else "medium"
+        )
         sparkline_w, sparkline_h = SIZE_PRESETS[size_preset]
         struct_w, struct_h = STRUCTURE_SIZE_PRESETS[struct_size]
 
@@ -122,6 +126,7 @@ class PdfRenderer:
         )
 
         from weasyprint import CSS, HTML
+
         HTML(string=html, base_url=str(PDF_TEMPLATE_DIR)).write_pdf(
             target=str(out_path),
             stylesheets=[CSS(filename=str(PDF_TEMPLATE_DIR / "search_report.css"))],

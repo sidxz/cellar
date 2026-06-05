@@ -32,7 +32,8 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 )
 from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 from cellar.infrastructure.rdkit.query_normalizer import aromatize_substructure_query
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+
+from .search_query_composer import (
     _compute_query_bytes,
 )
 
@@ -328,7 +329,7 @@ def _build_base_stmt(
     project_ids: list[uuid.UUID] | None = None,
 ):
     """Build the base SELECT/WHERE for search_by_query and count_by_query."""
-    from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+    from .search_query_composer import (
         _project_clause,
         compose_criteria,
     )
@@ -376,9 +377,8 @@ def _is_tanimoto_similarity(criterion: dict[str, Any]) -> bool:
     metric_payload = criterion.get("metric")
     if metric_payload and metric_payload.get("kind") == "tversky":
         return False
-    if metric_payload is None and criterion.get("mode") == "fragment_in_target":
-        return False  # mode default is Tversky
-    return True
+    # mode default is Tversky, so an absent metric in fragment_in_target mode is not Tanimoto
+    return not (metric_payload is None and criterion.get("mode") == "fragment_in_target")
 
 
 def _find_first_tanimoto_threshold(criteria: list[dict[str, Any]]) -> float | None:
@@ -424,8 +424,10 @@ def _find_first_similarity_criterion(
     """First similarity-structure criterion in the tree, or None."""
     return find_first(
         criteria,
-        lambda c: c.get("type") == "structure"
-        and (c.get("kind") or c.get("search_type")) == "similarity",
+        lambda c: (
+            c.get("type") == "structure"
+            and (c.get("kind") or c.get("search_type")) == "similarity"
+        ),
     )
 
 
@@ -437,7 +439,7 @@ def _build_score_clause(criterion: dict[str, Any]):
     ``search_similarity`` / ``_similarity_clause`` so the score column always
     matches what the WHERE clause computes.
     """
-    from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+    from .search_query_composer import (
         _resolve_algorithm_and_metric,
     )
 
@@ -495,7 +497,7 @@ def _build_base_stmt_with_score(
     project_ids: list[uuid.UUID] | None = None,
 ):
     """Like ``_build_base_stmt`` but adds a similarity score projection column."""
-    from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+    from .search_query_composer import (
         _project_clause,
         compose_criteria,
     )

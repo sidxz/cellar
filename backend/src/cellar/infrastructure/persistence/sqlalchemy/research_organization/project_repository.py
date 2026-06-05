@@ -74,10 +74,7 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
     ) -> list[Project]:
-        stmt = (
-            select(ProjectModel)
-            .where(ProjectModel.workspace_id == workspace_id)
-        )
+        stmt = select(ProjectModel).where(ProjectModel.workspace_id == workspace_id)
         if tags:
             stmt = stmt.where(
                 ProjectModel.id.in_(

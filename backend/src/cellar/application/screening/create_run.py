@@ -74,7 +74,8 @@ class CreateRun:
             if protocol.status != ProtocolStatus.ACTIVE:
                 return Failure(
                     ConflictError(
-                        f"Cannot create runs on a {protocol.status.value} protocol — only active protocols"
+                        f"Cannot create runs on a {protocol.status.value} protocol — "
+                        "only active protocols"
                     )
                 )
 

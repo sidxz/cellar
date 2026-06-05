@@ -167,9 +167,7 @@ class MoleculeActivityService:
             if curve.raw_data and isinstance(curve.raw_data, list):
                 data_points = _condense_raw_data(curve.raw_data)
 
-            intercept_values_payload = _serialize_intercept_values(
-                curve.intercept_values
-            )
+            intercept_values_payload = _serialize_intercept_values(curve.intercept_values)
 
             unit = protocols_by_id.get(curve.protocol_id, ("", "", "uM"))[2]
             curves_by_proto.setdefault(curve.protocol_id, []).append(
@@ -321,9 +319,7 @@ class MoleculeActivityService:
                 for curve in curves
             }
             if curve_proto_ids:
-                protos = await self._protocol_repo.find_by_ids(
-                    workspace_id, list(curve_proto_ids)
-                )
+                protos = await self._protocol_repo.find_by_ids(workspace_id, list(curve_proto_ids))
                 proto_dose_unit = {p.id: p.dose_unit.value for p in protos}
 
         # Build result
@@ -427,9 +423,7 @@ class MoleculeActivityService:
                 for curve in curves
             }
         )
-        runs_by_id = (
-            await self._run_repo.find_by_ids(workspace_id, run_ids) if run_ids else {}
-        )
+        runs_by_id = await self._run_repo.find_by_ids(workspace_id, run_ids) if run_ids else {}
         return merged, runs_by_id
 
     @staticmethod
@@ -473,8 +467,7 @@ class MoleculeActivityService:
                     curve_r_squared=c.r_squared,
                     curve_raw_data=c.raw_data,
                     curve_excluded_points=c.excluded_points,
-                    intercept_values=_serialize_intercept_values(c.intercept_values)
-                    or None,
+                    intercept_values=_serialize_intercept_values(c.intercept_values) or None,
                     curve_type=c.curve_type.value if c.curve_type else None,
                     curve_confidence_interval_low=c.confidence_interval_low,
                     curve_confidence_interval_high=c.confidence_interval_high,
@@ -523,9 +516,7 @@ class MoleculeActivityService:
             agg_result: AggregateResult = (
                 primary_result
                 if key == primary_key
-                else apply_selection_rule(
-                    resolved_runs, selection_rule, qualifier_handling, key
-                )
+                else apply_selection_rule(resolved_runs, selection_rule, qualifier_handling, key)
             )
             stats = compute_aggregate_stats(resolved_runs, key)
             disagree = detect_disagreement(resolved_runs, key)
@@ -549,9 +540,7 @@ class MoleculeActivityService:
         )
         runs_payload = [_to_run_summary(r) for r in runs_sorted[:_MAX_RUNS_PAYLOAD]]
 
-        condensed = (
-            _condense_raw_data(rep.curve_raw_data) if rep.curve_raw_data else None
-        )
+        condensed = _condense_raw_data(rep.curve_raw_data) if rep.curve_raw_data else None
 
         # Cell-level qualifier: ND/GT from the primary aggregate's qualifier
         # overrides "no qualifier" on EQ; otherwise carry through.
@@ -583,11 +572,7 @@ class MoleculeActivityService:
             SelectionRule.GEOMETRIC_MEAN,
         }
         if is_aggregate and primary_result.value is not None:
-            marker_label = (
-                "gmean"
-                if selection_rule == SelectionRule.GEOMETRIC_MEAN
-                else "mean"
-            )
+            marker_label = "gmean" if selection_rule == SelectionRule.GEOMETRIC_MEAN else "mean"
             snap = build_aggregate_curve_snapshot(
                 resolved_runs,
                 aggregate_value=primary_result.value,
@@ -614,8 +599,7 @@ class MoleculeActivityService:
                 curve_class=rep.curve_class,
                 confidence_interval_low=rep.curve_confidence_interval_low,
                 confidence_interval_high=rep.curve_confidence_interval_high,
-                fit_quality_warnings=list(rep.curve_fit_quality_warnings or [])
-                or None,
+                fit_quality_warnings=list(rep.curve_fit_quality_warnings or []) or None,
             ),
             intercept_values=intercepts_payload or None,
             run_count=len(resolved_runs),
@@ -623,9 +607,7 @@ class MoleculeActivityService:
             runs=runs_payload or None,
             intercept_aggregates=intercept_aggregates or None,
             disagreement_flag=(
-                intercept_aggregates[0].disagreement_flag
-                if intercept_aggregates
-                else False
+                intercept_aggregates[0].disagreement_flag if intercept_aggregates else False
             ),
             additional_curves=additional_curves,
             aggregate=aggregate_marker,
@@ -659,9 +641,7 @@ def _discover_intercept_keys(runs: list[ResolvedRun]) -> list[InterceptKey]:
     return out
 
 
-def _intercept_key_spec(
-    key: InterceptKey, runs: list[ResolvedRun]
-) -> dict[str, Any]:
+def _intercept_key_spec(key: InterceptKey, runs: list[ResolvedRun]) -> dict[str, Any]:
     """Echo back the persisted spec dict for an intercept key.
 
     The FE reads ``spec.label`` to render the column header; pulling the

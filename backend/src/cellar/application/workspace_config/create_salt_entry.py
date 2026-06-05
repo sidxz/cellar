@@ -48,7 +48,8 @@ class CreateSaltEntry:
             if existing is not None:
                 return Failure(
                     ConflictError(
-                        f"Salt entry with code '{input.code.strip()}' already exists in this workspace"
+                        f"Salt entry with code '{input.code.strip()}' "
+                        "already exists in this workspace"
                     )
                 )
 

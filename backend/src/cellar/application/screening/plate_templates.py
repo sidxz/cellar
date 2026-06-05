@@ -164,7 +164,8 @@ class DeletePlateTemplate:
             if ref_count > 0:
                 return Failure(
                     ConflictError(
-                        f"PlateTemplate is referenced by {ref_count} plate(s)/run(s) and cannot be deleted"
+                        f"PlateTemplate is referenced by {ref_count} plate(s)/run(s) "
+                        "and cannot be deleted"
                     )
                 )
 

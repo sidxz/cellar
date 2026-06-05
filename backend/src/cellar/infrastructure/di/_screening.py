@@ -8,11 +8,12 @@ from __future__ import annotations
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.attachment.upload_attachment import UploadAttachment
 from cellar.application.audit.audit_recording_service import AuditRecordingService
-from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.inventory.ensure_batch_exists import EnsureBatchExists
+from cellar.application.inventory.export_plate_layout import ExportPlateLayout
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.registered_plates import (
     ChangeStatus,
@@ -25,7 +26,6 @@ from cellar.application.inventory.registered_plates import (
     RegisterPlate,
     UpdatePlate,
 )
-from cellar.application.inventory.export_plate_layout import ExportPlateLayout
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.compound_curves_reader import CompoundCurvesReader
@@ -35,17 +35,17 @@ from cellar.application.screening.create_dose_response import CreateDoseResponse
 from cellar.application.screening.create_protocol import CreateProtocol
 from cellar.application.screening.create_readout_data import CreateReadoutData
 from cellar.application.screening.create_run import CreateRun
-from cellar.application.screening.delete_run import DeleteRun
-from cellar.application.screening.reset_run_data import ResetRunData
 from cellar.application.screening.create_target import CreateTarget
 from cellar.application.screening.cross_protocol_resolver import CrossProtocolResolver
 from cellar.application.screening.delete_compound_flag import DeleteCompoundFlag
+from cellar.application.screening.delete_run import DeleteRun
 from cellar.application.screening.delete_target import DeleteTarget
 from cellar.application.screening.dose_response_enriched_reader import (
     DoseResponseEnrichedReader,
 )
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.application.screening.get_compound_curves import GetCompoundCurves
+from cellar.application.screening.get_curve_edit_history import GetCurveEditHistory
 from cellar.application.screening.get_dose_response import ListDoseResponseByRun
 from cellar.application.screening.get_dose_response_curves_batch import (
     GetDoseResponseCurvesBatch,
@@ -54,7 +54,6 @@ from cellar.application.screening.get_molecule_activity_detail import GetMolecul
 from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
 from cellar.application.screening.get_plate_map import GetPlateMap
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
-from cellar.application.screening.list_protocol_summaries import ListProtocolSummaries
 from cellar.application.screening.get_protocol_activity import GetProtocolActivitySummary
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
 from cellar.application.screening.get_readout_data import ListReadoutDataByRun
@@ -70,8 +69,13 @@ from cellar.application.screening.import_run_readouts import ImportRunReadouts
 from cellar.application.screening.import_summary_file import ImportSummaryFile
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
+from cellar.application.screening.list_protocol_summaries import ListProtocolSummaries
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
+from cellar.application.screening.lock_protocol import (
+    LockProtocol,
+    UnlockProtocol,
+)
 from cellar.application.screening.lock_run import LockRun, UnlockRun
 from cellar.application.screening.manage_condition_definitions import (
     AddConditionDefinition,
@@ -85,10 +89,6 @@ from cellar.application.screening.manage_control_layouts import (
 from cellar.application.screening.manage_ontology_annotations import (
     RemoveOntologyAnnotation,
     SetOntologyAnnotation,
-)
-from cellar.application.screening.lock_protocol import (
-    LockProtocol,
-    UnlockProtocol,
 )
 from cellar.application.screening.manage_protocol import (
     AddProtocolToProject,
@@ -128,10 +128,10 @@ from cellar.application.screening.protocol_stats_reader import ProtocolStatsRead
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.readout_data_enriched_reader import ReadoutDataEnrichedReader
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
-from cellar.application.screening.get_curve_edit_history import GetCurveEditHistory
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
+from cellar.application.screening.reset_run_data import ResetRunData
 from cellar.application.screening.run_import_templates import (
     CreateRunImportTemplate,
     DeleteRunImportTemplate,
@@ -143,6 +143,7 @@ from cellar.application.screening.update_run import UpdateRun
 from cellar.application.screening.update_target import UpdateTarget
 from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.parsers import TabularParser
+from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
@@ -151,10 +152,10 @@ from cellar.domain.screening_assay.plate_quality import PlateQualityCalculator
 from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
-from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 from cellar.infrastructure.external.bioportal.client import BioPortalClient
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+from cellar.infrastructure.parsers.tabular_file import TabularFileParser
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
@@ -172,16 +173,16 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_curve
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (
     SQLAlchemyCompoundFlagRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
     SQLAlchemyDoseResponseCurveRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_enriched_reader import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_enriched_reader import (  # noqa: E501
     SQLAlchemyDoseResponseEnrichedReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.plate_map_reader import (
     SQLAlchemyPlateMapReader,
 )
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.plate_template_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.plate_template_repository import (  # noqa: E501
     SQLAlchemyPlateTemplateRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_activity_reader import (
@@ -193,13 +194,13 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repos
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_stats_reader import (
     SQLAlchemyProtocolStatsReader,
 )
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_enriched_reader import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_enriched_reader import (  # noqa: E501
     SQLAlchemyReadoutDataEnrichedReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
     SQLAlchemyReadoutDataRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_import_template_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_import_template_repository import (  # noqa: E501
     SQLAlchemyRunImportTemplateRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
@@ -209,7 +210,6 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_reposit
     SQLAlchemyTargetRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from cellar.application.admin.admin_delete_registry import register_admin_delete
 
 
 def register_screening(container: Container) -> None:

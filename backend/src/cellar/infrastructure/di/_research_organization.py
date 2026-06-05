@@ -7,9 +7,30 @@ from __future__ import annotations
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from cellar.application.admin.admin_delete_registry import register_admin_delete
+from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
+from cellar.application.research_organization.add_campaign_channel import AddCampaignChannel
+from cellar.application.research_organization.add_result_row import AddResultRow
+from cellar.application.research_organization.add_results_from_campaign import (
+    AddResultsFromCampaign as AddResultsFromCampaignUC,
+)
+from cellar.application.research_organization.add_results_from_collection import (
+    AddResultsFromCollection as AddResultsFromCollectionUC,
+)
+from cellar.application.research_organization.add_results_from_runs import (
+    AddResultsFromRuns as AddResultsFromRunsUC,
+)
 from cellar.application.research_organization.archive_project import ArchiveProject
 from cellar.application.research_organization.bulk_add_to_collection import BulkAddToCollection
+from cellar.application.research_organization.bulk_set_result_decisions import (
+    BulkSetResultDecisions,
+)
+from cellar.application.research_organization.campaign_scientist_reader import (
+    CampaignScientistReader,
+)
+from cellar.application.research_organization.channel_resolution import ChannelResolver
+from cellar.application.research_organization.close_campaign import CloseCampaign
 from cellar.application.research_organization.collection_import_templates import (
     CreateCollectionImportTemplate,
     DeleteCollectionImportTemplate,
@@ -22,14 +43,17 @@ from cellar.application.research_organization.collection_membership import (
     RemoveMoleculesFromCollection,
 )
 from cellar.application.research_organization.compose_collections import ComposeCollections
+from cellar.application.research_organization.count_search import CountSearch
+from cellar.application.research_organization.create_campaign import (
+    CreateCampaign as CreateCampaignUC,
+)
 from cellar.application.research_organization.create_collection import CreateCollection
 from cellar.application.research_organization.create_project import CreateProject
 from cellar.application.research_organization.create_saved_search import CreateSavedSearch
 from cellar.application.research_organization.delete_collection import DeleteCollection
 from cellar.application.research_organization.delete_saved_search import DeleteSavedSearch
-from cellar.application.chemical_registration.molecule_reader import MoleculeReader
-from cellar.application.research_organization.count_search import CountSearch
 from cellar.application.research_organization.execute_search import ExecuteSearch
+from cellar.application.research_organization.get_campaign import GetCampaign
 from cellar.application.research_organization.get_collection import (
     GetCollection,
     ListCollections,
@@ -41,10 +65,12 @@ from cellar.application.research_organization.get_project import GetProject, Lis
 from cellar.application.research_organization.get_project_scope_stats import (
     GetProjectScopeStats,
 )
+from cellar.application.research_organization.get_published_campaign import GetPublishedCampaign
 from cellar.application.research_organization.get_saved_search import (
     GetSavedSearch,
     ListSavedSearches,
 )
+from cellar.application.research_organization.list_campaigns import ListCampaigns
 from cellar.application.research_organization.manage_molecule_projects import (
     AddMoleculeToProject,
     ListMoleculeProjects,
@@ -56,31 +82,66 @@ from cellar.application.research_organization.manage_project_members import (
     RemoveProjectMember,
     UpdateProjectMemberRole,
 )
+from cellar.application.research_organization.mirror_protocol_channels import (
+    MirrorProtocolChannels,
+)
+from cellar.application.research_organization.override_result_cell import OverrideResultCell
+from cellar.application.research_organization.preview_run_import import PreviewRunImport
+from cellar.application.research_organization.recompute_channel import RecomputeChannel
+from cellar.application.research_organization.refresh_campaign_from_sources import (
+    RefreshFromSources,
+)
+from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
+from cellar.application.research_organization.remove_result_row import RemoveResultRow
+from cellar.application.research_organization.set_result_decision import SetResultDecision
+from cellar.application.research_organization.supersede_campaign import (
+    SupersedeCampaign as SupersedeCampaignUC,
+)
+from cellar.application.research_organization.update_campaign_channel import UpdateCampaignChannel
+from cellar.application.research_organization.update_campaign_metadata import (
+    UpdateCampaignMetadata,
+)
 from cellar.application.research_organization.update_collection import UpdateCollection
 from cellar.application.research_organization.update_project import UpdateProject
 from cellar.application.research_organization.update_saved_search import UpdateSavedSearch
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
 from cellar.application.shared.molecule_resolver import MoleculeResolver
+from cellar.domain.research_organization.repository import (
+    CampaignRepository,
+    CollectionImportTemplateRepository,
+)
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_import_template_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
+    SQLAlchemyBatchRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (  # noqa: E501
+    SQLAlchemyCampaignRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_scientist_reader import (  # noqa: E501
+    SQLAlchemyCampaignScientistReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (  # noqa: E501
+    SQLAlchemyChannelResolutionQuery,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_import_template_repository import (  # noqa: E501
     SQLAlchemyCollectionImportTemplateRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
     SQLAlchemyCollectionRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_member_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_member_repository import (  # noqa: E501
     SQLAlchemyProjectMemberRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
     SQLAlchemyProjectRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (  # noqa: E501
     SQLAlchemySavedSearchRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
     SQLAlchemyDoseResponseCurveRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
@@ -89,81 +150,10 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repos
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
     SQLAlchemyReadoutDataRepository,
 )
-from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from cellar.application.admin.admin_delete_registry import register_admin_delete
-from cellar.application.research_organization.add_campaign_channel import AddCampaignChannel
-from cellar.application.research_organization.add_result_row import AddResultRow
-from cellar.application.research_organization.add_results_from_campaign import (
-    AddResultsFromCampaign as AddResultsFromCampaignUC,
-)
-from cellar.application.research_organization.add_results_from_collection import (
-    AddResultsFromCollection as AddResultsFromCollectionUC,
-)
-from cellar.application.research_organization.add_results_from_runs import (
-    AddResultsFromRuns as AddResultsFromRunsUC,
-)
-from cellar.application.research_organization.preview_run_import import PreviewRunImport
-from cellar.application.research_organization.channel_resolution import ChannelResolver
-from cellar.application.research_organization.close_campaign import CloseCampaign
-from cellar.application.research_organization.create_campaign import (
-    CreateCampaign as CreateCampaignUC,
-)
-from cellar.application.research_organization.campaign_scientist_reader import (
-    CampaignScientistReader,
-)
-from cellar.application.research_organization.get_campaign import GetCampaign
-from cellar.application.research_organization.get_published_campaign import GetPublishedCampaign
-from cellar.application.research_organization.list_campaigns import ListCampaigns
-from cellar.application.research_organization.override_result_cell import OverrideResultCell
-from cellar.application.research_organization.recompute_channel import RecomputeChannel
-from cellar.application.research_organization.refresh_campaign_from_sources import (
-    RefreshFromSources,
-)
-from cellar.application.research_organization.mirror_protocol_channels import (
-    MirrorProtocolChannels,
-)
-from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
-from cellar.application.research_organization.remove_result_row import RemoveResultRow
-
-from cellar.application.research_organization.set_result_decision import SetResultDecision
-from cellar.application.research_organization.bulk_set_result_decisions import (
-    BulkSetResultDecisions,
-)
-from cellar.application.research_organization.supersede_campaign import (
-    SupersedeCampaign as SupersedeCampaignUC,
-)
-from cellar.application.research_organization.update_campaign_channel import UpdateCampaignChannel
-from cellar.application.research_organization.update_campaign_metadata import (
-    UpdateCampaignMetadata,
-)
-from cellar.domain.chemical_registration.repository import MoleculeRepository
-from cellar.domain.inventory.repository import BatchRepository
-from cellar.domain.research_organization.repository import (
-    CampaignRepository,
-    CollectionImportTemplateRepository,
-)
-from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
-    SQLAlchemyCampaignRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_scientist_reader import (
-    SQLAlchemyCampaignScientistReader,
-)
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
-    SQLAlchemyChannelResolutionQuery,
-)
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
-    SQLAlchemyProtocolRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
-    SQLAlchemyMoleculeRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
-    SQLAlchemyBatchRepository,
-)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
     SQLAlchemyRunRepository,
 )
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 def register_research_organization(container: Container) -> None:

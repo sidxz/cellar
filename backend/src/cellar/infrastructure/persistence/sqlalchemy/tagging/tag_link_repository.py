@@ -61,11 +61,11 @@ class SQLAlchemyTagLinkRepository:
         self._uow = uow
 
     @property
-    def _session(self):  # noqa: ANN202 - AsyncSession
+    def _session(self):
         return self._uow.session
 
     @property
-    def _entity_col(self):  # noqa: ANN202 - InstrumentedAttribute
+    def _entity_col(self):
         return getattr(self.link_model, self.entity_id_attr)
 
     async def entity_exists_in_workspace(
@@ -196,9 +196,7 @@ class SQLAlchemyTagLinkRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def repoint(
-        self, from_tag_id: uuid.UUID, to_tag_id: uuid.UUID
-    ) -> None:
+    async def repoint(self, from_tag_id: uuid.UUID, to_tag_id: uuid.UUID) -> None:
         """Move every link from ``from_tag_id`` to ``to_tag_id`` (merge).
 
         Copies the source links onto the target tag (skipping rows where the
@@ -214,9 +212,7 @@ class SQLAlchemyTagLinkRepository:
         ).where(self.link_model.tag_id == from_tag_id)
         ins = (
             pg_insert(self.link_model)
-            .from_select(
-                [self.entity_id_attr, "tag_id", "assigned_by", "assigned_at"], src
-            )
+            .from_select([self.entity_id_attr, "tag_id", "assigned_by", "assigned_at"], src)
             .on_conflict_do_nothing()
         )
         await self._session.execute(ins)

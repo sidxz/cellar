@@ -6,10 +6,8 @@ Modules call `register_rules(*rules)` at import time. Lookup by parent_table.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Iterable
 
 from cellar.infrastructure.cascade.rules import CascadeRule
-
 
 _BY_PARENT: dict[str, list[CascadeRule]] = defaultdict(list)
 

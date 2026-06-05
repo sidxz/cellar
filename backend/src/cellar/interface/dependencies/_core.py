@@ -16,7 +16,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.audit.audit_recording_service import AuditRecordingService
 from cellar.application.inventory.salt_matcher import SaltMatcher
-from cellar.application.shared.unit_of_work import UnitOfWork  # noqa: F401  (re-exported for compat)
+from cellar.application.shared.unit_of_work import (
+    UnitOfWork,  # noqa: F401  (re-exported for compat)
+)
 from cellar.application.user.get_preferences import GetPreferences
 from cellar.application.user.update_preferences import UpdatePreferences
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -27,27 +29,26 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 from cellar.infrastructure.sentinel.auth import get_sentinel
 
-
 __all__ = [
-    "get_container",
-    "get_uow",
-    "get_session_factory",
-    "get_salt_matcher_uow",
-    "get_event_dispatcher",
-    "get_audit_service",
-    "get_preferences_query",
-    "get_preferences_command",
-    "get_auth",
-    "AuthDep",
-    "UoWDep",
-    "SessionFactoryDep",
-    "SaltMatcherUoWDep",
-    "EventDispatcherDep",
     "AuditServiceDep",
-    "GetPreferencesDep",
-    "UpdatePreferencesDep",
+    "AuthDep",
+    "EventDispatcherDep",
     "FingerprintRegistryDep",
+    "GetPreferencesDep",
+    "SaltMatcherUoWDep",
+    "SessionFactoryDep",
+    "UoWDep",
+    "UpdatePreferencesDep",
     "_get_use_case",
+    "get_audit_service",
+    "get_auth",
+    "get_container",
+    "get_event_dispatcher",
+    "get_preferences_command",
+    "get_preferences_query",
+    "get_salt_matcher_uow",
+    "get_session_factory",
+    "get_uow",
 ]
 
 
@@ -163,8 +164,8 @@ UpdatePreferencesDep = Annotated[UpdatePreferences, Depends(get_preferences_comm
 
 
 # --- Generic use-case dependency factory ---
-def _get_use_case(uc_type: type):  # noqa: ANN001
-    def _dep(container: Annotated[Container, Depends(get_container)]):  # noqa: ANN001
+def _get_use_case(uc_type: type):
+    def _dep(container: Annotated[Container, Depends(get_container)]):
         return container[uc_type]
 
     return _dep

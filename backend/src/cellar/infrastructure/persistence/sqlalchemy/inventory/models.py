@@ -7,7 +7,6 @@ from datetime import date
 
 from sqlalchemy import (
     Date,
-    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -67,7 +66,7 @@ class BatchModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     synthesis_step_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     synthesis_request_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
 
-    identifiers: Mapped[list["BatchIdentifierModel"]] = relationship(
+    identifiers: Mapped[list[BatchIdentifierModel]] = relationship(
         "BatchIdentifierModel",
         cascade="all, delete-orphan",
         lazy="selectin",

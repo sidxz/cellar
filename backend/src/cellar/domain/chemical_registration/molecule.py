@@ -179,12 +179,15 @@ class Molecule(AggregateRoot):
 
     def _validate_molecular_formula_sync(self) -> None:
         """Sync invariant: molecular_formula must match descriptors when both set."""
-        if self.descriptors is not None and self.molecular_formula is not None:
-            if self.molecular_formula != self.descriptors.molecular_formula:
-                raise ValidationError(
-                    f"molecular_formula '{self.molecular_formula}' does not match "
-                    f"descriptors.molecular_formula '{self.descriptors.molecular_formula}'"
-                )
+        if (
+            self.descriptors is not None
+            and self.molecular_formula is not None
+            and self.molecular_formula != self.descriptors.molecular_formula
+        ):
+            raise ValidationError(
+                f"molecular_formula '{self.molecular_formula}' does not match "
+                f"descriptors.molecular_formula '{self.descriptors.molecular_formula}'"
+            )
 
     def _guard_tombstone(self) -> None:
         """Invariant 4: tombstones are immutable."""

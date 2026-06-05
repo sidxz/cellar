@@ -9,23 +9,19 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from cellar.application.screening.search_ontology import (
-    SearchOntology,
     SearchOntologyQuery,
 )
+from cellar.application.shared.sentinel import UNSET
 from cellar.application.workspace_config.create_ontology_slot import (
-    CreateOntologySlot,
     CreateOntologySlotCommand,
 )
 from cellar.application.workspace_config.delete_ontology_slot import (
-    DeleteOntologySlot,
     DeleteOntologySlotCommand,
 )
 from cellar.application.workspace_config.list_ontology_slots import (
-    ListOntologySlots,
     ListOntologySlotsQuery,
 )
 from cellar.application.workspace_config.update_ontology_slot import (
-    UpdateOntologySlot,
     UpdateOntologySlotCommand,
 )
 from cellar.domain.shared.ontology import OntologyTerm
@@ -39,7 +35,6 @@ from cellar.interface.dependencies import (
     UpdateOntologySlotDep,
 )
 from cellar.interface.error_handlers import result_to_response
-from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1", tags=["ontology"])
 

@@ -16,17 +16,21 @@ from cellar.application.sar_analysis.start_umap_cluster_job import StartUmapClus
 from ._core import _get_use_case
 
 __all__ = [
-    "StartScaffoldTreeJobDep",
-    "GetScaffoldTreeJobDep",
     "CancelScaffoldTreeJobDep",
-    "StartUmapClusterJobDep",
-    "GetUmapClusterJobDep",
     "CancelUmapClusterJobDep",
+    "GetScaffoldTreeJobDep",
+    "GetUmapClusterJobDep",
+    "StartScaffoldTreeJobDep",
+    "StartUmapClusterJobDep",
 ]
 
-StartScaffoldTreeJobDep = Annotated[StartScaffoldTreeJob, Depends(_get_use_case(StartScaffoldTreeJob))]
+StartScaffoldTreeJobDep = Annotated[
+    StartScaffoldTreeJob, Depends(_get_use_case(StartScaffoldTreeJob))
+]
 GetScaffoldTreeJobDep = Annotated[GetScaffoldTreeJob, Depends(_get_use_case(GetScaffoldTreeJob))]
-CancelScaffoldTreeJobDep = Annotated[CancelScaffoldTreeJob, Depends(_get_use_case(CancelScaffoldTreeJob))]
+CancelScaffoldTreeJobDep = Annotated[
+    CancelScaffoldTreeJob, Depends(_get_use_case(CancelScaffoldTreeJob))
+]
 _get_start_umap_cluster_job = _get_use_case(StartUmapClusterJob)
 _get_get_umap_cluster_job = _get_use_case(GetUmapClusterJob)
 _get_cancel_umap_cluster_job = _get_use_case(CancelUmapClusterJob)

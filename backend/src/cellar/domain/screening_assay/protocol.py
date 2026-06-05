@@ -18,11 +18,6 @@ from cellar.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
-from cellar.domain.shared.enums import ConcentrationUnit
-from cellar.domain.shared.hit_criterion import (
-    HitCriterion,
-    validate_hit_criteria,
-)
 from cellar.domain.screening_assay.events import (
     ProtocolCreated,
     ProtocolLocked,
@@ -31,7 +26,12 @@ from cellar.domain.screening_assay.events import (
     ProtocolUnlocked,
 )
 from cellar.domain.shared.entity import AggregateRoot, Entity
+from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.domain.shared.hit_criterion import (
+    HitCriterion,
+    validate_hit_criteria,
+)
 from cellar.domain.shared.ontology import OntologyTerm
 
 
@@ -107,11 +107,10 @@ class PickListValue:
     def __post_init__(self) -> None:
         if not self.label or not self.label.strip():
             raise ValidationError("PickListValue label must not be empty")
-        if self.color is not None:
-            if not _HEX_COLOR_RE.match(self.color):
-                raise ValidationError(
-                    f"PickListValue color must be 7-char hex (#rrggbb), got {self.color!r}"
-                )
+        if self.color is not None and not _HEX_COLOR_RE.match(self.color):
+            raise ValidationError(
+                f"PickListValue color must be 7-char hex (#rrggbb), got {self.color!r}"
+            )
 
     def to_dict(self) -> dict[str, str | None]:
         return {"label": self.label, "color": self.color}

@@ -55,10 +55,7 @@ class ExcludedPointDetail:
     def __post_init__(self) -> None:
         if self.source == ExclusionSource.MANUAL and self.author_id is None:
             raise ValidationError("author_id required for manual exclusions")
-        if (
-            self.source == ExclusionSource.MANUAL
-            and self.reason == ExclusionReason.AUTO_3SIGMA
-        ):
+        if self.source == ExclusionSource.MANUAL and self.reason == ExclusionReason.AUTO_3SIGMA:
             raise ValidationError("AUTO_3SIGMA reason only valid for AUTO source")
 
     @property
@@ -82,11 +79,8 @@ class ExcludedPointDetail:
     @classmethod
     def from_jsonb(cls, raw: dict[str, Any]) -> ExcludedPointDetail:
         ts_raw = raw["ts"]
-        if isinstance(ts_raw, str):
-            # Tolerate "...Z" suffix (UTC) and bare ISO-8601 forms alike.
-            ts = datetime.fromisoformat(ts_raw.rstrip("Z"))
-        else:
-            ts = ts_raw
+        # Tolerate "...Z" suffix (UTC) and bare ISO-8601 forms alike.
+        ts = datetime.fromisoformat(ts_raw.rstrip("Z")) if isinstance(ts_raw, str) else ts_raw
         return cls(
             idx=raw.get("idx"),
             source=ExclusionSource(raw["source"]),

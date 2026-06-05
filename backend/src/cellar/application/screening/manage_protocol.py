@@ -274,7 +274,8 @@ class DeleteProtocol:
             if protocol.status != ProtocolStatus.DRAFT:
                 return Failure(
                     ConflictError(
-                        f"Cannot delete protocol in '{protocol.status}' status — only DRAFT protocols can be deleted"
+                        f"Cannot delete protocol in '{protocol.status}' status — "
+                        "only DRAFT protocols can be deleted"
                     )
                 )
 

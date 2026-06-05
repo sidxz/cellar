@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class RowStatus(str, Enum):
+class RowStatus(StrEnum):
     RESOLVED = "resolved"
     ALREADY_PRESENT = "already_present"
     UNREGISTERED = "unregistered"

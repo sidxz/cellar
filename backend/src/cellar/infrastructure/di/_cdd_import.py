@@ -47,7 +47,7 @@ from cellar.application.workspace_config.get_data_source_for_import import (
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.cdd.client import CddVaultClient
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_repository import (  # noqa: E501
     SQLAlchemyCddMoleculeImportRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_repository import (
@@ -59,7 +59,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repos
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.data_source_repository import (
     SQLAlchemyDataSourceRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.external_api_key_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.external_api_key_repository import (  # noqa: E501
     SQLAlchemyExternalApiKeyRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork

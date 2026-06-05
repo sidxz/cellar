@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator
 
 from rdkit import Chem
 from rdkit.Chem import AllChem

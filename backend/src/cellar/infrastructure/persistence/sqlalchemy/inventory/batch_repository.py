@@ -9,11 +9,15 @@ import sqlalchemy as sa
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.sql import expression
 
-from cellar.domain.shared.pagination import PageResult
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.domain.inventory.enums import BatchSource
+from cellar.domain.shared.pagination import PageResult
 from cellar.domain.shared.value_objects import BatchNumber
+from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
+    SQLAlchemyRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
 from cellar.infrastructure.persistence.sqlalchemy.inventory._vo_mappers import (
     amount_from_columns,
     amount_to_columns,
@@ -22,10 +26,6 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory._vo_mappers import (
     storage_from_columns,
     storage_to_columns,
 )
-from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
-    SQLAlchemyRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     BatchIdentifierModel,
     BatchModel,

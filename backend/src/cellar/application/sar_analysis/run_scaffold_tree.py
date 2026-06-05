@@ -12,7 +12,7 @@ business semantics.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -44,9 +44,7 @@ class RunScaffoldTree:
     repository: ScaffoldTreeJobRepository
     uow: UnitOfWork
 
-    async def run(
-        self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]
-    ) -> None:
+    async def run(self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]) -> None:
         """Execute the scaffold-tree pipeline for *job_id*.
 
         1. Load the job from the repository.
@@ -62,7 +60,7 @@ class RunScaffoldTree:
                 if job is None:
                     log.error("scaffold_tree_job_not_found")
                     return
-                running = job.mark_running(datetime.now(timezone.utc))
+                running = job.mark_running(datetime.now(UTC))
                 await self.repository.save(running)
                 await self.uow.commit()
 
@@ -74,7 +72,7 @@ class RunScaffoldTree:
             )
 
             async with self.uow:
-                ready = running.mark_ready(tree, datetime.now(timezone.utc))
+                ready = running.mark_ready(tree, datetime.now(UTC))
                 await self.repository.save(ready)
                 await self.uow.commit()
             log.info("scaffold_tree_job_ready", node_count=tree.stats.node_count)
@@ -83,11 +81,9 @@ class RunScaffoldTree:
             log.exception("scaffold_tree_job_failed")
             try:
                 async with self.uow:
-                    current = await self.repository.find_by_id(
-                        job_id, workspace_id=workspace_id
-                    )
+                    current = await self.repository.find_by_id(job_id, workspace_id=workspace_id)
                     if current is not None:
-                        failed = current.mark_failed(str(exc), datetime.now(timezone.utc))
+                        failed = current.mark_failed(str(exc), datetime.now(UTC))
                         await self.repository.save(failed)
                         await self.uow.commit()
             except Exception:

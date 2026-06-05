@@ -124,10 +124,7 @@ def _resolve_algorithm_and_metric(
         defaults = MODE_DEFAULTS[mode]
         algorithm = algorithm or defaults.algorithm
         threshold = threshold if threshold is not None else defaults.threshold
-        if metric_payload is None:
-            metric = defaults.metric
-        else:
-            metric = _parse_metric(metric_payload)
+        metric = defaults.metric if metric_payload is None else _parse_metric(metric_payload)
     elif algorithm is not None:
         # Explicit algorithm — metric and threshold are required.
         if metric_payload is None:

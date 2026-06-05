@@ -162,9 +162,7 @@ def resolve_intercept(
     return None, ValueQualifier.ND
 
 
-def intercept_scalar(
-    run: ResolvedRun, intercept_key: InterceptKey | None
-) -> float | None:
+def intercept_scalar(run: ResolvedRun, intercept_key: InterceptKey | None) -> float | None:
     """Numeric scalar suitable for aggregation. Returns None for non-EQ."""
     value, qualifier = resolve_intercept(run, intercept_key)
     return value if qualifier == ValueQualifier.EQ else None
@@ -211,9 +209,7 @@ def _resolvable_runs(
     ``intercept_scalar`` instead, which keeps only EQ rows — non-scalar
     rows can't participate honestly in an arithmetic / log-space average.
     """
-    return [
-        r for r in runs if resolve_intercept(r, intercept_key)[0] is not None
-    ]
+    return [r for r in runs if resolve_intercept(r, intercept_key)[0] is not None]
 
 
 def _latest_by_date(runs: list[ResolvedRun]) -> ResolvedRun:
@@ -275,9 +271,7 @@ def _aggregate_eq(
     channels with mixed EQ/Inactive runs.
     """
     pairs = [(r, intercept_scalar(r, intercept_key)) for r in runs]
-    qualifying = [
-        (r, s) for r, s in pairs if s is not None and (s > 0 or not require_positive)
-    ]
+    qualifying = [(r, s) for r, s in pairs if s is not None and (s > 0 or not require_positive)]
     if not qualifying:
         return AggregateResult(
             value=None,
@@ -382,9 +376,7 @@ def compute_aggregate_stats(
     the cell's dose unit alongside.
     """
     scalars = [
-        v
-        for v in (intercept_scalar(r, intercept_key) for r in runs)
-        if v is not None and v > 0
+        v for v in (intercept_scalar(r, intercept_key) for r in runs) if v is not None and v > 0
     ]
     if not scalars:
         return AggregateStats(
@@ -413,9 +405,7 @@ def compute_aggregate_stats(
     )
 
 
-def detect_disagreement(
-    runs: list[ResolvedRun], intercept_key: InterceptKey | None
-) -> bool:
+def detect_disagreement(runs: list[ResolvedRun], intercept_key: InterceptKey | None) -> bool:
     """True when the cell deserves a disagreement glyph.
 
     Two triggers:
@@ -430,9 +420,7 @@ def detect_disagreement(
         return True
 
     scalars = [
-        v
-        for v in (intercept_scalar(r, intercept_key) for r in runs)
-        if v is not None and v > 0
+        v for v in (intercept_scalar(r, intercept_key) for r in runs) if v is not None and v > 0
     ]
     if len(scalars) < 2:
         return False

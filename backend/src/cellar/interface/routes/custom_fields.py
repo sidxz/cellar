@@ -9,21 +9,17 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from cellar.application.workspace_config.create_custom_field import (
-    CreateCustomField,
     CreateCustomFieldCommand,
 )
 from cellar.application.workspace_config.delete_custom_field import (
-    DeleteCustomField,
     DeleteCustomFieldCommand,
 )
 from cellar.application.workspace_config.list_custom_fields import (
-    ListCustomFields,
     ListCustomFieldsQuery,
 )
 from cellar.application.workspace_config.update_custom_field import (
-    UpdateCustomField,
-    UpdateCustomFieldCommand,
     UNSET,
+    UpdateCustomFieldCommand,
 )
 from cellar.domain.workspace_config.custom_field_definition import CustomFieldDefinition
 from cellar.interface.dependencies import (

@@ -128,9 +128,7 @@ class BulkAddBatchIdentifiers:
         if row.cellar_batch_number:
             resolved_bn = row.cellar_batch_number
         elif row.cellar_molecule_reg_number and row.cellar_batch_sequence is not None:
-            resolved_bn = (
-                f"{row.cellar_molecule_reg_number}-{row.cellar_batch_sequence:0{width}d}"
-            )
+            resolved_bn = f"{row.cellar_molecule_reg_number}-{row.cellar_batch_sequence:0{width}d}"
         else:
             return RowOutcome(
                 row_index=row.row_index,
@@ -176,13 +174,15 @@ class BulkAddBatchIdentifiers:
 
         # 3. If dry_run, just report resolved. Else attach + save.
         if not dry_run:
-            target.add_identifier(BatchIdentifier.create(
-                batch_id=target.id,
-                identifier=row.external_identifier,
-                identifier_type=row.identifier_type,
-                source=row.source or source_default,
-                registered_by=importing_user_id,
-            ))
+            target.add_identifier(
+                BatchIdentifier.create(
+                    batch_id=target.id,
+                    identifier=row.external_identifier,
+                    identifier_type=row.identifier_type,
+                    source=row.source or source_default,
+                    registered_by=importing_user_id,
+                )
+            )
             await self._batch_repo.save(target)
 
         return RowOutcome(

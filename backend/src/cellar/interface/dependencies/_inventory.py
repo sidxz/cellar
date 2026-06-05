@@ -6,9 +6,16 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from cellar.application.inventory.batch_identifiers import (
+    AddBatchIdentifier,
+    ListBatchIdentifiers,
+    RemoveBatchIdentifier,
+)
+from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
 from cellar.application.inventory.create_batch import CreateBatch
 from cellar.application.inventory.create_sample import CreateSample
 from cellar.application.inventory.delete_storage_location import DeleteStorageLocation
+from cellar.application.inventory.export_plate_layout import ExportPlateLayout
 from cellar.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from cellar.application.inventory.get_inventory_summary import GetInventorySummary
 from cellar.application.inventory.get_sample import GetSample, ListSamplesByBatch
@@ -36,7 +43,6 @@ from cellar.application.inventory.manage_storage import (
     ListStorageLocations,
     ListStorageLocationsWithCounts,
 )
-from cellar.application.inventory.export_plate_layout import ExportPlateLayout
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.registered_plates import (
     ChangeStatus,
@@ -49,61 +55,55 @@ from cellar.application.inventory.registered_plates import (
     RegisterPlate,
     UpdatePlate,
 )
-from cellar.application.inventory.batch_identifiers import (
-    AddBatchIdentifier,
-    ListBatchIdentifiers,
-    RemoveBatchIdentifier,
-)
-from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
 from cellar.application.inventory.update_batch import UpdateBatch
 from cellar.application.inventory.update_storage_location import UpdateStorageLocation
 
 from ._core import _get_use_case
 
 __all__ = [
+    "AddBatchIdentifierDep",
+    "AliquotSampleDep",
+    "BulkAddBatchIdentifiersDep",
+    "ChangeStatusDep",
+    "ClearQuarantineSampleDep",
     # Inventory
     "CreateBatchDep",
-    "GetBatchDep",
-    "ListBatchesByMoleculeDep",
-    "ListBatchesGlobalDep",
-    "UpdateBatchDep",
-    "AddBatchIdentifierDep",
-    "RemoveBatchIdentifierDep",
-    "ListBatchIdentifiersDep",
-    "BulkAddBatchIdentifiersDep",
+    "CreateImportTemplateDep",
     "CreateSampleDep",
-    "GetSampleDep",
-    "ListSamplesByBatchDep",
-    "ListSamplesGlobalDep",
-    "AliquotSampleDep",
-    "MoveSampleDep",
-    "QuarantineSampleDep",
-    "ClearQuarantineSampleDep",
-    "DisposeSampleDep",
     "CreateStorageLocationDep",
-    "ListStorageLocationsDep",
-    "GetStorageLocationChildrenDep",
-    "ListStorageLocationsWithCountsDep",
-    "GetInventorySummaryDep",
-    "UpdateStorageLocationDep",
-    "DeleteStorageLocationDep",
-    "RegisterPlateDep",
-    "GetPlateDep",
-    "ListPlatesDep",
-    "UpdatePlateDep",
-    "MapWellsDep",
-    "ChangeStatusDep",
-    "DerivePlateDep",
-    "ListChildrenDep",
+    "DeleteImportTemplateDep",
     "DeletePlateDep",
+    "DeleteStorageLocationDep",
+    "DerivePlateDep",
+    "DisposeSampleDep",
     "ExportPlateLayoutDep",
-    "PlateReadModelServiceDep",
+    "GetBatchDep",
+    "GetInventorySummaryDep",
+    "GetPlateDep",
+    "GetSampleDep",
+    "GetStorageLocationChildrenDep",
     # Plate-import pipeline
     "ImportFileCacheDep",
     "ImportPlateDataServiceDep",
-    "CreateImportTemplateDep",
+    "ListBatchIdentifiersDep",
+    "ListBatchesByMoleculeDep",
+    "ListBatchesGlobalDep",
+    "ListChildrenDep",
     "ListImportTemplatesDep",
-    "DeleteImportTemplateDep",
+    "ListPlatesDep",
+    "ListSamplesByBatchDep",
+    "ListSamplesGlobalDep",
+    "ListStorageLocationsDep",
+    "ListStorageLocationsWithCountsDep",
+    "MapWellsDep",
+    "MoveSampleDep",
+    "PlateReadModelServiceDep",
+    "QuarantineSampleDep",
+    "RegisterPlateDep",
+    "RemoveBatchIdentifierDep",
+    "UpdateBatchDep",
+    "UpdatePlateDep",
+    "UpdateStorageLocationDep",
 ]
 
 # --- Inventory dependencies ---
@@ -114,9 +114,7 @@ ListBatchesByMoleculeDep = Annotated[
 ]
 ListBatchesGlobalDep = Annotated[ListBatchesGlobal, Depends(_get_use_case(ListBatchesGlobal))]
 UpdateBatchDep = Annotated[UpdateBatch, Depends(_get_use_case(UpdateBatch))]
-AddBatchIdentifierDep = Annotated[
-    AddBatchIdentifier, Depends(_get_use_case(AddBatchIdentifier))
-]
+AddBatchIdentifierDep = Annotated[AddBatchIdentifier, Depends(_get_use_case(AddBatchIdentifier))]
 RemoveBatchIdentifierDep = Annotated[
     RemoveBatchIdentifier, Depends(_get_use_case(RemoveBatchIdentifier))
 ]

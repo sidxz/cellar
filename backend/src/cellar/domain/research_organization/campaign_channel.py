@@ -17,8 +17,8 @@ from cellar.domain.research_organization.enums import (
     QualifierHandling,
     SelectionRule,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
 
 @dataclass

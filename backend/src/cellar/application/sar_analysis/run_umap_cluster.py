@@ -12,7 +12,7 @@ semantics.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -72,13 +72,11 @@ class RunUmapCluster:
         running = None
         try:
             async with self.uow:
-                job = await self.repository.find_by_id(
-                    job_id, workspace_id=workspace_id
-                )
+                job = await self.repository.find_by_id(job_id, workspace_id=workspace_id)
                 if job is None:
                     log.error("umap_cluster_job_not_found")
                     return
-                running = job.mark_running(datetime.now(timezone.utc))
+                running = job.mark_running(datetime.now(UTC))
                 await self.repository.save(running)
                 await self.uow.commit()
 
@@ -91,7 +89,7 @@ class RunUmapCluster:
             )
 
             async with self.uow:
-                ready = running.mark_ready(result, datetime.now(timezone.utc))
+                ready = running.mark_ready(result, datetime.now(UTC))
                 await self.repository.save(ready)
                 await self.uow.commit()
             log.info(
@@ -104,11 +102,9 @@ class RunUmapCluster:
             log.exception("umap_cluster_job_failed")
             try:
                 async with self.uow:
-                    current = await self.repository.find_by_id(
-                        job_id, workspace_id=workspace_id
-                    )
+                    current = await self.repository.find_by_id(job_id, workspace_id=workspace_id)
                     if current is not None:
-                        failed = current.mark_failed(str(exc), datetime.now(timezone.utc))
+                        failed = current.mark_failed(str(exc), datetime.now(UTC))
                         await self.repository.save(failed)
                         await self.uow.commit()
             except Exception:

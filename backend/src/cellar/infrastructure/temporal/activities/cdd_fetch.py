@@ -20,24 +20,23 @@ import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
 
-from cellar.domain.shared.secret_provider import SecretProvider
-
 from cellar.application.cdd_import.molecule_mapper import map_cdd_molecules
+from cellar.application.cdd_import.plate_mapper import map_cdd_plate
+from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.domain.workspace_config.data_source import EntityMapping
 from cellar.infrastructure.cdd.client import CddVaultClient
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_repository import (  # noqa: E501
     CddMoleculeSyncRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-from cellar.application.cdd_import.plate_mapper import map_cdd_plate
 from cellar.infrastructure.temporal.activities.dtos import (
     CddPollExportInput,
     CddPollExportOutput,
     CddStartExportInput,
     CddStartExportOutput,
+    CddStartPlateExportInput,
     CddSyncWatermarkInput,
     CddSyncWatermarkOutput,
-    CddStartPlateExportInput,
     LoadExportChunkInput,
     LoadExportChunkOutput,
     LoadPlateChunkInput,

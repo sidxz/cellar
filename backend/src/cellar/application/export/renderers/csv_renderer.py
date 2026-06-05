@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import AsyncIterator
 
 from cellar.application.export.renderers.base import RenderOptions
 from cellar.application.export.row_streams.base import ColumnSpec, ExportRow

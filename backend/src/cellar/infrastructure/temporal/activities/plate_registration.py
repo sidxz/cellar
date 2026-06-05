@@ -14,18 +14,17 @@ from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
 
-from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
-
 from cellar.application.inventory.registered_plates import (
     MapWells,
     MapWellsCommand,
     RegisterPlate,
     RegisterPlateCommand,
 )
-from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
+from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
 )
@@ -75,7 +74,8 @@ class PlateRegistrationActivities:
 
             activity.heartbeat(
                 f"chunk {input.chunk_index}: "
-                f"reg={output.plates_registered} dup={output.plates_duplicate} err={output.plates_error}"
+                f"reg={output.plates_registered} dup={output.plates_duplicate} "
+                f"err={output.plates_error}"
             )
 
         return output

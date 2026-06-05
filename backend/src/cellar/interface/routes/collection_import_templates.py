@@ -56,10 +56,7 @@ class UpdateCollectionImportTemplateRequest(BaseModel):
 def _to_response(  # type: ignore[no-untyped-def]
     template, collection_id: uuid.UUID | None = None
 ) -> CollectionImportTemplateResponse:
-    used_here = (
-        collection_id is not None
-        and collection_id in template.used_in_collections
-    )
+    used_here = collection_id is not None and collection_id in template.used_in_collections
     return CollectionImportTemplateResponse(
         id=template.id,
         workspace_id=template.workspace_id,

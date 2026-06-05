@@ -15,15 +15,15 @@ from cellar.application.research_organization.get_project import GetProjectQuery
 from cellar.application.research_organization.get_project_scope_stats import (
     GetProjectScopeStatsQuery,
 )
+from cellar.application.research_organization.manage_molecule_projects import (
+    AddMoleculeToProjectCommand,
+    RemoveMoleculeFromProjectCommand,
+)
 from cellar.application.research_organization.manage_project_members import (
     AddProjectMemberCommand,
     ListProjectMembersQuery,
     RemoveProjectMemberCommand,
     UpdateProjectMemberRoleCommand,
-)
-from cellar.application.research_organization.manage_molecule_projects import (
-    AddMoleculeToProjectCommand,
-    RemoveMoleculeFromProjectCommand,
 )
 from cellar.application.research_organization.update_project import UpdateProjectCommand
 from cellar.application.shared.sentinel import UNSET

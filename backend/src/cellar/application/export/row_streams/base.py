@@ -1,8 +1,9 @@
 # backend/src/cellar/application/export/row_streams/base.py
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Literal, Protocol
+from typing import Any, Literal, Protocol
 
 ColumnKind = Literal[
     "text",
@@ -17,8 +18,8 @@ ColumnKind = Literal[
 
 @dataclass(frozen=True)
 class ColumnSpec:
-    key: str               # stable identifier
-    header: str            # human-readable
+    key: str  # stable identifier
+    header: str  # human-readable
     kind: ColumnKind
     unit: str | None = None
     group: str | None = None  # logical column-group (e.g. protocol name)

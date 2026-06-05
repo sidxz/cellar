@@ -91,7 +91,8 @@ class BulkCreateReadoutData:
             if self._molecule_repo is None:
                 return Failure(
                     ValidationError(
-                        f"Item {idx}: registration_number provided but molecule resolver not available"
+                        f"Item {idx}: registration_number provided but "
+                        "molecule resolver not available"
                     )
                 )
             mol = await self._molecule_repo.find_by_registration_number(

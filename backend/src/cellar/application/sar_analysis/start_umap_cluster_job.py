@@ -65,9 +65,7 @@ class StartUmapClusterJob:
         self._uow = uow
         self._sync_limit = sync_limit
 
-    async def execute(
-        self, payload: StartUmapClusterJobInput
-    ) -> StartUmapClusterJobOutput:
+    async def execute(self, payload: StartUmapClusterJobInput) -> StartUmapClusterJobOutput:
         ids_hash = compute_ids_hash(payload.molecule_ids)
         pp_hash = compute_picker_param_hash(payload.picker, payload.picker_params)
 

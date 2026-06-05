@@ -11,7 +11,8 @@ from cellar.application.chemical_registration.bulk_registration_item_reader impo
     BulkRegistrationItemPage,
     BulkRegistrationItemRow,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_models import (
+
+from .bulk_registration_models import (
     BulkRegistrationItemModel,
 )
 

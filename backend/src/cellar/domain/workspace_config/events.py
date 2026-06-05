@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass
 
 from cellar.domain.shared.events import DomainEvent

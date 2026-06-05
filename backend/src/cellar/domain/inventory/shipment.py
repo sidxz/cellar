@@ -15,7 +15,6 @@ from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.value_objects import Amount
 
-
 # ---------------------------------------------------------------------------
 # ShipmentItem — owned entity
 # ---------------------------------------------------------------------------

@@ -35,7 +35,6 @@ from cellar.infrastructure.persistence.sqlalchemy.base import (
     WorkspaceIdMixin,
 )
 
-
 # ---------------------------------------------------------------------------
 # Association tables
 # ---------------------------------------------------------------------------

@@ -3,27 +3,23 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from cellar.application.workspace_config.create_salt_entry import (
-    CreateSaltEntry,
     CreateSaltEntryCommand,
 )
 from cellar.application.workspace_config.delete_salt_entry import (
-    DeleteSaltEntry,
     DeleteSaltEntryCommand,
 )
 from cellar.application.workspace_config.list_salt_entries import (
-    ListSaltEntries,
     ListSaltEntriesQuery,
 )
 from cellar.application.workspace_config.update_salt_entry import (
-    UpdateSaltEntry,
-    UpdateSaltEntryCommand,
     UNSET,
+    UpdateSaltEntryCommand,
 )
 from cellar.domain.workspace_config.salt_entry import SaltEntry
 from cellar.interface.dependencies import (

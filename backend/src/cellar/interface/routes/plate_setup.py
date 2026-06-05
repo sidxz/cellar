@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from typing import Annotated
 
@@ -10,7 +11,6 @@ from pydantic import BaseModel
 
 from cellar.application.screening.fit_dose_response import FitOverrides
 from cellar.application.screening.get_plate_map import GetPlateMapQuery
-from cellar.application.shared.grid_plate_reshaper import reshape_grid_to_well_value_csv
 from cellar.application.screening.import_run_readouts import (
     ImportRunReadoutsCommand,
     ImportRunReadoutsResult,
@@ -20,6 +20,7 @@ from cellar.application.screening.plate_setup import (
     ParsedPlateMap,
     SetUpRunPlateCommand,
 )
+from cellar.application.shared.grid_plate_reshaper import reshape_grid_to_well_value_csv
 from cellar.domain.screening_assay.enums import HillSlopeConstraint
 from cellar.domain.shared.errors import ValidationError
 from cellar.interface.dependencies import (
@@ -307,10 +308,9 @@ async def import_run_readouts(
 
     # Auto-trigger calculation pipeline (best-effort — don't fail the import)
     if import_result.readouts_created > 0:
-        try:
+        # Calculation errors don't fail the import (best-effort).
+        with contextlib.suppress(Exception):
             await calc_engine.compute_for_run(run_id, workspace_id=auth.workspace_id)
-        except Exception:
-            pass  # Calculation errors don't fail the import
 
     return ImportReadoutsResponse(
         total_rows=import_result.total_rows,

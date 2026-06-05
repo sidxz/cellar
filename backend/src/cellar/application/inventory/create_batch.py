@@ -88,9 +88,7 @@ class CreateBatch:
         if self._workspace_settings_repo is None:
             settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
         else:
-            settings = await self._workspace_settings_repo.find_by_workspace_id(
-                workspace_id
-            )
+            settings = await self._workspace_settings_repo.find_by_workspace_id(workspace_id)
             if settings is None:
                 settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
         return settings.batch_sequence_width

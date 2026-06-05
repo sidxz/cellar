@@ -12,8 +12,10 @@ from pydantic import BaseModel
 from cellar.application.chemical_registration.depict_molecules import (
     DepictMoleculesQuery,
 )
-from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCountsQuery
 from cellar.application.chemical_registration.get_molecule import GetMoleculeQuery
+from cellar.application.chemical_registration.get_molecule_by_identifier import (
+    GetMoleculeByIdentifierQuery,
+)
 from cellar.application.chemical_registration.identifiers import (
     AddIdentifierCommand,
     ListIdentifiersQuery,
@@ -23,27 +25,24 @@ from cellar.application.chemical_registration.list_molecules import ListMolecule
 from cellar.application.chemical_registration.list_molecules_by_ids import (
     ListMoleculesByIdsQuery,
 )
-from cellar.application.chemical_registration.get_molecule_by_identifier import (
-    GetMoleculeByIdentifierQuery,
-)
 from cellar.application.chemical_registration.register_molecule import (
     ExternalId,
     RegisterMoleculeCommand,
 )
-from cellar.application.inventory.create_batch import CreateBatchCommand
-from cellar.application.inventory.salt_matcher import compute_formula_weight
-from cellar.interface.routes.batches import BatchResponse
 from cellar.application.chemical_registration.search_molecules import SearchMoleculesQuery
 from cellar.application.chemical_registration.update_molecule import UpdateMoleculeCommand
-from cellar.application.shared.sentinel import UNSET
-from cellar.domain.chemical_registration.molecule import Molecule
-from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
-from cellar.application.research_organization.manage_molecule_projects import (
-    ListMoleculeProjectsQuery,
-)
+from cellar.application.inventory.create_batch import CreateBatchCommand
+from cellar.application.inventory.salt_matcher import compute_formula_weight
 from cellar.application.research_organization.get_collections_for_molecule import (
     ListCollectionsForMoleculeQuery,
 )
+from cellar.application.research_organization.manage_molecule_projects import (
+    ListMoleculeProjectsQuery,
+)
+from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCountsQuery
+from cellar.application.shared.sentinel import UNSET
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from cellar.interface.dependencies import (
     AddIdentifierDep,
     AuthDep,
@@ -72,6 +71,7 @@ from cellar.interface.pagination import (
     clamp_limit,
     parse_cursor,
 )
+from cellar.interface.routes.batches import BatchResponse
 
 router = APIRouter(prefix="/api/v1/molecules", tags=["molecules"])
 
@@ -516,9 +516,7 @@ async def list_molecules(
     # Bulk-by-ids shortcut: when ?ids=<csv> is provided, skip normal pagination.
     if ids is not None:
         parsed_ids = [uuid.UUID(x.strip()) for x in ids.split(",") if x.strip()]
-        by_ids_query = ListMoleculesByIdsQuery(
-            workspace_id=auth.workspace_id, ids=parsed_ids
-        )
+        by_ids_query = ListMoleculesByIdsQuery(workspace_id=auth.workspace_id, ids=parsed_ids)
         molecules = result_to_response(await by_ids_use_case(by_ids_query, auth=auth))
         return PaginatedResponse(
             items=[MoleculeResponse.from_domain(m) for m in molecules],
@@ -574,8 +572,6 @@ async def search_molecules(
     results = result_to_response(await use_case(q, auth=auth))
 
     if search_type == "similarity":
-        from cellar.application.chemical_registration.search_molecules import SimilarityResult
-
         items = [
             SimilaritySearchResult.from_domain(r.molecule, r.similarity)
             for r in results[:capped_limit]

@@ -128,9 +128,7 @@ class UpdateCollectionImportTemplate:
                 input.workspace_id, input.template_id
             )
             if template is None:
-                return Failure(
-                    NotFoundError("CollectionImportTemplate", str(input.template_id))
-                )
+                return Failure(NotFoundError("CollectionImportTemplate", str(input.template_id)))
             template.update(
                 name=input.name,
                 description=input.description,
@@ -170,9 +168,7 @@ class DeleteCollectionImportTemplate:
                 input.workspace_id, input.template_id
             )
             if template is None:
-                return Failure(
-                    NotFoundError("CollectionImportTemplate", str(input.template_id))
-                )
+                return Failure(NotFoundError("CollectionImportTemplate", str(input.template_id)))
             await self._repo.delete(input.workspace_id, input.template_id)
             events = await self._uow.commit()
 

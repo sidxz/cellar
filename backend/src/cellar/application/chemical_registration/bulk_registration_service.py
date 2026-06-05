@@ -283,7 +283,8 @@ class BulkRegistrationService:
                 # Consult policy: always batch new molecules; for dups, use effective default.
                 create_batch_now = should_create_batch(
                     is_new_molecule=outcome.is_new,
-                    override=None,  # workflow-level decision already collapsed into effective_policy_default
+                    # workflow-level decision already collapsed into effective_policy_default
+                    override=None,
                     workspace_default=effective_policy_default,
                 )
 

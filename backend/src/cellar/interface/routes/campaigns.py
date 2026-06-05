@@ -1,4 +1,4 @@
-"""Campaign lifecycle endpoints — create, list, get, update, add-results, refresh, close, supersede.
+"""Campaign lifecycle endpoints: create, list, get, update, add-results, refresh, close, supersede.
 
 Channel, result-row, and publishing endpoints are split into sibling modules
 (``campaigns_channels.py``, ``campaigns_results.py``, ``campaigns_publishing.py``).

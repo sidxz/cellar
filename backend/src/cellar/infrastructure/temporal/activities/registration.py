@@ -7,14 +7,12 @@ invocation resolves fresh UoW + repos from the DI container.
 from __future__ import annotations
 
 import uuid
-from typing import Callable
+from collections.abc import Callable
 
 import structlog
 from returns.result import Failure
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
-
-from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 
 from cellar.application.chemical_registration.disclosure_service import DisclosureService
 from cellar.application.chemical_registration.merge_service import MergeService
@@ -37,13 +35,14 @@ from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCo
 from cellar.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
 from cellar.domain.chemical_registration.enums import RegistrationAction
 from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (
+from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (  # noqa: E501
     SQLAlchemyDisclosureRequestRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.merge_event_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.merge_event_repository import (  # noqa: E501
     SQLAlchemyMergeEventRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
@@ -52,7 +51,7 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository imp
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
     SQLAlchemySaltEntryRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (  # noqa: E501
     SQLAlchemyWorkspaceSettingsRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
@@ -206,7 +205,8 @@ class RegistrationActivities:
             if action not in (RegistrationAction.MERGE_CANDIDATE, RegistrationAction.CONFLICT):
                 create_batch_now = should_create_batch(
                     is_new_molecule=outcome.is_new,
-                    override=None,  # workflow-level decision already collapsed into effective_policy_default
+                    # workflow-level decision already collapsed into effective_policy_default
+                    override=None,
                     workspace_default=effective_policy_default,
                 )
                 if create_batch_now:

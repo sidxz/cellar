@@ -31,13 +31,9 @@ class GetUmapClusterJob:
         self._repo = repository
         self._uow = uow
 
-    async def execute(
-        self, payload: GetUmapClusterJobInput
-    ) -> Result[UmapJob, DomainError]:
+    async def execute(self, payload: GetUmapClusterJobInput) -> Result[UmapJob, DomainError]:
         async with self._uow:
-            job = await self._repo.find_by_id(
-                payload.job_id, workspace_id=payload.workspace_id
-            )
+            job = await self._repo.find_by_id(payload.job_id, workspace_id=payload.workspace_id)
         if job is None:
             return Failure(NotFoundError("UmapJob", str(payload.job_id)))
         return Success(job)

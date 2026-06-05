@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from cellar.domain.inventory.enums import PlateStatus, PlateType
 from cellar.domain.inventory.registered_plate import RegisteredPlate
@@ -13,7 +13,7 @@ from cellar.domain.shared.value_objects import Barcode
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (  # noqa: E501
     escape_like,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory._vo_mappers import (

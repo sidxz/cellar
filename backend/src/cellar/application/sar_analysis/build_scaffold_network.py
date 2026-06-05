@@ -162,10 +162,7 @@ class BuildScaffoldNetwork:
                 )
             )
 
-        edges = [
-            ScaffoldTreeEdge(parent_smiles=p, child_smiles=c)
-            for p, c in network.edges
-        ]
+        edges = [ScaffoldTreeEdge(parent_smiles=p, child_smiles=c) for p, c in network.edges]
 
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         return ScaffoldTreeResult(
@@ -184,7 +181,5 @@ def _empty_result(started: float) -> ScaffoldTreeResult:
     return ScaffoldTreeResult(
         nodes=[],
         edges=[],
-        stats=ScaffoldTreeStats(
-            node_count=0, elapsed_ms=elapsed_ms, cache_hit=False
-        ),
+        stats=ScaffoldTreeStats(node_count=0, elapsed_ms=elapsed_ms, cache_hit=False),
     )

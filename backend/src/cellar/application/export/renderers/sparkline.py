@@ -30,13 +30,13 @@ SIZE_PRESETS: dict[str, tuple[int, int]] = {
 }
 
 # Mirrors FE chart-colors.ts
-_FIT_COLOR = "#18974c"             # CURVE_QUALITY_COLORS.full (green)
+_FIT_COLOR = "#18974c"  # CURVE_QUALITY_COLORS.full (green)
 _INACTIVE_MARKER_COLOR = "#707372"  # CURVE_DEFAULT_COLOR (neutral)
-_MARKER_COLOR = "#18974c"          # same as fit so points line up visually
-_AGGREGATE_LINE = "#f49e17"        # CHART_COLORS.warning (amber)
-_INTERCEPT_LINE = "#f49e17"        # same amber, dotted
-_AXIS_GRID = "#c0c4c3"             # CHART_CANVAS.grid (light bg)
-_AXIS_TICK = "#707372"             # CHART_CANVAS.label
+_MARKER_COLOR = "#18974c"  # same as fit so points line up visually
+_AGGREGATE_LINE = "#f49e17"  # CHART_COLORS.warning (amber)
+_INTERCEPT_LINE = "#f49e17"  # same amber, dotted
+_AXIS_GRID = "#c0c4c3"  # CHART_CANVAS.grid (light bg)
+_AXIS_TICK = "#707372"  # CHART_CANVAS.label
 
 
 def _resolve_size(size: SizePreset | tuple[int, int] | None) -> tuple[int, int]:
@@ -47,8 +47,9 @@ def _resolve_size(size: SizePreset | tuple[int, int] | None) -> tuple[int, int]:
     return size
 
 
-def _sigmoid_xy(bottom: float, top: float, fv: float, hill: float,
-                lo_log: float, hi_log: float, n: int = 80) -> tuple[list[float], list[float]]:
+def _sigmoid_xy(
+    bottom: float, top: float, fv: float, hill: float, lo_log: float, hi_log: float, n: int = 80
+) -> tuple[list[float], list[float]]:
     """Sample the 4PL sigmoid across log10(dose) from lo_log..hi_log."""
     if fv is None or fv <= 0:
         return [], []
@@ -56,7 +57,7 @@ def _sigmoid_xy(bottom: float, top: float, fv: float, hill: float,
     step = (hi_log - lo_log) / max(1, n - 1)
     xs_log = [lo_log + i * step for i in range(n)]
     ys = [bottom + (top - bottom) / (1 + 10 ** ((lf - x) * hill)) for x in xs_log]
-    return [10 ** x for x in xs_log], ys
+    return [10**x for x in xs_log], ys
 
 
 def _xrange_for(curve_snapshot: dict) -> tuple[float, float]:
@@ -110,7 +111,11 @@ def av_to_sparkline_snapshot(av: dict) -> dict | None:
 
     raw_data = av.get("raw_data") or []
     data_points = [
-        {"dose": pt["x"], "response": pt["y"], **{k: v for k, v in pt.items() if k not in ("x", "y")}}
+        {
+            "dose": pt["x"],
+            "response": pt["y"],
+            **{k: v for k, v in pt.items() if k not in ("x", "y")},
+        }
         for pt in raw_data
         if isinstance(pt, dict) and "x" in pt and "y" in pt
     ]
@@ -157,6 +162,7 @@ def render_sparkline_png(
         return None
 
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.ticker import FixedLocator, LogLocator
@@ -168,8 +174,7 @@ def render_sparkline_png(
     additional = curve_snapshot.get("additional_curves") or []
     aggregate = curve_snapshot.get("aggregate")
 
-    has_points = any(isinstance(p.get("dose"), (int, float)) and p["dose"] > 0
-                     for p in points)
+    has_points = any(isinstance(p.get("dose"), (int, float)) and p["dose"] > 0 for p in points)
     has_fit = all(k in fit for k in ("top", "bottom", "ec50", "hill_slope"))
     if not has_points and not has_fit:
         return None
@@ -189,15 +194,12 @@ def render_sparkline_png(
     ax.set_xlim(lo, hi)
     ax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=8))
     ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=tuple(range(2, 10)), numticks=80))
-    ax.tick_params(axis="x", which="major", labelsize=7, colors=_AXIS_TICK,
-                   length=3, width=0.6)
-    ax.tick_params(axis="x", which="minor", length=1.5, width=0.4,
-                   colors=_AXIS_GRID)
+    ax.tick_params(axis="x", which="major", labelsize=7, colors=_AXIS_TICK, length=3, width=0.6)
+    ax.tick_params(axis="x", which="minor", length=1.5, width=0.4, colors=_AXIS_GRID)
 
     # Y-axis: 0/50/100 fixed ticks, drawn even when data falls outside.
     ax.yaxis.set_major_locator(FixedLocator([0, 50, 100]))
-    ax.tick_params(axis="y", labelsize=7, colors=_AXIS_TICK,
-                   length=3, width=0.6)
+    ax.tick_params(axis="y", labelsize=7, colors=_AXIS_TICK, length=3, width=0.6)
     ax.set_ylim(-15, 115)
 
     ax.grid(True, which="major", color=_AXIS_GRID, linewidth=0.4, alpha=0.6)
@@ -206,8 +208,16 @@ def render_sparkline_png(
     # inactive curves — matches FE).
     marker_color = _INACTIVE_MARKER_COLOR if inactive else _MARKER_COLOR
     if has_points:
-        xs = [float(p["dose"]) for p in points if isinstance(p.get("dose"), (int, float)) and p["dose"] > 0]
-        ys = [float(p.get("response", 0)) for p in points if isinstance(p.get("dose"), (int, float)) and p["dose"] > 0]
+        xs = [
+            float(p["dose"])
+            for p in points
+            if isinstance(p.get("dose"), (int, float)) and p["dose"] > 0
+        ]
+        ys = [
+            float(p.get("response", 0))
+            for p in points
+            if isinstance(p.get("dose"), (int, float)) and p["dose"] > 0
+        ]
         ax.scatter(xs, ys, s=10, color=marker_color, zorder=3, edgecolors="none")
 
     # Aggregate-mode sibling sigmoids (muted dashed) — drawn under the
@@ -224,11 +234,19 @@ def render_sparkline_png(
                 ac.get("top", 100.0),
                 float(fv),
                 ac.get("hill_slope", 1.0),
-                math.log10(lo), math.log10(hi),
+                math.log10(lo),
+                math.log10(hi),
             )
             if sx:
-                ax.plot(sx, sy, color=_FIT_COLOR, linewidth=0.8,
-                        linestyle=(0, (2, 2)), alpha=0.35, zorder=1)
+                ax.plot(
+                    sx,
+                    sy,
+                    color=_FIT_COLOR,
+                    linewidth=0.8,
+                    linestyle=(0, (2, 2)),
+                    alpha=0.35,
+                    zorder=1,
+                )
 
     # Primary fit (only drawn when not inactive — matches FE showFit).
     if not inactive and has_fit:
@@ -237,7 +255,8 @@ def render_sparkline_png(
             float(fit["top"]),
             float(fit["ec50"]),
             float(fit["hill_slope"]),
-            math.log10(lo), math.log10(hi),
+            math.log10(lo),
+            math.log10(hi),
         )
         if sx:
             ax.plot(sx, sy, color=_FIT_COLOR, linewidth=1.6, zorder=2)
@@ -255,12 +274,17 @@ def render_sparkline_png(
     elif not inactive and has_fit:
         fv = float(fit["ec50"])
         if fv > 0:
-            ax.axvline(fv, color=_INTERCEPT_LINE, linewidth=0.9,
-                       linestyle=(0, (1.5, 1.5)), alpha=0.7, zorder=2)
+            ax.axvline(
+                fv,
+                color=_INTERCEPT_LINE,
+                linewidth=0.9,
+                linestyle=(0, (1.5, 1.5)),
+                alpha=0.7,
+                zorder=2,
+            )
 
     fig.tight_layout(pad=0.3)
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0.06,
-                facecolor="white")
+    fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0.06, facecolor="white")
     plt.close(fig)
     return buf.getvalue()

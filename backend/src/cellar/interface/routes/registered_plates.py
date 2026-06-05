@@ -9,26 +9,6 @@ from fastapi import APIRouter, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from cellar.application.inventory.registered_plates import (
-    ChangeStatus,
-    ChangeStatusCommand,
-    DeletePlate,
-    DeletePlateCommand,
-    DerivePlate,
-    DerivePlateCommand,
-    GetPlate,
-    GetPlateQuery,
-    ListChildren,
-    ListChildrenQuery,
-    ListPlates,
-    ListPlatesQuery,
-    MapWells,
-    MapWellsCommand,
-    RegisterPlate,
-    RegisterPlateCommand,
-    UpdatePlate,
-    UpdatePlateCommand,
-)
 from cellar.application.inventory.export_plate_layout import (
     ExportPlateLayoutQuery,
     render_csv,
@@ -36,7 +16,17 @@ from cellar.application.inventory.export_plate_layout import (
 )
 from cellar.application.inventory.plate_read_model import (
     MoleculePlateEntry,
-    PlateReadModelService,
+)
+from cellar.application.inventory.registered_plates import (
+    ChangeStatusCommand,
+    DeletePlateCommand,
+    DerivePlateCommand,
+    GetPlateQuery,
+    ListChildrenQuery,
+    ListPlatesQuery,
+    MapWellsCommand,
+    RegisterPlateCommand,
+    UpdatePlateCommand,
 )
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.inventory.enums import PlateStatus, PlateType
@@ -52,7 +42,6 @@ from cellar.interface.dependencies import (
     ListChildrenDep,
     ListPlatesDep,
     MapWellsDep,
-    PlateReadModelServiceDep,
     RegisterPlateDep,
     UpdatePlateDep,
 )

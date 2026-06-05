@@ -29,9 +29,7 @@ class InterceptKey:
                 f"InterceptKey kind must be one of {_VALID_INTERCEPT_KINDS}, got '{self.kind}'"
             )
         if not (0 < self.level < 100):
-            raise ValidationError(
-                f"InterceptKey level must be in (0, 100), got {self.level}"
-            )
+            raise ValidationError(f"InterceptKey level must be in (0, 100), got {self.level}")
 
     def to_dict(self) -> dict:
         return {"kind": self.kind, "level": self.level}

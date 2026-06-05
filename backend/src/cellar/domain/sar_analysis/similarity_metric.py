@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Union
 
 
 @dataclass(frozen=True)
@@ -29,7 +28,7 @@ class Tversky:
             raise ValueError(f"beta must be >= 0, got {self.beta}")
 
 
-SimilarityMetric = Union[Tanimoto, Tversky]
+SimilarityMetric = Tanimoto | Tversky
 
 
 def serialize_metric(metric: SimilarityMetric) -> str:

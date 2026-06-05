@@ -27,9 +27,7 @@ from typing import Any
 Criterion = dict[str, Any]
 
 
-def walk_criteria(
-    root: list[Criterion] | None, visit: Callable[[Criterion], None]
-) -> None:
+def walk_criteria(root: list[Criterion] | None, visit: Callable[[Criterion], None]) -> None:
     """Depth-first walk; invoke ``visit`` on every non-group leaf node."""
     if not root:
         return

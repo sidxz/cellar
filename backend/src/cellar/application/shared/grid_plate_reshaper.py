@@ -68,7 +68,7 @@ def _as_column_number(cell: str) -> int | None:
 def _row_letter(row: list[str]) -> str | None:
     """Return the well-row letter a data row starts with (A..AF), else None.
 
-    The first non-empty cell must be a 1–2 char letter; otherwise this is a
+    The first non-empty cell must be a 1-2 char letter; otherwise this is a
     header/title row, not a data row.
     """
     for cell in row:

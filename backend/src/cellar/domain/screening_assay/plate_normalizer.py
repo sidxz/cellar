@@ -18,7 +18,6 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.run import Well
 from cellar.domain.shared.errors import ValidationError
 
-
 # ---------------------------------------------------------------------------
 # Output value object
 # ---------------------------------------------------------------------------

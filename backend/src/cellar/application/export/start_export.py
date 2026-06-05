@@ -58,9 +58,7 @@ class StartExport:
         require_workspace_role(auth, "viewer")
 
         if cmd.source != ExportSource.SEARCH:
-            return Failure(
-                ValidationError(f"Unsupported export source: {cmd.source}")
-            )
+            return Failure(ValidationError(f"Unsupported export source: {cmd.source}"))
 
         job = ExportJob.create(
             id=uuid.uuid4(),

@@ -52,7 +52,8 @@ class CreateExternalApiKey:
             if existing is not None:
                 return Failure(
                     ConflictError(
-                        f"API key with name '{input.key_name.strip()}' already exists in this workspace"
+                        f"API key with name '{input.key_name.strip()}' "
+                        "already exists in this workspace"
                     )
                 )
 

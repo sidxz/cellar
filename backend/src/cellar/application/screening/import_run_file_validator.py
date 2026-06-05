@@ -27,7 +27,6 @@ from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
 from cellar.domain.screening_assay.repository import PlateTemplateRepository
 from cellar.domain.shared.enums import PlateFormat
 
-
 _DESIGNATION_TO_WELL_TYPE: dict[str, WellType] = {
     "compound": WellType.SAMPLE,
     "positive_control": WellType.POSITIVE_CONTROL,

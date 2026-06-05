@@ -18,7 +18,7 @@ from uuid import UUID
 from cellar.domain.sar_analysis.scaffold_tree_types import ScaffoldTreeResult
 
 
-class ScaffoldTreeJobStatus(str, enum.Enum):
+class ScaffoldTreeJobStatus(enum.StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     READY = "ready"
@@ -59,7 +59,7 @@ class ScaffoldTreeJob:
         requested_by: UUID,
         ids_hash: str,
         now: datetime,
-    ) -> "ScaffoldTreeJob":
+    ) -> ScaffoldTreeJob:
         return cls(
             id=uuid.uuid4(),
             workspace_id=workspace_id,
@@ -68,20 +68,14 @@ class ScaffoldTreeJob:
             requested_at=now,
         )
 
-    def mark_running(self, now: datetime) -> "ScaffoldTreeJob":
+    def mark_running(self, now: datetime) -> ScaffoldTreeJob:
         if self.status != ScaffoldTreeJobStatus.PENDING:
-            raise InvalidScaffoldTreeJobTransition(
-                f"Cannot mark RUNNING from {self.status}"
-            )
+            raise InvalidScaffoldTreeJobTransition(f"Cannot mark RUNNING from {self.status}")
         return replace(self, status=ScaffoldTreeJobStatus.RUNNING, started_at=now)
 
-    def mark_ready(
-        self, result: ScaffoldTreeResult, now: datetime
-    ) -> "ScaffoldTreeJob":
+    def mark_ready(self, result: ScaffoldTreeResult, now: datetime) -> ScaffoldTreeJob:
         if self.status != ScaffoldTreeJobStatus.RUNNING:
-            raise InvalidScaffoldTreeJobTransition(
-                f"Cannot mark READY from {self.status}"
-            )
+            raise InvalidScaffoldTreeJobTransition(f"Cannot mark READY from {self.status}")
         return replace(
             self,
             status=ScaffoldTreeJobStatus.READY,
@@ -89,14 +83,12 @@ class ScaffoldTreeJob:
             result=result,
         )
 
-    def mark_failed(self, error: str, now: datetime) -> "ScaffoldTreeJob":
+    def mark_failed(self, error: str, now: datetime) -> ScaffoldTreeJob:
         if self.status not in {
             ScaffoldTreeJobStatus.PENDING,
             ScaffoldTreeJobStatus.RUNNING,
         }:
-            raise InvalidScaffoldTreeJobTransition(
-                f"Cannot mark FAILED from {self.status}"
-            )
+            raise InvalidScaffoldTreeJobTransition(f"Cannot mark FAILED from {self.status}")
         return replace(
             self,
             status=ScaffoldTreeJobStatus.FAILED,
@@ -104,11 +96,9 @@ class ScaffoldTreeJob:
             error_message=error,
         )
 
-    def mark_cancelled(self, now: datetime) -> "ScaffoldTreeJob":
+    def mark_cancelled(self, now: datetime) -> ScaffoldTreeJob:
         if self.status in _TERMINAL:
-            raise InvalidScaffoldTreeJobTransition(
-                f"Cannot CANCEL terminal {self.status}"
-            )
+            raise InvalidScaffoldTreeJobTransition(f"Cannot CANCEL terminal {self.status}")
         return replace(
             self,
             status=ScaffoldTreeJobStatus.CANCELLED,

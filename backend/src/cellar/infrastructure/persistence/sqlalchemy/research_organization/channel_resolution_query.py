@@ -148,8 +148,7 @@ class SQLAlchemyChannelResolutionQuery:
                 # Without this predicate, two DR readouts that happen to
                 # share a curve_type would both surface here and the
                 # selection rule below would silently pick the wrong one.
-                DoseResponseCurveModel.readout_definition_id
-                == channel.readout_definition_id,
+                DoseResponseCurveModel.readout_definition_id == channel.readout_definition_id,
             )
         )
         async with self._sf() as session:

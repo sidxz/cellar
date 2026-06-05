@@ -16,9 +16,8 @@ Schema notes / deviations from plan:
 """
 
 from cellar.domain.shared.cascade.actions import CascadeAction as A
-from cellar.infrastructure.cascade.rules import CascadeRule
 from cellar.infrastructure.cascade.registry import register_rules
-
+from cellar.infrastructure.cascade.rules import CascadeRule
 
 register_rules(
     # -------------------------------------------------------------------------
@@ -38,7 +37,7 @@ register_rules(
         parent_table="projects",
         action=A.CASCADE,
         label_field=None,
-        display_label="Project–molecule links",
+        display_label="Project-molecule links",
     ),
     # -------------------------------------------------------------------------
     # collection_molecules join table
@@ -59,7 +58,7 @@ register_rules(
         parent_table="collections",
         action=A.CASCADE,
         label_field=None,
-        display_label="Collection–molecule links",
+        display_label="Collection-molecule links",
     ),
     # -------------------------------------------------------------------------
     # Collection parent references

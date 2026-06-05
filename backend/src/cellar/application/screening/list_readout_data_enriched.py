@@ -56,7 +56,7 @@ class ListReadoutDataEnriched:
         auth: AuthContext | None = None,
     ) -> Result[list[EnrichedReadoutData], DomainError]:
         require_same_workspace(auth, input.workspace_id)
-        async with self._uow as uow:
+        async with self._uow:
             data = await self._repo.find_by_run(input.workspace_id, input.run_id)
 
             mol_ids = list({rd.molecule_id for rd in data if rd.molecule_id})

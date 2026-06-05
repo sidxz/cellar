@@ -113,10 +113,12 @@ class UpdateCampaignMetadata:
                     campaign.name = stripped
                     changed = True
 
-            if not isinstance(input.description, _Unset):
-                if input.description != campaign.description:
-                    campaign.description = input.description  # type: ignore[assignment]
-                    changed = True
+            if (
+                not isinstance(input.description, _Unset)
+                and input.description != campaign.description
+            ):
+                campaign.description = input.description  # type: ignore[assignment]
+                changed = True
 
             if changed:
                 campaign.updated_at = datetime.now(UTC)

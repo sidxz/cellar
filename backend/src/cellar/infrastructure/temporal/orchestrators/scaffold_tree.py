@@ -29,9 +29,7 @@ from cellar.infrastructure.temporal.workflows.scaffold_tree import (
 class ScaffoldTreeRunner(Protocol):
     """Minimal interface consumed by NullScaffoldTreeOrchestrator."""
 
-    async def run(
-        self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]
-    ) -> None: ...
+    async def run(self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]) -> None: ...
 
 
 class TemporalScaffoldTreeOrchestrator:
@@ -74,15 +72,18 @@ class NullScaffoldTreeOrchestrator:
 
     def __init__(self, runner: ScaffoldTreeRunner | RunScaffoldTree) -> None:
         self._runner = runner
+        # Keep strong references to in-flight tasks — asyncio only holds weak
+        # refs, so a fire-and-forget task can be garbage-collected mid-build.
+        self._tasks: set[asyncio.Task] = set()
 
     async def schedule(
         self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]
     ) -> None:
-        asyncio.create_task(
-            self._runner.run(
-                job_id=job_id, workspace_id=workspace_id, molecule_ids=molecule_ids
-            )
+        task = asyncio.create_task(
+            self._runner.run(job_id=job_id, workspace_id=workspace_id, molecule_ids=molecule_ids)
         )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     async def cancel(self, *, job_id: UUID) -> None:
         # No-op — inline tasks cannot be cancelled by job id.

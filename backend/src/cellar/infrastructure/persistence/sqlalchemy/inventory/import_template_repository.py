@@ -19,9 +19,7 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
 )
 
 
-class SQLAlchemyImportTemplateRepository(
-    EntityRepository[ImportTemplate, ImportTemplateModel]
-):
+class SQLAlchemyImportTemplateRepository(EntityRepository[ImportTemplate, ImportTemplateModel]):
     """Persists ImportTemplate entities to PostgreSQL."""
 
     model_class = ImportTemplateModel

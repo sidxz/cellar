@@ -19,9 +19,7 @@ from cellar.interface.dependencies import (
     CollectionRepoUoWDep,
 )
 
-router = APIRouter(
-    prefix="/api/v1/collection-import-previews", tags=["collection-import"]
-)
+router = APIRouter(prefix="/api/v1/collection-import-previews", tags=["collection-import"])
 
 
 class UnregisteredRowResponse(BaseModel):
@@ -64,13 +62,9 @@ async def get_unregistered_rows(
     # path can reuse cached outcomes. Filter back down to unregistered rows
     # for the bulk-register wizard handoff.
     unregistered_indices = {
-        o.row_index
-        for o in stashed.outcomes
-        if o.status == RowStatus.UNREGISTERED
+        o.row_index for o in stashed.outcomes if o.status == RowStatus.UNREGISTERED
     }
-    unregistered_rows = [
-        r for r in stashed.rows if r.row_index in unregistered_indices
-    ]
+    unregistered_rows = [r for r in stashed.rows if r.row_index in unregistered_indices]
 
     return UnregisteredRowsResponse(
         rows=[

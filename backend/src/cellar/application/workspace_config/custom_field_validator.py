@@ -103,8 +103,7 @@ class CustomFieldValidator:
                     f"picklist values: {allowed}"
                 )
 
-        elif data_type == FieldDataType.BATCH_LINK:
-            if not isinstance(value, str):
-                return f"Field '{field_name}' expects a batch identifier (string)"
+        elif data_type == FieldDataType.BATCH_LINK and not isinstance(value, str):
+            return f"Field '{field_name}' expects a batch identifier (string)"
 
         return None

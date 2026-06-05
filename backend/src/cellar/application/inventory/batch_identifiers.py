@@ -71,9 +71,7 @@ class AddBatchIdentifier:
         require_editor(auth)
 
         async with self._uow:
-            batch = await self._repo.find_by_id_in_workspace(
-                input.workspace_id, input.batch_id
-            )
+            batch = await self._repo.find_by_id_in_workspace(input.workspace_id, input.batch_id)
             if batch is None:
                 return Failure(NotFoundError("Batch", str(input.batch_id)))
 
@@ -131,9 +129,7 @@ class RemoveBatchIdentifier:
         require_editor(auth)
 
         async with self._uow:
-            batch = await self._repo.find_by_id_in_workspace(
-                input.workspace_id, input.batch_id
-            )
+            batch = await self._repo.find_by_id_in_workspace(input.workspace_id, input.batch_id)
             if batch is None:
                 return Failure(NotFoundError("Batch", str(input.batch_id)))
 
@@ -163,9 +159,7 @@ class ListBatchIdentifiers:
     ) -> Result[list[BatchIdentifier], DomainError]:
         require_workspace_role(auth, "viewer")
         async with self._uow:
-            batch = await self._repo.find_by_id_in_workspace(
-                input.workspace_id, input.batch_id
-            )
+            batch = await self._repo.find_by_id_in_workspace(input.workspace_id, input.batch_id)
             if batch is None:
                 return Failure(NotFoundError("Batch", str(input.batch_id)))
             return Success(batch.identifiers)

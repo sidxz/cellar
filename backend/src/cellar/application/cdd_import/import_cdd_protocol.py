@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from dataclasses import dataclass
 
@@ -127,10 +128,8 @@ class ImportCddProtocol:
             protocol_type = ProtocolType.BIOCHEMICAL
             if mapping.category:
                 cat_normalized = mapping.category.lower().replace(" ", "_").replace("-", "_")
-                try:
+                with contextlib.suppress(ValueError):  # keep default BIOCHEMICAL
                     protocol_type = ProtocolType(cat_normalized)
-                except ValueError:
-                    pass  # keep default BIOCHEMICAL
 
             protocol = Protocol.create(
                 workspace_id=input.workspace_id,

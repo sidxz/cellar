@@ -7,15 +7,13 @@ import uuid
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from cellar.application.screening.create_target import CreateTarget, CreateTargetCommand
-from cellar.application.screening.delete_target import DeleteTarget, DeleteTargetCommand
+from cellar.application.screening.create_target import CreateTargetCommand
+from cellar.application.screening.delete_target import DeleteTargetCommand
 from cellar.application.screening.get_target import (
-    GetTarget,
     GetTargetQuery,
-    ListTargets,
     ListTargetsQuery,
 )
-from cellar.application.screening.update_target import UpdateTarget, UpdateTargetCommand
+from cellar.application.screening.update_target import UpdateTargetCommand
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.target import Target
 from cellar.interface.dependencies import (

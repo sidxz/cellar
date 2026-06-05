@@ -19,7 +19,6 @@ from cellar.domain.shared.value_objects import (
     StorageCondition,
 )
 
-
 # --- Amount (required field on Batch / Sample) ------------------------------
 
 

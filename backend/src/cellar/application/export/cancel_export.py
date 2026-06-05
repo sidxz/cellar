@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from dataclasses import dataclass
 
@@ -47,18 +48,15 @@ class CancelExport:
         require_same_workspace(auth, cmd.workspace_id)
 
         async with self._uow:
-            job = await self._repo.find_by_id_in_workspace(
-                cmd.workspace_id, cmd.job_id
-            )
+            job = await self._repo.find_by_id_in_workspace(cmd.workspace_id, cmd.job_id)
             if job is None:
                 return Failure(NotFoundError("ExportJob", str(cmd.job_id)))
             job.request_cancel()
             await self._repo.save(job)
             await self._uow.commit()
 
-        try:
+        # best-effort — worker polls the status column
+        with contextlib.suppress(Exception):
             await self._orchestrator.request_cancel(f"export-{job.id}")
-        except Exception:
-            pass  # best-effort — worker polls the status column
 
         return Success(None)

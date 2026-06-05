@@ -7,7 +7,6 @@ Search-side queries (substructure / similarity / structured query) live on
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any
 
 import sqlalchemy as sa
@@ -15,12 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.chemical_registration.enums import (
-    LifecycleStage,
-    MoleculeType,
     RegistrationStatus,
-    Stereochemistry,
-    StructureStatus,
-    SynthesisStatus,
 )
 from cellar.domain.chemical_registration.mixture_component import MixtureComponent
 from cellar.domain.chemical_registration.molecule import Molecule
@@ -37,12 +31,13 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models i
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_mapping import (
     model_to_molecule,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
-    escape_like,
-)
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
     ProjectModel,
     molecule_projects,
+)
+
+from .search_query_composer import (
+    escape_like,
 )
 
 
@@ -327,11 +322,11 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
             MoleculeModel.registration_status != RegistrationStatus.PENDING_REVIEW.value,
         )
         if filters:
-            if "molecule_type" in filters and filters["molecule_type"]:
+            if filters.get("molecule_type"):
                 stmt = stmt.where(MoleculeModel.molecule_type == filters["molecule_type"])
-            if "lifecycle_stage" in filters and filters["lifecycle_stage"]:
+            if filters.get("lifecycle_stage"):
                 stmt = stmt.where(MoleculeModel.lifecycle_stage == filters["lifecycle_stage"])
-            if "structure_status" in filters and filters["structure_status"]:
+            if filters.get("structure_status"):
                 stmt = stmt.where(MoleculeModel.structure_status == filters["structure_status"])
 
         # Free-text search on name, registration_number, formula, inchi_key,
@@ -354,7 +349,8 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
                 )
             )
 
-        # Project scoping: None = no filter (admin), [] = unscoped only, [ids] = unscoped + matching
+        # Project scoping: None = no filter (admin), [] = unscoped only,
+        # [ids] = unscoped + matching
         if project_ids is not None:
             # Molecules in any project within this workspace
             ws_project_ids = select(ProjectModel.id).where(

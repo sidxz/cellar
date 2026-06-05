@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 
 
 @dataclass(frozen=True)
-class PageResult(Generic[T]):
+class PageResult[T]:
     """A single page of query results.
 
     Attributes:
@@ -24,7 +25,7 @@ class PageResult(Generic[T]):
 
 
 @dataclass(frozen=True)
-class EnrichedPageResult(Generic[T]):
+class EnrichedPageResult[T]:
     """Page result with optional activity enrichment data."""
 
     items: list[T]

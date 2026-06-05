@@ -12,76 +12,52 @@ from pydantic import BaseModel
 from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
-from cellar.application.screening.condition_grouping_service import ConditionGroupingService
-from cellar.application.screening.create_protocol import CreateProtocol, CreateProtocolCommand
-from cellar.application.screening.lock_protocol import (
-    LockProtocol,
-    LockProtocolCommand,
-    UnlockProtocol,
-    UnlockProtocolCommand,
-)
+from cellar.application.screening.create_protocol import CreateProtocolCommand
 from cellar.application.screening.get_protocol import (
-    GetProtocol,
     GetProtocolQuery,
-    ListProtocols,
     ListProtocolsQuery,
 )
 from cellar.application.screening.list_protocol_summaries import (
     ListProtocolSummariesQuery,
 )
-from cellar.application.screening.manage_protocol import (
-    AddProtocolToProject,
-    AddProtocolToProjectCommand,
-    DeleteProtocol,
-    DeleteProtocolCommand,
-    ListProtocolsByProject,
-    ListProtocolsByProjectQuery,
-    PublishProtocol,
-    PublishProtocolCommand,
-    RemoveProtocolFromProject,
-    RemoveProtocolFromProjectCommand,
-    RetireProtocol,
-    RetireProtocolCommand,
-    UpdateProtocol,
-    UpdateProtocolCommand,
-    VersionProtocol,
-    VersionProtocolCommand,
+from cellar.application.screening.lock_protocol import (
+    LockProtocolCommand,
+    UnlockProtocolCommand,
 )
 from cellar.application.screening.manage_condition_definitions import (
-    AddConditionDefinition,
     AddConditionDefinitionCommand,
-    RemoveConditionDefinition,
     RemoveConditionDefinitionCommand,
-    UpdateConditionDefinition,
     UpdateConditionDefinitionCommand,
 )
 from cellar.application.screening.manage_control_layouts import (
-    RemoveControlLayout,
     RemoveControlLayoutCommand,
-    SetControlLayout,
     SetControlLayoutCommand,
 )
 from cellar.application.screening.manage_ontology_annotations import (
-    RemoveOntologyAnnotation,
     RemoveOntologyAnnotationCommand,
-    SetOntologyAnnotation,
     SetOntologyAnnotationCommand,
 )
-from cellar.application.screening.manage_readout_definitions import (
-    AddReadoutDefinition,
-    AddReadoutDefinitionCommand,
-    RemoveReadoutDefinition,
-    RemoveReadoutDefinitionCommand,
-    UpdateReadoutDefinition,
-    UpdateReadoutDefinitionCommand,
-    _UNSET as _RD_UNSET,
+from cellar.application.screening.manage_protocol import (
+    AddProtocolToProjectCommand,
+    DeleteProtocolCommand,
+    ListProtocolsByProjectQuery,
+    PublishProtocolCommand,
+    RemoveProtocolFromProjectCommand,
+    RetireProtocolCommand,
+    UpdateProtocolCommand,
+    VersionProtocolCommand,
 )
+from cellar.application.screening.manage_readout_definitions import (
+    AddReadoutDefinitionCommand,
+    RemoveReadoutDefinitionCommand,
+    UpdateReadoutDefinitionCommand,
+)
+from cellar.application.shared.sentinel import UNSET
+from cellar.domain.screening_assay.protocol import Protocol
 from cellar.interface.dependencies import (
     AddConditionDefinitionDep,
-    UpdateConditionDefinitionDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
-    UpdateReadoutDefinitionDep,
     AuthDep,
     ConditionGroupingServiceDep,
     CreateProtocolDep,
@@ -98,16 +74,16 @@ from cellar.interface.dependencies import (
     RemoveProtocolFromProjectDep,
     RemoveReadoutDefinitionDep,
     RetireProtocolDep,
-    UnlockProtocolDep,
     SetControlLayoutDep,
     SetOntologyAnnotationDep,
+    UnlockProtocolDep,
+    UpdateConditionDefinitionDep,
     UpdateProtocolDep,
+    UpdateReadoutDefinitionDep,
     VersionProtocolDep,
 )
-from cellar.domain.screening_assay.protocol import Protocol
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
-from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1")
 
@@ -945,7 +921,7 @@ async def remove_ontology_annotation(
 
 
 # ---------------------------------------------------------------------------
-# Protocol–Project association routes
+# Protocol-Project association routes
 # ---------------------------------------------------------------------------
 
 
@@ -1037,5 +1013,3 @@ async def get_condition_groups(
             for g in groups
         ],
     )
-
-

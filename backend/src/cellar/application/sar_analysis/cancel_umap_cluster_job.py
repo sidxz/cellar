@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from returns.result import Failure, Result, Success
@@ -33,17 +33,13 @@ class CancelUmapClusterJob:
         self._uow = uow
         self._orchestrator = orchestrator
 
-    async def execute(
-        self, payload: CancelUmapClusterJobInput
-    ) -> Result[UmapJob, DomainError]:
+    async def execute(self, payload: CancelUmapClusterJobInput) -> Result[UmapJob, DomainError]:
         async with self._uow:
-            job = await self._repo.find_by_id(
-                payload.job_id, workspace_id=payload.workspace_id
-            )
+            job = await self._repo.find_by_id(payload.job_id, workspace_id=payload.workspace_id)
             if job is None:
                 return Failure(NotFoundError("UmapJob", str(payload.job_id)))
             try:
-                cancelled = job.mark_cancelled(datetime.now(timezone.utc))
+                cancelled = job.mark_cancelled(datetime.now(UTC))
             except InvalidUmapJobTransition:
                 return Success(job)  # already terminal — idempotent no-op
             await self._repo.save(cancelled)

@@ -47,8 +47,6 @@ class MoleculeTagMergeSideEffect:
 
         # Step 2: UPDATE remaining source → target.
         await session.execute(
-            sa.text(
-                "UPDATE molecule_tags SET molecule_id = :target WHERE molecule_id = :source"
-            ),
+            sa.text("UPDATE molecule_tags SET molecule_id = :target WHERE molecule_id = :source"),
             params,
         )

@@ -320,7 +320,7 @@ class AddResultsFromRuns:
                 # across all this molecule's cells.
                 first_run_id: uuid.UUID | None = None
                 earliest_date = None
-                for ch_id, cell in cells_by_mol[mol_id].items():
+                for _ch_id, cell in cells_by_mol[mol_id].items():
                     if cell.picked.source_run_id is None:
                         continue
                     if (
@@ -458,6 +458,4 @@ def _qc_pass(c) -> bool:
     """Default QC heuristic: run must be approved + z_prime, when present, >= 0.5."""
     if not c.run_approved:
         return False
-    if c.z_prime is not None and c.z_prime < 0.5:
-        return False
-    return True
+    return not (c.z_prime is not None and c.z_prime < 0.5)

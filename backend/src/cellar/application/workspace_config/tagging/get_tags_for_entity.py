@@ -23,9 +23,7 @@ class GetTagsForEntityQuery(Query):
 
 
 class GetTagsForEntity:
-    def __init__(
-        self, uow: UnitOfWork, link_provider: TagLinkRepositoryProvider
-    ) -> None:
+    def __init__(self, uow: UnitOfWork, link_provider: TagLinkRepositoryProvider) -> None:
         self._uow = uow
         self._link_provider = link_provider
 

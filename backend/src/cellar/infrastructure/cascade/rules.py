@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from cellar.domain.shared.cascade.actions import CascadeAction  # re-export for convenience
 
-__all__ = ["CascadeRule", "CascadeAction"]
+__all__ = ["CascadeAction", "CascadeRule"]
 
 
 @dataclass(frozen=True)

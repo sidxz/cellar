@@ -183,9 +183,7 @@ class MirrorProtocolChannels:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
             if campaign.status != CampaignStatus.DRAFT:
                 return Failure(
-                    ValidationError(
-                        f"Cannot mirror protocol: campaign is {campaign.status.value}"
-                    )
+                    ValidationError(f"Cannot mirror protocol: campaign is {campaign.status.value}")
                 )
 
             protocol = await self._protocol_repo.find_by_id_in_workspace(
@@ -195,12 +193,15 @@ class MirrorProtocolChannels:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
 
             existing_keys = {
-                (ch.protocol_id, ch.readout_definition_id, ch.normalization_applied, ch.intercept_key)
+                (
+                    ch.protocol_id,
+                    ch.readout_definition_id,
+                    ch.normalization_applied,
+                    ch.intercept_key,
+                )
                 for ch in campaign.channels
             }
-            next_order = (
-                max((ch.display_order for ch in campaign.channels), default=-1) + 1
-            )
+            next_order = max((ch.display_order for ch in campaign.channels), default=-1) + 1
 
             recommended = list(protocol.recommended_hit_criteria or [])
             channels_created = 0
@@ -242,14 +243,8 @@ class MirrorProtocolChannels:
                         channels_skipped += 1
                         continue
 
-                    label = (
-                        _channel_label(rd, spec, is_multi, primary_spec)
-                        if spec
-                        else rd.name
-                    )
-                    threshold = _match_recommended_threshold(
-                        recommended, rd.name, intercept_key
-                    )
+                    label = _channel_label(rd, spec, is_multi, primary_spec) if spec else rd.name
+                    threshold = _match_recommended_threshold(recommended, rd.name, intercept_key)
 
                     try:
                         channel = CampaignChannel(

@@ -7,7 +7,6 @@ of BulkRegistrationItem DTOs for the registration activity.
 
 from __future__ import annotations
 
-import json
 import os
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -83,7 +82,6 @@ class FileParsingActivities:
             all_items.append(asdict(item))
 
         # Items with parse errors become error ChunkItems
-        error_items: list[dict] = []
         valid_items: list[dict] = []
         for item_dict in all_items:
             # ParsedMoleculeItem.error maps through — items without name+smiles

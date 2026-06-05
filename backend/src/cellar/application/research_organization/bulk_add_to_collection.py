@@ -139,8 +139,7 @@ class BulkAddToCollection:
                     resolved_ids = [
                         o.molecule_id
                         for o in outcomes
-                        if o.status == RowStatus.RESOLVED
-                        and o.molecule_id is not None
+                        if o.status == RowStatus.RESOLVED and o.molecule_id is not None
                     ]
                     if resolved_ids:
                         await self._repo.add_molecules(
@@ -156,9 +155,7 @@ class BulkAddToCollection:
                                 tpl.record_usage_in(input.collection_id)
                                 await self._template_repo.save(tpl)
                         await self._uow.commit()
-                    return Success(
-                        BulkAddResult.from_outcomes(outcomes, preview_id=None)
-                    )
+                    return Success(BulkAddResult.from_outcomes(outcomes, preview_id=None))
 
             member_ids = set(
                 await self._repo.get_molecule_ids(
@@ -189,9 +186,7 @@ class BulkAddToCollection:
                 input.workspace_id, flat_refs
             )
             resolved_by_key = {(r.ref.value, r.ref.ref_type): r for r in resolved_list}
-            unresolved_by_key = {
-                (u.ref.value, u.ref.ref_type): u for u in unresolved_list
-            }
+            unresolved_by_key = {(u.ref.value, u.ref.ref_type): u for u in unresolved_list}
 
             for row, ref in row_refs:
                 key = (ref.value, ref.ref_type)
@@ -213,9 +208,7 @@ class BulkAddToCollection:
                     u = unresolved_by_key.get(key)
                     reason = u.reason if u else "not_found"
                     status = (
-                        RowStatus.AMBIGUOUS
-                        if reason == "ambiguous"
-                        else RowStatus.UNREGISTERED
+                        RowStatus.AMBIGUOUS if reason == "ambiguous" else RowStatus.UNREGISTERED
                     )
                     outcomes.append(
                         RowOutcome(
@@ -239,9 +232,7 @@ class BulkAddToCollection:
             )
             name_by_id: dict[uuid.UUID, str] = {}
             if resolved_ids:
-                molecules = await self._molecule_repo.find_by_ids(
-                    input.workspace_id, resolved_ids
-                )
+                molecules = await self._molecule_repo.find_by_ids(input.workspace_id, resolved_ids)
                 for m in molecules:
                     reg = getattr(m, "registration_number", None)
                     nm = getattr(m, "name", None)
@@ -256,9 +247,7 @@ class BulkAddToCollection:
                     row_index=o.row_index,
                     status=o.status,
                     molecule_id=o.molecule_id,
-                    molecule_name=(
-                        name_by_id.get(o.molecule_id) if o.molecule_id else None
-                    ),
+                    molecule_name=(name_by_id.get(o.molecule_id) if o.molecule_id else None),
                     candidates=o.candidates,
                     message=o.message,
                 )
@@ -301,13 +290,9 @@ class BulkAddToCollection:
                 )
                 self._gc_stash()
 
-            return Success(
-                BulkAddResult.from_outcomes(outcomes, preview_id=preview_id)
-            )
+            return Success(BulkAddResult.from_outcomes(outcomes, preview_id=preview_id))
 
-    def fetch_stash(
-        self, preview_id: uuid.UUID | None
-    ) -> CachedPreview | None:
+    def fetch_stash(self, preview_id: uuid.UUID | None) -> CachedPreview | None:
         if preview_id is None:
             return None
         self._gc_stash()

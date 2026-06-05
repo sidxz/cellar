@@ -24,7 +24,7 @@ class FieldOverride(BaseModel):
     pick_list_subset: list[str] | None = None
 
     @model_validator(mode="after")
-    def _locked_requires_default(self) -> "FieldOverride":
+    def _locked_requires_default(self) -> FieldOverride:
         if self.is_locked and self.default_value is None:
             raise ValueError(
                 "A locked field override must have a default_value set; "

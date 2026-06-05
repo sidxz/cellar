@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator
+from typing import Any
 
 from returns.result import Success
 
-from cellar.application.export.row_streams.base import ColumnSpec, ExportRow, RowStream
+from cellar.application.export.row_streams.base import ColumnSpec, ExportRow
 from cellar.application.research_organization.execute_search import (
     ExecuteSearch,
     ExecuteSearchQuery,
@@ -116,14 +117,10 @@ class SearchResultsRowStream:
             "smiles": getattr(mol.structure, "smiles", None) if mol.structure else None,
             "inchi_key": getattr(mol.structure, "inchi_key", None) if mol.structure else None,
             "molecular_formula": (
-                getattr(mol.descriptors, "molecular_formula", None)
-                if mol.descriptors
-                else None
+                getattr(mol.descriptors, "molecular_formula", None) if mol.descriptors else None
             ),
             "molecular_weight": (
-                getattr(mol.descriptors, "molecular_weight", None)
-                if mol.descriptors
-                else None
+                getattr(mol.descriptors, "molecular_weight", None) if mol.descriptors else None
             ),
             "logp": getattr(mol.descriptors, "logp", None) if mol.descriptors else None,
             "hbd": getattr(mol.descriptors, "hbd", None) if mol.descriptors else None,
@@ -197,18 +194,20 @@ def _build_columns(
 
     if fields is None:
         # Legacy default — matches the pre-reportConfig column set.
-        base.extend([
-            ColumnSpec(key="registration_number", header="Reg #", kind="text"),
-            ColumnSpec(key="name", header="Name", kind="text"),
-            ColumnSpec(key="smiles", header="SMILES", kind="smiles"),
-            ColumnSpec(key="inchi_key", header="InChIKey", kind="text"),
-            ColumnSpec(key="molecular_formula", header="Formula", kind="text"),
-            ColumnSpec(key="molecular_weight", header="MW", kind="number"),
-            ColumnSpec(key="logp", header="LogP", kind="number"),
-            ColumnSpec(key="hbd", header="HBD", kind="number"),
-            ColumnSpec(key="hba", header="HBA", kind="number"),
-            ColumnSpec(key="tpsa", header="TPSA", kind="number"),
-        ])
+        base.extend(
+            [
+                ColumnSpec(key="registration_number", header="Reg #", kind="text"),
+                ColumnSpec(key="name", header="Name", kind="text"),
+                ColumnSpec(key="smiles", header="SMILES", kind="smiles"),
+                ColumnSpec(key="inchi_key", header="InChIKey", kind="text"),
+                ColumnSpec(key="molecular_formula", header="Formula", kind="text"),
+                ColumnSpec(key="molecular_weight", header="MW", kind="number"),
+                ColumnSpec(key="logp", header="LogP", kind="number"),
+                ColumnSpec(key="hbd", header="HBD", kind="number"),
+                ColumnSpec(key="hba", header="HBA", kind="number"),
+                ColumnSpec(key="tpsa", header="TPSA", kind="number"),
+            ]
+        )
     else:
         structure_fields = list(fields.get("structure") or [])
         if "structure" in structure_fields:
@@ -296,15 +295,21 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
         # When a protocol has a single DR readout the FE drops the readout
         # name from the header ("EC50" alone is unambiguous). When there
         # are multiple, we disambiguate with "{readout} {label}".
-        dr_readouts = [
-            r for r in (proto.readout_definitions or []) if getattr(r, "dose_response_config", None)
-        ] if proto else []
+        dr_readouts = (
+            [
+                r
+                for r in (proto.readout_definitions or [])
+                if getattr(r, "dose_response_config", None)
+            ]
+            if proto
+            else []
+        )
         prefix = "" if len(dr_readouts) <= 1 else f"{rd_name} "
         intercepts = (
-            (getattr(rd, "dose_response_config", None).intercepts
-             if rd and getattr(rd, "dose_response_config", None) else [])
-            or []
-        )
+            getattr(rd, "dose_response_config", None).intercepts
+            if rd and getattr(rd, "dose_response_config", None)
+            else []
+        ) or []
         cols: list[ColumnSpec] = []
         for spec in intercepts:
             label = spec.label or f"{spec.kind.value.upper()}{int(spec.level)}"

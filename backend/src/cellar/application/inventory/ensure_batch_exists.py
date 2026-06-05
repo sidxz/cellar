@@ -82,13 +82,15 @@ class EnsureBatchExists:
                     i.identifier == input.external_batch_ref for i in existing.identifiers
                 )
                 if not has_alias:
-                    existing.add_identifier(BatchIdentifier.create(
-                        batch_id=existing.id,
-                        identifier=input.external_batch_ref,
-                        identifier_type="external_lot",
-                        source=input.source_label,
-                        registered_by=input.importing_user_id,
-                    ))
+                    existing.add_identifier(
+                        BatchIdentifier.create(
+                            batch_id=existing.id,
+                            identifier=input.external_batch_ref,
+                            identifier_type="external_lot",
+                            source=input.source_label,
+                            registered_by=input.importing_user_id,
+                        )
+                    )
                     await self._batch_repo.save(existing)
                     await self._uow.commit()
                 return Success(EnsureBatchExistsOutcome(batch=existing, created=False))
@@ -110,13 +112,15 @@ class EnsureBatchExists:
                 source=BatchSource.EXTERNAL_REFERENCE,
                 chemist=input.importing_user_id,
             )
-            batch.add_identifier(BatchIdentifier.create(
-                batch_id=batch.id,
-                identifier=input.external_batch_ref,
-                identifier_type="external_lot",
-                source=input.source_label,
-                registered_by=input.importing_user_id,
-            ))
+            batch.add_identifier(
+                BatchIdentifier.create(
+                    batch_id=batch.id,
+                    identifier=input.external_batch_ref,
+                    identifier_type="external_lot",
+                    source=input.source_label,
+                    registered_by=input.importing_user_id,
+                )
+            )
 
             if self._sync is not None and self._molecule_repo is not None:
                 mol = await self._molecule_repo.find_by_id_in_workspace(

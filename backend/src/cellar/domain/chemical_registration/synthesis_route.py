@@ -7,9 +7,8 @@ Includes DAG validation for step ordering and convergent route support.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 
 from cellar.domain.chemical_registration.enums import (
     ReagentRole,
@@ -28,7 +27,6 @@ from cellar.domain.chemical_registration.events import (
 from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.value_objects import Amount, ReactionConditions, ReactionOutcome
-
 
 # ---------------------------------------------------------------------------
 # ReactionReagent — value object (frozen dataclass)

@@ -19,7 +19,8 @@ from cellar.domain.shared.errors import AuthorizationError
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_models import (
+
+from .bulk_registration_models import (
     BulkRegistrationItemModel,
     BulkRegistrationModel,
 )

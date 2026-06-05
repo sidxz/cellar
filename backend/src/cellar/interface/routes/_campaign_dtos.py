@@ -29,7 +29,6 @@ from cellar.domain.research_organization.enums import (
 from cellar.domain.research_organization.source_ref import ManualRef
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
-
 # ---------------------------------------------------------------------------
 # DTOs — requests
 # ---------------------------------------------------------------------------
@@ -72,9 +71,7 @@ class HitCriterionDTO(BaseModel):
             operator=hc.operator,
             value=hc.value,
             intercept_key=(
-                InterceptKeyDTO.from_domain(hc.intercept_key)
-                if hc.intercept_key
-                else None
+                InterceptKeyDTO.from_domain(hc.intercept_key) if hc.intercept_key else None
             ),
         )
 

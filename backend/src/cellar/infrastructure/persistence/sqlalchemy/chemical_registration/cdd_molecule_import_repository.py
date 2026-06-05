@@ -14,7 +14,8 @@ from cellar.domain.chemical_registration.enums import (
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_models import (
+
+from .cdd_molecule_import_models import (
     CddMoleculeImportModel,
 )
 

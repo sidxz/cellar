@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -23,10 +23,7 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 def _encode_result(result: UmapResult) -> dict[str, Any]:
     return {
-        "points": [
-            {"molecule_id": str(p.molecule_id), "x": p.x, "y": p.y}
-            for p in result.points
-        ],
+        "points": [{"molecule_id": str(p.molecule_id), "x": p.x, "y": p.y} for p in result.points],
         "clusters": [
             {"molecule_id": str(c.molecule_id), "cluster_id": c.cluster_id}
             for c in result.clusters
@@ -49,15 +46,11 @@ def _decode_result(payload: dict[str, Any]) -> UmapResult:
             for p in payload["points"]
         ],
         clusters=[
-            ClusterAssignment(
-                molecule_id=UUID(c["molecule_id"]), cluster_id=c["cluster_id"]
-            )
+            ClusterAssignment(molecule_id=UUID(c["molecule_id"]), cluster_id=c["cluster_id"])
             for c in payload["clusters"]
         ],
         representatives=[
-            RepresentativePick(
-                molecule_id=UUID(r["molecule_id"]), cluster_id=r["cluster_id"]
-            )
+            RepresentativePick(molecule_id=UUID(r["molecule_id"]), cluster_id=r["cluster_id"])
             for r in payload["representatives"]
         ],
         cluster_count=payload["cluster_count"],
@@ -127,14 +120,10 @@ class SQLAlchemyUmapJobRepository:
         if existing.workspace_id != job.workspace_id:
             from cellar.domain.shared.errors import AuthorizationError
 
-            raise AuthorizationError(
-                f"Cannot update UmapJob {job.id}: workspace mismatch"
-            )
+            raise AuthorizationError(f"Cannot update UmapJob {job.id}: workspace mismatch")
         _apply_to_model(existing, job)
 
-    async def find_by_id(
-        self, job_id: UUID, *, workspace_id: UUID
-    ) -> UmapJob | None:
+    async def find_by_id(self, job_id: UUID, *, workspace_id: UUID) -> UmapJob | None:
         stmt = select(UmapJobModel).where(
             UmapJobModel.id == job_id,
             UmapJobModel.workspace_id == workspace_id,
@@ -151,7 +140,7 @@ class SQLAlchemyUmapJobRepository:
         picker_param_hash: str,
         ttl_seconds: int,
     ) -> UmapJob | None:
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=ttl_seconds)
+        cutoff = datetime.now(tz=UTC) - timedelta(seconds=ttl_seconds)
         stmt = (
             select(UmapJobModel)
             .where(
@@ -183,7 +172,7 @@ class SQLAlchemyUmapJobRepository:
         only re-run the picker (MaxMin in particular skips the expensive UMAP
         step). The matched job may have any picker / N.
         """
-        cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=ttl_seconds)
+        cutoff = datetime.now(tz=UTC) - timedelta(seconds=ttl_seconds)
         threshold_expr = UmapJobModel.picker_params["threshold"].as_float()
         stmt = (
             select(UmapJobModel)

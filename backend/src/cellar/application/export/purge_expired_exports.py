@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime
 
 from cellar.application.attachment.storage import StorageClient
@@ -36,15 +37,12 @@ class PurgeExpiredExports:
         purged = 0
         for job in jobs:
             if job.file_key:
-                try:
+                # already gone — continue to mark EXPIRED
+                with contextlib.suppress(FileNotFoundError):
                     await self._storage.delete(job.file_key)
-                except FileNotFoundError:
-                    pass  # already gone — continue to mark EXPIRED
 
             async with self._uow:
-                fresh = await self._repo.find_by_id_in_workspace(
-                    job.workspace_id, job.id
-                )
+                fresh = await self._repo.find_by_id_in_workspace(job.workspace_id, job.id)
                 if fresh is None:
                     continue  # deleted between list and re-fetch; skip
                 fresh.mark_expired()

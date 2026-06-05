@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Protocol, TypeVar, runtime_checkable
 
 from cellar.domain.shared.entity import AggregateRoot

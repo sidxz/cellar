@@ -20,8 +20,8 @@ from cellar.domain.inventory.events import (
     PlateWellsMapped,
 )
 from cellar.domain.inventory.well_assignment import WellAssignment
-from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.shared.entity import AggregateRoot
+from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.value_objects import Barcode
 
@@ -63,11 +63,13 @@ def _validate_well_position(position: str, fmt: PlateFormat) -> None:
     max_row, max_col = _FORMAT_BOUNDS[fmt]
     if _row_to_int(row_str) > _row_to_int(max_row):
         raise ValidationError(
-            f"Invalid well position '{position}': row '{row_str}' exceeds max row '{max_row}' for {fmt}-well plate"
+            f"Invalid well position '{position}': row '{row_str}' exceeds max row "
+            f"'{max_row}' for {fmt}-well plate"
         )
     if int(col_str) > max_col or int(col_str) < 1:
         raise ValidationError(
-            f"Invalid well position '{position}': column {col_str} out of range [1, {max_col}] for {fmt}-well plate"
+            f"Invalid well position '{position}': column {col_str} out of range "
+            f"[1, {max_col}] for {fmt}-well plate"
         )
 
 

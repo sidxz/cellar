@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from cellar.domain.export.enums import ExportFormat, ExportSource, ExportStatus
@@ -87,7 +87,7 @@ class ExportJob(AggregateRoot):
         format: ExportFormat,
         query_snapshot: dict[str, Any],
         filename: str,
-    ) -> "ExportJob":
+    ) -> ExportJob:
         return cls(
             id=id,
             workspace_id=workspace_id,

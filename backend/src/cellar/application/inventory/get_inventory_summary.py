@@ -57,7 +57,9 @@ class GetInventorySummary:
 
         recent_activity = [
             ActivityItem(
-                description=f"{row.operation_type.replace('_', ' ').capitalize()} {row.entity_type}",
+                description=(
+                    f"{row.operation_type.replace('_', ' ').capitalize()} {row.entity_type}"
+                ),
                 entity_type=row.entity_type,
                 entity_id=row.entity_id,
                 occurred_at=row.started_at,

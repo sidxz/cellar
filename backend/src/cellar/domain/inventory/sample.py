@@ -16,7 +16,6 @@ from cellar.domain.inventory.events import (
     SampleQuarantined,
 )
 from cellar.domain.shared.entity import AggregateRoot
-from cellar.domain.shared.enums import AmountUnit
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.value_objects import Amount, Barcode, Concentration
 

@@ -14,10 +14,11 @@ from dateutil.parser import isoparse
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_model import (
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+
+from .cdd_molecule_sync_model import (
     CddMoleculeSyncModel,
 )
-from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 class CddMoleculeSyncRepository:

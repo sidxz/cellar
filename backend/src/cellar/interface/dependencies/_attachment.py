@@ -14,10 +14,10 @@ from cellar.application.attachment.upload_attachment import UploadAttachment
 from ._core import _get_use_case
 
 __all__ = [
-    "UploadAttachmentDep",
     "DeleteAttachmentDep",
-    "ListAttachmentsDep",
     "DownloadAttachmentDep",
+    "ListAttachmentsDep",
+    "UploadAttachmentDep",
 ]
 
 UploadAttachmentDep = Annotated[UploadAttachment, Depends(_get_use_case(UploadAttachment))]

@@ -122,7 +122,8 @@ class CloseCampaign:
                     ValidationError(f"Cannot close: campaign is {campaign.status.value}")
                 )
 
-            # Step 4 — re-resolve all non-override cells (same 3-branch loop as RefreshFromSources).
+            # Step 4 — re-resolve all non-override cells
+            # (same 3-branch loop as RefreshFromSources).
             channels = list(campaign.channels)
             results = list(campaign.results)
 
@@ -183,7 +184,8 @@ class CloseCampaign:
                     readout_unit_by_channel[channel.id] = rd.unit
             campaign.repair_placeholder_units(readout_unit_by_channel)
 
-            # Step 7a — validate close prerequisites (domain method enforces ≥1 result + ≥1 channel).
+            # Step 7a — validate close prerequisites
+            # (domain method enforces ≥1 result + ≥1 channel).
             if not campaign.results:
                 return Failure(ValidationError("Cannot close campaign with no results"))
             if not campaign.channels:

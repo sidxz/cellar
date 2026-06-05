@@ -32,7 +32,7 @@ _AGGREGATABLE_DATA_TYPES = {"numeric", "dose_response"}
 
 def _hydrate_intercept_payloads(
     raw: list[dict] | None,
-) -> list["InterceptValuePayload"]:
+) -> list[InterceptValuePayload]:
     """Hydrate JSONB-serialized intercept_values into payload dataclasses.
 
     The persistence layer stores intercept_values as a JSONB array of

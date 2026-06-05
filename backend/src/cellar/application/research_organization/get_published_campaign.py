@@ -276,7 +276,8 @@ def _derive_compound_sources(results: list[Any]) -> list[dict[str, Any]]:
     group together as kind="manual".
 
     DAIKON format:
-      [{"kind": "collection", "ref": {"collection_id": "..."}, "description": "...", "count": N}, ...]
+      [{"kind": "collection", "ref": {"collection_id": "..."},
+        "description": "...", "count": N}, ...]
     """
     # Use a dict keyed by a stable grouping key to preserve insertion order.
     groups: dict[tuple, dict[str, Any]] = {}

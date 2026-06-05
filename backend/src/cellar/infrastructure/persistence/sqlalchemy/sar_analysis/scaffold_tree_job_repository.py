@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -37,9 +37,7 @@ class SQLAlchemyScaffoldTreeJobRepository:
         else:
             _apply_to_model(existing, job)
 
-    async def find_by_id(
-        self, job_id: UUID, *, workspace_id: UUID
-    ) -> ScaffoldTreeJob | None:
+    async def find_by_id(self, job_id: UUID, *, workspace_id: UUID) -> ScaffoldTreeJob | None:
         session = self._uow.session
         stmt = select(ScaffoldTreeJobModel).where(
             ScaffoldTreeJobModel.id == job_id,
@@ -60,7 +58,7 @@ class SQLAlchemyScaffoldTreeJobRepository:
         # set (ids_hash) never goes stale on time alone. Membership changes
         # produce a different ids_hash, so they miss naturally and recompute.
         if ttl_seconds is not None:
-            cutoff = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
+            cutoff = datetime.now(UTC) - timedelta(seconds=ttl_seconds)
             conditions.append(ScaffoldTreeJobModel.completed_at > cutoff)
         stmt = (
             select(ScaffoldTreeJobModel)
@@ -146,9 +144,7 @@ def _deserialize_result(payload: dict) -> ScaffoldTreeResult:
             for n in payload.get("nodes", [])
         ],
         edges=[
-            ScaffoldTreeEdge(
-                parent_smiles=e["parent_smiles"], child_smiles=e["child_smiles"]
-            )
+            ScaffoldTreeEdge(parent_smiles=e["parent_smiles"], child_smiles=e["child_smiles"])
             for e in payload.get("edges", [])
         ],
         stats=ScaffoldTreeStats(**payload.get("stats", {})),

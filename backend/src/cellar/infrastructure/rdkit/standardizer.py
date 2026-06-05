@@ -17,11 +17,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import structlog
-from rdkit import Chem
-from rdkit.Chem import Descriptors, GetMolFrags, MolToMolBlock, MolToSmiles, MolToCXSmiles
-from returns.result import Failure, Result, Success
-
 from chembl_structure_pipeline import checker, standardizer
+from rdkit import Chem
+from rdkit.Chem import Descriptors, GetMolFrags, MolToCXSmiles, MolToMolBlock, MolToSmiles
+from returns.result import Failure, Result, Success
 
 from cellar.domain.shared.errors import DomainError
 from cellar.infrastructure.rdkit.errors import InvalidSmilesError, StandardizationError

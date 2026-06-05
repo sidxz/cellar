@@ -9,20 +9,17 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from cellar.application.shared.sentinel import UNSET
 from cellar.application.workspace_config.create_external_api_key import (
-    CreateExternalApiKey,
     CreateExternalApiKeyCommand,
 )
 from cellar.application.workspace_config.delete_external_api_key import (
-    DeleteExternalApiKey,
     DeleteExternalApiKeyCommand,
 )
 from cellar.application.workspace_config.list_external_api_keys import (
-    ListExternalApiKeys,
     ListExternalApiKeysQuery,
 )
 from cellar.application.workspace_config.update_external_api_key import (
-    UpdateExternalApiKey,
     UpdateExternalApiKeyCommand,
 )
 from cellar.domain.workspace_config.external_api_key import ExternalApiKey
@@ -34,7 +31,6 @@ from cellar.interface.dependencies import (
     UpdateExternalApiKeyDep,
 )
 from cellar.interface.error_handlers import result_to_response
-from cellar.application.shared.sentinel import UNSET
 
 router = APIRouter(prefix="/api/v1/api-keys", tags=["api-keys"])
 

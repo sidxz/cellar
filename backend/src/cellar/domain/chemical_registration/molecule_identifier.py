@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from cellar.domain.shared.entity import Entity
 from cellar.domain.shared.errors import ValidationError

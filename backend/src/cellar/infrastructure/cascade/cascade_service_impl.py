@@ -100,4 +100,4 @@ class UoWBackedCascadeService:
 
 
 # Re-export so importers can use the Protocol type in annotations.
-__all__ = ["UoWBackedCascadeService", "CascadeService"]
+__all__ = ["CascadeService", "UoWBackedCascadeService"]

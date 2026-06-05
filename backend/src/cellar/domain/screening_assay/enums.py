@@ -103,12 +103,11 @@ class TargetType(StrEnum):
 
 # PlateFormat is shared across screening and inventory — canonical definition
 # lives in domain.shared.enums. Re-exported here for backwards compatibility.
-from cellar.domain.shared.enums import PlateFormat as PlateFormat  # noqa: F401
-
+from cellar.domain.shared.enums import PlateFormat as PlateFormat  # noqa: E402
 
 # WellType is shared across screening and inventory — canonical definition
 # lives in domain.shared.enums. Re-exported here for backwards compatibility.
-from cellar.domain.shared.enums import WellType as WellType  # noqa: F401, E402
+from cellar.domain.shared.enums import WellType as WellType  # noqa: E402
 
 
 class RunStatus(StrEnum):

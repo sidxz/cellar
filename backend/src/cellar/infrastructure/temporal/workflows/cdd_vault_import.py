@@ -15,16 +15,17 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
+    from cellar.domain.chemical_registration.enums import CddImportMode
     from cellar.infrastructure.temporal.activities.bulk_tracking import BulkTrackingActivities
     from cellar.infrastructure.temporal.activities.cdd_fetch import CddFetchActivities
     from cellar.infrastructure.temporal.activities.dtos import (
         CddPollExportInput,
         CddStartExportInput,
         CddSyncWatermarkInput,
-        CompleteDiscoveryInput,
         ChunkInput,
         ChunkItem,
         CompleteCddImportInput,
+        CompleteDiscoveryInput,
         CreateCddImportInput,
         FailCddImportInput,
         LoadExportChunkInput,
@@ -33,7 +34,6 @@ with workflow.unsafe.imports_passed_through():
     )
     from cellar.infrastructure.temporal.activities.registration import RegistrationActivities
     from cellar.infrastructure.temporal.task_queues import CHUNK_SIZE
-    from cellar.domain.chemical_registration.enums import CddImportMode
 
 
 @dataclass

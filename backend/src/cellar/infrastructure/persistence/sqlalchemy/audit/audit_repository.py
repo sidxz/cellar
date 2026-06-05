@@ -124,7 +124,10 @@ class SQLAlchemyAuditRepository:
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
     ) -> list[AuditOperation]:
-        """Retrieve audit operations with optional filters, ordered by id for stable cursor paging."""
+        """Retrieve audit operations with optional filters.
+
+        Ordered by id for stable cursor paging.
+        """
         stmt = (
             select(AuditOperationModel)
             .where(AuditOperationModel.workspace_id == workspace_id)

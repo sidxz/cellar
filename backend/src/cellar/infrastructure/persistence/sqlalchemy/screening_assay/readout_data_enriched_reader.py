@@ -18,7 +18,6 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     BatchModel,
 )
 
-
 # Identifier types we treat as user-facing aliases for readout-data display.
 _ALIAS_TYPES = ("custom", "synonym", "common_name")
 

@@ -57,7 +57,7 @@ class _ExactMatch(BaseModel):
     inchi_key: str | None = None
 
     @model_validator(mode="after")
-    def _check(self) -> "_ExactMatch":
+    def _check(self) -> _ExactMatch:
         # Allow either smiles OR inchi_key. The composer accepts inchi_key path.
         if self.smiles is None and self.inchi_key is None:
             raise ValueError("exact match requires smiles or inchi_key")
@@ -75,7 +75,7 @@ class _SubstructureMatch(BaseModel):
     query_kind: Literal["smiles", "smarts"] | None = None
 
     @model_validator(mode="after")
-    def _check(self) -> "_SubstructureMatch":
+    def _check(self) -> _SubstructureMatch:
         text_value = self.smiles_or_smarts or self.smarts
         if not text_value:
             raise ValueError("substructure requires smiles_or_smarts (or legacy smarts)")
@@ -99,7 +99,7 @@ class _SimilarityMatch(BaseModel):
     metric: _MetricSpec | None = None
 
     @model_validator(mode="after")
-    def _check(self) -> "_SimilarityMatch":
+    def _check(self) -> _SimilarityMatch:
         # Power-user override: if `algorithm` is set without `mode`,
         # `metric` and `threshold` must also be set explicitly.
         if (
@@ -150,7 +150,7 @@ class ExecuteSearchBody(BaseModel):
     aggregation: SelectionRule = SelectionRule.LATEST_APPROVED_RUN
 
     @model_validator(mode="after")
-    def _validate_structure_clauses(self) -> "ExecuteSearchBody":
+    def _validate_structure_clauses(self) -> ExecuteSearchBody:
         if self.query is None:
             return self
         _walk_validate_structures(self.query.get("criteria", []))
@@ -245,7 +245,7 @@ class CountSearchBody(BaseModel):
     saved_search_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
-    def _validate_structure_clauses(self) -> "CountSearchBody":
+    def _validate_structure_clauses(self) -> CountSearchBody:
         if self.query is None:
             return self
         _walk_validate_structures(self.query.get("criteria", []))

@@ -51,6 +51,19 @@ from cellar.application.attachment.upload_attachment import (
 )
 from cellar.application.auth import AuthContext, require_editor
 from cellar.application.screening.compound_ref_resolver import resolve_rows
+
+# Re-exported here so existing callers `from import_run_file import WellConflict`
+# keep working; the underscore-prefixed names are also re-imported for any
+# tests/utilities that historically reached through this module.
+from cellar.application.screening.import_plan import (  # noqa: F401
+    ReadoutConflict,
+    WellConflict,
+    _ImportPlan,
+    _ReadoutWrite,
+    _scan_conflicts,
+    _well_key,
+    _well_metadata_mismatch,
+)
 from cellar.application.screening.import_run_file_dtos import (
     AmbiguousCompoundDTO,
     BatchOption,
@@ -75,19 +88,6 @@ from cellar.application.screening.import_run_file_preview_store import (
 from cellar.application.screening.import_run_file_validator import (
     _load_templates_by_format,
     _validate_controls_required,
-)
-
-# Re-exported here so existing callers `from import_run_file import WellConflict`
-# keep working; the underscore-prefixed names are also re-imported for any
-# tests/utilities that historically reached through this module.
-from cellar.application.screening.import_plan import (  # noqa: F401
-    ReadoutConflict,
-    WellConflict,
-    _ImportPlan,
-    _ReadoutWrite,
-    _scan_conflicts,
-    _well_key,
-    _well_metadata_mismatch,
 )
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,

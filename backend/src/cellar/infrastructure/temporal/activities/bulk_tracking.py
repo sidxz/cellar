@@ -11,8 +11,6 @@ import uuid
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
 
-from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
-
 from cellar.domain.chemical_registration.bulk_registration import BulkRegistration
 from cellar.domain.chemical_registration.cdd_molecule_import import CddMoleculeImport
 from cellar.domain.chemical_registration.enums import (
@@ -20,18 +18,19 @@ from cellar.domain.chemical_registration.enums import (
     BulkRegistrationItemAction,
     CddImportMode,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
-    SQLAlchemyMoleculeRepository,
-)
 from cellar.domain.inventory.cdd_plate_import import CddPlateImport
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (
+from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (  # noqa: E501
     SQLAlchemyBulkRegistrationRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_repository import (  # noqa: E501
     SQLAlchemyCddMoleculeImportRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_sync_repository import (  # noqa: E501
     CddMoleculeSyncRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
+    SQLAlchemyMoleculeRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_repository import (
     SQLAlchemyCddPlateImportRepository,

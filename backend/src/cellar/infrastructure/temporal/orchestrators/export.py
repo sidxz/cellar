@@ -67,9 +67,14 @@ class NullExportOrchestrator:
 
     def __init__(self, render_export: RenderExport) -> None:
         self._run = render_export
+        # Keep strong references to in-flight tasks — asyncio only holds weak
+        # refs, so a fire-and-forget task can be garbage-collected mid-render.
+        self._tasks: set[asyncio.Task] = set()
 
     async def start(self, request: StartExportWorkflowRequest) -> str:
-        asyncio.create_task(self._run(request.job_id, request.workspace_id))
+        task = asyncio.create_task(self._run(request.job_id, request.workspace_id))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
         return f"inline-{request.job_id}"
 
     async def request_cancel(self, workflow_id: str) -> None:

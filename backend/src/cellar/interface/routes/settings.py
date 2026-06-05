@@ -5,7 +5,6 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from cellar.application.shared.sentinel import UNSET
 from cellar.application.workspace_config.get_workspace_settings import (
     GetWorkspaceSettingsQuery,
 )

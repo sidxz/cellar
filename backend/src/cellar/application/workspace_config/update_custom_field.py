@@ -1,4 +1,7 @@
-"""UpdateCustomField command — update label, constraints, or status of a custom field definition."""
+"""UpdateCustomField command.
+
+Update label, constraints, or status of a custom field definition.
+"""
 
 from __future__ import annotations
 

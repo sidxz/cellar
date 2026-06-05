@@ -13,7 +13,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -25,7 +25,7 @@ _MAX_KEY_LEN = 128
 _MAX_VALUE_LEN = 256
 
 
-class TaggableEntityType(str, Enum):
+class TaggableEntityType(StrEnum):
     """Entity types that can carry tags (one link table each)."""
 
     MOLECULE = "Molecule"
@@ -130,9 +130,7 @@ class Tag(AggregateRoot):
         return self._name.normalized_value
 
     @classmethod
-    def create(
-        cls, *, workspace_id: uuid.UUID, name: TagName, created_by: uuid.UUID
-    ) -> Tag:
+    def create(cls, *, workspace_id: uuid.UUID, name: TagName, created_by: uuid.UUID) -> Tag:
         tag = cls(workspace_id=workspace_id, name=name, created_by=created_by)
         tag.register_event(
             TagCreated(

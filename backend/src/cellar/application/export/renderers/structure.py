@@ -10,7 +10,6 @@ Batches by SMILES — same SMILES across many rows renders once.
 from __future__ import annotations
 
 import base64
-import io
 from typing import Literal
 
 from rdkit import Chem

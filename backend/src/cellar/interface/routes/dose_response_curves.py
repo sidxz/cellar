@@ -53,6 +53,4 @@ async def get_curves_batch(
         workspace_id=auth.workspace_id, curve_ids=body.curve_ids
     )
     curves = result_to_response(await uc(query, auth=auth))
-    return BatchCurvesResponse(
-        curves=[DoseResponseCurveResponse.from_domain(c) for c in curves]
-    )
+    return BatchCurvesResponse(curves=[DoseResponseCurveResponse.from_domain(c) for c in curves])

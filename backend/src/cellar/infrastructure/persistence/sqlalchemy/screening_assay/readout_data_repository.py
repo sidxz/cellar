@@ -9,6 +9,7 @@ import uuid
 
 from sqlalchemy import delete, func, select
 
+from cellar.domain.screening_assay.activity_types import AggregatedReadout
 from cellar.domain.screening_assay.enums import (
     ReadoutNormalization,
     unit_for_normalization,
@@ -79,7 +80,7 @@ class SQLAlchemyReadoutDataRepository:
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
         specs: list[tuple[uuid.UUID, str | None]],
-    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], "AggregatedReadout"]]:
+    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]:
         """Batch query: molecule_id -> (readout_def_id, normalization) -> aggregated value.
 
         ``specs`` selects which (readout_definition, normalization_applied) pairs
@@ -92,7 +93,6 @@ class SQLAlchemyReadoutDataRepository:
 
         Aggregation method comes from ``readout_definition.aggregation``.
         """
-        from cellar.domain.screening_assay.activity_types import AggregatedReadout
         from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
             ReadoutDefinitionModel,
         )

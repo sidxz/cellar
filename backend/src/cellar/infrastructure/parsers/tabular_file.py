@@ -12,7 +12,7 @@ import io
 
 from cellar.application.shared.parsers import ParsedTable, TabularParseError
 
-__all__ = ["TabularFileParser", "ParsedTable", "TabularParseError", "parse_tabular"]
+__all__ = ["ParsedTable", "TabularFileParser", "TabularParseError", "parse_tabular"]
 
 
 # ---------------------------------------------------------------------------

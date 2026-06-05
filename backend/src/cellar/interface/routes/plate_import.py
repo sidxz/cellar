@@ -141,7 +141,7 @@ async def preview_import(
             default=[],
         )
         suggested_id, suggested_name = auto_match_template(preview.headers, templates)
-    except Exception as exc:  # noqa: BLE001 — best-effort suggestion path
+    except Exception as exc:
         # Auto-matching is purely a UX hint; we log and continue rather than
         # silently swallowing so a misconfigured DI / DB issue is visible
         # in operator logs without breaking the preview response.

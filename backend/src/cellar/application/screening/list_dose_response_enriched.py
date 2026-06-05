@@ -66,16 +66,14 @@ class ListDoseResponseEnriched:
         auth: AuthContext | None = None,
     ) -> Result[list[EnrichedDoseResponseCurve], DomainError]:
         require_same_workspace(auth, input.workspace_id)
-        async with self._uow as uow:
+        async with self._uow:
             curves = await self._repo.find_by_run(input.workspace_id, input.run_id)
 
             mol_ids = list({c.molecule_id for c in curves})
             batch_ids = list({c.batch_id for c in curves})
 
             mol_info = await self._reader.resolve_molecules(input.workspace_id, mol_ids)
-            batch_numbers = await self._reader.resolve_batch_numbers(
-                input.workspace_id, batch_ids
-            )
+            batch_numbers = await self._reader.resolve_batch_numbers(input.workspace_id, batch_ids)
 
             run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             dose_unit = "uM"

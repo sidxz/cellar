@@ -223,9 +223,7 @@ class DisclosureService:
                             resolved_to_molecule_id=target_molecule_id,
                         )
                     else:
-                        dr.mark_conflict(
-                            reason=f"Merge failed: {merge_result.failure().message}"
-                        )
+                        dr.mark_conflict(reason=f"Merge failed: {merge_result.failure().message}")
 
                     await self._disclosure_repo.save(dr)
                     events = await self._uow.commit()

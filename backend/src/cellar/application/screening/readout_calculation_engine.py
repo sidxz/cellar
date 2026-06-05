@@ -163,9 +163,6 @@ class ReadoutCalculationEngine:
 
         # Build lookup maps once — the inner loops below are O(W*R*D) without
         # them on a 384-well, multi-readout run.
-        rd_by_id: dict[uuid.UUID, ReadoutDefinition] = {
-            rd.id: rd for rd in protocol.readout_definitions
-        }
         rd_by_name: dict[str, ReadoutDefinition] = {
             rd.name: rd for rd in protocol.readout_definitions
         }

@@ -315,10 +315,13 @@ def _well_metadata_mismatch(
         diffs.append(f"well_type {existing.well_type.value} vs file {file_well_type.value}")
     if file_batch_id is not None and existing.batch_id != file_batch_id:
         diffs.append("batch_ref differs")
-    if file_dose is not None and existing.dose is not None:
-        # Tolerant float compare — same dose at different precision is fine.
-        if abs(existing.dose - file_dose) > 1e-9:
-            diffs.append(f"dose {existing.dose} vs file {file_dose}")
+    # Tolerant float compare — same dose at different precision is fine.
+    if (
+        file_dose is not None
+        and existing.dose is not None
+        and abs(existing.dose - file_dose) > 1e-9
+    ):
+        diffs.append(f"dose {existing.dose} vs file {file_dose}")
     if not diffs:
         return None
     return "; ".join(diffs)

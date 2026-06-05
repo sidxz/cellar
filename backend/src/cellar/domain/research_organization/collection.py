@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from cellar.domain.research_organization.enums import CollectionBooleanOp, CollectionVisibility
+from cellar.domain.research_organization.enums import CollectionVisibility
 from cellar.domain.research_organization.events import CollectionCreated
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import CollectionFrozenError, ValidationError

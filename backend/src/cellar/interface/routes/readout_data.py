@@ -10,16 +10,13 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from cellar.application.screening.bulk_create_readout_data import (
-    BulkCreateReadoutData,
     BulkCreateReadoutDataCommand,
     ReadoutDataItem,
 )
 from cellar.application.screening.create_dose_response import (
-    CreateDoseResponseCurve,
     CreateDoseResponseCurveCommand,
 )
 from cellar.application.screening.create_readout_data import (
-    CreateReadoutData,
     CreateReadoutDataCommand,
 )
 from cellar.application.screening.get_curve_edit_history import (
@@ -28,14 +25,11 @@ from cellar.application.screening.get_curve_edit_history import (
     GetCurveEditHistoryResult,
 )
 from cellar.application.screening.list_dose_response_enriched import (
-    ListDoseResponseEnriched,
     ListDoseResponseEnrichedQuery,
 )
 from cellar.application.screening.list_readout_data_enriched import (
-    ListReadoutDataEnriched,
     ListReadoutDataEnrichedQuery,
 )
-from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.excluded_point_detail import ExcludedPointDetail
 from cellar.domain.screening_assay.readout_data import ReadoutData
@@ -326,14 +320,17 @@ class RefitDoseResponseCurveRequest(BaseModel):
     # ``save_reason`` is REQUIRED by the use case when ``exclusions`` is set;
     # the use case raises ValidationError otherwise — the route just forwards.
     exclusions: list[ExclusionPayloadEntryBody] | None = None
-    save_reason: Literal[
-        "outlier",
-        "instrument_artifact",
-        "concentration_error",
-        "contamination",
-        "qc_failure",
-        "other",
-    ] | None = None
+    save_reason: (
+        Literal[
+            "outlier",
+            "instrument_artifact",
+            "concentration_error",
+            "contamination",
+            "qc_failure",
+            "other",
+        ]
+        | None
+    ) = None
     save_note: str | None = None
 
 
@@ -406,9 +403,7 @@ class CurveEditHistoryResponse(BaseModel):
 
     @classmethod
     def from_result(cls, result: GetCurveEditHistoryResult) -> CurveEditHistoryResponse:
-        return cls(
-            events=[CurveEditHistoryEventBody.from_domain(e) for e in result.events]
-        )
+        return cls(events=[CurveEditHistoryEventBody.from_domain(e) for e in result.events])
 
 
 # ---------------------------------------------------------------------------
@@ -586,9 +581,7 @@ async def refit_dose_response_curve(
             )
             for e in body.exclusions
         ]
-    save_reason = (
-        ExclusionReason(body.save_reason) if body.save_reason is not None else None
-    )
+    save_reason = ExclusionReason(body.save_reason) if body.save_reason is not None else None
 
     result = await uc(
         RefitDoseResponseCurveCommand(

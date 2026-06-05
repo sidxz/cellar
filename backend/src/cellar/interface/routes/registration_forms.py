@@ -21,8 +21,8 @@ from cellar.application.workspace_config.list_registration_forms import (
     ListRegistrationFormsQuery,
 )
 from cellar.application.workspace_config.update_registration_form import (
-    UpdateRegistrationFormCommand,
     UNSET,
+    UpdateRegistrationFormCommand,
 )
 from cellar.domain.workspace_config.enums import FieldTarget
 from cellar.domain.workspace_config.registration_form import RegistrationForm
@@ -49,7 +49,7 @@ class RegistrationFormResponse(BaseModel):
     version: int
 
     @classmethod
-    def from_domain(cls, form: RegistrationForm) -> "RegistrationFormResponse":
+    def from_domain(cls, form: RegistrationForm) -> RegistrationFormResponse:
         return cls(
             id=form.id,
             workspace_id=form.workspace_id,

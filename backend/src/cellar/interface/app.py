@@ -63,14 +63,14 @@ def create_app() -> FastAPI:
         # Workflow orchestrators — bind concrete adapter or null stand-in based
         # on Temporal availability. Routes/use cases see only the application
         # Protocols and never reach into ``temporalio`` themselves.
-        from cellar.application.chemical_registration.bulk_registration_orchestrator import (
-            BulkRegistrationOrchestrator,
-        )
         from cellar.application.cdd_import.cdd_molecule_import_orchestrator import (
             CddMoleculeImportOrchestrator,
         )
         from cellar.application.cdd_import.cdd_plate_import_orchestrator import (
             CddPlateImportOrchestrator,
+        )
+        from cellar.application.chemical_registration.bulk_registration_orchestrator import (
+            BulkRegistrationOrchestrator,
         )
         from cellar.application.export.orchestration import ExportOrchestrator
         from cellar.application.sar_analysis.start_scaffold_tree_job import (
@@ -110,9 +110,7 @@ def create_app() -> FastAPI:
             bulk_orch: BulkRegistrationOrchestrator = TemporalBulkRegistrationOrchestrator(
                 app.state.temporal_client
             )
-            export_orch: ExportOrchestrator = TemporalExportOrchestrator(
-                app.state.temporal_client
-            )
+            export_orch: ExportOrchestrator = TemporalExportOrchestrator(app.state.temporal_client)
             scaffold_orch: ScaffoldTreeOrchestrator = TemporalScaffoldTreeOrchestrator(
                 app.state.temporal_client
             )
@@ -189,34 +187,34 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
 
     # Routes
-    from cellar.interface.routes.user import router as user_router
-    from cellar.interface.routes.organizations import router as org_router
-    from cellar.interface.routes.settings import router as settings_router
-    from cellar.interface.routes.vocabularies import router as vocab_router
-    from cellar.interface.routes.molecules import router as mol_router
+    from cellar.interface.routes.audit import router as audit_router
+    from cellar.interface.routes.batches import router as batch_router
+    from cellar.interface.routes.bulk_registration import router as bulk_reg_router
     from cellar.interface.routes.disclosures import router as disclosure_router
     from cellar.interface.routes.merge import router as merge_router
-    from cellar.interface.routes.relationships import router as rel_router
-    from cellar.interface.routes.bulk_registration import router as bulk_reg_router
-    from cellar.interface.routes.batches import router as batch_router
-    from cellar.interface.routes.samples import router as sample_router
-    from cellar.interface.routes.storage import router as storage_router
+    from cellar.interface.routes.molecules import router as mol_router
+    from cellar.interface.routes.organizations import router as org_router
     from cellar.interface.routes.protocols import router as protocol_router
-    from cellar.interface.routes.targets import router as target_router
-    from cellar.interface.routes.runs import router as run_router
     from cellar.interface.routes.readout_data import router as readout_data_router
-    from cellar.interface.routes.audit import router as audit_router
-    from cellar.interface.routes.synthesis_routes import router as synth_route_router
+    from cellar.interface.routes.relationships import router as rel_router
+    from cellar.interface.routes.runs import router as run_router
     from cellar.interface.routes.sample_requests import router as sample_request_router
+    from cellar.interface.routes.samples import router as sample_router
+    from cellar.interface.routes.settings import router as settings_router
     from cellar.interface.routes.shipments import router as shipment_router
+    from cellar.interface.routes.storage import router as storage_router
     from cellar.interface.routes.synthesis_requests import router as synth_req_router
+    from cellar.interface.routes.synthesis_routes import router as synth_route_router
+    from cellar.interface.routes.targets import router as target_router
+    from cellar.interface.routes.user import router as user_router
+    from cellar.interface.routes.vocabularies import router as vocab_router
 
     app.include_router(user_router)
     app.include_router(org_router)
     app.include_router(settings_router)
     app.include_router(vocab_router)
-    from cellar.interface.routes.export import router as export_router
     from cellar.interface.routes.export import legacy_router as export_legacy_router
+    from cellar.interface.routes.export import router as export_router
 
     app.include_router(mol_router)
     app.include_router(export_router)
@@ -247,15 +245,6 @@ def create_app() -> FastAPI:
     app.include_router(plate_template_router)
     app.include_router(registered_plates_router)
 
-    from cellar.interface.routes.projects import router as project_router
-    from cellar.interface.routes.collections import router as collection_router
-    from cellar.interface.routes.collection_import_previews import (
-        router as collection_import_previews_router,
-    )
-    from cellar.interface.routes.collection_import_templates import (
-        router as collection_import_templates_router,
-    )
-    from cellar.interface.routes.saved_searches import router as saved_search_router
     from cellar.interface.routes.campaigns import router as campaign_router
     from cellar.interface.routes.campaigns_channels import (
         router as campaign_channels_router,
@@ -266,6 +255,15 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.campaigns_results import (
         router as campaign_results_router,
     )
+    from cellar.interface.routes.collection_import_previews import (
+        router as collection_import_previews_router,
+    )
+    from cellar.interface.routes.collection_import_templates import (
+        router as collection_import_templates_router,
+    )
+    from cellar.interface.routes.collections import router as collection_router
+    from cellar.interface.routes.projects import router as project_router
+    from cellar.interface.routes.saved_searches import router as saved_search_router
 
     app.include_router(project_router)
     app.include_router(collection_router)
@@ -371,8 +369,8 @@ def create_app() -> FastAPI:
 
     app.include_router(admin_delete_router)
 
-    from cellar.interface.routes.tags import router as tags_router
     from cellar.interface.routes.tags import assignment_router as tag_assignment_router
+    from cellar.interface.routes.tags import router as tags_router
 
     app.include_router(tags_router)
     app.include_router(tag_assignment_router)

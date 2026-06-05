@@ -207,9 +207,9 @@ async def delete_tag(
 async def list_tag_entities(
     auth: AuthDep,
     use_case: ListTagEntitiesDep,
-    tags: list[uuid.UUID] | None = Query(default=None),  # noqa: B008 - FastAPI query idiom
+    tags: list[uuid.UUID] | None = Query(default=None),
     tag_logic: str = "any",
-    types: list[str] | None = Query(default=None),  # noqa: B008 - FastAPI query idiom
+    types: list[str] | None = Query(default=None),
     limit: int = 200,
 ) -> list[TaggedEntityResponse]:
     query = ListTagEntitiesQuery(
@@ -277,9 +277,7 @@ async def assign_entity_tag(
     return TagResponse.from_domain(tag)
 
 
-@assignment_router.put(
-    "/{entity_collection}/{entity_id}/tags", response_model=list[TagResponse]
-)
+@assignment_router.put("/{entity_collection}/{entity_id}/tags", response_model=list[TagResponse])
 async def set_entity_tags(
     entity_collection: str,
     entity_id: uuid.UUID,
@@ -298,9 +296,7 @@ async def set_entity_tags(
     return [TagResponse.from_domain(t) for t in tags]
 
 
-@assignment_router.delete(
-    "/{entity_collection}/{entity_id}/tags/{tag_id}", status_code=204
-)
+@assignment_router.delete("/{entity_collection}/{entity_id}/tags/{tag_id}", status_code=204)
 async def unassign_entity_tag(
     entity_collection: str,
     entity_id: uuid.UUID,

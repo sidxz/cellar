@@ -59,9 +59,7 @@ class GetExportStatus:
             return Failure(NotFoundError("ExportJob", str(q.job_id)))
 
         download_url = (
-            f"/api/v1/exports/{job.id}/download"
-            if job.status == ExportStatus.READY
-            else None
+            f"/api/v1/exports/{job.id}/download" if job.status == ExportStatus.READY else None
         )
 
         return Success(

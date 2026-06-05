@@ -182,9 +182,7 @@ class RefitDoseResponseCurve:
         # (workers / system calls may still legitimately pass ``auth=None``).
         if input.exclusions is not None and auth is None:
             return Failure(
-                ValidationError(
-                    "rich exclusions payload requires an authenticated user"
-                )
+                ValidationError("rich exclusions payload requires an authenticated user")
             )
 
         async with self._uow:
@@ -208,9 +206,7 @@ class RefitDoseResponseCurve:
             # only the actually-excluded indices for the fitter.
             if input.exclusions is not None:
                 excluded_indices = [
-                    e.idx
-                    for e in input.exclusions
-                    if e.excluded and e.idx is not None
+                    e.idx for e in input.exclusions if e.excluded and e.idx is not None
                 ]
             else:
                 excluded_indices = input.excluded_point_indices
@@ -267,9 +263,7 @@ class RefitDoseResponseCurve:
             # callers don't audit (their contract is unchanged).
             if input.exclusions is not None:
                 assert auth is not None
-                save_reason = (
-                    input.save_reason.value if input.save_reason else "unspecified"
-                )
+                save_reason = input.save_reason.value if input.save_reason else "unspecified"
                 await self._audit.record(
                     workspace_id=input.workspace_id,
                     operation_type=OperationType.CURVE_POINT_EXCLUSION,
@@ -282,18 +276,12 @@ class RefitDoseResponseCurve:
                             entity_id=curve.id,
                             field_name="excluded_points",
                             action=AuditAction.UPDATE,
-                            old_value=_serialize_excluded_points_for_audit(
-                                old_excluded_points
-                            ),
-                            new_value=_serialize_excluded_points_for_audit(
-                                new_excluded_points
-                            ),
+                            old_value=_serialize_excluded_points_for_audit(old_excluded_points),
+                            new_value=_serialize_excluded_points_for_audit(new_excluded_points),
                         )
                     ],
                     reason=(
-                        f"{save_reason}: {input.save_note}"
-                        if input.save_note
-                        else save_reason
+                        f"{save_reason}: {input.save_note}" if input.save_note else save_reason
                     ),
                     session=self._uow.session,
                 )

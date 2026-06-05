@@ -95,7 +95,7 @@ from cellar.application.screening.create_run import CreateRun
 from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.infrastructure.cache.in_memory_file_cache import InMemoryImportFileCache
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
@@ -125,10 +125,10 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.storage_location_rep
 from cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_repository import (
     SQLAlchemySynthesisRequestRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (  # noqa: E501
     SQLAlchemyCustomFieldDefinitionRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (  # noqa: E501
     SQLAlchemyWorkspaceSettingsRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import contextlib
+from collections.abc import AsyncIterator
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import AsyncIterator
 
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as XLImage
@@ -88,8 +89,10 @@ class ExcelRenderer:
                     continue
                 if end > start:
                     ws.merge_cells(
-                        start_row=1, start_column=start + 1,
-                        end_row=1, end_column=end + 1,
+                        start_row=1,
+                        start_column=start + 1,
+                        end_row=1,
+                        end_column=end + 1,
                     )
                 cell = ws.cell(row=1, column=start + 1, value=label)
                 _style_group_header(cell)
@@ -97,21 +100,12 @@ class ExcelRenderer:
         else:
             _HEADER_ROWS = 1
 
-        header_row = [
-            (f"{c.header} ({c.unit})" if c.unit else c.header) for c in columns
-        ]
+        header_row = [(f"{c.header} ({c.unit})" if c.unit else c.header) for c in columns]
         ws.append(header_row)
 
-        embed_images = (
-            options.include_sparklines
-            and row_count_hint <= SPARKLINE_ROW_CAP
-        )
-        sparkline_col_indices = [
-            i for i, c in enumerate(columns) if c.kind == "image_curve"
-        ]
-        structure_col_indices = [
-            i for i, c in enumerate(columns) if c.kind == "image_structure"
-        ]
+        embed_images = options.include_sparklines and row_count_hint <= SPARKLINE_ROW_CAP
+        sparkline_col_indices = [i for i, c in enumerate(columns) if c.kind == "image_curve"]
+        structure_col_indices = [i for i, c in enumerate(columns) if c.kind == "image_structure"]
         size_preset = options.image_size if options.image_size in SIZE_PRESETS else "medium"
         sparkline_w, sparkline_h = SIZE_PRESETS[size_preset]
         struct_w, struct_h = STRUCTURE_SIZE_PRESETS.get(
@@ -149,10 +143,8 @@ class ExcelRenderer:
                     for c in columns:
                         v = row.cells.get(c.key)
                         if c.kind == "number" and v is not None:
-                            try:
+                            with contextlib.suppress(TypeError, ValueError):
                                 v = float(v)
-                            except (TypeError, ValueError):
-                                pass
                         if c.kind in ("image_curve", "image_structure"):
                             out_row.append("")
                         else:
@@ -181,16 +173,20 @@ class ExcelRenderer:
                             if not av:
                                 continue
                             snapshot = av_to_sparkline_snapshot(av)
-                            png = render_sparkline_png(snapshot, size=size_preset) if snapshot else None
+                            png = (
+                                render_sparkline_png(snapshot, size=size_preset)
+                                if snapshot
+                                else None
+                            )
                             if not png:
                                 continue
-                            tf = NamedTemporaryFile(suffix=".png", delete=False)
-                            tf.write(png); tf.close()
+                            with NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                                tf.write(png)
                             tempfiles.append(tf.name)
                             img = XLImage(tf.name)
                             img.width = sparkline_w
                             img.height = sparkline_h
-                            cell_ref = f"{get_column_letter(ci+1)}{excel_row}"
+                            cell_ref = f"{get_column_letter(ci + 1)}{excel_row}"
                             ws.add_image(img, cell_ref)
 
                     if embed_images and structure_col_indices:
@@ -203,8 +199,8 @@ class ExcelRenderer:
                             png = pngs.get(smiles)
                             if not png:
                                 continue
-                            tf = NamedTemporaryFile(suffix=".png", delete=False)
-                            tf.write(png); tf.close()
+                            with NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                                tf.write(png)
                             tempfiles.append(tf.name)
                             tf_path = tf.name
                             structure_cache[smiles] = tf_path
@@ -212,20 +208,24 @@ class ExcelRenderer:
                             img = XLImage(tf_path)
                             img.width = struct_w
                             img.height = struct_h
-                            cell_ref = f"{get_column_letter(ci+1)}{excel_row}"
+                            cell_ref = f"{get_column_letter(ci + 1)}{excel_row}"
                             ws.add_image(img, cell_ref)
 
             notes = wb.create_sheet("Notes")
             notes.append([options.title])
             notes.append([f"Rows: {rows_written}"])
             if not embed_images and row_count_hint > SPARKLINE_ROW_CAP:
-                notes.append([f"Images omitted: row count {row_count_hint} exceeds {SPARKLINE_ROW_CAP} cap."])
+                notes.append(
+                    [
+                        f"Images omitted: row count {row_count_hint} "
+                        f"exceeds {SPARKLINE_ROW_CAP} cap."
+                    ]
+                )
 
             wb.save(out_path)
         finally:
             import os
+
             for p in tempfiles:
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(p)
-                except OSError:
-                    pass

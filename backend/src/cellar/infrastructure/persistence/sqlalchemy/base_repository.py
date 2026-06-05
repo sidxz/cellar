@@ -194,9 +194,7 @@ class EntityRepository[T: Entity, ModelType: Base](ABC):
     # Standard workspace-scoped queries
     # ------------------------------------------------------------------
 
-    async def find_by_id_in_workspace(
-        self, workspace_id: uuid.UUID, id: uuid.UUID
-    ) -> T | None:
+    async def find_by_id_in_workspace(self, workspace_id: uuid.UUID, id: uuid.UUID) -> T | None:
         stmt = select(self.model_class).where(
             self.model_class.id == id,  # type: ignore[attr-defined]
             self.model_class.workspace_id == workspace_id,  # type: ignore[attr-defined]

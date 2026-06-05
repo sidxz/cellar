@@ -120,9 +120,7 @@ class PreviewSummaryFile:
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))
 
-        protocol = await self._protocol_repo.find_by_id_in_workspace(
-            workspace_id, run.protocol_id
-        )
+        protocol = await self._protocol_repo.find_by_id_in_workspace(workspace_id, run.protocol_id)
         if protocol is None:
             return Failure(NotFoundError("Protocol", str(run.protocol_id)))
 
@@ -146,8 +144,7 @@ class PreviewSummaryFile:
         suggestions = _infer_suggestions(table.headers, readout_by_name)
 
         sample_rows = [
-            {h: (row.get(h) or "") for h in table.headers}
-            for row in table.rows[:_SAMPLE_N]
+            {h: (row.get(h) or "") for h in table.headers} for row in table.rows[:_SAMPLE_N]
         ]
 
         _log.info(

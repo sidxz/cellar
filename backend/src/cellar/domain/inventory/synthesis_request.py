@@ -17,15 +17,14 @@ from cellar.domain.inventory.events import (
     SynthesisRequestApproved,
     SynthesisRequestAssigned,
     SynthesisRequestCreated,
+    SynthesisRequested,
     SynthesisRequestFulfilled,
     SynthesisRequestRejected,
-    SynthesisRequested,
     SynthesisStarted,
 )
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.value_objects import Amount, ChemicalStructure, SynthesisAssignment
-
 
 # ---------------------------------------------------------------------------
 # State machine
@@ -180,9 +179,8 @@ class SynthesisRequest(AggregateRoot):
             raise ValidationError("Requested amount must be positive")
         if not purpose.strip():
             raise ValidationError("Purpose is required")
-        if target_purity is not None:
-            if target_purity <= 0 or target_purity > 100:
-                raise ValidationError("Target purity must be in (0, 100]")
+        if target_purity is not None and (target_purity <= 0 or target_purity > 100):
+            raise ValidationError("Target purity must be in (0, 100]")
 
         sr = cls(
             workspace_id=workspace_id,
@@ -221,17 +219,14 @@ class SynthesisRequest(AggregateRoot):
         """Update mutable fields on a draft request (sentinel pattern)."""
         if self.status != SynthesisRequestStatus.DRAFT:
             raise ValidationError("Can only update draft synthesis requests")
-        if purpose is not ...:
-            if purpose is not None:
-                self.purpose = purpose
-        if priority is not ...:
-            if priority is not None:
-                self.priority = priority
+        if purpose is not ... and purpose is not None:
+            self.purpose = purpose
+        if priority is not ... and priority is not None:
+            self.priority = priority
         if target_purity is not ...:
             self.target_purity = target_purity
-        if requested_amount is not ...:
-            if requested_amount is not None:
-                self.requested_amount = requested_amount
+        if requested_amount is not ... and requested_amount is not None:
+            self.requested_amount = requested_amount
         self.updated_at = datetime.now(UTC)
 
     # -- State transitions --

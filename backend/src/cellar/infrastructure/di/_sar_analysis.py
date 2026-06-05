@@ -36,7 +36,10 @@ from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapCl
 from cellar.application.sar_analysis.compute_umap_cluster import ComputeUmapCluster
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
-from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository, UmapJobRepository
+from cellar.application.sar_analysis.repositories import (
+    ScaffoldTreeJobRepository,
+    UmapJobRepository,
+)
 from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
 from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
 from cellar.application.sar_analysis.start_scaffold_tree_job import (
@@ -47,10 +50,10 @@ from cellar.application.sar_analysis.start_umap_cluster_job import (
     StartUmapClusterJob,
     UmapClusterOrchestrator,
 )
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.scaffold_tree_job_repository import (
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.scaffold_tree_job_repository import (  # noqa: E501
     SQLAlchemyScaffoldTreeJobRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_repository import (

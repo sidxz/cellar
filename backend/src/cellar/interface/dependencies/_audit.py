@@ -11,8 +11,8 @@ from cellar.application.audit.query_audit import GetAuditOperation, ListAuditOpe
 from ._core import _get_use_case
 
 __all__ = [
-    "ListAuditOperationsDep",
     "GetAuditOperationDep",
+    "ListAuditOperationsDep",
 ]
 
 ListAuditOperationsDep = Annotated[

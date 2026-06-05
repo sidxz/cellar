@@ -11,7 +11,8 @@ Temporal cluster and implements ``cancel`` via workflow handle.
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 from uuid import UUID
 
 from temporalio.client import Client

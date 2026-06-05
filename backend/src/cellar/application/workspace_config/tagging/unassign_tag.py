@@ -47,16 +47,12 @@ class UnassignTag:
         require_editor(auth)
 
         async with self._uow:
-            tag = await self._tag_repo.find_by_id_in_workspace(
-                input.workspace_id, input.tag_id
-            )
+            tag = await self._tag_repo.find_by_id_in_workspace(input.workspace_id, input.tag_id)
             if tag is None:
                 return Failure(NotFoundError("Tag", str(input.tag_id)))
 
             link_repo = self._link_provider.for_type(input.entity_type)
-            if not await link_repo.entity_exists_in_workspace(
-                input.workspace_id, input.entity_id
-            ):
+            if not await link_repo.entity_exists_in_workspace(input.workspace_id, input.entity_id):
                 return Failure(NotFoundError(input.entity_type.value, str(input.entity_id)))
 
             await link_repo.remove(input.workspace_id, input.entity_id, input.tag_id)

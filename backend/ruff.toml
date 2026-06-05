@@ -4,6 +4,25 @@ src = ["src"]
 
 [lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+# Scientific notation used deliberately in docstrings/comments/labels:
+# σ (std dev, outlier thresholds), × (dimensions, e.g. 16×24 plates),
+# α (Greek-letter chemistry names), ′ (prime, e.g. the Z′ assay statistic).
+allowed-confusables = ["σ", "×", "α", "′"]
+
+[lint.flake8-bugbear]
+# FastAPI's DI idiom requires calls in parameter defaults (Depends(), Query(), ...).
+# These are immutable by design — declare them so B008 doesn't flag route signatures.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.File",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Cookie",
+    "fastapi.Form",
+    "fastapi.Security",
+]
 
 [format]
 quote-style = "double"

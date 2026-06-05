@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from typing import Protocol, runtime_checkable
 
-from cellar.domain.shared.pagination import PageResult
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.cdd_plate_import import CddPlateImport
 from cellar.domain.inventory.import_template import ImportTemplate
@@ -15,6 +14,7 @@ from cellar.domain.inventory.sample_request import SampleRequest
 from cellar.domain.inventory.shipment import Shipment
 from cellar.domain.inventory.storage_location import StorageLocation
 from cellar.domain.inventory.synthesis_request import SynthesisRequest
+from cellar.domain.shared.pagination import PageResult
 from cellar.domain.shared.value_objects import BatchNumber
 
 
@@ -25,9 +25,7 @@ class BatchRepository(Protocol):
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Batch | None: ...
-    async def find_by_ids(
-        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
-    ) -> list[Batch]: ...
+    async def find_by_ids(self, workspace_id: uuid.UUID, ids: list[uuid.UUID]) -> list[Batch]: ...
     async def find_by_molecule(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> list[Batch]: ...
