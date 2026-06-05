@@ -23,6 +23,7 @@ const baseCollection = {
   visibility: "shared" as const,
   molecule_count: 30,
   is_frozen: false,
+  type: "library" as const,
   derived_from_campaign_id: null,
 };
 
@@ -64,6 +65,11 @@ describe("CollectionHeader", () => {
   it("renders the visibility chip", () => {
     render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
     expect(screen.getByText(/shared/i)).toBeInTheDocument();
+  });
+
+  it("renders the collection type badge", () => {
+    render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
+    expect(screen.getByText("Library")).toBeInTheDocument();
   });
 
   it("renders rightSlot content at the right end of the strip", () => {

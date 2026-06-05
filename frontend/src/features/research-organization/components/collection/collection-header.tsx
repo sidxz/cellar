@@ -5,6 +5,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { FlaskConical, FolderOpen, Lock } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { COLLECTION_TYPE_LABELS, type CollectionType } from "../../types";
 
 export interface CollectionHeaderData {
   id: string;
@@ -16,6 +17,7 @@ export interface CollectionHeaderData {
   visibility: "private" | "shared";
   molecule_count: number;
   is_frozen?: boolean;
+  type?: CollectionType;
   derived_from_campaign_id?: string | null;
 }
 
@@ -48,6 +50,11 @@ export function CollectionHeader({
           >
             {collection.visibility}
           </Badge>
+          {collection.type && (
+            <Badge variant="outline" className="text-xs">
+              {COLLECTION_TYPE_LABELS[collection.type]}
+            </Badge>
+          )}
           {collection.is_frozen && (
             <Badge variant="outline" className="text-xs">
               <Lock className="mr-1 h-3 w-3" />
