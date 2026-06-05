@@ -1253,7 +1253,6 @@ export * from './updateCollectionBodyDescription';
 export * from './updateCollectionBodyName';
 export * from './updateCollectionBodyOwnedByOrgId';
 export * from './updateCollectionBodyProjectId';
-export * from './updateCollectionBodyType';
 export * from './updateCollectionBodyVisibility';
 export * from './updateCollectionImportTemplateRequest';
 export * from './updateCollectionImportTemplateRequestColumnMapping';
