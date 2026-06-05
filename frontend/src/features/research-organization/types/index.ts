@@ -3,7 +3,8 @@ import type {
   AggregateMarker,
 } from "@/features/screening-assay/components/dose-response-figure";
 import type { TargetRef } from "@/features/screening-assay/types";
-import type { SelectionRule } from "@/shared/lib/api/model";
+import type { CollectionType, SelectionRule } from "@/shared/lib/api/model";
+export type { CollectionType };
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
@@ -20,14 +21,6 @@ export const SEARCH_VISIBILITY_LABELS: Record<SearchVisibility, string> = {
   private: "Private",
   project: "Project",
 };
-
-export type CollectionType =
-  | "generic"
-  | "reference_set"
-  | "library"
-  | "hit_list"
-  | "series"
-  | "distribution_set";
 
 export const COLLECTION_TYPE_LABELS: Record<CollectionType, string> = {
   generic: "Generic",

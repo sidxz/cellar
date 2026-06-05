@@ -9,7 +9,7 @@ import type { UpdateCollectionBodyDescription } from './updateCollectionBodyDesc
 import type { UpdateCollectionBodyProjectId } from './updateCollectionBodyProjectId';
 import type { UpdateCollectionBodyOwnedByOrgId } from './updateCollectionBodyOwnedByOrgId';
 import type { UpdateCollectionBodyVisibility } from './updateCollectionBodyVisibility';
-import type { UpdateCollectionBodyType } from './updateCollectionBodyType';
+import type { CollectionType } from './collectionType';
 
 export interface UpdateCollectionBody {
   name?: UpdateCollectionBodyName;
@@ -17,5 +17,5 @@ export interface UpdateCollectionBody {
   project_id?: UpdateCollectionBodyProjectId;
   owned_by_org_id?: UpdateCollectionBodyOwnedByOrgId;
   visibility?: UpdateCollectionBodyVisibility;
-  type?: UpdateCollectionBodyType;
+  type?: CollectionType;
 }
