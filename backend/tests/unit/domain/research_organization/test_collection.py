@@ -7,7 +7,7 @@ import pytest
 from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.enums import CollectionType
 from cellar.domain.research_organization.events import CollectionCreated
-from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import CollectionFrozenError, ValidationError
 
 
 @pytest.fixture
@@ -147,3 +147,55 @@ class TestCollectionType:
 
     def test_constructable_from_string(self) -> None:
         assert CollectionType("library") is CollectionType.LIBRARY
+
+
+class TestCollectionTypeOnAggregate:
+    def test_defaults_to_generic(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        collection = Collection.create(workspace_id=ws_id, name="C", created_by=user_id)
+        assert collection.type is CollectionType.GENERIC
+
+    def test_factory_accepts_explicit_type(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        collection = Collection.create(
+            workspace_id=ws_id,
+            name="C",
+            created_by=user_id,
+            type=CollectionType.LIBRARY,
+        )
+        assert collection.type is CollectionType.LIBRARY
+
+    def test_created_event_carries_type(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        collection = Collection.create(
+            workspace_id=ws_id,
+            name="C",
+            created_by=user_id,
+            type=CollectionType.HIT_LIST,
+        )
+        events = collection.collect_events()
+        assert isinstance(events[0], CollectionCreated)
+        assert events[0].type == "hit_list"
+
+    def test_update_changes_type(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        collection = Collection.create(workspace_id=ws_id, name="C", created_by=user_id)
+        collection.update(type=CollectionType.SERIES)
+        assert collection.type is CollectionType.SERIES
+
+    def test_update_omitting_type_leaves_it_unchanged(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        collection = Collection.create(
+            workspace_id=ws_id, name="C", created_by=user_id, type=CollectionType.LIBRARY
+        )
+        collection.update(name="renamed")
+        assert collection.type is CollectionType.LIBRARY
+
+    def test_frozen_collection_rejects_type_change(
+        self, ws_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        collection = Collection.create(workspace_id=ws_id, name="C", created_by=user_id)
+        collection.freeze(derived_from_campaign_id=uuid.uuid4())
+        with pytest.raises(CollectionFrozenError):
+            collection.update(type=CollectionType.HIT_LIST)

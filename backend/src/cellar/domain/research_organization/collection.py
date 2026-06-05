@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from cellar.domain.research_organization.enums import CollectionVisibility
+from cellar.domain.research_organization.enums import CollectionType, CollectionVisibility
 from cellar.domain.research_organization.events import CollectionCreated
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import CollectionFrozenError, ValidationError
@@ -33,6 +33,7 @@ class Collection(AggregateRoot):
         created_by: uuid.UUID,
         molecule_count: int = 0,
         visibility: CollectionVisibility = CollectionVisibility.PRIVATE,
+        type: CollectionType = CollectionType.GENERIC,
         is_frozen: bool = False,
         derived_from_campaign_id: uuid.UUID | None = None,
         created_at: datetime | None = None,
@@ -50,6 +51,7 @@ class Collection(AggregateRoot):
         self.created_by = created_by
         self.molecule_count = molecule_count
         self.visibility = visibility
+        self.type = type
         self.is_frozen = is_frozen
         self.derived_from_campaign_id = derived_from_campaign_id
 
@@ -64,6 +66,7 @@ class Collection(AggregateRoot):
         owned_by_org_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
         visibility: CollectionVisibility = CollectionVisibility.PRIVATE,
+        type: CollectionType = CollectionType.GENERIC,
     ) -> Collection:
         collection = cls(
             workspace_id=workspace_id,
@@ -73,6 +76,7 @@ class Collection(AggregateRoot):
             owned_by_org_id=owned_by_org_id,
             created_by=created_by,
             visibility=visibility,
+            type=type,
         )
         collection.register_event(
             CollectionCreated(
@@ -80,6 +84,7 @@ class Collection(AggregateRoot):
                 aggregate_type="Collection",
                 workspace_id=workspace_id,
                 name=collection.name,
+                type=collection.type.value,
             )
         )
         return collection
@@ -92,6 +97,7 @@ class Collection(AggregateRoot):
         project_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         owned_by_org_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         visibility: CollectionVisibility | None = None,
+        type: CollectionType | None = None,
     ) -> None:
         """Update mutable fields.
 
@@ -112,6 +118,8 @@ class Collection(AggregateRoot):
             self.owned_by_org_id = owned_by_org_id
         if visibility is not None:
             self.visibility = visibility
+        if type is not None:
+            self.type = type
         self.updated_at = datetime.now(UTC)
 
     def freeze(self, *, derived_from_campaign_id: uuid.UUID) -> None:
