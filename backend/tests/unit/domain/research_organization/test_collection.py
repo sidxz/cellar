@@ -5,6 +5,7 @@ import uuid
 import pytest
 
 from cellar.domain.research_organization.collection import Collection
+from cellar.domain.research_organization.enums import CollectionType
 from cellar.domain.research_organization.events import CollectionCreated
 from cellar.domain.shared.errors import ValidationError
 
@@ -133,3 +134,16 @@ class TestCollectionUpdate:
         )
         with pytest.raises(ValidationError, match="name must not be empty"):
             collection.update(name="   ")
+
+
+class TestCollectionType:
+    def test_values(self) -> None:
+        assert CollectionType.GENERIC.value == "generic"
+        assert CollectionType.REFERENCE_SET.value == "reference_set"
+        assert CollectionType.LIBRARY.value == "library"
+        assert CollectionType.HIT_LIST.value == "hit_list"
+        assert CollectionType.SERIES.value == "series"
+        assert CollectionType.DISTRIBUTION_SET.value == "distribution_set"
+
+    def test_constructable_from_string(self) -> None:
+        assert CollectionType("library") is CollectionType.LIBRARY
