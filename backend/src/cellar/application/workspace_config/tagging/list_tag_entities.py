@@ -1,9 +1,17 @@
-"""List all entities (across types) carrying a given tag — workspace-scoped read."""
+"""List all entities (across types) carrying a given tag — workspace-scoped read.
+
+Pure read path — the reader protocol + row DTO live here (CQRS reader, same
+pattern as ``application.chemical_registration.molecule_reader``).  The
+concrete implementation is in
+``infrastructure.persistence.sqlalchemy.tagging.tag_browse_repository``.
+"""
 
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
+from typing import Protocol, runtime_checkable
 
 from returns.result import Result, Success
 
@@ -11,10 +19,29 @@ from cellar.application.auth import AuthContext
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError
-from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_browse_repository import (
-    SQLAlchemyTagBrowseRepository,
-    TaggedEntityRow,
-)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TaggedEntityRow:
+    entity_type: str
+    entity_id: uuid.UUID
+    label: str
+    assigned_at: datetime
+
+
+@runtime_checkable
+class TagBrowseReader(Protocol):
+    """Application-layer protocol for the cross-entity tag browse read-model."""
+
+    async def find_entities_for_tags(
+        self,
+        workspace_id: uuid.UUID,
+        tag_ids: list[uuid.UUID],
+        *,
+        match_all: bool = False,
+        types: list[str] | None = None,
+        limit: int = 200,
+    ) -> list[TaggedEntityRow]: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -27,7 +54,7 @@ class ListTagEntitiesQuery(Query):
 
 
 class ListTagEntities:
-    def __init__(self, uow: UnitOfWork, repo: SQLAlchemyTagBrowseRepository) -> None:
+    def __init__(self, uow: UnitOfWork, repo: TagBrowseReader) -> None:
         self._uow = uow
         self._repo = repo
 

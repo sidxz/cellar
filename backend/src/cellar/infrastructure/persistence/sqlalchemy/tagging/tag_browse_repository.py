@@ -8,11 +8,10 @@ its entity table for the label and workspace-scoped. Read-only; not an aggregate
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
-from datetime import datetime
 
 from sqlalchemy import String, cast, distinct, func, literal, select, union_all
 
+from cellar.application.workspace_config.tagging.list_tag_entities import TaggedEntityRow
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
@@ -42,15 +41,9 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
-@dataclass(frozen=True, kw_only=True)
-class TaggedEntityRow:
-    entity_type: str
-    entity_id: uuid.UUID
-    label: str
-    assigned_at: datetime
-
-
 class SQLAlchemyTagBrowseRepository:
+    """Implements the application-layer ``TagBrowseReader`` protocol."""
+
     def __init__(self, uow: AsyncUnitOfWork) -> None:
         self._uow = uow
 
