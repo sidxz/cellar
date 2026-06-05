@@ -125,7 +125,10 @@ async def test_backfill_populates_null_rows(uow: AsyncUnitOfWork) -> None:
         await uow.commit()
 
     async with uow:
-        stats = await backfill_batch(uow.session, batch_size=10)
+        # Scope to this test's workspace — the testcontainer DB is shared
+        # across the whole session, so other tests' molecules may also have
+        # NULL scaffolds and would inflate the global count.
+        stats = await backfill_batch(uow.session, batch_size=10, workspace_id=ws_id)
 
     assert stats.processed == 3
     assert stats.failed == 0
@@ -179,10 +182,10 @@ async def test_backfill_idempotent(uow: AsyncUnitOfWork) -> None:
         await uow.commit()
 
     async with uow:
-        first = await backfill_batch(uow.session, batch_size=10)
+        first = await backfill_batch(uow.session, batch_size=10, workspace_id=ws_id)
 
     async with uow:
-        second = await backfill_batch(uow.session, batch_size=10)
+        second = await backfill_batch(uow.session, batch_size=10, workspace_id=ws_id)
 
     assert first.processed == 1
     assert first.failed == 0
@@ -208,7 +211,7 @@ async def test_backfill_handles_none_smiles(uow: AsyncUnitOfWork) -> None:
         await uow.commit()
 
     async with uow:
-        stats = await backfill_batch(uow.session, batch_size=10)
+        stats = await backfill_batch(uow.session, batch_size=10, workspace_id=ws_id)
 
     assert stats.processed == 1
     assert stats.failed == 0
