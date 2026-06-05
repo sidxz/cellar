@@ -1,9 +1,13 @@
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# pnpm version is pinned via the packageManager field in package.json;
+# corepack resolves it per-project so Docker/CI/local all use the same version.
+RUN corepack enable
 
 FROM base AS deps
 WORKDIR /app
-COPY package.json pnpm-lock.yaml* ./
+# pnpm-workspace.yaml carries the allowBuilds approvals — without it pnpm
+# refuses to run dependency build scripts and install fails (ERR_PNPM_IGNORED_BUILDS).
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder

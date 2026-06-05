@@ -1,6 +1,7 @@
 {
   "name": "cellar-frontend",
   "version": "0.1.0",
+  "packageManager": "pnpm@11.0.8",
   "private": true,
   "scripts": {
     "predev": "node scripts/cap-turbopack-cache.mjs",
