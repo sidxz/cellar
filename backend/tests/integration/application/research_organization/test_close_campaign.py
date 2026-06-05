@@ -30,6 +30,7 @@ from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
+    CollectionType,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
@@ -275,6 +276,7 @@ async def test_close_campaign_integration(
     assert coll is not None
     assert coll.is_frozen is True
     assert coll.derived_from_campaign_id == campaign.id
+    assert coll.type is CollectionType.HIT_LIST
 
     # Collection membership contains the SELECTED molecule
     async with AsyncUnitOfWork(session_factory) as uow_members:

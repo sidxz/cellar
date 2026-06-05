@@ -46,6 +46,7 @@ from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
+    CollectionType,
 )
 from cellar.domain.research_organization.events import (
     CampaignPublishedCollectionCreated,
@@ -239,6 +240,7 @@ class CloseCampaign:
                     description=(f'Frozen output of campaign "{campaign.name}"'),
                     project_id=campaign.project_id,
                     created_by=input.user_id,
+                    type=CollectionType.HIT_LIST,
                 )
                 # Save BEFORE freeze so membership can be written while the
                 # persisted row is still mutable — add_molecules checks
