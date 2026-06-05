@@ -224,6 +224,13 @@ From the consumer map:
 - **List/search**: `protocol-section.tsx` (`:133/:162-164`) and
   `source-protocols-list.tsx:27` render multiple target chips and search across
   all target names.
+- **Protocol dashboard table** (`protocol-list.tsx` on the `/assays` Protocols
+  tab): add a **Targets** column rendering the effective target chips (uses
+  `ProtocolSummaryResponse.targets`).
+- **Run table** (the runs list grid): add a **Targets** column rendering the
+  run's target chips (uses `RunResponse.targets`). A small shared
+  `TargetChips` presentational component keeps both grids + the detail cards
+  consistent (overflow collapses to "+N").
 - **Types/hooks**: update `types/index.ts` (`Protocol`, `ProtocolSummary`,
   `Run`, add target-ref shapes) and `use-protocols.ts`. These are currently
   hand-written interfaces; per CLAUDE.md the ideal is orval-generated + aliased.
