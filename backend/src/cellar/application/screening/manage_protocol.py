@@ -144,6 +144,15 @@ class VersionProtocol:
 
             # Save only the new draft — parent stays ACTIVE until new version is published
             await self._repo.save(new_protocol)
+            # Carry forward the parent's DIRECT targets. Inherited targets are
+            # not copied — they re-derive from the new version's own runs.
+            direct_ids = await self._repo.find_direct_target_ids(
+                input.workspace_id, protocol.id
+            )
+            for target_id in direct_ids:
+                await self._repo.add_direct_target(
+                    input.workspace_id, new_protocol.id, target_id
+                )
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
@@ -156,7 +165,6 @@ class UpdateProtocolCommand(Command):
     protocol_id: uuid.UUID
     name: str | None = None
     description: str | None | object = UNSET
-    target_id: uuid.UUID | None | object = UNSET
     category: str | None | object = UNSET
     recommended_hit_criteria: list[dict] | None | object = UNSET
     pos_control_signal: str | None = None
@@ -191,8 +199,6 @@ class UpdateProtocol:
                 fields["name"] = input.name
             if input.description is not UNSET:
                 fields["description"] = input.description
-            if input.target_id is not UNSET:
-                fields["target_id"] = input.target_id
             if input.category is not UNSET:
                 fields["category"] = input.category
 
@@ -245,6 +251,20 @@ class RemoveProtocolFromProjectCommand(Command):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
     project_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class AddProtocolTargetCommand(Command):
+    workspace_id: uuid.UUID
+    protocol_id: uuid.UUID
+    target_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class RemoveProtocolTargetCommand(Command):
+    workspace_id: uuid.UUID
+    protocol_id: uuid.UUID
+    target_id: uuid.UUID
 
 
 class DeleteProtocol:
@@ -380,6 +400,86 @@ class RemoveProtocolFromProject:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             await self._repo.remove_from_project(
                 input.workspace_id, input.protocol_id, input.project_id
+            )
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)
+
+
+class AddProtocolTarget:
+    """Attach a direct target to a protocol (idempotent)."""
+
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: ProtocolRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: AddProtocolTargetCommand, auth: AuthContext | None = None
+    ) -> Result[None, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            protocol = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.protocol_id
+            )
+            if protocol is None:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+            if protocol.is_locked:
+                return Failure(
+                    ConflictError("Protocol is locked — unlock to change targets")
+                )
+            if protocol.status == ProtocolStatus.RETIRED:
+                return Failure(
+                    ConflictError("Cannot change targets on a retired protocol")
+                )
+            await self._repo.add_direct_target(
+                input.workspace_id, input.protocol_id, input.target_id
+            )
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(None)
+
+
+class RemoveProtocolTarget:
+    """Remove a direct target from a protocol."""
+
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: ProtocolRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: RemoveProtocolTargetCommand, auth: AuthContext | None = None
+    ) -> Result[None, DomainError]:
+        require_editor(auth)
+        async with self._uow:
+            protocol = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.protocol_id
+            )
+            if protocol is None:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+            if protocol.is_locked:
+                return Failure(
+                    ConflictError("Protocol is locked — unlock to change targets")
+                )
+            if protocol.status == ProtocolStatus.RETIRED:
+                return Failure(
+                    ConflictError("Cannot change targets on a retired protocol")
+                )
+            await self._repo.remove_direct_target(
+                input.workspace_id, input.protocol_id, input.target_id
             )
             events = await self._uow.commit()
 

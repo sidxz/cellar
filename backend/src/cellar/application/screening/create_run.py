@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
@@ -40,6 +40,7 @@ class CreateRunCommand(Command):
     plate_template_id: uuid.UUID | None = None
     conditions: dict[str, Any] | None = None
     notes: str | None = None
+    target_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 class CreateRun:
@@ -105,6 +106,9 @@ class CreateRun:
                 notes=input.notes,
             )
             await self._repo.save(run)
+            # Initial run targets — idempotent, workspace-checked in the repo.
+            for target_id in dict.fromkeys(input.target_ids):
+                await self._repo.add_target(input.workspace_id, run.id, target_id)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)

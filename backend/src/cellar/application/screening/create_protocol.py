@@ -41,7 +41,7 @@ class CreateProtocolCommand(Command):
     name: str
     description: str | None = None
     protocol_type: str
-    target_id: uuid.UUID | None = None
+    target_ids: list[uuid.UUID] = field(default_factory=list)
     category: str | None = None
     dose_unit: str = "uM"
     pos_control_signal: str = "high"
@@ -143,7 +143,6 @@ class CreateProtocol:
                 name=input.name,
                 description=input.description,
                 protocol_type=ProtocolType(input.protocol_type),
-                target_id=input.target_id,
                 category=input.category,
                 created_by=auth.user_id,
                 dose_unit=ConcentrationUnit(input.dose_unit),
@@ -152,6 +151,11 @@ class CreateProtocol:
                 condition_definitions=condition_defs or None,
             )
             await self._repo.save(protocol)
+            # Initial direct targets — idempotent, workspace-checked in the repo.
+            for target_id in dict.fromkeys(input.target_ids):
+                await self._repo.add_direct_target(
+                    input.workspace_id, protocol.id, target_id
+                )
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)

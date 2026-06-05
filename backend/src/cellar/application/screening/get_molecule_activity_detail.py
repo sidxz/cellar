@@ -25,6 +25,7 @@ from cellar.domain.screening_assay.repository import (
     ProtocolRepository,
     RunRepository,
 )
+from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.errors import DomainError
 
 # ---------------------------------------------------------------------------
@@ -148,7 +149,7 @@ class ProtocolCurveGroup:
     protocol_id: uuid.UUID
     protocol_name: str
     protocol_type: str
-    target_id: uuid.UUID | None
+    targets: list[TargetRef]
     curves: list[CurveDetail]
 
 
@@ -212,6 +213,11 @@ class GetMoleculeActivityDetail:
                 input.workspace_id, list(by_protocol.keys())
             )
             proto_map = {p.id: p for p in protocols}
+            targets_by_protocol = (
+                await self._protocol_repo.find_effective_targets_for_protocols(
+                    input.workspace_id, list(by_protocol.keys())
+                )
+            )
 
             # 5. Build response, sorting curves within each group by r_squared DESC
             groups: list[ProtocolCurveGroup] = []
@@ -224,7 +230,7 @@ class GetMoleculeActivityDetail:
                         protocol_id=protocol_id,
                         protocol_name=proto.name if proto else "Unknown",
                         protocol_type=proto.protocol_type.value if proto else "unknown",
-                        target_id=proto.target_id if proto else None,
+                        targets=targets_by_protocol.get(protocol_id, []),
                         curves=[
                             CurveDetail.from_domain(
                                 c,
