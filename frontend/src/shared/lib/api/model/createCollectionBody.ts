@@ -7,6 +7,7 @@
 import type { CreateCollectionBodyDescription } from './createCollectionBodyDescription';
 import type { CreateCollectionBodyProjectId } from './createCollectionBodyProjectId';
 import type { CreateCollectionBodyOwnedByOrgId } from './createCollectionBodyOwnedByOrgId';
+import type { CollectionType } from './collectionType';
 
 export interface CreateCollectionBody {
   name: string;
@@ -14,4 +15,5 @@ export interface CreateCollectionBody {
   project_id?: CreateCollectionBodyProjectId;
   owned_by_org_id?: CreateCollectionBodyOwnedByOrgId;
   visibility?: string;
+  type?: CollectionType;
 }

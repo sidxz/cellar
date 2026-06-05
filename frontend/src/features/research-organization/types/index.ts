@@ -2,6 +2,7 @@ import type {
   AdditionalCurve,
   AggregateMarker,
 } from "@/features/screening-assay/components/dose-response-figure";
+import type { TargetRef } from "@/features/screening-assay/types";
 import type { SelectionRule } from "@/shared/lib/api/model";
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -19,6 +20,32 @@ export const SEARCH_VISIBILITY_LABELS: Record<SearchVisibility, string> = {
   private: "Private",
   project: "Project",
 };
+
+export type CollectionType =
+  | "generic"
+  | "reference_set"
+  | "library"
+  | "hit_list"
+  | "series"
+  | "distribution_set";
+
+export const COLLECTION_TYPE_LABELS: Record<CollectionType, string> = {
+  generic: "Generic",
+  reference_set: "Reference Set",
+  library: "Library",
+  hit_list: "Hit List",
+  series: "Series",
+  distribution_set: "Distribution Set",
+};
+
+export const COLLECTION_TYPE_OPTIONS: { value: CollectionType; label: string }[] = [
+  { value: "generic", label: "Generic" },
+  { value: "reference_set", label: "Reference Set" },
+  { value: "library", label: "Library" },
+  { value: "hit_list", label: "Hit List" },
+  { value: "series", label: "Series" },
+  { value: "distribution_set", label: "Distribution Set" },
+];
 
 export type RefType =
   | "uuid"
@@ -59,6 +86,7 @@ export interface Collection {
   created_by: string;
   molecule_count: number;
   visibility: "private" | "shared";
+  type: CollectionType;
   is_frozen: boolean;
   derived_from_campaign_id: string | null;
   version: number;
@@ -139,6 +167,7 @@ export interface CreateCollectionInput {
   project_id?: string | null;
   owned_by_org_id?: string | null;
   visibility?: "private" | "shared";
+  type?: CollectionType;
 }
 
 export interface UpdateCollectionInput {
@@ -147,6 +176,7 @@ export interface UpdateCollectionInput {
   project_id?: string | null;
   owned_by_org_id?: string | null;
   visibility?: "private" | "shared";
+  type?: CollectionType;
 }
 
 export interface CreateSavedSearchInput {
@@ -612,7 +642,8 @@ export interface ProtocolCurveGroup {
   protocol_id: string;
   protocol_name: string;
   protocol_type: string;
-  target_id: string | null;
+  /** Effective targets of the protocol (replaces the old scalar target_id). */
+  targets: TargetRef[];
   curves: CurveDetail[];
 }
 

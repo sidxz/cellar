@@ -19,6 +19,7 @@ export interface CollectionResponse {
   created_by: string;
   molecule_count: number;
   visibility: string;
+  type: string;
   is_frozen?: boolean;
   derived_from_campaign_id?: CollectionResponseDerivedFromCampaignId;
   version: number;
