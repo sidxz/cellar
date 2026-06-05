@@ -1,12 +1,11 @@
-import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import React from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UseScaffoldTreeReturn } from "../hooks/use-scaffold-tree";
 
-import { ScaffoldTreeView, SCAFFOLD_TREE_TOAST_ID } from "./scaffold-tree-view";
 import { NO_SCAFFOLD_SENTINEL } from "../types/scaffold-tree";
+import { SCAFFOLD_TREE_TOAST_ID, ScaffoldTreeView } from "./scaffold-tree-view";
 
 // ---------------------------------------------------------------------------
 // customInstance mock — used by useCollectionScaffoldSearch (V4 Path A tests)
@@ -26,12 +25,8 @@ vi.mock("next/navigation", () => ({
 // react-resizable-panels uses ResizeObserver + layout APIs not in jsdom.
 // Mock it so tests focus on selection logic, not panel internals.
 vi.mock("@/shared/components/ui/resizable", () => ({
-  ResizablePanelGroup: ({ children }: any) => (
-    <div data-testid="resizable-group">{children}</div>
-  ),
-  ResizablePanel: ({ children }: any) => (
-    <div data-testid="resizable-panel">{children}</div>
-  ),
+  ResizablePanelGroup: ({ children }: any) => <div data-testid="resizable-group">{children}</div>,
+  ResizablePanel: ({ children }: any) => <div data-testid="resizable-panel">{children}</div>,
   ResizableHandle: () => <div data-testid="resizable-handle" />,
 }));
 
@@ -64,13 +59,15 @@ const fixtureTree = {
 // Typed explicitly so that mockReturnValue() calls accept nullable tree
 // values without TS complaining about the inferred non-nullable type from
 // the default literal.
-const mockUseScaffoldTree = vi.fn((): UseScaffoldTreeReturn => ({
-  tree: fixtureTree,
-  jobId: null,
-  isStarting: false,
-  isPolling: false,
-  error: null,
-}));
+const mockUseScaffoldTree = vi.fn(
+  (): UseScaffoldTreeReturn => ({
+    tree: fixtureTree,
+    jobId: null,
+    isStarting: false,
+    isPolling: false,
+    error: null,
+  }),
+);
 
 vi.mock("../hooks/use-scaffold-tree", () => ({
   // Ignore the params — the mock controls return value via mockReturnValue().
@@ -90,37 +87,23 @@ vi.mock("sonner", () => ({
 
 // Cancel endpoint — track calls without hitting the network.
 const mockCancel = vi.fn();
-vi.mock(
-  "@/shared/lib/api/scaffold-tree/scaffold-tree",
-  async (importOriginal) => {
-    const actual = await importOriginal<
-      typeof import("@/shared/lib/api/scaffold-tree/scaffold-tree")
-    >();
-    return {
-      ...actual,
-      cancelScaffoldTreeJobApiV1ScaffoldTreeJobsJobIdCancelPost: (
-        jobId: string,
-      ) => mockCancel(jobId),
-    };
-  },
-);
+vi.mock("@/shared/lib/api/scaffold-tree/scaffold-tree", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/shared/lib/api/scaffold-tree/scaffold-tree")>();
+  return {
+    ...actual,
+    cancelScaffoldTreeJobApiV1ScaffoldTreeJobsJobIdCancelPost: (jobId: string) => mockCancel(jobId),
+  };
+});
 
 // Mock CardGrid — tracks the molecule count passed in
-vi.mock(
-  "@/features/research-organization/components/results/card-grid",
-  () => ({
-    CardGrid: ({ molecules }: any) => (
-      <div data-testid="card-grid">{molecules.length} cards</div>
-    ),
-  }),
-);
-
+vi.mock("@/features/research-organization/components/results/card-grid", () => ({
+  CardGrid: ({ molecules }: any) => <div data-testid="card-grid">{molecules.length} cards</div>,
+}));
 
 // Mock StructureThumbnail (RDKit-free shim)
 vi.mock("@/shared/components/chemistry", () => ({
-  StructureThumbnail: ({ smiles }: any) => (
-    <div data-testid={`thumb-${smiles}`} />
-  ),
+  StructureThumbnail: ({ smiles }: any) => <div data-testid={`thumb-${smiles}`} />,
 }));
 
 // ScaffoldColorPicker uses Radix Select which triggers a ref-update loop in
@@ -163,24 +146,16 @@ describe("ScaffoldTreeView — Groups mode (default)", () => {
     render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
       wrapper,
     });
-    await waitFor(() =>
-      expect(
-        screen.getByTestId("scaffold-group-c1ccccc1"),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId("scaffold-group-c1ccccc1")).toBeInTheDocument());
     // Both nodes shown as groups (both have molecule_count > 0)
-    expect(
-      screen.getByTestId("scaffold-group-c1ccc2ccccc2c1"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("scaffold-group-c1ccc2ccccc2c1")).toBeInTheDocument();
   });
 
   it("right pane shows all molecules when no group selected", async () => {
     render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, {
       wrapper,
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"),
-    );
+    await waitFor(() => expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"));
   });
 
   it("clicking a group filters cards to that group's DIRECT members only", async () => {
@@ -189,12 +164,8 @@ describe("ScaffoldTreeView — Groups mode (default)", () => {
     });
     // benzene group has molecule_ids = [m1, m2] (direct only — NOT m3 from
     // the naphthalene descendant; that's the hierarchy-mode subtree story)
-    fireEvent.click(
-      await screen.findByTestId("scaffold-group-c1ccccc1"),
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("card-grid")).toHaveTextContent("2 cards"),
-    );
+    fireEvent.click(await screen.findByTestId("scaffold-group-c1ccccc1"));
+    await waitFor(() => expect(screen.getByTestId("card-grid")).toHaveTextContent("2 cards"));
   });
 
   it("min-mols pill hides single-member chemotypes", async () => {
@@ -205,15 +176,9 @@ describe("ScaffoldTreeView — Groups mode (default)", () => {
 
     const pill = screen.getByTitle(/cycle minimum members/i);
     fireEvent.click(pill); // 1 → 2
-    await waitFor(() =>
-      expect(
-        screen.queryByTestId("scaffold-group-c1ccc2ccccc2c1"),
-      ).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("scaffold-group-c1ccc2ccccc2c1")).toBeNull());
     // benzene still visible (count=2 >= min=2)
-    expect(
-      screen.getByTestId("scaffold-group-c1ccccc1"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("scaffold-group-c1ccccc1")).toBeInTheDocument();
   });
 });
 
@@ -223,11 +188,7 @@ describe("ScaffoldTreeView — Hierarchy mode", () => {
       wrapper,
     });
     switchToHierarchy();
-    await waitFor(() =>
-      expect(
-        screen.getByTestId("scaffold-node-c1ccccc1"),
-      ).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId("scaffold-node-c1ccccc1")).toBeInTheDocument());
   });
 
   it("clicking a node filters cards to its full subtree", async () => {
@@ -237,9 +198,7 @@ describe("ScaffoldTreeView — Hierarchy mode", () => {
     switchToHierarchy();
     fireEvent.click(await screen.findByTestId("scaffold-node-c1ccccc1"));
     // benzene subtree = m1, m2 (benzene direct) + m3 (naphthalene descendant) = 3
-    await waitFor(() =>
-      expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"),
-    );
+    await waitFor(() => expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"));
   });
 
   it("clicking selected node again deselects (back to all)", async () => {
@@ -250,9 +209,7 @@ describe("ScaffoldTreeView — Hierarchy mode", () => {
     const node = await screen.findByTestId("scaffold-node-c1ccccc1");
     fireEvent.click(node);
     fireEvent.click(node);
-    await waitFor(() =>
-      expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"),
-    );
+    await waitFor(() => expect(screen.getByTestId("card-grid")).toHaveTextContent("3 cards"));
   });
 
   it("min-mols pill hides root nodes below the threshold", async () => {
@@ -267,9 +224,7 @@ describe("ScaffoldTreeView — Hierarchy mode", () => {
     fireEvent.click(pill); // 2
     fireEvent.click(pill); // 3
     fireEvent.click(pill); // 5
-    await waitFor(() =>
-      expect(screen.queryByTestId("scaffold-node-c1ccccc1")).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("scaffold-node-c1ccccc1")).toBeNull());
     expect(screen.getByText(/no scaffolds match/i)).toBeInTheDocument();
   });
 });
@@ -284,16 +239,11 @@ describe("ScaffoldTreeView — Hierarchy mode", () => {
  */
 function renderWithHookState(initial: UseScaffoldTreeReturn) {
   mockUseScaffoldTree.mockReturnValue(initial);
-  const result = render(
-    <ScaffoldTreeView molecules={molecules} activityData={{}} />,
-    { wrapper },
-  );
+  const result = render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, { wrapper });
   return {
     rerender: (next: UseScaffoldTreeReturn) => {
       mockUseScaffoldTree.mockReturnValue(next);
-      result.rerender(
-        <ScaffoldTreeView molecules={molecules} activityData={{}} />,
-      );
+      result.rerender(<ScaffoldTreeView molecules={molecules} activityData={{}} />);
     },
   };
 }
@@ -334,7 +284,7 @@ describe("ScaffoldTreeView — async-compute Sonner toast (Wave 4 / C1)", () => 
       "Computing scaffold tree…",
       expect.objectContaining({
         id: SCAFFOLD_TREE_TOAST_ID,
-        duration: Infinity,
+        duration: Number.POSITIVE_INFINITY,
         action: expect.objectContaining({ label: "Cancel" }),
       }),
     );
@@ -431,14 +381,9 @@ describe("ScaffoldTreeView — V4 Path A server-side scaffold filter", () => {
   });
 
   it("invokes customInstance with scaffold exact_match_in body when scaffold selected on a collection page (Groups mode)", async () => {
-    render(
-      <ScaffoldTreeView
-        molecules={molecules}
-        activityData={{}}
-        collectionId="col-abc"
-      />,
-      { wrapper },
-    );
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} collectionId="col-abc" />, {
+      wrapper,
+    });
 
     // Groups mode is the default. Find the benzene row by its data-testid
     // (set in scaffold-groups-list.tsx: data-testid=`scaffold-group-${smiles}`).
@@ -480,10 +425,7 @@ describe("ScaffoldTreeView — V4 Path A server-side scaffold filter", () => {
   });
 
   it("does NOT invoke customInstance when collectionId is absent (ad-hoc result set)", async () => {
-    render(
-      <ScaffoldTreeView molecules={molecules} activityData={{}} />,
-      { wrapper },
-    );
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} />, { wrapper });
 
     // Select the same benzene row.
     const benzeneRow = await screen.findByTestId("scaffold-group-c1ccccc1");
@@ -523,17 +465,11 @@ describe("ScaffoldTreeView — V4 Path A server-side scaffold filter", () => {
     ];
 
     render(
-      <ScaffoldTreeView
-        molecules={acyclicMols}
-        activityData={{}}
-        collectionId="col-acyclic"
-      />,
+      <ScaffoldTreeView molecules={acyclicMols} activityData={{}} collectionId="col-acyclic" />,
       { wrapper },
     );
 
-    const bucket = await screen.findByTestId(
-      `scaffold-group-${NO_SCAFFOLD_SENTINEL}`,
-    );
+    const bucket = await screen.findByTestId(`scaffold-group-${NO_SCAFFOLD_SENTINEL}`);
     fireEvent.click(bucket);
 
     // No server call: the sentinel is not a real SMILES; BE `exact_match_in`
@@ -547,14 +483,9 @@ describe("ScaffoldTreeView — V4 Path A server-side scaffold filter", () => {
   });
 
   it("includes all subtree scaffold SMILES in the criterion body for Hierarchy mode", async () => {
-    render(
-      <ScaffoldTreeView
-        molecules={molecules}
-        activityData={{}}
-        collectionId="col-xyz"
-      />,
-      { wrapper },
-    );
+    render(<ScaffoldTreeView molecules={molecules} activityData={{}} collectionId="col-xyz" />, {
+      wrapper,
+    });
 
     // Switch to Hierarchy mode.
     fireEvent.click(screen.getByRole("button", { name: /hierarchy/i }));
@@ -569,9 +500,7 @@ describe("ScaffoldTreeView — V4 Path A server-side scaffold filter", () => {
 
     const call = mockCustomInstance.mock.calls[0][0];
     const groupCrit = call.data.query.criteria[0];
-    const scaffoldCrit = groupCrit.criteria.find(
-      (c: any) => c.type === "scaffold",
-    );
+    const scaffoldCrit = groupCrit.criteria.find((c: any) => c.type === "scaffold");
     // Benzene subtree contains both scaffold SMILES (benzene + naphthalene).
     expect(scaffoldCrit.scaffold_smiles_list).toEqual(
       expect.arrayContaining(["c1ccccc1", "c1ccc2ccccc2c1"]),

@@ -1,13 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Download,
-  Upload,
-} from "lucide-react";
-import type { ColDef, GridApi } from "ag-grid-community";
+import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
+import type { Molecule } from "@/features/chemical-registration/types";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { SearchInput } from "@/shared/components/search-input";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -16,9 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { SearchInput } from "@/shared/components/search-input";
 import {
   Select,
   SelectContent,
@@ -26,16 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
-import type { Molecule } from "@/features/chemical-registration/types";
+import type { ColDef, GridApi } from "ag-grid-community";
+import { ChevronDown, ChevronRight, Download, Upload } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useAddMolecules } from "../hooks/use-collection-molecules";
 import type { MembershipResult, MoleculeReference, RefType } from "../types";
 
@@ -65,13 +54,9 @@ function MembershipResultDisplay({ result }: { result: MembershipResult }) {
   return (
     <div className="space-y-2 rounded-md border p-3 text-sm">
       <div className="flex items-center gap-4">
-        <span className="text-success font-medium">
-          Added {result.added_count}
-        </span>
+        <span className="text-success font-medium">Added {result.added_count}</span>
         {result.already_present > 0 && (
-          <span className="text-muted-foreground">
-            {result.already_present} already present
-          </span>
+          <span className="text-muted-foreground">{result.already_present} already present</span>
         )}
       </div>
       {result.unresolved.length > 0 && (
@@ -101,9 +86,7 @@ function MembershipResultDisplay({ result }: { result: MembershipResult }) {
                   {result.unresolved.map((u, i) => (
                     <tr key={i} className="border-b last:border-0">
                       <td className="px-3 py-1.5 font-mono">{u.value}</td>
-                      <td className="px-3 py-1.5 text-destructive">
-                        {u.reason}
-                      </td>
+                      <td className="px-3 py-1.5 text-destructive">{u.reason}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -134,9 +117,7 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
-function parseCSV(
-  text: string
-): Array<{ identifier: string; type: string }> {
+function parseCSV(text: string): Array<{ identifier: string; type: string }> {
   const lines = text
     .trim()
     .split("\n")
@@ -173,8 +154,7 @@ function SearchTab({
   onResult: (result: MembershipResult) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const { data: results, isLoading: searching } =
-    useMoleculeSearch(searchTerm);
+  const { data: results, isLoading: searching } = useMoleculeSearch(searchTerm);
   const addMutation = useAddMolecules(collectionId);
   const gridApiRef = useRef<GridApi<MoleculeSearchRow> | null>(null);
 
@@ -185,7 +165,7 @@ function SearchTab({
         name: m.name,
         registration_number: m.registration_number,
       })),
-    [results]
+    [results],
   );
 
   const columnDefs = useMemo<ColDef<MoleculeSearchRow>[]>(
@@ -198,7 +178,7 @@ function SearchTab({
       },
       { headerName: "Name", field: "name", flex: 1 },
     ],
-    []
+    [],
   );
 
   const handleAdd = useCallback(() => {
@@ -212,7 +192,7 @@ function SearchTab({
       { references: refs },
       {
         onSuccess: (result) => onResult(result),
-      }
+      },
     );
   }, [addMutation, onResult]);
 
@@ -237,26 +217,18 @@ function SearchTab({
         emptyState={
           searchTerm.length < 2 ? (
             <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Type at least 2 characters to search.
-              </p>
+              <p className="text-sm text-muted-foreground">Type at least 2 characters to search.</p>
             </div>
           ) : (
             <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                No molecules found.
-              </p>
+              <p className="text-sm text-muted-foreground">No molecules found.</p>
             </div>
           )
         }
       />
 
       <div className="flex justify-end">
-        <Button
-          size="sm"
-          onClick={handleAdd}
-          disabled={addMutation.isPending}
-        >
+        <Button size="sm" onClick={handleAdd} disabled={addMutation.isPending}>
           {addMutation.isPending ? "Adding..." : "Add Selected"}
         </Button>
       </div>
@@ -290,19 +262,19 @@ function PasteTab({
       value,
       ref_type: refType,
     }));
-    addMutation.mutate({ references: refs }, {
-      onSuccess: (result) => onResult(result),
-    });
+    addMutation.mutate(
+      { references: refs },
+      {
+        onSuccess: (result) => onResult(result),
+      },
+    );
   };
 
   return (
     <div className="space-y-3 pt-2">
       <div className="grid gap-2">
         <Label className="text-xs">Identifier Type</Label>
-        <Select
-          value={refType}
-          onValueChange={(v) => setRefType(v as RefType)}
-        >
+        <Select value={refType} onValueChange={(v) => setRefType(v as RefType)}>
           <SelectTrigger className="w-56">
             <SelectValue />
           </SelectTrigger>
@@ -328,10 +300,7 @@ function PasteTab({
         <Button
           size="sm"
           onClick={handleAdd}
-          disabled={
-            addMutation.isPending ||
-            text.trim().length === 0
-          }
+          disabled={addMutation.isPending || text.trim().length === 0}
         >
           {addMutation.isPending ? "Adding..." : "Add"}
         </Button>
@@ -351,9 +320,7 @@ function CsvTab({
   collectionId: string;
   onResult: (result: MembershipResult) => void;
 }) {
-  const [parsedRows, setParsedRows] = useState<
-    Array<{ identifier: string; type: string }>
-  >([]);
+  const [parsedRows, setParsedRows] = useState<Array<{ identifier: string; type: string }>>([]);
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addMutation = useAddMolecules(collectionId);
@@ -384,24 +351,20 @@ function CsvTab({
     ];
     const refs: MoleculeReference[] = parsedRows.map((row) => ({
       value: row.identifier,
-      ref_type: validTypes.includes(row.type as RefType)
-        ? (row.type as RefType)
-        : "name",
+      ref_type: validTypes.includes(row.type as RefType) ? (row.type as RefType) : "name",
     }));
-    addMutation.mutate({ references: refs }, {
-      onSuccess: (result) => onResult(result),
-    });
+    addMutation.mutate(
+      { references: refs },
+      {
+        onSuccess: (result) => onResult(result),
+      },
+    );
   };
 
   return (
     <div className="space-y-3 pt-2">
       <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={downloadTemplate}
-        >
+        <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
           <Download className="mr-1 h-3 w-3" />
           Download Template
         </Button>
@@ -421,9 +384,7 @@ function CsvTab({
           className="hidden"
           onChange={handleFileUpload}
         />
-        {fileName && (
-          <span className="text-xs text-muted-foreground">{fileName}</span>
-        )}
+        {fileName && <span className="text-xs text-muted-foreground">{fileName}</span>}
       </div>
 
       {/* Preview table */}
@@ -445,12 +406,8 @@ function CsvTab({
               <tbody>
                 {parsedRows.slice(0, 10).map((row, i) => (
                   <tr key={i} className="border-b last:border-0">
-                    <td className="px-3 py-1.5 text-muted-foreground">
-                      {i + 1}
-                    </td>
-                    <td className="px-3 py-1.5 font-mono text-xs">
-                      {row.identifier}
-                    </td>
+                    <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
+                    <td className="px-3 py-1.5 font-mono text-xs">{row.identifier}</td>
                     <td className="px-3 py-1.5">{row.type}</td>
                   </tr>
                 ))}
@@ -482,11 +439,7 @@ function CsvTab({
 // Main Dialog
 // ---------------------------------------------------------------------------
 
-export function AddMoleculesDialog({
-  collectionId,
-  open,
-  onOpenChange,
-}: AddMoleculesDialogProps) {
+export function AddMoleculesDialog({ collectionId, open, onOpenChange }: AddMoleculesDialogProps) {
   const [lastResult, setLastResult] = useState<MembershipResult | null>(null);
 
   function handleClose(v: boolean) {
@@ -504,8 +457,7 @@ export function AddMoleculesDialog({
         <DialogHeader>
           <DialogTitle>Add Molecules</DialogTitle>
           <DialogDescription>
-            Search, paste identifiers, or import from CSV to add molecules to
-            this collection.
+            Search, paste identifiers, or import from CSV to add molecules to this collection.
           </DialogDescription>
         </DialogHeader>
 
@@ -519,24 +471,15 @@ export function AddMoleculesDialog({
           </TabsList>
 
           <TabsContent value="search">
-            <SearchTab
-              collectionId={collectionId}
-              onResult={handleResult}
-            />
+            <SearchTab collectionId={collectionId} onResult={handleResult} />
           </TabsContent>
 
           <TabsContent value="paste">
-            <PasteTab
-              collectionId={collectionId}
-              onResult={handleResult}
-            />
+            <PasteTab collectionId={collectionId} onResult={handleResult} />
           </TabsContent>
 
           <TabsContent value="csv">
-            <CsvTab
-              collectionId={collectionId}
-              onResult={handleResult}
-            />
+            <CsvTab collectionId={collectionId} onResult={handleResult} />
           </TabsContent>
         </Tabs>
       </DialogContent>

@@ -101,10 +101,7 @@ export function deriveChannelHitDefaults(
   const curveClass =
     readout.data_type === "dose_response"
       ? recommended.find(
-          (c) =>
-            c.readout_name === "Curve Class" &&
-            c.operator === "in" &&
-            Array.isArray(c.value),
+          (c) => c.readout_name === "Curve Class" && c.operator === "in" && Array.isArray(c.value),
         )
       : undefined;
   const allowed_curve_classes = (curveClass?.value as string[] | undefined) ?? [];

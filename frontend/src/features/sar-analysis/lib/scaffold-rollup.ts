@@ -100,7 +100,5 @@ export function medianPic50ForMols(
 
   pic50s.sort((a, b) => a - b);
   const mid = Math.floor(pic50s.length / 2);
-  return pic50s.length % 2 === 0
-    ? (pic50s[mid - 1] + pic50s[mid]) / 2
-    : pic50s[mid];
+  return pic50s.length % 2 === 0 ? (pic50s[mid - 1] + pic50s[mid]) / 2 : pic50s[mid];
 }

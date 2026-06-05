@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -137,11 +137,7 @@ export function SaveExclusionsDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={onClose}
-            disabled={isSaving}
-          >
+          <Button variant="outline" onClick={onClose} disabled={isSaving}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!canSave}>

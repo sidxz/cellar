@@ -31,8 +31,7 @@ const TEMPLATES_QK = ["collection-import-templates"] as const;
 export function useCollectionImportTemplates(collectionId?: string) {
   return useQuery({
     queryKey: [...TEMPLATES_QK, collectionId ?? null],
-    queryFn: () =>
-      listCollectionImportTemplates({ collection_id: collectionId }),
+    queryFn: () => listCollectionImportTemplates({ collection_id: collectionId }),
   });
 }
 
@@ -63,8 +62,7 @@ export function useUpdateCollectionImportTemplate() {
     Error,
     { templateId: string; body: UpdateCollectionImportTemplateRequest }
   >({
-    mutationFn: ({ templateId, body }) =>
-      updateCollectionImportTemplate(templateId, body),
+    mutationFn: ({ templateId, body }) => updateCollectionImportTemplate(templateId, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: TEMPLATES_QK });
     },

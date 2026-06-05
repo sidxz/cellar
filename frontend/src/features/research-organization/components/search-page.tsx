@@ -1,20 +1,18 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
 import type { Molecule } from "@/features/chemical-registration/types";
+import { consumeScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
-import type { SearchQuery, ActivityValue, SortField, SortDir, SavedSearch } from "../types";
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 import type { ExportFormat, ExportRequest } from "@/shared/components/export/types";
-import { useExecuteSearch, type EnrichedSearchResponse } from "../hooks/use-search";
-import { useSavedSearches } from "../hooks/use-saved-searches";
+import { Button } from "@/shared/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useReportConfig } from "../hooks/use-report-config";
-import {
-  toBackendProtocolColumns,
-  uniqueProtocolIds,
-} from "../lib/protocol-column-id";
+import { useSavedSearches } from "../hooks/use-saved-searches";
+import { type EnrichedSearchResponse, useExecuteSearch } from "../hooks/use-search";
+import { toBackendProtocolColumns, uniqueProtocolIds } from "../lib/protocol-column-id";
 import {
   aggregationModeToWire,
   computeScopeForcesSingleRun,
@@ -22,17 +20,13 @@ import {
   wireToAggregationMode,
 } from "../lib/use-aggregation-mode";
 import type { AggregationMode } from "../lib/use-aggregation-mode";
-import { SearchForm } from "./search/search-form";
-import {
-  ResultsToolbarActions,
-  ResultsToolbarLeft,
-} from "./search/results-toolbar";
-import { ResultsGrid } from "./search/results-grid";
+import type { ActivityValue, SavedSearch, SearchQuery, SortDir, SortField } from "../types";
 import { CompoundDetailSheet } from "./search/compound-detail-sheet";
 import { ReportCustomizer } from "./search/report-customizer";
+import { ResultsGrid } from "./search/results-grid";
+import { ResultsToolbarActions, ResultsToolbarLeft } from "./search/results-toolbar";
 import { SaveSearchDialog } from "./search/save-search-dialog";
-import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
-import { consumeScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
+import { SearchForm } from "./search/search-form";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -191,8 +185,7 @@ function SearchPageInner() {
   // the writer; the page reads + injects into the request body, and also
   // calls `setMode` on the saved-search load path so the URL chip and the
   // request body stay in lock-step with the persisted rule.
-  const { mode: aggregationMode, setMode: setAggregationMode } =
-    useAggregationMode();
+  const { mode: aggregationMode, setMode: setAggregationMode } = useAggregationMode();
 
   // ── Derived: visible protocol IDs for detail panel ─────────────────────
   // Resolves each protocol-column token to its owning protocol.
@@ -288,7 +281,16 @@ function SearchPageInner() {
         },
       },
     );
-  }, [currentQuery, nextCursor, searchMutation, protocolColumns, sortBy, sortDir, enrichItems, aggregationMode]);
+  }, [
+    currentQuery,
+    nextCursor,
+    searchMutation,
+    protocolColumns,
+    sortBy,
+    sortDir,
+    enrichItems,
+    aggregationMode,
+  ]);
 
   // ── Re-fetch with current columns (called from report customizer +
   // when the aggregation mode changes) ──────────────────────────────────
@@ -314,7 +316,16 @@ function SearchPageInner() {
       },
     );
     setReportOpen(false);
-  }, [currentQuery, hasSearched, protocolColumns, searchMutation, sortBy, sortDir, enrichItems, aggregationMode]);
+  }, [
+    currentQuery,
+    hasSearched,
+    protocolColumns,
+    searchMutation,
+    sortBy,
+    sortDir,
+    enrichItems,
+    aggregationMode,
+  ]);
 
   const handleSetProtocolColumns = useCallback((next: string[]) => {
     dispatch({ type: "setProtocolColumns", protocolColumns: next });
@@ -349,7 +360,16 @@ function SearchPageInner() {
         },
       },
     );
-  }, [aggregationMode, currentQuery, hasSearched, protocolColumns, searchMutation, sortBy, sortDir, enrichItems]);
+  }, [
+    aggregationMode,
+    currentQuery,
+    hasSearched,
+    protocolColumns,
+    searchMutation,
+    sortBy,
+    sortDir,
+    enrichItems,
+  ]);
 
   // ── Auto-fire handoffs (saved search + scaffold) ──────────────────────
   //
@@ -394,9 +414,7 @@ function SearchPageInner() {
     // and fall back to "latest" — matching the FE default.
     const savedAggregation = rawQuery?.aggregation;
     const nextAggregationMode =
-      typeof savedAggregation === "string"
-        ? wireToAggregationMode(savedAggregation)
-        : "latest";
+      typeof savedAggregation === "string" ? wireToAggregationMode(savedAggregation) : "latest";
     // Strip the aggregation field out before handing the query to the BE
     // — the search query schema doesn't include it as a criterion (it
     // travels as a top-level `input.aggregation` instead).
@@ -537,15 +555,7 @@ function SearchPageInner() {
         },
       };
     },
-    [
-      currentQuery,
-      protocolColumns,
-      aggregationMode,
-      projectIds,
-      sortBy,
-      sortDir,
-      reportConfig,
-    ],
+    [currentQuery, protocolColumns, aggregationMode, projectIds, sortBy, sortDir, reportConfig],
   );
 
   // ── Add to collection ──────────────────────────────────────────────────
@@ -634,8 +644,15 @@ function SearchPageInner() {
             />
             {nextCursor && (
               <div className="flex justify-center py-3">
-                <Button variant="outline" size="sm" onClick={handleLoadMore} disabled={searchMutation.isPending}>
-                  {searchMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadMore}
+                  disabled={searchMutation.isPending}
+                >
+                  {searchMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
                   Load More
                 </Button>
               </div>

@@ -35,8 +35,7 @@ const COMPACT_STYLES: Record<string, string> = {
   full: "bg-success/15 text-success",
   partial: "bg-yellow-500/15 text-yellow-400",
   bell_shaped: "bg-primary/15 text-primary",
-  inactive:
-    "bg-slate-200/60 text-slate-700 dark:bg-slate-800/40 dark:text-slate-300",
+  inactive: "bg-slate-200/60 text-slate-700 dark:bg-slate-800/40 dark:text-slate-300",
 };
 
 interface CurveClassBadgeProps {
@@ -84,8 +83,7 @@ export function CurveClassBadge({
   }
 
   const cls = FULL_STYLES[key] ?? FULL_STYLES.inactive;
-  const label =
-    (CURVE_CLASS_LABELS as Record<string, string>)[curveClass] ?? curveClass;
+  const label = (CURVE_CLASS_LABELS as Record<string, string>)[curveClass] ?? curveClass;
   return (
     <Badge variant="outline" className={`${cls}${className ? ` ${className}` : ""}`}>
       {label}

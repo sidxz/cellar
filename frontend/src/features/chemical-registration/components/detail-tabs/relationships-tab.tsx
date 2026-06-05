@@ -1,8 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { Link2, Plus, Trash2 } from "lucide-react";
 import { SearchInput } from "@/shared/components/search-input";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -25,12 +22,15 @@ import {
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { Link2, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 import {
-  useRelationships,
   useCreateRelationship,
   useDeleteRelationship,
   useMolecule,
   useMoleculeSearch,
+  useRelationships,
 } from "../../hooks/use-molecules";
 
 // ---------------------------------------------------------------------------
@@ -47,7 +47,7 @@ const RELATIONSHIP_TYPES = [
 ] as const;
 
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(
-  RELATIONSHIP_TYPES.map((t) => [t.value, t.label])
+  RELATIONSHIP_TYPES.map((t) => [t.value, t.label]),
 );
 
 // ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ export function RelationshipsTab({ moleculeId }: RelationshipsTabProps) {
         </Button>
       </CardHeader>
       <CardContent>
-        {(!relationships || relationships.length === 0) ? (
+        {!relationships || relationships.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Link2 className="mx-auto h-8 w-8 text-muted-foreground/40" />
             <p className="mt-2 text-sm">No relationships defined</p>
@@ -102,11 +102,7 @@ export function RelationshipsTab({ moleculeId }: RelationshipsTabProps) {
         )}
       </CardContent>
 
-      <AddRelationshipDialog
-        moleculeId={moleculeId}
-        open={addOpen}
-        onOpenChange={setAddOpen}
-      />
+      <AddRelationshipDialog moleculeId={moleculeId} open={addOpen} onOpenChange={setAddOpen} />
     </Card>
   );
 }
@@ -134,9 +130,7 @@ function RelationshipRow({
   isDeleting: boolean;
 }) {
   const otherId =
-    rel.source_molecule_id === moleculeId
-      ? rel.target_molecule_id
-      : rel.source_molecule_id;
+    rel.source_molecule_id === moleculeId ? rel.target_molecule_id : rel.source_molecule_id;
   const { data: other } = useMolecule(otherId);
 
   return (
@@ -150,15 +144,9 @@ function RelationshipRow({
       >
         {other?.registration_number ?? otherId.slice(0, 8)}
       </Link>
-      {other?.name && (
-        <span className="text-sm text-muted-foreground truncate">
-          {other.name}
-        </span>
-      )}
+      {other?.name && <span className="text-sm text-muted-foreground truncate">{other.name}</span>}
       {rel.notes && (
-        <span className="text-xs text-muted-foreground truncate ml-auto mr-2">
-          {rel.notes}
-        </span>
+        <span className="text-xs text-muted-foreground truncate ml-auto mr-2">{rel.notes}</span>
       )}
       <Button
         variant="ghost"
@@ -213,9 +201,7 @@ function AddRelationshipDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Relationship</DialogTitle>
-          <DialogDescription>
-            Define a relationship to another compound.
-          </DialogDescription>
+          <DialogDescription>Define a relationship to another compound.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -261,9 +247,7 @@ function AddRelationshipDialog({
                     }}
                   >
                     <span className="font-mono">{m.registration_number}</span>
-                    {m.name && (
-                      <span className="text-muted-foreground truncate">{m.name}</span>
-                    )}
+                    {m.name && <span className="text-muted-foreground truncate">{m.name}</span>}
                   </button>
                 ))}
               </div>
@@ -300,7 +284,7 @@ function AddRelationshipDialog({
                     reset();
                     onOpenChange(false);
                   },
-                }
+                },
               );
             }}
           >

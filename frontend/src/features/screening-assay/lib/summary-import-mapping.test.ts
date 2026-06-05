@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildMapping, suggestionsToDraft } from "./summary-import-mapping";
 import type { SummaryHeaderSuggestionModel } from "../hooks/use-summary-import";
+import { buildMapping, suggestionsToDraft } from "./summary-import-mapping";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

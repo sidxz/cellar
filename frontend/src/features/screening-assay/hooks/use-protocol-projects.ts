@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Protocol } from "../types";
 
 const PROTOCOLS_KEY = ["protocols"];

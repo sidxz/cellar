@@ -16,23 +16,18 @@ import {
 import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { cn } from "@/shared/lib/utils";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthz } from "@sentinel-auth/nextjs";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, ImageIcon, Redo2, RotateCcw, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  type DraftExclusion,
-  useEditSession,
-} from "../hooks/use-edit-session";
-import { useRefitPreview } from "../hooks/use-refit-preview";
+import { type DraftExclusion, useEditSession } from "../hooks/use-edit-session";
 import { useClassifyDoseResponse, useRefitDoseResponse } from "../hooks/use-refit-dose-response";
-import { CurveControls } from "./curve-controls";
-import { CurveEditHistory } from "./curve-edit-history";
-import { DoseResponsePointInventory } from "./dose-response-point-inventory";
+import { useRefitPreview } from "../hooks/use-refit-preview";
 import {
-  type ExclusionReason as SaveExclusionReason,
-  SaveExclusionsDialog,
-} from "./save-exclusions-dialog";
+  type CurveConstraints,
+  constraintsValid,
+  defaultConstraintsFor,
+} from "../lib/curve-constraints";
 import {
   PLOT_MARKER,
   X_AXIS_FALLBACK_MAX_RATIO,
@@ -42,18 +37,13 @@ import {
   X_AXIS_MIN_RATIO,
   generate4PLPoints,
 } from "../lib/dose-response-display";
-import { interceptLabel } from "../lib/intercept-label";
 import {
   computeReplicateStats,
   generate4PLCurve,
   isDegenerateFit,
   rSquaredColor,
 } from "../lib/dose-response-math";
-import {
-  type CurveConstraints,
-  constraintsValid,
-  defaultConstraintsFor,
-} from "../lib/curve-constraints";
+import { interceptLabel } from "../lib/intercept-label";
 import {
   CURVE_CLASS_LABELS,
   CURVE_TYPE_LABELS,
@@ -62,6 +52,13 @@ import {
   type DoseResponseConfig,
   type DoseResponseCurve,
 } from "../types";
+import { CurveControls } from "./curve-controls";
+import { CurveEditHistory } from "./curve-edit-history";
+import { DoseResponsePointInventory } from "./dose-response-point-inventory";
+import {
+  type ExclusionReason as SaveExclusionReason,
+  SaveExclusionsDialog,
+} from "./save-exclusions-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,10 +91,7 @@ interface DoseResponseChartProps {
   previewFn?: PreviewFnOverride;
 }
 
-type PreviewFnOverride = NonNullable<
-  Parameters<typeof useRefitPreview>[0]
->["previewFn"];
-
+type PreviewFnOverride = NonNullable<Parameters<typeof useRefitPreview>[0]>["previewFn"];
 
 const TRACE_COLORS = GROUP_PALETTE.slice(0, 8);
 
@@ -136,11 +130,7 @@ interface CapturedPoint {
 }
 
 /** Pull a number from one of two field names; undefined / null / non-number → undefined. */
-function pickNum(
-  obj: Record<string, unknown>,
-  a: string,
-  b?: string,
-): number | undefined {
+function pickNum(obj: Record<string, unknown>, a: string, b?: string): number | undefined {
   const v = obj[a] ?? (b ? obj[b] : undefined);
   return typeof v === "number" && Number.isFinite(v) ? v : undefined;
 }
@@ -215,10 +205,7 @@ function buildCapturedPoints(
       // state), prefer attaching to that pending row instead of inserting
       // a duplicate.
       const overlap = pending.find(
-        (p) =>
-          p.isInRawData &&
-          p.rawIdx === idx &&
-          Math.abs(p.concentration - conc) < 1e-12,
+        (p) => p.isInRawData && p.rawIdx === idx && Math.abs(p.concentration - conc) < 1e-12,
       );
       if (overlap) {
         overlap.exclusionEntry = entry;
@@ -235,9 +222,7 @@ function buildCapturedPoints(
     }
 
     // Case (b) — entry has idx only, no coords. Resolve via rawData[idx].
-    const match = pending.find(
-      (p) => p.isInRawData && p.rawIdx === idx,
-    );
+    const match = pending.find((p) => p.isInRawData && p.rawIdx === idx);
     if (match) {
       match.exclusionEntry = entry;
     }
@@ -481,10 +466,9 @@ export function DoseResponseChart({
   const editSeed = useMemo(
     () =>
       editCurve
-        ? ({
-            excluded_points:
-              (editCurve.excluded_points as DraftExclusion[] | null) ?? null,
-          })
+        ? {
+            excluded_points: (editCurve.excluded_points as DraftExclusion[] | null) ?? null,
+          }
         : null,
     [editCurve],
   );
@@ -505,10 +489,7 @@ export function DoseResponseChart({
     if (!editCurve) return [];
     return buildCapturedPoints(
       editCurve.raw_data as Array<Record<string, unknown>> | null | undefined,
-      editCurve.excluded_points as
-        | Array<Record<string, unknown>>
-        | null
-        | undefined,
+      editCurve.excluded_points as Array<Record<string, unknown>> | null | undefined,
     );
   }, [editCurve]);
   const editCurveCapturedByIdx = useMemo<Map<number, CapturedPoint>>(() => {
@@ -520,11 +501,10 @@ export function DoseResponseChart({
   // Audit-trail of prior point-exclusion edits for the curve under edit.
   // Hook is unconditionally invoked (React rules), but the query is gated
   // on `enabled: !!editCurve?.id` so non-interactive renders never fetch.
-  const editHistoryQuery =
-    useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet(
-      editCurve?.id ?? "",
-      { query: { enabled: !!editCurve?.id } },
-    );
+  const editHistoryQuery = useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet(
+    editCurve?.id ?? "",
+    { query: { enabled: !!editCurve?.id } },
+  );
 
   // constraints per curve id
   const [constraintsMap, setConstraintsMap] = useState<Record<string, CurveConstraints>>({});
@@ -777,10 +757,7 @@ export function DoseResponseChart({
     // for the merge / dedup semantics.
     const captured = buildCapturedPoints(
       curve.raw_data as Array<Record<string, unknown>> | null | undefined,
-      curve.excluded_points as
-        | Array<Record<string, unknown>>
-        | null
-        | undefined,
+      curve.excluded_points as Array<Record<string, unknown>> | null | undefined,
     );
     const localExcluded = getExcluded(curve.id);
 
@@ -795,10 +772,8 @@ export function DoseResponseChart({
       const e = cp.exclusionEntry;
       if (!e) return "included";
       const source =
-        (e.source as string | undefined) ??
-        (e.reason === "auto_3sigma" ? "auto_3sigma" : "manual");
-      const excluded =
-        typeof e.excluded === "boolean" ? (e.excluded as boolean) : true;
+        (e.source as string | undefined) ?? (e.reason === "auto_3sigma" ? "auto_3sigma" : "manual");
+      const excluded = typeof e.excluded === "boolean" ? (e.excluded as boolean) : true;
       if (source === "auto_3sigma" && !excluded) return "suggestion";
       if (source === "auto_3sigma" && excluded) return "autoExcluded";
       if (excluded) return "manualExcluded";
@@ -909,7 +884,8 @@ export function DoseResponseChart({
       const acRaw = (ac as { raw_data?: Array<Record<string, unknown>> | null }).raw_data;
       if (Array.isArray(acRaw)) {
         for (const pt of acRaw) {
-          const xv = (pt as { x?: number; concentration?: number }).x ??
+          const xv =
+            (pt as { x?: number; concentration?: number }).x ??
             (pt as { x?: number; concentration?: number }).concentration;
           if (typeof xv === "number" && Number.isFinite(xv) && xv > 0) {
             additionalXs.push(xv);
@@ -1220,11 +1196,7 @@ export function DoseResponseChart({
       Number.isFinite(previewCurveOverlay.fitted_value) &&
       previewCurveOverlay.fitted_value > 0
     ) {
-      const { x: pvX, y: pvY } = generate4PLPoints(
-        previewCurveOverlay,
-        xMin,
-        xMax,
-      );
+      const { x: pvX, y: pvY } = generate4PLPoints(previewCurveOverlay, xMin, xMax);
       traces.push({
         type: "scatter",
         mode: "lines",
@@ -1249,11 +1221,12 @@ export function DoseResponseChart({
     if (editSession.dirtyCount > 0) {
       // V1 simplicity — window.confirm is keyboard-accessible and free.
       // A custom dialog can replace this in Sprint 3 if chemists request it.
-      const ok = typeof window === "undefined"
-        ? true
-        : window.confirm(
-            `You have ${editSession.dirtyCount} unsaved change${editSession.dirtyCount === 1 ? "" : "s"}. Discard them?`,
-          );
+      const ok =
+        typeof window === "undefined"
+          ? true
+          : window.confirm(
+              `You have ${editSession.dirtyCount} unsaved change${editSession.dirtyCount === 1 ? "" : "s"}. Discard them?`,
+            );
       if (!ok) return;
     }
     editSession.resetToSaved();
@@ -1274,7 +1247,7 @@ export function DoseResponseChart({
       if (
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
-        (target && target.isContentEditable)
+        target?.isContentEditable
       ) {
         return;
       }
@@ -1285,10 +1258,7 @@ export function DoseResponseChart({
       if (ctrlOrCmd && key === "z" && !e.shiftKey) {
         e.preventDefault();
         editSession.undo();
-      } else if (
-        ctrlOrCmd &&
-        ((key === "z" && e.shiftKey) || key === "y")
-      ) {
+      } else if (ctrlOrCmd && ((key === "z" && e.shiftKey) || key === "y")) {
         e.preventDefault();
         editSession.redo();
       } else if (e.key === "Escape") {
@@ -1365,8 +1335,7 @@ export function DoseResponseChart({
     // run's intercept (not the aggregate) — drawing a cross-hair there
     // would mislead, so suppress every per-curve annotation in
     // aggregate mode and rely on the single amber marker below.
-    const isAggregateMode =
-      curve.aggregate != null && Number.isFinite(curve.aggregate.marker_x);
+    const isAggregateMode = curve.aggregate != null && Number.isFinite(curve.aggregate.marker_x);
 
     // Cross-hair: dotted lines + marker + label at (EC50, midpoint).
     // Suppress for inactive/degenerate fits — the EC50 isn't meaningful.
@@ -1642,11 +1611,7 @@ export function DoseResponseChart({
                 size="sm"
                 onClick={handleEnterEdit}
                 disabled={runIsLocked}
-                title={
-                  runIsLocked
-                    ? "Unapprove run to edit curves"
-                    : undefined
-                }
+                title={runIsLocked ? "Unapprove run to edit curves" : undefined}
               >
                 Edit Points
               </Button>
@@ -1797,10 +1762,7 @@ export function DoseResponseChart({
           `min-w-0` lets the chart shrink inside flex/grid parents (side
           panels, sheets) instead of forcing horizontal overflow. */}
       {editMode && editCurve ? (
-        <ResizablePanelGroup
-          orientation="horizontal"
-          className="h-[420px] rounded-md border"
-        >
+        <ResizablePanelGroup orientation="horizontal" className="h-[420px] rounded-md border">
           <ResizablePanel defaultSize={65} minSize={40} maxSize={80}>
             {plotBlock}
           </ResizablePanel>
@@ -1878,9 +1840,7 @@ export function DoseResponseChart({
           // double-count. For non-edit curves, fall back to the legacy combo.
           let excludedCount: number;
           if (editMode && curve.id === editCurve?.id) {
-            excludedCount = editSession.draft.exclusions.filter(
-              (e) => e.excluded,
-            ).length;
+            excludedCount = editSession.draft.exclusions.filter((e) => e.excluded).length;
           } else {
             const localExcluded = getExcluded(curve.id);
             excludedCount = serverExcludedCount + localExcluded.size;

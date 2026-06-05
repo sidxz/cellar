@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
 import { Loader2, Plus } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
 import { Button } from "@/shared/components/ui/button";
-import { formatDate } from "@/shared/lib/format-date";
 import {
   Table,
   TableBody,
@@ -14,11 +14,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
+import { formatDate } from "@/shared/lib/format-date";
 
-import { useCampaigns } from "../hooks/use-campaigns";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
 import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
+import { useCampaigns } from "../hooks/use-campaigns";
 import { CampaignStatusChip } from "./campaign-status-chip";
 import { CreateCampaignDialog } from "./create-campaign-dialog";
 

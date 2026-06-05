@@ -23,11 +23,7 @@ export const SYNTHESIS_REQUEST_STATUS_LABELS: Record<SynthesisRequestStatus, str
   failed: "Failed",
 };
 
-export type FeasibilityStatus =
-  | "feasible"
-  | "challenging"
-  | "infeasible"
-  | "alternative_proposed";
+export type FeasibilityStatus = "feasible" | "challenging" | "infeasible" | "alternative_proposed";
 
 export const FEASIBILITY_STATUS_LABELS: Record<FeasibilityStatus, string> = {
   feasible: "Feasible",

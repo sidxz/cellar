@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -19,11 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { useState } from "react";
 import { useCreateSample } from "../hooks/use-samples";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import { CONTAINER_TYPE_LABELS, type StorageLocation } from "../types";
-import { MoleculeSelector } from "./molecule-selector";
 import { BatchSelector } from "./batch-selector";
+import { MoleculeSelector } from "./molecule-selector";
 
 interface CreateSampleDialogProps {
   batchId?: string;
@@ -31,11 +31,7 @@ interface CreateSampleDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateSampleDialog({
-  batchId,
-  open,
-  onOpenChange,
-}: CreateSampleDialogProps) {
+export function CreateSampleDialog({ batchId, open, onOpenChange }: CreateSampleDialogProps) {
   const createMutation = useCreateSample();
   const { data: locations } = useStorageLocations();
   const [selectedMoleculeId, setSelectedMoleculeId] = useState<string | null>(null);
@@ -57,13 +53,11 @@ export function CreateSampleDialog({
         batch_id: resolvedBatchId,
         barcode,
         container_type: containerType,
-        amount_value: parseFloat(amountValue),
+        amount_value: Number.parseFloat(amountValue),
         amount_unit: amountUnit,
         solvent: solvent || null,
         location_id: locationId || null,
-        low_stock_threshold: lowStockThreshold
-          ? parseFloat(lowStockThreshold)
-          : null,
+        low_stock_threshold: lowStockThreshold ? Number.parseFloat(lowStockThreshold) : null,
       },
       {
         onSuccess: () => {
@@ -79,7 +73,7 @@ export function CreateSampleDialog({
             setSelectedBatchId(null);
           }
         },
-      }
+      },
     );
   };
 
@@ -88,9 +82,7 @@ export function CreateSampleDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Sample</DialogTitle>
-          <DialogDescription>
-            Create a new sample from this batch.
-          </DialogDescription>
+          <DialogDescription>Create a new sample from this batch.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">

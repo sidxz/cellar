@@ -1,4 +1,4 @@
-import type { Molecule, BatchInput } from "./index";
+import type { BatchInput, Molecule } from "./index";
 
 export type WizardMode = "single" | "bulk";
 

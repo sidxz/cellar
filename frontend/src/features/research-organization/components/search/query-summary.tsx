@@ -1,19 +1,19 @@
 "use client";
 
 import type {
-  SearchCriterion,
-  TextCriterion,
-  PropertyCriterion,
-  StructureCriterion,
   ActivityCriterion,
-  KeywordListCriterion,
-  RunDateCriterion,
   BatchCriterion,
-  ProjectCriterion,
-  SelectivityCriterion,
-  GroupCriterion,
   CustomFieldCriterion,
+  GroupCriterion,
+  KeywordListCriterion,
+  ProjectCriterion,
+  PropertyCriterion,
   PropertyOperator,
+  RunDateCriterion,
+  SearchCriterion,
+  SelectivityCriterion,
+  StructureCriterion,
+  TextCriterion,
   TextOperator,
 } from "../../types";
 
@@ -140,9 +140,7 @@ interface QuerySummaryProps {
 export function QuerySummary({ query, className }: QuerySummaryProps) {
   return (
     <span
-      className={
-        className ?? "text-xs text-muted-foreground truncate"
-      }
+      className={className ?? "text-xs text-muted-foreground truncate"}
       title={querySummaryText(query)}
     >
       {querySummaryText(query)}

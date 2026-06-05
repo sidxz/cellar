@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { AttachmentList, FileUploadZone } from "@/features/attachment";
+import { useMolecule } from "@/features/chemical-registration/hooks/use-molecules";
 import { TagTable } from "@/features/tagging/components/tag-table";
-import { Paperclip, Pencil } from "lucide-react";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { type SaltEntry, useSaltCatalog } from "@/features/workspace-config/hooks/use-salt-catalog";
+import { DetailShell } from "@/shared/components/detail-shell";
+import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
@@ -17,8 +20,6 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { DetailShell } from "@/shared/components/detail-shell";
-import { EntityLink } from "@/shared/components/entity-link";
 import {
   Select,
   SelectContent,
@@ -26,15 +27,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
-import { useSaltCatalog, type SaltEntry } from "@/features/workspace-config/hooks/use-salt-catalog";
-import { useMolecule } from "@/features/chemical-registration/hooks/use-molecules";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
-import { FileUploadZone, AttachmentList } from "@/features/attachment";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { Paperclip, Pencil } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useBatch, useUpdateBatch } from "../hooks/use-batches";
-import { SampleList } from "./sample-list";
-import { BatchIdentifiersCard } from "./batch-identifiers-card";
 import { BATCH_SOURCE_LABELS, type Batch, type BatchSource } from "../types";
+import { BatchIdentifiersCard } from "./batch-identifiers-card";
+import { SampleList } from "./sample-list";
 
 interface BatchDetailProps {
   batchId: string;
@@ -65,7 +65,8 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
       >
         {(batch) => {
           const supplier = orgs?.find((o) => o.id === batch.supplier_org_id);
-          const chemistName = members?.find((m) => m.user_id === batch.chemist)?.name ?? batch.chemist;
+          const chemistName =
+            members?.find((m) => m.user_id === batch.chemist)?.name ?? batch.chemist;
           return (
             <>
               {molecule && (
@@ -177,11 +178,7 @@ export function BatchDetail({ batchId }: BatchDetailProps) {
       </DetailShell>
 
       {query.data && (
-        <EditBatchDialog
-          batch={query.data}
-          open={editOpen}
-          onOpenChange={setEditOpen}
-        />
+        <EditBatchDialog batch={query.data} open={editOpen} onOpenChange={setEditOpen} />
       )}
     </>
   );
@@ -201,12 +198,8 @@ function EditBatchDialog({
   const mutation = useUpdateBatch(batch.id);
   const { data: saltEntries } = useSaltCatalog(true);
 
-  const [saltEntryId, setSaltEntryId] = useState<string>(
-    batch.salt_entry_id ?? NONE_VALUE
-  );
-  const [stoichiometry, setStoichiometry] = useState<number>(
-    batch.salt_stoichiometry ?? 1
-  );
+  const [saltEntryId, setSaltEntryId] = useState<string>(batch.salt_entry_id ?? NONE_VALUE);
+  const [stoichiometry, setStoichiometry] = useState<number>(batch.salt_stoichiometry ?? 1);
   const [purity, setPurity] = useState(batch.purity?.toString() ?? "");
   const [amountValue, setAmountValue] = useState(batch.amount_value.toString());
   const [amountUnit, setAmountUnit] = useState(batch.amount_unit);
@@ -214,11 +207,8 @@ function EditBatchDialog({
   const [expiryDate, setExpiryDate] = useState(batch.expiry_date ?? "");
 
   const selectedSalt = useMemo<SaltEntry | undefined>(
-    () =>
-      saltEntryId !== NONE_VALUE
-        ? saltEntries?.find((e) => e.id === saltEntryId)
-        : undefined,
-    [saltEntryId, saltEntries]
+    () => (saltEntryId !== NONE_VALUE ? saltEntries?.find((e) => e.id === saltEntryId) : undefined),
+    [saltEntryId, saltEntries],
   );
 
   return (
@@ -226,9 +216,7 @@ function EditBatchDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit Batch</DialogTitle>
-          <DialogDescription>
-            Update properties for {batch.batch_number}.
-          </DialogDescription>
+          <DialogDescription>Update properties for {batch.batch_number}.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid grid-cols-2 gap-4">
@@ -242,10 +230,7 @@ function EditBatchDialog({
             </div>
             <div className="grid gap-2">
               <Label>Unit</Label>
-              <Input
-                value={amountUnit}
-                onChange={(e) => setAmountUnit(e.target.value)}
-              />
+              <Input value={amountUnit} onChange={(e) => setAmountUnit(e.target.value)} />
             </div>
           </div>
           <div className="grid gap-2">
@@ -282,7 +267,7 @@ function EditBatchDialog({
                 step={1}
                 value={stoichiometry}
                 onChange={(e) =>
-                  setStoichiometry(Math.max(1, parseInt(e.target.value) || 1))
+                  setStoichiometry(Math.max(1, Number.parseInt(e.target.value) || 1))
                 }
               />
             </div>
@@ -297,11 +282,7 @@ function EditBatchDialog({
           </div>
           <div className="grid gap-2">
             <Label>Expiry Date</Label>
-            <Input
-              type="date"
-              value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
-            />
+            <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
           </div>
         </div>
         <DialogFooter>
@@ -309,9 +290,9 @@ function EditBatchDialog({
             onClick={() => {
               mutation.mutate(
                 {
-                  amount_value: parseFloat(amountValue) || null,
+                  amount_value: Number.parseFloat(amountValue) || null,
                   amount_unit: amountUnit || null,
-                  purity: purity ? parseFloat(purity) : null,
+                  purity: purity ? Number.parseFloat(purity) : null,
                   salt_entry_id: selectedSalt ? selectedSalt.id : null,
                   salt_name: selectedSalt ? selectedSalt.name : null,
                   salt_smiles: selectedSalt ? selectedSalt.smiles : null,
@@ -319,7 +300,7 @@ function EditBatchDialog({
                   appearance: appearance || null,
                   expiry_date: expiryDate || null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}

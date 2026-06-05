@@ -1,12 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import { Package, Pipette, Move, Trash2 } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState } from "@/shared/components/empty-state";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -17,20 +14,23 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { Move, Package, Pipette, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
+  type SampleGlobalParams,
   useAliquotSample,
   useDisposeSample,
   useMoveSample,
   useSamplesByBatch,
   useSamplesGlobal,
-  type SampleGlobalParams,
 } from "../hooks/use-samples";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import {
   CONTAINER_TYPE_LABELS,
-  SAMPLE_STATUS_LABELS,
   type ContainerType,
+  SAMPLE_STATUS_LABELS,
   type Sample,
   type SampleListItem,
   type SampleStatus,
@@ -62,14 +62,12 @@ export function SampleList({ batchId }: SampleListProps) {
         headerName: "Container",
         field: "container_type",
         width: 120,
-        valueFormatter: (p) =>
-          CONTAINER_TYPE_LABELS[p.value as ContainerType] ?? p.value,
+        valueFormatter: (p) => CONTAINER_TYPE_LABELS[p.value as ContainerType] ?? p.value,
       },
       {
         headerName: "Amount",
         width: 110,
-        valueGetter: (p) =>
-          p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : "",
+        valueGetter: (p) => (p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : ""),
       },
       {
         headerName: "Status",
@@ -140,7 +138,7 @@ export function SampleList({ batchId }: SampleListProps) {
         },
       },
     ],
-    []
+    [],
   );
 
   if (!batchId) {
@@ -242,9 +240,7 @@ export function GlobalSampleList({ params }: GlobalSampleListProps) {
         minWidth: 150,
         flex: 1,
         valueGetter: (p) =>
-          p.data
-            ? `${p.data.molecule_name} (${p.data.molecule_registration_number})`
-            : "",
+          p.data ? `${p.data.molecule_name} (${p.data.molecule_registration_number})` : "",
       },
       {
         headerName: "Batch #",
@@ -256,14 +252,12 @@ export function GlobalSampleList({ params }: GlobalSampleListProps) {
         headerName: "Container",
         field: "container_type",
         width: 110,
-        valueFormatter: (p) =>
-          CONTAINER_TYPE_LABELS[p.value as ContainerType] ?? p.value,
+        valueFormatter: (p) => CONTAINER_TYPE_LABELS[p.value as ContainerType] ?? p.value,
       },
       {
         headerName: "Amount",
         width: 120,
-        valueGetter: (p) =>
-          p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : "",
+        valueGetter: (p) => (p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : ""),
         cellClass: (p) => {
           const d = p.data;
           if (
@@ -284,9 +278,7 @@ export function GlobalSampleList({ params }: GlobalSampleListProps) {
         cellRenderer: (params: ICellRendererParams<SampleListItem>) => (
           <StatusBadge
             status={params.value}
-            label={
-              SAMPLE_STATUS_LABELS[params.value as SampleStatus] ?? params.value
-            }
+            label={SAMPLE_STATUS_LABELS[params.value as SampleStatus] ?? params.value}
           />
         ),
       },
@@ -294,9 +286,7 @@ export function GlobalSampleList({ params }: GlobalSampleListProps) {
         headerName: "Location",
         width: 150,
         valueGetter: (p) =>
-          p.data?.location_name
-            ? `${p.data.location_name} (${p.data.location_type})`
-            : "\u2014",
+          p.data?.location_name ? `${p.data.location_name} (${p.data.location_type})` : "\u2014",
       },
       {
         headerName: "F/T",
@@ -356,7 +346,7 @@ export function GlobalSampleList({ params }: GlobalSampleListProps) {
         },
       },
     ],
-    []
+    [],
   );
 
   return (
@@ -421,8 +411,8 @@ function AliquotDialog({
         <DialogHeader>
           <DialogTitle>Aliquot Sample</DialogTitle>
           <DialogDescription>
-            Remove material from {sample.barcode}. Available:{" "}
-            {sample.amount_value} {sample.amount_unit}
+            Remove material from {sample.barcode}. Available: {sample.amount_value}{" "}
+            {sample.amount_unit}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
@@ -439,14 +429,14 @@ function AliquotDialog({
           <Button
             onClick={() => {
               mutation.mutate(
-                { sampleId: sample.id, amount: parseFloat(amount) },
-                { onSuccess: () => onOpenChange(false) }
+                { sampleId: sample.id, amount: Number.parseFloat(amount) },
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={
               !amount ||
-              parseFloat(amount) <= 0 ||
-              parseFloat(amount) > sample.amount_value ||
+              Number.parseFloat(amount) <= 0 ||
+              Number.parseFloat(amount) > sample.amount_value ||
               mutation.isPending
             }
           >
@@ -476,9 +466,7 @@ function MoveDialog({
       <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Move Sample</DialogTitle>
-          <DialogDescription>
-            Move {sample.barcode} to a new location.
-          </DialogDescription>
+          <DialogDescription>Move {sample.barcode} to a new location.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
           <Label>Destination</Label>
@@ -500,7 +488,7 @@ function MoveDialog({
             onClick={() => {
               mutation.mutate(
                 { sampleId: sample.id, locationId: locationId || null },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}
@@ -531,8 +519,7 @@ function DisposeDialog({
         <DialogHeader>
           <DialogTitle>Dispose Sample</DialogTitle>
           <DialogDescription>
-            This will permanently mark {sample.barcode} as disposed. This action
-            cannot be undone.
+            This will permanently mark {sample.barcode} as disposed. This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
@@ -549,7 +536,7 @@ function DisposeDialog({
             onClick={() => {
               mutation.mutate(
                 { sampleId: sample.id, reason: reason || undefined },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}

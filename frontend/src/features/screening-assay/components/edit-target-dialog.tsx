@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -20,6 +19,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useState } from "react";
 import { useUpdateTarget } from "../hooks/use-targets";
 import { TARGET_TYPE_LABELS, type Target, type TargetType } from "../types";
 
@@ -29,11 +29,7 @@ interface EditTargetDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function EditTargetDialog({
-  target,
-  open,
-  onOpenChange,
-}: EditTargetDialogProps) {
+export function EditTargetDialog({ target, open, onOpenChange }: EditTargetDialogProps) {
   const mutation = useUpdateTarget(target.id);
   const [name, setName] = useState(target.name);
   const [targetType, setTargetType] = useState(target.target_type);
@@ -52,7 +48,7 @@ export function EditTargetDialog({
         uniprot_id: uniprotId || null,
         description: description || null,
       },
-      { onSuccess: () => onOpenChange(false) }
+      { onSuccess: () => onOpenChange(false) },
     );
   };
 
@@ -61,9 +57,7 @@ export function EditTargetDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit Target</DialogTitle>
-          <DialogDescription>
-            Update target details for {target.name}.
-          </DialogDescription>
+          <DialogDescription>Update target details for {target.name}.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
@@ -126,10 +120,7 @@ export function EditTargetDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={handleSubmit}
-            disabled={!name.trim() || mutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={!name.trim() || mutation.isPending}>
             {mutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>

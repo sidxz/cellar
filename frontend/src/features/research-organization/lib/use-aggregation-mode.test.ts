@@ -97,25 +97,18 @@ describe("computeScopeForcesSingleRun", () => {
       computeScopeForcesSingleRun([
         activity({
           mode: "specific",
-          run_ids: [
-            "00000000-0000-0000-0000-000000000001",
-            "00000000-0000-0000-0000-000000000002",
-          ],
+          run_ids: ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"],
         }),
       ]),
     ).toBe(false);
   });
 
   it("returns false for run_scope.mode='specific' with empty run_ids (invalid state still keeps toolbar live)", () => {
-    expect(
-      computeScopeForcesSingleRun([activity({ mode: "specific", run_ids: [] })]),
-    ).toBe(false);
+    expect(computeScopeForcesSingleRun([activity({ mode: "specific", run_ids: [] })])).toBe(false);
   });
 
   it("returns false for range scopes — past_n_days and date_range can yield multiple in-scope runs", () => {
-    expect(
-      computeScopeForcesSingleRun([activity({ mode: "past_n_days", days: 30 })]),
-    ).toBe(false);
+    expect(computeScopeForcesSingleRun([activity({ mode: "past_n_days", days: 30 })])).toBe(false);
     expect(
       computeScopeForcesSingleRun([
         activity({ mode: "date_range", date_from: "2026-01-01", date_to: "2026-05-01" }),
@@ -134,10 +127,7 @@ describe("computeScopeForcesSingleRun", () => {
 
   it("returns false when one criterion is narrow and another is open (mixed)", () => {
     expect(
-      computeScopeForcesSingleRun([
-        activity({ mode: "latest" }),
-        activity({ mode: "any" }),
-      ]),
+      computeScopeForcesSingleRun([activity({ mode: "latest" }), activity({ mode: "any" })]),
     ).toBe(false);
   });
 
@@ -182,10 +172,7 @@ describe("computeScopeForcesSingleRun", () => {
 // that has a non-`any` scope. Used by the search detail drawer to filter its
 // per-protocol curve list so the drawer chart agrees with the grid cell.
 describe("collectRunScopesByProtocol", () => {
-  const activity = (
-    protocol_id: string,
-    run_scope: RunScope | undefined,
-  ): SearchCriterion =>
+  const activity = (protocol_id: string, run_scope: RunScope | undefined): SearchCriterion =>
     ({
       type: "activity",
       protocol_id,
@@ -209,9 +196,7 @@ describe("collectRunScopesByProtocol", () => {
   });
 
   it("records a non-any scope for the criterion's protocol_id", () => {
-    const m = collectRunScopesByProtocol([
-      activity("p1", { mode: "specific", run_ids: ["r1"] }),
-    ]);
+    const m = collectRunScopesByProtocol([activity("p1", { mode: "specific", run_ids: ["r1"] })]);
     expect(m.get("p1")).toEqual({ mode: "specific", run_ids: ["r1"] });
   });
 

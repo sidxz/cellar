@@ -1,7 +1,7 @@
 "use client";
 
-import { useParams } from "next/navigation";
 import { DataSourceDetail } from "@/features/workspace-config/components/data-source-detail";
+import { useParams } from "next/navigation";
 
 export default function DataSourceDetailPage() {
   const params = useParams<{ id: string }>();

@@ -1,9 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import type { CreateStorageLocationInput, StorageLocation, StorageLocationWithCount, UpdateStorageLocationInput } from "../types";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type {
+  CreateStorageLocationInput,
+  StorageLocation,
+  StorageLocationWithCount,
+  UpdateStorageLocationInput,
+} from "../types";
 
 const STORAGE_KEY = ["storage-locations"];
 
@@ -41,7 +46,10 @@ export function useCreateStorageLocation() {
         method: "POST",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: STORAGE_KEY }); showSuccess("Location created"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: STORAGE_KEY });
+      showSuccess("Location created");
+    },
   });
 }
 
@@ -54,7 +62,10 @@ export function useUpdateStorageLocation(locationId: string) {
         method: "PATCH",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: STORAGE_KEY }); showSuccess("Location updated"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: STORAGE_KEY });
+      showSuccess("Location updated");
+    },
   });
 }
 
@@ -66,7 +77,10 @@ export function useDeleteStorageLocation() {
         url: `/api/v1/storage-locations/${locationId}`,
         method: "DELETE",
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: STORAGE_KEY }); showSuccess("Location deleted"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: STORAGE_KEY });
+      showSuccess("Location deleted");
+    },
   });
 }
 

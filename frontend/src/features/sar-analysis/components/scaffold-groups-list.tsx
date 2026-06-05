@@ -1,20 +1,20 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
+import { stashScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { cn } from "@/shared/lib/utils";
-import { stashScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
 
+import type { ActivityRollupBin } from "../lib/scaffold-rollup";
 import {
   NO_SCAFFOLD_SENTINEL,
   type ScaffoldTreeNode,
   type ScaffoldTreeResult,
 } from "../types/scaffold-tree";
-import type { ActivityRollupBin } from "../lib/scaffold-rollup";
 
 type Props = {
   tree: ScaffoldTreeResult;
@@ -62,13 +62,7 @@ const DEFAULT_CAP = 250;
  * Click a row to filter the right pane to that scaffold's direct members.
  * No expand / collapse — it's a flat list, not a tree.
  */
-function ScaffoldGroupsListInner({
-  tree,
-  colorBins,
-  minMembers,
-  selected,
-  onSelect,
-}: Props) {
+function ScaffoldGroupsListInner({ tree, colorBins, minMembers, selected, onSelect }: Props) {
   const router = useRouter();
   const parentRef = useRef<HTMLDivElement | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -106,10 +100,7 @@ function ScaffoldGroupsListInner({
   }, [tree, minMembers]);
 
   const capped = !showAll && groups.length > DEFAULT_CAP;
-  const visible = useMemo(
-    () => (capped ? groups.slice(0, DEFAULT_CAP) : groups),
-    [groups, capped],
-  );
+  const visible = useMemo(() => (capped ? groups.slice(0, DEFAULT_CAP) : groups), [groups, capped]);
 
   const virtualizer = useVirtualizer({
     count: visible.length,
@@ -141,9 +132,7 @@ function ScaffoldGroupsListInner({
       >
         {isBucket ? (
           <div className="shrink-0 w-20 h-20 flex items-center justify-center rounded border border-dashed border-muted-foreground/40">
-            <span className="text-xs italic text-muted-foreground">
-              no scaffold
-            </span>
+            <span className="text-xs italic text-muted-foreground">no scaffold</span>
           </div>
         ) : (
           <StructureThumbnail
@@ -187,8 +176,7 @@ function ScaffoldGroupsListInner({
   if (groups.length === 0) {
     return (
       <div className="p-4 text-xs text-muted-foreground">
-        No chemotypes shared by ≥ {minMembers}{" "}
-        {minMembers === 1 ? "molecule" : "molecules"}.
+        No chemotypes shared by ≥ {minMembers} {minMembers === 1 ? "molecule" : "molecules"}.
       </div>
     );
   }

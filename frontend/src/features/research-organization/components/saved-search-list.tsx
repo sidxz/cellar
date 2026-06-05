@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Search, Plus, Play, Pencil, Trash2, MoreHorizontal } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
-import { useQueryClient } from "@tanstack/react-query";
+import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
+import { MemberName } from "@/shared/components/entity-name";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -15,23 +14,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
-import { EmptyState, ErrorState } from "@/shared/components/empty-state";
-import { formatRelativeDate } from "@/shared/lib/format-date";
-import { PageHeader } from "@/shared/components/page-header";
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { MemberName } from "@/shared/components/entity-name";
-import { useSavedSearches, useDeleteSavedSearch } from "../hooks/use-saved-searches";
+import { formatRelativeDate } from "@/shared/lib/format-date";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useQueryClient } from "@tanstack/react-query";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { MoreHorizontal, Pencil, Play, Plus, Search, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { useProjects } from "../hooks/use-projects";
+import { useDeleteSavedSearch, useSavedSearches } from "../hooks/use-saved-searches";
+import type { SavedSearch, SearchVisibility } from "../types";
 import { CreateSavedSearchDialog } from "./create-saved-search-dialog";
 import { QuerySummary } from "./search/query-summary";
-import type { SavedSearch, SearchVisibility } from "../types";
-import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
 
-function visibilityBadgeVariant(
-  visibility: SearchVisibility
-): "default" | "outline" {
+function visibilityBadgeVariant(visibility: SearchVisibility): "default" | "outline" {
   return visibility === "project" ? "default" : "outline";
 }
 
@@ -108,7 +106,7 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
 
   const projectLookup = useMemo(() => {
     const map = new Map<string, string>();
-    projects?.forEach((p) => map.set(p.id, p.name));
+    for (const p of projects ?? []) map.set(p.id, p.name);
     return map;
   }, [projects]);
 
@@ -164,8 +162,7 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
         headerName: "Results",
         field: "result_count",
         width: 90,
-        valueFormatter: (params) =>
-          params.value != null ? String(params.value) : "\u2014",
+        valueFormatter: (params) => (params.value != null ? String(params.value) : "\u2014"),
       },
       {
         headerName: "Created By",
@@ -188,20 +185,21 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
               onRun={handleRun}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              onAdminDeleted={() =>
-                qc.invalidateQueries({ queryKey: ["saved-searches"] })
-              }
+              onAdminDeleted={() => qc.invalidateQueries({ queryKey: ["saved-searches"] })}
             />
           ) : null,
       },
     ],
-    [projectLookup, isAdmin, qc]
+    [projectLookup, isAdmin, qc],
   );
 
   if (error) {
     return (
       <div>
-        <ErrorState message="Failed to load saved searches. Is the backend running?" details={error.message} />
+        <ErrorState
+          message="Failed to load saved searches. Is the backend running?"
+          details={error.message}
+        />
       </div>
     );
   }
@@ -211,12 +209,7 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
       {/* Toolbar */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Switch
-            id="my-searches"
-            checked={mine}
-            onCheckedChange={setMine}
-            size="sm"
-          />
+          <Switch id="my-searches" checked={mine} onCheckedChange={setMine} size="sm" />
           <Label htmlFor="my-searches" className="text-sm text-muted-foreground">
             My Searches
           </Label>

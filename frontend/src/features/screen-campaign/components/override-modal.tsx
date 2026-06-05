@@ -8,17 +8,12 @@
  * the value differs from the auto-resolved one).
  */
 
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -28,14 +23,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { useOverrideResultCellApiV1CampaignsCampaignIdResultsResultIdCellsChannelIdPatch } from "@/shared/lib/api/campaigns/campaigns";
+import { formatMeasurementValue } from "@/shared/lib/format-number";
 
 import { campaignKeys } from "../hooks/use-campaigns";
 import type {
-  CampaignResultResponse,
   CampaignChannelResponse,
   CampaignMeasurementResponse,
+  CampaignResultResponse,
 } from "../types";
 
 // ── HitCallChip (modal-only helper) ──────────────────────────────────────────
@@ -50,7 +45,9 @@ const HIT_COLORS: Record<string, string> = {
 function HitCallChip({ hitCall }: { hitCall: string }) {
   const cls = HIT_COLORS[hitCall] ?? "bg-gray-100 text-gray-600";
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}
+    >
       {hitCall.replace("_", " ")}
     </span>
   );
@@ -131,11 +128,7 @@ export function OverrideModal({
       resultId: result.id,
       channelId: channel.id,
       data: {
-        value: isPlaceholderQualifier
-          ? null
-          : value !== ""
-            ? Number(value)
-            : undefined,
+        value: isPlaceholderQualifier ? null : value !== "" ? Number(value) : undefined,
         value_qualifier: qualifier,
         unit: isPlaceholderQualifier ? "" : unit,
         hit_call: isPlaceholderQualifier || hitCall === "none" ? undefined : hitCall,
@@ -158,10 +151,14 @@ export function OverrideModal({
               {measurement.value_qualifier !== "=" ? measurement.value_qualifier : ""}
               {formatMeasurementValue(measurement.value)} {measurement.unit}
               {measurement.hit_call && (
-                <span className="ml-2"><HitCallChip hitCall={measurement.hit_call as string} /></span>
+                <span className="ml-2">
+                  <HitCallChip hitCall={measurement.hit_call as string} />
+                </span>
               )}
               {measurement.is_manual_override && (
-                <Badge variant="secondary" className="ml-2 text-xs">overridden</Badge>
+                <Badge variant="secondary" className="ml-2 text-xs">
+                  overridden
+                </Badge>
               )}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -180,7 +177,9 @@ export function OverrideModal({
             <div className="space-y-1">
               <Label>Qualifier</Label>
               <Select value={qualifier} onValueChange={handleQualifierChange}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {[
                     { v: "=", label: "= (exact)" },
@@ -189,7 +188,9 @@ export function OverrideModal({
                     { v: "nd", label: "nd (not determined)" },
                     { v: "excluded", label: "excluded" },
                   ].map((q) => (
-                    <SelectItem key={q.v} value={q.v}>{q.label}</SelectItem>
+                    <SelectItem key={q.v} value={q.v}>
+                      {q.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -217,16 +218,16 @@ export function OverrideModal({
 
           <div className="space-y-1">
             <Label>Hit call (optional)</Label>
-            <Select
-              value={hitCall}
-              onValueChange={setHitCall}
-              disabled={isPlaceholderQualifier}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select value={hitCall} onValueChange={setHitCall} disabled={isPlaceholderQualifier}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
                 {["hit", "miss", "inconclusive"].map((h) => (
-                  <SelectItem key={h} value={h}>{h}</SelectItem>
+                  <SelectItem key={h} value={h}>
+                    {h}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -235,7 +236,8 @@ export function OverrideModal({
           {/* B8: reason — required when value differs from auto-resolved */}
           <div className="space-y-1">
             <Label>
-              Reason {reasonRequired ? (
+              Reason{" "}
+              {reasonRequired ? (
                 <span className="text-destructive">*</span>
               ) : (
                 <span className="text-muted-foreground text-xs">(optional)</span>
@@ -259,13 +261,13 @@ export function OverrideModal({
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             size="sm"
             onClick={handleSubmit}
-            disabled={
-              overrideMutation.isPending || !reasonOk || !unitOk
-            }
+            disabled={overrideMutation.isPending || !reasonOk || !unitOk}
           >
             {overrideMutation.isPending ? "Saving..." : "Save Override"}
           </Button>

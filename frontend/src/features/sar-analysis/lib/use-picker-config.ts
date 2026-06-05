@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import type { UmapPicker } from "@/features/sar-analysis/types";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 
 /**
  * URL state for the UMAP diversity-picker algorithm and its parameters.
@@ -66,9 +66,7 @@ function writeUrl(updates: Record<string, string | null>): void {
 
 export function usePickerConfig(opts: UsePickerConfigOptions = {}): PickerConfig {
   const params = useSearchParams();
-  const sizeDefault = opts.collectionSize
-    ? defaultNForSize(opts.collectionSize)
-    : 10;
+  const sizeDefault = opts.collectionSize ? defaultNForSize(opts.collectionSize) : 10;
 
   // Read URL once on mount; subsequent state is React-owned.
   const [picker, setPicker_] = useState<UmapPicker>(() => {

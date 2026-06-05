@@ -49,10 +49,7 @@ export function pickRepresentative(
  *
  *  Returns ``null`` when no contributors qualify (e.g. all Inactive).
  */
-export function aggregateValue(
-  curves: CurveDetail[],
-  mode: "gmean" | "mean",
-): number | null {
+export function aggregateValue(curves: CurveDetail[], mode: "gmean" | "mean"): number | null {
   const xs: number[] = [];
   for (const c of curves) {
     if (c.curve_class === "inactive") continue;
@@ -62,7 +59,7 @@ export function aggregateValue(
   if (xs.length === 0) return null;
   if (mode === "gmean") {
     const logMean = xs.reduce((acc, v) => acc + Math.log10(v), 0) / xs.length;
-    return Math.pow(10, logMean);
+    return 10 ** logMean;
   }
   return xs.reduce((acc, v) => acc + v, 0) / xs.length;
 }
@@ -123,9 +120,7 @@ export function filterCurvesByRunScope(
     const threshold = new Date();
     threshold.setDate(threshold.getDate() - scope.days);
     const thresholdStr = threshold.toISOString().slice(0, 10);
-    return curves.filter(
-      (c) => c.run_date !== null && c.run_date >= thresholdStr,
-    );
+    return curves.filter((c) => c.run_date !== null && c.run_date >= thresholdStr);
   }
 
   if (scope.mode === "date_range") {

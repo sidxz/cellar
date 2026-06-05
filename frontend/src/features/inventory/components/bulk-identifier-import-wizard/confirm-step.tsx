@@ -1,15 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useCommitBulkIdentifiers } from "../../hooks/use-bulk-identifier-import";
-import type {
-  BulkIdentifierRowBody,
-  BulkAddBatchIdentifiersResponse,
-} from "../../types";
+import type { BulkAddBatchIdentifiersResponse, BulkIdentifierRowBody } from "../../types";
 
 interface ConfirmStepProps {
   rows: BulkIdentifierRowBody[];
@@ -40,9 +37,7 @@ export function ConfirmStep({ rows, sourceDefault, onDone }: ConfirmStepProps) {
         <CardContent className="p-6">
           <p className="text-sm text-destructive">
             Commit failed:{" "}
-            {commit.error instanceof Error
-              ? commit.error.message
-              : String(commit.error)}
+            {commit.error instanceof Error ? commit.error.message : String(commit.error)}
           </p>
         </CardContent>
       </Card>
@@ -51,8 +46,7 @@ export function ConfirmStep({ rows, sourceDefault, onDone }: ConfirmStepProps) {
   if (!commit.data) return null;
 
   const counts = commit.data.counts;
-  const skipped =
-    (counts.not_found ?? 0) + (counts.conflict ?? 0) + (counts.error ?? 0);
+  const skipped = (counts.not_found ?? 0) + (counts.conflict ?? 0) + (counts.error ?? 0);
 
   return (
     <Card>
@@ -70,9 +64,7 @@ export function ConfirmStep({ rows, sourceDefault, onDone }: ConfirmStepProps) {
             : "All rows committed successfully."}
         </p>
         <div className="flex gap-2 pt-2">
-          <Button onClick={() => router.push("/inventory#batches")}>
-            Back to Batches
-          </Button>
+          <Button onClick={() => router.push("/inventory#batches")}>Back to Batches</Button>
           <Button variant="outline" onClick={() => router.refresh()}>
             Import another file
           </Button>

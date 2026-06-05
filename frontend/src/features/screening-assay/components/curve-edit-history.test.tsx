@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import { CurveEditHistory } from "./curve-edit-history";
 import type { CurveEditHistoryEventBody } from "@/shared/lib/api/model";
+import { CurveEditHistory } from "./curve-edit-history";
 
 const events: CurveEditHistoryEventBody[] = [
   {

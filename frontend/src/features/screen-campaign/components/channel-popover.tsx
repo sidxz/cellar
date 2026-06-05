@@ -7,16 +7,16 @@
  * Used by both the legacy ChannelStrip chip-strip and the new ChannelsSection.
  */
 
-import { useState, useEffect, useMemo } from "react";
-import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 
 import { Button } from "@/shared/components/ui/button";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -25,13 +25,8 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 
-import { useProtocolSummaries, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
-import {
-  READOUT_NORMALIZATION_LABELS,
-  type HitCriterion,
-  type InterceptKey,
-  type InterceptSpec,
-} from "@/features/screening-assay/types";
+import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
+import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
 import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
 import {
   interceptKeyId,
@@ -39,12 +34,12 @@ import {
   narrowInterceptKey,
   parseInterceptKeyId,
 } from "@/features/screening-assay/lib/intercept-label";
-import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
 import {
-  useAddCampaignChannelApiV1CampaignsCampaignIdChannelsPost,
-  useUpdateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch,
-  useRemoveCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdDelete,
-} from "@/shared/lib/api/campaigns/campaigns";
+  type HitCriterion,
+  type InterceptKey,
+  type InterceptSpec,
+  READOUT_NORMALIZATION_LABELS,
+} from "@/features/screening-assay/types";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +50,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
+import {
+  useAddCampaignChannelApiV1CampaignsCampaignIdChannelsPost,
+  useRemoveCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdDelete,
+  useUpdateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch,
+} from "@/shared/lib/api/campaigns/campaigns";
 import { Trash2 } from "lucide-react";
 import { campaignKeys } from "../hooks/use-campaigns";
 import type { CampaignChannelResponse } from "../types";
@@ -72,11 +72,7 @@ const channelSchema = z.object({
     "geometric_mean",
     "manual_pick",
   ]),
-  qualifier_handling: z.enum([
-    "include_qualified",
-    "exclude_qualified",
-    "treat_as_limit",
-  ]),
+  qualifier_handling: z.enum(["include_qualified", "exclude_qualified", "treat_as_limit"]),
   require_approved: z.boolean(),
   min_z_prime: z.number().min(0).max(1),
   // Hit threshold — operator "none" means "no threshold". For between, low/high; otherwise single value.
@@ -101,9 +97,9 @@ type ChannelFormValues = z.infer<typeof channelSchema>;
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
-export function parseHitThreshold(t: unknown):
-  | { operator: string; value: number | number[]; intercept_key: InterceptKey | null }
-  | null {
+export function parseHitThreshold(
+  t: unknown,
+): { operator: string; value: number | number[]; intercept_key: InterceptKey | null } | null {
   if (!t || typeof t !== "object") return null;
   const obj = t as {
     operator?: string;
@@ -119,10 +115,7 @@ export function parseHitThreshold(t: unknown):
   let intercept_key: InterceptKey | null = null;
   if (obj.intercept_key && typeof obj.intercept_key === "object") {
     const ik = obj.intercept_key;
-    if (
-      (ik.kind === "ec" || ik.kind === "ic") &&
-      typeof ik.level === "number"
-    ) {
+    if ((ik.kind === "ec" || ik.kind === "ic") && typeof ik.level === "number") {
       intercept_key = { kind: ik.kind, level: ik.level };
     }
   }
@@ -155,9 +148,7 @@ export function ChannelPopoverForm({
 }: ChannelPopoverFormProps) {
   const qc = useQueryClient();
   const { data: protocols } = useProtocolSummaries([projectId]);
-  const [selectedProtocolId, setSelectedProtocolId] = useState<string>(
-    existing?.protocol_id ?? "",
-  );
+  const [selectedProtocolId, setSelectedProtocolId] = useState<string>(existing?.protocol_id ?? "");
   // Fetch full protocol to get readout_definitions
   const { data: fullProtocol } = useProtocol(selectedProtocolId, {
     enabled: !!selectedProtocolId,
@@ -197,10 +188,7 @@ export function ChannelPopoverForm({
   // gives us a stable identity so the edit-mode useEffect below can take
   // it as a dep without re-firing every render (parseHitThreshold returns
   // a fresh object each call).
-  const existingHit = useMemo(
-    () => parseHitThreshold(existing?.hit_threshold),
-    [existing],
-  );
+  const existingHit = useMemo(() => parseHitThreshold(existing?.hit_threshold), [existing]);
   const defaultHitOperator: ChannelFormValues["hit_operator"] =
     (existingHit?.operator as ChannelFormValues["hit_operator"] | undefined) ?? "none";
   const defaultHitValue =
@@ -216,12 +204,8 @@ export function ChannelPopoverForm({
   // resolved to the protocol's primary intercept id by the useEffect
   // below once fullProtocol arrives.
   const persistedInterceptKey =
-    narrowInterceptKey(existing?.intercept_key) ??
-    existingHit?.intercept_key ??
-    null;
-  const defaultHitInterceptKey = persistedInterceptKey
-    ? interceptKeyId(persistedInterceptKey)
-    : "";
+    narrowInterceptKey(existing?.intercept_key) ?? existingHit?.intercept_key ?? null;
+  const defaultHitInterceptKey = persistedInterceptKey ? interceptKeyId(persistedInterceptKey) : "";
 
   const {
     register,
@@ -237,8 +221,7 @@ export function ChannelPopoverForm({
       protocol_id: existing?.protocol_id ?? "",
       readout_definition_id: existing?.readout_definition_id ?? "",
       source_kind:
-        (existing?.source_kind as "readout_data" | "dose_response_curve") ??
-        "readout_data",
+        (existing?.source_kind as "readout_data" | "dose_response_curve") ?? "readout_data",
       selection_rule:
         (existing?.selection_rule as
           | "latest_approved_run"
@@ -281,7 +264,9 @@ export function ChannelPopoverForm({
 
     setValue(
       "hit_operator",
-      (defaults.hit_operator === "" ? "none" : defaults.hit_operator) as ChannelFormValues["hit_operator"],
+      (defaults.hit_operator === ""
+        ? "none"
+        : defaults.hit_operator) as ChannelFormValues["hit_operator"],
     );
     setValue("hit_value", defaults.hit_value);
     setValue("hit_value_low", defaults.hit_value_low);
@@ -317,9 +302,7 @@ export function ChannelPopoverForm({
       return;
     }
     const persisted =
-      narrowInterceptKey(existing.intercept_key) ??
-      existingHit?.intercept_key ??
-      null;
+      narrowInterceptKey(existing.intercept_key) ?? existingHit?.intercept_key ?? null;
     setValue(
       "hit_intercept_key",
       persisted ? interceptKeyId(persisted) : interceptKeyId(intercepts[0]),
@@ -357,9 +340,10 @@ export function ChannelPopoverForm({
   }, [watchedReadoutId, existing, fullProtocol, setValue]);
 
   const onSubmit = (values: ChannelFormValues) => {
-    const qcFilter = values.require_approved || values.min_z_prime > 0
-      ? { require_approved: values.require_approved, min_z_prime: values.min_z_prime }
-      : undefined;
+    const qcFilter =
+      values.require_approved || values.min_z_prime > 0
+        ? { require_approved: values.require_approved, min_z_prime: values.min_z_prime }
+        : undefined;
 
     // Resolve the intercept_key for the persisted threshold. Only meaningful
     // when the channel reads from a dose-response curve — otherwise no curve
@@ -383,20 +367,20 @@ export function ChannelPopoverForm({
     };
 
     // Build hit_threshold from split form fields. "" = no threshold.
-    let hitThreshold:
-      | {
-          readout_name: string;
-          operator: string;
-          value: number | number[];
-          intercept_key: InterceptKey | null;
-        }
-      | null = null;
+    let hitThreshold: {
+      readout_name: string;
+      operator: string;
+      value: number | number[];
+      intercept_key: InterceptKey | null;
+    } | null = null;
     if (values.hit_operator === "between") {
       const low = values.hit_value_low === "" ? null : Number(values.hit_value_low);
       const high = values.hit_value_high === "" ? null : Number(values.hit_value_high);
       if (
-        low !== null && !Number.isNaN(low) &&
-        high !== null && !Number.isNaN(high) &&
+        low !== null &&
+        !Number.isNaN(low) &&
+        high !== null &&
+        !Number.isNaN(high) &&
         low <= high
       ) {
         hitThreshold = {
@@ -457,8 +441,7 @@ export function ChannelPopoverForm({
     }
   };
 
-  const isPending =
-    addMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
+  const isPending = addMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   const readouts = fullProtocol?.readout_definitions ?? [];
 
@@ -499,7 +482,9 @@ export function ChannelPopoverForm({
                 </Select>
               )}
             />
-            {errors.protocol_id && <p className="text-xs text-destructive">{errors.protocol_id.message}</p>}
+            {errors.protocol_id && (
+              <p className="text-xs text-destructive">{errors.protocol_id.message}</p>
+            )}
           </div>
 
           <div className="space-y-1">
@@ -556,33 +541,39 @@ export function ChannelPopoverForm({
           chosen readout actually emits normalizations. Locked after creation
           for the same reason source_kind is: changing it would invalidate
           every existing measurement. */}
-      {!isEdit && watch("source_kind") === "readout_data" && (() => {
-        const rd = readouts.find((r) => r.id === watchedReadoutId);
-        const norms = rd?.normalizations?.filter((n) => n !== "none") ?? [];
-        if (norms.length === 0) return null;
-        return (
-          <div className="space-y-1">
-            <Label>Normalization</Label>
-            <Controller
-              name="normalization_applied"
-              control={control}
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="raw">Raw (no normalization)</SelectItem>
-                    {norms.map((n) => (
-                      <SelectItem key={n} value={n}>
-                        {READOUT_NORMALIZATION_LABELS[n as keyof typeof READOUT_NORMALIZATION_LABELS] ?? n}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </div>
-        );
-      })()}
+      {!isEdit &&
+        watch("source_kind") === "readout_data" &&
+        (() => {
+          const rd = readouts.find((r) => r.id === watchedReadoutId);
+          const norms = rd?.normalizations?.filter((n) => n !== "none") ?? [];
+          if (norms.length === 0) return null;
+          return (
+            <div className="space-y-1">
+              <Label>Normalization</Label>
+              <Controller
+                name="normalization_applied"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="raw">Raw (no normalization)</SelectItem>
+                      {norms.map((n) => (
+                        <SelectItem key={n} value={n}>
+                          {READOUT_NORMALIZATION_LABELS[
+                            n as keyof typeof READOUT_NORMALIZATION_LABELS
+                          ] ?? n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+          );
+        })()}
       {isEdit && existing && existing.normalization_applied && (
         <div className="text-xs text-muted-foreground">
           Normalization:{" "}
@@ -602,17 +593,13 @@ export function ChannelPopoverForm({
           control={control}
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                <SelectItem value="latest_approved_run">
-                  Latest approved run
-                </SelectItem>
-                <SelectItem value="mean_across_runs">
-                  Mean across runs
-                </SelectItem>
-                <SelectItem value="geometric_mean">
-                  Geometric mean
-                </SelectItem>
+                <SelectItem value="latest_approved_run">Latest approved run</SelectItem>
+                <SelectItem value="mean_across_runs">Mean across runs</SelectItem>
+                <SelectItem value="geometric_mean">Geometric mean</SelectItem>
                 <SelectItem value="manual_pick">Manual pick</SelectItem>
               </SelectContent>
             </Select>
@@ -624,15 +611,11 @@ export function ChannelPopoverForm({
           Show the channel's unit suffix + a "Hit if … > N %" caption so chemists
           can see at a glance what value the threshold compares against. */}
       {(() => {
-        const rd = fullProtocol?.readout_definitions?.find(
-          (r) => r.id === watchedReadoutId,
-        );
+        const rd = fullProtocol?.readout_definitions?.find((r) => r.id === watchedReadoutId);
         const sourceKind = watch("source_kind");
         const normValue = watch("normalization_applied");
         const normalization =
-          sourceKind === "readout_data" && normValue && normValue !== "raw"
-            ? normValue
-            : null;
+          sourceKind === "readout_data" && normValue && normValue !== "raw" ? normValue : null;
         const unit = channelUnit({
           sourceKind,
           rawUnit: rd?.unit ?? null,
@@ -642,7 +625,10 @@ export function ChannelPopoverForm({
         const label = watch("label");
         const op = watch("hit_operator");
         const opSym: Record<string, string> = {
-          lt: "<", lte: "≤", gt: ">", gte: "≥",
+          lt: "<",
+          lte: "≤",
+          gt: ">",
+          gte: "≥",
         };
         const single = watch("hit_value");
         const lo = watch("hit_value_low");
@@ -663,11 +649,7 @@ export function ChannelPopoverForm({
         const selectedSpec = (() => {
           const parsed = parseInterceptKeyId(interceptKeyVal);
           if (!parsed) return null;
-          return (
-            intercepts.find(
-              (s) => s.kind === parsed.kind && s.level === parsed.level,
-            ) ?? null
-          );
+          return intercepts.find((s) => s.kind === parsed.kind && s.level === parsed.level) ?? null;
         })();
         const interceptText =
           showInterceptPicker && selectedSpec ? ` ${interceptLabel(selectedSpec)}` : "";
@@ -721,7 +703,9 @@ export function ChannelPopoverForm({
                 control={control}
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">(no threshold)</SelectItem>
                       <SelectItem value="lt">&lt; less than</SelectItem>
@@ -748,9 +732,7 @@ export function ChannelPopoverForm({
                     type="number"
                     className="h-9 text-sm"
                   />
-                  {unit && (
-                    <span className="text-muted-foreground text-xs pb-2.5">{unit}</span>
-                  )}
+                  {unit && <span className="text-muted-foreground text-xs pb-2.5">{unit}</span>}
                 </div>
               ) : op !== "none" ? (
                 <div className="flex items-end gap-1 flex-1 min-w-0">
@@ -760,15 +742,11 @@ export function ChannelPopoverForm({
                     type="number"
                     className="h-9 text-sm flex-1 min-w-0"
                   />
-                  {unit && (
-                    <span className="text-muted-foreground text-xs pb-2.5">{unit}</span>
-                  )}
+                  {unit && <span className="text-muted-foreground text-xs pb-2.5">{unit}</span>}
                 </div>
               ) : null}
             </div>
-            {caption && (
-              <p className="text-[11px] text-muted-foreground italic">{caption}</p>
-            )}
+            {caption && <p className="text-[11px] text-muted-foreground italic">{caption}</p>}
           </div>
         );
       })()}
@@ -782,14 +760,12 @@ export function ChannelPopoverForm({
             control={control}
             render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="include_qualified">
-                    Include qualified (&lt;, &gt;)
-                  </SelectItem>
-                  <SelectItem value="exclude_qualified">
-                    Exclude qualified
-                  </SelectItem>
+                  <SelectItem value="include_qualified">Include qualified (&lt;, &gt;)</SelectItem>
+                  <SelectItem value="exclude_qualified">Exclude qualified</SelectItem>
                   <SelectItem value="treat_as_limit">Treat as limit</SelectItem>
                 </SelectContent>
               </Select>
@@ -877,10 +853,9 @@ export function ChannelPopoverForm({
             <AlertDialogHeader>
               <AlertDialogTitle>Delete channel "{existing.label}"?</AlertDialogTitle>
               <AlertDialogDescription>
-                This removes the channel and every measurement it produced
-                across all results in this campaign. You can re-add the same
-                readout afterwards, but the new channel will have a fresh id
-                — manual overrides on this channel will not carry over.
+                This removes the channel and every measurement it produced across all results in
+                this campaign. You can re-add the same readout afterwards, but the new channel will
+                have a fresh id — manual overrides on this channel will not carry over.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

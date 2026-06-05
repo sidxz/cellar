@@ -73,7 +73,7 @@ export function StructureEditorDialog({
         // auto
         try {
           const smi = await ketcher.getSmiles();
-          if (smi && smi.trim()) {
+          if (smi?.trim()) {
             structure = smi;
             resolvedFormat = "smiles";
           }
@@ -86,7 +86,7 @@ export function StructureEditorDialog({
         }
       }
 
-      if (structure && structure.trim()) {
+      if (structure?.trim()) {
         onApply(structure.trim(), resolvedFormat);
         onOpenChange(false);
       }

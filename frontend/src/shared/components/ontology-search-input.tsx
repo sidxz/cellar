@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import {
+  type OntologyTerm,
+  useOntologyDescendants,
+  useOntologySearch,
+} from "@/features/workspace-config/hooks/use-ontology-search";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
-import {
-  useOntologyDescendants,
-  useOntologySearch,
-  type OntologyTerm,
-} from "@/features/workspace-config/hooks/use-ontology-search";
+import { ChevronDown, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type { OntologyTerm };
 
@@ -77,17 +77,11 @@ function OntologyDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { data: descendants, isLoading } = useOntologyDescendants(
-    ontology,
-    rootConceptId,
-  );
+  const { data: descendants, isLoading } = useOntologyDescendants(ontology, rootConceptId);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
@@ -106,9 +100,7 @@ function OntologyDropdown({
     onChange(value.filter((t) => t.term_id !== termId));
   };
 
-  const available = (descendants ?? []).filter(
-    (d) => !value.some((v) => v.term_id === d.term_id),
-  );
+  const available = (descendants ?? []).filter((d) => !value.some((v) => v.term_id === d.term_id));
 
   return (
     <div ref={containerRef} className="relative">
@@ -142,9 +134,7 @@ function OntologyDropdown({
       {open && (
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-60 overflow-y-auto">
           {isLoading ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              Loading...
-            </div>
+            <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
           ) : available.length === 0 ? (
             <div className="px-3 py-2 text-sm text-muted-foreground">
               {descendants?.length ? "All terms selected." : "No terms found."}
@@ -205,10 +195,7 @@ function OntologySearchMode({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setShowDropdown(false);
       }
     };
@@ -255,15 +242,9 @@ function OntologySearchMode({
       {value.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">
           {value.map((term) => (
-            <Badge
-              key={term.term_id}
-              variant="secondary"
-              className="gap-1 pr-1"
-            >
+            <Badge key={term.term_id} variant="secondary" className="gap-1 pr-1">
               {term.label}
-              <span className="text-[10px] text-muted-foreground">
-                ({term.ontology_source})
-              </span>
+              <span className="text-[10px] text-muted-foreground">({term.ontology_source})</span>
               <button
                 type="button"
                 onClick={() => removeTerm(term.term_id)}
@@ -291,13 +272,9 @@ function OntologySearchMode({
       {showDropdown && debouncedQuery.length >= 2 && (
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-60 overflow-y-auto">
           {isLoading ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              Searching...
-            </div>
+            <div className="px-3 py-2 text-sm text-muted-foreground">Searching...</div>
           ) : filteredResults.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              No results found.
-            </div>
+            <div className="px-3 py-2 text-sm text-muted-foreground">No results found.</div>
           ) : (
             filteredResults.map((term) => (
               <button

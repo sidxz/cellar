@@ -1,7 +1,7 @@
+import { getCurvesBatchApiV1DoseResponseCurvesBatchPost } from "@/shared/lib/api/dose-response/dose-response";
+import type { DoseResponseCurveResponse } from "@/shared/lib/api/model";
 import { useQuery } from "@tanstack/react-query";
 import type { CampaignResponse } from "../types";
-import type { DoseResponseCurveResponse } from "@/shared/lib/api/model";
-import { getCurvesBatchApiV1DoseResponseCurvesBatchPost } from "@/shared/lib/api/dose-response/dose-response";
 
 const CAMPAIGN_CURVES_KEY = ["campaign-curves"] as const;
 

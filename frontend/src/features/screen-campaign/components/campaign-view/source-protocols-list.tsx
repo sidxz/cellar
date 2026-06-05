@@ -15,11 +15,7 @@ interface SourceProtocolsListProps {
 
 export function SourceProtocolsList({ protocols }: SourceProtocolsListProps) {
   if (!protocols || protocols.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground italic">
-        No source protocols recorded.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground italic">No source protocols recorded.</p>;
   }
 
   return (

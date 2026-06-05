@@ -16,10 +16,7 @@ export function evaluate4PL(
 ): number {
   const { top, bottom, fitted_value, hill_slope } = params;
   const logEc50 = Math.log10(fitted_value);
-  return (
-    bottom +
-    (top - bottom) / (1 + Math.pow(10, (logEc50 - logX) * hill_slope))
-  );
+  return bottom + (top - bottom) / (1 + 10 ** ((logEc50 - logX) * hill_slope));
 }
 
 /** Generate ``n`` evenly-spaced (log-X) sigmoid points across [xMin, xMax].
@@ -39,7 +36,7 @@ export function generate4PLPoints(
   for (let i = 0; i < n; i++) {
     const lx = logMin + ((logMax - logMin) * i) / (n - 1);
     logX.push(lx);
-    x.push(Math.pow(10, lx));
+    x.push(10 ** lx);
     y.push(evaluate4PL(lx, params));
   }
   return { x, y, logX };
@@ -114,8 +111,8 @@ export function generate4PLFromData(
   const ext = options?.rangeExtension ?? COMPACT_DR_CHART.RANGE_EXTENSION;
   const n = options?.numPoints ?? COMPACT_DR_CHART.POINTS;
 
-  const xMin = Math.max(Math.pow(10, Math.log10(Math.min(...positiveXs)) - ext), X_AXIS_FLOOR);
-  const xMax = Math.pow(10, Math.log10(Math.max(...positiveXs)) + ext);
+  const xMin = Math.max(10 ** (Math.log10(Math.min(...positiveXs)) - ext), X_AXIS_FLOOR);
+  const xMax = 10 ** (Math.log10(Math.max(...positiveXs)) + ext);
 
   const { x, y } = generate4PLPoints(params, xMin, xMax, n);
   return { x, y };

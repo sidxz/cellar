@@ -1,16 +1,16 @@
-import { memo } from "react";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { memo } from "react";
 
+import { stashScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { cn } from "@/shared/lib/utils";
-import { stashScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
 
+import type { ActivityRollupBin } from "../lib/scaffold-rollup";
 import {
   NO_SCAFFOLD_SENTINEL,
   type ScaffoldTreeNode as ScaffoldTreeNodeData,
 } from "../types/scaffold-tree";
-import type { ActivityRollupBin } from "../lib/scaffold-rollup";
 
 type Props = {
   scaffoldSmiles: string;
@@ -71,9 +71,7 @@ function ScaffoldTreeNodeInner(props: Props) {
   // Filter children to visible ones so a subtree below the threshold collapses
   // without rendering any of its rows.
   const allChildren = childIndex.get(scaffoldSmiles) ?? [];
-  const children = visibleNodes
-    ? allChildren.filter((c) => visibleNodes.has(c))
-    : allChildren;
+  const children = visibleNodes ? allChildren.filter((c) => visibleNodes.has(c)) : allChildren;
   const isExpanded = expanded.has(scaffoldSmiles);
   const isSelected = selected === scaffoldSmiles;
   const isBucket = scaffoldSmiles === NO_SCAFFOLD_SENTINEL;

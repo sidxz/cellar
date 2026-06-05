@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 
-import type { UmapJobDto, UmapResultDto } from "@/shared/lib/api/model";
 import {
-  dtoToUmapJob,
-  dtoToUmapResult,
   type UmapJob,
   type UmapPicker,
   type UmapResult,
+  dtoToUmapJob,
+  dtoToUmapResult,
 } from "@/features/sar-analysis/types";
+import type { UmapJobDto, UmapResultDto } from "@/shared/lib/api/model";
 
 // ---------------------------------------------------------------------------
 // Input / output types
@@ -33,9 +33,7 @@ export interface UseUmapClusterInput {
   }) => Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }>;
   /** Override for tests — defaults to the orval-generated GET. The route
    *  returns `StartUmapClusterResponse` ({result, job}), not a flat UmapJobDto. */
-  pollFn?: (
-    jobId: string,
-  ) => Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }>;
+  pollFn?: (jobId: string) => Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }>;
   /** Override for tests — defaults to the orval-generated cancel POST. */
   cancelFn?: (jobId: string) => Promise<void>;
   pollIntervalMs?: number;
@@ -76,8 +74,9 @@ async function defaultPollFn(
 }
 
 async function defaultCancelFn(jobId: string): Promise<void> {
-  const { cancelUmapClusterJobApiV1SarUmapClusterJobsJobIdCancelPost } =
-    await import("@/shared/lib/api/sar-analysis/sar-analysis");
+  const { cancelUmapClusterJobApiV1SarUmapClusterJobsJobIdCancelPost } = await import(
+    "@/shared/lib/api/sar-analysis/sar-analysis"
+  );
   await cancelUmapClusterJobApiV1SarUmapClusterJobsJobIdCancelPost(jobId);
 }
 
@@ -107,17 +106,12 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
 
   // Stable cache key — prefer collectionId, fall back to sorted mol-ids hash.
   const key = useMemo(
-    () =>
-      collectionId
-        ? `coll:${collectionId}`
-        : `ids:${sortedKey(moleculeIds ?? [])}`,
+    () => (collectionId ? `coll:${collectionId}` : `ids:${sortedKey(moleculeIds ?? [])}`),
     [collectionId, moleculeIds],
   );
 
   // Only enable when there is something to fetch.
-  const queryEnabled =
-    enabled &&
-    (collectionId !== undefined || (moleculeIds ?? []).length > 0);
+  const queryEnabled = enabled && (collectionId !== undefined || (moleculeIds ?? []).length > 0);
 
   // Start query — fire the POST and cache the response.
   const start = useQuery({
@@ -153,7 +147,7 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
   const [polledResult, setPolledResult] = useState<UmapResult | null>(null);
   const [polledJob, setPolledJob] = useState<UmapJob | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
-  const [cancelRequested, setCancelRequested] = useState(false);
+  const [_cancelRequested, setCancelRequested] = useState(false);
 
   // Reset polling state whenever the query key changes (new input).
   useEffect(() => {
@@ -236,8 +230,7 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
     job.status !== "cancelled" &&
     result === null; // once we have a result, stop showing loading
   const loading = start.isPending || isJobPending;
-  const error =
-    pollError ?? ((start.error as Error | null)?.message ?? null);
+  const error = pollError ?? (start.error as Error | null)?.message ?? null;
 
   return { result, job, loading, error, cancel };
 }

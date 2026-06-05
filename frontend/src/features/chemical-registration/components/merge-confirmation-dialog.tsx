@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -12,7 +12,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
+import { useState } from "react";
 import { useMergeMolecules } from "../hooks/use-disclosures";
 import type { Molecule } from "../types";
 
@@ -59,8 +59,7 @@ export function MergeConfirmationDialog({
       reset();
       onOpenChange(false);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Merge failed";
+      const message = err instanceof Error ? err.message : "Merge failed";
       setError(message);
     }
   };
@@ -78,27 +77,21 @@ export function MergeConfirmationDialog({
           <DialogTitle>Merge Compound</DialogTitle>
           <DialogDescription>
             Merge{" "}
-            <span className="font-mono font-semibold">
-              {sourceMolecule.registration_number}
-            </span>{" "}
-            ({sourceMolecule.name}) into another compound. All related data
-            will be transferred to the target compound.
+            <span className="font-mono font-semibold">{sourceMolecule.registration_number}</span> (
+            {sourceMolecule.name}) into another compound. All related data will be transferred to
+            the target compound.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-            This action is irreversible. The source compound will become a
-            tombstone and all its data (batches, assay results, identifiers)
-            will be moved to the target compound.
+            This action is irreversible. The source compound will become a tombstone and all its
+            data (batches, assay results, identifiers) will be moved to the target compound.
           </div>
 
           <div className="grid gap-2">
             <Label>Target Compound</Label>
-            <MoleculeSelector
-              selectedId={targetId}
-              onSelect={setTargetId}
-            />
+            <MoleculeSelector selectedId={targetId} onSelect={setTargetId} />
           </div>
 
           <div className="grid gap-2">

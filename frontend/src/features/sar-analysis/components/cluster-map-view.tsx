@@ -2,25 +2,25 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import type { Molecule } from "@/features/chemical-registration/types";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/shared/components/ui/resizable";
-import type { Molecule } from "@/features/chemical-registration/types";
 
-import { useUmapCluster } from "../hooks/use-umap-cluster";
 import { useCherrypickBasket } from "../hooks/use-cherrypick-basket";
 import { useRegionDiversePick } from "../hooks/use-region-diverse-pick";
-import { usePickerConfig } from "../lib/use-picker-config";
-import { useColorMode } from "../lib/use-color-mode";
+import { useUmapCluster } from "../hooks/use-umap-cluster";
 import type { ColorOption } from "../lib/cluster-palette";
-import { ClusterScatter } from "./cluster-scatter";
-import { ClusterToolbar } from "./cluster-toolbar";
+import { useColorMode } from "../lib/use-color-mode";
+import { usePickerConfig } from "../lib/use-picker-config";
 import { ClusterBasketBar } from "./cluster-basket-bar";
-import { RegionActionBar } from "./region-action-bar";
+import { ClusterScatter } from "./cluster-scatter";
 import { ClusterSelectionPane } from "./cluster-selection-pane";
+import { ClusterToolbar } from "./cluster-toolbar";
 import { ColorModePicker, type ProtocolOption } from "./color-mode-picker";
+import { RegionActionBar } from "./region-action-bar";
 import { SaveSelectionDialog } from "./save-selection-dialog";
 
 // react-resizable-panels v4: STRING = percent, NUMBER = pixels.
@@ -66,9 +66,7 @@ function buildActivityPic50(
   return out;
 }
 
-function buildScaffoldByMol(
-  molecules: Molecule[],
-): Record<string, string | null> {
+function buildScaffoldByMol(molecules: Molecule[]): Record<string, string | null> {
   const out: Record<string, string | null> = {};
   for (const mol of molecules) {
     const s = (mol as any).bemis_murcko_smiles;
@@ -87,12 +85,16 @@ export function ClusterMapView({
   defaultProjectId,
   sourceLabel,
 }: ClusterMapViewProps) {
-  const { picker, n, threshold, setPicker, setN, setThreshold } =
-    usePickerConfig({ collectionSize: molecules.length });
-  const { mode: colorMode, protocolId: colorProtocolId, setMode: setColorMode } =
-    useColorMode({
-      defaultMode: defaultColorProtocolId ? "activity" : "cluster",
-    });
+  const { picker, n, threshold, setPicker, setN, setThreshold } = usePickerConfig({
+    collectionSize: molecules.length,
+  });
+  const {
+    mode: colorMode,
+    protocolId: colorProtocolId,
+    setMode: setColorMode,
+  } = useColorMode({
+    defaultMode: defaultColorProtocolId ? "activity" : "cluster",
+  });
 
   // Lasso region (transient).
   const [lassoedIds, setLassoedIds] = useState<Set<string>>(new Set());
@@ -220,16 +222,14 @@ export function ClusterMapView({
   if (molecules.length < MIN_MOLS_FOR_UMAP) {
     return (
       <div className="p-6 text-sm text-muted-foreground">
-        Need at least {MIN_MOLS_FOR_UMAP} molecules to compute a cluster map.
-        This set has {molecules.length}.
+        Need at least {MIN_MOLS_FOR_UMAP} molecules to compute a cluster map. This set has{" "}
+        {molecules.length}.
       </div>
     );
   }
 
   if (error) {
-    return (
-      <div className="p-6 text-sm text-rose-600">Cluster map failed: {error}</div>
-    );
+    return <div className="p-6 text-sm text-rose-600">Cluster map failed: {error}</div>;
   }
 
   return (
@@ -264,22 +264,14 @@ export function ClusterMapView({
       {result && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground">
           <span>
-            <span className="font-medium text-foreground">
-              {result.clusterCount}
-            </span>{" "}
-            chemotype{result.clusterCount === 1 ? "" : "s"} (Butina @{" "}
-            {committedThreshold.toFixed(2)})
+            <span className="font-medium text-foreground">{result.clusterCount}</span> chemotype
+            {result.clusterCount === 1 ? "" : "s"} (Butina @ {committedThreshold.toFixed(2)})
           </span>
           <span className="text-border">·</span>
           <span>
-            <span className="font-medium text-foreground">
-              {result.representatives.length}
-            </span>{" "}
+            <span className="font-medium text-foreground">{result.representatives.length}</span>{" "}
             representative{result.representatives.length === 1 ? "" : "s"} (
-            {committedPicker === "maxmin"
-              ? `MaxMin N=${committedN}`
-              : "Butina medoids"}
-            )
+            {committedPicker === "maxmin" ? `MaxMin N=${committedN}` : "Butina medoids"})
           </span>
           <span className="text-border">·</span>
           {lassoedIds.size > 0 ? (
@@ -301,10 +293,7 @@ export function ClusterMapView({
         </div>
       )}
 
-      <ResizablePanelGroup
-        orientation="horizontal"
-        className="flex-1 rounded-md border"
-      >
+      <ResizablePanelGroup orientation="horizontal" className="flex-1 rounded-md border">
         <ResizablePanel
           defaultSize={SCATTER_DEFAULT_PCT}
           minSize={SCATTER_MIN_PCT}
@@ -356,10 +345,7 @@ export function ClusterMapView({
           minSize={PANE_MIN_PCT}
           maxSize={PANE_MAX_PCT}
         >
-          <ClusterSelectionPane
-            allMolecules={molecules}
-            basketIds={basket.ids}
-          />
+          <ClusterSelectionPane allMolecules={molecules} basketIds={basket.ids} />
         </ResizablePanel>
       </ResizablePanelGroup>
 

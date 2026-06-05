@@ -1,18 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  Loader2,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Square,
-} from "lucide-react";
+import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { PageHeader } from "@/shared/components/page-header";
+import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { Badge } from "@/shared/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -21,12 +16,6 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
-import {
   Table,
   TableBody,
   TableCell,
@@ -34,29 +23,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import {
-  RadioGroup,
-  RadioGroupItem,
-} from "@/shared/components/ui/radio-group";
-import { PageHeader } from "@/shared/components/page-header";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { formatDateTime } from "@/shared/lib/format-date";
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
-import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle2, Loader2, Square, XCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { MOLECULES_KEY } from "../hooks/query-keys";
 import {
-  useStartCddMoleculeImport,
-  useCddMoleculeImportStatus,
   useCancelCddMoleculeImport,
+  useCddMoleculeImportStatus,
   useForceFailImport,
   useImportHistory,
+  useStartCddMoleculeImport,
 } from "../hooks/use-cdd-molecule-import";
 import {
-  useStartCddPlateImport,
-  useCddPlateImportStatus,
   useCancelCddPlateImport,
+  useCddPlateImportStatus,
   useForceFailPlateImport,
   usePlateImportHistory,
+  useStartCddPlateImport,
 } from "../hooks/use-cdd-plate-import";
-import { MOLECULES_KEY } from "../hooks/query-keys";
 
 const TERMINAL_STATUSES = ["completed", "completed_with_errors", "failed"];
 
@@ -66,9 +52,7 @@ export function DataImportPage() {
 
   // Form state
   const [orgId, setOrgId] = useState("");
-  const [importMode, setImportMode] = useState<"full_vault" | "sync">(
-    "full_vault"
-  );
+  const [importMode, setImportMode] = useState<"full_vault" | "sync">("full_vault");
   const [maxMolecules, setMaxMolecules] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
@@ -84,9 +68,7 @@ export function DataImportPage() {
   const cancelMutation = useCancelCddMoleculeImport();
 
   // Find active import from history (survives page reload)
-  const activeImport = history?.find(
-    (imp) => !TERMINAL_STATUSES.includes(imp.status)
-  );
+  const activeImport = history?.find((imp) => !TERMINAL_STATUSES.includes(imp.status));
 
   // Auto-resume polling for active imports
   useEffect(() => {
@@ -106,11 +88,11 @@ export function DataImportPage() {
 
       if (liveStatus.status === "completed") {
         setCompletionMessage(
-          `Import completed successfully. ${liveStatus.registered_count} molecules registered, ${liveStatus.duplicate_count} duplicates.`
+          `Import completed successfully. ${liveStatus.registered_count} molecules registered, ${liveStatus.duplicate_count} duplicates.`,
         );
       } else if (liveStatus.status === "completed_with_errors") {
         setCompletionMessage(
-          `Import completed with ${liveStatus.error_count} errors. ${liveStatus.registered_count} molecules registered, ${liveStatus.duplicate_count} duplicates.`
+          `Import completed with ${liveStatus.error_count} errors. ${liveStatus.registered_count} molecules registered, ${liveStatus.duplicate_count} duplicates.`,
         );
       } else {
         setCompletionMessage("Import failed. Check the History tab for details.");
@@ -126,11 +108,11 @@ export function DataImportPage() {
       return;
     }
     try {
-      const limit = maxMolecules ? parseInt(maxMolecules, 10) : undefined;
+      const limit = maxMolecules ? Number.parseInt(maxMolecules, 10) : undefined;
       const result = await startMutation.mutateAsync({
         originatingOrgId: orgId,
         importMode: importMode,
-        maxMolecules: limit && !isNaN(limit) ? limit : undefined,
+        maxMolecules: limit && !Number.isNaN(limit) ? limit : undefined,
       });
       setWorkflowId(result.workflow_id);
       refetchHistory();
@@ -172,7 +154,10 @@ export function DataImportPage() {
   if (!cddEnabled) {
     return (
       <>
-        <PageHeader title="CDD Vault Import" subtitle="Import data from your connected CDD Vault." />
+        <PageHeader
+          title="CDD Vault Import"
+          subtitle="Import data from your connected CDD Vault."
+        />
         <div className="rounded-md border p-8 text-center text-muted-foreground mt-4">
           <p className="font-medium">CDD Vault is not configured</p>
           <p className="text-sm mt-1">
@@ -185,16 +170,15 @@ export function DataImportPage() {
 
   return (
     <>
-      <PageHeader
-        title="CDD Vault Import"
-        subtitle="Import data from your connected CDD Vault."
-      />
+      <PageHeader title="CDD Vault Import" subtitle="Import data from your connected CDD Vault." />
 
       {/* Entity type tabs — Molecules & Batches is the only one for now */}
       <Tabs defaultValue="molecules" className="mt-4">
         <TabsList>
           <TabsTrigger value="molecules">Molecules &amp; Batches</TabsTrigger>
-          <TabsTrigger value="protocols" disabled>Protocols</TabsTrigger>
+          <TabsTrigger value="protocols" disabled>
+            Protocols
+          </TabsTrigger>
           <TabsTrigger value="plates">Plates</TabsTrigger>
         </TabsList>
 
@@ -206,260 +190,248 @@ export function DataImportPage() {
               <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
 
-        {/* Tab 1: New Import */}
-        <TabsContent value="new-import" className="mt-4 space-y-6">
-          {completionMessage && (
-            <div className="flex items-start gap-2 rounded-md bg-green-50 p-3 text-sm text-green-800 dark:bg-green-950/30 dark:text-green-300">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{completionMessage}</span>
-            </div>
-          )}
-
-          {error && (
-            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          {/* Configuration form (hidden when import active) */}
-          {!isImportActive && (
-            <div className="max-w-lg space-y-5">
-              <div className="rounded-md border p-4 text-sm space-y-2">
-                <p>This will:</p>
-                <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                  <li>Discover all molecules in your CDD Vault</li>
-                  <li>
-                    Register each molecule with structure processing and
-                    deduplication
-                  </li>
-                  <li>Import associated batches (lots, amounts, salts)</li>
-                  <li>Register molecules without SMILES as undisclosed</li>
-                </ul>
-                <p className="text-muted-foreground">
-                  For large vaults (100K+ molecules), this may take several
-                  hours. You can navigate away and check back later.
-                </p>
-              </div>
-
-              <div className="grid gap-2">
-                <Label>Originating Organization</Label>
-                <Select value={orgId} onValueChange={setOrgId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select organization..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {orgs?.map((org: { id: string; name: string }) => (
-                      <SelectItem key={org.id} value={org.id}>
-                        {org.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <Label>Import Mode</Label>
-                <RadioGroup
-                  value={importMode}
-                  onValueChange={(v) =>
-                    setImportMode(v as "full_vault" | "sync")
-                  }
-                  className="flex gap-6"
-                >
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="full_vault" id="mode-full" />
-                    <Label htmlFor="mode-full" className="font-normal">
-                      Full Vault
-                    </Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value="sync" id="mode-sync" />
-                    <Label htmlFor="mode-sync" className="font-normal">
-                      Sync (new molecules only)
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="max-molecules">
-                  Max molecules{" "}
-                  <span className="font-normal text-muted-foreground">
-                    (optional, for testing)
-                  </span>
-                </Label>
-                <Input
-                  id="max-molecules"
-                  type="number"
-                  min={1}
-                  placeholder="Leave blank to import all"
-                  value={maxMolecules}
-                  onChange={(e) => setMaxMolecules(e.target.value)}
-                />
-              </div>
-
-              <Button
-                onClick={handleStart}
-                disabled={!orgId || startMutation.isPending}
-              >
-                {startMutation.isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Start Import
-              </Button>
-            </div>
-          )}
-
-          {/* Progress section (visible when import active) */}
-          {isImportActive && liveStatus && (
-            <div className="max-w-lg space-y-4">
-              {/* Phase indicator */}
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                {TERMINAL_STATUSES.includes(liveStatus.status) ? (
-                  statusIcon(liveStatus.status)
-                ) : (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
-                {statusLabel(liveStatus.status, liveStatus.pages_processed)}
-              </div>
-
-              {/* Progress bar */}
-              {liveStatus.total_count > 0 && (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>
-                      {processedCount.toLocaleString()} of{" "}
-                      {liveStatus.total_count.toLocaleString()}
-                    </span>
-                    <span>{percent}%</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all duration-300"
-                      style={{ width: `${percent}%` }}
-                    />
-                  </div>
+            {/* Tab 1: New Import */}
+            <TabsContent value="new-import" className="mt-4 space-y-6">
+              {completionMessage && (
+                <div className="flex items-start gap-2 rounded-md bg-green-50 p-3 text-sm text-green-800 dark:bg-green-950/30 dark:text-green-300">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{completionMessage}</span>
                 </div>
               )}
 
-              {/* Live counters */}
-              <div className="grid grid-cols-4 gap-3">
-                <CounterCard
-                  label="Registered"
-                  value={liveStatus.registered_count}
-                  color="text-green-600"
-                />
-                <CounterCard
-                  label="Duplicate"
-                  value={liveStatus.duplicate_count}
-                  color="text-blue-600"
-                />
-                <CounterCard
-                  label="Skipped"
-                  value={liveStatus.skipped_count}
-                  color="text-muted-foreground"
-                />
-                <CounterCard
-                  label="Errors"
-                  value={liveStatus.error_count}
-                  color="text-destructive"
-                />
-              </div>
-
-              {!TERMINAL_STATUSES.includes(liveStatus.status) && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleCancel}
-                  disabled={cancelMutation.isPending}
-                >
-                  <Square className="mr-1.5 h-3 w-3" />
-                  Stop Import
-                </Button>
+              {error && (
+                <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                  {error}
+                </div>
               )}
-            </div>
-          )}
 
-          {/* Waiting for first status poll */}
-          {isImportActive && !liveStatus && (
-            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Starting import workflow...
-            </div>
-          )}
-        </TabsContent>
+              {/* Configuration form (hidden when import active) */}
+              {!isImportActive && (
+                <div className="max-w-lg space-y-5">
+                  <div className="rounded-md border p-4 text-sm space-y-2">
+                    <p>This will:</p>
+                    <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                      <li>Discover all molecules in your CDD Vault</li>
+                      <li>Register each molecule with structure processing and deduplication</li>
+                      <li>Import associated batches (lots, amounts, salts)</li>
+                      <li>Register molecules without SMILES as undisclosed</li>
+                    </ul>
+                    <p className="text-muted-foreground">
+                      For large vaults (100K+ molecules), this may take several hours. You can
+                      navigate away and check back later.
+                    </p>
+                  </div>
 
-        {/* Tab 2: History */}
-        <TabsContent value="history" className="mt-4">
-          {!history || history.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              No imports have been run yet.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Mode</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Registered</TableHead>
-                  <TableHead className="text-right">Duplicate</TableHead>
-                  <TableHead className="text-right">Errors</TableHead>
-                  <TableHead className="text-right">Skipped</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.map((imp) => (
-                  <TableRow key={imp.id}>
-                    <TableCell className="whitespace-nowrap">
-                      {formatDateTime(imp.submitted_at)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {imp.import_mode === "full_vault"
-                          ? "Full"
-                          : "Sync"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <ImportStatusBadge status={imp.status} />
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {imp.registered_count.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {imp.duplicate_count.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {imp.error_count.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {imp.skipped_count.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {imp.total_count.toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      {!TERMINAL_STATUSES.includes(imp.status) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive"
-                          onClick={() => forceFailMutation.mutate(imp.id)}
-                          disabled={forceFailMutation.isPending}
-                        >
-                          Force Stop
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </TabsContent>
+                  <div className="grid gap-2">
+                    <Label>Originating Organization</Label>
+                    <Select value={orgId} onValueChange={setOrgId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select organization..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {orgs?.map((org: { id: string; name: string }) => (
+                          <SelectItem key={org.id} value={org.id}>
+                            {org.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Import Mode</Label>
+                    <RadioGroup
+                      value={importMode}
+                      onValueChange={(v) => setImportMode(v as "full_vault" | "sync")}
+                      className="flex gap-6"
+                    >
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="full_vault" id="mode-full" />
+                        <Label htmlFor="mode-full" className="font-normal">
+                          Full Vault
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="sync" id="mode-sync" />
+                        <Label htmlFor="mode-sync" className="font-normal">
+                          Sync (new molecules only)
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="max-molecules">
+                      Max molecules{" "}
+                      <span className="font-normal text-muted-foreground">
+                        (optional, for testing)
+                      </span>
+                    </Label>
+                    <Input
+                      id="max-molecules"
+                      type="number"
+                      min={1}
+                      placeholder="Leave blank to import all"
+                      value={maxMolecules}
+                      onChange={(e) => setMaxMolecules(e.target.value)}
+                    />
+                  </div>
+
+                  <Button onClick={handleStart} disabled={!orgId || startMutation.isPending}>
+                    {startMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Start Import
+                  </Button>
+                </div>
+              )}
+
+              {/* Progress section (visible when import active) */}
+              {isImportActive && liveStatus && (
+                <div className="max-w-lg space-y-4">
+                  {/* Phase indicator */}
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    {TERMINAL_STATUSES.includes(liveStatus.status) ? (
+                      statusIcon(liveStatus.status)
+                    ) : (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )}
+                    {statusLabel(liveStatus.status, liveStatus.pages_processed)}
+                  </div>
+
+                  {/* Progress bar */}
+                  {liveStatus.total_count > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>
+                          {processedCount.toLocaleString()} of{" "}
+                          {liveStatus.total_count.toLocaleString()}
+                        </span>
+                        <span>{percent}%</span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-300"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Live counters */}
+                  <div className="grid grid-cols-4 gap-3">
+                    <CounterCard
+                      label="Registered"
+                      value={liveStatus.registered_count}
+                      color="text-green-600"
+                    />
+                    <CounterCard
+                      label="Duplicate"
+                      value={liveStatus.duplicate_count}
+                      color="text-blue-600"
+                    />
+                    <CounterCard
+                      label="Skipped"
+                      value={liveStatus.skipped_count}
+                      color="text-muted-foreground"
+                    />
+                    <CounterCard
+                      label="Errors"
+                      value={liveStatus.error_count}
+                      color="text-destructive"
+                    />
+                  </div>
+
+                  {!TERMINAL_STATUSES.includes(liveStatus.status) && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleCancel}
+                      disabled={cancelMutation.isPending}
+                    >
+                      <Square className="mr-1.5 h-3 w-3" />
+                      Stop Import
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Waiting for first status poll */}
+              {isImportActive && !liveStatus && (
+                <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Starting import workflow...
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Tab 2: History */}
+            <TabsContent value="history" className="mt-4">
+              {!history || history.length === 0 ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  No imports have been run yet.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Mode</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Registered</TableHead>
+                      <TableHead className="text-right">Duplicate</TableHead>
+                      <TableHead className="text-right">Errors</TableHead>
+                      <TableHead className="text-right">Skipped</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.map((imp) => (
+                      <TableRow key={imp.id}>
+                        <TableCell className="whitespace-nowrap">
+                          {formatDateTime(imp.submitted_at)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {imp.import_mode === "full_vault" ? "Full" : "Sync"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <ImportStatusBadge status={imp.status} />
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {imp.registered_count.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {imp.duplicate_count.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {imp.error_count.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {imp.skipped_count.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {imp.total_count.toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          {!TERMINAL_STATUSES.includes(imp.status) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive"
+                              onClick={() => forceFailMutation.mutate(imp.id)}
+                              disabled={forceFailMutation.isPending}
+                            >
+                              Force Stop
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </TabsContent>
           </Tabs>
         </TabsContent>
 
@@ -474,7 +446,6 @@ export function DataImportPage() {
 
 /* ---------- Plate import tab ---------- */
 
-
 function PlateImportTab() {
   const qc = useQueryClient();
   const [plateWorkflowId, setPlateWorkflowId] = useState<string | null>(null);
@@ -486,9 +457,7 @@ function PlateImportTab() {
   const cancelPlate = useCancelCddPlateImport();
   const forceFailPlate = useForceFailPlateImport();
 
-  const activePlateImport = plateHistory?.find(
-    (imp) => !TERMINAL_STATUSES.includes(imp.status)
-  );
+  const activePlateImport = plateHistory?.find((imp) => !TERMINAL_STATUSES.includes(imp.status));
 
   useEffect(() => {
     if (activePlateImport?.workflow_id && !plateWorkflowId) {
@@ -505,11 +474,11 @@ function PlateImportTab() {
       qc.invalidateQueries({ queryKey: ["plates"] });
       if (plateLive.status === "completed") {
         setPlateCompletion(
-          `Import completed. ${plateLive.plates_registered} plates registered, ${plateLive.plates_duplicate} duplicates, ${plateLive.wells_mapped} wells mapped.`
+          `Import completed. ${plateLive.plates_registered} plates registered, ${plateLive.plates_duplicate} duplicates, ${plateLive.wells_mapped} wells mapped.`,
         );
       } else if (plateLive.status === "completed_with_errors") {
         setPlateCompletion(
-          `Import completed with ${plateLive.plates_error} errors. ${plateLive.plates_registered} plates registered, ${plateLive.wells_unresolved} wells unresolved.`
+          `Import completed with ${plateLive.plates_error} errors. ${plateLive.plates_registered} plates registered, ${plateLive.wells_unresolved} wells unresolved.`,
         );
       } else {
         setPlateCompletion("Import failed. Check the History tab for details.");
@@ -597,8 +566,7 @@ function PlateImportTab() {
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>
-                    {plateProcessed.toLocaleString()} of{" "}
-                    {plateLive.total_count.toLocaleString()}
+                    {plateProcessed.toLocaleString()} of {plateLive.total_count.toLocaleString()}
                   </span>
                   <span>{platePct}%</span>
                 </div>
@@ -612,9 +580,21 @@ function PlateImportTab() {
             )}
 
             <div className="grid grid-cols-4 gap-3">
-              <CounterCard label="Registered" value={plateLive.plates_registered} color="text-green-600" />
-              <CounterCard label="Duplicate" value={plateLive.plates_duplicate} color="text-blue-600" />
-              <CounterCard label="Wells OK" value={plateLive.wells_mapped} color="text-muted-foreground" />
+              <CounterCard
+                label="Registered"
+                value={plateLive.plates_registered}
+                color="text-green-600"
+              />
+              <CounterCard
+                label="Duplicate"
+                value={plateLive.plates_duplicate}
+                color="text-blue-600"
+              />
+              <CounterCard
+                label="Wells OK"
+                value={plateLive.wells_mapped}
+                color="text-muted-foreground"
+              />
               <CounterCard label="Errors" value={plateLive.plates_error} color="text-destructive" />
             </div>
 
@@ -719,9 +699,7 @@ function CounterCard({
 }) {
   return (
     <div className="rounded-md border p-2.5 text-center">
-      <div className={`text-lg font-semibold tabular-nums ${color}`}>
-        {value.toLocaleString()}
-      </div>
+      <div className={`text-lg font-semibold tabular-nums ${color}`}>{value.toLocaleString()}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </div>
   );
@@ -781,5 +759,3 @@ function statusLabel(status: string, pagesProcessed: number) {
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
 }
-
-

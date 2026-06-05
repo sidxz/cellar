@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -19,10 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import {
-  useCreateStorageLocation,
-  useStorageLocations,
-} from "../hooks/use-storage-locations";
+import { useState } from "react";
+import { useCreateStorageLocation, useStorageLocations } from "../hooks/use-storage-locations";
 import type { StorageLocation } from "../types";
 
 interface CreateStorageLocationDialogProps {
@@ -74,7 +71,7 @@ export function CreateStorageLocationDialog({
           setTemperature("");
           setBarcode("");
         },
-      }
+      },
     );
   };
 
@@ -83,9 +80,7 @@ export function CreateStorageLocationDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Storage Location</DialogTitle>
-          <DialogDescription>
-            Add a new location to your storage hierarchy.
-          </DialogDescription>
+          <DialogDescription>Add a new location to your storage hierarchy.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
@@ -152,10 +147,7 @@ export function CreateStorageLocationDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={handleSubmit}
-            disabled={!name || createMutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={!name || createMutation.isPending}>
             {createMutation.isPending ? "Creating..." : "Create Location"}
           </Button>
         </DialogFooter>

@@ -1,9 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -23,12 +19,13 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 import { useProjects } from "../hooks/use-projects";
-import {
-  useCreateSavedSearch,
-  useUpdateSavedSearch,
-} from "../hooks/use-saved-searches";
-import type { SavedSearch, SearchVisibility } from "../types";
+import { useCreateSavedSearch, useUpdateSavedSearch } from "../hooks/use-saved-searches";
+import type { SavedSearch } from "../types";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -48,10 +45,7 @@ const formSchema = z
     name: z.string().min(1, "Name is required"),
     visibility: z.enum(["private", "project"]),
     project_id: z.string(),
-    query: z
-      .string()
-      .min(1, "Query is required")
-      .refine(isValidJson, "Invalid JSON"),
+    query: z.string().min(1, "Query is required").refine(isValidJson, "Invalid JSON"),
     columns: z
       .string()
       .optional()
@@ -161,9 +155,7 @@ export function CreateSavedSearchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Saved Search" : "New Saved Search"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Saved Search" : "New Saved Search"}</DialogTitle>
           <DialogDescription>
             {isEdit
               ? "Update the saved search details."
@@ -185,9 +177,7 @@ export function CreateSavedSearchDialog({
                 }}
               />
               {form.formState.errors.name && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
               )}
             </div>
 
@@ -251,9 +241,7 @@ export function CreateSavedSearchDialog({
                 className="font-mono text-sm"
               />
               {form.formState.errors.query && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.query.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.query.message}</p>
               )}
             </div>
 
@@ -266,9 +254,7 @@ export function CreateSavedSearchDialog({
                 className="font-mono text-sm"
               />
               {form.formState.errors.columns && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.columns.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.columns.message}</p>
               )}
             </div>
           </div>
@@ -282,10 +268,7 @@ export function CreateSavedSearchDialog({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={form.formState.isSubmitting || mutation.isPending}
-            >
+            <Button type="submit" disabled={form.formState.isSubmitting || mutation.isPending}>
               {mutation.isPending
                 ? isEdit
                   ? "Saving..."

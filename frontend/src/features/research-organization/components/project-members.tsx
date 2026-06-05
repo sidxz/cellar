@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Trash2, UserPlus } from "lucide-react";
+import { MemberName } from "@/shared/components/entity-name";
+import { MemberSelector } from "@/shared/components/member-selector";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -11,8 +11,6 @@ import {
   DialogTrigger,
 } from "@/shared/components/ui/dialog";
 import { Label } from "@/shared/components/ui/label";
-import { MemberSelector } from "@/shared/components/member-selector";
-import { MemberName } from "@/shared/components/entity-name";
 import {
   Select,
   SelectContent,
@@ -28,11 +26,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { Trash2, UserPlus } from "lucide-react";
+import { useState } from "react";
 import {
-  useProjectMembers,
   useAddProjectMember,
-  useUpdateMemberRole,
+  useProjectMembers,
   useRemoveProjectMember,
+  useUpdateMemberRole,
 } from "../hooks/use-project-members";
 import type { ProjectRole } from "../types";
 
@@ -60,7 +60,7 @@ export function ProjectMembers({ projectId }: ProjectMembersProps) {
           setSelectedUserId(null);
           setNewRole("viewer");
         },
-      }
+      },
     );
   };
 
@@ -121,13 +121,13 @@ export function ProjectMembers({ projectId }: ProjectMembersProps) {
         <TableBody>
           {members?.map((m) => (
             <TableRow key={m.user_id}>
-              <TableCell><MemberName id={m.user_id} /></TableCell>
+              <TableCell>
+                <MemberName id={m.user_id} />
+              </TableCell>
               <TableCell>
                 <Select
                   value={m.role}
-                  onValueChange={(role) =>
-                    updateRole.mutate({ userId: m.user_id, role })
-                  }
+                  onValueChange={(role) => updateRole.mutate({ userId: m.user_id, role })}
                 >
                   <SelectTrigger className="w-32">
                     <SelectValue />
@@ -140,11 +140,7 @@ export function ProjectMembers({ projectId }: ProjectMembersProps) {
                 </Select>
               </TableCell>
               <TableCell>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => removeMember.mutate(m.user_id)}
-                >
+                <Button size="icon" variant="ghost" onClick={() => removeMember.mutate(m.user_id)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </TableCell>

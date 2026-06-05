@@ -1,7 +1,7 @@
-import { describe, expect, it, vi, beforeAll } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { ResultsSurface } from "./results-surface";
 import type { Molecule } from "@/features/chemical-registration/types";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { ResultsSurface } from "./results-surface";
 
 vi.mock("@/shared/components/molecule-thumbnail", () => ({
   MoleculeThumbnail: ({ smiles }: { smiles: string }) => (
@@ -84,7 +84,10 @@ describe("ResultsSurface", () => {
         onOpen={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(screen.getAllByTestId("mol-thumb")).toHaveLength(2);
   });
 
@@ -102,7 +105,10 @@ describe("ResultsSurface", () => {
     // Assert that the ViewModeToggle reflects table mode correctly.
     // AG Grid may not render cells in jsdom (it relies on layout that jsdom lacks),
     // so we only assert on the toggle's aria-pressed state here.
-    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("calls onModeChange when the inactive toggle is clicked", () => {
@@ -150,7 +156,10 @@ describe("ResultsSurface", () => {
     );
     expect(screen.getByTestId("scaffold-tree-view")).toBeInTheDocument();
     // Toggle should reflect scaffold-tree as active
-    expect(screen.getByRole("button", { name: /scaffold view/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /scaffold view/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("renders ClusterMapView when mode=clusters", () => {
@@ -165,7 +174,10 @@ describe("ResultsSurface", () => {
       />,
     );
     expect(screen.getByTestId("cluster-map-view")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /cluster view/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /cluster view/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("disables cluster toggle when molecule count < 10", () => {

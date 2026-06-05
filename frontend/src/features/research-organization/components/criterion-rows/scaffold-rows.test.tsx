@@ -1,7 +1,7 @@
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { ScaffoldCriterionRow } from "./scaffold-rows";
 import type { ScaffoldCriterion } from "../../types";
+import { ScaffoldCriterionRow } from "./scaffold-rows";
 
 // Stub the chemistry components so jsdom doesn't try to load RDKit.js WASM
 // or mount Ketcher. We assert on the surface contract (presence + props).
@@ -37,13 +37,7 @@ const baseExact: ScaffoldCriterion = {
 
 describe("ScaffoldCriterionRow", () => {
   it("renders mode picker + SMILES input in exact_match mode", () => {
-    render(
-      <ScaffoldCriterionRow
-        criterion={baseExact}
-        onChange={vi.fn()}
-        onRemove={vi.fn()}
-      />,
-    );
+    render(<ScaffoldCriterionRow criterion={baseExact} onChange={vi.fn()} onRemove={vi.fn()} />);
     expect(screen.getByPlaceholderText(/scaffold smiles/i)).toBeInTheDocument();
   });
 
@@ -60,13 +54,7 @@ describe("ScaffoldCriterionRow", () => {
 
   it("emits onChange with the typed SMILES", () => {
     const onChange = vi.fn();
-    render(
-      <ScaffoldCriterionRow
-        criterion={baseExact}
-        onChange={onChange}
-        onRemove={vi.fn()}
-      />,
-    );
+    render(<ScaffoldCriterionRow criterion={baseExact} onChange={onChange} onRemove={vi.fn()} />);
     fireEvent.change(screen.getByPlaceholderText(/scaffold smiles/i), {
       target: { value: "c1ccncc1" },
     });
@@ -95,24 +83,14 @@ describe("ScaffoldCriterionRow", () => {
 
   it("calls onRemove when the trash icon is clicked", () => {
     const onRemove = vi.fn();
-    render(
-      <ScaffoldCriterionRow
-        criterion={baseExact}
-        onChange={vi.fn()}
-        onRemove={onRemove}
-      />,
-    );
+    render(<ScaffoldCriterionRow criterion={baseExact} onChange={vi.fn()} onRemove={onRemove} />);
     fireEvent.click(screen.getByRole("button", { name: /remove criterion/i }));
     expect(onRemove).toHaveBeenCalledTimes(1);
   });
 
   it("shows a Draw button in exact_match mode (Edit when a SMILES is present)", () => {
     const { rerender } = render(
-      <ScaffoldCriterionRow
-        criterion={baseExact}
-        onChange={vi.fn()}
-        onRemove={vi.fn()}
-      />,
+      <ScaffoldCriterionRow criterion={baseExact} onChange={vi.fn()} onRemove={vi.fn()} />,
     );
     expect(screen.getByRole("button", { name: /^draw$/i })).toBeInTheDocument();
 
@@ -128,11 +106,7 @@ describe("ScaffoldCriterionRow", () => {
 
   it("renders the structure preview when scaffold_smiles is non-empty", () => {
     const { rerender } = render(
-      <ScaffoldCriterionRow
-        criterion={baseExact}
-        onChange={vi.fn()}
-        onRemove={vi.fn()}
-      />,
+      <ScaffoldCriterionRow criterion={baseExact} onChange={vi.fn()} onRemove={vi.fn()} />,
     );
     expect(screen.queryByTestId("structure-preview")).toBeNull();
 
@@ -149,13 +123,7 @@ describe("ScaffoldCriterionRow", () => {
 
   it("opens the editor on Draw click and applies the drawn structure", () => {
     const onChange = vi.fn();
-    render(
-      <ScaffoldCriterionRow
-        criterion={baseExact}
-        onChange={onChange}
-        onRemove={vi.fn()}
-      />,
-    );
+    render(<ScaffoldCriterionRow criterion={baseExact} onChange={onChange} onRemove={vi.fn()} />);
     // Dialog hidden initially
     expect(screen.queryByTestId("ketcher-dialog")).toBeNull();
     // Click Draw → stub dialog mounts

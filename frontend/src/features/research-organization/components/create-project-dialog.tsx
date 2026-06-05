@@ -1,9 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -16,6 +12,10 @@ import {
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { useCreateProject, useUpdateProject } from "../hooks/use-projects";
 import type { Project } from "../types";
 
@@ -50,11 +50,7 @@ interface CreateProjectDialogProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function CreateProjectDialog({
-  open,
-  onOpenChange,
-  project,
-}: CreateProjectDialogProps) {
+export function CreateProjectDialog({ open, onOpenChange, project }: CreateProjectDialogProps) {
   const isEdit = !!project;
   const createMutation = useCreateProject();
   const updateMutation = useUpdateProject(project?.id ?? "");
@@ -113,9 +109,7 @@ export function CreateProjectDialog({
                 }}
               />
               {form.formState.errors.name && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
               )}
             </div>
 
@@ -138,10 +132,7 @@ export function CreateProjectDialog({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={form.formState.isSubmitting || mutation.isPending}
-            >
+            <Button type="submit" disabled={form.formState.isSubmitting || mutation.isPending}>
               {mutation.isPending
                 ? isEdit
                   ? "Saving..."

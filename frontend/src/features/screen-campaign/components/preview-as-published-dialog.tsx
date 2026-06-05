@@ -43,7 +43,12 @@ interface PublishedShape {
   results: {
     molecule: { registration_number: string | null; name: string | null };
     decision: string;
-    measurements: { channel_id: string; value: number | null; unit: string; hit_call: string | null }[];
+    measurements: {
+      channel_id: string;
+      value: number | null;
+      unit: string;
+      hit_call: string | null;
+    }[];
   }[];
   source_protocols: { name?: string; version?: number | null }[];
   published_collection: { name: string; size: number } | null;
@@ -56,11 +61,9 @@ export function PreviewAsPublishedDialog({
   onClose,
 }: PreviewAsPublishedDialogProps) {
   const { data, isLoading } =
-    usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet(
-      campaignId,
-      undefined,
-      { query: { enabled: open } },
-    );
+    usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet(campaignId, undefined, {
+      query: { enabled: open },
+    });
 
   const doc = data as PublishedShape | undefined;
 
@@ -86,9 +89,8 @@ export function PreviewAsPublishedDialog({
             Preview as published
           </DialogTitle>
           <DialogDescription>
-            This is the DAIKON-shaped document that will be exported when this
-            campaign is closed. Reuses the same serializer used by the
-            published endpoint.
+            This is the DAIKON-shaped document that will be exported when this campaign is closed.
+            Reuses the same serializer used by the published endpoint.
           </DialogDescription>
         </DialogHeader>
 
@@ -101,9 +103,7 @@ export function PreviewAsPublishedDialog({
             <div className="space-y-4">
               {/* Header */}
               <section className="space-y-1">
-                <div className="text-xs uppercase text-muted-foreground">
-                  Campaign
-                </div>
+                <div className="text-xs uppercase text-muted-foreground">Campaign</div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold">{doc.campaign.name}</span>
                   <Badge variant="secondary">{doc.campaign.status}</Badge>
@@ -185,9 +185,7 @@ export function PreviewAsPublishedDialog({
                       {doc.results.slice(0, 50).map((r, i) => (
                         <tr key={i}>
                           <td className="p-2">
-                            <div className="font-mono">
-                              {r.molecule.registration_number ?? "—"}
-                            </div>
+                            <div className="font-mono">{r.molecule.registration_number ?? "—"}</div>
                             {r.molecule.name && (
                               <div className="text-muted-foreground truncate max-w-[120px]">
                                 {r.molecule.name}
@@ -198,9 +196,7 @@ export function PreviewAsPublishedDialog({
                             <Badge variant="outline">{r.decision}</Badge>
                           </td>
                           {doc.channels.map((c) => {
-                            const m = r.measurements.find(
-                              (mm) => mm.channel_id === c.id,
-                            );
+                            const m = r.measurements.find((mm) => mm.channel_id === c.id);
                             if (!m || m.value == null) {
                               return (
                                 <td key={c.id} className="p-2 text-muted-foreground">
@@ -225,8 +221,8 @@ export function PreviewAsPublishedDialog({
                   </table>
                   {doc.results.length > 50 && (
                     <p className="text-xs text-muted-foreground p-2 text-center">
-                      Showing first 50 of {doc.results.length} results. Download
-                      JSON for full content.
+                      Showing first 50 of {doc.results.length} results. Download JSON for full
+                      content.
                     </p>
                   )}
                 </div>

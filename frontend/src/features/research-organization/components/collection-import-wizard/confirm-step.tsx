@@ -34,8 +34,8 @@ export function ConfirmStep({ result, collectionId, onClose }: ConfirmStepProps)
       {handoffHref && result.unregistered_count > 0 && (
         <div className="rounded border border-amber-300 bg-amber-50 p-3">
           <p className="text-sm text-amber-900">
-            {result.unregistered_count} rows weren&apos;t added because they aren&apos;t
-            registered yet.
+            {result.unregistered_count} rows weren&apos;t added because they aren&apos;t registered
+            yet.
           </p>
           <Link
             href={handoffHref}

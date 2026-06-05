@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,11 +62,7 @@ export interface UpdateDataSourceInput {
 // CRUD hooks
 // ---------------------------------------------------------------------------
 
-const dataSourceHooks = createCrudHooks<
-  DataSource,
-  CreateDataSourceInput,
-  UpdateDataSourceInput
->({
+const dataSourceHooks = createCrudHooks<DataSource, CreateDataSourceInput, UpdateDataSourceInput>({
   entityName: "Data source",
   baseUrl: "/api/v1/data-sources",
   queryKey: ["data-sources"],

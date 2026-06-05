@@ -61,9 +61,7 @@ export function UploadStep({ onParsed }: UploadStepProps) {
           <p className="text-sm text-muted-foreground">
             Upload a CSV or Excel file mapping rows to Cellar molecules.
           </p>
-          {lastFile && (
-            <p className="mt-2 text-xs text-muted-foreground">Last: {lastFile}</p>
-          )}
+          {lastFile && <p className="mt-2 text-xs text-muted-foreground">Last: {lastFile}</p>}
           <Label htmlFor="csv-file" className="sr-only">
             Upload CSV or Excel
           </Label>
@@ -79,19 +77,15 @@ export function UploadStep({ onParsed }: UploadStepProps) {
               e.target.value = "";
             }}
           />
-          <Button
-            className="mt-4"
-            onClick={() => fileRef.current?.click()}
-            disabled={parsing}
-          >
+          <Button className="mt-4" onClick={() => fileRef.current?.click()} disabled={parsing}>
             {parsing ? "Parsing…" : "Choose file"}
           </Button>
         </div>
         <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
           <p className="font-medium text-foreground">CSV columns</p>
           <p className="mt-1">
-            Any one of: <code>registration_number</code>,{" "}
-            <code>external_id</code>, <code>smiles</code>, <code>inchi_key</code>
+            Any one of: <code>registration_number</code>, <code>external_id</code>,{" "}
+            <code>smiles</code>, <code>inchi_key</code>
           </p>
           <p className="mt-1">
             Optional: <code>name</code>, <code>notes</code>

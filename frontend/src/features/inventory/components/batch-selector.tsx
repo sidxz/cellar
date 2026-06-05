@@ -9,11 +9,7 @@ interface BatchSelectorProps {
   onSelect: (id: string | null) => void;
 }
 
-export function BatchSelector({
-  moleculeId,
-  selectedId,
-  onSelect,
-}: BatchSelectorProps) {
+export function BatchSelector({ moleculeId, selectedId, onSelect }: BatchSelectorProps) {
   const { data: batches, isLoading } = useBatchesByMolecule(moleculeId);
 
   return (
@@ -23,9 +19,7 @@ export function BatchSelector({
       onChange={(e) => onSelect(e.target.value || null)}
       disabled={isLoading}
     >
-      <option value="">
-        {isLoading ? "Loading batches..." : "Select batch..."}
-      </option>
+      <option value="">{isLoading ? "Loading batches..." : "Select batch..."}</option>
       {batches?.map((b: Batch) => (
         <option key={b.id} value={b.id}>
           {b.batch_number}

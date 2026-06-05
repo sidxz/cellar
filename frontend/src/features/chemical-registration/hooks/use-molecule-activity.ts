@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
 import { MOLECULES_KEY } from "./query-keys";
 
 export interface ProtocolActivityResponse {

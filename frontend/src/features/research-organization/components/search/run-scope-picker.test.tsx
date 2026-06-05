@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { RunScope } from "../../types";
 import { RunScopePicker } from "./run-scope-picker";

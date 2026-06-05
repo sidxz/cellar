@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { WorkspaceSettings } from "../types";
 
 const SETTINGS_KEY = ["workspace-settings"];
@@ -27,6 +27,9 @@ export function useUpdateWorkspaceSettings() {
         method: "PATCH",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: SETTINGS_KEY }); showSuccess("Settings saved"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SETTINGS_KEY });
+      showSuccess("Settings saved");
+    },
   });
 }

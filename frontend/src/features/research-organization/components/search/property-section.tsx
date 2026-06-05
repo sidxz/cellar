@@ -1,6 +1,5 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
 import {
   Select,
@@ -9,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { Plus, Trash2 } from "lucide-react";
 import type { PropertyCriterion } from "../../types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -51,10 +51,7 @@ function PropertyRow({
   return (
     <div className="flex items-center gap-2">
       {/* Property select */}
-      <Select
-        value={criterion.field}
-        onValueChange={(v) => onChange({ ...criterion, field: v })}
-      >
+      <Select value={criterion.field} onValueChange={(v) => onChange({ ...criterion, field: v })}>
         <SelectTrigger className="h-8 w-20 text-sm">
           <SelectValue />
         </SelectTrigger>
@@ -152,9 +149,7 @@ export function PropertySection({ criteria, onChange }: PropertySectionProps) {
 
       {/* Empty state */}
       {criteria.length === 0 && (
-        <p className="text-sm italic text-muted-foreground/50">
-          No property filters added.
-        </p>
+        <p className="text-sm italic text-muted-foreground/50">No property filters added.</p>
       )}
 
       {/* Rows */}

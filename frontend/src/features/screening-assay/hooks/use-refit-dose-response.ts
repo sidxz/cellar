@@ -1,11 +1,11 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
+  ClassifyDoseResponseInput,
   DoseResponseCurve,
   RefitDoseResponseInput,
-  ClassifyDoseResponseInput,
 } from "../types";
 
 const DOSE_RESPONSE_KEY = ["dose-response-curves"];

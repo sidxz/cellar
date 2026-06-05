@@ -5,11 +5,8 @@
  * and can be unit-tested in Node/vitest without a browser context.
  */
 
-import {
-  CURVE_FIT_POINTS,
-  generate4PLPoints,
-} from "./dose-response-display";
 import type { DoseResponseCurve } from "../types";
+import { CURVE_FIT_POINTS, generate4PLPoints } from "./dose-response-display";
 
 // ─── Degenerate-fit guard ─────────────────────────────────────────────────────
 

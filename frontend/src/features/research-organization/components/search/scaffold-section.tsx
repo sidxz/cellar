@@ -1,9 +1,9 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { ScaffoldCriterionRow } from "../criterion-rows/scaffold-rows";
 import { defaultScaffoldCriterion } from "../../lib/search-query-config";
 import type { ScaffoldCriterion } from "../../types";
+import { ScaffoldCriterionRow } from "../criterion-rows/scaffold-rows";
 
 interface ScaffoldSectionProps {
   criteria: ScaffoldCriterion[];
@@ -40,9 +40,7 @@ export function ScaffoldSection({ criteria, onChange }: ScaffoldSectionProps) {
       </div>
 
       {criteria.length === 0 && (
-        <p className="text-sm italic text-muted-foreground/50">
-          No scaffold filters.
-        </p>
+        <p className="text-sm italic text-muted-foreground/50">No scaffold filters.</p>
       )}
 
       <div className="space-y-2">
@@ -58,8 +56,8 @@ export function ScaffoldSection({ criteria, onChange }: ScaffoldSectionProps) {
 
       {criteria.some((c) => c.mode === "exact_match") && (
         <p className="text-xs text-muted-foreground/70">
-          Compared to the canonical Bemis-Murcko scaffold. Decorated molecules
-          are stripped to their scaffold before comparing.
+          Compared to the canonical Bemis-Murcko scaffold. Decorated molecules are stripped to their
+          scaffold before comparing.
         </p>
       )}
     </div>

@@ -1,11 +1,8 @@
+import type { Protocol, ReadoutDefinition } from "@/features/screening-assay/types";
 import { describe, expect, it } from "vitest";
-import type {
-  Protocol,
-  ReadoutDefinition,
-} from "@/features/screening-assay/types";
 import {
-  buildActivityWhereOptions,
   CURVE_CLASS_OPTION_ID,
+  buildActivityWhereOptions,
   parseWhereOptionId,
   whereConditionOptionId,
 } from "./activity-where-options";
@@ -163,18 +160,20 @@ describe("buildActivityWhereOptions", () => {
 
 describe("parseWhereOptionId / whereConditionOptionId roundtrip", () => {
   it("preserves a primary DR option", () => {
-    const id = "dr_curve:" + RD_DR;
+    const id = `dr_curve:${RD_DR}`;
     const parsed = parseWhereOptionId(id);
     expect(parsed).toEqual({
       source: "dr_curve",
       readout_definition_id: RD_DR,
       intercept_key: null,
     });
-    expect(whereConditionOptionId({
-      source: "dr_curve",
-      readout_definition_id: RD_DR,
-      operator: "lt",
-    })).toBe(id);
+    expect(
+      whereConditionOptionId({
+        source: "dr_curve",
+        readout_definition_id: RD_DR,
+        operator: "lt",
+      }),
+    ).toBe(id);
   });
 
   it("preserves a secondary intercept", () => {
@@ -185,27 +184,31 @@ describe("parseWhereOptionId / whereConditionOptionId roundtrip", () => {
       readout_definition_id: RD_DR,
       intercept_key: { kind: "ec", level: 90 },
     });
-    expect(whereConditionOptionId({
-      source: "dr_curve",
-      readout_definition_id: RD_DR,
-      operator: "lt",
-      intercept_key: { kind: "ec", level: 90 },
-    })).toBe(id);
+    expect(
+      whereConditionOptionId({
+        source: "dr_curve",
+        readout_definition_id: RD_DR,
+        operator: "lt",
+        intercept_key: { kind: "ec", level: 90 },
+      }),
+    ).toBe(id);
   });
 
   it("preserves curve_class", () => {
     const parsed = parseWhereOptionId(CURVE_CLASS_OPTION_ID);
     expect(parsed?.source).toBe("curve_class");
-    expect(whereConditionOptionId({
-      source: "curve_class",
-      readout_definition_id: "",
-      operator: "eq",
-      curve_classes: ["full"],
-    })).toBe(CURVE_CLASS_OPTION_ID);
+    expect(
+      whereConditionOptionId({
+        source: "curve_class",
+        readout_definition_id: "",
+        operator: "eq",
+        curve_classes: ["full"],
+      }),
+    ).toBe(CURVE_CLASS_OPTION_ID);
   });
 
   it("rejects unrecognised ids", () => {
     expect(parseWhereOptionId("garbage")).toBeNull();
-    expect(parseWhereOptionId("dr_curve:" + RD_DR + ":wat:50")).toBeNull();
+    expect(parseWhereOptionId(`dr_curve:${RD_DR}:wat:50`)).toBeNull();
   });
 });

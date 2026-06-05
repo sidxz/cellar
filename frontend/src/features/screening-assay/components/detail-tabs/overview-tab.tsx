@@ -1,27 +1,22 @@
 "use client";
 
-import { FlaskConical, Beaker, Target, Clock } from "lucide-react";
+import { TagTable } from "@/features/tagging/components/tag-table";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { StatusBadge } from "@/shared/components/status-badge";
 import { formatDate } from "@/shared/lib/format-date";
-import { TagTable } from "@/features/tagging/components/tag-table";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { Beaker, Clock, FlaskConical, Target } from "lucide-react";
 import { useProtocolStats } from "../../hooks/use-protocol-stats";
 import {
-  PROTOCOL_TYPE_LABELS,
   PLATE_FORMAT_LABELS,
+  PROTOCOL_TYPE_LABELS,
   type PlateFormat,
   type Protocol,
   type ProtocolType,
 } from "../../types";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 
 // ---------------------------------------------------------------------------
 // Z' quality badge helper
@@ -79,9 +74,7 @@ function StatsCard({
         <div className="min-w-0">
           <p className="text-sm text-muted-foreground">{label}</p>
           <p className="text-2xl font-bold tabular-nums">{value}</p>
-          {subtext && (
-            <p className="text-xs text-muted-foreground">{subtext}</p>
-          )}
+          {subtext && <p className="text-xs text-muted-foreground">{subtext}</p>}
         </div>
       </CardContent>
     </Card>
@@ -98,11 +91,7 @@ interface OverviewTabProps {
   onTabChange: (tab: string) => void;
 }
 
-export function OverviewTab({
-  protocol,
-  protocolId,
-  onTabChange,
-}: OverviewTabProps) {
+export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabProps) {
   const { data: stats, isLoading } = useProtocolStats(protocolId);
   const canEditTags = useAuthzHasRole("editor");
 
@@ -137,14 +126,8 @@ export function OverviewTab({
           <StatsCard
             icon={Target}
             label="Hits"
-            value={
-              stats.hit_criteria_applied
-                ? (stats.hit_count ?? 0)
-                : "\u2014"
-            }
-            subtext={
-              !stats.hit_criteria_applied ? "No criteria set" : undefined
-            }
+            value={stats.hit_criteria_applied ? (stats.hit_count ?? 0) : "\u2014"}
+            subtext={!stats.hit_criteria_applied ? "No criteria set" : undefined}
             onClick={() => onTabChange("activity")}
           />
           <StatsCard
@@ -168,16 +151,13 @@ export function OverviewTab({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div>
-                  <p className="font-medium">
-                    {formatDate(stats.latest_run.run_date)}
-                  </p>
+                  <p className="font-medium">{formatDate(stats.latest_run.run_date)}</p>
                   <div className="mt-1 flex items-center gap-2">
                     <StatusBadge status={stats.latest_run.status} />
                     {stats.latest_run.plate_format && (
                       <Badge variant="outline">
-                        {PLATE_FORMAT_LABELS[
-                          stats.latest_run.plate_format as PlateFormat
-                        ] ?? stats.latest_run.plate_format}
+                        {PLATE_FORMAT_LABELS[stats.latest_run.plate_format as PlateFormat] ??
+                          stats.latest_run.plate_format}
                       </Badge>
                     )}
                     {stats.latest_run.plate_count > 0 && (
@@ -196,11 +176,7 @@ export function OverviewTab({
                   </div>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onTabChange("runs")}
-              >
+              <Button variant="outline" size="sm" onClick={() => onTabChange("runs")}>
                 View Runs
               </Button>
             </div>
@@ -219,17 +195,14 @@ export function OverviewTab({
         </CardHeader>
         <CardContent className="space-y-4">
           {protocol.description && (
-            <p className="text-sm text-muted-foreground">
-              {protocol.description}
-            </p>
+            <p className="text-sm text-muted-foreground">{protocol.description}</p>
           )}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <p className="text-sm text-muted-foreground">Type</p>
               <p className="font-medium">
-                {PROTOCOL_TYPE_LABELS[
-                  protocol.protocol_type as ProtocolType
-                ] ?? protocol.protocol_type}
+                {PROTOCOL_TYPE_LABELS[protocol.protocol_type as ProtocolType] ??
+                  protocol.protocol_type}
               </p>
             </div>
             <div>
@@ -242,9 +215,7 @@ export function OverviewTab({
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Readouts</p>
-              <p className="font-medium">
-                {protocol.readout_definitions.length}
-              </p>
+              <p className="font-medium">{protocol.readout_definitions.length}</p>
             </div>
           </div>
         </CardContent>

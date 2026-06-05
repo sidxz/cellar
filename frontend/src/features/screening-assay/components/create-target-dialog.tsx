@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -20,6 +19,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useState } from "react";
 import { useCreateTarget } from "../hooks/use-targets";
 import { TARGET_TYPE_LABELS, type TargetType } from "../types";
 
@@ -28,10 +28,7 @@ interface CreateTargetDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateTargetDialog({
-  open,
-  onOpenChange,
-}: CreateTargetDialogProps) {
+export function CreateTargetDialog({ open, onOpenChange }: CreateTargetDialogProps) {
   const createMutation = useCreateTarget();
   const [name, setName] = useState("");
   const [targetType, setTargetType] = useState<string>("single_protein");
@@ -64,7 +61,7 @@ export function CreateTargetDialog({
           onOpenChange(false);
           resetForm();
         },
-      }
+      },
     );
   };
 
@@ -73,9 +70,7 @@ export function CreateTargetDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>New Target</DialogTitle>
-          <DialogDescription>
-            Define a biological target for screening protocols.
-          </DialogDescription>
+          <DialogDescription>Define a biological target for screening protocols.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
@@ -142,10 +137,7 @@ export function CreateTargetDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={handleSubmit}
-            disabled={!name.trim() || createMutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={!name.trim() || createMutation.isPending}>
             {createMutation.isPending ? "Creating..." : "Create Target"}
           </Button>
         </DialogFooter>

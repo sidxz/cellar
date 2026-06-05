@@ -1,13 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { ClipboardList, Pencil, Plus, Trash2 } from "lucide-react";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -34,16 +29,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ClipboardList, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 import { useCustomFields } from "../hooks/use-custom-fields";
 import {
+  type CreateRegistrationFormInput,
+  type FieldOverride,
+  type RegistrationForm,
+  type UpdateRegistrationFormInput,
   useCreateRegistrationForm,
   useDeleteRegistrationForm,
   useRegistrationForms,
   useUpdateRegistrationForm,
-  type FieldOverride,
-  type RegistrationForm,
-  type CreateRegistrationFormInput,
-  type UpdateRegistrationFormInput,
 } from "../hooks/use-registration-forms";
 
 // ---------------------------------------------------------------------------
@@ -56,11 +56,7 @@ interface FieldOverridesEditorProps {
   onChange: (overrides: FieldOverride[]) => void;
 }
 
-function FieldOverridesEditor({
-  appliesTo,
-  overrides,
-  onChange,
-}: FieldOverridesEditorProps) {
+function FieldOverridesEditor({ appliesTo, overrides, onChange }: FieldOverridesEditorProps) {
   const { data: fields, isLoading } = useCustomFields(appliesTo, true);
 
   if (isLoading) {
@@ -76,8 +72,7 @@ function FieldOverridesEditor({
   if (!fields || fields.length === 0) {
     return (
       <p className="py-3 text-sm text-muted-foreground">
-        No custom fields defined for {appliesTo}. Add custom fields in the
-        Custom Fields admin page.
+        No custom fields defined for {appliesTo}. Add custom fields in the Custom Fields admin page.
       </p>
     );
   }
@@ -88,20 +83,15 @@ function FieldOverridesEditor({
   const setOverrideField = <K extends keyof FieldOverride>(
     fieldId: string,
     key: K,
-    value: FieldOverride[K]
+    value: FieldOverride[K],
   ) => {
     const existing = overrides.find((o) => o.field_definition_id === fieldId);
     if (existing) {
       onChange(
-        overrides.map((o) =>
-          o.field_definition_id === fieldId ? { ...o, [key]: value } : o
-        )
+        overrides.map((o) => (o.field_definition_id === fieldId ? { ...o, [key]: value } : o)),
       );
     } else {
-      onChange([
-        ...overrides,
-        { field_definition_id: fieldId, [key]: value } as FieldOverride,
-      ]);
+      onChange([...overrides, { field_definition_id: fieldId, [key]: value } as FieldOverride]);
     }
   };
 
@@ -122,9 +112,7 @@ function FieldOverridesEditor({
             const isRequired = override?.is_required ?? null;
             const isLocked = override?.is_locked ?? false;
             const defaultVal =
-              override?.default_value != null
-                ? String(override.default_value)
-                : "";
+              override?.default_value != null ? String(override.default_value) : "";
 
             return (
               <TableRow key={field.id}>
@@ -135,10 +123,7 @@ function FieldOverridesEditor({
                       {field.name}
                     </span>
                     {field.is_required && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-2 text-xs"
-                      >
+                      <Badge variant="secondary" className="ml-2 text-xs">
                         Required by default
                       </Badge>
                     )}
@@ -157,11 +142,7 @@ function FieldOverridesEditor({
                   <Input
                     value={defaultVal}
                     onChange={(e) =>
-                      setOverrideField(
-                        field.id,
-                        "default_value",
-                        e.target.value || undefined
-                      )
+                      setOverrideField(field.id, "default_value", e.target.value || undefined)
                     }
                     placeholder="Override default..."
                     className="h-7 text-xs"
@@ -170,9 +151,7 @@ function FieldOverridesEditor({
                 <TableCell className="text-center">
                   <Switch
                     checked={isLocked}
-                    onCheckedChange={(checked) =>
-                      setOverrideField(field.id, "is_locked", checked)
-                    }
+                    onCheckedChange={(checked) => setOverrideField(field.id, "is_locked", checked)}
                     aria-label={`Lock field ${field.label}`}
                   />
                 </TableCell>
@@ -263,9 +242,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Registration Form" : "New Registration Form"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Registration Form" : "New Registration Form"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -278,9 +255,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                 placeholder="e.g., Standard Molecule Registration"
               />
               {form.formState.errors.name && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
               )}
             </div>
 
@@ -307,10 +282,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
             ) : (
               <div className="grid gap-2">
                 <Label>Applies To</Label>
-                <Input
-                  value={editing!.applies_to === "molecule" ? "Molecule" : "Batch"}
-                  disabled
-                />
+                <Input value={editing!.applies_to === "molecule" ? "Molecule" : "Batch"} disabled />
               </div>
             )}
 
@@ -327,11 +299,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                 name="is_default"
                 control={form.control}
                 render={({ field }) => (
-                  <Switch
-                    id="rf-default"
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
+                  <Switch id="rf-default" checked={field.value} onCheckedChange={field.onChange} />
                 )}
               />
             </div>
@@ -340,8 +308,8 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
             <div className="grid gap-2">
               <Label>Field Overrides</Label>
               <p className="text-xs text-muted-foreground">
-                Override required/default/locked behaviour for individual custom
-                fields when this form is selected.
+                Override required/default/locked behaviour for individual custom fields when this
+                form is selected.
               </p>
               <Controller
                 name="field_overrides"
@@ -396,19 +364,14 @@ function DeleteDialog({ form, onClose }: DeleteDialogProps) {
           <DialogTitle>Delete Registration Form?</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Permanently delete{" "}
-          <span className="font-medium text-foreground">{form?.name}</span>?
-          This action cannot be undone.
+          Permanently delete <span className="font-medium text-foreground">{form?.name}</span>? This
+          action cannot be undone.
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-            disabled={deleteMutation.isPending}
-          >
+          <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>
@@ -468,25 +431,15 @@ function FormsTable({ forms, onEdit, onDelete }: FormsTableProps) {
                 )}
               </TableCell>
               <TableCell>
-                <span className="text-sm tabular-nums">
-                  {form.field_overrides?.length ?? 0}
-                </span>
+                <span className="text-sm tabular-nums">{form.field_overrides?.length ?? 0}</span>
               </TableCell>
               <TableCell>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEdit(form)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onEdit(form)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                   {!form.is_default && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onDelete(form)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => onDelete(form)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   )}
@@ -543,19 +496,11 @@ export function RegistrationFormAdmin() {
             ))}
           </div>
         ) : (
-          <FormsTable
-            forms={forms ?? []}
-            onEdit={openEdit}
-            onDelete={setDeleting}
-          />
+          <FormsTable forms={forms ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}
       </div>
 
-      <FormDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editing={editing}
-      />
+      <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
       <DeleteDialog form={deleting} onClose={() => setDeleting(null)} />
     </>

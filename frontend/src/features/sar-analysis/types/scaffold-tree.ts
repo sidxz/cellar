@@ -1,7 +1,7 @@
 export const NO_SCAFFOLD_SENTINEL = "__no_scaffold__";
 
 export type ScaffoldTreeNode = {
-  scaffold_smiles: string;          // canonical SMILES OR NO_SCAFFOLD_SENTINEL
+  scaffold_smiles: string; // canonical SMILES OR NO_SCAFFOLD_SENTINEL
   molecule_ids: string[];
   molecule_count: number;
   subtree_molecule_count: number;
@@ -25,12 +25,7 @@ export type ScaffoldTreeResult = {
   stats: ScaffoldTreeStats;
 };
 
-export type ScaffoldTreeJobStatus =
-  | "pending"
-  | "running"
-  | "ready"
-  | "failed"
-  | "cancelled";
+export type ScaffoldTreeJobStatus = "pending" | "running" | "ready" | "failed" | "cancelled";
 
 export type ScaffoldTreeJob = {
   id: string;

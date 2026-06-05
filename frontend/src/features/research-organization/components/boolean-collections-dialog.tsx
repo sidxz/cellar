@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -19,9 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useCollections } from "../hooks/use-collections";
 import type { Collection } from "../types";
 
@@ -37,10 +37,7 @@ const OPERATIONS = [
   { value: "symmetric_difference", label: "Exclusive", description: "In exactly one collection" },
 ] as const;
 
-export function BooleanCollectionsDialog({
-  open,
-  onOpenChange,
-}: BooleanCollectionsDialogProps) {
+export function BooleanCollectionsDialog({ open, onOpenChange }: BooleanCollectionsDialogProps) {
   const queryClient = useQueryClient();
   const { data: collections } = useCollections();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -69,9 +66,7 @@ export function BooleanCollectionsDialog({
   };
 
   const toggleCollection = (id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const handleSubmit = () => {
@@ -85,7 +80,13 @@ export function BooleanCollectionsDialog({
   const opInfo = OPERATIONS.find((o) => o.value === operation);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); else onOpenChange(o); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) handleClose();
+        else onOpenChange(o);
+      }}
+    >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Boolean Collection Operations</DialogTitle>
@@ -99,7 +100,10 @@ export function BooleanCollectionsDialog({
             <Label>Select collections (min 2)</Label>
             <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
               {collections?.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 rounded p-1 hover:bg-muted/50 cursor-pointer">
+                <label
+                  key={c.id}
+                  className="flex items-center gap-2 rounded p-1 hover:bg-muted/50 cursor-pointer"
+                >
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(c.id)}
@@ -110,7 +114,9 @@ export function BooleanCollectionsDialog({
                 </label>
               ))}
               {!collections?.length && (
-                <p className="py-2 text-center text-sm text-muted-foreground">No collections available</p>
+                <p className="py-2 text-center text-sm text-muted-foreground">
+                  No collections available
+                </p>
               )}
             </div>
           </div>
@@ -129,9 +135,7 @@ export function BooleanCollectionsDialog({
                 ))}
               </SelectContent>
             </Select>
-            {opInfo && (
-              <p className="text-xs text-muted-foreground">{opInfo.description}</p>
-            )}
+            {opInfo && <p className="text-xs text-muted-foreground">{opInfo.description}</p>}
           </div>
 
           <div className="space-y-2">
@@ -145,7 +149,9 @@ export function BooleanCollectionsDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>Cancel</Button>
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
           <Button
             onClick={handleSubmit}
             disabled={selectedIds.length < 2 || !resultName.trim() || composeMutation.isPending}

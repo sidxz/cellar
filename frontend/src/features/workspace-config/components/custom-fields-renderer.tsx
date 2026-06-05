@@ -63,8 +63,7 @@ export function CustomFieldsRenderer({
         const rawValue = values[def.name];
         const stringValue = rawValue != null ? String(rawValue) : "";
 
-        const pickListOptions =
-          override?.pick_list_subset ?? def.pick_list_values ?? [];
+        const pickListOptions = override?.pick_list_subset ?? def.pick_list_values ?? [];
 
         return (
           <div key={def.id} className="grid gap-1.5">
@@ -79,12 +78,7 @@ export function CustomFieldsRenderer({
 
             {def.data_type === "picklist" ? (
               disabled ? (
-                <Input
-                  id={`cf-${def.name}`}
-                  value={stringValue}
-                  disabled
-                  readOnly
-                />
+                <Input id={`cf-${def.name}`} value={stringValue} disabled readOnly />
               ) : (
                 <Select
                   value={stringValue}
@@ -107,11 +101,7 @@ export function CustomFieldsRenderer({
               <Input
                 id={`cf-${def.name}`}
                 type={
-                  def.data_type === "number"
-                    ? "number"
-                    : def.data_type === "date"
-                    ? "date"
-                    : "text"
+                  def.data_type === "number" ? "number" : def.data_type === "date" ? "date" : "text"
                 }
                 value={stringValue}
                 onChange={(e) => handleChange(def.name, e.target.value)}
@@ -121,8 +111,8 @@ export function CustomFieldsRenderer({
                   def.data_type === "file"
                     ? "File upload not supported here"
                     : def.data_type === "batch_link"
-                    ? "Batch number or ID"
-                    : ""
+                      ? "Batch number or ID"
+                      : ""
                 }
               />
             )}

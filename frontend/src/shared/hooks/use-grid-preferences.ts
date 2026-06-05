@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
 import type { ColumnState } from "ag-grid-community";
 import type { AgGridReact } from "ag-grid-react";
+import { useCallback, useEffect, useRef } from "react";
 
 const STORAGE_KEY_PREFIX = "cv-grid-prefs-";
 
@@ -21,7 +21,7 @@ export function useGridPreferences(gridId: string) {
         // localStorage full or unavailable — ignore
       }
     },
-    [storageKey]
+    [storageKey],
   );
 
   const loadState = useCallback((): ColumnState[] | null => {
@@ -45,7 +45,7 @@ export function useGridPreferences(gridId: string) {
         }, 500);
       };
     },
-    [saveState]
+    [saveState],
   );
 
   const applyState = useCallback(
@@ -56,7 +56,7 @@ export function useGridPreferences(gridId: string) {
       if (!api) return;
       api.applyColumnState({ state: saved, applyOrder: true });
     },
-    [loadState]
+    [loadState],
   );
 
   useEffect(() => {

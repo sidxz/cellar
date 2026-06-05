@@ -1,26 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { TagTable } from "@/features/tagging/components/tag-table";
-import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
-import {
-  RefreshCw,
-  FileText,
-  Lock,
-  Download,
-  AlertTriangle,
-  Pencil,
-} from "lucide-react";
+import { Button } from "@/shared/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Download, FileText, Lock, Pencil, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 
+import { MemberName } from "@/shared/components/entity-name";
 import { useUpdateCampaignApiV1CampaignsCampaignIdPatch } from "@/shared/lib/api/campaigns/campaigns";
 import { showError } from "@/shared/lib/toast";
-import { MemberName } from "@/shared/components/entity-name";
+import { campaignKeys } from "../../hooks/use-campaigns";
 import type { CampaignResponse } from "../../types";
 import { CampaignStatusChip } from "../campaign-status-chip";
-import { campaignKeys } from "../../hooks/use-campaigns";
 
 interface HeaderStripProps {
   campaign: CampaignResponse;
@@ -168,8 +161,7 @@ export function HeaderStrip({
         <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2">
           {closedAt && (
             <span>
-              Closed{" "}
-              {/* inline: custom date format — dateStyle:"medium" + timeStyle:"short" */}
+              Closed {/* inline: custom date format — dateStyle:"medium" + timeStyle:"short" */}
               {new Date(closedAt).toLocaleString(undefined, {
                 dateStyle: "medium",
                 timeStyle: "short",
@@ -294,12 +286,7 @@ function DescriptionRow({
           >
             Cancel
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={commit}
-            disabled={mutation.isPending || !dirty}
-          >
+          <Button type="button" size="sm" onClick={commit} disabled={mutation.isPending || !dirty}>
             {mutation.isPending ? "Saving…" : "Save"}
           </Button>
         </div>
@@ -315,9 +302,7 @@ function DescriptionRow({
   // inline at the end of the text so the affordance is discoverable without
   // looking like a settings cog.
   if (!editable) {
-    return (
-      <p className="text-sm text-muted-foreground">{campaign.description}</p>
-    );
+    return <p className="text-sm text-muted-foreground">{campaign.description}</p>;
   }
 
   return (
@@ -329,9 +314,7 @@ function DescriptionRow({
     >
       <span
         className={`text-sm ${
-          hasDescription
-            ? "text-muted-foreground"
-            : "text-muted-foreground/60 italic"
+          hasDescription ? "text-muted-foreground" : "text-muted-foreground/60 italic"
         }`}
       >
         {hasDescription ? campaign.description : "Add a description…"}

@@ -1,17 +1,17 @@
 "use client";
 
-import { Fragment, useMemo } from "react";
-import { cn } from "@/shared/lib/utils";
+import { StructureThumbnail } from "@/shared/components/chemistry";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
-import { StructureThumbnail } from "@/shared/components/chemistry";
+import { WELL_EMPTY_COLOR, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
+import { cn } from "@/shared/lib/utils";
+import { Fragment, useMemo } from "react";
+import { plateCellSizePx, plateDimensionsTuple, rowLabel } from "../lib/plate-dimensions";
 import type { DoseUnit, PlateData, PlateMapWell } from "../types";
-import { plateDimensionsTuple, plateCellSizePx, rowLabel } from "../lib/plate-dimensions";
-import { WELL_TYPE_COLORS, WELL_EMPTY_COLOR } from "@/shared/lib/chart-colors";
 
 // ─── Color palettes ──────────────────────────────────────────────────────────
 
@@ -20,22 +20,22 @@ type ColorStops = ReadonlyArray<readonly [number, readonly [number, number, numb
 /** Diverging palette — signed scales (z-score, NEG/POS anchored).
  *  t=0 dark blue → 0.5 near-white → 1 near-black via red. */
 const DIVERGING_STOPS: ColorStops = [
-  [0.0, [30, 58, 138]],     // blue-900
-  [0.25, [96, 165, 250]],   // blue-400
-  [0.5, [248, 250, 252]],   // slate-50
-  [0.75, [220, 38, 38]],    // red-600
-  [1.0, [20, 5, 5]],        // near-black
+  [0.0, [30, 58, 138]], // blue-900
+  [0.25, [96, 165, 250]], // blue-400
+  [0.5, [248, 250, 252]], // slate-50
+  [0.75, [220, 38, 38]], // red-600
+  [1.0, [20, 5, 5]], // near-black
 ];
 
 /** Sequential palette — unsigned magnitude (dose, raw counts).
  *  Pale → red → dark red. Reads as "low → high" without implying a
  *  meaningful midpoint. */
 const SEQUENTIAL_STOPS: ColorStops = [
-  [0.0, [254, 242, 242]],   // red-50
-  [0.25, [252, 165, 165]],  // red-300
-  [0.5, [239, 68, 68]],     // red-500
-  [0.75, [185, 28, 28]],    // red-700
-  [1.0, [69, 10, 10]],      // red-950
+  [0.0, [254, 242, 242]], // red-50
+  [0.25, [252, 165, 165]], // red-300
+  [0.5, [239, 68, 68]], // red-500
+  [0.75, [185, 28, 28]], // red-700
+  [1.0, [69, 10, 10]], // red-950
 ];
 
 export type Palette = "diverging" | "sequential";
@@ -144,13 +144,9 @@ function WellTooltipContent({
           {well.well_type.replace(/_/g, " ")}
         </span>
       </div>
-      {well.batch_number && (
-        <p className="font-mono text-[11px] truncate">{well.batch_number}</p>
-      )}
+      {well.batch_number && <p className="font-mono text-[11px] truncate">{well.batch_number}</p>}
       {aliases.length > 0 && (
-        <p className="text-[10px] italic opacity-70 line-clamp-2">
-          {aliases.join(" · ")}
-        </p>
+        <p className="text-[10px] italic opacity-70 line-clamp-2">{aliases.join(" · ")}</p>
       )}
       {well.dose != null && (
         <p className="text-[10px]">
@@ -159,17 +155,13 @@ function WellTooltipContent({
       )}
       {rawValue != null && (
         <p className="text-[11px]">
-          Raw:{" "}
-          <span className="font-mono tabular-nums">{rawValue.toFixed(3)}</span>
+          Raw: <span className="font-mono tabular-nums">{rawValue.toFixed(3)}</span>
           {rawUnit ? ` ${rawUnit}` : ""}
         </p>
       )}
       {computedValue != null && (
         <p className="text-[11px]">
-          {computedUnit}:{" "}
-          <span className="font-mono tabular-nums">
-            {computedValue.toFixed(3)}
-          </span>
+          {computedUnit}: <span className="font-mono tabular-nums">{computedValue.toFixed(3)}</span>
         </p>
       )}
       {well.smiles && (
@@ -233,8 +225,7 @@ export function PlateValueHeatmap({
     return m;
   }, [plate.wells]);
 
-  const labelSize =
-    size >= 28 ? "text-xs" : size >= 18 ? "text-[10px]" : "text-[8px]";
+  const labelSize = size >= 28 ? "text-xs" : size >= 18 ? "text-[10px]" : "text-[8px]";
 
   function getWellStyle(well: PlateMapWell | undefined): {
     background: string;
@@ -365,7 +356,9 @@ interface ColorScaleLegendProps {
   /** Which well types actually appear on this plate. Drives the swatch
    *  key beneath the gradient; types not present are omitted so the key
    *  doesn't advertise outlines the chemist will never see. */
-  controlTypesPresent?: ReadonlyArray<"negative_control" | "positive_control" | "blank" | "reference">;
+  controlTypesPresent?: ReadonlyArray<
+    "negative_control" | "positive_control" | "blank" | "reference"
+  >;
   className?: string;
 }
 
@@ -431,58 +424,37 @@ export function ColorScaleLegend({
         {scale.kind === "zscore" ? (
           <>
             <span>
-              −2σ{" "}
-              <span className="font-mono tabular-nums">
-                {scale.low.toFixed(2)}
-              </span>
+              −2σ <span className="font-mono tabular-nums">{scale.low.toFixed(2)}</span>
               {u}
             </span>
             {scale.zMean != null && (
               <span>
-                μ{" "}
-                <span className="font-mono tabular-nums">
-                  {scale.zMean.toFixed(2)}
-                </span>
+                μ <span className="font-mono tabular-nums">{scale.zMean.toFixed(2)}</span>
               </span>
             )}
             <span>
-              +2σ{" "}
-              <span className="font-mono tabular-nums">
-                {scale.high.toFixed(2)}
-              </span>
+              +2σ <span className="font-mono tabular-nums">{scale.high.toFixed(2)}</span>
               {u}
             </span>
           </>
         ) : scale.controlAnchored ? (
           <>
             <span>
-              NEG{" "}
-              <span className="font-mono tabular-nums">
-                {scale.low.toFixed(2)}
-              </span>
+              NEG <span className="font-mono tabular-nums">{scale.low.toFixed(2)}</span>
               {u}
             </span>
             <span>
-              POS{" "}
-              <span className="font-mono tabular-nums">
-                {scale.high.toFixed(2)}
-              </span>
+              POS <span className="font-mono tabular-nums">{scale.high.toFixed(2)}</span>
               {u}
             </span>
           </>
         ) : (
           <>
             <span>
-              min{" "}
-              <span className="font-mono tabular-nums">
-                {scale.low.toFixed(2)}
-              </span>
+              min <span className="font-mono tabular-nums">{scale.low.toFixed(2)}</span>
             </span>
             <span>
-              max{" "}
-              <span className="font-mono tabular-nums">
-                {scale.high.toFixed(2)}
-              </span>
+              max <span className="font-mono tabular-nums">{scale.high.toFixed(2)}</span>
             </span>
           </>
         )}

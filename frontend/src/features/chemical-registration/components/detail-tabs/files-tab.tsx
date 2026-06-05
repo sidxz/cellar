@@ -1,6 +1,6 @@
 "use client";
 
-import { FileUploadZone, AttachmentList } from "@/features/attachment";
+import { AttachmentList, FileUploadZone } from "@/features/attachment";
 
 interface FilesTabProps {
   moleculeId: string;

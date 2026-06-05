@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,7 +45,11 @@ export interface UpdateRegistrationFormInput {
 
 const REGISTRATION_FORMS_KEY = ["registration-forms"];
 
-const formHooks = createCrudHooks<RegistrationForm, CreateRegistrationFormInput, UpdateRegistrationFormInput>({
+const formHooks = createCrudHooks<
+  RegistrationForm,
+  CreateRegistrationFormInput,
+  UpdateRegistrationFormInput
+>({
   entityName: "Registration form",
   baseUrl: "/api/v1/registration-forms",
   queryKey: REGISTRATION_FORMS_KEY,

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess, showError } from "@/shared/lib/toast";
+import { showError, showSuccess } from "@/shared/lib/toast";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RegisterMoleculeInput, RegistrationResponse } from "../types";
 import type {
   BulkProgress,
@@ -109,10 +109,7 @@ export function useStartBulkRegistration() {
         formData.append("originating_org_id", originating_org_id);
       }
       if (typeof create_batch_on_duplicate === "boolean") {
-        formData.append(
-          "create_batch_on_duplicate",
-          String(create_batch_on_duplicate)
-        );
+        formData.append("create_batch_on_duplicate", String(create_batch_on_duplicate));
       }
       return customInstance<{ workflow_id: string; status: string }>({
         url: "/api/v1/bulk-registrations",
@@ -131,10 +128,7 @@ export function useStartBulkRegistration() {
 }
 
 /** GET /api/v1/bulk-registrations/{workflowId} — polls every 3 s while job is active. */
-export function useBulkRegistrationStatus(
-  workflowId: string | null,
-  enabled: boolean
-) {
+export function useBulkRegistrationStatus(workflowId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: [...BULK_REG_KEY, workflowId],
     queryFn: () =>
@@ -171,7 +165,7 @@ export function useConfirmMerges(workflowId: string | null) {
       qc.invalidateQueries({ queryKey: MOLECULES_KEY });
       qc.invalidateQueries({ queryKey: BULK_REG_KEY });
       showSuccess(
-        `Merges processed: ${data.confirmed_count} confirmed, ${data.rejected_count} rejected`
+        `Merges processed: ${data.confirmed_count} confirmed, ${data.rejected_count} rejected`,
       );
     },
     onError: (err: Error) => {

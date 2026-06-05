@@ -1,6 +1,5 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useProjects } from "@/features/research-organization/hooks/use-projects";
 import { useOntologySlots } from "@/features/workspace-config/hooks/use-ontology-slots";
 import {
@@ -33,9 +32,10 @@ import { Separator } from "@/shared/components/ui/separator";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useFieldArray, useForm, Controller } from "react-hook-form";
+import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
 import { useTargets } from "../hooks/use-targets";
@@ -60,8 +60,8 @@ import {
   READOUT_DATA_TYPE_LABELS,
   type ReadoutNormalization,
 } from "../types";
-import { InterceptsEditor } from "./intercepts-editor";
 import { FormulaInput } from "./formula-input";
+import { InterceptsEditor } from "./intercepts-editor";
 import { PickListEditor } from "./pick-list-editor";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 
@@ -202,16 +202,23 @@ export function CreateProtocolDialog({
     },
   });
 
-  const { fields: readoutFields, append: appendReadout, remove: removeReadout } = useFieldArray({
+  const {
+    fields: readoutFields,
+    append: appendReadout,
+    remove: removeReadout,
+  } = useFieldArray({
     control: form.control,
     name: "readouts",
   });
 
-  const { fields: conditionFields, append: appendCondition, remove: removeCondition } =
-    useFieldArray({
-      control: form.control,
-      name: "conditions",
-    });
+  const {
+    fields: conditionFields,
+    append: appendCondition,
+    remove: removeCondition,
+  } = useFieldArray({
+    control: form.control,
+    name: "conditions",
+  });
 
   const readoutValues = form.watch("readouts");
 
@@ -340,9 +347,7 @@ export function CreateProtocolDialog({
             // curve_type. Send only when the chemist explicitly
             // configured >=1 intercept so we don't drown the create
             // payload in a single-default row.
-            ...(rd.dr_intercepts.length > 0
-              ? { intercepts: rd.dr_intercepts }
-              : {}),
+            ...(rd.dr_intercepts.length > 0 ? { intercepts: rd.dr_intercepts } : {}),
           } as CreateReadoutDefinitionInput["dose_response_config"];
         }
         return base;
@@ -402,14 +407,9 @@ export function CreateProtocolDialog({
           {/* Basic info */}
           <div className="grid gap-2">
             <Label>Name</Label>
-            <Input
-              placeholder="e.g., EGFR Kinase IC50"
-              {...form.register("name")}
-            />
+            <Input placeholder="e.g., EGFR Kinase IC50" {...form.register("name")} />
             {form.formState.errors.name && (
-              <p className="text-[11px] text-destructive">
-                {form.formState.errors.name.message}
-              </p>
+              <p className="text-[11px] text-destructive">{form.formState.errors.name.message}</p>
             )}
           </div>
 
@@ -553,10 +553,7 @@ export function CreateProtocolDialog({
 
           <div className="grid gap-2">
             <Label>Description</Label>
-            <Textarea
-              placeholder="Optional description..."
-              {...form.register("description")}
-            />
+            <Textarea placeholder="Optional description..." {...form.register("description")} />
           </div>
 
           {/* Ontology Annotations */}
@@ -728,11 +725,7 @@ export function CreateProtocolDialog({
                             control={form.control}
                             name={`readouts.${index}.is_calculated`}
                             render={({ field: f }) => (
-                              <Switch
-                                checked={f.value}
-                                onCheckedChange={f.onChange}
-                                size="sm"
-                              />
+                              <Switch checked={f.value} onCheckedChange={f.onChange} size="sm" />
                             )}
                           />
                           <Label className="text-xs">Calculated</Label>
@@ -809,10 +802,7 @@ export function CreateProtocolDialog({
                                               other.data_type === "numeric",
                                           )
                                           .map((other) => (
-                                            <SelectItem
-                                              key={other.name}
-                                              value={other.name.trim()}
-                                            >
+                                            <SelectItem key={other.name} value={other.name.trim()}>
                                               {other.name}
                                             </SelectItem>
                                           ))}
@@ -840,10 +830,7 @@ export function CreateProtocolDialog({
                                               other.data_type === "numeric",
                                           )
                                           .map((other) => (
-                                            <SelectItem
-                                              key={other.name}
-                                              value={other.name.trim()}
-                                            >
+                                            <SelectItem key={other.name} value={other.name.trim()}>
                                               {other.name}
                                             </SelectItem>
                                           ))}
@@ -867,8 +854,8 @@ export function CreateProtocolDialog({
                                   <div className="flex items-baseline justify-between">
                                     <Label className="text-xs font-medium">Intercepts</Label>
                                     <span className="text-[11px] text-muted-foreground">
-                                      One row per intercept (EC50, EC90, IC10, …) — all derived
-                                      from the same Hill fit
+                                      One row per intercept (EC50, EC90, IC10, …) — all derived from
+                                      the same Hill fit
                                     </span>
                                   </div>
                                   <InterceptsEditor
@@ -1015,10 +1002,7 @@ export function CreateProtocolDialog({
                   </div>
                   <div className="grid gap-1 w-[100px]">
                     <Label className="text-xs">Unit</Label>
-                    <Input
-                      placeholder="optional"
-                      {...form.register(`conditions.${index}.unit`)}
-                    />
+                    <Input placeholder="optional" {...form.register(`conditions.${index}.unit`)} />
                   </div>
                   <Button
                     type="button"

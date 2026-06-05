@@ -44,18 +44,11 @@ const DISABLED_TOOLTIP =
  * "Single run per compound" label that points the chemist at the runs
  * filter via tooltip.
  */
-export function AggregationControl({
-  mode,
-  onChange,
-  disabled,
-}: AggregationControlProps) {
+export function AggregationControl({ mode, onChange, disabled }: AggregationControlProps) {
   if (disabled) {
     return (
       <div className="inline-flex items-center gap-1.5 text-xs">
-        <span
-          className="text-muted-foreground italic"
-          title={DISABLED_TOOLTIP}
-        >
+        <span className="text-muted-foreground italic" title={DISABLED_TOOLTIP}>
           Single run per compound
         </span>
       </div>

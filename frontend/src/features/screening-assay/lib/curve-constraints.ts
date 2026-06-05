@@ -5,9 +5,9 @@
  * and server components.
  */
 
-import { PERCENT_FIT_RANGES } from "./readout-constants";
-import { isPercentNormalization } from "./dose-response-math";
 import type { DoseResponseConfig, DoseResponseCurve } from "../types";
+import { isPercentNormalization } from "./dose-response-math";
+import { PERCENT_FIT_RANGES } from "./readout-constants";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 

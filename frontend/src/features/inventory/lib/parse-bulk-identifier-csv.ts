@@ -46,9 +46,7 @@ export async function parseBulkIdentifierCsv(file: File): Promise<ParseResult> {
           const seqRaw = (raw.cellar_batch_sequence ?? "").trim();
           const seq = seqRaw ? Number.parseInt(seqRaw, 10) : null;
           if (seqRaw && Number.isNaN(seq!)) {
-            errors.push(
-              `Row ${idx + 1}: cellar_batch_sequence "${seqRaw}" is not an integer`
-            );
+            errors.push(`Row ${idx + 1}: cellar_batch_sequence "${seqRaw}" is not an integer`);
             return;
           }
           rows.push({
@@ -79,5 +77,5 @@ export function generateCsvTemplate(): string {
     "CC-000001-001,,,SACC-0001-001,external_lot,",
     ",CC-000002,1,SACC-0002-A,external_lot,",
   ];
-  return [header, ...examples].join("\n") + "\n";
+  return `${[header, ...examples].join("\n")}\n`;
 }

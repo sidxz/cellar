@@ -1,8 +1,8 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { getRDKit } from "@/shared/lib/rdkit/rdkit-loader";
+import { memo, useEffect, useState } from "react";
 
 interface StructureRendererProps {
   /** SMILES or CXSMILES string */
@@ -58,7 +58,7 @@ function StructureRendererInner({
 
         if (highlightSmarts) {
           const qmol = rdkit.get_qmol(highlightSmarts);
-          if (qmol && qmol.is_valid()) {
+          if (qmol?.is_valid()) {
             const matchJson = mol.get_substruct_match(qmol);
             svgStr = mol.get_svg_with_highlights(matchJson);
             qmol.delete();

@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useMoleculePlates } from "@/features/inventory/hooks/use-plates";
-import { plateTypeLabels, plateStatusLabels } from "@/features/inventory/types/plates";
+import { plateStatusLabels, plateTypeLabels } from "@/features/inventory/types/plates";
 import { Badge } from "@/shared/components/ui/badge";
+import Link from "next/link";
 
 interface PlatesTabProps {
   moleculeId: string;
@@ -18,9 +18,7 @@ export function PlatesTab({ moleculeId }: PlatesTabProps) {
 
   if (!entries || entries.length === 0) {
     return (
-      <div className="py-8 text-center text-muted-foreground">
-        No plates contain this compound
-      </div>
+      <div className="py-8 text-center text-muted-foreground">No plates contain this compound</div>
     );
   }
 
@@ -41,7 +39,10 @@ export function PlatesTab({ moleculeId }: PlatesTabProps) {
           </thead>
           <tbody>
             {entries.map((entry) => (
-              <tr key={`${entry.plate_id}-${entry.well_position}`} className="border-b last:border-0">
+              <tr
+                key={`${entry.plate_id}-${entry.well_position}`}
+                className="border-b last:border-0"
+              >
                 <td className="px-4 py-2">
                   <Link
                     href={`/inventory/plates/${entry.plate_id}`}
@@ -59,12 +60,14 @@ export function PlatesTab({ moleculeId }: PlatesTabProps) {
                 </td>
                 <td className="px-4 py-2">
                   <Badge variant="outline">
-                    {plateTypeLabels[entry.plate_type as keyof typeof plateTypeLabels] ?? entry.plate_type}
+                    {plateTypeLabels[entry.plate_type as keyof typeof plateTypeLabels] ??
+                      entry.plate_type}
                   </Badge>
                 </td>
                 <td className="px-4 py-2">
                   <Badge variant="secondary">
-                    {plateStatusLabels[entry.status as keyof typeof plateStatusLabels] ?? entry.status}
+                    {plateStatusLabels[entry.status as keyof typeof plateStatusLabels] ??
+                      entry.status}
                   </Badge>
                 </td>
                 <td className="px-4 py-2 text-muted-foreground">

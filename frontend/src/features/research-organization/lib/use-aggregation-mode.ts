@@ -80,9 +80,7 @@ export function aggregationModeToWire(mode: AggregationMode): SelectionRule {
  * Walks into `group` criteria recursively because activity criteria can
  * nest inside boolean groups.
  */
-export function computeScopeForcesSingleRun(
-  criteria: SearchCriterion[],
-): boolean {
+export function computeScopeForcesSingleRun(criteria: SearchCriterion[]): boolean {
   let sawActivity = false;
   let allNarrow = true;
 
@@ -116,10 +114,7 @@ function isSingleRunScope(
   return false;
 }
 
-type ActivityRunScope = Extract<
-  SearchCriterion,
-  { type: "activity" }
->["run_scope"];
+type ActivityRunScope = Extract<SearchCriterion, { type: "activity" }>["run_scope"];
 
 /**
  * Walk the criteria tree and collect each activity criterion's `run_scope`
@@ -167,7 +162,7 @@ export function collectRunScopesByProtocol(
 type Listener = () => void;
 const _listeners = new Set<Listener>();
 function notifySubscribers() {
-  _listeners.forEach((l) => l());
+  for (const l of _listeners) l();
 }
 
 function readModeFromWindow(): AggregationMode {

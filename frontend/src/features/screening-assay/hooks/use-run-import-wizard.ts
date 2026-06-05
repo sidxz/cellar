@@ -1,26 +1,26 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
+import { showError, showSuccess } from "@/shared/lib/toast";
+import {
+  type MappingDraft,
+  applyTemplateToDraft,
+  emptyDraft,
+  pickBestTemplate,
+  suggestionToInitialDraft,
+} from "../lib/run-import-mapping";
 import { useProtocol } from "./use-protocols";
 import {
-  useCreateRunImportTemplate,
-  useImportRunFile,
-  usePreviewRunFile,
-  useRepreviewRunFile,
-  useRunImportTemplates,
   type ColumnMappingPayload,
   type ImportRole,
   type PreviewRunFileResponse,
   type ReadoutColumnPayload,
   type RunImportTemplate,
+  useCreateRunImportTemplate,
+  useImportRunFile,
+  usePreviewRunFile,
+  useRepreviewRunFile,
+  useRunImportTemplates,
 } from "./use-run-import";
-import {
-  applyTemplateToDraft,
-  emptyDraft,
-  pickBestTemplate,
-  suggestionToInitialDraft,
-  type MappingDraft,
-} from "../lib/run-import-mapping";
-import { showError, showSuccess } from "@/shared/lib/toast";
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -306,16 +306,15 @@ export function useRunImportWizard({
       {
         preview_id: preview.preview_id,
         mapping,
-        compound_batch_overrides: Object.entries(compoundPicks).map(
-          ([molecule_id, batch_id]) => ({ molecule_id, batch_id }),
-        ),
+        compound_batch_overrides: Object.entries(compoundPicks).map(([molecule_id, batch_id]) => ({
+          molecule_id,
+          batch_id,
+        })),
         auto_create_unmatched_batches: autoCreateUnmatchedBatches,
       },
       {
         onSuccess: (data) => {
-          showSuccess(
-            `Imported ${data.wells_created} wells / ${data.readouts_created} readouts`,
-          );
+          showSuccess(`Imported ${data.wells_created} wells / ${data.readouts_created} readouts`);
           if (saveAsTemplate && templateName.trim()) {
             const column_mapping: Record<string, unknown> = {
               well: mapping.well,
@@ -335,7 +334,16 @@ export function useRunImportWizard({
         onError: () => showError("Import failed"),
       },
     );
-  }, [preview, buildMapping, compoundPicks, autoCreateUnmatchedBatches, importMutation, saveAsTemplate, templateName, createTemplate]);
+  }, [
+    preview,
+    buildMapping,
+    compoundPicks,
+    autoCreateUnmatchedBatches,
+    importMutation,
+    saveAsTemplate,
+    templateName,
+    createTemplate,
+  ]);
 
   // ─── Return ──────────────────────────────────────────────────────────────────
   return {

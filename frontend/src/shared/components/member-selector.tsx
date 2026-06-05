@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { Input } from "@/shared/components/ui/input";
+import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
+import { useState } from "react";
 
 interface MemberSelectorProps {
   selectedId: string | null;
@@ -22,9 +22,7 @@ export function MemberSelector({
 }: MemberSelectorProps) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const { data: members, isLoading } = useWorkspaceMembers(
-    query.length >= 1 ? query : undefined
-  );
+  const { data: members, isLoading } = useWorkspaceMembers(query.length >= 1 ? query : undefined);
 
   const selected = members?.find((m) => m.user_id === selectedId);
 
@@ -54,9 +52,7 @@ export function MemberSelector({
       )}
       {open && !selectedId && (
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-48 overflow-y-auto">
-          {isLoading && (
-            <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
-          )}
+          {isLoading && <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>}
           {!isLoading && members && members.length === 0 && (
             <div className="px-3 py-2 text-sm text-muted-foreground">No members found</div>
           )}

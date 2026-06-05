@@ -39,8 +39,7 @@ interface ReportConfigState {
 export const useReportConfig = create<ReportConfigState>((set, get) => ({
   config: DEFAULT_CONFIG,
   setConfig: (config) => set({ config }),
-  updateConfig: (partial) =>
-    set((state) => ({ config: { ...state.config, ...partial } })),
+  updateConfig: (partial) => set((state) => ({ config: { ...state.config, ...partial } })),
   setVisibleFields: (fields) =>
     set((state) => ({
       config: {

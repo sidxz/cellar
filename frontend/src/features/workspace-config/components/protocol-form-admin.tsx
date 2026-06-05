@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  PROTOCOL_TYPE_LABELS,
+  READOUT_AGGREGATION_LABELS,
+  READOUT_DATA_TYPE_LABELS,
+  READOUT_NORMALIZATION_LABELS,
+} from "@/features/screening-assay/types";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +27,6 @@ import {
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Switch } from "@/shared/components/ui/switch";
-import { Textarea } from "@/shared/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -32,20 +35,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { Textarea } from "@/shared/components/ui/textarea";
+import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
-  PROTOCOL_TYPE_LABELS,
-  READOUT_DATA_TYPE_LABELS,
-  READOUT_AGGREGATION_LABELS,
-  READOUT_NORMALIZATION_LABELS,
-} from "@/features/screening-assay/types";
-import {
-  useProtocolForms,
-  useCreateProtocolForm,
-  useDeleteProtocolForm,
-  useUpdateProtocolForm,
   type CreateProtocolFormInput,
   type ProtocolForm,
   type UpdateProtocolFormInput,
+  useCreateProtocolForm,
+  useDeleteProtocolForm,
+  useProtocolForms,
+  useUpdateProtocolForm,
 } from "../hooks/use-protocol-forms";
 
 // ---------------------------------------------------------------------------
@@ -180,9 +180,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Protocol Form" : "New Protocol Form"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Protocol Form" : "New Protocol Form"}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
@@ -227,11 +225,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
             <Label htmlFor="form-default" className="cursor-pointer">
               Default Form
             </Label>
-            <Switch
-              id="form-default"
-              checked={isDefault}
-              onCheckedChange={setIsDefault}
-            />
+            <Switch id="form-default" checked={isDefault} onCheckedChange={setIsDefault} />
           </div>
 
           {/* Readout Templates */}
@@ -257,7 +251,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                       value={row.name}
                       onChange={(e) =>
                         setReadoutRows((prev) =>
-                          prev.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r))
+                          prev.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r)),
                         )
                       }
                       placeholder="e.g., % Inhibition"
@@ -270,14 +264,18 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                       value={row.data_type}
                       onValueChange={(v) =>
                         setReadoutRows((prev) =>
-                          prev.map((r, i) => (i === idx ? { ...r, data_type: v } : r))
+                          prev.map((r, i) => (i === idx ? { ...r, data_type: v } : r)),
                         )
                       }
                     >
-                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         {Object.entries(READOUT_DATA_TYPE_LABELS).map(([v, l]) => (
-                          <SelectItem key={v} value={v}>{l}</SelectItem>
+                          <SelectItem key={v} value={v}>
+                            {l}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -288,7 +286,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                       value={row.unit}
                       onChange={(e) =>
                         setReadoutRows((prev) =>
-                          prev.map((r, i) => (i === idx ? { ...r, unit: e.target.value } : r))
+                          prev.map((r, i) => (i === idx ? { ...r, unit: e.target.value } : r)),
                         )
                       }
                       placeholder="nM"
@@ -301,14 +299,18 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                       value={row.aggregation}
                       onValueChange={(v) =>
                         setReadoutRows((prev) =>
-                          prev.map((r, i) => (i === idx ? { ...r, aggregation: v } : r))
+                          prev.map((r, i) => (i === idx ? { ...r, aggregation: v } : r)),
                         )
                       }
                     >
-                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         {Object.entries(READOUT_AGGREGATION_LABELS).map(([v, l]) => (
-                          <SelectItem key={v} value={v}>{l}</SelectItem>
+                          <SelectItem key={v} value={v}>
+                            {l}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -319,14 +321,18 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                       value={row.normalization}
                       onValueChange={(v) =>
                         setReadoutRows((prev) =>
-                          prev.map((r, i) => (i === idx ? { ...r, normalization: v } : r))
+                          prev.map((r, i) => (i === idx ? { ...r, normalization: v } : r)),
                         )
                       }
                     >
-                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         {Object.entries(READOUT_NORMALIZATION_LABELS).map(([v, l]) => (
-                          <SelectItem key={v} value={v}>{l}</SelectItem>
+                          <SelectItem key={v} value={v}>
+                            {l}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -351,7 +357,8 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
               <Label className="text-sm font-semibold">
-                Conditions <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                Conditions{" "}
+                <span className="text-xs font-normal text-muted-foreground">(optional)</span>
               </Label>
               <Button
                 type="button"
@@ -373,7 +380,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                         value={row.name}
                         onChange={(e) =>
                           setConditionRows((prev) =>
-                            prev.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r))
+                            prev.map((r, i) => (i === idx ? { ...r, name: e.target.value } : r)),
                           )
                         }
                         placeholder="e.g., Cell Line"
@@ -386,11 +393,13 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                         value={row.data_type}
                         onValueChange={(v) =>
                           setConditionRows((prev) =>
-                            prev.map((r, i) => (i === idx ? { ...r, data_type: v } : r))
+                            prev.map((r, i) => (i === idx ? { ...r, data_type: v } : r)),
                           )
                         }
                       >
-                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="text">Text</SelectItem>
                           <SelectItem value="numeric">Numeric</SelectItem>
@@ -404,7 +413,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                         value={row.unit}
                         onChange={(e) =>
                           setConditionRows((prev) =>
-                            prev.map((r, i) => (i === idx ? { ...r, unit: e.target.value } : r))
+                            prev.map((r, i) => (i === idx ? { ...r, unit: e.target.value } : r)),
                           )
                         }
                         placeholder="optional"
@@ -464,19 +473,14 @@ function DeleteDialog({ form, onClose }: DeleteDialogProps) {
           <DialogTitle>Delete Protocol Form?</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Permanently delete{" "}
-          <span className="font-medium text-foreground">{form?.name}</span>?
-          This action cannot be undone.
+          Permanently delete <span className="font-medium text-foreground">{form?.name}</span>? This
+          action cannot be undone.
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-            disabled={deleteMutation.isPending}
-          >
+          <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>
@@ -524,22 +528,18 @@ function FormTable({ entries, onEdit, onDelete }: FormTableProps) {
                 <div>
                   <span className="font-medium">{entry.name}</span>
                   {entry.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {entry.description}
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{entry.description}</p>
                   )}
                 </div>
               </TableCell>
               <TableCell>
                 {entry.protocol_type
-                  ? PROTOCOL_TYPE_LABELS[
+                  ? (PROTOCOL_TYPE_LABELS[
                       entry.protocol_type as keyof typeof PROTOCOL_TYPE_LABELS
-                    ] ?? entry.protocol_type
+                    ] ?? entry.protocol_type)
                   : "\u2014"}
               </TableCell>
-              <TableCell className="tabular-nums">
-                {entry.readout_templates.length}
-              </TableCell>
+              <TableCell className="tabular-nums">{entry.readout_templates.length}</TableCell>
               <TableCell>
                 {entry.is_default ? (
                   <Badge variant="secondary" className="text-xs">
@@ -551,18 +551,10 @@ function FormTable({ entries, onEdit, onDelete }: FormTableProps) {
               </TableCell>
               <TableCell>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEdit(entry)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onEdit(entry)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDelete(entry)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onDelete(entry)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
@@ -616,19 +608,11 @@ export function ProtocolFormAdmin() {
             ))}
           </div>
         ) : (
-          <FormTable
-            entries={entries ?? []}
-            onEdit={openEdit}
-            onDelete={setDeleting}
-          />
+          <FormTable entries={entries ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}
       </div>
 
-      <FormDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editing={editing}
-      />
+      <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
       <DeleteDialog form={deleting} onClose={() => setDeleting(null)} />
     </>

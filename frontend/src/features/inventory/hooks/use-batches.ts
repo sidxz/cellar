@@ -1,12 +1,18 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
-import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { showSuccess, showError } from "@/shared/lib/toast";
 import { renderToast } from "@/features/inventory/components/mirror-summary-toast";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { CreateBatchResponse } from "@/shared/lib/api/model/createBatchResponse";
-import type { Batch, BatchListItem, CreateBatchInput, PaginatedResponse, UpdateBatchInput } from "../types";
+import { showError, showSuccess } from "@/shared/lib/toast";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type {
+  Batch,
+  BatchListItem,
+  CreateBatchInput,
+  PaginatedResponse,
+  UpdateBatchInput,
+} from "../types";
 
 const batchHooks = createCrudHooks<Batch, CreateBatchInput, UpdateBatchInput>({
   entityName: "Batch",
@@ -80,7 +86,10 @@ export function useBatchesGlobal(params: BatchGlobalParams = {}) {
     reqParams.expiring_within_days = String(params.expiring_within_days);
   if (params.cursor) reqParams.cursor = params.cursor;
   if (params.page_size) reqParams.page_size = String(params.page_size);
-  if (tags) { reqParams.tags = tags; reqParams.tag_logic = params.tagLogic ?? "any"; }
+  if (tags) {
+    reqParams.tags = tags;
+    reqParams.tag_logic = params.tagLogic ?? "any";
+  }
 
   return useQuery({
     queryKey: ["batches", "global", reqParams],

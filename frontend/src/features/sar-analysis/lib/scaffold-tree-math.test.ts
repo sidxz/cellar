@@ -1,24 +1,41 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import { NO_SCAFFOLD_SENTINEL, type ScaffoldTreeResult } from "../types/scaffold-tree";
 import {
   buildChildIndex,
   buildSubtreeMolIdMap,
   collectSubtreeMolIds,
   rootNodes,
 } from "./scaffold-tree-math";
-import {
-  NO_SCAFFOLD_SENTINEL,
-  type ScaffoldTreeResult,
-} from "../types/scaffold-tree";
 
 const tree: ScaffoldTreeResult = {
   nodes: [
-    { scaffold_smiles: "c1ccccc1",          molecule_ids: ["m1"],       molecule_count: 1, subtree_molecule_count: 3 },
-    { scaffold_smiles: "c1ccc2ccccc2c1",    molecule_ids: ["m2"],       molecule_count: 1, subtree_molecule_count: 2 },
-    { scaffold_smiles: "c1ccc2cc(N)ccc2c1", molecule_ids: ["m3"],       molecule_count: 1, subtree_molecule_count: 1 },
-    { scaffold_smiles: NO_SCAFFOLD_SENTINEL, molecule_ids: ["m4","m5"], molecule_count: 2, subtree_molecule_count: 2 },
+    {
+      scaffold_smiles: "c1ccccc1",
+      molecule_ids: ["m1"],
+      molecule_count: 1,
+      subtree_molecule_count: 3,
+    },
+    {
+      scaffold_smiles: "c1ccc2ccccc2c1",
+      molecule_ids: ["m2"],
+      molecule_count: 1,
+      subtree_molecule_count: 2,
+    },
+    {
+      scaffold_smiles: "c1ccc2cc(N)ccc2c1",
+      molecule_ids: ["m3"],
+      molecule_count: 1,
+      subtree_molecule_count: 1,
+    },
+    {
+      scaffold_smiles: NO_SCAFFOLD_SENTINEL,
+      molecule_ids: ["m4", "m5"],
+      molecule_count: 2,
+      subtree_molecule_count: 2,
+    },
   ],
   edges: [
-    { parent_smiles: "c1ccccc1",       child_smiles: "c1ccc2ccccc2c1" },
+    { parent_smiles: "c1ccccc1", child_smiles: "c1ccc2ccccc2c1" },
     { parent_smiles: "c1ccc2ccccc2c1", child_smiles: "c1ccc2cc(N)ccc2c1" },
   ],
   stats: { node_count: 4, elapsed_ms: 0, cache_hit: false },
@@ -62,9 +79,7 @@ describe("scaffold-tree-math", () => {
       expect(new Set(map.get("c1ccccc1"))).toEqual(new Set(["m1", "m2", "m3"]));
       expect(new Set(map.get("c1ccc2ccccc2c1"))).toEqual(new Set(["m2", "m3"]));
       expect(map.get("c1ccc2cc(N)ccc2c1")).toEqual(["m3"]);
-      expect(new Set(map.get(NO_SCAFFOLD_SENTINEL))).toEqual(
-        new Set(["m4", "m5"]),
-      );
+      expect(new Set(map.get(NO_SCAFFOLD_SENTINEL))).toEqual(new Set(["m4", "m5"]));
     });
 
     it("matches collectSubtreeMolIds for every node", () => {
@@ -80,9 +95,24 @@ describe("scaffold-tree-math", () => {
       const diamond: ScaffoldTreeResult = {
         nodes: [
           { scaffold_smiles: "A", molecule_ids: [], molecule_count: 0, subtree_molecule_count: 3 },
-          { scaffold_smiles: "B", molecule_ids: ["m1"], molecule_count: 1, subtree_molecule_count: 2 },
-          { scaffold_smiles: "C", molecule_ids: ["m2"], molecule_count: 1, subtree_molecule_count: 2 },
-          { scaffold_smiles: "D", molecule_ids: ["m3"], molecule_count: 1, subtree_molecule_count: 1 },
+          {
+            scaffold_smiles: "B",
+            molecule_ids: ["m1"],
+            molecule_count: 1,
+            subtree_molecule_count: 2,
+          },
+          {
+            scaffold_smiles: "C",
+            molecule_ids: ["m2"],
+            molecule_count: 1,
+            subtree_molecule_count: 2,
+          },
+          {
+            scaffold_smiles: "D",
+            molecule_ids: ["m3"],
+            molecule_count: 1,
+            subtree_molecule_count: 1,
+          },
         ],
         edges: [
           { parent_smiles: "A", child_smiles: "B" },
@@ -101,8 +131,18 @@ describe("scaffold-tree-math", () => {
     it("terminates and stays sane on a cyclic edge set (DAGs are expected; this is a guard)", () => {
       const cyclic: ScaffoldTreeResult = {
         nodes: [
-          { scaffold_smiles: "X", molecule_ids: ["m1"], molecule_count: 1, subtree_molecule_count: 2 },
-          { scaffold_smiles: "Y", molecule_ids: ["m2"], molecule_count: 1, subtree_molecule_count: 2 },
+          {
+            scaffold_smiles: "X",
+            molecule_ids: ["m1"],
+            molecule_count: 1,
+            subtree_molecule_count: 2,
+          },
+          {
+            scaffold_smiles: "Y",
+            molecule_ids: ["m2"],
+            molecule_count: 1,
+            subtree_molecule_count: 2,
+          },
         ],
         edges: [
           { parent_smiles: "X", child_smiles: "Y" },
@@ -121,9 +161,24 @@ describe("scaffold-tree-math", () => {
     const diamond: ScaffoldTreeResult = {
       nodes: [
         { scaffold_smiles: "A", molecule_ids: [], molecule_count: 0, subtree_molecule_count: 3 },
-        { scaffold_smiles: "B", molecule_ids: ["m1"], molecule_count: 1, subtree_molecule_count: 2 },
-        { scaffold_smiles: "C", molecule_ids: ["m2"], molecule_count: 1, subtree_molecule_count: 2 },
-        { scaffold_smiles: "D", molecule_ids: ["m3"], molecule_count: 1, subtree_molecule_count: 1 },
+        {
+          scaffold_smiles: "B",
+          molecule_ids: ["m1"],
+          molecule_count: 1,
+          subtree_molecule_count: 2,
+        },
+        {
+          scaffold_smiles: "C",
+          molecule_ids: ["m2"],
+          molecule_count: 1,
+          subtree_molecule_count: 2,
+        },
+        {
+          scaffold_smiles: "D",
+          molecule_ids: ["m3"],
+          molecule_count: 1,
+          subtree_molecule_count: 1,
+        },
       ],
       edges: [
         { parent_smiles: "A", child_smiles: "B" },

@@ -1,10 +1,10 @@
 "use client";
 
-import { Badge } from "@/shared/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { AddToProjectDialog } from "@/features/research-organization/components/add-to-project-dialog";
 import { useMoleculeProjects } from "@/features/research-organization/hooks/use-molecule-projects";
 import { useProjects } from "@/features/research-organization/hooks/use-projects";
-import { AddToProjectDialog } from "@/features/research-organization/components/add-to-project-dialog";
+import { Badge } from "@/shared/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
 interface ProjectsTabProps {
   moleculeId: string;

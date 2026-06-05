@@ -1,14 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { PageHeader } from "@/shared/components/page-header";
-import { formatDate } from "@/shared/lib/format-date";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +21,6 @@ import {
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Switch } from "@/shared/components/ui/switch";
-import { Textarea } from "@/shared/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -36,14 +29,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { Textarea } from "@/shared/components/ui/textarea";
+import { formatDate } from "@/shared/lib/format-date";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 import {
+  type CreateApiKeyInput,
+  type ExternalApiKey,
+  type UpdateApiKeyInput,
   useApiKeys,
   useCreateApiKey,
   useDeleteApiKey,
   useUpdateApiKey,
-  type CreateApiKeyInput,
-  type ExternalApiKey,
-  type UpdateApiKeyInput,
 } from "../hooks/use-api-keys";
 
 // ---------------------------------------------------------------------------
@@ -224,9 +224,7 @@ function ApiKeyDialog({ open, onOpenChange, editing }: ApiKeyDialogProps) {
                 placeholder="e.g., BioPortal API Key"
               />
               {form.formState.errors.label && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.label.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.label.message}</p>
               )}
             </div>
 
@@ -248,11 +246,7 @@ function ApiKeyDialog({ open, onOpenChange, editing }: ApiKeyDialogProps) {
                 id="key-secret"
                 type="password"
                 {...form.register("secret_value")}
-                placeholder={
-                  isEdit
-                    ? "Leave blank to keep current value"
-                    : "Paste your API key"
-                }
+                placeholder={isEdit ? "Leave blank to keep current value" : "Paste your API key"}
               />
               {isEdit && (
                 <p className="text-xs text-muted-foreground">
@@ -329,11 +323,7 @@ function DeleteDialog({ apiKey, onClose }: DeleteDialogProps) {
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-            disabled={deleteMutation.isPending}
-          >
+          <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>
@@ -400,37 +390,32 @@ function ApiKeyTable({ entries, onEdit, onDelete }: ApiKeyTableProps) {
                 {entry.key_name}
               </TableCell>
               <TableCell className="font-mono text-sm">
-                {entry.key_prefix}{"****"}
+                {entry.key_prefix}
+                {"****"}
               </TableCell>
               <TableCell>
                 {entry.is_active ? (
-                  <Badge variant="default" className="text-xs">Active</Badge>
+                  <Badge variant="default" className="text-xs">
+                    Active
+                  </Badge>
                 ) : (
-                  <Badge variant="destructive" className="text-xs">Inactive</Badge>
+                  <Badge variant="destructive" className="text-xs">
+                    Inactive
+                  </Badge>
                 )}
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
-                {entry.last_used_at
-                  ? formatDate(entry.last_used_at)
-                  : "—"}
+                {entry.last_used_at ? formatDate(entry.last_used_at) : "—"}
               </TableCell>
               <TableCell>
                 <ActiveToggle entry={entry} />
               </TableCell>
               <TableCell>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEdit(entry)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onEdit(entry)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDelete(entry)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onDelete(entry)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
@@ -484,19 +469,11 @@ export function ApiKeyAdmin() {
             ))}
           </div>
         ) : (
-          <ApiKeyTable
-            entries={entries ?? []}
-            onEdit={openEdit}
-            onDelete={setDeleting}
-          />
+          <ApiKeyTable entries={entries ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}
       </div>
 
-      <ApiKeyDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editing={editing}
-      />
+      <ApiKeyDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
       <DeleteDialog apiKey={deleting} onClose={() => setDeleting(null)} />
     </>

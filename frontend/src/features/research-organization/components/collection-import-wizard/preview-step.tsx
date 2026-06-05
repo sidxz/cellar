@@ -16,12 +16,7 @@ import {
 
 interface Outcome {
   row_index: number;
-  status:
-    | "resolved"
-    | "already_present"
-    | "unregistered"
-    | "ambiguous"
-    | "error";
+  status: "resolved" | "already_present" | "unregistered" | "ambiguous" | "error";
   molecule_id?: string | null;
   molecule_name?: string | null;
   candidates?: string[];
@@ -76,7 +71,7 @@ const INPUT_PRIORITY = [
 ] as const;
 
 function truncate(s: string, max = 40): string {
-  return s.length > max ? s.slice(0, max) + "…" : s;
+  return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
 export function PreviewStep({
@@ -106,14 +101,12 @@ export function PreviewStep({
       const header = mapping[role];
       if (!header) continue;
       const v = row[header];
-      if (v && v.trim()) return truncate(v.trim());
+      if (v?.trim()) return truncate(v.trim());
     }
     return "";
   }
 
-  const commitLabel = submitting
-    ? "Adding…"
-    : `Add ${result.resolved_count} to collection`;
+  const commitLabel = submitting ? "Adding…" : `Add ${result.resolved_count} to collection`;
   const bottomAriaLabel = `Add ${result.resolved_count} resolved ${
     result.resolved_count === 1 ? "row" : "rows"
   } to the collection`;
@@ -121,12 +114,8 @@ export function PreviewStep({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
-        <Badge className="bg-emerald-100 text-emerald-900">
-          {result.resolved_count} resolved
-        </Badge>
-        <Badge variant="secondary">
-          {result.already_present_count} already present
-        </Badge>
+        <Badge className="bg-emerald-100 text-emerald-900">{result.resolved_count} resolved</Badge>
+        <Badge variant="secondary">{result.already_present_count} already present</Badge>
         <Badge variant="outline" className="border-amber-500 text-amber-700">
           {result.unregistered_count} unregistered
         </Badge>
@@ -138,9 +127,8 @@ export function PreviewStep({
       {handoffHref && result.unregistered_count > 0 && (
         <div className="rounded border border-amber-300 bg-amber-50 p-3">
           <p className="text-sm text-amber-900">
-            {result.unregistered_count} rows reference molecules not yet
-            registered. They&rsquo;ll be skipped — register them first, then
-            re-check.
+            {result.unregistered_count} rows reference molecules not yet registered. They&rsquo;ll
+            be skipped — register them first, then re-check.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-4">
             <Link
@@ -152,12 +140,7 @@ export function PreviewStep({
               Register them ↗ (opens a new tab)
             </Link>
             {onRecheck && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onRecheck}
-                disabled={rechecking}
-              >
+              <Button variant="outline" size="sm" onClick={onRecheck} disabled={rechecking}>
                 {rechecking ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -212,19 +195,13 @@ export function PreviewStep({
                   <Badge variant={STATUS_VARIANT[o.status]}>{o.status}</Badge>
                 </TableCell>
                 <TableCell>{o.molecule_name ?? "—"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {o.message ?? ""}
-                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">{o.message ?? ""}</TableCell>
               </TableRow>
             );
           })}
         </TableBody>
       </Table>
-      <Button
-        disabled={!canCommit || submitting}
-        onClick={onCommit}
-        aria-label={bottomAriaLabel}
-      >
+      <Button disabled={!canCommit || submitting} onClick={onCommit} aria-label={bottomAriaLabel}>
         {submitting ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

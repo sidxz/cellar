@@ -1,17 +1,17 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import type {
-  CreateSavedSearchInput,
-  SavedSearch,
-  UpdateSavedSearchInput,
-} from "../types";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
+import type { CreateSavedSearchInput, SavedSearch, UpdateSavedSearchInput } from "../types";
 
 const SAVED_SEARCHES_KEY = ["saved-searches"];
 
-const savedSearchHooks = createCrudHooks<SavedSearch, CreateSavedSearchInput, UpdateSavedSearchInput>({
+const savedSearchHooks = createCrudHooks<
+  SavedSearch,
+  CreateSavedSearchInput,
+  UpdateSavedSearchInput
+>({
   entityName: "Saved search",
   baseUrl: "/api/v1/saved-searches",
   queryKey: SAVED_SEARCHES_KEY,

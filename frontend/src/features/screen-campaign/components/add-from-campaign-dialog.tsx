@@ -8,8 +8,8 @@
  * the current campaign. Shows {added, skipped} in a toast on success.
  */
 
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/shared/components/ui/button";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -18,10 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 import { Label } from "@/shared/components/ui/label";
-import { Textarea } from "@/shared/components/ui/textarea";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -29,11 +26,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import {
-  useAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost,
-} from "@/shared/lib/api/campaigns/campaigns";
+import { Textarea } from "@/shared/components/ui/textarea";
+import { useAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost } from "@/shared/lib/api/campaigns/campaigns";
+import { showError, showSuccess } from "@/shared/lib/toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { campaignKeys, useCampaigns } from "../hooks/use-campaigns";
-import { showSuccess, showError } from "@/shared/lib/toast";
 
 const DECISION_OPTIONS = [
   { value: "selected", label: "Selected" },
@@ -59,8 +57,9 @@ export function AddFromCampaignDialog({
   const [decisionFilter, setDecisionFilter] = useState<string[]>(["selected"]);
   const [description, setDescription] = useState("");
 
-  const { data: allCampaigns, isLoading: campaignsLoading } =
-    useCampaigns(projectId, { enabled: open });
+  const { data: allCampaigns, isLoading: campaignsLoading } = useCampaigns(projectId, {
+    enabled: open,
+  });
 
   // Exclude current campaign from picker
   const sourceCampaigns = allCampaigns?.filter((c) => c.id !== campaignId) ?? [];
@@ -114,8 +113,8 @@ export function AddFromCampaignDialog({
         <DialogHeader>
           <DialogTitle>Add compounds from another Campaign</DialogTitle>
           <DialogDescription>
-            Pick a source campaign and which decisions to include. Duplicates
-            are skipped automatically.
+            Pick a source campaign and which decisions to include. Duplicates are skipped
+            automatically.
           </DialogDescription>
         </DialogHeader>
 
@@ -128,9 +127,7 @@ export function AddFromCampaignDialog({
               disabled={campaignsLoading}
             >
               <SelectTrigger>
-                <SelectValue
-                  placeholder={campaignsLoading ? "Loading…" : "Select a campaign…"}
-                />
+                <SelectValue placeholder={campaignsLoading ? "Loading…" : "Select a campaign…"} />
               </SelectTrigger>
               <SelectContent>
                 {sourceCampaigns.map((c) => (
@@ -160,19 +157,14 @@ export function AddFromCampaignDialog({
                     checked={decisionFilter.includes(opt.value)}
                     onCheckedChange={() => toggleDecision(opt.value)}
                   />
-                  <label
-                    htmlFor={`decision-${opt.value}`}
-                    className="text-sm cursor-pointer"
-                  >
+                  <label htmlFor={`decision-${opt.value}`} className="text-sm cursor-pointer">
                     {opt.label}
                   </label>
                 </div>
               ))}
             </div>
             {decisionFilter.length === 0 && (
-              <p className="text-xs text-destructive">
-                Select at least one decision type.
-              </p>
+              <p className="text-xs text-destructive">Select at least one decision type.</p>
             )}
           </div>
 

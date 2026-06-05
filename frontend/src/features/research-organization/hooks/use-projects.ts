@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "../types";
 
 const PROJECTS_KEY = ["projects"];
@@ -23,13 +23,13 @@ const projectHooks = createCrudHooks<Project, CreateProjectInput, UpdateProjectI
 export function useProjects(options?: { tags?: string[]; tagLogic?: "any" | "all" }) {
   const tags = options?.tags?.length ? options.tags : null;
   return useQuery({
-    queryKey: [
-      ...PROJECTS_KEY,
-      ...(tags ? [{ tags, tagLogic: options?.tagLogic ?? "any" }] : []),
-    ],
+    queryKey: [...PROJECTS_KEY, ...(tags ? [{ tags, tagLogic: options?.tagLogic ?? "any" }] : [])],
     queryFn: async () => {
       const params: Record<string, unknown> = {};
-      if (tags) { params.tags = tags; params.tag_logic = options?.tagLogic ?? "any"; }
+      if (tags) {
+        params.tags = tags;
+        params.tag_logic = options?.tagLogic ?? "any";
+      }
       const resp = await customInstance<Project[] | { items: Project[] }>({
         url: "/api/v1/projects",
         method: "GET",
@@ -46,5 +46,9 @@ export const useUpdateProject = projectHooks.useUpdate;
 
 export function useArchiveProject() {
   const action = projectHooks.useAction("archive", "Project archived");
-  return { ...action, mutate: (id: string, options?: Parameters<typeof action.mutate>[1]) => action.mutate({ id }, options) };
+  return {
+    ...action,
+    mutate: (id: string, options?: Parameters<typeof action.mutate>[1]) =>
+      action.mutate({ id }, options),
+  };
 }

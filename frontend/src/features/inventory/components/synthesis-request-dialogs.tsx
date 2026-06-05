@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useSynthesisRoutesByMolecule } from "@/features/chemical-registration/hooks/use-synthesis-routes";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { MemberSelector } from "@/shared/components/member-selector";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -13,7 +14,6 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { MemberSelector } from "@/shared/components/member-selector";
 import {
   Select,
   SelectContent,
@@ -22,23 +22,23 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { RefreshCw } from "lucide-react";
+import { useState } from "react";
 import { useBatchesByMolecule } from "../hooks/use-batches";
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
-import { useSynthesisRoutesByMolecule } from "@/features/chemical-registration/hooks/use-synthesis-routes";
 import type {
-  useUpdateSynthesisRequest,
-  useRejectSynthesisRequest,
   useAssignSynthesisRequest,
-  useStartSynthesis,
-  useFlagInfeasible,
   useCompleteSynthesis,
-  useFulfillSynthesisRequest,
   useFailSynthesis,
+  useFlagInfeasible,
+  useFulfillSynthesisRequest,
+  useRejectSynthesisRequest,
+  useStartSynthesis,
+  useUpdateSynthesisRequest,
 } from "../hooks/use-synthesis-requests";
 import {
   FEASIBILITY_STATUS_LABELS,
-  type SynthesisRequest,
   type FeasibilityStatus,
+  type SynthesisRequest,
 } from "../types/synthesis-request";
 
 export function EditSynthesisRequestDialog({
@@ -57,7 +57,7 @@ export function EditSynthesisRequestDialog({
   const [amountValue, setAmountValue] = useState(String(request.amount_value));
   const [amountUnit, setAmountUnit] = useState(request.amount_unit);
   const [targetPurity, setTargetPurity] = useState(
-    request.target_purity != null ? String(request.target_purity) : ""
+    request.target_purity != null ? String(request.target_purity) : "",
   );
 
   return (
@@ -69,9 +69,7 @@ export function EditSynthesisRequestDialog({
           setPriority(request.priority);
           setAmountValue(String(request.amount_value));
           setAmountUnit(request.amount_unit);
-          setTargetPurity(
-            request.target_purity != null ? String(request.target_purity) : ""
-          );
+          setTargetPurity(request.target_purity != null ? String(request.target_purity) : "");
         }
         onOpenChange(v);
       }}
@@ -154,13 +152,11 @@ export function EditSynthesisRequestDialog({
                   id: request.id,
                   purpose: purpose.trim(),
                   priority,
-                  amount_value: parseFloat(amountValue) || request.amount_value,
+                  amount_value: Number.parseFloat(amountValue) || request.amount_value,
                   amount_unit: amountUnit,
-                  target_purity: targetPurity
-                    ? parseFloat(targetPurity)
-                    : null,
+                  target_purity: targetPurity ? Number.parseFloat(targetPurity) : null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={!purpose.trim() || mutation.isPending}
@@ -208,10 +204,7 @@ export function RejectDialog({
           <Button
             variant="destructive"
             onClick={() => {
-              mutation.mutate(
-                { id: request.id, reason },
-                { onSuccess: () => onOpenChange(false) }
-              );
+              mutation.mutate({ id: request.id, reason }, { onSuccess: () => onOpenChange(false) });
             }}
             disabled={!reason.trim() || mutation.isPending}
           >
@@ -249,14 +242,19 @@ export function AssignDialog({
       <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Assign Request</DialogTitle>
-          <DialogDescription>
-            Assign this synthesis request to a chemist or CRO.
-          </DialogDescription>
+          <DialogDescription>Assign this synthesis request to a chemist or CRO.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label>Assignment Type</Label>
-            <Select value={assignmentType} onValueChange={(v) => { setAssignmentType(v); setAssignedToId(null); setAssignedOrgId(""); }}>
+            <Select
+              value={assignmentType}
+              onValueChange={(v) => {
+                setAssignmentType(v);
+                setAssignedToId(null);
+                setAssignedOrgId("");
+              }}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -279,16 +277,10 @@ export function AssignDialog({
           {assignmentType === "cro" && (
             <div className="grid gap-2">
               <Label htmlFor="assign-org">CRO Organization</Label>
-              <Select
-                value={assignedOrgId}
-                onValueChange={setAssignedOrgId}
-                disabled={orgsLoading}
-              >
+              <Select value={assignedOrgId} onValueChange={setAssignedOrgId} disabled={orgsLoading}>
                 <SelectTrigger id="assign-org">
                   <SelectValue
-                    placeholder={
-                      orgsLoading ? "Loading organizations..." : "Select CRO..."
-                    }
+                    placeholder={orgsLoading ? "Loading organizations..." : "Select CRO..."}
                   />
                 </SelectTrigger>
                 <SelectContent>
@@ -309,14 +301,11 @@ export function AssignDialog({
                 {
                   id: request.id,
                   assignment_type: assignmentType,
-                  assigned_to:
-                    assignmentType === "internal" ? assignedToId : null,
+                  assigned_to: assignmentType === "internal" ? assignedToId : null,
                   assigned_org_id:
-                    assignmentType === "cro" && assignedOrgId.trim()
-                      ? assignedOrgId.trim()
-                      : null,
+                    assignmentType === "cro" && assignedOrgId.trim() ? assignedOrgId.trim() : null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending || !isValid}
@@ -342,8 +331,11 @@ export function StartDialog({
 }) {
   const [proposedRouteId, setProposedRouteId] = useState("");
 
-  const { data: routes, isLoading: routesLoading, refetch: refetchRoutes } =
-    useSynthesisRoutesByMolecule(request.molecule_id);
+  const {
+    data: routes,
+    isLoading: routesLoading,
+    refetch: refetchRoutes,
+  } = useSynthesisRoutesByMolecule(request.molecule_id);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -357,38 +349,36 @@ export function StartDialog({
         <div className="grid gap-2 py-4">
           <Label htmlFor="start-route">Proposed Route (optional)</Label>
           <div className="flex gap-2">
-          <Select
-            value={proposedRouteId}
-            onValueChange={setProposedRouteId}
-            disabled={routesLoading}
-          >
-            <SelectTrigger id="start-route" className="flex-1">
-              <SelectValue
-                placeholder={
-                  routesLoading ? "Loading routes..." : "None — start without a route"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {routes?.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.name}
-                  {r.status !== "draft" ? ` (${r.status})` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={() => refetchRoutes()}
-            disabled={routesLoading}
-            title="Refresh routes"
-          >
-            <RefreshCw className={`h-4 w-4 ${routesLoading ? "animate-spin" : ""}`} />
-          </Button>
+            <Select
+              value={proposedRouteId}
+              onValueChange={setProposedRouteId}
+              disabled={routesLoading}
+            >
+              <SelectTrigger id="start-route" className="flex-1">
+                <SelectValue
+                  placeholder={routesLoading ? "Loading routes..." : "None — start without a route"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                {routes?.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name}
+                    {r.status !== "draft" ? ` (${r.status})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => refetchRoutes()}
+              disabled={routesLoading}
+              title="Refresh routes"
+            >
+              <RefreshCw className={`h-4 w-4 ${routesLoading ? "animate-spin" : ""}`} />
+            </Button>
           </div>
           <p className="text-xs text-muted-foreground">
             {!routesLoading && (!routes || routes.length === 0)
@@ -410,9 +400,10 @@ export function StartDialog({
               mutation.mutate(
                 {
                   id: request.id,
-                  proposed_route_id: proposedRouteId && proposedRouteId !== "none" ? proposedRouteId : null,
+                  proposed_route_id:
+                    proposedRouteId && proposedRouteId !== "none" ? proposedRouteId : null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}
@@ -436,8 +427,7 @@ export function FlagInfeasibleDialog({
   onOpenChange: (open: boolean) => void;
   mutation: ReturnType<typeof useFlagInfeasible>;
 }) {
-  const [feasibilityStatus, setFeasibilityStatus] =
-    useState<FeasibilityStatus>("infeasible");
+  const [feasibilityStatus, setFeasibilityStatus] = useState<FeasibilityStatus>("infeasible");
   const [notes, setNotes] = useState("");
 
   return (
@@ -454,21 +444,17 @@ export function FlagInfeasibleDialog({
             <Label>Feasibility Status</Label>
             <Select
               value={feasibilityStatus}
-              onValueChange={(v) =>
-                setFeasibilityStatus(v as FeasibilityStatus)
-              }
+              onValueChange={(v) => setFeasibilityStatus(v as FeasibilityStatus)}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(FEASIBILITY_STATUS_LABELS).map(
-                  ([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  )
-                )}
+                {Object.entries(FEASIBILITY_STATUS_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -491,7 +477,7 @@ export function FlagInfeasibleDialog({
                   feasibility_status: feasibilityStatus,
                   feasibility_notes: notes.trim() || null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}
@@ -561,13 +547,10 @@ export function CompleteDialog({
                 {
                   id: request.id,
                   actual_cost_value:
-                    actualCostValue !== ""
-                      ? parseFloat(actualCostValue)
-                      : null,
-                  actual_cost_unit:
-                    actualCostValue !== "" ? actualCostUnit : null,
+                    actualCostValue !== "" ? Number.parseFloat(actualCostValue) : null,
+                  actual_cost_unit: actualCostValue !== "" ? actualCostUnit : null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}
@@ -593,9 +576,7 @@ export function FulfillDialog({
 }) {
   const [batchId, setBatchId] = useState("");
 
-  const { data: batches, isLoading: batchesLoading } = useBatchesByMolecule(
-    request.molecule_id
-  );
+  const { data: batches, isLoading: batchesLoading } = useBatchesByMolecule(request.molecule_id);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -608,16 +589,10 @@ export function FulfillDialog({
         </DialogHeader>
         <div className="grid gap-2 py-4">
           <Label htmlFor="fulfill-batch">Batch</Label>
-          <Select
-            value={batchId}
-            onValueChange={setBatchId}
-            disabled={batchesLoading}
-          >
+          <Select value={batchId} onValueChange={setBatchId} disabled={batchesLoading}>
             <SelectTrigger id="fulfill-batch">
               <SelectValue
-                placeholder={
-                  batchesLoading ? "Loading batches..." : "Select batch..."
-                }
+                placeholder={batchesLoading ? "Loading batches..." : "Select batch..."}
               />
             </SelectTrigger>
             <SelectContent>
@@ -631,8 +606,7 @@ export function FulfillDialog({
           </Select>
           {!batchesLoading && (!batches || batches.length === 0) && (
             <p className="text-xs text-muted-foreground">
-              No batches found for this molecule. Register the synthesized batch
-              first.
+              No batches found for this molecule. Register the synthesized batch first.
             </p>
           )}
         </div>
@@ -641,7 +615,7 @@ export function FulfillDialog({
             onClick={() => {
               mutation.mutate(
                 { id: request.id, batch_id: batchId },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={!batchId || mutation.isPending}
@@ -672,9 +646,7 @@ export function FailDialog({
       <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Mark as Failed</DialogTitle>
-          <DialogDescription>
-            Record the reason for synthesis failure.
-          </DialogDescription>
+          <DialogDescription>Record the reason for synthesis failure.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
           <Label>Reason</Label>
@@ -689,10 +661,7 @@ export function FailDialog({
           <Button
             variant="destructive"
             onClick={() => {
-              mutation.mutate(
-                { id: request.id, reason },
-                { onSuccess: () => onOpenChange(false) }
-              );
+              mutation.mutate({ id: request.id, reason }, { onSuccess: () => onOpenChange(false) });
             }}
             disabled={!reason.trim() || mutation.isPending}
           >

@@ -1,14 +1,14 @@
 "use client";
 
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { showError, showSuccess } from "@/shared/lib/toast";
 import {
-  useQuery,
-  useMutation,
-  useQueryClient,
   type QueryClient,
   type UseQueryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess, showError } from "@/shared/lib/toast";
 
 export interface CrudHooksConfig {
   entityName: string;
@@ -35,8 +35,7 @@ export function createCrudHooks<
   const createdMsg = messages?.created ?? ((n) => `${n} created`);
   const updatedMsg = messages?.updated ?? ((n) => `${n} updated`);
   const deletedMsg = messages?.deleted ?? ((n) => `${n} deleted`);
-  const actionDefaultMsg =
-    messages?.actionDefault ?? ((n, a) => `${n} ${a} complete`);
+  const actionDefaultMsg = messages?.actionDefault ?? ((n, a) => `${n} ${a} complete`);
 
   function invalidateAll(qc: QueryClient) {
     qc.invalidateQueries({ queryKey });
@@ -45,33 +44,28 @@ export function createCrudHooks<
     }
   }
 
-  function useList(
-    params?: Record<string, string>,
-    options?: Partial<UseQueryOptions<TEntity[]>>,
-  ) {
+  function useList(params?: Record<string, string>, options?: Partial<UseQueryOptions<TEntity[]>>) {
     return useQuery({
       queryKey: params ? [...queryKey, params] : queryKey,
       queryFn: async () => {
         // Endpoints migrated to cursor pagination return PaginatedResponse;
         // older ones still return a bare list. Accept both at runtime so
         // call sites don't need to know which shape they get.
-        const resp = await customInstance<
-          TEntity[] | { items: TEntity[] }
-        >({ url: baseUrl, method: "GET", params });
+        const resp = await customInstance<TEntity[] | { items: TEntity[] }>({
+          url: baseUrl,
+          method: "GET",
+          params,
+        });
         return Array.isArray(resp) ? resp : resp.items;
       },
       ...options,
     });
   }
 
-  function useGet(
-    id: string | undefined,
-    options?: Partial<UseQueryOptions<TEntity>>,
-  ) {
+  function useGet(id: string | undefined, options?: Partial<UseQueryOptions<TEntity>>) {
     return useQuery({
       queryKey: [...queryKey, id],
-      queryFn: () =>
-        customInstance<TEntity>({ url: `${baseUrl}/${id}`, method: "GET" }),
+      queryFn: () => customInstance<TEntity>({ url: `${baseUrl}/${id}`, method: "GET" }),
       enabled: !!id,
       ...options,
     });

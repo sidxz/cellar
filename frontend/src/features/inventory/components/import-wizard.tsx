@@ -1,16 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  CheckCircle2,
-  Download,
-  FileUp,
-  Loader2,
-  XCircle,
-} from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
+import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
 import { PageHeader } from "@/shared/components/page-header";
+import { Button } from "@/shared/components/ui/button";
 import {
   Card,
   CardContent,
@@ -36,7 +28,9 @@ import {
 } from "@/shared/components/ui/table";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showError, showSuccess } from "@/shared/lib/toast";
-import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import { CheckCircle2, Download, FileUp, Loader2, XCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 import {
   useCreateImportTemplate,
   useDeleteImportTemplate,
@@ -87,11 +81,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
     <div className="flex items-center gap-2 mb-6">
       {steps.map(({ n, label }, idx) => (
         <div key={n} className="flex items-center gap-2">
-          {idx > 0 && (
-            <div
-              className={`h-px w-8 ${current > idx ? "bg-primary" : "bg-border"}`}
-            />
-          )}
+          {idx > 0 && <div className={`h-px w-8 ${current > idx ? "bg-primary" : "bg-border"}`} />}
           <div className="flex items-center gap-1.5">
             <div
               className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold ${
@@ -104,9 +94,7 @@ function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
             >
               {n}
             </div>
-            <span
-              className={`text-sm ${current === n ? "font-medium" : "text-muted-foreground"}`}
-            >
+            <span className={`text-sm ${current === n ? "font-medium" : "text-muted-foreground"}`}>
               {label}
             </span>
           </div>
@@ -126,9 +114,7 @@ export function ImportWizard() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
-  const [columnMappings, setColumnMappings] = useState<Record<string, string>>(
-    {}
-  );
+  const [columnMappings, setColumnMappings] = useState<Record<string, string>>({});
   const [protocolId, setProtocolId] = useState("");
   const [runId, setRunId] = useState("");
   const [validating, setValidating] = useState(false);
@@ -162,10 +148,8 @@ export function ImportWizard() {
       const auto: Record<string, string> = {};
       for (const h of response.headers) {
         const lower = h.toLowerCase().replace(/[\s_-]+/g, "_");
-        if (lower.includes("barcode") || lower.includes("plate_id"))
-          auto[h] = "plate_barcode";
-        else if (lower.includes("well") && lower.includes("pos"))
-          auto[h] = "well_position";
+        if (lower.includes("barcode") || lower.includes("plate_id")) auto[h] = "plate_barcode";
+        else if (lower.includes("well") && lower.includes("pos")) auto[h] = "well_position";
         else if (
           lower.includes("cmpd") ||
           lower.includes("compound") ||
@@ -179,9 +163,7 @@ export function ImportWizard() {
       setColumnMappings(auto);
       setStep(2);
     } catch (err: unknown) {
-      showError(
-        err instanceof Error ? err.message : "Upload failed. Check the file format."
-      );
+      showError(err instanceof Error ? err.message : "Upload failed. Check the file format.");
     } finally {
       setUploading(false);
     }
@@ -201,12 +183,8 @@ export function ImportWizard() {
     const baseHeaders = ["plate_barcode", "well_position", "molecule_identifier", "qualifier"];
     const baseExample = ["PLT-001", "A01", "CC-000001", "="];
 
-    const readoutHeaders = readoutDefs.map((rd) =>
-      rd.unit ? `${rd.name} (${rd.unit})` : rd.name
-    );
-    const readoutExample = readoutDefs.map((rd) =>
-      rd.data_type === "numeric" ? "0.00" : ""
-    );
+    const readoutHeaders = readoutDefs.map((rd) => (rd.unit ? `${rd.name} (${rd.unit})` : rd.name));
+    const readoutExample = readoutDefs.map((rd) => (rd.data_type === "numeric" ? "0.00" : ""));
 
     const headers = [...baseHeaders, ...readoutHeaders];
     const example = [...baseExample, ...readoutExample];
@@ -242,9 +220,7 @@ export function ImportWizard() {
       setValidation(response);
       setStep(3);
     } catch (err: unknown) {
-      showError(
-        err instanceof Error ? err.message : "Validation failed."
-      );
+      showError(err instanceof Error ? err.message : "Validation failed.");
     } finally {
       setValidating(false);
     }
@@ -284,9 +260,7 @@ export function ImportWizard() {
       setImportResult(response);
       showSuccess(`Imported ${response.imported_count} row(s)`);
     } catch (err: unknown) {
-      showError(
-        err instanceof Error ? err.message : "Import failed."
-      );
+      showError(err instanceof Error ? err.message : "Import failed.");
     } finally {
       setImporting(false);
     }
@@ -360,9 +334,7 @@ export function ImportWizard() {
         <Card>
           <CardHeader>
             <CardTitle>Upload File</CardTitle>
-            <CardDescription>
-              Supported formats: CSV, TSV, TXT, XLSX. Max 10 MB.
-            </CardDescription>
+            <CardDescription>Supported formats: CSV, TSV, TXT, XLSX. Max 10 MB.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Template helpers */}
@@ -403,12 +375,8 @@ export function ImportWizard() {
                 <p className="text-sm font-medium">{file.name}</p>
               ) : (
                 <>
-                  <p className="text-sm font-medium">
-                    Drop a file here or click to browse
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    CSV, TSV, TXT, XLSX
-                  </p>
+                  <p className="text-sm font-medium">Drop a file here or click to browse</p>
+                  <p className="mt-1 text-xs text-muted-foreground">CSV, TSV, TXT, XLSX</p>
                 </>
               )}
               <input
@@ -424,13 +392,8 @@ export function ImportWizard() {
             </div>
 
             <div className="flex justify-end">
-              <Button
-                onClick={handleUpload}
-                disabled={!file || uploading}
-              >
-                {uploading && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
+              <Button onClick={handleUpload} disabled={!file || uploading}>
+                {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Upload &amp; Preview
               </Button>
             </div>
@@ -454,8 +417,7 @@ export function ImportWizard() {
             <CardHeader>
               <CardTitle>Map Columns</CardTitle>
               <CardDescription>
-                {preview.total_rows} data rows detected. Assign each file
-                column to a plate field.
+                {preview.total_rows} data rows detected. Assign each file column to a plate field.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -482,7 +444,10 @@ export function ImportWizard() {
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium">Protocol</label>
                   {protocols && protocols.length > 0 ? (
-                    <Select value={protocolId || "__none__"} onValueChange={(v) => setProtocolId(v === "__none__" ? "" : v)}>
+                    <Select
+                      value={protocolId || "__none__"}
+                      onValueChange={(v) => setProtocolId(v === "__none__" ? "" : v)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select protocol…" />
                       </SelectTrigger>
@@ -519,9 +484,7 @@ export function ImportWizard() {
           <Card>
             <CardHeader>
               <CardTitle>Save as Template</CardTitle>
-              <CardDescription>
-                Reuse this column mapping for future imports.
-              </CardDescription>
+              <CardDescription>Reuse this column mapping for future imports.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">
@@ -536,9 +499,7 @@ export function ImportWizard() {
                   disabled={!saveTemplateName.trim() || savingTemplate}
                   onClick={handleSaveTemplate}
                 >
-                  {savingTemplate && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
+                  {savingTemplate && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Save Template
                 </Button>
               </div>
@@ -550,9 +511,7 @@ export function ImportWizard() {
               Back
             </Button>
             <Button onClick={handleValidate} disabled={validating}>
-              {validating && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
+              {validating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Validate &amp; Continue
             </Button>
           </div>
@@ -563,12 +522,13 @@ export function ImportWizard() {
       {step === 3 && (
         <div className="space-y-4">
           {importResult ? (
-            <ImportResultCard result={importResult} onDone={() => router.push("/inventory/plates")} />
+            <ImportResultCard
+              result={importResult}
+              onDone={() => router.push("/inventory/plates")}
+            />
           ) : (
             <>
-              {validation && (
-                <ValidationSummaryCard validation={validation} />
-              )}
+              {validation && <ValidationSummaryCard validation={validation} />}
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(2)}>
                   Back
@@ -577,9 +537,7 @@ export function ImportWizard() {
                   onClick={handleImport}
                   disabled={importing || (validation != null && validation.errors > 0)}
                 >
-                  {importing && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
+                  {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Import Now
                 </Button>
               </div>
@@ -675,17 +633,17 @@ function ValidationSummaryCard({
                 <TableBody>
                   {validation.details.map((d, i) => (
                     <TableRow key={i}>
-                      <TableCell className="font-mono text-xs">
-                        {d.row}
-                      </TableCell>
+                      <TableCell className="font-mono text-xs">{d.row}</TableCell>
                       <TableCell className="text-xs">
-                        <span className={d.severity === "error" ? "text-destructive" : "text-yellow-500"}>
+                        <span
+                          className={
+                            d.severity === "error" ? "text-destructive" : "text-yellow-500"
+                          }
+                        >
                           {d.severity}
                         </span>
                       </TableCell>
-                      <TableCell className="text-xs">
-                        {d.issue}
-                      </TableCell>
+                      <TableCell className="text-xs">{d.issue}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

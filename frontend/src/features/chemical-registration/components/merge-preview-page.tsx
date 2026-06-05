@@ -1,32 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  Loader2,
-  ShieldAlert,
-  X,
-} from "lucide-react";
+import { StructureThumbnail } from "@/shared/components/chemistry";
 import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
-import { StructureThumbnail } from "@/shared/components/chemistry";
-import { useMolecule } from "../hooks/use-molecules";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2, ShieldAlert, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   useConfirmDisclosure,
   useMergeImpact,
   useRejectDisclosure,
 } from "../hooks/use-disclosures";
 import { useDisclosuresForMolecule } from "../hooks/use-disclosures";
+import { useMolecule } from "../hooks/use-molecules";
 import { ImpactRow } from "./merge-impact-row";
 
 // ---------------------------------------------------------------------------
@@ -42,10 +29,7 @@ interface MergePreviewPageProps {
 // MergePreviewPage
 // ---------------------------------------------------------------------------
 
-export function MergePreviewPage({
-  compoundId,
-  disclosureId,
-}: MergePreviewPageProps) {
+export function MergePreviewPage({ compoundId, disclosureId }: MergePreviewPageProps) {
   const router = useRouter();
 
   // Load the disclosure to get the matched_molecule_id
@@ -54,18 +38,12 @@ export function MergePreviewPage({
 
   const sourceQuery = useMolecule(compoundId);
   const targetQuery = useMolecule(disclosure?.matched_molecule_id ?? undefined);
-  const impactQuery = useMergeImpact(
-    compoundId,
-    disclosure?.matched_molecule_id ?? undefined
-  );
+  const impactQuery = useMergeImpact(compoundId, disclosure?.matched_molecule_id ?? undefined);
 
   const confirmMutation = useConfirmDisclosure(disclosureId);
   const rejectMutation = useRejectDisclosure(disclosureId);
 
-  const isLoading =
-    disclosuresQuery.isLoading ||
-    sourceQuery.isLoading ||
-    targetQuery.isLoading;
+  const isLoading = disclosuresQuery.isLoading || sourceQuery.isLoading || targetQuery.isLoading;
 
   const source = sourceQuery.data;
   const target = targetQuery.data;
@@ -124,23 +102,16 @@ export function MergePreviewPage({
   return (
     <div className="mx-auto max-w-4xl space-y-6 py-6">
       {/* Back button */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => router.push(`/compounds/${compoundId}`)}
-      >
+      <Button variant="ghost" size="sm" onClick={() => router.push(`/compounds/${compoundId}`)}>
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to {source?.registration_number ?? "compound"}
       </Button>
 
       {/* Title */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Merge Preview
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Merge Preview</h1>
         <p className="text-muted-foreground">
-          Structure match found during disclosure. Review the impact before
-          confirming.
+          Structure match found during disclosure. Review the impact before confirming.
         </p>
       </div>
 
@@ -157,21 +128,14 @@ export function MergePreviewPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="font-mono text-sm font-semibold">
-              {source?.registration_number}
-            </div>
+            <div className="font-mono text-sm font-semibold">{source?.registration_number}</div>
             <div className="text-sm text-muted-foreground">{source?.name}</div>
-            <Badge
-              variant="outline"
-              className="border-yellow-500/40 text-yellow-400"
-            >
+            <Badge variant="outline" className="border-yellow-500/40 text-yellow-400">
               Undisclosed
             </Badge>
             {source?.identifiers && source.identifiers.length > 0 && (
               <div className="space-y-1">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Identifiers
-                </div>
+                <div className="text-xs font-medium text-muted-foreground">Identifiers</div>
                 {source.identifiers.map((id) => (
                   <div key={id.id} className="text-xs text-muted-foreground">
                     {id.identifier_type}: {id.identifier}
@@ -196,9 +160,7 @@ export function MergePreviewPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="font-mono text-sm font-semibold">
-              {target?.registration_number}
-            </div>
+            <div className="font-mono text-sm font-semibold">{target?.registration_number}</div>
             <div className="text-sm text-muted-foreground">{target?.name}</div>
             {target?.structure?.smiles && (
               <StructureThumbnail smiles={target.structure.smiles} size={160} />
@@ -249,8 +211,8 @@ export function MergePreviewPage({
       {impact && impact.categories.length === 0 && (
         <Card>
           <CardContent className="py-6 text-center text-sm text-muted-foreground">
-            No data associated with the source compound. Merge will only
-            tombstone the source record.
+            No data associated with the source compound. Merge will only tombstone the source
+            record.
           </CardContent>
         </Card>
       )}
@@ -260,9 +222,7 @@ export function MergePreviewPage({
         <div className="flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/5 p-4">
           <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
           <div className="space-y-1">
-            <p className="text-sm font-medium text-destructive">
-              Merge blocked
-            </p>
+            <p className="text-sm font-medium text-destructive">Merge blocked</p>
             {impact?.blockers.map((b, i) => (
               <p key={i} className="text-sm text-destructive/80">
                 {b}
@@ -329,4 +289,3 @@ export function MergePreviewPage({
     </div>
   );
 }
-

@@ -48,9 +48,7 @@ export function filtersActive(f: CampaignFilters): boolean {
 }
 
 /** Any-hit semantics: hit if any measurement is a hit; non_hit if all are miss; nd otherwise. */
-export function computeRowHitStatus(
-  result: CampaignResultResponse,
-): CampaignHitStatusFilter {
+export function computeRowHitStatus(result: CampaignResultResponse): CampaignHitStatusFilter {
   let hasHit = false;
   let hasMiss = false;
   for (const m of result.measurements) {
@@ -182,24 +180,22 @@ export function CampaignFilterBar({
     <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2 text-xs">
       <span className="text-muted-foreground font-medium">Filter:</span>
 
-      {(["selected", "deferred", "rejected"] as CampaignDecisionFilter[]).map(
-        (d) => {
-          const isActive = filters.decisions.has(d);
-          return (
-            <button
-              key={d}
-              type="button"
-              onClick={() => toggleDecision(d)}
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border transition-colors ${
-                isActive ? DECISION_ACTIVE_STYLE[d] : DECISION_CHIP_STYLE[d]
-              }`}
-            >
-              <span className="capitalize">{d}</span>
-              <span className="font-semibold tabular-nums">{byDecision[d]}</span>
-            </button>
-          );
-        },
-      )}
+      {(["selected", "deferred", "rejected"] as CampaignDecisionFilter[]).map((d) => {
+        const isActive = filters.decisions.has(d);
+        return (
+          <button
+            key={d}
+            type="button"
+            onClick={() => toggleDecision(d)}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border transition-colors ${
+              isActive ? DECISION_ACTIVE_STYLE[d] : DECISION_CHIP_STYLE[d]
+            }`}
+          >
+            <span className="capitalize">{d}</span>
+            <span className="font-semibold tabular-nums">{byDecision[d]}</span>
+          </button>
+        );
+      })}
 
       <span className="text-muted-foreground/50 mx-1">·</span>
 

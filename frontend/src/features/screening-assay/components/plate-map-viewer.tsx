@@ -1,7 +1,5 @@
 "use client";
 
-import { Fragment, useMemo } from "react";
-import { cn } from "@/shared/lib/utils";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import {
   Tooltip,
@@ -9,9 +7,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
+import {
+  CHART_COLORS,
+  GROUP_PALETTE,
+  WELL_EMPTY_COLOR,
+  WELL_TYPE_COLORS,
+} from "@/shared/lib/chart-colors";
+import { cn } from "@/shared/lib/utils";
+import { Fragment, useMemo } from "react";
+import { plateCellSizePx, plateDimensionsTuple, rowLabel } from "../lib/plate-dimensions";
 import type { DoseUnit, PlateData, PlateMapWell } from "../types";
-import { plateDimensionsTuple, plateCellSizePx, rowLabel } from "../lib/plate-dimensions";
-import { GROUP_PALETTE, WELL_TYPE_COLORS, CHART_COLORS, WELL_EMPTY_COLOR } from "@/shared/lib/chart-colors";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -68,13 +73,9 @@ function WellTooltipContent({
           {well.well_type.replace(/_/g, " ")}
         </span>
       </div>
-      {well.batch_number && (
-        <p className="font-mono text-[11px] truncate">{well.batch_number}</p>
-      )}
+      {well.batch_number && <p className="font-mono text-[11px] truncate">{well.batch_number}</p>}
       {aliases.length > 0 && (
-        <p className="text-[10px] italic opacity-70 line-clamp-2">
-          {aliases.join(" · ")}
-        </p>
+        <p className="text-[10px] italic opacity-70 line-clamp-2">{aliases.join(" · ")}</p>
       )}
       {well.dose != null && (
         <p className="text-[10px]">
@@ -98,11 +99,7 @@ interface PlateMapViewerProps {
   className?: string;
 }
 
-export function PlateMapViewer({
-  plate,
-  doseUnit,
-  className,
-}: PlateMapViewerProps) {
+export function PlateMapViewer({ plate, doseUnit, className }: PlateMapViewerProps) {
   const [rows, cols] = plateDimensionsTuple(plate.format);
   const size = plateCellSizePx(plate.format);
   const showLabel = size >= 18;
@@ -177,8 +174,7 @@ export function PlateMapViewer({
     return { background: WELL_EMPTY_COLOR };
   }
 
-  const labelSize =
-    size >= 28 ? "text-xs" : size >= 18 ? "text-[10px]" : "text-[8px]";
+  const labelSize = size >= 28 ? "text-xs" : size >= 18 ? "text-[10px]" : "text-[8px]";
 
   const { summary } = plate;
 
@@ -238,91 +234,91 @@ export function PlateMapViewer({
 
       {/* Plate grid */}
       <TooltipProvider delayDuration={120}>
-      <div className="overflow-auto">
-        <div
-          className="inline-grid select-none"
-          style={{
-            gridTemplateColumns: `${size + 8}px repeat(${cols}, ${size}px)`,
-            gridTemplateRows: `${size}px repeat(${rows}, ${size}px)`,
-            gap: "1px",
-          }}
-        >
-          {/* Top-left corner */}
-          <div />
+        <div className="overflow-auto">
+          <div
+            className="inline-grid select-none"
+            style={{
+              gridTemplateColumns: `${size + 8}px repeat(${cols}, ${size}px)`,
+              gridTemplateRows: `${size}px repeat(${rows}, ${size}px)`,
+              gap: "1px",
+            }}
+          >
+            {/* Top-left corner */}
+            <div />
 
-          {/* Column headers */}
-          {Array.from({ length: cols }, (_, c) => (
-            <div
-              key={`col-${c}`}
-              className={cn(
-                "flex items-center justify-center",
-                labelSize,
-                "text-muted-foreground font-medium"
-              )}
-            >
-              {c + 1}
-            </div>
-          ))}
+            {/* Column headers */}
+            {Array.from({ length: cols }, (_, c) => (
+              <div
+                key={`col-${c}`}
+                className={cn(
+                  "flex items-center justify-center",
+                  labelSize,
+                  "text-muted-foreground font-medium",
+                )}
+              >
+                {c + 1}
+              </div>
+            ))}
 
-          {/* Rows */}
-          {Array.from({ length: rows }, (_, r) => {
-            const rLabel = rowLabel(r);
-            return (
-              <Fragment key={`row-${r}`}>
-                {/* Row header */}
-                <div
-                  className={cn(
-                    "flex items-center justify-center",
-                    labelSize,
-                    "text-muted-foreground font-medium"
-                  )}
-                >
-                  {rLabel}
-                </div>
+            {/* Rows */}
+            {Array.from({ length: rows }, (_, r) => {
+              const rLabel = rowLabel(r);
+              return (
+                <Fragment key={`row-${r}`}>
+                  {/* Row header */}
+                  <div
+                    className={cn(
+                      "flex items-center justify-center",
+                      labelSize,
+                      "text-muted-foreground font-medium",
+                    )}
+                  >
+                    {rLabel}
+                  </div>
 
-                {/* Wells */}
-                {Array.from({ length: cols }, (_, c) => {
-                  const pos = `${rLabel}${c + 1}`;
-                  const well = wellMap.get(pos);
-                  const style = getWellStyle(well);
-                  const cell = (
-                    <div
-                      className="rounded-sm cursor-default transition-opacity hover:opacity-75"
-                      style={{
-                        width: size,
-                        height: size,
-                        background: style.background,
-                        border: style.border,
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      {showLabel && !well && (
-                        <span className="flex h-full w-full items-center justify-center text-[8px] text-muted-foreground/40 select-none">
-                          {pos}
-                        </span>
-                      )}
-                    </div>
-                  );
-                  if (!well) return <Fragment key={pos}>{cell}</Fragment>;
-                  return (
-                    <Tooltip key={pos}>
-                      <TooltipTrigger asChild>{cell}</TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        sideOffset={6}
-                        collisionPadding={12}
-                        className="bg-popover text-popover-foreground border shadow-lg p-2.5"
+                  {/* Wells */}
+                  {Array.from({ length: cols }, (_, c) => {
+                    const pos = `${rLabel}${c + 1}`;
+                    const well = wellMap.get(pos);
+                    const style = getWellStyle(well);
+                    const cell = (
+                      <div
+                        className="rounded-sm cursor-default transition-opacity hover:opacity-75"
+                        style={{
+                          width: size,
+                          height: size,
+                          background: style.background,
+                          border: style.border,
+                          boxSizing: "border-box",
+                        }}
                       >
-                        <WellTooltipContent well={well} doseUnit={doseUnit} />
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
-              </Fragment>
-            );
-          })}
+                        {showLabel && !well && (
+                          <span className="flex h-full w-full items-center justify-center text-[8px] text-muted-foreground/40 select-none">
+                            {pos}
+                          </span>
+                        )}
+                      </div>
+                    );
+                    if (!well) return <Fragment key={pos}>{cell}</Fragment>;
+                    return (
+                      <Tooltip key={pos}>
+                        <TooltipTrigger asChild>{cell}</TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          sideOffset={6}
+                          collisionPadding={12}
+                          className="bg-popover text-popover-foreground border shadow-lg p-2.5"
+                        >
+                          <WellTooltipContent well={well} doseUnit={doseUnit} />
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </Fragment>
+              );
+            })}
+          </div>
         </div>
-      </div>
       </TooltipProvider>
 
       {/* Compound legend — table form. Sorted by reg id so the analyst can
@@ -337,10 +333,8 @@ export function PlateMapViewer({
             <table className="w-full text-xs">
               <thead className="bg-muted/20 text-[10px] uppercase tracking-wide text-muted-foreground">
                 <tr className="border-b">
-                  <th className="w-8 px-2 py-1.5"></th>
-                  <th className="px-2 py-1.5 text-left font-medium">
-                    Compound
-                  </th>
+                  <th className="w-8 px-2 py-1.5" />
+                  <th className="px-2 py-1.5 text-left font-medium">Compound</th>
                   <th className="px-2 py-1.5 text-left font-medium">Aliases</th>
                   <th className="px-2 py-1.5 text-right font-medium">Wells</th>
                 </tr>
@@ -361,15 +355,11 @@ export function PlateMapViewer({
                           aria-hidden
                         />
                       </td>
-                      <td className="px-2 py-1.5 font-mono">
-                        {e.batchNumber}
-                      </td>
+                      <td className="px-2 py-1.5 font-mono">{e.batchNumber}</td>
                       <td className="px-2 py-1.5 text-muted-foreground italic truncate max-w-[300px]">
                         {e.aliases.join(" · ") || "—"}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">
-                        {e.wellCount}
-                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">{e.wellCount}</td>
                     </tr>
                   ))}
               </tbody>

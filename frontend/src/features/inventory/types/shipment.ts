@@ -1,9 +1,4 @@
-export type ShipmentStatus =
-  | "preparing"
-  | "shipped"
-  | "in_transit"
-  | "delivered"
-  | "returned";
+export type ShipmentStatus = "preparing" | "shipped" | "in_transit" | "delivered" | "returned";
 
 export const SHIPMENT_STATUS_LABELS: Record<ShipmentStatus, string> = {
   preparing: "Preparing",

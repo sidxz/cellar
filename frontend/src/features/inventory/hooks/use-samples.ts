@@ -1,9 +1,9 @@
 "use client";
 
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateSampleInput, PaginatedResponse, Sample, SampleListItem } from "../types";
 
 const SAMPLES_KEY = ["samples"];
@@ -41,7 +41,10 @@ export function useAliquotSample() {
         method: "POST",
         data: { amount },
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Aliquot complete"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SAMPLES_KEY });
+      showSuccess("Aliquot complete");
+    },
   });
 }
 
@@ -54,7 +57,10 @@ export function useMoveSample() {
         method: "POST",
         data: { location_id: locationId },
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Sample moved"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SAMPLES_KEY });
+      showSuccess("Sample moved");
+    },
   });
 }
 
@@ -67,7 +73,10 @@ export function useDisposeSample() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Sample disposed"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SAMPLES_KEY });
+      showSuccess("Sample disposed");
+    },
   });
 }
 
@@ -80,7 +89,10 @@ export function useQuarantineSample() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Sample quarantined"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SAMPLES_KEY });
+      showSuccess("Sample quarantined");
+    },
   });
 }
 
@@ -92,7 +104,10 @@ export function useClearQuarantine() {
         url: `/api/v1/samples/${sampleId}/clear-quarantine`,
         method: "POST",
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: SAMPLES_KEY }); showSuccess("Quarantine cleared"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SAMPLES_KEY });
+      showSuccess("Quarantine cleared");
+    },
   });
 }
 
@@ -115,8 +130,7 @@ export function useSamplesGlobal(params: SampleGlobalParams = {}) {
   if (params.search) searchParams.search = params.search;
   if (params.status?.length) searchParams.status = params.status.join(",");
   if (params.location_id) searchParams.location_id = params.location_id;
-  if (params.container_type?.length)
-    searchParams.container_type = params.container_type.join(",");
+  if (params.container_type?.length) searchParams.container_type = params.container_type.join(",");
   if (params.low_stock) searchParams.low_stock = "true";
   if (params.cursor) searchParams.cursor = params.cursor;
   if (params.page_size) searchParams.page_size = String(params.page_size);

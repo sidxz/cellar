@@ -1,24 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
 import { ExportToolbar as SharedExportToolbar } from "@/shared/components/export/export-toolbar";
 import type { ExportFormat, ExportRequest } from "@/shared/components/export/types";
-import {
-  type ColDef,
-  type ColGroupDef,
-  type ICellRendererParams,
-} from "ag-grid-community";
+import type { ColDef, ColGroupDef, ICellRendererParams } from "ag-grid-community";
+import { useMemo } from "react";
 
-import { StructureThumbnail } from "@/shared/components/chemistry";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { Badge } from "@/shared/components/ui/badge";
-import { groupBy } from "@/shared/lib/group-by";
 import type { Molecule } from "@/features/chemical-registration/types";
-import {
-  READOUT_NORMALIZATION_LABELS,
-  type InterceptSpec,
-  type Protocol,
-} from "@/features/screening-assay/types";
 import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
 import {
   findInterceptValue,
@@ -27,14 +14,20 @@ import {
   maxDoseFromRawData,
 } from "@/features/screening-assay/lib/intercept-label";
 import {
-  drcColId,
+  type InterceptSpec,
+  type Protocol,
+  READOUT_NORMALIZATION_LABELS,
+} from "@/features/screening-assay/types";
+import { StructureThumbnail } from "@/shared/components/chemistry";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { Badge } from "@/shared/components/ui/badge";
+import { groupBy } from "@/shared/lib/group-by";
+import {
   type ResolvedColumn,
+  drcColId,
   resolveColumns as resolveColumnsShared,
 } from "../../lib/protocol-column-id";
-import {
-  type AggregationMode,
-  useAggregationMode,
-} from "../../lib/use-aggregation-mode";
+import { type AggregationMode, useAggregationMode } from "../../lib/use-aggregation-mode";
 import type { ActivityValue, ReportConfig } from "../../types";
 import { DoseResponseCell } from "./dose-response-cell";
 import { InterceptCell } from "./intercept-cell";
@@ -102,8 +95,7 @@ function buildSimilarityColumn(): ColDef<EnrichedMolecule> {
       "Expressed as percent (100% = identical) to match the search threshold input. " +
       "Algorithm + metric depend on the active mode.",
     valueGetter: (p) => p.data?.similarity_score ?? null,
-    valueFormatter: (p) =>
-      p.value != null ? formatSimilarityPercent(Number(p.value)) : "—",
+    valueFormatter: (p) => (p.value != null ? formatSimilarityPercent(Number(p.value)) : "—"),
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const score = params.data?.similarity_score;
       if (score == null) {
@@ -113,14 +105,9 @@ function buildSimilarityColumn(): ColDef<EnrichedMolecule> {
       const color = similarityBarColor(score);
       return (
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs tabular-nums">
-            {formatSimilarityPercent(score)}
-          </span>
+          <span className="font-mono text-xs tabular-nums">{formatSimilarityPercent(score)}</span>
           <div className="h-1.5 w-12 rounded-full bg-muted overflow-hidden">
-            <div
-              className={`h-full ${color}`}
-              style={{ width: `${pct}%` }}
-            />
+            <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
           </div>
         </div>
       );
@@ -128,9 +115,7 @@ function buildSimilarityColumn(): ColDef<EnrichedMolecule> {
   };
 }
 
-function buildPropertyColumns(
-  visibleProperties: string[],
-): ColDef<EnrichedMolecule>[] {
+function buildPropertyColumns(visibleProperties: string[]): ColDef<EnrichedMolecule>[] {
   const cols: ColDef<EnrichedMolecule>[] = [];
 
   if (visibleProperties.includes("molecular_weight")) {
@@ -138,8 +123,7 @@ function buildPropertyColumns(
       headerName: "MW",
       width: 90,
       valueGetter: (p) => p.data?.descriptors?.molecular_weight ?? null,
-      valueFormatter: (p) =>
-        p.value != null ? Number(p.value).toFixed(1) : "—",
+      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(1) : "—"),
     });
   }
 
@@ -148,8 +132,7 @@ function buildPropertyColumns(
       headerName: "LogP",
       width: 80,
       valueGetter: (p) => p.data?.descriptors?.logp ?? null,
-      valueFormatter: (p) =>
-        p.value != null ? Number(p.value).toFixed(2) : "—",
+      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(2) : "—"),
     });
   }
 
@@ -177,11 +160,9 @@ function buildPropertyColumns(
     cols.push({
       headerName: "TPSA",
       width: 80,
-      headerTooltip:
-        "Topological polar surface area (Veber's rule — predicts permeability)",
+      headerTooltip: "Topological polar surface area (Veber's rule — predicts permeability)",
       valueGetter: (p) => p.data?.descriptors?.tpsa ?? null,
-      valueFormatter: (p) =>
-        p.value != null ? Number(p.value).toFixed(1) : "—",
+      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(1) : "—"),
     });
   }
 
@@ -213,7 +194,8 @@ function renderInterceptCell(
   // ActivityValue can carry a wire-level qualifier (">", "<") from upstream
   // — only prepend it when we're actually rendering a numeric scalar; ND /
   // qualifier / missing cells already self-describe.
-  const q = av.qualifier && av.qualifier !== "=" && display.kind === "scalar" ? `${av.qualifier} ` : "";
+  const q =
+    av.qualifier && av.qualifier !== "=" && display.kind === "scalar" ? `${av.qualifier} ` : "";
   const showUnit = display.kind === "scalar" || display.kind === "qualifier";
   const unitSuffix = showUnit && av.unit ? ` ${av.unit}` : "";
   if (display.warning) {
@@ -265,14 +247,10 @@ function buildReadoutColumn(
   const rd = proto?.readout_definitions?.find((r) => r.id === readoutDefId);
   const rdName = rd?.name ?? "Readout";
   const normLabel = normalization
-    ? READOUT_NORMALIZATION_LABELS[normalization as keyof typeof READOUT_NORMALIZATION_LABELS] ??
-      normalization
+    ? (READOUT_NORMALIZATION_LABELS[normalization as keyof typeof READOUT_NORMALIZATION_LABELS] ??
+      normalization)
     : null;
-  const headerSuffix = normLabel
-    ? ` (${normLabel})`
-    : rd?.unit
-      ? ` (${rd.unit})`
-      : "";
+  const headerSuffix = normLabel ? ` (${normLabel})` : rd?.unit ? ` (${rd.unit})` : "";
 
   return {
     headerName: `${rdName}${headerSuffix}`,
@@ -319,9 +297,7 @@ export function buildDrcColumns(
   const intercepts =
     visibleIntercepts && visibleIntercepts.length > 0
       ? allIntercepts.filter((spec) =>
-          visibleIntercepts.some(
-            (ik) => ik.kind === spec.kind && ik.level === spec.level,
-          ),
+          visibleIntercepts.some((ik) => ik.kind === spec.kind && ik.level === spec.level),
         )
       : allIntercepts;
 
@@ -455,12 +431,7 @@ function buildProtocolColumnGroups(
         const parts = entry.colId.split(":");
         const normalization = parts.length >= 4 ? parts[3] || null : null;
         children.push(
-          buildReadoutColumn(
-            entry.colId,
-            proto,
-            entry.readoutDefId ?? "",
-            normalization,
-          ),
+          buildReadoutColumn(entry.colId, proto, entry.readoutDefId ?? "", normalization),
         );
       } else {
         const rdId = entry.readoutDefId ?? "";
@@ -481,9 +452,7 @@ function buildProtocolColumnGroups(
     for (const { parentColId, visible } of drcByRdId.values()) {
       const rdId = parentColId.split(":")[1];
       const proto2 = protocols.find((p) => p.id === protoId);
-      children.push(
-        ...buildDrcColumns(parentColId, proto2, rdId, visible, aggregationMode),
-      );
+      children.push(...buildDrcColumns(parentColId, proto2, rdId, visible, aggregationMode));
     }
 
     groups.push({
@@ -501,9 +470,7 @@ function buildProtocolColumnGroups(
 // caller host the checkbox inside the Molecule cell via the grid's built-in
 // headerCheckboxSelection. Here we use DataGrid's auto-prepended __select__
 // column for simplicity (suppressSelectColumn=false, enableMultiSelect=true).
-function buildMoleculeColumn(
-  imageSize: string,
-): ColDef<EnrichedMolecule> {
+function buildMoleculeColumn(imageSize: string): ColDef<EnrichedMolecule> {
   const thumbSize = imageSize === "large" ? 260 : imageSize === "medium" ? 156 : 72;
   return {
     headerName: "Molecule",
@@ -530,9 +497,7 @@ function buildMoleculeColumn(
             <p className="truncate font-mono text-xs text-muted-foreground">
               {mol.registration_number ?? "—"}
             </p>
-            <p className="truncate text-sm">
-              {mol.name || "Unnamed"}
-            </p>
+            <p className="truncate text-sm">{mol.name || "Unnamed"}</p>
           </div>
         </div>
       );
@@ -576,11 +541,7 @@ export function ResultsGrid({
     const molecule = buildMoleculeColumn(reportConfig.imageSize);
     const sim = hasSimilarityScores ? [buildSimilarityColumn()] : [];
     const props = buildPropertyColumns(reportConfig.visibleFields.properties);
-    const protoGroups = buildProtocolColumnGroups(
-      protocolColumns,
-      protocols,
-      aggregationMode,
-    );
+    const protoGroups = buildProtocolColumnGroups(protocolColumns, protocols, aggregationMode);
     return [molecule, ...sim, ...props, ...protoGroups];
   }, [
     reportConfig.imageSize,
@@ -602,9 +563,7 @@ export function ResultsGrid({
   const toolbarActionsWithExport = (
     <>
       {toolbarActions}
-      {buildExportRequest ? (
-        <SharedExportToolbar buildRequest={buildExportRequest} />
-      ) : null}
+      {buildExportRequest ? <SharedExportToolbar buildRequest={buildExportRequest} /> : null}
     </>
   );
 
@@ -624,9 +583,7 @@ export function ResultsGrid({
         columnDefs={columnDefs}
         loading={loading}
         emptyState={
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            No results to display.
-          </p>
+          <p className="py-12 text-center text-sm text-muted-foreground">No results to display.</p>
         }
         height="calc(100vh - 80px)"
         rowHeight={rowHeight}

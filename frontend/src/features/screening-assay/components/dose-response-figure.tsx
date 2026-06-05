@@ -259,13 +259,8 @@ interface FigureInputs {
   layout: any;
 }
 
-function buildPlotInputs(
-  curve: CurveSnapshot,
-  preset: Preset,
-  unit: string | null,
-): FigureInputs {
-  const color =
-    CURVE_QUALITY_COLORS[curve.curve_class ?? ""] ?? CURVE_DEFAULT_COLOR;
+function buildPlotInputs(curve: CurveSnapshot, preset: Preset, unit: string | null): FigureInputs {
+  const color = CURVE_QUALITY_COLORS[curve.curve_class ?? ""] ?? CURVE_DEFAULT_COLOR;
   // Inactive curves don't represent a real dose-response — drawing a
   // fitted sigmoid + a vertical line at the (meaningless) fitted_value
   // implies a precision the data doesn't carry. Markers stay; the fit
@@ -393,8 +388,7 @@ function buildPlotInputs(
   //  - LATEST / BEST_R_SQUARED (non-aggregate, non-inactive): existing
   //    dashed line at the curve's own fitted_value.
   //  - Inactive single-curve: no shapes (showFit=false).
-  const isAggregateMode =
-    curve.aggregate != null && Number.isFinite(curve.aggregate.marker_x);
+  const isAggregateMode = curve.aggregate != null && Number.isFinite(curve.aggregate.marker_x);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const shapes: any[] = [];
   if (isAggregateMode) {

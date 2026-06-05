@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Pipette, Move, Trash2, ShieldAlert, ShieldCheck } from "lucide-react";
+import { AttachmentList, FileUploadZone } from "@/features/attachment";
+import { DetailShell } from "@/shared/components/detail-shell";
+import { EntityLink } from "@/shared/components/entity-link";
+import { MoleculeName } from "@/shared/components/entity-name";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
 import {
@@ -14,10 +16,8 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { DetailShell } from "@/shared/components/detail-shell";
-import { EntityLink } from "@/shared/components/entity-link";
-import { MoleculeName } from "@/shared/components/entity-name";
-import { AttachmentList, FileUploadZone } from "@/features/attachment";
+import { Move, Pipette, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { useBatch } from "../hooks/use-batches";
 import {
   useAliquotSample,
@@ -30,8 +30,8 @@ import {
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import {
   CONTAINER_TYPE_LABELS,
-  SAMPLE_STATUS_LABELS,
   type ContainerType,
+  SAMPLE_STATUS_LABELS,
   type SampleStatus,
   type StorageLocation,
 } from "../types";
@@ -82,37 +82,21 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
                 </Button>
               ) : (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAliquotOpen(true)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setAliquotOpen(true)}>
                     <Pipette className="mr-2 h-4 w-4" />
                     Aliquot
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setMoveOpen(true)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setMoveOpen(true)}>
                     <Move className="mr-2 h-4 w-4" />
                     Move
                   </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setQuarantineOpen(true)}
-                  >
+                  <Button variant="secondary" size="sm" onClick={() => setQuarantineOpen(true)}>
                     <ShieldAlert className="mr-2 h-4 w-4" />
                     Quarantine
                   </Button>
                 </>
               )}
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setDisposeOpen(true)}
-              >
+              <Button variant="destructive" size="sm" onClick={() => setDisposeOpen(true)}>
                 <Trash2 className="mr-2 h-4 w-4" />
                 Dispose
               </Button>
@@ -127,11 +111,7 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
               {batch && (
                 <p className="-mt-3 text-muted-foreground">
                   Sample from batch{" "}
-                  <EntityLink
-                    type="batch"
-                    id={batch.id}
-                    label={batch.batch_number}
-                  />
+                  <EntityLink type="batch" id={batch.id} label={batch.batch_number} />
                 </p>
               )}
 
@@ -168,9 +148,7 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
                   </div>
                   {sample.low_stock_threshold != null && (
                     <div>
-                      <p className="text-xs text-muted-foreground">
-                        Low Stock Threshold
-                      </p>
+                      <p className="text-xs text-muted-foreground">Low Stock Threshold</p>
                       <p className="font-medium">{sample.low_stock_threshold}</p>
                     </div>
                   )}
@@ -184,11 +162,7 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
                   <div className="mt-4 flex gap-6">
                     <div>
                       <p className="text-xs text-muted-foreground">Batch</p>
-                      <EntityLink
-                        type="batch"
-                        id={batch.id}
-                        label={batch.batch_number}
-                      />
+                      <EntityLink type="batch" id={batch.id} label={batch.batch_number} />
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Compound</p>
@@ -217,22 +191,14 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
       {/* Inline action dialogs */}
       {query.data && !TERMINAL_STATUSES.has(query.data.status) && (
         <>
-          <AliquotDialog
-            sample={query.data}
-            open={aliquotOpen}
-            onOpenChange={setAliquotOpen}
-          />
+          <AliquotDialog sample={query.data} open={aliquotOpen} onOpenChange={setAliquotOpen} />
           <MoveDialog
             sample={query.data}
             locations={locations ?? []}
             open={moveOpen}
             onOpenChange={setMoveOpen}
           />
-          <DisposeDialog
-            sample={query.data}
-            open={disposeOpen}
-            onOpenChange={setDisposeOpen}
-          />
+          <DisposeDialog sample={query.data} open={disposeOpen} onOpenChange={setDisposeOpen} />
           <QuarantineDialog
             sample={query.data}
             open={quarantineOpen}
@@ -262,8 +228,8 @@ function AliquotDialog({
         <DialogHeader>
           <DialogTitle>Aliquot Sample</DialogTitle>
           <DialogDescription>
-            Remove material from {sample.barcode}. Available:{" "}
-            {sample.amount_value} {sample.amount_unit}
+            Remove material from {sample.barcode}. Available: {sample.amount_value}{" "}
+            {sample.amount_unit}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
@@ -280,19 +246,19 @@ function AliquotDialog({
           <Button
             onClick={() => {
               mutation.mutate(
-                { sampleId: sample.id, amount: parseFloat(amount) },
+                { sampleId: sample.id, amount: Number.parseFloat(amount) },
                 {
                   onSuccess: () => {
                     onOpenChange(false);
                     setAmount("");
                   },
-                }
+                },
               );
             }}
             disabled={
               !amount ||
-              parseFloat(amount) <= 0 ||
-              parseFloat(amount) > sample.amount_value ||
+              Number.parseFloat(amount) <= 0 ||
+              Number.parseFloat(amount) > sample.amount_value ||
               mutation.isPending
             }
           >
@@ -323,9 +289,7 @@ function MoveDialog({
       <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Move Sample</DialogTitle>
-          <DialogDescription>
-            Move {sample.barcode} to a new location.
-          </DialogDescription>
+          <DialogDescription>Move {sample.barcode} to a new location.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
           <Label>Destination</Label>
@@ -347,7 +311,7 @@ function MoveDialog({
             onClick={() => {
               mutation.mutate(
                 { sampleId: sample.id, locationId: locationId || null },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}
@@ -378,8 +342,7 @@ function DisposeDialog({
         <DialogHeader>
           <DialogTitle>Dispose Sample</DialogTitle>
           <DialogDescription>
-            This will permanently mark {sample.barcode} as disposed. This action
-            cannot be undone.
+            This will permanently mark {sample.barcode} as disposed. This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
@@ -396,7 +359,7 @@ function DisposeDialog({
             onClick={() => {
               mutation.mutate(
                 { sampleId: sample.id, reason: reason || undefined },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}
@@ -427,8 +390,8 @@ function QuarantineDialog({
         <DialogHeader>
           <DialogTitle>Quarantine Sample</DialogTitle>
           <DialogDescription>
-            Mark {sample.barcode} as quarantined. It will be unavailable until
-            the quarantine is cleared.
+            Mark {sample.barcode} as quarantined. It will be unavailable until the quarantine is
+            cleared.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
@@ -449,7 +412,7 @@ function QuarantineDialog({
                     onOpenChange(false);
                     setReason("");
                   },
-                }
+                },
               );
             }}
             disabled={!reason.trim() || mutation.isPending}

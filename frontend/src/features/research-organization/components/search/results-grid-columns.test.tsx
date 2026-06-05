@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
 import type {
   DoseResponseConfig,
   InterceptSpec,
   Protocol,
   ReadoutDefinition,
 } from "@/features/screening-assay/types";
+import { describe, expect, it } from "vitest";
 import { buildDrcColumns, resolveColumns } from "./results-grid";
 
 const PROTO_ID = "11111111-1111-1111-1111-111111111111";
@@ -42,9 +42,7 @@ function drConfig(intercepts: InterceptSpec[]): DoseResponseConfig {
   };
 }
 
-function rd(
-  over: Partial<ReadoutDefinition> & { id: string },
-): ReadoutDefinition {
+function rd(over: Partial<ReadoutDefinition> & { id: string }): ReadoutDefinition {
   const { id, ...rest } = over;
   return {
     id,
@@ -78,10 +76,7 @@ describe("resolveColumns", () => {
       rd({
         id: RD_DR_ID,
         data_type: "dose_response",
-        dose_response_config: drConfig([
-          spec({ level: 50 }),
-          spec({ level: 90, label: "EC90" }),
-        ]),
+        dose_response_config: drConfig([spec({ level: 50 }), spec({ level: 90, label: "EC90" })]),
       }),
     ]);
     const resolved = resolveColumns([`drc:${RD_DR_ID}`], [p]);
@@ -107,10 +102,7 @@ describe("resolveColumns", () => {
 
   it("supports 4-segment rd:<proto>:<rd>:<norm> colIds", () => {
     const p = proto([rd({ id: RD_RAW_ID })]);
-    const resolved = resolveColumns(
-      [`rd:${PROTO_ID}:${RD_RAW_ID}:percent_inhibition`],
-      [p],
-    );
+    const resolved = resolveColumns([`rd:${PROTO_ID}:${RD_RAW_ID}:percent_inhibition`], [p]);
     expect(resolved).toHaveLength(1);
     expect(resolved[0].protocolId).toBe(PROTO_ID);
     expect(resolved[0].readoutDefId).toBe(RD_RAW_ID);
@@ -134,10 +126,7 @@ describe("buildDrcColumns", () => {
     const dr = rd({
       id: RD_DR_ID,
       data_type: "dose_response",
-      dose_response_config: drConfig([
-        spec({ level: 50 }),
-        spec({ level: 90, label: "EC90" }),
-      ]),
+      dose_response_config: drConfig([spec({ level: 50 }), spec({ level: 90, label: "EC90" })]),
     });
     const cols = buildDrcColumns(`drc:${RD_DR_ID}`, proto([dr]), RD_DR_ID);
     expect(cols).toHaveLength(3);

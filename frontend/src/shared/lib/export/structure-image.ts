@@ -12,7 +12,7 @@ interface DepictResponse {
 export async function fetchStructureImages(
   smilesSet: string[],
   width = 150,
-  height = 100
+  height = 100,
 ): Promise<Record<string, string>> {
   const unique = [...new Set(smilesSet.filter(Boolean))];
   if (unique.length === 0) return {};

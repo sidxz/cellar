@@ -10,9 +10,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 
-import {
-  getCampaignApiV1CampaignsCampaignIdGet,
-} from "@/shared/lib/api/campaigns/campaigns";
+import { getCampaignApiV1CampaignsCampaignIdGet } from "@/shared/lib/api/campaigns/campaigns";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { CampaignResponse, PaginatedResponseCampaignResponse } from "@/shared/lib/api/model";
 
@@ -20,8 +18,7 @@ import type { CampaignResponse, PaginatedResponseCampaignResponse } from "@/shar
 
 export const campaignKeys = {
   all: ["campaigns"] as const,
-  byProject: (projectId: string) =>
-    ["campaigns", "by-project", projectId] as const,
+  byProject: (projectId: string) => ["campaigns", "by-project", projectId] as const,
   detail: (campaignId: string) => ["campaigns", campaignId] as const,
 } as const;
 
@@ -57,7 +54,10 @@ export function useCampaigns(
     queryFn: async () => {
       const params: Record<string, unknown> = {};
       if (projectId) params.project_id = projectId;
-      if (tags) { params.tags = tags; params.tag_logic = tagLogic ?? "any"; }
+      if (tags) {
+        params.tags = tags;
+        params.tag_logic = tagLogic ?? "any";
+      }
       const page = await customInstance<PaginatedResponseCampaignResponse>({
         url: "/api/v1/campaigns",
         method: "GET",
@@ -77,9 +77,7 @@ export function useCampaigns(
  */
 export function useCampaign(
   campaignId: string,
-  options?: Partial<
-    UseQueryOptions<CampaignResponse, Error, CampaignResponse>
-  >,
+  options?: Partial<UseQueryOptions<CampaignResponse, Error, CampaignResponse>>,
 ) {
   return useQuery({
     queryKey: campaignKeys.detail(campaignId),

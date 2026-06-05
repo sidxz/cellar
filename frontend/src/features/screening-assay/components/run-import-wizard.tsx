@@ -1,21 +1,7 @@
 "use client";
 
-import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Upload,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Upload } from "lucide-react";
 
-import {
-  type ImportConfidence,
-  type ImportRole,
-  type PreviewRunFileResponse,
-  type RunImportTemplate,
-} from "../hooks/use-run-import";
-import { useRunImportWizard } from "../hooks/use-run-import-wizard";
-import type { MappingDraft } from "../lib/run-import-mapping";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
@@ -37,6 +23,14 @@ import {
 } from "@/shared/components/ui/select";
 import { formatDate } from "@/shared/lib/format-date";
 import { cn } from "@/shared/lib/utils";
+import type {
+  ImportConfidence,
+  ImportRole,
+  PreviewRunFileResponse,
+  RunImportTemplate,
+} from "../hooks/use-run-import";
+import { useRunImportWizard } from "../hooks/use-run-import-wizard";
+import type { MappingDraft } from "../lib/run-import-mapping";
 
 const ROLE_OPTIONS: Array<{ value: ImportRole | "ignore"; label: string }> = [
   { value: "well", label: "Well" },
@@ -72,12 +66,7 @@ function confidenceLabel(c: ImportConfidence): string {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function RunImportWizard({
-  runId,
-  protocolId,
-  open,
-  onOpenChange,
-}: RunImportWizardProps) {
+export function RunImportWizard({ runId, protocolId, open, onOpenChange }: RunImportWizardProps) {
   const {
     step,
     setStep,
@@ -123,8 +112,8 @@ export function RunImportWizard({
         <DialogHeader>
           <DialogTitle>Import Run File</DialogTitle>
           <DialogDescription>
-            Upload a long-format CSV or XLSX with plate name, well, concentration,
-            batch ref, and readout values.
+            Upload a long-format CSV or XLSX with plate name, well, concentration, batch ref, and
+            readout values.
           </DialogDescription>
         </DialogHeader>
 
@@ -152,9 +141,7 @@ export function RunImportWizard({
             onClearTemplate={() => setAppliedTemplate(null)}
             onSetRole={handleSetRole}
             onSetReadoutDef={handleSetReadoutDef}
-            onAckLowConfidence={(v) =>
-              setDraft((d) => ({ ...d, acknowledgedLowConfidence: v }))
-            }
+            onAckLowConfidence={(v) => setDraft((d) => ({ ...d, acknowledgedLowConfidence: v }))}
             lowConfidenceHeaders={lowConfidenceHeaders}
           />
         )}
@@ -216,24 +203,20 @@ export function RunImportWizard({
                 importMutation.isPending ||
                 (preview?.validation_errors.length ?? 0) > 0 ||
                 (preview?.row_conflicts.length ?? 0) > 0 ||
-                (preview?.ambiguous_compounds ?? []).some(
-                  (a) => !compoundPicks[a.molecule_id],
-                )
+                (preview?.ambiguous_compounds ?? []).some((a) => !compoundPicks[a.molecule_id])
               }
             >
               {importMutation.isPending
                 ? "Importing…"
                 : (preview?.will_create_plates ?? 0) +
-                    (preview?.will_create_wells ?? 0) +
-                    (preview?.will_create_readouts ?? 0) ===
-                  0
-                ? "Attach file"
-                : "Import"}
+                      (preview?.will_create_wells ?? 0) +
+                      (preview?.will_create_readouts ?? 0) ===
+                    0
+                  ? "Attach file"
+                  : "Import"}
             </Button>
           )}
-          {step === 4 && (
-            <Button onClick={() => handleOpenChange(false)}>Done</Button>
-          )}
+          {step === 4 && <Button onClick={() => handleOpenChange(false)}>Done</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -262,17 +245,10 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 | 4 }) {
             >
               {n}
             </span>
-            <span
-              className={cn(
-                active && "text-foreground",
-                !active && "text-muted-foreground",
-              )}
-            >
+            <span className={cn(active && "text-foreground", !active && "text-muted-foreground")}>
               {label}
             </span>
-            {i < steps.length - 1 && (
-              <span className="mx-1 h-px w-6 bg-border" />
-            )}
+            {i < steps.length - 1 && <span className="mx-1 h-px w-6 bg-border" />}
           </div>
         );
       })}
@@ -372,8 +348,7 @@ function MappingStep({
       {appliedTemplate && (
         <div className="flex items-center justify-between rounded-md border border-primary/40 bg-primary/5 p-3 text-sm">
           <span>
-            Applied template <strong>{appliedTemplate.name}</strong>. Adjust as
-            needed.
+            Applied template <strong>{appliedTemplate.name}</strong>. Adjust as needed.
           </span>
           <Button variant="ghost" size="sm" onClick={onClearTemplate}>
             Clear
@@ -400,9 +375,7 @@ function MappingStep({
                   <td className="px-3 py-2">
                     <Select
                       value={role ?? "ignore"}
-                      onValueChange={(v) =>
-                        onSetRole(s.header, v as ImportRole | "ignore")
-                      }
+                      onValueChange={(v) => onSetRole(s.header, v as ImportRole | "ignore")}
                     >
                       <SelectTrigger className="h-8 w-44">
                         <SelectValue />
@@ -417,15 +390,10 @@ function MappingStep({
                     </Select>
                   </td>
                   <td className="px-3 py-2">
-                    <Badge
-                      variant="outline"
-                      className={confidenceBadgeClass(s.confidence)}
-                    >
+                    <Badge variant="outline" className={confidenceBadgeClass(s.confidence)}>
                       {confidenceLabel(s.confidence)}
                     </Badge>
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {s.reason}
-                    </span>
+                    <span className="ml-2 text-xs text-muted-foreground">{s.reason}</span>
                   </td>
                   <td className="px-3 py-2">
                     {role === "readout" ? (
@@ -457,9 +425,8 @@ function MappingStep({
 
       <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         Dose values in this file are interpreted as{" "}
-        <span className="font-mono font-medium text-foreground">{doseUnit}</span>{" "}
-        (per protocol). To change the unit, edit the protocol&apos;s Dose Unit
-        on the Design tab.
+        <span className="font-mono font-medium text-foreground">{doseUnit}</span> (per protocol). To
+        change the unit, edit the protocol&apos;s Dose Unit on the Design tab.
       </div>
 
       {lowConfidenceHeaders.length > 0 && (
@@ -469,9 +436,9 @@ function MappingStep({
             onCheckedChange={(v) => onAckLowConfidence(!!v)}
           />
           <span>
-            <strong>{lowConfidenceHeaders.length}</strong> column(s) have low
-            confidence: <span className="font-mono">{lowConfidenceHeaders.join(", ")}</span>.
-            Confirm assignments before continuing.
+            <strong>{lowConfidenceHeaders.length}</strong> column(s) have low confidence:{" "}
+            <span className="font-mono">{lowConfidenceHeaders.join(", ")}</span>. Confirm
+            assignments before continuing.
           </span>
         </label>
       )}
@@ -495,11 +462,8 @@ function PreviewStep({
   onAutoCreateUnmatchedBatches: (v: boolean) => void;
 }) {
   const willCreateTotal =
-    preview.will_create_plates +
-    preview.will_create_wells +
-    preview.will_create_readouts;
-  const willSkipTotal =
-    preview.will_skip_wells.length + preview.will_skip_readouts.length;
+    preview.will_create_plates + preview.will_create_wells + preview.will_create_readouts;
+  const willSkipTotal = preview.will_skip_wells.length + preview.will_skip_readouts.length;
 
   return (
     <div className="space-y-4 py-2">
@@ -525,7 +489,9 @@ function PreviewStep({
         <div className="rounded-md border border-green-500/30 bg-green-500/5 p-3 text-xs text-muted-foreground">
           <span className="font-medium text-green-300">Will create: </span>
           {preview.will_create_plates > 0 && (
-            <>{preview.will_create_plates} plate{preview.will_create_plates === 1 ? "" : "s"}, </>
+            <>
+              {preview.will_create_plates} plate{preview.will_create_plates === 1 ? "" : "s"},{" "}
+            </>
           )}
           {preview.will_create_wells} well{preview.will_create_wells === 1 ? "" : "s"},{" "}
           {preview.will_create_readouts} readout cell
@@ -535,24 +501,19 @@ function PreviewStep({
 
       {willCreateTotal === 0 && preview.validation_errors.length === 0 && (
         <div className="rounded-md border border-muted bg-muted/30 p-3 text-sm text-muted-foreground">
-          Nothing new to import — this file is fully redundant with what&apos;s
-          already on the run. The file will still be saved to the Files tab as
-          an audit artifact. Use <span className="font-medium">Reset Run Data</span>{" "}
-          on the run header if you want to wipe and re-import.
+          Nothing new to import — this file is fully redundant with what&apos;s already on the run.
+          The file will still be saved to the Files tab as an audit artifact. Use{" "}
+          <span className="font-medium">Reset Run Data</span> on the run header if you want to wipe
+          and re-import.
         </div>
       )}
 
       {willSkipTotal > 0 && (
-        <ConflictPanel
-          wells={preview.will_skip_wells}
-          readouts={preview.will_skip_readouts}
-        />
+        <ConflictPanel wells={preview.will_skip_wells} readouts={preview.will_skip_readouts} />
       )}
 
       <div>
-        <p className="mb-2 text-xs font-medium text-muted-foreground">
-          Per-plate summary
-        </p>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">Per-plate summary</p>
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
@@ -591,7 +552,9 @@ function PreviewStep({
             ))}
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
-            Configure on the protocol&apos;s <span className="font-medium">Design</span> tab → Control Layouts. You&apos;ll need a Plate Template first (Administration → Screening Setup → Plate Templates).
+            Configure on the protocol&apos;s <span className="font-medium">Design</span> tab →
+            Control Layouts. You&apos;ll need a Plate Template first (Administration → Screening
+            Setup → Plate Templates).
           </p>
         </div>
       )}
@@ -603,8 +566,7 @@ function PreviewStep({
             {preview.unmatched_batches.length} unmatched batch ref(s)
           </div>
           <p className="text-xs text-muted-foreground">
-            These wells will be skipped. Register the batches first if they
-            should be included.
+            These wells will be skipped. Register the batches first if they should be included.
           </p>
           <p className="mt-2 break-words font-mono text-xs">
             {preview.unmatched_batches.slice(0, 20).join(", ")}
@@ -622,9 +584,9 @@ function PreviewStep({
         <div>
           <span className="font-medium">Auto-create missing batches</span>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            When a row&apos;s batch identifier doesn&apos;t match any existing batch in
-            Cellar AND the compound resolves, create a placeholder batch
-            automatically and capture the imported identifier as an alias.
+            When a row&apos;s batch identifier doesn&apos;t match any existing batch in Cellar AND
+            the compound resolves, create a placeholder batch automatically and capture the imported
+            identifier as an alias.
           </p>
         </div>
       </label>
@@ -636,8 +598,8 @@ function PreviewStep({
             {preview.unmatched_compound_refs.length} unmatched compound ref(s)
           </div>
           <p className="text-xs text-muted-foreground">
-            No molecule matches these identifiers (or the molecule has no
-            registered batches). Wells will be skipped.
+            No molecule matches these identifiers (or the molecule has no registered batches). Wells
+            will be skipped.
           </p>
           <p className="mt-2 break-words font-mono text-xs">
             {preview.unmatched_compound_refs.slice(0, 20).join(", ")}
@@ -658,12 +620,11 @@ function PreviewStep({
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
           <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
             <AlertCircle className="h-4 w-4" />
-            Batch Ref / Compound Ref disagree on{" "}
-            {preview.row_conflicts.length} row(s)
+            Batch Ref / Compound Ref disagree on {preview.row_conflicts.length} row(s)
           </div>
           <p className="text-xs text-muted-foreground">
-            Each row's Batch Ref and Compound Ref point to different molecules.
-            Fix the file (drop one column or correct the values) and re-upload.
+            Each row's Batch Ref and Compound Ref point to different molecules. Fix the file (drop
+            one column or correct the values) and re-upload.
           </p>
           <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
             {preview.row_conflicts.slice(0, 10).map((line, i) => (
@@ -726,9 +687,8 @@ function DisambiguatePanel({
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        These compounds have multiple registered batches. Pick the lot that
-        was actually assayed; your choice applies to every row referencing
-        that compound.
+        These compounds have multiple registered batches. Pick the lot that was actually assayed;
+        your choice applies to every row referencing that compound.
       </p>
       <div className="mt-3 space-y-2">
         {ambiguous.map((a) => {
@@ -739,18 +699,13 @@ function DisambiguatePanel({
               className="flex flex-col gap-1 rounded-md border border-muted bg-background/50 p-2 sm:flex-row sm:items-center sm:gap-3"
             >
               <div className="flex-1 min-w-0">
-                <div className="font-mono text-xs text-foreground">
-                  {a.compound_ref}
-                </div>
+                <div className="font-mono text-xs text-foreground">{a.compound_ref}</div>
                 <div className="text-xs text-muted-foreground">
                   {a.molecule_name} · {a.affected_row_count} row
                   {a.affected_row_count === 1 ? "" : "s"}
                 </div>
               </div>
-              <Select
-                value={value}
-                onValueChange={(v) => onPick(a.molecule_id, v)}
-              >
+              <Select value={value} onValueChange={(v) => onPick(a.molecule_id, v)}>
                 <SelectTrigger className="h-8 w-full sm:w-80">
                   <SelectValue placeholder="Pick a batch…" />
                 </SelectTrigger>
@@ -759,14 +714,10 @@ function DisambiguatePanel({
                     <SelectItem key={b.batch_id} value={b.batch_id}>
                       <span className="font-mono">{b.batch_number}</span>
                       {b.salt_form && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          · {b.salt_form}
-                        </span>
+                        <span className="ml-2 text-xs text-muted-foreground">· {b.salt_form}</span>
                       )}
                       {b.purity != null && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          · {b.purity}%
-                        </span>
+                        <span className="ml-2 text-xs text-muted-foreground">· {b.purity}%</span>
                       )}
                       <span className="ml-2 text-xs text-muted-foreground">
                         · {formatDate(b.created_at)}
@@ -800,8 +751,8 @@ function ConflictPanel({
         {readouts.length === 1 ? "" : "s"} already populated
       </div>
       <p className="text-xs text-muted-foreground">
-        Existing values are never overwritten. New plates, new wells, and
-        empty readout cells will still write.
+        Existing values are never overwritten. New plates, new wells, and empty readout cells will
+        still write.
       </p>
       {wells.length > 0 && (
         <details className="mt-2">
@@ -811,14 +762,14 @@ function ConflictPanel({
           <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
             {wells.slice(0, SAMPLE).map((w, i) => (
               <li key={i}>
-                <span className="text-foreground">{w.plate_name} {w.well_position}</span>
+                <span className="text-foreground">
+                  {w.plate_name} {w.well_position}
+                </span>
                 <span className="ml-2 text-muted-foreground">— {w.reason}</span>
               </li>
             ))}
             {wells.length > SAMPLE && (
-              <li className="text-muted-foreground">
-                …and {wells.length - SAMPLE} more
-              </li>
+              <li className="text-muted-foreground">…and {wells.length - SAMPLE} more</li>
             )}
           </ul>
         </details>
@@ -834,15 +785,11 @@ function ConflictPanel({
                 <span className="text-foreground">
                   {r.plate_name} {r.well_position}
                 </span>
-                <span className="ml-2 text-muted-foreground">
-                  — {r.readout_name || "readout"}
-                </span>
+                <span className="ml-2 text-muted-foreground">— {r.readout_name || "readout"}</span>
               </li>
             ))}
             {readouts.length > SAMPLE && (
-              <li className="text-muted-foreground">
-                …and {readouts.length - SAMPLE} more
-              </li>
+              <li className="text-muted-foreground">…and {readouts.length - SAMPLE} more</li>
             )}
           </ul>
         </details>
@@ -900,31 +847,27 @@ function ConfirmStep({
           <p className="font-medium">Import complete</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {result.plates_created} plates · {result.wells_created} wells ·{" "}
-            {result.readouts_created} readouts ·{" "}
-            {result.controls_from_template} controls from layout
+            {result.readouts_created} readouts · {result.controls_from_template} controls from
+            layout
             {result.controls_unclassified > 0 && (
               <> · {result.controls_unclassified} blank wells unclassified</>
             )}
             {result.conflicts_well_metadata.length > 0 && (
               <>
-                {" "}· {result.conflicts_well_metadata.length} well metadata
-                conflict
+                {" "}
+                · {result.conflicts_well_metadata.length} well metadata conflict
                 {result.conflicts_well_metadata.length === 1 ? "" : "s"} skipped
               </>
             )}
             {result.conflicts_readout.length > 0 && (
               <>
-                {" "}· {result.conflicts_readout.length} readout cell
-                {result.conflicts_readout.length === 1 ? "" : "s"} skipped
-                (already present)
+                {" "}
+                · {result.conflicts_readout.length} readout cell
+                {result.conflicts_readout.length === 1 ? "" : "s"} skipped (already present)
               </>
             )}
             {result.unmatched_batches.length > 0 && (
-              <>
-                {" "}
-                · {result.unmatched_batches.length} unmatched batch refs
-                skipped
-              </>
+              <> · {result.unmatched_batches.length} unmatched batch refs skipped</>
             )}
           </p>
           {result.attachment_id && (
@@ -943,14 +886,12 @@ function ConfirmStep({
       {(result.auto_created_batches ?? 0) > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950">
           <p className="font-medium text-amber-900 dark:text-amber-200">
-            {result.auto_created_batches}{" "}
-            placeholder{" "}
-            {result.auto_created_batches === 1 ? "batch was" : "batches were"}{" "}
-            auto-created from external references.
+            {result.auto_created_batches} placeholder{" "}
+            {result.auto_created_batches === 1 ? "batch was" : "batches were"} auto-created from
+            external references.
           </p>
           <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">
-            Review them on the Inventory page and fill in real provenance
-            (amount, source, chemist).
+            Review them on the Inventory page and fill in real provenance (amount, source, chemist).
           </p>
         </div>
       )}
@@ -962,12 +903,10 @@ function ConfirmStep({
             Post-import calculation failed
           </div>
           <p className="text-xs text-muted-foreground">
-            Normalization / aggregation did not run. Dose-response curves and
-            QC metrics will be empty until this is resolved.
+            Normalization / aggregation did not run. Dose-response curves and QC metrics will be
+            empty until this is resolved.
           </p>
-          <p className="mt-2 break-words font-mono text-xs">
-            {result.compute_warning}
-          </p>
+          <p className="mt-2 break-words font-mono text-xs">{result.compute_warning}</p>
         </div>
       )}
 
@@ -996,4 +935,3 @@ function ConfirmStep({
     </div>
   );
 }
-

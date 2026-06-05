@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface CurveNavigatorProps {
   currentIndex: number;

@@ -1,20 +1,15 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
 import { useGetUnregisteredRowsApiV1CollectionImportPreviewsPreviewIdUnregisteredRowsGet as useUnregisteredRows } from "@/shared/lib/api/collection-import/collection-import";
 import type { UnregisteredRowResponse } from "@/shared/lib/api/model";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { useRegistrationWizard } from "./use-registration-wizard";
 
 // CSV columns recognised by the bulk-register CSV importer.
 // Source of truth: CSV_TEMPLATE_HEADERS in step-input.tsx.
 // The handoff only populates the columns the upstream stash carries.
-const CSV_HEADERS = [
-  "name",
-  "smiles",
-  "identifier",
-  "identifier_type",
-] as const;
+const CSV_HEADERS = ["name", "smiles", "identifier", "identifier_type"] as const;
 
 function escapeCsvCell(value: string): string {
   // Quote everything that's non-empty for safety — CSV parsers handle quoted
@@ -30,9 +25,7 @@ function buildCsvFromStash(rows: UnregisteredRowResponse[]): File {
     const smiles = r.smiles ?? "";
     const identifier = r.external_id ?? "";
     const identifierType = identifier ? "custom" : "";
-    lines.push(
-      [name, smiles, identifier, identifierType].map(escapeCsvCell).join(","),
-    );
+    lines.push([name, smiles, identifier, identifierType].map(escapeCsvCell).join(","));
   }
   const csv = lines.join("\n");
   return new File([csv], "from-collection-import.csv", { type: "text/csv" });

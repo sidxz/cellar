@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
+import { describe, expect, it } from "vitest";
 import { snapshotToDoseResponseCurve } from "./snapshot-adapter";
 
 const MIN_SNAP: CurveSnapshot = {

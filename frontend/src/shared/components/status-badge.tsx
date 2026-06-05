@@ -1,5 +1,9 @@
 import { Badge } from "@/shared/components/ui/badge";
-import { getStatusVariant, formatStatusLabel, getPriorityVariant } from "@/shared/lib/status-variants";
+import {
+  formatStatusLabel,
+  getPriorityVariant,
+  getStatusVariant,
+} from "@/shared/lib/status-variants";
 
 interface StatusBadgeProps {
   status: string;

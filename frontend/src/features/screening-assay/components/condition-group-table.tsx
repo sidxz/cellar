@@ -1,7 +1,5 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { ColDef } from "ag-grid-community";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -11,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import type { ColDef } from "ag-grid-community";
+import { useMemo, useState } from "react";
 import { useConditionGroups } from "../hooks/use-condition-groups";
 import type { ConditionDefinition, ConditionGroupResponse } from "../types";
 
@@ -26,13 +26,10 @@ export function ConditionGroupTable({
   className,
 }: ConditionGroupTableProps) {
   const [selectedCondition, setSelectedCondition] = useState<string>(
-    conditionDefinitions[0]?.name ?? ""
+    conditionDefinitions[0]?.name ?? "",
   );
 
-  const { data, isLoading } = useConditionGroups(
-    protocolId,
-    selectedCondition || undefined
-  );
+  const { data, isLoading } = useConditionGroups(protocolId, selectedCondition || undefined);
 
   // Build columns dynamically: condition_value + run_count + one per readout
   const columnDefs = useMemo<ColDef<ConditionGroupResponse>[]>(() => {
@@ -65,14 +62,12 @@ export function ConditionGroupTable({
         headerClass: "ag-right-aligned-header",
         valueGetter: (p) => {
           const match = p.data?.aggregated_readouts.find(
-            (r) => r.readout_definition_id === rd.readout_definition_id
+            (r) => r.readout_definition_id === rd.readout_definition_id,
           );
           return match?.value ?? null;
         },
         valueFormatter: (p) =>
-          p.value !== null && p.value !== undefined
-            ? Number(p.value).toFixed(3)
-            : "\u2014",
+          p.value !== null && p.value !== undefined ? Number(p.value).toFixed(3) : "\u2014",
       });
     }
 

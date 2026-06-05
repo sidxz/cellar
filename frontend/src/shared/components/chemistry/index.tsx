@@ -1,7 +1,7 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import dynamic from "next/dynamic";
 
 /**
  * Dynamic (no-SSR) exports for chemistry components.
@@ -12,23 +12,19 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
  */
 
 export const StructureRenderer = dynamic(
-  () =>
-    import("./structure-renderer").then((mod) => mod.StructureRenderer),
+  () => import("./structure-renderer").then((mod) => mod.StructureRenderer),
   {
     ssr: false,
     loading: () => <Skeleton style={{ width: 300, height: 200 }} />,
-  }
+  },
 );
 
 export const StructureThumbnail = dynamic(
-  () =>
-    import("./structure-thumbnail").then((mod) => mod.StructureThumbnail),
+  () => import("./structure-thumbnail").then((mod) => mod.StructureThumbnail),
   {
     ssr: false,
-    loading: () => (
-      <div className="h-10 w-10 rounded bg-muted" />
-    ),
-  }
+    loading: () => <div className="h-10 w-10 rounded bg-muted" />,
+  },
 );
 
 export { StructureEditorDialog } from "./structure-editor-dialog";

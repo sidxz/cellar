@@ -1,8 +1,8 @@
 "use client";
 
+import type { ReadoutNormalization } from "@/features/screening-assay/types";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Label } from "@/shared/components/ui/label";
-import type { ReadoutNormalization } from "@/features/screening-assay/types";
 
 const FORMULAS: Array<{
   value: Exclude<ReadoutNormalization, "none">;
@@ -78,9 +78,7 @@ export function NormalizationCheckboxGroup({
             <div className="grid gap-0.5 leading-tight">
               <Label
                 htmlFor={`norm-${f.value}`}
-                className={
-                  disabled ? "cursor-not-allowed text-foreground" : "cursor-pointer"
-                }
+                className={disabled ? "cursor-not-allowed text-foreground" : "cursor-pointer"}
               >
                 {f.label}
               </Label>

@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { cn } from "@/shared/lib/utils";
-import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { Badge } from "@/shared/components/ui/badge";
+import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
+import { cn } from "@/shared/lib/utils";
+import { useMemo, useState } from "react";
 import {
   CURVE_CLASS_LABELS,
   CURVE_TYPE_LABELS,
@@ -69,7 +69,7 @@ export function ComparisonTable({ rows }: ComparisonTableProps) {
   );
 
   const curveLabel = rows[0]
-    ? CURVE_TYPE_LABELS[rows[0].curve_type as CurveType] ?? rows[0].curve_type
+    ? (CURVE_TYPE_LABELS[rows[0].curve_type as CurveType] ?? rows[0].curve_type)
     : "Value";
 
   return (
@@ -100,11 +100,21 @@ export function ComparisonTable({ rows }: ComparisonTableProps) {
                 </span>
               </td>
               <td className="px-3 py-2 text-xs text-muted-foreground">{row.batch ?? "--"}</td>
-              <td className={cn("px-3 py-2 font-mono", row.fitted_value === bestIC50 && "text-success font-semibold")}>
+              <td
+                className={cn(
+                  "px-3 py-2 font-mono",
+                  row.fitted_value === bestIC50 && "text-success font-semibold",
+                )}
+              >
                 {row.fitted_value.toPrecision(4)}
               </td>
               <td className="px-3 py-2 font-mono">{row.hill_slope.toFixed(2)}</td>
-              <td className={cn("px-3 py-2 font-mono", row.r_squared === bestR2 && "text-success font-semibold")}>
+              <td
+                className={cn(
+                  "px-3 py-2 font-mono",
+                  row.r_squared === bestR2 && "text-success font-semibold",
+                )}
+              >
                 {row.r_squared.toFixed(3)}
               </td>
               <td className="px-3 py-2">
@@ -112,7 +122,9 @@ export function ComparisonTable({ rows }: ComparisonTableProps) {
                   <Badge variant="outline" className="text-xs">
                     {CURVE_CLASS_LABELS[row.curve_class] ?? row.curve_class}
                   </Badge>
-                ) : "--"}
+                ) : (
+                  "--"
+                )}
               </td>
               <td className="px-3 py-2 font-mono">{row.top.toFixed(1)}</td>
               <td className="px-3 py-2 font-mono">{row.bottom.toFixed(1)}</td>
@@ -127,7 +139,7 @@ export function ComparisonTable({ rows }: ComparisonTableProps) {
 /** Build ComparisonRow[] from DoseResponseCurve[] + registration labels */
 export function buildComparisonRows(
   curves: DoseResponseCurve[],
-  labelMap: Map<string, { label: string; batch?: string | null }>
+  labelMap: Map<string, { label: string; batch?: string | null }>,
 ): ComparisonRow[] {
   const byMolecule = new Map<string, DoseResponseCurve>();
   for (const c of curves) {

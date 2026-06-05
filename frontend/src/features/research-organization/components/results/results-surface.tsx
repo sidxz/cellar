@@ -1,22 +1,22 @@
 "use client";
 
-import { useCallback, useMemo, type ReactNode } from "react";
+import type { Molecule } from "@/features/chemical-registration/types";
+import { ClusterMapView } from "@/features/sar-analysis/components/cluster-map-view";
+import type { ProtocolOption } from "@/features/sar-analysis/components/color-mode-picker";
+import { ScaffoldTreeView } from "@/features/sar-analysis/components/scaffold-tree-view";
+import { StructureThumbnail } from "@/shared/components/chemistry";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { Button } from "@/shared/components/ui/button";
+import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { ColDef } from "ag-grid-community";
 import { ExternalLink } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { StructureThumbnail } from "@/shared/components/chemistry";
-import { Button } from "@/shared/components/ui/button";
-import type { Molecule } from "@/features/chemical-registration/types";
-import { ScaffoldTreeView } from "@/features/sar-analysis/components/scaffold-tree-view";
-import { ClusterMapView } from "@/features/sar-analysis/components/cluster-map-view";
-import type { ProtocolOption } from "@/features/sar-analysis/components/color-mode-picker";
-import { customInstance } from "@/shared/lib/api/custom-instance";
-import type { MembershipResult } from "../../types";
+import { type ReactNode, useCallback, useMemo } from "react";
 import { useCreateCollection } from "../../hooks/use-collections";
 import type { ViewMode } from "../../lib/use-view-mode";
-import { ViewModeToggle } from "./view-mode-toggle";
+import type { MembershipResult } from "../../types";
 import { CardGrid } from "./card-grid";
+import { ViewModeToggle } from "./view-mode-toggle";
 
 // Minimum molecule count for the cluster view to be enabled.
 const MIN_MOLS_FOR_CLUSTER = 10;

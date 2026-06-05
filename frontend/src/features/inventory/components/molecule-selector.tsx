@@ -1,21 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useDebounce } from "@/shared/hooks/use-debounce";
-import { X } from "lucide-react";
-import { Input } from "@/shared/components/ui/input";
 import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
 import type { Molecule } from "@/features/chemical-registration/types";
+import { Input } from "@/shared/components/ui/input";
+import { useDebounce } from "@/shared/hooks/use-debounce";
+import { X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface MoleculeSelectorProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 }
 
-export function MoleculeSelector({
-  selectedId,
-  onSelect,
-}: MoleculeSelectorProps) {
+export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedTerm = useDebounce(searchTerm, 300);
   const [isOpen, setIsOpen] = useState(false);
@@ -34,10 +31,7 @@ export function MoleculeSelector({
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(e.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     }
@@ -111,15 +105,9 @@ export function MoleculeSelector({
 
       {showDropdown && (
         <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md">
-          {isLoading && (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              Searching...
-            </div>
-          )}
+          {isLoading && <div className="px-3 py-2 text-sm text-muted-foreground">Searching...</div>}
           {!isLoading && results && results.length === 0 && (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              No compounds found.
-            </div>
+            <div className="px-3 py-2 text-sm text-muted-foreground">No compounds found.</div>
           )}
           {results?.map((mol) => (
             <button

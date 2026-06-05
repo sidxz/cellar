@@ -30,10 +30,10 @@ import { cn } from "@/shared/lib/utils";
 import { Check, ChevronsUpDown, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  buildActivityWhereOptions,
   CURVE_CLASS_OPTIONS,
-  parseWhereOptionId,
   type WhereOption,
+  buildActivityWhereOptions,
+  parseWhereOptionId,
   whereConditionOptionId,
 } from "../../lib/activity-where-options";
 import type {

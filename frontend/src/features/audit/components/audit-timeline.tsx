@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { ChevronDown, ChevronRight, Clock, ExternalLink, FileSignature } from "lucide-react";
+import { EmptyState } from "@/shared/components/empty-state";
+import { MemberName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/shared/components/ui/card";
 import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { MemberName } from "@/shared/components/entity-name";
-import { EmptyState } from "@/shared/components/empty-state";
 import { formatDateTime } from "@/shared/lib/format-date";
-import { useAuditOperations, useAuditByEntity } from "../hooks/use-audit";
+import { ChevronDown, ChevronRight, Clock, ExternalLink, FileSignature } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import { useAuditByEntity, useAuditOperations } from "../hooks/use-audit";
 import type { AuditOperation } from "../types";
 
 // Map backend entity_type strings to browsable paths
@@ -45,7 +45,11 @@ function operationVariant(op: string) {
 
 // ─── Entry diff row ──────────────────────────────────────────────────────────
 
-function EntryRow({ fieldName, oldValue, newValue }: {
+function EntryRow({
+  fieldName,
+  oldValue,
+  newValue,
+}: {
   fieldName: string;
   oldValue: string | null;
   newValue: string | null;
@@ -90,9 +94,7 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
             <Badge variant={operationVariant(operation.operation_type)}>
               {operation.operation_type}
             </Badge>
-            <span className="text-sm font-medium">
-              {operation.entity_type}
-            </span>
+            <span className="text-sm font-medium">{operation.entity_type}</span>
             {ENTITY_TYPE_PATHS[operation.entity_type] ? (
               <Link
                 href={`${ENTITY_TYPE_PATHS[operation.entity_type]}/${operation.entity_id}`}
@@ -115,7 +117,10 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
           {operation.reason && (
             <>
               <Separator orientation="vertical" className="h-3" />
-              <span className="text-xs text-muted-foreground italic truncate max-w-[200px]" title={operation.reason}>
+              <span
+                className="text-xs text-muted-foreground italic truncate max-w-[200px]"
+                title={operation.reason}
+              >
                 {operation.reason}
               </span>
             </>
@@ -130,8 +135,14 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
             className="h-7 px-2 text-xs"
             onClick={() => setExpanded(!expanded)}
           >
-            {expanded ? <ChevronDown className="size-3 mr-1" /> : <ChevronRight className="size-3 mr-1" />}
-            {hasEntries ? `${operation.entries.length} change${operation.entries.length !== 1 ? "s" : ""}` : ""}
+            {expanded ? (
+              <ChevronDown className="size-3 mr-1" />
+            ) : (
+              <ChevronRight className="size-3 mr-1" />
+            )}
+            {hasEntries
+              ? `${operation.entries.length} change${operation.entries.length !== 1 ? "s" : ""}`
+              : ""}
             {hasEntries && hasSignature ? " + signature" : ""}
             {!hasEntries && hasSignature ? "Signature" : ""}
           </Button>
@@ -154,9 +165,14 @@ function OperationCard({ operation }: { operation: AuditOperation }) {
               <div className="flex items-center gap-2 rounded-md border p-3 text-sm">
                 <FileSignature className="size-4 text-muted-foreground shrink-0" />
                 <span className="text-muted-foreground">Signed by</span>
-                <span className="text-xs"><MemberName id={operation.signature.signer_id} /></span>
+                <span className="text-xs">
+                  <MemberName id={operation.signature.signer_id} />
+                </span>
                 <Separator orientation="vertical" className="h-3" />
-                <span className="italic text-muted-foreground truncate" title={operation.signature.reason}>
+                <span
+                  className="italic text-muted-foreground truncate"
+                  title={operation.signature.reason}
+                >
                   {operation.signature.reason}
                 </span>
                 <span className="ml-auto text-xs text-muted-foreground shrink-0">
@@ -195,7 +211,6 @@ function TimelineSkeleton() {
   );
 }
 
-
 // ─── Timeline (data-driven) ─────────────────────────────────────────────────
 
 function TimelineContent({
@@ -206,13 +221,14 @@ function TimelineContent({
   isLoading: boolean;
 }) {
   if (isLoading) return <TimelineSkeleton />;
-  if (!operations || operations.length === 0) return (
-    <EmptyState
-      icon={Clock}
-      title="No audit operations"
-      description="No audit operations found."
-    />
-  );
+  if (!operations || operations.length === 0)
+    return (
+      <EmptyState
+        icon={Clock}
+        title="No audit operations"
+        description="No audit operations found."
+      />
+    );
 
   return (
     <div className="space-y-3">
@@ -238,9 +254,7 @@ export function AuditTimeline(props: {
 
   // Otherwise, fetch all operations (optionally filtered by entity_type)
   const listQuery = useAuditOperations(
-    !props.entityId
-      ? { entity_type: props.entityType || undefined }
-      : undefined,
+    !props.entityId ? { entity_type: props.entityType || undefined } : undefined,
   );
 
   // Pick the active query

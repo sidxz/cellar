@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   DisclosureOutcome,
   DisclosureRequest,
@@ -147,10 +147,7 @@ export function useRejectDisclosure(disclosureId: string) {
   });
 }
 
-export function useMergeImpact(
-  sourceId: string | undefined,
-  targetId: string | undefined
-) {
+export function useMergeImpact(sourceId: string | undefined, targetId: string | undefined) {
   return useQuery({
     queryKey: ["merge-impact", sourceId, targetId],
     queryFn: () =>

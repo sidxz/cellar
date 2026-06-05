@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactNode } from "react";
+import { renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { useProtocolTestCounts } from "./use-protocol-test-counts";
 
 const mockInstance = vi.fn();
@@ -20,10 +20,7 @@ describe("useProtocolTestCounts", () => {
   it("posts to /api/v1/molecules/test-counts and returns counts", async () => {
     mockInstance.mockResolvedValue({ counts: { "mol-1": 2 } });
 
-    const { result } = renderHook(
-      () => useProtocolTestCounts(["mol-1"], null),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useProtocolTestCounts(["mol-1"], null), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -50,10 +47,7 @@ describe("useProtocolTestCounts", () => {
   it("includes project_id when provided", async () => {
     mockInstance.mockResolvedValue({ counts: { "mol-2": 1 } });
 
-    const { result } = renderHook(
-      () => useProtocolTestCounts(["mol-2"], "proj-xyz"),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useProtocolTestCounts(["mol-2"], "proj-xyz"), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 

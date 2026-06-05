@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
 import { StructureEditorDialog, StructureRenderer } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { cn } from "@/shared/lib/utils";
+import { Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
 import type { ScaffoldCriterion, ScaffoldMode } from "../../types";
 
 const MODE_OPTIONS: { value: ScaffoldMode; label: string }[] = [
@@ -45,8 +45,7 @@ export function ScaffoldCriterionRow({
     });
   }
 
-  const smiles =
-    criterion.mode === "exact_match" ? (criterion.scaffold_smiles ?? "") : "";
+  const smiles = criterion.mode === "exact_match" ? (criterion.scaffold_smiles ?? "") : "";
   const hasStructure = smiles.length >= 2;
 
   return (
@@ -65,10 +64,7 @@ export function ScaffoldCriterionRow({
                 type="button"
                 variant={criterion.mode === opt.value ? "default" : "ghost"}
                 size="sm"
-                className={cn(
-                  "h-7 px-3 text-xs",
-                  criterion.mode === opt.value && "shadow-sm",
-                )}
+                className={cn("h-7 px-3 text-xs", criterion.mode === opt.value && "shadow-sm")}
                 onClick={() => handleModeChange(opt.value)}
               >
                 {opt.label}

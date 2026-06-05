@@ -24,9 +24,7 @@ function makeResponse(over: Partial<RefitPreviewResponse> = {}): RefitPreviewRes
 describe("useRefitPreview", () => {
   it("debounces multiple rapid requests into one network call", async () => {
     const previewFn = vi.fn().mockResolvedValue(makeResponse());
-    const { result } = renderHook(() =>
-      useRefitPreview({ previewFn, debounceMs: 50 }),
-    );
+    const { result } = renderHook(() => useRefitPreview({ previewFn, debounceMs: 50 }));
 
     act(() => result.current.requestPreview("curve-1", [2]));
     act(() => result.current.requestPreview("curve-1", [2, 3]));
@@ -46,9 +44,7 @@ describe("useRefitPreview", () => {
     const previewFn = vi
       .fn()
       .mockResolvedValue(makeResponse({ fitted_value: 2.5, r_squared: 0.85 }));
-    const { result } = renderHook(() =>
-      useRefitPreview({ previewFn, debounceMs: 10 }),
-    );
+    const { result } = renderHook(() => useRefitPreview({ previewFn, debounceMs: 10 }));
 
     act(() => result.current.requestPreview("curve-1", [2]));
 
@@ -62,9 +58,7 @@ describe("useRefitPreview", () => {
       .fn()
       .mockResolvedValueOnce(makeResponse({ fitted_value: 1.0 }))
       .mockRejectedValueOnce(new Error("boom"));
-    const { result } = renderHook(() =>
-      useRefitPreview({ previewFn, debounceMs: 10 }),
-    );
+    const { result } = renderHook(() => useRefitPreview({ previewFn, debounceMs: 10 }));
 
     act(() => result.current.requestPreview("curve-1", []));
     await waitFor(() => expect(result.current.data?.fitted_value).toBe(1.0));
@@ -79,19 +73,15 @@ describe("useRefitPreview", () => {
 
   it("cancels an in-flight call when a newer request arrives", async () => {
     let firstAbortSignal: AbortSignal | undefined;
-    const previewFn = vi.fn(
-      (_curveId: string, _body, signal?: AbortSignal) => {
-        if (!firstAbortSignal) {
-          firstAbortSignal = signal;
-          // First call: never resolves — only the abort should clear it.
-          return new Promise<RefitPreviewResponse>(() => {});
-        }
-        return Promise.resolve(makeResponse({ fitted_value: 3.3 }));
-      },
-    );
-    const { result } = renderHook(() =>
-      useRefitPreview({ previewFn, debounceMs: 10 }),
-    );
+    const previewFn = vi.fn((_curveId: string, _body, signal?: AbortSignal) => {
+      if (!firstAbortSignal) {
+        firstAbortSignal = signal;
+        // First call: never resolves — only the abort should clear it.
+        return new Promise<RefitPreviewResponse>(() => {});
+      }
+      return Promise.resolve(makeResponse({ fitted_value: 3.3 }));
+    });
+    const { result } = renderHook(() => useRefitPreview({ previewFn, debounceMs: 10 }));
 
     act(() => result.current.requestPreview("curve-1", [1]));
     // Wait until the first call has actually been dispatched
@@ -110,9 +100,7 @@ describe("useRefitPreview", () => {
 
   it("reset clears state and cancels pending", async () => {
     const previewFn = vi.fn().mockResolvedValue(makeResponse());
-    const { result } = renderHook(() =>
-      useRefitPreview({ previewFn, debounceMs: 10 }),
-    );
+    const { result } = renderHook(() => useRefitPreview({ previewFn, debounceMs: 10 }));
 
     act(() => result.current.requestPreview("curve-1", [2]));
     await waitFor(() => expect(result.current.data).not.toBeNull());
@@ -128,12 +116,8 @@ describe("useRefitPreview", () => {
     // timer / promise would dangle and (with fake timers) the test would
     // hang. With real timers, the test just exits because nothing else
     // is keeping the event loop busy.
-    const previewFn = vi.fn(
-      () => new Promise<RefitPreviewResponse>(() => {}),
-    );
-    const { result, unmount } = renderHook(() =>
-      useRefitPreview({ previewFn, debounceMs: 10 }),
-    );
+    const previewFn = vi.fn(() => new Promise<RefitPreviewResponse>(() => {}));
+    const { result, unmount } = renderHook(() => useRefitPreview({ previewFn, debounceMs: 10 }));
 
     act(() => result.current.requestPreview("curve-1", [2]));
     unmount();

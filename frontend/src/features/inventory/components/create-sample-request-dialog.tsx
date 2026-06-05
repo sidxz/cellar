@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { BatchSelector } from "@/features/inventory/components/batch-selector";
+import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -20,19 +21,15 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useState } from "react";
 import { useCreateSampleRequest } from "../hooks/use-sample-requests";
-import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
-import { BatchSelector } from "@/features/inventory/components/batch-selector";
 
 interface CreateSampleRequestDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateSampleRequestDialog({
-  open,
-  onOpenChange,
-}: CreateSampleRequestDialogProps) {
+export function CreateSampleRequestDialog({ open, onOpenChange }: CreateSampleRequestDialogProps) {
   const mutation = useCreateSampleRequest();
 
   const [moleculeId, setMoleculeId] = useState<string | null>(null);
@@ -56,7 +53,7 @@ export function CreateSampleRequestDialog({
       {
         molecule_id: moleculeId!,
         batch_id: batchId,
-        amount_value: parseFloat(amountValue),
+        amount_value: Number.parseFloat(amountValue),
         amount_unit: amountUnit,
         purpose,
         priority,
@@ -66,14 +63,14 @@ export function CreateSampleRequestDialog({
           onOpenChange(false);
           resetState();
         },
-      }
+      },
     );
   };
 
   const isValid =
     moleculeId !== null &&
     amountValue !== "" &&
-    parseFloat(amountValue) > 0 &&
+    Number.parseFloat(amountValue) > 0 &&
     purpose.trim() !== "";
 
   return (
@@ -101,11 +98,7 @@ export function CreateSampleRequestDialog({
           {moleculeId && (
             <div className="grid gap-2">
               <Label>Batch (optional)</Label>
-              <BatchSelector
-                moleculeId={moleculeId}
-                selectedId={batchId}
-                onSelect={setBatchId}
-              />
+              <BatchSelector moleculeId={moleculeId} selectedId={batchId} onSelect={setBatchId} />
             </div>
           )}
 
@@ -162,10 +155,7 @@ export function CreateSampleRequestDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={handleSubmit}
-            disabled={!isValid || mutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={!isValid || mutation.isPending}>
             {mutation.isPending ? "Submitting..." : "Submit Request"}
           </Button>
         </DialogFooter>

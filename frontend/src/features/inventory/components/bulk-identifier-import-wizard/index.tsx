@@ -1,15 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Card, CardContent } from "@/shared/components/ui/card";
 import { PageHeader } from "@/shared/components/page-header";
-import { UploadStep } from "./upload-step";
-import { PreviewStep } from "./preview-step";
+import { Card, CardContent } from "@/shared/components/ui/card";
+import { useMemo, useState } from "react";
+import type { BulkAddBatchIdentifiersResponse, BulkIdentifierRowBody } from "../../types";
 import { ConfirmStep } from "./confirm-step";
-import type {
-  BulkIdentifierRowBody,
-  BulkAddBatchIdentifiersResponse,
-} from "../../types";
+import { PreviewStep } from "./preview-step";
+import { UploadStep } from "./upload-step";
 
 type Step = "upload" | "preview" | "confirm";
 
@@ -45,9 +42,7 @@ export function BulkIdentifierImportWizard() {
           {parseErrors.length > 0 && (
             <Card>
               <CardContent className="space-y-1 p-4">
-                <p className="text-sm font-medium text-destructive">
-                  CSV issues:
-                </p>
+                <p className="text-sm font-medium text-destructive">CSV issues:</p>
                 {parseErrors.map((err, i) => (
                   <p key={i} className="text-xs text-destructive">
                     {err}

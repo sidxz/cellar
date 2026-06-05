@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { FlaskConical } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState } from "@/shared/components/empty-state";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Badge } from "@/shared/components/ui/badge";
 import {
   Select,
@@ -12,20 +12,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { StatusBadge } from "@/shared/components/status-badge";
-import { EmptyState } from "@/shared/components/empty-state";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { FlaskConical } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 import { useRunsByProtocol } from "../../hooks/use-runs";
+import { worstZPrime } from "../../lib/qc-metrics";
 import {
   PLATE_FORMAT_LABELS,
-  RUN_STATUS_LABELS,
   type PlateFormat,
   type Protocol,
+  RUN_STATUS_LABELS,
   type Run,
 } from "../../types";
-import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
-import { worstZPrime } from "../../lib/qc-metrics";
 
 interface RunsTabProps {
   protocol: Protocol;
@@ -63,11 +63,11 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
 
   const memberName = useCallback(
     (userId: string) => members?.find((m) => m.user_id === userId)?.name ?? null,
-    [members]
+    [members],
   );
   const orgName = useCallback(
     (orgId: string) => orgs?.find((o) => o.id === orgId)?.name ?? null,
-    [orgs]
+    [orgs],
   );
 
   const filteredRuns = useMemo(() => {
@@ -93,7 +93,9 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
           const c = p.data?.conditions;
           if (!c) return null;
           if (typeof c === "object" && "description" in c) return c.description;
-          return Object.entries(c).map(([k, v]) => `${k}: ${v}`).join(", ");
+          return Object.entries(c)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(", ");
         },
         cellRenderer: (params: ICellRendererParams<Run>) => {
           if (!params.value) return <span className="text-muted-foreground">&mdash;</span>;
@@ -109,20 +111,22 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         headerName: "Scientist",
         field: "operator",
         width: 120,
-        valueGetter: (p) => p.data ? memberName(p.data.operator) ?? p.data.operator.slice(0, 8) : null,
+        valueGetter: (p) =>
+          p.data ? (memberName(p.data.operator) ?? p.data.operator.slice(0, 8)) : null,
       },
       {
         headerName: "Lab",
         field: "performed_at_org_id",
         width: 100,
-        valueGetter: (p) => p.data?.performed_at_org_id ? orgName(p.data.performed_at_org_id) ?? null : null,
+        valueGetter: (p) =>
+          p.data?.performed_at_org_id ? (orgName(p.data.performed_at_org_id) ?? null) : null,
         valueFormatter: (p) => p.value ?? "\u2014",
       },
       {
         headerName: "Molecules",
         field: "molecule_count",
         width: 90,
-        valueFormatter: (p) => p.value != null && p.value > 0 ? String(p.value) : "\u2014",
+        valueFormatter: (p) => (p.value != null && p.value > 0 ? String(p.value) : "\u2014"),
       },
       { headerName: "Plates", field: "plate_count", width: 80 },
       {
@@ -130,24 +134,19 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         field: "plate_format",
         width: 100,
         valueFormatter: (p) =>
-          p.value
-            ? PLATE_FORMAT_LABELS[p.value as PlateFormat] ?? p.value
-            : "\u2014",
+          p.value ? (PLATE_FORMAT_LABELS[p.value as PlateFormat] ?? p.value) : "\u2014",
       },
       {
         headerName: "Z\u2032",
         field: "qc_metrics",
         width: 90,
-        cellRenderer: (params: ICellRendererParams<Run>) =>
-          zPrimeBadge(params.value),
+        cellRenderer: (params: ICellRendererParams<Run>) => zPrimeBadge(params.value),
       },
       {
         headerName: "Status",
         field: "status",
         width: 110,
-        cellRenderer: (params: ICellRendererParams<Run>) => (
-          <StatusBadge status={params.value} />
-        ),
+        cellRenderer: (params: ICellRendererParams<Run>) => <StatusBadge status={params.value} />,
       },
       {
         headerName: "Notes",
@@ -156,8 +155,7 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         minWidth: 160,
         cellRenderer: (params: ICellRendererParams<Run>) => {
           const text = params.value as string | null;
-          if (!text)
-            return <span className="text-muted-foreground">&mdash;</span>;
+          if (!text) return <span className="text-muted-foreground">&mdash;</span>;
           return (
             <span className="text-sm" title={text}>
               {text.length > 80 ? `${text.slice(0, 80)}...` : text}
@@ -166,7 +164,7 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         },
       },
     ],
-    [memberName, orgName]
+    [memberName, orgName],
   );
 
   return (

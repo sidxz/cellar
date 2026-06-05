@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useHashTab } from "@/shared/hooks/use-hash-tab";
-import { Archive, FolderKanban, Library, Pencil, Plus, TestTubes } from "lucide-react";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { CampaignList } from "@/features/screen-campaign";
+import { ProtocolList } from "@/features/screening-assay";
 import { TagTable } from "@/features/tagging/components/tag-table";
+import { DetailShell } from "@/shared/components/detail-shell";
+import { MemberName } from "@/shared/components/entity-name";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,28 +16,18 @@ import {
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/shared/components/ui/tabs";
-import { DetailShell } from "@/shared/components/detail-shell";
-import { MemberName } from "@/shared/components/entity-name";
-import { useProject, useArchiveProject } from "../hooks/use-projects";
-import { ProtocolList } from "@/features/screening-assay";
-import { CreateProjectDialog } from "./create-project-dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { Archive, FolderKanban, Library, Pencil, Plus, TestTubes } from "lucide-react";
+import { useState } from "react";
+import { useArchiveProject, useProject } from "../hooks/use-projects";
 import { AddProtocolDialog } from "./add-protocol-dialog";
 import { CollectionList } from "./collection-list";
-import { SavedSearchList } from "./saved-search-list";
+import { CreateProjectDialog } from "./create-project-dialog";
 import { ProjectMembers } from "./project-members";
-import { CampaignList } from "@/features/screen-campaign";
+import { SavedSearchList } from "./saved-search-list";
 
 interface ProjectDetailProps {
   projectId: string;
@@ -65,19 +55,11 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
         actions={(p) =>
           p.status !== "archived" ? (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditOpen(true)}
-              >
+              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setArchiveOpen(true)}
-              >
+              <Button variant="outline" size="sm" onClick={() => setArchiveOpen(true)}>
                 <Archive className="mr-2 h-4 w-4" />
                 Archive
               </Button>
@@ -112,9 +94,7 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
                     <div>
                       <p className="text-sm text-muted-foreground">Description</p>
-                      <p className="font-medium">
-                        {project.description || "\u2014"}
-                      </p>
+                      <p className="font-medium">{project.description || "\u2014"}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Status</p>
@@ -189,11 +169,7 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
       />
 
       {/* Edit dialog */}
-      <CreateProjectDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        project={query.data}
-      />
+      <CreateProjectDialog open={editOpen} onOpenChange={setEditOpen} project={query.data} />
 
       {/* Archive confirmation */}
       <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
@@ -201,9 +177,8 @@ export function ProjectDetail({ projectId }: ProjectDetailProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Archive project?</AlertDialogTitle>
             <AlertDialogDescription>
-              Archiving &ldquo;{query.data?.name}&rdquo; will hide it from the
-              active projects list. Collections and saved searches will be
-              preserved.
+              Archiving &ldquo;{query.data?.name}&rdquo; will hide it from the active projects list.
+              Collections and saved searches will be preserved.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

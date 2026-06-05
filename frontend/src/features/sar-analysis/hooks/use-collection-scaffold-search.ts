@@ -1,14 +1,14 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { EnrichedSearchResponse } from "@/features/research-organization/hooks/use-search";
 import type {
-  ExecuteSearchInput,
   CollectionCriterion,
-  ScaffoldCriterion,
+  ExecuteSearchInput,
   GroupCriterion,
+  ScaffoldCriterion,
 } from "@/features/research-organization/types";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
 
 export interface UseCollectionScaffoldSearchOptions {
   collectionId: string;
@@ -29,11 +29,7 @@ export function scaffoldSearchQueryKey(
   collectionId: string,
   scaffoldSmiles: string[],
 ): readonly unknown[] {
-  return [
-    "collection-scaffold-search",
-    collectionId,
-    [...scaffoldSmiles].sort().join("\n"),
-  ];
+  return ["collection-scaffold-search", collectionId, [...scaffoldSmiles].sort().join("\n")];
 }
 
 /**
@@ -50,8 +46,7 @@ export function useCollectionScaffoldSearch({
   enabled,
   limit = 10000,
 }: UseCollectionScaffoldSearchOptions) {
-  const effectiveEnabled =
-    (enabled ?? true) && Boolean(collectionId) && scaffoldSmiles.length > 0;
+  const effectiveEnabled = (enabled ?? true) && Boolean(collectionId) && scaffoldSmiles.length > 0;
 
   return useQuery({
     queryKey: scaffoldSearchQueryKey(collectionId, scaffoldSmiles),

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { ViewModeToggle } from "./view-mode-toggle";
 
 describe("ViewModeToggle", () => {
@@ -11,8 +11,14 @@ describe("ViewModeToggle", () => {
 
   it("highlights the currently-active mode via aria-pressed", () => {
     render(<ViewModeToggle mode="cards" onChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("calls onChange with the new mode when the inactive button is clicked", () => {
@@ -36,9 +42,18 @@ describe("ViewModeToggle", () => {
 
   it("highlights tree segment via aria-pressed when mode=scaffold-tree", () => {
     render(<ViewModeToggle mode="scaffold-tree" onChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /scaffold view/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /scaffold view/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("calls onChange with 'scaffold-tree' when tree segment is clicked from cards mode", () => {

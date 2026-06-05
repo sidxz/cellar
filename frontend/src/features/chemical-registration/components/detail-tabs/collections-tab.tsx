@@ -1,18 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, Plus, X } from "lucide-react";
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
+import { EmptyState } from "@/shared/components/empty-state";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import { useMoleculeCollections } from "../../hooks/use-molecule-collections";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FolderOpen, Plus, X } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 import { MOLECULES_KEY } from "../../hooks/query-keys";
-import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
+import { useMoleculeCollections } from "../../hooks/use-molecule-collections";
 
 // ---------------------------------------------------------------------------
 // CollectionsTab
@@ -53,9 +53,7 @@ export function CollectionsTab({ moleculeId }: CollectionsTabProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Collections containing this molecule.
-        </p>
+        <p className="text-sm text-muted-foreground">Collections containing this molecule.</p>
         <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add to Collection
@@ -72,10 +70,7 @@ export function CollectionsTab({ moleculeId }: CollectionsTabProps) {
       ) : (
         <div className="space-y-2">
           {collections.map((col) => (
-            <div
-              key={col.id}
-              className="flex items-center gap-3 rounded-lg border p-3"
-            >
+            <div key={col.id} className="flex items-center gap-3 rounded-lg border p-3">
               <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="flex-1 min-w-0">
                 <Link

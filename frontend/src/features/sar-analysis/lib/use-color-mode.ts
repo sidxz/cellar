@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import type { ColorMode } from "@/features/sar-analysis/types";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 
 /**
  * URL state for the UMAP cluster-map color mode.
@@ -35,11 +35,7 @@ interface ColorModeState {
   setMode: (next: ColorMode, protocol?: string) => void;
 }
 
-function writeUrl(
-  next: ColorMode,
-  defaultMode: ColorMode,
-  protocol?: string,
-): void {
+function writeUrl(next: ColorMode, defaultMode: ColorMode, protocol?: string): void {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
   if (next === defaultMode) {
@@ -69,9 +65,7 @@ export function useColorMode(opts: {
     return opts.defaultMode;
   });
 
-  const [protocolId, setProtocolId_] = useState<string | null>(() =>
-    params.get(PROTOCOL_PARAM),
-  );
+  const [protocolId, setProtocolId_] = useState<string | null>(() => params.get(PROTOCOL_PARAM));
 
   const setMode = useCallback(
     (next: ColorMode, protocol?: string) => {

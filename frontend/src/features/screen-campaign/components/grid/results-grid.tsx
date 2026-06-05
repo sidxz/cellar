@@ -19,48 +19,35 @@
  * and the per-row detail renderer are removed.
  */
 
-import { useCallback, useMemo, useState } from "react";
-import type {
-  ColDef,
-  ColGroupDef,
-  ICellRendererParams,
-  IRowNode,
-} from "ag-grid-community";
+import type { ColDef, ColGroupDef, ICellRendererParams, IRowNode } from "ag-grid-community";
 import { Pencil } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 
-import { Badge } from "@/shared/components/ui/badge";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { StructureThumbnail } from "@/shared/components/chemistry";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { Badge } from "@/shared/components/ui/badge";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 
 import {
-  DoseResponseSparkline,
   CurveClassBadge,
+  DoseResponseSparkline,
   useProtocolSummaries,
 } from "@/features/screening-assay";
-import {
-  READOUT_NORMALIZATION_LABELS,
-  type CurveClass,
-  type CurveParams,
-} from "@/features/screening-assay/types";
+import { type CurveClass, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
 
 import { useMoleculesByIds } from "@/features/chemical-registration";
 import { useCampaignCurves } from "../../hooks/use-campaign-curves";
+import { type CampaignFilters, filtersActive, rowPassesFilters } from "../campaign-filter-bar";
 import { OverrideModal } from "../override-modal";
-import {
-  type CampaignFilters,
-  filtersActive,
-  rowPassesFilters,
-} from "../campaign-filter-bar";
 
-import { DecisionChipCell } from "./decision-chip-cell";
 import { CurveExpandDialog, type ExpandedCurve } from "./curve-expand-dialog";
+import { DecisionChipCell } from "./decision-chip-cell";
 
 import type {
-  CampaignResponse,
-  CampaignResultResponse,
   CampaignChannelResponse,
   CampaignMeasurementResponse,
+  CampaignResponse,
+  CampaignResultResponse,
 } from "../../types";
 
 import type { CurveSnapshot } from "@/features/screening-assay";
@@ -83,8 +70,7 @@ function curveSnapshotFromMeasurement(
   m: CampaignMeasurementResponse,
   liveById: Map<string, DoseResponseCurveResponse>,
 ): CurveSnapshot | null {
-  const snap = (m as unknown as { curve_snapshot?: CurveSnapshot | null })
-    .curve_snapshot;
+  const snap = (m as unknown as { curve_snapshot?: CurveSnapshot | null }).curve_snapshot;
   if (snap && Number.isFinite(snap.fitted_value)) return snap;
   const live = m.source_curve_id ? liveById.get(m.source_curve_id) : null;
   if (!live) return null;
@@ -95,29 +81,25 @@ function curveSnapshotFromMeasurement(
     hill_slope: live.hill_slope,
     r_squared: live.r_squared,
     curve_class: (live.curve_class as string | null) ?? null,
-    raw_data:
-      (live.raw_data as Array<{ x: number; y: number }> | null | undefined) ??
-      null,
+    raw_data: (live.raw_data as Array<{ x: number; y: number }> | null | undefined) ?? null,
     // The four chart fields. Pre-2026-05-14 snapshots didn't carry these,
     // so for measurements that fall back to the live FK we surface them
     // here. <DoseResponseChart>'s SummaryCard reads these to render the
     // intercept chip strip + CI strip + fit-warning badges.
     curve_type: (live as unknown as { curve_type?: string | null }).curve_type ?? null,
     confidence_interval_low:
-      (live as unknown as { confidence_interval_low?: number | null })
-        .confidence_interval_low ?? null,
+      (live as unknown as { confidence_interval_low?: number | null }).confidence_interval_low ??
+      null,
     confidence_interval_high:
-      (live as unknown as { confidence_interval_high?: number | null })
-        .confidence_interval_high ?? null,
+      (live as unknown as { confidence_interval_high?: number | null }).confidence_interval_high ??
+      null,
     intercept_values:
       (live as unknown as { intercept_values?: Array<Record<string, unknown>> | null })
         .intercept_values ?? null,
     fit_quality_warnings:
-      (live as unknown as { fit_quality_warnings?: string[] | null })
-        .fit_quality_warnings ?? null,
+      (live as unknown as { fit_quality_warnings?: string[] | null }).fit_quality_warnings ?? null,
   };
 }
-
 
 // ── Inline hit chip + value cell ─────────────────────────────────────────────
 
@@ -127,13 +109,9 @@ function HitChip({ call }: { call: string | null | undefined }) {
     call === "hit"
       ? "border-success/40 bg-success/10 text-success"
       : call === "miss"
-      ? "border-muted text-muted-foreground"
-      : "border-warning/40 bg-warning/10 text-warning";
-  return (
-    <span className={`ml-1 rounded-sm border px-1 py-px text-[10px] ${cls}`}>
-      {call}
-    </span>
-  );
+        ? "border-muted text-muted-foreground"
+        : "border-warning/40 bg-warning/10 text-warning";
+  return <span className={`ml-1 rounded-sm border px-1 py-px text-[10px] ${cls}`}>{call}</span>;
 }
 
 interface CompoundValueCellProps {
@@ -208,11 +186,7 @@ interface ResultsGridV2Props {
 // stack carries 3-4 lines vertically inside this space.
 const ROW_HEIGHT = 170;
 
-export function ResultsGridV2({
-  campaign,
-  filters,
-  readOnly,
-}: ResultsGridV2Props) {
+export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Props) {
   const [overrideTarget, setOverrideTarget] = useState<{
     result: CampaignResultResponse;
     channel: CampaignChannelResponse;
@@ -280,27 +254,20 @@ export function ResultsGridV2({
         const synonyms =
           m?.identifiers
             ?.map((idn) => idn.identifier)
-            .filter((s) => !!s && s !== m?.name && s !== m?.registration_number) ??
-          [];
+            .filter((s) => !!s && s !== m?.name && s !== m?.registration_number) ?? [];
         const visibleSynonyms = synonyms.slice(0, 3);
         const extra = synonyms.length - visibleSynonyms.length;
         return (
           <div className="flex flex-col py-2 leading-tight">
             <span className="font-medium text-sm">{label}</span>
-            {m?.name && (
-              <span className="text-xs text-muted-foreground truncate">
-                {m.name}
-              </span>
-            )}
+            {m?.name && <span className="text-xs text-muted-foreground truncate">{m.name}</span>}
             {visibleSynonyms.map((s) => (
               <span key={s} className="text-[11px] text-muted-foreground truncate">
                 {s}
               </span>
             ))}
             {extra > 0 && (
-              <span className="text-[10px] text-muted-foreground/70 italic">
-                +{extra} more
-              </span>
+              <span className="text-[10px] text-muted-foreground/70 italic">+{extra} more</span>
             )}
           </div>
         );
@@ -359,28 +326,19 @@ export function ResultsGridV2({
         // formula produced each cell.
         const norm = ch.normalization_applied ?? null;
         const normLabel = norm
-          ? READOUT_NORMALIZATION_LABELS[
-              norm as keyof typeof READOUT_NORMALIZATION_LABELS
-            ] ?? norm
+          ? (READOUT_NORMALIZATION_LABELS[norm as keyof typeof READOUT_NORMALIZATION_LABELS] ??
+            norm)
           : null;
         // Derive a representative unit from the first non-empty measurement
         // on this channel (CampaignChannelResponse has no `unit` field — the
         // unit lives on each measurement, derived per layer at resolve time).
         const sampleUnit =
           (campaign.results ?? [])
-            .map(
-              (r) =>
-                r.measurements?.find((mm) => mm.channel_id === ch.id)?.unit ??
-                "",
-            )
+            .map((r) => r.measurements?.find((mm) => mm.channel_id === ch.id)?.unit ?? "")
             .find((u) => u && u !== "-") ?? "";
         // Pick which suffix to show — normalization label wins (more
         // chemist-meaningful than a raw "%" unit), else fall back to unit.
-        const headerSuffix = normLabel
-          ? ` (${normLabel})`
-          : sampleUnit
-            ? ` (${sampleUnit})`
-            : "";
+        const headerSuffix = normLabel ? ` (${normLabel})` : sampleUnit ? ` (${sampleUnit})` : "";
 
         groupChildren.push({
           headerName: `${ch.label}${headerSuffix}`,
@@ -415,7 +373,10 @@ export function ResultsGridV2({
             }
             if (q === "excluded") {
               return (
-                <span className="text-muted-foreground italic" title="Excluded by hit-criteria filter or channel QC.">
+                <span
+                  className="text-muted-foreground italic"
+                  title="Excluded by hit-criteria filter or channel QC."
+                >
                   excluded
                 </span>
               );
@@ -431,9 +392,7 @@ export function ResultsGridV2({
                 overridden={m.is_manual_override}
                 overrideReason={m.override_reason}
                 readOnly={readOnly}
-                onEdit={() =>
-                  setOverrideTarget({ result: r, channel: ch, measurement: m })
-                }
+                onEdit={() => setOverrideTarget({ result: r, channel: ch, measurement: m })}
               />
             );
           },
@@ -448,13 +407,9 @@ export function ResultsGridV2({
             cellRenderer: (params: ICellRendererParams<RowData>) => {
               const r = params.data?.result;
               const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
-              const curve = m?.source_curve_id
-                ? curveMap.get(m.source_curve_id)
-                : null;
+              const curve = m?.source_curve_id ? curveMap.get(m.source_curve_id) : null;
               return (
-                <CurveClassBadge
-                  curveClass={(curve?.curve_class as CurveClass | null) ?? null}
-                />
+                <CurveClassBadge curveClass={(curve?.curve_class as CurveClass | null) ?? null} />
               );
             },
           });
@@ -479,8 +434,7 @@ export function ResultsGridV2({
                 return <span className="text-muted-foreground">--</span>;
               }
               const mol = moleculesById.get(r.molecule_id);
-              const moleculeLabel =
-                mol?.registration_number ?? r.molecule_id.slice(0, 8);
+              const moleculeLabel = mol?.registration_number ?? r.molecule_id.slice(0, 8);
               return (
                 <button
                   type="button"
@@ -504,8 +458,7 @@ export function ResultsGridV2({
                       r_squared: snapshot.r_squared ?? 0,
                     }}
                     dataPoints={
-                      (snapshot.raw_data as Array<{ x: number; y: number }> | null) ??
-                      null
+                      (snapshot.raw_data as Array<{ x: number; y: number }> | null) ?? null
                     }
                     curveClass={(snapshot.curve_class as CurveClass | null) ?? null}
                     width={220}
@@ -538,13 +491,7 @@ export function ResultsGridV2({
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
         if (!r) return null;
-        return (
-          <DecisionChipCell
-            campaignId={campaign.id}
-            result={r}
-            readOnly={readOnly}
-          />
-        );
+        return <DecisionChipCell campaignId={campaign.id} result={r} readOnly={readOnly} />;
       },
     });
 
@@ -561,10 +508,7 @@ export function ResultsGridV2({
 
   // ── External (chip) filters ─────────────────────────────────────────────────
 
-  const isExternalFilterPresent = useCallback(
-    () => filtersActive(filters),
-    [filters],
-  );
+  const isExternalFilterPresent = useCallback(() => filtersActive(filters), [filters]);
 
   const doesExternalFilterPass = useCallback(
     (node: IRowNode<RowData>) => {

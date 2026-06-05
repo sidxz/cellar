@@ -1,34 +1,34 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import type { Protocol } from "@/features/screening-assay/types";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/shared/components/ui/sheet";
-import { ScrollArea } from "@/shared/components/ui/scroll-area";
-import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
 import { Checkbox } from "@/shared/components/ui/checkbox";
-import { Switch } from "@/shared/components/ui/switch";
-import { Label } from "@/shared/components/ui/label";
-import { Separator } from "@/shared/components/ui/separator";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/shared/components/ui/collapsible";
+import { Label } from "@/shared/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
+import { ScrollArea } from "@/shared/components/ui/scroll-area";
+import { Separator } from "@/shared/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/shared/components/ui/sheet";
+import { Switch } from "@/shared/components/ui/switch";
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { useState } from "react";
 import { useReportConfig } from "../../hooks/use-report-config";
 import { expandParentTokens } from "../../lib/protocol-column-id";
 import {
   buildReadoutCustomizerEntries,
   replaceProtocolEntries,
 } from "../../lib/readout-customizer-entries";
-import type { Protocol } from "@/features/screening-assay/types";
-import type { DetailLevel, PlotScale, ImageSize } from "../../types";
+import type { DetailLevel, ImageSize, PlotScale } from "../../types";
 
 // ─── Field definitions ──────────────────────────────────────────────────────
 
@@ -113,8 +113,7 @@ export function ReportCustomizer({
   protocolColumns,
   onProtocolColumnsChange,
 }: ReportCustomizerProps) {
-  const { config, updateConfig, setVisibleFields, setProtocolFields } =
-    useReportConfig();
+  const { config, updateConfig, setVisibleFields, setProtocolFields } = useReportConfig();
   const { visibleFields } = config;
 
   return (
@@ -140,9 +139,7 @@ export function ReportCustomizer({
                 <Label className="text-sm font-medium">Detail Level</Label>
                 <RadioGroup
                   value={config.detailLevel}
-                  onValueChange={(v) =>
-                    updateConfig({ detailLevel: v as DetailLevel })
-                  }
+                  onValueChange={(v) => updateConfig({ detailLevel: v as DetailLevel })}
                   className="grid gap-2"
                 >
                   <div className="flex items-center gap-2">
@@ -152,31 +149,21 @@ export function ReportCustomizer({
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <RadioGroupItem
-                      value="run_batch"
-                      id="detail-run-batch"
-                      disabled
-                    />
+                    <RadioGroupItem value="run_batch" id="detail-run-batch" disabled />
                     <Label
                       htmlFor="detail-run-batch"
                       className="cursor-not-allowed text-muted-foreground"
                     >
-                      Run/Batch{" "}
-                      <span className="text-xs italic">(v2)</span>
+                      Run/Batch <span className="text-xs italic">(v2)</span>
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
-                    <RadioGroupItem
-                      value="details"
-                      id="detail-details"
-                      disabled
-                    />
+                    <RadioGroupItem value="details" id="detail-details" disabled />
                     <Label
                       htmlFor="detail-details"
                       className="cursor-not-allowed text-muted-foreground"
                     >
-                      Details{" "}
-                      <span className="text-xs italic">(v2)</span>
+                      Details <span className="text-xs italic">(v2)</span>
                     </Label>
                   </div>
                 </RadioGroup>
@@ -187,17 +174,12 @@ export function ReportCustomizer({
                 <Label className="text-sm font-medium">Plot Scale</Label>
                 <RadioGroup
                   value={config.plotScale}
-                  onValueChange={(v) =>
-                    updateConfig({ plotScale: v as PlotScale })
-                  }
+                  onValueChange={(v) => updateConfig({ plotScale: v as PlotScale })}
                   className="grid gap-2"
                 >
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="per_molecule" id="scale-molecule" />
-                    <Label
-                      htmlFor="scale-molecule"
-                      className="cursor-pointer"
-                    >
+                    <Label htmlFor="scale-molecule" className="cursor-pointer">
                       Per Molecule
                     </Label>
                   </div>
@@ -212,27 +194,19 @@ export function ReportCustomizer({
 
               {/* Show Plot Legend */}
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">
-                  Show Plot Legend
-                </Label>
+                <Label className="text-sm font-medium">Show Plot Legend</Label>
                 <Switch
                   checked={config.showPlotLegend}
-                  onCheckedChange={(v) =>
-                    updateConfig({ showPlotLegend: v })
-                  }
+                  onCheckedChange={(v) => updateConfig({ showPlotLegend: v })}
                 />
               </div>
 
               {/* Structure Image Size */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Structure Image Size
-                </Label>
+                <Label className="text-sm font-medium">Structure Image Size</Label>
                 <RadioGroup
                   value={config.imageSize}
-                  onValueChange={(v) =>
-                    updateConfig({ imageSize: v as ImageSize })
-                  }
+                  onValueChange={(v) => updateConfig({ imageSize: v as ImageSize })}
                   className="flex gap-4"
                 >
                   <div className="flex items-center gap-2">
@@ -299,31 +273,21 @@ export function ReportCustomizer({
                 // One entry per DR intercept + one per numeric readout. The
                 // entry's key is the actual grid column-id token, so the
                 // check-state reconciles with what's actually rendered.
-                const readoutEntries = buildReadoutCustomizerEntries(
-                  protocol,
-                  protocolId,
-                );
+                const readoutEntries = buildReadoutCustomizerEntries(protocol, protocolId);
                 const entryKeys = new Set(readoutEntries.map((e) => e.key));
                 // Expand any parent `drc:<rd>` token to the full per-intercept
                 // set so a plain `set.has(entryKey)` lookup reflects every
                 // intercept the grid is rendering. Without this, a filter-
                 // emitted parent token would only "check" the primary entry.
-                const expandedColumns = expandParentTokens(
-                  protocolColumns,
-                  protocols,
-                );
-                const visibleEntryKeys = expandedColumns.filter((c) =>
-                  entryKeys.has(c),
-                );
+                const expandedColumns = expandParentTokens(protocolColumns, protocols);
+                const visibleEntryKeys = expandedColumns.filter((c) => entryKeys.has(c));
                 return (
                   <div key={protocolId} className="space-y-0">
                     <FieldGroup
                       title={protocolName}
                       fields={PROTOCOL_FIELDS}
                       selected={visibleFields.protocols[protocolId] ?? []}
-                      onChange={(fields) =>
-                        setProtocolFields(protocolId, fields)
-                      }
+                      onChange={(fields) => setProtocolFields(protocolId, fields)}
                     />
                     {readoutEntries.length > 0 && (
                       <FieldGroup
@@ -379,11 +343,7 @@ function FieldGroup({ title, fields, selected, onChange }: FieldGroupProps) {
   }
 
   function handleFieldToggle(key: string) {
-    onChange(
-      selected.includes(key)
-        ? selected.filter((k) => k !== key)
-        : [...selected, key],
-    );
+    onChange(selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]);
   }
 
   return (
@@ -394,11 +354,7 @@ function FieldGroup({ title, fields, selected, onChange }: FieldGroupProps) {
             type="button"
             className="flex items-center text-muted-foreground hover:text-foreground transition-colors"
           >
-            {isOpen ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
+            {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
         </CollapsibleTrigger>
 
@@ -407,10 +363,7 @@ function FieldGroup({ title, fields, selected, onChange }: FieldGroupProps) {
           onCheckedChange={handleMasterToggle}
           id={`group-${title}`}
         />
-        <Label
-          htmlFor={`group-${title}`}
-          className="flex-1 text-sm font-medium cursor-pointer"
-        >
+        <Label htmlFor={`group-${title}`} className="flex-1 text-sm font-medium cursor-pointer">
           {title}
         </Label>
 
@@ -442,10 +395,7 @@ function FieldGroup({ title, fields, selected, onChange }: FieldGroupProps) {
                 onCheckedChange={() => handleFieldToggle(field.key)}
                 id={`field-${title}-${field.key}`}
               />
-              <Label
-                htmlFor={`field-${title}-${field.key}`}
-                className="text-sm cursor-pointer"
-              >
+              <Label htmlFor={`field-${title}-${field.key}`} className="text-sm cursor-pointer">
                 {field.label}
               </Label>
             </div>

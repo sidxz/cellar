@@ -1,15 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ScaffoldTreeNode } from "./scaffold-tree-node";
+import {
+  STORAGE_KEY,
+  consumeScaffoldSearch,
+} from "@/features/research-organization/lib/scaffold-search-handoff";
 import {
   NO_SCAFFOLD_SENTINEL,
   type ScaffoldTreeNode as ScaffoldTreeNodeData,
 } from "../types/scaffold-tree";
-import {
-  consumeScaffoldSearch,
-  STORAGE_KEY,
-} from "@/features/research-organization/lib/scaffold-search-handoff";
+import { ScaffoldTreeNode } from "./scaffold-tree-node";
 
 // StructureThumbnail renders via RDKit.js WASM — stub it in tests.
 vi.mock("@/shared/components/chemistry", () => ({
@@ -25,8 +25,18 @@ vi.mock("next/navigation", () => ({
 
 const tree = {
   nodes: [
-    { scaffold_smiles: "c1ccccc1", molecule_ids: ["m1"], molecule_count: 1, subtree_molecule_count: 2 },
-    { scaffold_smiles: "c1ccc2ccccc2c1", molecule_ids: ["m2"], molecule_count: 1, subtree_molecule_count: 1 },
+    {
+      scaffold_smiles: "c1ccccc1",
+      molecule_ids: ["m1"],
+      molecule_count: 1,
+      subtree_molecule_count: 2,
+    },
+    {
+      scaffold_smiles: "c1ccc2ccccc2c1",
+      molecule_ids: ["m2"],
+      molecule_count: 1,
+      subtree_molecule_count: 1,
+    },
   ],
   edges: [{ parent_smiles: "c1ccccc1", child_smiles: "c1ccc2ccccc2c1" }],
   stats: { node_count: 2, elapsed_ms: 0, cache_hit: false },
@@ -35,9 +45,7 @@ const tree = {
 // The component now takes a prebuilt smiles->node map (built once at the tree
 // root) rather than the whole tree. Mirror that here.
 const nodeMap = (t: { nodes: ScaffoldTreeNodeData[] }) =>
-  new Map<string, ScaffoldTreeNodeData>(
-    t.nodes.map((n) => [n.scaffold_smiles, n]),
-  );
+  new Map<string, ScaffoldTreeNodeData>(t.nodes.map((n) => [n.scaffold_smiles, n]));
 
 describe("ScaffoldTreeNode", () => {
   it("renders subtree count when greater than own count", () => {
@@ -63,7 +71,12 @@ describe("ScaffoldTreeNode", () => {
     const leaf = {
       ...tree,
       nodes: [
-        { scaffold_smiles: "c1ccc2ccccc2c1", molecule_ids: ["m2"], molecule_count: 1, subtree_molecule_count: 1 },
+        {
+          scaffold_smiles: "c1ccc2ccccc2c1",
+          molecule_ids: ["m2"],
+          molecule_count: 1,
+          subtree_molecule_count: 1,
+        },
       ],
       edges: [],
     };
@@ -110,7 +123,12 @@ describe("ScaffoldTreeNode", () => {
       ...tree,
       nodes: [
         ...tree.nodes,
-        { scaffold_smiles: NO_SCAFFOLD_SENTINEL, molecule_ids: ["m3"], molecule_count: 1, subtree_molecule_count: 1 },
+        {
+          scaffold_smiles: NO_SCAFFOLD_SENTINEL,
+          molecule_ids: ["m3"],
+          molecule_count: 1,
+          subtree_molecule_count: 1,
+        },
       ],
     };
     render(
@@ -132,9 +150,7 @@ describe("ScaffoldTreeNode", () => {
   it("toggles expand via caret click WITHOUT firing select", () => {
     const onToggle = vi.fn();
     const onSelect = vi.fn();
-    const childIndex = new Map<string, string[]>([
-      ["c1ccccc1", ["c1ccc2ccccc2c1"]],
-    ]);
+    const childIndex = new Map<string, string[]>([["c1ccccc1", ["c1ccc2ccccc2c1"]]]);
     render(
       <ScaffoldTreeNode
         scaffoldSmiles="c1ccccc1"
@@ -154,9 +170,7 @@ describe("ScaffoldTreeNode", () => {
   });
 
   it("recursively renders children when expanded", () => {
-    const childIndex = new Map<string, string[]>([
-      ["c1ccccc1", ["c1ccc2ccccc2c1"]],
-    ]);
+    const childIndex = new Map<string, string[]>([["c1ccccc1", ["c1ccc2ccccc2c1"]]]);
     render(
       <ScaffoldTreeNode
         scaffoldSmiles="c1ccccc1"
@@ -186,7 +200,14 @@ describe("scaffold → search loop closer", () => {
       <ScaffoldTreeNode
         scaffoldSmiles="c1ccncc1"
         nodesBySmiles={nodeMap({
-          nodes: [{ scaffold_smiles: "c1ccncc1", molecule_count: 1, subtree_molecule_count: 1, molecule_ids: ["m1"] }],
+          nodes: [
+            {
+              scaffold_smiles: "c1ccncc1",
+              molecule_count: 1,
+              subtree_molecule_count: 1,
+              molecule_ids: ["m1"],
+            },
+          ],
         })}
         childIndex={new Map()}
         colorBins={new Map()}
@@ -212,7 +233,14 @@ describe("scaffold → search loop closer", () => {
       <ScaffoldTreeNode
         scaffoldSmiles={NO_SCAFFOLD_SENTINEL}
         nodesBySmiles={nodeMap({
-          nodes: [{ scaffold_smiles: NO_SCAFFOLD_SENTINEL, molecule_count: 5, subtree_molecule_count: 5, molecule_ids: [] }],
+          nodes: [
+            {
+              scaffold_smiles: NO_SCAFFOLD_SENTINEL,
+              molecule_count: 5,
+              subtree_molecule_count: 5,
+              molecule_ids: [],
+            },
+          ],
         })}
         childIndex={new Map()}
         colorBins={new Map()}
@@ -237,7 +265,14 @@ describe("scaffold → search loop closer", () => {
       <ScaffoldTreeNode
         scaffoldSmiles="c1ccncc1"
         nodesBySmiles={nodeMap({
-          nodes: [{ scaffold_smiles: "c1ccncc1", molecule_count: 1, subtree_molecule_count: 1, molecule_ids: ["m1"] }],
+          nodes: [
+            {
+              scaffold_smiles: "c1ccncc1",
+              molecule_count: 1,
+              subtree_molecule_count: 1,
+              molecule_ids: ["m1"],
+            },
+          ],
         })}
         childIndex={new Map()}
         colorBins={new Map()}

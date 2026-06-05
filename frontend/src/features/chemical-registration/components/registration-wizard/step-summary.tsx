@@ -1,33 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import {
-  CheckCircle2,
+  AlertCircle,
   AlertTriangle,
-  ExternalLink,
-  RotateCcw,
+  CheckCircle2,
   Copy,
+  ExternalLink,
   Eye,
   GitMerge,
-  XCircle,
-  AlertCircle,
   Loader2,
+  RotateCcw,
+  XCircle,
 } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
-import { Badge } from "@/shared/components/ui/badge";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { useBulkRegistrationItems } from "../../hooks/use-registration-wizard-api";
 import type { BulkRegItemAction } from "../../types/registration-wizard";
@@ -92,9 +82,7 @@ function SingleSummary() {
         {/* Detail rows */}
         <dl className="divide-y rounded-md border">
           <SummaryRow label="Registration Number">
-            <span className="font-mono font-semibold">
-              {molecule.registration_number}
-            </span>
+            <span className="font-mono font-semibold">{molecule.registration_number}</span>
           </SummaryRow>
           <SummaryRow label="Name">{molecule.name}</SummaryRow>
           <SummaryRow label="Action">
@@ -257,7 +245,6 @@ function BulkSummary() {
         </CardContent>
       </Card>
 
-
       {/* Per-row results table */}
       {workflowId && (
         <BulkResultsTable
@@ -312,13 +299,7 @@ function BulkResultsTable({
   const action = tab === "all" ? null : tab;
   const offset = page * PAGE_SIZE;
 
-  const query = useBulkRegistrationItems(
-    workflowId,
-    action,
-    PAGE_SIZE,
-    offset,
-    true,
-  );
+  const query = useBulkRegistrationItems(workflowId, action, PAGE_SIZE, offset, true);
 
   function changeTab(next: string) {
     setTab(next as ResultsFilter);
@@ -378,9 +359,7 @@ function BulkResultsTable({
                                 : ""
                           }`}
                         >
-                          <td className="px-3 py-1.5 text-muted-foreground">
-                            {row.row_index + 1}
-                          </td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{row.row_index + 1}</td>
                           <td className="px-3 py-1.5">
                             <ActionPill action={row.action} />
                           </td>
@@ -404,9 +383,7 @@ function BulkResultsTable({
                           <td className="px-3 py-1.5 font-mono text-muted-foreground">
                             {row.batch_number ?? "\u2014"}
                           </td>
-                          <td className="px-3 py-1.5 text-destructive">
-                            {row.error ?? ""}
-                          </td>
+                          <td className="px-3 py-1.5 text-destructive">{row.error ?? ""}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -418,8 +395,8 @@ function BulkResultsTable({
                   <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                     <span>
                       Showing {offset + 1}–
-                      {Math.min(offset + query.data.rows.length, query.data.total)}{" "}
-                      of {query.data.total}
+                      {Math.min(offset + query.data.rows.length, query.data.total)} of{" "}
+                      {query.data.total}
                     </span>
                     <div className="flex gap-2">
                       <Button
@@ -517,8 +494,7 @@ function ActionBadge({ action, label }: { action: string; label: string }) {
     conflict: "text-destructive bg-destructive/10 border-destructive/30",
   };
 
-  const cls =
-    variantMap[action] ?? "text-muted-foreground bg-muted border-border";
+  const cls = variantMap[action] ?? "text-muted-foreground bg-muted border-border";
 
   return (
     <span

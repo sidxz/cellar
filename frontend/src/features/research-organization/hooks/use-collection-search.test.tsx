@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactNode } from "react";
+import { renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { useCollectionSearch } from "./use-collection-search";
 
 const mockInstance = vi.fn();
@@ -25,10 +25,7 @@ describe("useCollectionSearch", () => {
       activity_data: {},
     });
 
-    const { result } = renderHook(
-      () => useCollectionSearch("col-123"),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useCollectionSearch("col-123"), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 

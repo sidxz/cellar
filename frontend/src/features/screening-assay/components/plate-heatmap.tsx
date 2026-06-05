@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
-import { cn } from "@/shared/lib/utils";
-import { type PlateFormat, type WellType, WELL_TYPE_LABELS } from "../types";
-import { plateDimensions } from "../lib/plate-dimensions";
 import { WELL_TYPE_COLORS as VF_WELL_COLORS, WELL_EMPTY_COLOR } from "@/shared/lib/chart-colors";
+import { cn } from "@/shared/lib/utils";
+import { useMemo } from "react";
+import { plateDimensions } from "../lib/plate-dimensions";
+import { type PlateFormat, WELL_TYPE_LABELS, type WellType } from "../types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,23 +46,17 @@ function valueToColor(value: number, min: number, max: number): string {
     const g = Math.round(130 + (179 - 130) * t);
     const b = Math.round(246 + (8 - 246) * t);
     return `rgb(${r},${g},${b})`;
-  } else {
-    const t = (ratio - 0.5) * 2;
-    const r = Math.round(234 + (239 - 234) * t);
-    const g = Math.round(179 + (68 - 179) * t);
-    const b = Math.round(8 + (68 - 8) * t);
-    return `rgb(${r},${g},${b})`;
   }
+  const t = (ratio - 0.5) * 2;
+  const r = Math.round(234 + (239 - 234) * t);
+  const g = Math.round(179 + (68 - 179) * t);
+  const b = Math.round(8 + (68 - 8) * t);
+  return `rgb(${r},${g},${b})`;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function PlateHeatmap({
-  format,
-  wells = [],
-  valueRange,
-  className,
-}: PlateHeatmapProps) {
+export function PlateHeatmap({ format, wells = [], valueRange, className }: PlateHeatmapProps) {
   const dims = plateDimensions(format);
   if (!dims) return null;
 

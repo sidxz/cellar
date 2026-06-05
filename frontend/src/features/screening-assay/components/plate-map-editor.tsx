@@ -1,10 +1,10 @@
 "use client";
 
-import { Fragment, useCallback, useRef, useState } from "react";
 import { cn } from "@/shared/lib/utils";
+import { Fragment, useCallback, useRef, useState } from "react";
+import { plateCellSizePx, plateDimensionsTuple, rowLabel } from "../lib/plate-dimensions";
 import type { PlateFormat, WellDesignation } from "../types";
 import { WELL_DESIGNATION_LABELS } from "../types";
-import { plateDimensionsTuple, plateCellSizePx, rowLabel } from "../lib/plate-dimensions";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -37,13 +37,8 @@ interface PlateMapEditorProps {
   onChange: (map: Record<string, WellDesignation>) => void;
 }
 
-export function PlateMapEditor({
-  format,
-  value,
-  onChange,
-}: PlateMapEditorProps) {
-  const [selectedDesignation, setSelectedDesignation] =
-    useState<WellDesignation>("compound");
+export function PlateMapEditor({ format, value, onChange }: PlateMapEditorProps) {
+  const [selectedDesignation, setSelectedDesignation] = useState<WellDesignation>("compound");
   const isMouseDownRef = useRef(false);
 
   const [rows, cols] = plateDimensionsTuple(format);
@@ -56,7 +51,7 @@ export function PlateMapEditor({
       next[wellKey] = selectedDesignation;
       onChange(next);
     },
-    [value, onChange, selectedDesignation]
+    [value, onChange, selectedDesignation],
   );
 
   const fillRow = useCallback(
@@ -68,7 +63,7 @@ export function PlateMapEditor({
       }
       onChange(next);
     },
-    [value, onChange, cols, selectedDesignation]
+    [value, onChange, cols, selectedDesignation],
   );
 
   const fillCol = useCallback(
@@ -79,7 +74,7 @@ export function PlateMapEditor({
       }
       onChange(next);
     },
-    [value, onChange, rows, selectedDesignation]
+    [value, onChange, rows, selectedDesignation],
   );
 
   const handleMouseDown = useCallback(
@@ -87,7 +82,7 @@ export function PlateMapEditor({
       isMouseDownRef.current = true;
       setWell(wellKey);
     },
-    [setWell]
+    [setWell],
   );
 
   const handleMouseEnter = useCallback(
@@ -96,7 +91,7 @@ export function PlateMapEditor({
         setWell(wellKey);
       }
     },
-    [setWell]
+    [setWell],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -119,12 +114,10 @@ export function PlateMapEditor({
               "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
               selectedDesignation === d
                 ? "border-primary ring-2 ring-primary/30 bg-primary/10"
-                : "border-border hover:bg-accent"
+                : "border-border hover:bg-accent",
             )}
           >
-            <span
-              className={cn("h-3 w-3 rounded-full", WELL_DOT_COLORS[d])}
-            />
+            <span className={cn("h-3 w-3 rounded-full", WELL_DOT_COLORS[d])} />
             {WELL_DESIGNATION_LABELS[d]}
           </button>
         ))}
@@ -156,7 +149,7 @@ export function PlateMapEditor({
               className={cn(
                 "flex items-center justify-center rounded-sm cursor-pointer hover:bg-accent transition-colors",
                 labelSize,
-                "text-muted-foreground font-medium"
+                "text-muted-foreground font-medium",
               )}
               title={`Fill column ${c + 1}`}
             >
@@ -176,7 +169,7 @@ export function PlateMapEditor({
                   className={cn(
                     "flex items-center justify-center rounded-sm cursor-pointer hover:bg-accent transition-colors",
                     labelSize,
-                    "text-muted-foreground font-medium"
+                    "text-muted-foreground font-medium",
                   )}
                   title={`Fill row ${rLabel}`}
                 >
@@ -197,7 +190,7 @@ export function PlateMapEditor({
                       onMouseEnter={() => handleMouseEnter(wellKey)}
                       className={cn(
                         "rounded-sm cursor-pointer transition-colors hover:opacity-80",
-                        WELL_COLORS[designation]
+                        WELL_COLORS[designation],
                       )}
                       title={`${wellKey}: ${WELL_DESIGNATION_LABELS[designation]}`}
                       style={{ width: size, height: size }}

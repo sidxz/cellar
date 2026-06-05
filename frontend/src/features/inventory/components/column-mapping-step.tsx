@@ -1,5 +1,6 @@
 "use client";
 
+import { useProtocol } from "@/features/screening-assay/hooks/use-protocols";
 import {
   Select,
   SelectContent,
@@ -18,7 +19,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { useProtocol } from "@/features/screening-assay/hooks/use-protocols";
 
 const STANDARD_TARGET_OPTIONS = [
   { value: "skip", label: "— Skip —" },
@@ -65,9 +65,7 @@ export function ColumnMappingStep({
         <TableBody>
           {headers.map((header, idx) => (
             <TableRow key={header}>
-              <TableCell className="font-mono text-sm font-medium">
-                {header}
-              </TableCell>
+              <TableCell className="font-mono text-sm font-medium">{header}</TableCell>
               <TableCell className="font-mono text-sm text-muted-foreground truncate max-w-[200px]">
                 {firstRow[idx] ?? "—"}
               </TableCell>

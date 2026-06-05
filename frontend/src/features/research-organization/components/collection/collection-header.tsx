@@ -1,10 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
-import Link from "next/link";
-import { Lock, FlaskConical, FolderOpen } from "lucide-react";
-import { Badge } from "@/shared/components/ui/badge";
 import { MemberName, OrgName } from "@/shared/components/entity-name";
+import { Badge } from "@/shared/components/ui/badge";
+import { FlaskConical, FolderOpen, Lock } from "lucide-react";
+import Link from "next/link";
+import type { ReactNode } from "react";
 
 export interface CollectionHeaderData {
   id: string;
@@ -82,9 +82,7 @@ export function CollectionHeader({
           )}
         </div>
         {/* Right slot: selection toolbar + view toggle, pinned to end */}
-        {rightSlot && (
-          <div className="ml-auto flex items-center gap-2">{rightSlot}</div>
-        )}
+        {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
       </div>
 
       {/* Description — only rendered when non-empty, always on its own line */}

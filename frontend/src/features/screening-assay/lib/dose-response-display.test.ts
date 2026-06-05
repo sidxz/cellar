@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  evaluate4PL,
-  generate4PLFromData,
-  generate4PLPoints,
-} from "./dose-response-display";
+import { evaluate4PL, generate4PLFromData, generate4PLPoints } from "./dose-response-display";
 
 /**
  * Pin the 4PL Hill convention to GraphPad Prism (matches backend
@@ -104,6 +100,11 @@ describe("generate4PLFromData — compact-renderer wrapper", () => {
   it("returns empty arrays when fewer than 2 positive raw x-values", () => {
     expect(generate4PLFromData(PARAMS, [{ x: 1, y: 10 }]).x).toEqual([]);
     expect(generate4PLFromData(PARAMS, []).x).toEqual([]);
-    expect(generate4PLFromData(PARAMS, [{ x: -1, y: 10 }, { x: 0, y: 5 }]).x).toEqual([]);
+    expect(
+      generate4PLFromData(PARAMS, [
+        { x: -1, y: 10 },
+        { x: 0, y: 5 },
+      ]).x,
+    ).toEqual([]);
   });
 });

@@ -47,10 +47,7 @@ export type ChannelSourceKind = "readout_data" | "dose_response_curve";
 
 export type ValueQualifier = "=" | "<" | ">" | "nd" | "excluded";
 
-export type QualifierHandling =
-  | "include_qualified"
-  | "exclude_qualified"
-  | "treat_as_limit";
+export type QualifierHandling = "include_qualified" | "exclude_qualified" | "treat_as_limit";
 
 // ─── View models ─────────────────────────────────────────────────────────────
 
@@ -75,4 +72,3 @@ export const CAMPAIGN_DECISION_LABELS: Record<CampaignDecision, string> = {
   deferred: "Deferred",
   rejected: "Rejected",
 };
-

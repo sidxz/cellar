@@ -1,7 +1,5 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -20,6 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useUpdateProtocol } from "../hooks/use-protocols";
 import { buildHitCriterionOptions, optionIdForRule } from "../lib/hit-criteria-options";
 import type { HitCriterion, ReadoutDefinition } from "../types";
@@ -36,7 +36,7 @@ const OPERATOR_LABELS: Record<string, string> = {
   in: "in",
 };
 
-const COMPARISON_OPERATORS = ["gt", "lt", "gte", "lte"] as const;
+const _COMPARISON_OPERATORS = ["gt", "lt", "gte", "lte"] as const;
 const ALL_OPERATORS = ["gt", "lt", "gte", "lte", "in"] as const;
 
 const MAX_RULES = 3;
@@ -74,7 +74,7 @@ export function HitCriteriaDialog({
 }: HitCriteriaDialogProps) {
   const updateProtocol = useUpdateProtocol(protocolId);
   const [rules, setRules] = useState<HitCriterion[]>(
-    () => currentCriteria?.map((r) => ({ ...r })) ?? []
+    () => currentCriteria?.map((r) => ({ ...r })) ?? [],
   );
 
   // Reset state when dialog opens
@@ -97,9 +97,7 @@ export function HitCriteriaDialog({
   };
 
   const updateRule = (index: number, patch: Partial<HitCriterion>) => {
-    setRules((prev) =>
-      prev.map((r, i) => (i === index ? { ...r, ...patch } : r))
-    );
+    setRules((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   };
 
   const handleOptionChange = (index: number, optionId: string) => {
@@ -129,10 +127,7 @@ export function HitCriteriaDialog({
     }
   };
 
-  const handleOperatorChange = (
-    index: number,
-    operator: HitCriterion["operator"]
-  ) => {
+  const handleOperatorChange = (index: number, operator: HitCriterion["operator"]) => {
     if (operator === "in") {
       updateRule(index, { operator, value: [] });
     } else {
@@ -154,8 +149,8 @@ export function HitCriteriaDialog({
         .filter(Boolean);
       updateRule(index, { value: parts });
     } else {
-      const num = parseFloat(raw);
-      updateRule(index, { value: isNaN(num) ? 0 : num });
+      const num = Number.parseFloat(raw);
+      updateRule(index, { value: Number.isNaN(num) ? 0 : num });
     }
   };
 
@@ -163,26 +158,19 @@ export function HitCriteriaDialog({
 
   const handleSave = () => {
     const payload = rules.length > 0 ? rules : null;
-    updateProtocol.mutate(
-      { recommended_hit_criteria: payload } as Record<string, unknown>,
-      {
-        onSuccess: () => onOpenChange(false),
-      }
-    );
+    updateProtocol.mutate({ recommended_hit_criteria: payload } as Record<string, unknown>, {
+      onSuccess: () => onOpenChange(false),
+    });
   };
 
   // --- Derived state -------------------------------------------------------
 
-  const options = useMemo(
-    () => buildHitCriterionOptions(readoutDefinitions),
-    [readoutDefinitions],
-  );
+  const options = useMemo(() => buildHitCriterionOptions(readoutDefinitions), [readoutDefinitions]);
 
   const isValid = rules.every(
     (r) =>
       r.readout_name !== "" &&
-      (r.operator !== "in" ||
-        (Array.isArray(r.value) && r.value.length > 0))
+      (r.operator !== "in" || (Array.isArray(r.value) && r.value.length > 0)),
   );
 
   // --- Render --------------------------------------------------------------
@@ -193,9 +181,8 @@ export function HitCriteriaDialog({
         <DialogHeader>
           <DialogTitle>Hit Criteria</DialogTitle>
           <DialogDescription>
-            Define up to {MAX_RULES} rules (combined with AND) to classify
-            compounds as hits. These criteria are saved on the protocol and
-            recommended to all users.
+            Define up to {MAX_RULES} rules (combined with AND) to classify compounds as hits. These
+            criteria are saved on the protocol and recommended to all users.
           </DialogDescription>
         </DialogHeader>
 
@@ -205,15 +192,14 @@ export function HitCriteriaDialog({
             const operators = isCurveClass ? (["in"] as const) : ALL_OPERATORS;
 
             return (
-              <div
-                key={index}
-                className="flex items-end gap-2 rounded-md border p-3"
-              >
+              <div key={index} className="flex items-end gap-2 rounded-md border p-3">
                 {/* Readout / intercept selector */}
                 <div className="flex-1 space-y-1">
                   <Label className="text-xs">Readout</Label>
                   <Select
-                    value={rule.readout_name === "" ? "" : optionIdForRule(rule, readoutDefinitions)}
+                    value={
+                      rule.readout_name === "" ? "" : optionIdForRule(rule, readoutDefinitions)
+                    }
                     onValueChange={(v) => handleOptionChange(index, v)}
                   >
                     <SelectTrigger className="h-9">
@@ -235,10 +221,7 @@ export function HitCriteriaDialog({
                   <Select
                     value={rule.operator}
                     onValueChange={(v) =>
-                      handleOperatorChange(
-                        index,
-                        v as HitCriterion["operator"]
-                      )
+                      handleOperatorChange(index, v as HitCriterion["operator"])
                     }
                   >
                     <SelectTrigger className="h-9">
@@ -260,14 +243,8 @@ export function HitCriteriaDialog({
                   <Input
                     className="h-9"
                     type={rule.operator === "in" ? "text" : "number"}
-                    placeholder={
-                      rule.operator === "in" ? "full, partial" : "0"
-                    }
-                    value={
-                      Array.isArray(rule.value)
-                        ? rule.value.join(", ")
-                        : rule.value
-                    }
+                    placeholder={rule.operator === "in" ? "full, partial" : "0"}
+                    value={Array.isArray(rule.value) ? rule.value.join(", ") : rule.value}
                     onChange={(e) => handleValueChange(index, e.target.value)}
                   />
                 </div>

@@ -1,11 +1,9 @@
 "use client";
 
+import { adminHardDeleteApiV1AdminEntityTypeEntityIdDelete as adminHardDelete } from "@/shared/lib/api/admin/admin";
+import type { BlockerPayload } from "@/shared/lib/api/model";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  adminHardDeleteApiV1AdminEntityTypeEntityIdDelete as adminHardDelete,
-} from "@/shared/lib/api/admin/admin";
-import type { BlockerPayload } from "@/shared/lib/api/model";
 
 export interface AdminDeleteOptions {
   entityType: string;

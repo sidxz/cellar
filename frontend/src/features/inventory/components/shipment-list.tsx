@@ -1,14 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Truck } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState } from "@/shared/components/empty-state";
+import { OrgName } from "@/shared/components/entity-name";
+import { PageHeader } from "@/shared/components/page-header";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
-import { PageHeader } from "@/shared/components/page-header";
-import { OrgName } from "@/shared/components/entity-name";
 import {
   Select,
   SelectContent,
@@ -16,7 +13,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { Truck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { useShipments } from "../hooks/use-shipments";
 import {
   SHIPMENT_STATUS_LABELS,
@@ -31,7 +31,7 @@ export function ShipmentListPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data: shipments, isLoading } = useShipments(
-    statusFilter !== "all" ? statusFilter : undefined
+    statusFilter !== "all" ? statusFilter : undefined,
   );
 
   const columnDefs = useMemo<ColDef<ShipmentSummary>[]>(
@@ -75,7 +75,7 @@ export function ShipmentListPage() {
         type: "numericColumn",
       },
     ],
-    []
+    [],
   );
 
   return (
@@ -99,13 +99,11 @@ export function ShipmentListPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
-            {(Object.keys(SHIPMENT_STATUS_LABELS) as ShipmentStatus[]).map(
-              (s) => (
-                <SelectItem key={s} value={s}>
-                  {SHIPMENT_STATUS_LABELS[s]}
-                </SelectItem>
-              )
-            )}
+            {(Object.keys(SHIPMENT_STATUS_LABELS) as ShipmentStatus[]).map((s) => (
+              <SelectItem key={s} value={s}>
+                {SHIPMENT_STATUS_LABELS[s]}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

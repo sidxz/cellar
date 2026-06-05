@@ -10,13 +10,13 @@
  * outside) discards local edits.
  */
 
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
-import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
-import { Label } from "@/shared/components/ui/label";
-import { Textarea } from "@/shared/components/ui/textarea";
 import { Button } from "@/shared/components/ui/button";
+import { Label } from "@/shared/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
+import { Textarea } from "@/shared/components/ui/textarea";
 import { showError } from "@/shared/lib/toast";
 
 import { useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch } from "@/shared/lib/api/campaigns/campaigns";
@@ -31,35 +31,26 @@ export interface DecisionPopoverProps {
   onClose: () => void;
 }
 
-export function DecisionPopover({
-  campaignId,
-  result,
-  onClose,
-}: DecisionPopoverProps) {
-  const [decision, setDecision] = useState<Decision>(
-    (result.decision ?? "deferred") as Decision,
-  );
-  const [reason, setReason] = useState(
-    (result.decision_reason as string | undefined) ?? "",
-  );
+export function DecisionPopover({ campaignId, result, onClose }: DecisionPopoverProps) {
+  const [decision, setDecision] = useState<Decision>((result.decision ?? "deferred") as Decision);
+  const [reason, setReason] = useState((result.decision_reason as string | undefined) ?? "");
   const [notes, setNotes] = useState((result.notes as string | undefined) ?? "");
 
   const qc = useQueryClient();
-  const mutation =
-    useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch({
-      mutation: {
-        onSuccess: () => {
-          void qc.invalidateQueries({
-            queryKey: campaignKeys.detail(campaignId),
-          });
-          onClose();
-        },
-        onError: (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          showError(`Couldn't save decision: ${msg}`);
-        },
+  const mutation = useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({
+          queryKey: campaignKeys.detail(campaignId),
+        });
+        onClose();
       },
-    });
+      onError: (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        showError(`Couldn't save decision: ${msg}`);
+      },
+    },
+  });
 
   const initial = {
     decision: (result.decision ?? "deferred") as Decision,
@@ -67,9 +58,7 @@ export function DecisionPopover({
     notes: (result.notes as string | undefined) ?? "",
   };
   const dirty =
-    decision !== initial.decision ||
-    reason !== initial.reason ||
-    notes !== initial.notes;
+    decision !== initial.decision || reason !== initial.reason || notes !== initial.notes;
 
   function onSave() {
     if (!dirty) {
@@ -91,9 +80,7 @@ export function DecisionPopover({
     <div className="space-y-3 p-1">
       {/* Decision radio */}
       <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground uppercase font-medium">
-          Decision
-        </Label>
+        <Label className="text-xs text-muted-foreground uppercase font-medium">Decision</Label>
         <RadioGroup
           value={decision}
           onValueChange={(v) => setDecision(v as Decision)}
@@ -107,10 +94,7 @@ export function DecisionPopover({
             ] as const
           ).map((opt) => (
             <div key={opt.value} className="flex items-center gap-2">
-              <RadioGroupItem
-                value={opt.value}
-                id={`dec-${result.id}-${opt.value}`}
-              />
+              <RadioGroupItem value={opt.value} id={`dec-${result.id}-${opt.value}`} />
               <Label
                 htmlFor={`dec-${result.id}-${opt.value}`}
                 className={`cursor-pointer font-medium ${opt.color}`}
@@ -154,19 +138,10 @@ export function DecisionPopover({
 
       {/* Actions */}
       <div className="flex justify-end gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClose}
-          disabled={mutation.isPending}
-        >
+        <Button variant="ghost" size="sm" onClick={onClose} disabled={mutation.isPending}>
           Cancel
         </Button>
-        <Button
-          size="sm"
-          onClick={onSave}
-          disabled={mutation.isPending || !dirty}
-        >
+        <Button size="sm" onClick={onSave} disabled={mutation.isPending || !dirty}>
           {mutation.isPending ? "Saving…" : "Save"}
         </Button>
       </div>

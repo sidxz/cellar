@@ -1,9 +1,9 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { Molecule } from "@/features/chemical-registration/types";
-import type { ExecuteSearchInput, ActivityValue, SortField, SortDir } from "../types";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useMutation } from "@tanstack/react-query";
+import type { ActivityValue, ExecuteSearchInput, SortDir, SortField } from "../types";
 
 export interface EnrichedSearchResponse {
   items: Molecule[];

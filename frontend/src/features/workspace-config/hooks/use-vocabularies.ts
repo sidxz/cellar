@@ -1,11 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import type {
-  CreateVocabularyInput,
-  UpdateVocabularyInput,
-  Vocabulary,
-} from "../types";
+import type { CreateVocabularyInput, UpdateVocabularyInput, Vocabulary } from "../types";
 
 const vocabHooks = createCrudHooks<Vocabulary, CreateVocabularyInput, UpdateVocabularyInput>({
   entityName: "Vocabulary",

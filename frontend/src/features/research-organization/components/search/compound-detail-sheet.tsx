@@ -24,12 +24,7 @@ import {
   collectRunScopesByProtocol,
   useAggregationMode,
 } from "../../lib/use-aggregation-mode";
-import type {
-  CurveDetail,
-  ProtocolCurveGroup,
-  RunScope,
-  SearchQuery,
-} from "../../types";
+import type { CurveDetail, ProtocolCurveGroup, RunScope, SearchQuery } from "../../types";
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 
@@ -110,7 +105,6 @@ function adaptCurve(
   };
 }
 
-
 // ─── ProtocolCard ─────────────────────────────────────────────────────────
 
 interface ProtocolCardProps {
@@ -122,12 +116,7 @@ interface ProtocolCardProps {
   defaultExpanded?: boolean;
 }
 
-function ProtocolCard({
-  group,
-  molecule,
-  scope,
-  defaultExpanded = true,
-}: ProtocolCardProps) {
+function ProtocolCard({ group, molecule, scope, defaultExpanded = true }: ProtocolCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   // Drawer honors the toolbar's aggregation mode so the chart matches
   // the grid cell value end-to-end. Reads URL state directly via the
@@ -201,9 +190,7 @@ function ProtocolCard({
     if (nScope === 0) return "No runs in scope";
     if (nScope === 1) {
       const d = repCurve.run_date ?? "—";
-      return scoped
-        ? `1 run in scope — Run ${d}`
-        : `Run ${d}`;
+      return scoped ? `1 run in scope — Run ${d}` : `Run ${d}`;
     }
     const noun = scoped ? `${nScope} of ${totalCurves} runs in scope` : `${nScope} runs`;
     if (mode === "best_r2") {
@@ -243,9 +230,7 @@ function ProtocolCard({
         // otherwise refuse to shrink below their content width — without it
         // the side-panel chart pushes past the sheet's right edge.
         <div className="min-w-0 space-y-3 border-t border-border px-4 py-3">
-          {headerText && (
-            <p className="text-xs text-muted-foreground">{headerText}</p>
-          )}
+          {headerText && <p className="text-xs text-muted-foreground">{headerText}</p>}
           <DoseResponseChart curves={[adaptedCurve]} isInteractive={false} />
         </div>
       )}

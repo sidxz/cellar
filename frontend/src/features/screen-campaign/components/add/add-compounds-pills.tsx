@@ -8,14 +8,14 @@
  * without changing their internal behavior.
  */
 
-import { useState } from "react";
 import { Plus } from "lucide-react";
+import { useState } from "react";
 
-import { AddFromCollectionDialog } from "../add-from-collection-dialog";
+import type { CampaignResponse } from "../../types";
 import { AddFromCampaignDialog } from "../add-from-campaign-dialog";
+import { AddFromCollectionDialog } from "../add-from-collection-dialog";
 import { AddFromRunsDialog } from "../add-from-runs-dialog";
 import { ManualAddDialog } from "./manual-add-dialog";
-import type { CampaignResponse } from "../../types";
 
 interface AddCompoundsPillsProps {
   campaign: CampaignResponse;

@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
-import { X } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import { X } from "lucide-react";
+import { useMemo } from "react";
 import type { CampaignResponse } from "../../types";
 import { AddCompoundsPills } from "../add/add-compounds-pills";
 
@@ -39,8 +39,7 @@ interface SourcesSectionProps {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const SECTION_HEADING =
-  "text-sm font-semibold uppercase tracking-wide text-muted-foreground";
+const SECTION_HEADING = "text-sm font-semibold uppercase tracking-wide text-muted-foreground";
 
 /** Cached per-run label info derived from the measurement snapshots so the
  *  UI doesn't need an extra round-trip to /runs/{id} just to render a row. */
@@ -64,10 +63,7 @@ interface RunInfo {
  *   "Manual · 5 compounds"
  *   "Saved search · 0 compounds"
  */
-function describeSource(
-  source: SourceEntry,
-  runInfoById: Map<string, RunInfo>,
-): string {
+function describeSource(source: SourceEntry, runInfoById: Map<string, RunInfo>): string {
   const countPart =
     source.count !== undefined
       ? `${source.count} ${source.count === 1 ? "compound" : "compounds"}`
@@ -92,8 +88,7 @@ function describeSource(
     case "campaign": {
       parts.push("Campaign");
       const campaignLabel =
-        source.description?.trim() ||
-        (source.campaign_id ? source.campaign_id.slice(0, 8) : null);
+        source.description?.trim() || (source.campaign_id ? source.campaign_id.slice(0, 8) : null);
       if (campaignLabel) parts.push(campaignLabel);
       break;
     }
@@ -178,9 +173,7 @@ export function SourcesSection({
     <section className="border-b px-6 py-4">
       <div className="mb-2 flex items-center justify-between">
         <h2 className={SECTION_HEADING}>Sources</h2>
-        {!readOnly && (
-          <AddCompoundsPills campaign={campaign} projectId={projectId} />
-        )}
+        {!readOnly && <AddCompoundsPills campaign={campaign} projectId={projectId} />}
       </div>
 
       {sources.length === 0 ? (
@@ -199,9 +192,7 @@ export function SourcesSection({
                 source={s}
                 runInfoById={runInfoById}
                 readOnly={readOnly}
-                onRemove={
-                  onRemoveSource ? () => onRemoveSource(s) : undefined
-                }
+                onRemove={onRemoveSource ? () => onRemoveSource(s) : undefined}
               />
             );
           })}
@@ -230,12 +221,7 @@ function SourceRow({
     <li className="flex items-center justify-between rounded-md border bg-card px-3 py-1.5">
       <span className="text-sm">{label}</span>
       {!readOnly && onRemove && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={onRemove}
-        >
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onRemove}>
           <X className="h-3.5 w-3.5" />
         </Button>
       )}

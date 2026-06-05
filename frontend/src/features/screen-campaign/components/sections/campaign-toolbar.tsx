@@ -32,11 +32,7 @@ export function CampaignToolbar({
   return (
     <div className="flex items-center justify-end border-b px-6 py-2 gap-3">
       {campaign && filters && (
-        <BulkDecisionMenu
-          campaign={campaign}
-          filters={filters}
-          readOnly={readOnly ?? false}
-        />
+        <BulkDecisionMenu campaign={campaign} filters={filters} readOnly={readOnly ?? false} />
       )}
       {onExport && (
         <Button variant="outline" size="sm" onClick={onExport} disabled={exportDisabled}>

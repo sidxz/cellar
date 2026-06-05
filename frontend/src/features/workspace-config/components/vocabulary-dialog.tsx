@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -13,10 +11,9 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import {
-  useCreateVocabulary,
-  useUpdateVocabulary,
-} from "../hooks/use-vocabularies";
+import { Plus, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useCreateVocabulary, useUpdateVocabulary } from "../hooks/use-vocabularies";
 import type { Vocabulary } from "../types";
 
 interface Props {
@@ -73,9 +70,7 @@ export function VocabularyDialog({ open, onOpenChange, vocabulary }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Vocabulary" : "New Vocabulary"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Vocabulary" : "New Vocabulary"}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">

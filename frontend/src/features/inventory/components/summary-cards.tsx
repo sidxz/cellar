@@ -1,8 +1,8 @@
 "use client";
 
-import { AlertTriangle, Clock, ClipboardList, Activity } from "lucide-react";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { Activity, AlertTriangle, ClipboardList, Clock } from "lucide-react";
 import { useInventorySummary } from "../hooks/use-inventory-summary";
 import type { InventorySummary } from "../types";
 
@@ -32,9 +32,7 @@ function MetricCard({ icon, count, label, onClick }: MetricCardProps) {
       <CardContent className="flex items-center gap-4 py-4">
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
-            hasAlert
-              ? "bg-warning/10 text-warning"
-              : "bg-muted text-muted-foreground"
+            hasAlert ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground"
           }`}
         >
           {icon}
@@ -68,9 +66,7 @@ function ActivityCard({ summary }: ActivityCardProps) {
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
             <Activity className="h-5 w-5" />
           </div>
-          <p className="text-sm font-medium text-muted-foreground">
-            Recent Activity
-          </p>
+          <p className="text-sm font-medium text-muted-foreground">Recent Activity</p>
         </div>
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">No recent activity.</p>

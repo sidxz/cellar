@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
-import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
+import { Button } from "@/shared/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo } from "react";
 import { useCollectionImportHandoff } from "../../hooks/use-collection-import-handoff";
+import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
+import type { WizardMode } from "../../types/registration-wizard";
+import { StepBatch } from "./step-batch";
 import { StepInput } from "./step-input";
 import { StepPreview } from "./step-preview";
 import { StepProcessing } from "./step-processing";
 import { StepResults } from "./step-results";
-import { StepBatch } from "./step-batch";
 import { StepSummary } from "./step-summary";
-import type { WizardMode } from "../../types/registration-wizard";
 
 // ─── Step definitions per mode ──────────────────────────────────────────────
 
@@ -47,11 +47,7 @@ function StepIndicator({
         return (
           <div key={name} className="flex items-center gap-2">
             {index > 0 && (
-              <div
-                className={`h-px w-6 ${
-                  isCompleted ? "bg-primary" : "bg-border"
-                }`}
-              />
+              <div className={`h-px w-6 ${isCompleted ? "bg-primary" : "bg-border"}`} />
             )}
             <Badge
               variant={isActive ? "default" : isCompleted ? "secondary" : "outline"}
@@ -199,9 +195,7 @@ export function RegistrationWizard() {
       </div>
 
       {/* Step indicator */}
-      {mode !== null && (
-        <StepIndicator steps={steps} currentStep={currentStep} />
-      )}
+      {mode !== null && <StepIndicator steps={steps} currentStep={currentStep} />}
 
       {/* Step content */}
       {renderStep()}

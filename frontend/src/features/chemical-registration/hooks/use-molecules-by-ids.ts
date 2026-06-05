@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { listMoleculesApiV1MoleculesGet } from "@/shared/lib/api/molecules/molecules";
+import { useQuery } from "@tanstack/react-query";
 
 /**
  * Bulk-fetches molecules by id list (workspace-scoped).

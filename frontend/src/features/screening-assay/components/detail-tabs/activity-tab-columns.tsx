@@ -121,14 +121,10 @@ export function buildColumnDefs(
       if (specs.length === 0) {
         // No declared intercepts (legacy / single-intercept protocols)
         // — fall back to one "Best" column reading the headline value.
-        cols.push(
-          buildPrimaryFitColumn(rd, unitSuffix, /* defaultSort */ isFirstReadout),
-        );
+        cols.push(buildPrimaryFitColumn(rd, unitSuffix, /* defaultSort */ isFirstReadout));
       } else {
         specs.forEach((spec, idx) => {
-          cols.push(
-            buildInterceptColumn(rd, spec, idx === 0, isFirstReadout && idx === 0),
-          );
+          cols.push(buildInterceptColumn(rd, spec, idx === 0, isFirstReadout && idx === 0));
         });
       }
       cols.push({
@@ -292,8 +288,7 @@ function buildInterceptColumn(
           </Badge>
         );
       }
-      const className =
-        display.kind === "scalar" ? "font-mono" : "font-mono text-muted-foreground";
+      const className = display.kind === "scalar" ? "font-mono" : "font-mono text-muted-foreground";
       return (
         <span className={className} title={display.tooltip || undefined}>
           {display.text}

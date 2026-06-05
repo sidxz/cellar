@@ -1,6 +1,6 @@
 "use client";
 
-import { Package, CheckCircle2 } from "lucide-react";
+import { useSaltCatalog } from "@/features/workspace-config/hooks/use-salt-catalog";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { useSaltCatalog } from "@/features/workspace-config/hooks/use-salt-catalog";
+import { CheckCircle2, Package } from "lucide-react";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import type { WizardBatchInput } from "../../hooks/use-registration-wizard";
 
@@ -52,9 +52,7 @@ export function StepBatch() {
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />
             Batch Created
           </CardTitle>
-          <CardDescription>
-            A batch was automatically created during registration.
-          </CardDescription>
+          <CardDescription>A batch was automatically created during registration.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md bg-muted/50 p-4">
@@ -110,10 +108,7 @@ export function StepBatch() {
         {/* Source */}
         <div className="space-y-1.5">
           <Label htmlFor="batch-source">Source</Label>
-          <Select
-            value={current.source}
-            onValueChange={(v) => patch({ source: v })}
-          >
+          <Select value={current.source} onValueChange={(v) => patch({ source: v })}>
             <SelectTrigger id="batch-source">
               <SelectValue placeholder="Select source" />
             </SelectTrigger>
@@ -144,10 +139,7 @@ export function StepBatch() {
               }
               className="flex-1"
             />
-            <Select
-              value={current.amountUnit}
-              onValueChange={(v) => patch({ amountUnit: v })}
-            >
+            <Select value={current.amountUnit} onValueChange={(v) => patch({ amountUnit: v })}>
               <SelectTrigger className="w-24">
                 <SelectValue />
               </SelectTrigger>
@@ -173,9 +165,7 @@ export function StepBatch() {
             step="any"
             placeholder="e.g. 99.5"
             value={current.purity ?? ""}
-            onChange={(e) =>
-              patch({ purity: e.target.value ? Number(e.target.value) : null })
-            }
+            onChange={(e) => patch({ purity: e.target.value ? Number(e.target.value) : null })}
           />
         </div>
 
@@ -187,9 +177,7 @@ export function StepBatch() {
             type="text"
             placeholder="e.g. White crystalline powder"
             value={current.appearance ?? ""}
-            onChange={(e) =>
-              patch({ appearance: e.target.value || null })
-            }
+            onChange={(e) => patch({ appearance: e.target.value || null })}
           />
         </div>
 
@@ -200,9 +188,7 @@ export function StepBatch() {
               <Label htmlFor="batch-salt">Salt Form</Label>
               <Select
                 value={current.saltEntryId ?? "__none__"}
-                onValueChange={(v) =>
-                  patch({ saltEntryId: v === "__none__" ? null : v })
-                }
+                onValueChange={(v) => patch({ saltEntryId: v === "__none__" ? null : v })}
               >
                 <SelectTrigger id="batch-salt">
                   <SelectValue placeholder="None (free base)" />
@@ -229,9 +215,7 @@ export function StepBatch() {
                   value={current.saltStoichiometry}
                   onChange={(e) =>
                     patch({
-                      saltStoichiometry: e.target.value
-                        ? Number(e.target.value)
-                        : 1,
+                      saltStoichiometry: e.target.value ? Number(e.target.value) : 1,
                     })
                   }
                   className="w-32"
@@ -243,8 +227,15 @@ export function StepBatch() {
 
         {/* Actions */}
         <div className="flex items-center gap-3 border-t pt-4">
-          <Button variant="outline" onClick={nextStep}>Skip &amp; Auto-Create</Button>
-          <Button onClick={() => { setBatchInput(current); nextStep(); }}>
+          <Button variant="outline" onClick={nextStep}>
+            Skip &amp; Auto-Create
+          </Button>
+          <Button
+            onClick={() => {
+              setBatchInput(current);
+              nextStep();
+            }}
+          >
             Save Batch Info &amp; Continue
           </Button>
         </div>

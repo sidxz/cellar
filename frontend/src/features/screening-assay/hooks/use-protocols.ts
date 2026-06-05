@@ -45,7 +45,10 @@ export function useProtocols(
     queryFn: async () => {
       const params: Record<string, unknown> = {};
       if (projectId) params.project_id = projectId;
-      if (tags) { params.tags = tags; params.tag_logic = options?.tagLogic ?? "any"; }
+      if (tags) {
+        params.tags = tags;
+        params.tag_logic = options?.tagLogic ?? "any";
+      }
       const resp = await customInstance<Protocol[] | { items: Protocol[] }>({
         url: "/api/v1/protocols",
         method: "GET",

@@ -1,9 +1,9 @@
+import { generate4PLPoints } from "@/features/screening-assay/lib/dose-response-display";
 /**
  * Render a dose-response curve to a canvas and return as base64 PNG.
  * Used for embedding sparkline images in Excel exports.
  */
-import { CHART_COLORS, CHART_CANVAS } from "@/shared/lib/chart-colors";
-import { generate4PLPoints } from "@/features/screening-assay/lib/dose-response-display";
+import { CHART_CANVAS, CHART_COLORS } from "@/shared/lib/chart-colors";
 
 interface CurveImageParams {
   hill_slope: number;
@@ -28,7 +28,7 @@ const PAD = 12;
 export function renderCurveToBase64(
   params: CurveImageParams,
   dataPoints?: DataPoint[] | null,
-  color = CHART_COLORS.primary
+  color = CHART_COLORS.primary,
 ): string | null {
   if (typeof document === "undefined") return null; // SSR guard
 
@@ -45,9 +45,7 @@ export function renderCurveToBase64(
   // log10 chokes on NaN/Infinity/non-positive — fall back to a generic
   // µM-range default when fitted_value is degenerate (failed fit, etc.).
   const fittedOk = Number.isFinite(fitted_value) && fitted_value > 0;
-  const logMin = fittedOk
-    ? Math.log10(Math.max(fitted_value * 0.01, 1e-12))
-    : Math.log10(0.001);
+  const logMin = fittedOk ? Math.log10(Math.max(fitted_value * 0.01, 1e-12)) : Math.log10(0.001);
   const logMax = fittedOk ? Math.log10(fitted_value * 100) : Math.log10(1000);
   const logRange = logMax - logMin || 1;
   const yMin = Math.min(0, bottom, top);
@@ -100,8 +98,8 @@ export function renderCurveToBase64(
   ctx.beginPath();
   const { y: ys, logX: logXs } = generate4PLPoints(
     { top, bottom, fitted_value, hill_slope },
-    Math.pow(10, logMin),
-    Math.pow(10, logMax),
+    10 ** logMin,
+    10 ** logMax,
     50,
   );
   for (let i = 0; i < ys.length; i++) {

@@ -1,15 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
-import {
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Plus,
-  Trash2,
-  Upload,
-  Download,
-} from "lucide-react";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -28,26 +19,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
-import { MoleculeSelector } from "./molecule-selector";
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { AlertTriangle, CheckCircle2, Download, Plus, Trash2, Upload, XCircle } from "lucide-react";
+import { useRef, useState } from "react";
 import { useBatchesByMolecule } from "../hooks/use-batches";
 import { useSamplesByBatch } from "../hooks/use-samples";
-import {
-  useCreateShipment,
-  usePreviewShipmentImport,
-} from "../hooks/use-shipments";
+import { useCreateShipment, usePreviewShipmentImport } from "../hooks/use-shipments";
 import type {
-  ShipmentItemInput,
-  ImportResolvedRow,
   ImportFieldCorrection,
+  ImportResolvedRow,
+  ShipmentItemInput,
 } from "../types/shipment";
+import { MoleculeSelector } from "./molecule-selector";
 
 interface CreateShipmentDialogProps {
   open: boolean;
@@ -90,7 +74,7 @@ function downloadTemplate() {
 }
 
 function parseCSV(
-  text: string
+  text: string,
 ): Array<{ compound: string; batch: string; sample: string; amount: string }> {
   const lines = text
     .trim()
@@ -128,9 +112,7 @@ function PreviewCell({
     return (
       <td className="px-3 py-2 bg-yellow-500/10">
         <span className="font-medium">{corrected}</span>
-        <span className="ml-2 text-xs text-muted-foreground line-through">
-          {original}
-        </span>
+        <span className="ml-2 text-xs text-muted-foreground line-through">{original}</span>
       </td>
     );
   }
@@ -164,25 +146,20 @@ function ShipmentItemRow({
   item: ItemRowState;
   index: number;
   canRemove: boolean;
-  onUpdate: <K extends keyof ItemRowState>(
-    key: K,
-    value: ItemRowState[K]
-  ) => void;
+  onUpdate: <K extends keyof ItemRowState>(key: K, value: ItemRowState[K]) => void;
   onRemove: () => void;
 }) {
   const { data: batches, isLoading: batchesLoading } = useBatchesByMolecule(
-    item._moleculeId ?? undefined
+    item._moleculeId ?? undefined,
   );
   const { data: samples, isLoading: samplesLoading } = useSamplesByBatch(
-    item._batchId || undefined
+    item._batchId || undefined,
   );
 
   return (
     <div className="rounded-md border p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">
-          Item {index + 1}
-        </span>
+        <span className="text-xs font-medium text-muted-foreground">Item {index + 1}</span>
         <Button
           type="button"
           variant="ghost"
@@ -269,9 +246,7 @@ function ShipmentItemRow({
             >
               <SelectTrigger>
                 <SelectValue
-                  placeholder={
-                    samplesLoading ? "Loading samples..." : "Select sample"
-                  }
+                  placeholder={samplesLoading ? "Loading samples..." : "Select sample"}
                 />
               </SelectTrigger>
               <SelectContent>
@@ -309,18 +284,13 @@ function ShipmentItemRow({
             placeholder="0.0"
             min={0}
             value={item.amount_value || ""}
-            onChange={(e) =>
-              onUpdate("amount_value", parseFloat(e.target.value) || 0)
-            }
+            onChange={(e) => onUpdate("amount_value", Number.parseFloat(e.target.value) || 0)}
           />
         </div>
 
         <div className="grid gap-1 w-20">
           <Label className="text-xs">Unit</Label>
-          <Select
-            value={item.amount_unit}
-            onValueChange={(val) => onUpdate("amount_unit", val)}
-          >
+          <Select value={item.amount_unit} onValueChange={(val) => onUpdate("amount_unit", val)}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -340,10 +310,7 @@ function ShipmentItemRow({
 // Main dialog
 // ---------------------------------------------------------------------------
 
-export function CreateShipmentDialog({
-  open,
-  onOpenChange,
-}: CreateShipmentDialogProps) {
+export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialogProps) {
   const mutation = useCreateShipment();
   const previewMutation = usePreviewShipmentImport();
   const { data: orgs } = useOrganizations();
@@ -360,9 +327,7 @@ export function CreateShipmentDialog({
 
   // CSV tab
   const [csvText, setCsvText] = useState("");
-  const [previewRows, setPreviewRows] = useState<ImportResolvedRow[] | null>(
-    null
-  );
+  const [previewRows, setPreviewRows] = useState<ImportResolvedRow[] | null>(null);
   const [previewSummary, setPreviewSummary] = useState<{
     total: number;
     valid: number;
@@ -398,24 +363,15 @@ export function CreateShipmentDialog({
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateItem<K extends keyof ItemRowState>(
-    index: number,
-    key: K,
-    value: ItemRowState[K]
-  ) {
-    setItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [key]: value } : item))
-    );
+  function updateItem<K extends keyof ItemRowState>(index: number, key: K, value: ItemRowState[K]) {
+    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
   }
 
   const manualValid =
     destinationOrgId.trim().length > 0 &&
     items.length > 0 &&
     items.every(
-      (it) =>
-        it.sample_id.trim().length > 0 &&
-        it.amount_value > 0 &&
-        it.amount_unit.length > 0
+      (it) => it.sample_id.trim().length > 0 && it.amount_value > 0 && it.amount_unit.length > 0,
     );
 
   function handleManualSubmit() {
@@ -433,7 +389,7 @@ export function CreateShipmentDialog({
         notes: notes.trim() || null,
         items: apiItems,
       },
-      { onSuccess: () => handleClose(false) }
+      { onSuccess: () => handleClose(false) },
     );
   }
 
@@ -498,14 +454,14 @@ export function CreateShipmentDialog({
         notes: notes.trim() || null,
         items: apiItems,
       },
-      { onSuccess: () => handleClose(false) }
+      { onSuccess: () => handleClose(false) },
     );
   }
 
   // --- Helper: find correction for a field ---
   function getCorrection(
     corrections: ImportFieldCorrection[],
-    fieldName: string
+    fieldName: string,
   ): ImportFieldCorrection | undefined {
     return corrections.find((c) => c.field === fieldName);
   }
@@ -524,8 +480,7 @@ export function CreateShipmentDialog({
           {/* Shared fields: destination, carrier, conditions */}
           <div className="grid gap-2">
             <Label>
-              Destination Organization{" "}
-              <span className="text-destructive">*</span>
+              Destination Organization <span className="text-destructive">*</span>
             </Label>
             <Select value={destinationOrgId} onValueChange={setDestinationOrgId}>
               <SelectTrigger>
@@ -581,15 +536,9 @@ export function CreateShipmentDialog({
               <div className="grid gap-2 pt-2">
                 <div className="flex items-center justify-between">
                   <Label>
-                    Samples to Ship{" "}
-                    <span className="text-destructive">*</span>
+                    Samples to Ship <span className="text-destructive">*</span>
                   </Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addItem}
-                  >
+                  <Button type="button" variant="outline" size="sm" onClick={addItem}>
                     <Plus className="mr-1 h-3 w-3" />
                     Add Another Compound
                   </Button>
@@ -613,10 +562,7 @@ export function CreateShipmentDialog({
                 <Button variant="outline" onClick={() => handleClose(false)}>
                   Cancel
                 </Button>
-                <Button
-                  onClick={handleManualSubmit}
-                  disabled={!manualValid || mutation.isPending}
-                >
+                <Button onClick={handleManualSubmit} disabled={!manualValid || mutation.isPending}>
                   {mutation.isPending ? "Creating..." : "Create Shipment"}
                 </Button>
               </DialogFooter>
@@ -627,12 +573,7 @@ export function CreateShipmentDialog({
               <div className="grid gap-4 pt-2">
                 {/* Template + Upload */}
                 <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={downloadTemplate}
-                  >
+                  <Button type="button" variant="outline" size="sm" onClick={downloadTemplate}>
                     <Download className="mr-1 h-3 w-3" />
                     Download Template
                   </Button>
@@ -656,13 +597,9 @@ export function CreateShipmentDialog({
 
                 {/* CSV text area */}
                 <div className="grid gap-1">
-                  <Label className="text-xs">
-                    Paste CSV or upload a file above
-                  </Label>
+                  <Label className="text-xs">Paste CSV or upload a file above</Label>
                   <Textarea
-                    placeholder={
-                      "compound,batch,sample,amount\nCC-000001,B-001,SMP-001,5mg"
-                    }
+                    placeholder={"compound,batch,sample,amount\nCC-000001,B-001,SMP-001,5mg"}
                     rows={5}
                     className="font-mono text-xs"
                     value={csvText}
@@ -679,14 +616,10 @@ export function CreateShipmentDialog({
                   type="button"
                   variant="secondary"
                   size="sm"
-                  disabled={
-                    csvText.trim().length === 0 || previewMutation.isPending
-                  }
+                  disabled={csvText.trim().length === 0 || previewMutation.isPending}
                   onClick={handleValidate}
                 >
-                  {previewMutation.isPending
-                    ? "Validating..."
-                    : "Validate & Preview"}
+                  {previewMutation.isPending ? "Validating..." : "Validate & Preview"}
                 </Button>
 
                 {/* Preview results */}
@@ -694,18 +627,10 @@ export function CreateShipmentDialog({
                   <div className="space-y-3">
                     {/* Summary bar */}
                     <div className="flex items-center gap-4 text-sm">
-                      <span className="font-medium">
-                        {previewSummary.total} items:
-                      </span>
-                      <span className="text-success">
-                        {previewSummary.valid} valid
-                      </span>
-                      <span className="text-yellow-500">
-                        {previewSummary.corrected} corrected
-                      </span>
-                      <span className="text-destructive">
-                        {previewSummary.errors} errors
-                      </span>
+                      <span className="font-medium">{previewSummary.total} items:</span>
+                      <span className="text-success">{previewSummary.valid} valid</span>
+                      <span className="text-yellow-500">{previewSummary.corrected} corrected</span>
+                      <span className="text-destructive">{previewSummary.errors} errors</span>
                     </div>
 
                     {/* Preview table */}
@@ -718,38 +643,20 @@ export function CreateShipmentDialog({
                             <th className="px-3 py-2 text-left">Batch</th>
                             <th className="px-3 py-2 text-left">Sample</th>
                             <th className="px-3 py-2 text-left">Amount</th>
-                            <th className="px-3 py-2 text-center w-10">
-                              Status
-                            </th>
+                            <th className="px-3 py-2 text-center w-10">Status</th>
                           </tr>
                         </thead>
                         <tbody>
                           {previewRows.map((row) => {
-                            const compoundCorr = getCorrection(
-                              row.corrections,
-                              "compound"
-                            );
-                            const batchCorr = getCorrection(
-                              row.corrections,
-                              "batch"
-                            );
-                            const sampleCorr = getCorrection(
-                              row.corrections,
-                              "sample"
-                            );
-                            const amountCorr = getCorrection(
-                              row.corrections,
-                              "amount"
-                            );
+                            const compoundCorr = getCorrection(row.corrections, "compound");
+                            const batchCorr = getCorrection(row.corrections, "batch");
+                            const sampleCorr = getCorrection(row.corrections, "sample");
+                            const amountCorr = getCorrection(row.corrections, "amount");
 
                             return (
                               <tr
                                 key={row.row_number}
-                                className={
-                                  row.status === "error"
-                                    ? "bg-destructive/5"
-                                    : ""
-                                }
+                                className={row.status === "error" ? "bg-destructive/5" : ""}
                               >
                                 <td className="px-3 py-2 text-muted-foreground">
                                   {row.row_number}
@@ -757,35 +664,27 @@ export function CreateShipmentDialog({
                                 <PreviewCell
                                   original={row.original.compound}
                                   corrected={
-                                    compoundCorr
-                                      ? row.compound_display ?? undefined
-                                      : undefined
+                                    compoundCorr ? (row.compound_display ?? undefined) : undefined
                                   }
                                   hasCorrection={!!compoundCorr}
                                 />
                                 <PreviewCell
                                   original={row.original.batch}
                                   corrected={
-                                    batchCorr
-                                      ? row.batch_display ?? undefined
-                                      : undefined
+                                    batchCorr ? (row.batch_display ?? undefined) : undefined
                                   }
                                   hasCorrection={!!batchCorr}
                                 />
                                 <PreviewCell
                                   original={row.original.sample}
                                   corrected={
-                                    sampleCorr
-                                      ? row.sample_display ?? undefined
-                                      : undefined
+                                    sampleCorr ? (row.sample_display ?? undefined) : undefined
                                   }
                                   hasCorrection={!!sampleCorr}
                                 />
                                 <PreviewCell
                                   original={row.original.amount}
-                                  corrected={
-                                    amountCorr?.corrected
-                                  }
+                                  corrected={amountCorr?.corrected}
                                   hasCorrection={!!amountCorr}
                                 />
                                 <td className="px-3 py-2 text-center">
@@ -821,10 +720,7 @@ export function CreateShipmentDialog({
                 <Button variant="outline" onClick={() => handleClose(false)}>
                   Cancel
                 </Button>
-                <Button
-                  onClick={handleCsvSubmit}
-                  disabled={!csvValid || mutation.isPending}
-                >
+                <Button onClick={handleCsvSubmit} disabled={!csvValid || mutation.isPending}>
                   {mutation.isPending ? "Creating..." : "Create Shipment"}
                 </Button>
               </DialogFooter>

@@ -1,19 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { X, GitBranch, Plus, FlaskConical, Pencil, Trash2 } from "lucide-react";
-import { Badge } from "@/shared/components/ui/badge";
-import { StatusBadge } from "@/shared/components/status-badge";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { MemberName } from "@/shared/components/entity-name";
+import { StatusBadge } from "@/shared/components/status-badge";
+import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
   Select,
@@ -31,26 +24,28 @@ import {
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { FlaskConical, GitBranch, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useState } from "react";
 import {
-  useSynthesisRoute,
   useAddReactionStep,
-  useRecordStepOutcome,
-  useValidateSynthesisRoute,
-  useSetPreferredRoute,
-  useDeprecateSynthesisRoute,
-  useUpdateSynthesisRoute,
   useDeleteSynthesisRoute,
+  useDeprecateSynthesisRoute,
+  useRecordStepOutcome,
   useRemoveReactionStep,
+  useSetPreferredRoute,
+  useSynthesisRoute,
+  useUpdateSynthesisRoute,
+  useValidateSynthesisRoute,
 } from "../hooks/use-synthesis-routes";
 import {
+  type AddReactionStepInput,
+  ROUTE_SCALE_LABELS,
   ROUTE_STATUS_LABELS,
   ROUTE_TYPE_LABELS,
-  ROUTE_SCALE_LABELS,
-  type RouteStatus,
-  type ReactionStep,
   type ReactionReagent,
-  type AddReactionStepInput,
+  type ReactionStep,
   type RecordStepOutcomeInput,
+  type RouteStatus,
 } from "../types/synthesis-route";
 
 // ---------------------------------------------------------------------------
@@ -64,12 +59,7 @@ interface DeprecateDialogProps {
   isPending: boolean;
 }
 
-function DeprecateDialog({
-  open,
-  onOpenChange,
-  onConfirm,
-  isPending,
-}: DeprecateDialogProps) {
+function DeprecateDialog({ open, onOpenChange, onConfirm, isPending }: DeprecateDialogProps) {
   const [reason, setReason] = useState("");
 
   const handleConfirm = () => {
@@ -104,11 +94,7 @@ function DeprecateDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-            disabled={isPending}
-          >
+          <Button variant="destructive" onClick={handleConfirm} disabled={isPending}>
             {isPending ? "Deprecating..." : "Deprecate"}
           </Button>
         </DialogFooter>
@@ -146,7 +132,7 @@ function EditRouteDialog({ route, open, onOpenChange }: EditRouteDialogProps) {
         description: description.trim() || null,
         scale: scale || null,
       },
-      { onSuccess: () => onOpenChange(false) }
+      { onSuccess: () => onOpenChange(false) },
     );
   };
 
@@ -207,10 +193,7 @@ function EditRouteDialog({ route, open, onOpenChange }: EditRouteDialogProps) {
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!name.trim() || mutation.isPending}
-          >
+          <Button onClick={handleSave} disabled={!name.trim() || mutation.isPending}>
             {mutation.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
@@ -230,12 +213,7 @@ interface AddStepDialogProps {
   nextStepNumber: number;
 }
 
-function AddStepDialog({
-  open,
-  onOpenChange,
-  routeId,
-  nextStepNumber,
-}: AddStepDialogProps) {
+function AddStepDialog({ open, onOpenChange, routeId, nextStepNumber }: AddStepDialogProps) {
   const [stepNumber, setStepNumber] = useState(nextStepNumber);
   const [name, setName] = useState("");
   const [namedReaction, setNamedReaction] = useState("");
@@ -293,7 +271,7 @@ function AddStepDialog({
               min={1}
               className="mt-1"
               value={stepNumber}
-              onChange={(e) => setStepNumber(parseInt(e.target.value) || 1)}
+              onChange={(e) => setStepNumber(Number.parseInt(e.target.value) || 1)}
             />
           </div>
           <div>
@@ -394,8 +372,8 @@ function RecordOutcomeDialog({
 
   const handleSubmit = () => {
     const data: RecordStepOutcomeInput = {
-      yield_percent: yieldPercent ? parseFloat(yieldPercent) : null,
-      purity_percent: purityPercent ? parseFloat(purityPercent) : null,
+      yield_percent: yieldPercent ? Number.parseFloat(yieldPercent) : null,
+      purity_percent: purityPercent ? Number.parseFloat(purityPercent) : null,
       purification_method: purificationMethod.trim() || null,
     };
 
@@ -463,10 +441,7 @@ function RecordOutcomeDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={recordOutcomeMutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={recordOutcomeMutation.isPending}>
             {recordOutcomeMutation.isPending ? "Saving..." : "Save Outcome"}
           </Button>
         </DialogFooter>
@@ -487,14 +462,10 @@ function ReagentRow({ reagent }: { reagent: ReactionReagent }) {
       </Badge>
       <span className="flex-1 font-medium">{reagent.name}</span>
       {reagent.cas_number && (
-        <span className="font-mono text-xs text-muted-foreground">
-          CAS {reagent.cas_number}
-        </span>
+        <span className="font-mono text-xs text-muted-foreground">CAS {reagent.cas_number}</span>
       )}
       {reagent.equivalents != null && (
-        <span className="text-xs text-muted-foreground">
-          {reagent.equivalents} eq
-        </span>
+        <span className="text-xs text-muted-foreground">{reagent.equivalents} eq</span>
       )}
     </div>
   );
@@ -521,164 +492,151 @@ function StepCard({
   const outcome = step.outcome as Record<string, unknown> | null;
   const [outcomeOpen, setOutcomeOpen] = useState(false);
 
-  const canRecordOutcome =
-    (routeStatus === "draft" || routeStatus === "validated") && !outcome;
+  const canRecordOutcome = (routeStatus === "draft" || routeStatus === "validated") && !outcome;
 
   const stepLabel = step.name ?? step.named_reaction ?? `Step ${step.step_number}`;
 
   return (
     <>
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">
-              {step.step_number}
-            </span>
-            <CardTitle className="text-base">
-              {stepLabel}
-            </CardTitle>
-          </div>
-          <div className="flex items-center gap-2">
-            {routeStatus === "draft" && onRemove && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs text-destructive hover:text-destructive"
-                onClick={() => {
-                  if (confirm(`Remove step "${stepLabel}"? This cannot be undone.`)) {
-                    onRemove(step.id);
-                  }
-                }}
-              >
-                <Trash2 className="mr-1 h-3 w-3" />
-                Remove
-              </Button>
-            )}
-            {canRecordOutcome && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => setOutcomeOpen(true)}
-              >
-                <FlaskConical className="mr-1 h-3 w-3" />
-                Record Outcome
-              </Button>
-            )}
-            {step.branch_label && (
-              <Badge variant="outline" className="text-xs">
-                {step.branch_label}
-              </Badge>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {/* Product */}
-        {step.product_description && (
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">Product</p>
-            <p className="mt-0.5 text-sm">{step.product_description}</p>
-          </div>
-        )}
-
-        {/* Reaction SMILES */}
-        {step.reaction_smiles && (
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">
-              Reaction SMILES
-            </p>
-            <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground">
-              {step.reaction_smiles}
-            </p>
-          </div>
-        )}
-
-        {/* Conditions */}
-        {conditions && Object.keys(conditions).length > 0 && (
-          <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">
-              Conditions
-            </p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border p-2 text-sm sm:grid-cols-3">
-              {Object.entries(conditions).map(([k, v]) => (
-                <div key={k}>
-                  <p className="text-xs text-muted-foreground">
-                    {k.replace(/_/g, " ")}
-                  </p>
-                  <p className="font-medium">{String(v)}</p>
-                </div>
-              ))}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">
+                {step.step_number}
+              </span>
+              <CardTitle className="text-base">{stepLabel}</CardTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              {routeStatus === "draft" && onRemove && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-destructive hover:text-destructive"
+                  onClick={() => {
+                    if (confirm(`Remove step "${stepLabel}"? This cannot be undone.`)) {
+                      onRemove(step.id);
+                    }
+                  }}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  Remove
+                </Button>
+              )}
+              {canRecordOutcome && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setOutcomeOpen(true)}
+                >
+                  <FlaskConical className="mr-1 h-3 w-3" />
+                  Record Outcome
+                </Button>
+              )}
+              {step.branch_label && (
+                <Badge variant="outline" className="text-xs">
+                  {step.branch_label}
+                </Badge>
+              )}
             </div>
           </div>
-        )}
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Product */}
+          {step.product_description && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Product</p>
+              <p className="mt-0.5 text-sm">{step.product_description}</p>
+            </div>
+          )}
 
-        {/* Outcome */}
-        {outcome && Object.keys(outcome).length > 0 && (
-          <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">
-              Outcome
-            </p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border p-2 text-sm sm:grid-cols-3">
-              {Object.entries(outcome).map(([k, v]) => (
-                <div key={k}>
-                  <p className="text-xs text-muted-foreground">
-                    {k.replace(/_/g, " ")}
-                  </p>
-                  <p className="font-medium">
-                    {typeof v === "number" ? v.toFixed(1) : String(v)}
-                  </p>
-                </div>
+          {/* Reaction SMILES */}
+          {step.reaction_smiles && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">Reaction SMILES</p>
+              <p className="mt-0.5 break-all font-mono text-xs text-muted-foreground">
+                {step.reaction_smiles}
+              </p>
+            </div>
+          )}
+
+          {/* Conditions */}
+          {conditions && Object.keys(conditions).length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Conditions</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border p-2 text-sm sm:grid-cols-3">
+                {Object.entries(conditions).map(([k, v]) => (
+                  <div key={k}>
+                    <p className="text-xs text-muted-foreground">{k.replace(/_/g, " ")}</p>
+                    <p className="font-medium">{String(v)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Outcome */}
+          {outcome && Object.keys(outcome).length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Outcome</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border p-2 text-sm sm:grid-cols-3">
+                {Object.entries(outcome).map(([k, v]) => (
+                  <div key={k}>
+                    <p className="text-xs text-muted-foreground">{k.replace(/_/g, " ")}</p>
+                    <p className="font-medium">
+                      {typeof v === "number" ? v.toFixed(1) : String(v)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Reagents */}
+          {step.reagents.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">
+                Reagents ({step.reagents.length})
+              </p>
+              <div className="space-y-1">
+                {step.reagents.map((r, i) => (
+                  <ReagentRow key={i} reagent={r} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Preceding steps */}
+          {step.preceding_step_ids.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Follows steps:</span>
+              {step.preceding_step_ids.map((sid) => (
+                <Badge key={sid} variant="outline" className="text-xs">
+                  Step {stepNumberById.get(sid) ?? "?"}
+                </Badge>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Reagents */}
-        {step.reagents.length > 0 && (
-          <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">
-              Reagents ({step.reagents.length})
+          {/* Notes */}
+          {step.notes && (
+            <p className="rounded bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              {step.notes}
             </p>
-            <div className="space-y-1">
-              {step.reagents.map((r, i) => (
-                <ReagentRow key={i} reagent={r} />
-              ))}
-            </div>
-          </div>
-        )}
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Preceding steps */}
-        {step.preceding_step_ids.length > 0 && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Follows steps:</span>
-            {step.preceding_step_ids.map((sid) => (
-              <Badge key={sid} variant="outline" className="text-xs">
-                Step {stepNumberById.get(sid) ?? "?"}
-              </Badge>
-            ))}
-          </div>
-        )}
-
-        {/* Notes */}
-        {step.notes && (
-          <p className="rounded bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            {step.notes}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-
-    {canRecordOutcome && (
-      <RecordOutcomeDialog
-        open={outcomeOpen}
-        onOpenChange={setOutcomeOpen}
-        routeId={routeId}
-        stepId={step.id}
-        stepLabel={stepLabel}
-      />
-    )}
+      {canRecordOutcome && (
+        <RecordOutcomeDialog
+          open={outcomeOpen}
+          onOpenChange={setOutcomeOpen}
+          routeId={routeId}
+          stepId={step.id}
+          stepLabel={stepLabel}
+        />
+      )}
     </>
   );
 }
@@ -692,10 +650,7 @@ interface SynthesisRouteDetailProps {
   onClose?: () => void;
 }
 
-export function SynthesisRouteDetail({
-  routeId,
-  onClose,
-}: SynthesisRouteDetailProps) {
+export function SynthesisRouteDetail({ routeId, onClose }: SynthesisRouteDetailProps) {
   const { data: route, isLoading } = useSynthesisRoute(routeId);
   const validateMutation = useValidateSynthesisRoute();
   const preferMutation = useSetPreferredRoute();
@@ -733,10 +688,7 @@ export function SynthesisRouteDetail({
   const status = route.status as RouteStatus;
 
   const handleDeprecate = (reason: string | null) => {
-    deprecateMutation.mutate(
-      { id: routeId, reason },
-      { onSuccess: () => setDeprecateOpen(false) }
-    );
+    deprecateMutation.mutate({ id: routeId, reason }, { onSuccess: () => setDeprecateOpen(false) });
   };
 
   return (
@@ -746,17 +698,12 @@ export function SynthesisRouteDetail({
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-xl font-semibold">{route.name}</h2>
-            <StatusBadge
-              status={status}
-              label={ROUTE_STATUS_LABELS[status] ?? status}
-            />
+            <StatusBadge status={status} label={ROUTE_STATUS_LABELS[status] ?? status} />
             <Badge variant="outline">
               {ROUTE_TYPE_LABELS[route.route_type] ?? route.route_type}
             </Badge>
             {route.scale && (
-              <Badge variant="outline">
-                {ROUTE_SCALE_LABELS[route.scale] ?? route.scale}
-              </Badge>
+              <Badge variant="outline">{ROUTE_SCALE_LABELS[route.scale] ?? route.scale}</Badge>
             )}
           </div>
           {route.description && (
@@ -766,11 +713,7 @@ export function SynthesisRouteDetail({
         <div className="flex shrink-0 items-center gap-1">
           {status === "draft" && (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditOpen(true)}
-              >
+              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
                 <Pencil className="mr-1 h-3.5 w-3.5" />
                 Edit
               </Button>
@@ -786,11 +729,7 @@ export function SynthesisRouteDetail({
             </>
           )}
           {onClose && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-            >
+            <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -802,9 +741,7 @@ export function SynthesisRouteDetail({
         <CardContent className="grid grid-cols-2 gap-4 pt-4 sm:grid-cols-3">
           <div>
             <p className="text-xs text-muted-foreground">Source</p>
-            <p className="font-medium capitalize">
-              {route.source.replace(/_/g, " ")}
-            </p>
+            <p className="font-medium capitalize">{route.source.replace(/_/g, " ")}</p>
           </div>
           {route.source_reference && (
             <div>
@@ -815,9 +752,7 @@ export function SynthesisRouteDetail({
           <div>
             <p className="text-xs text-muted-foreground">Overall Yield</p>
             <p className="font-medium">
-              {route.overall_yield != null
-                ? `${route.overall_yield.toFixed(1)}%`
-                : "\u2014"}
+              {route.overall_yield != null ? `${route.overall_yield.toFixed(1)}%` : "\u2014"}
             </p>
           </div>
           <div>
@@ -826,7 +761,9 @@ export function SynthesisRouteDetail({
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Created By</p>
-            <p className="font-medium text-sm"><MemberName id={route.created_by} /></p>
+            <p className="font-medium text-sm">
+              <MemberName id={route.created_by} />
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -852,21 +789,13 @@ export function SynthesisRouteDetail({
               >
                 {preferMutation.isPending ? "Setting..." : "Set Preferred"}
               </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setDeprecateOpen(true)}
-              >
+              <Button size="sm" variant="destructive" onClick={() => setDeprecateOpen(true)}>
                 Deprecate
               </Button>
             </>
           )}
           {status === "preferred" && (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => setDeprecateOpen(true)}
-            >
+            <Button size="sm" variant="destructive" onClick={() => setDeprecateOpen(true)}>
               Deprecate
             </Button>
           )}
@@ -885,20 +814,14 @@ export function SynthesisRouteDetail({
             )}
           </h3>
           {status === "draft" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setAddStepOpen(true)}
-            >
+            <Button size="sm" variant="outline" onClick={() => setAddStepOpen(true)}>
               <Plus className="mr-1 h-4 w-4" />
               Add Step
             </Button>
           )}
         </div>
         {route.steps.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No steps added yet.
-          </p>
+          <p className="text-sm text-muted-foreground">No steps added yet.</p>
         ) : (
           <div className="space-y-3">
             {(() => {
@@ -920,11 +843,7 @@ export function SynthesisRouteDetail({
       </div>
 
       {status === "draft" && (
-        <EditRouteDialog
-          route={route}
-          open={editOpen}
-          onOpenChange={setEditOpen}
-        />
+        <EditRouteDialog route={route} open={editOpen} onOpenChange={setEditOpen} />
       )}
 
       <DeprecateDialog

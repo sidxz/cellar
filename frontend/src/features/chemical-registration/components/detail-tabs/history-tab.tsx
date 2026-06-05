@@ -1,22 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Trash2,
-  ChevronDown,
-  ChevronRight,
-} from "lucide-react";
 import { MoleculeName } from "@/shared/components/entity-name";
-import { Badge } from "@/shared/components/ui/badge";
 import { StatusBadge } from "@/shared/components/status-badge";
-import { formatDate } from "@/shared/lib/format-date";
+import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Separator } from "@/shared/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -25,17 +14,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { Separator } from "@/shared/components/ui/separator";
-import {
-  useRelationships,
-  useDeleteRelationship,
-} from "../../hooks/use-molecules";
-import {
-  useDisclosuresForMolecule,
-  useMergeHistory,
-} from "../../hooks/use-disclosures";
-import { SynthesisRouteList } from "../synthesis-route-list";
+import { formatDate } from "@/shared/lib/format-date";
+import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { useDisclosuresForMolecule, useMergeHistory } from "../../hooks/use-disclosures";
+import { useDeleteRelationship, useRelationships } from "../../hooks/use-molecules";
 import type { Molecule } from "../../types";
+import { SynthesisRouteList } from "../synthesis-route-list";
 
 // ---------------------------------------------------------------------------
 // HistoryTab
@@ -161,30 +146,18 @@ export function HistoryTab({ moleculeId }: HistoryTabProps) {
         {disclosuresOpen && (
           <div className="mt-4 space-y-3 pl-6">
             {!disclosures?.length ? (
-              <p className="text-sm text-muted-foreground">
-                No disclosure requests.
-              </p>
+              <p className="text-sm text-muted-foreground">No disclosure requests.</p>
             ) : (
               disclosures.map((d) => (
-                <div
-                  key={d.id}
-                  className="flex items-start gap-3 rounded-lg border p-3"
-                >
+                <div key={d.id} className="flex items-start gap-3 rounded-lg border p-3">
                   <StatusBadge status={d.status} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-mono truncate">
-                      {d.disclosed_smiles}
-                    </p>
+                    <p className="text-sm font-mono truncate">{d.disclosed_smiles}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Requested {formatDate(d.requested_at)}
-                      {d.resolved_at &&
-                        ` \u2022 Resolved ${formatDate(d.resolved_at)}`}
+                      {d.resolved_at && ` \u2022 Resolved ${formatDate(d.resolved_at)}`}
                     </p>
-                    {d.notes && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {d.notes}
-                      </p>
-                    )}
+                    {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
                   </div>
                 </div>
               ))
@@ -218,20 +191,13 @@ export function HistoryTab({ moleculeId }: HistoryTabProps) {
         {mergeOpen && (
           <div className="mt-4 space-y-3 pl-6">
             {!mergeHistory?.length ? (
-              <p className="text-sm text-muted-foreground">
-                No merge events.
-              </p>
+              <p className="text-sm text-muted-foreground">No merge events.</p>
             ) : (
               mergeHistory.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex items-start gap-3 rounded-lg border p-3"
-                >
+                <div key={m.id} className="flex items-start gap-3 rounded-lg border p-3">
                   <Badge variant="outline">Merge</Badge>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm">
-                      {m.reason}
-                    </p>
+                    <p className="text-sm">{m.reason}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {formatDate(m.merged_at)}
                       {" \u2022 "}
@@ -239,11 +205,7 @@ export function HistoryTab({ moleculeId }: HistoryTabProps) {
                       {" \u2192 "}
                       Target: <MoleculeName id={m.target_molecule_id} />
                     </p>
-                    {m.notes && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {m.notes}
-                      </p>
-                    )}
+                    {m.notes && <p className="text-xs text-muted-foreground mt-1">{m.notes}</p>}
                   </div>
                 </div>
               ))

@@ -1,6 +1,7 @@
 "use client";
 
 import { useProtocol, useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -12,7 +13,6 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Group, Trash2 } from "lucide-react";
-import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import {
   BATCH_FIELD_TYPE_OPTIONS,
   BATCH_NUMERIC_FIELDS,
@@ -115,7 +115,8 @@ export function ActivityCriterionRow({
                 const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
                 return (
                   <SelectItem key={rd.id} value={`dr_curve:${rd.id}`}>
-                    {rd.name}{suffix}
+                    {rd.name}
+                    {suffix}
                   </SelectItem>
                 );
               })}

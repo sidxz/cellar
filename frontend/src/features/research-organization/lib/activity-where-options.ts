@@ -30,18 +30,11 @@ import {
   type CurveClass,
   type Protocol,
 } from "@/features/screening-assay/types";
-import type {
-  ActivityWhereCondition,
-  ActivityWhereSource,
-  InterceptKey,
-} from "../types";
+import type { ActivityWhereCondition, ActivityWhereSource, InterceptKey } from "../types";
 
 /** Group heading in the picker — kept here so the section component doesn't
  *  carry chemistry vocabulary directly. */
-export type WhereOptionGroup =
-  | "dose_response"
-  | "numeric_readout"
-  | "curve_class";
+export type WhereOptionGroup = "dose_response" | "numeric_readout" | "curve_class";
 
 export interface WhereOption {
   /** Stable picker value: parseable via {@link parseWhereOptionId}. */
@@ -65,11 +58,12 @@ export interface WhereOption {
 
 /** All allowed curve classes, derived from the FE union/labels map so the
  *  set stays in sync with the domain enum. */
-export const CURVE_CLASS_OPTIONS: ReadonlyArray<{ value: CurveClass; label: string }> =
-  (Object.keys(CURVE_CLASS_LABELS) as CurveClass[]).map((value) => ({
-    value,
-    label: CURVE_CLASS_LABELS[value],
-  }));
+export const CURVE_CLASS_OPTIONS: ReadonlyArray<{ value: CurveClass; label: string }> = (
+  Object.keys(CURVE_CLASS_LABELS) as CurveClass[]
+).map((value) => ({
+  value,
+  label: CURVE_CLASS_LABELS[value],
+}));
 
 /** Build the picker option list for a protocol. Returns an empty list if
  *  the protocol hasn't loaded yet so the row renders a placeholder. */
@@ -159,10 +153,9 @@ function numericOptionId(rdId: string): string {
 /** Reverse the picker id back into a where-condition seed. Returns null
  *  when the id is unrecognised (defensive — e.g. saved-search shape from
  *  a future schema). */
-export function parseWhereOptionId(id: string): Pick<
-  ActivityWhereCondition,
-  "source" | "readout_definition_id" | "intercept_key"
-> | null {
+export function parseWhereOptionId(
+  id: string,
+): Pick<ActivityWhereCondition, "source" | "readout_definition_id" | "intercept_key"> | null {
   if (id === CURVE_CLASS_OPTION_ID) {
     return { source: "curve_class", readout_definition_id: "", intercept_key: null };
   }

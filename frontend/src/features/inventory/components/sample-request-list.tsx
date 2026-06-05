@@ -1,14 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ClipboardList, Plus } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { StatusBadge, PriorityBadge } from "@/shared/components/status-badge";
-import { Button } from "@/shared/components/ui/button";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EmptyState } from "@/shared/components/empty-state";
-import { PageHeader } from "@/shared/components/page-header";
 import { MoleculeName } from "@/shared/components/entity-name";
+import { PageHeader } from "@/shared/components/page-header";
+import { PriorityBadge, StatusBadge } from "@/shared/components/status-badge";
+import { Button } from "@/shared/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -16,14 +13,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { ClipboardList, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { useSampleRequests } from "../hooks/use-sample-requests";
 import {
-  SAMPLE_REQUEST_STATUS_LABELS,
   REQUEST_PRIORITY_LABELS,
+  type RequestPriority,
+  SAMPLE_REQUEST_STATUS_LABELS,
   type SampleRequest,
   type SampleRequestStatus,
-  type RequestPriority,
 } from "../types/sample-request";
 import { CreateSampleRequestDialog } from "./create-sample-request-dialog";
 
@@ -33,7 +33,7 @@ export function SampleRequestListPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data: requests, isLoading } = useSampleRequests(
-    statusFilter === "all" ? undefined : statusFilter
+    statusFilter === "all" ? undefined : statusFilter,
   );
 
   const columnDefs = useMemo<ColDef<SampleRequest>[]>(
@@ -60,8 +60,7 @@ export function SampleRequestListPage() {
       {
         headerName: "Amount",
         width: 120,
-        valueGetter: (p) =>
-          p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : "",
+        valueGetter: (p) => (p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : ""),
       },
       {
         headerName: "Purpose",
@@ -77,7 +76,9 @@ export function SampleRequestListPage() {
         cellRenderer: (params: ICellRendererParams<SampleRequest>) => (
           <StatusBadge
             status={params.value}
-            label={SAMPLE_REQUEST_STATUS_LABELS[params.value as SampleRequestStatus] ?? params.value}
+            label={
+              SAMPLE_REQUEST_STATUS_LABELS[params.value as SampleRequestStatus] ?? params.value
+            }
           />
         ),
       },
@@ -90,7 +91,7 @@ export function SampleRequestListPage() {
         valueGetter: () => "\u2014",
       },
     ],
-    []
+    [],
   );
 
   return (
@@ -114,13 +115,11 @@ export function SampleRequestListPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All</SelectItem>
-            {Object.entries(SAMPLE_REQUEST_STATUS_LABELS).map(
-              ([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              )
-            )}
+            {Object.entries(SAMPLE_REQUEST_STATUS_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -141,10 +140,7 @@ export function SampleRequestListPage() {
         }
       />
 
-      <CreateSampleRequestDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-      />
+      <CreateSampleRequestDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

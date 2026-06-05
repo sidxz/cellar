@@ -37,19 +37,20 @@ function makeRow(overrides: Partial<CompoundCurveRow> = {}): CompoundCurveRow {
 
 describe("applyHitFilter", () => {
   it("returns all rows when criteria is empty", () => {
-    const rows = [makeRow({ fitted_value: 5 }), makeRow({ molecule_id: "mol-2", fitted_value: 50 })];
+    const rows = [
+      makeRow({ fitted_value: 5 }),
+      makeRow({ molecule_id: "mol-2", fitted_value: 50 }),
+    ];
     expect(applyHitFilter(rows, [])).toHaveLength(2);
   });
 
   it("filters rows below an IC50 threshold (lt operator)", () => {
     const rows = [
-      makeRow({ molecule_id: "mol-1", fitted_value: 5 }),   // passes: 5 < 20
-      makeRow({ molecule_id: "mol-2", fitted_value: 25 }),  // fails: 25 >= 20
-      makeRow({ molecule_id: "mol-3", fitted_value: 19 }),  // passes: 19 < 20
+      makeRow({ molecule_id: "mol-1", fitted_value: 5 }), // passes: 5 < 20
+      makeRow({ molecule_id: "mol-2", fitted_value: 25 }), // fails: 25 >= 20
+      makeRow({ molecule_id: "mol-3", fitted_value: 19 }), // passes: 19 < 20
     ];
-    const criteria: HitCriterion[] = [
-      { readout_name: "IC50", operator: "lt", value: 20 },
-    ];
+    const criteria: HitCriterion[] = [{ readout_name: "IC50", operator: "lt", value: 20 }];
     const result = applyHitFilter(rows, criteria);
     expect(result).toHaveLength(2);
     expect(result.map((r) => r.molecule_id)).toEqual(["mol-1", "mol-3"]);
@@ -133,8 +134,8 @@ describe("applyHitFilter", () => {
 
   it("applies multiple criteria conjunctively (all must pass)", () => {
     const rows = [
-      makeRow({ molecule_id: "mol-1", fitted_value: 5, curve_class: "full" }),   // passes both
-      makeRow({ molecule_id: "mol-2", fitted_value: 50, curve_class: "full" }),  // fails lt
+      makeRow({ molecule_id: "mol-1", fitted_value: 5, curve_class: "full" }), // passes both
+      makeRow({ molecule_id: "mol-2", fitted_value: 50, curve_class: "full" }), // fails lt
       makeRow({ molecule_id: "mol-3", fitted_value: 5, curve_class: "inactive" }), // fails class
     ];
     const criteria: HitCriterion[] = [

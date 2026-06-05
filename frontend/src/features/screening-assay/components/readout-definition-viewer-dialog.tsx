@@ -149,8 +149,8 @@ export function ReadoutDefinitionViewerDialog({
 
               <Section title="Intercepts">
                 <p className="text-xs text-muted-foreground mb-2 leading-tight">
-                  One row per intercept (EC50, EC90, IC10, …) — all derived from the same Hill
-                  fit. Empty list defaults to a single 50% intercept seeded from the Curve Type.
+                  One row per intercept (EC50, EC90, IC10, …) — all derived from the same Hill fit.
+                  Empty list defaults to a single 50% intercept seeded from the Curve Type.
                 </p>
                 <InterceptsEditor
                   value={cfg.intercepts ?? []}

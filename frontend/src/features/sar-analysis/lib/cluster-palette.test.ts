@@ -12,10 +12,7 @@ describe("colorForPoint", () => {
 
   it("returns grey for none mode", () => {
     expect(
-      colorForPoint(
-        { mode: "none" },
-        { clusterId: 0, activityPic50: null, scaffoldId: null },
-      ),
+      colorForPoint({ mode: "none" }, { clusterId: 0, activityPic50: null, scaffoldId: null }),
     ).toBe("#a1a1aa");
   });
 

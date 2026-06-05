@@ -15,12 +15,7 @@ export const ROUTE_STATUS_LABELS: Record<RouteStatus, string> = {
   deprecated: "Deprecated",
 };
 
-export type RouteScale =
-  | "milligram"
-  | "gram"
-  | "kilogram"
-  | "pilot"
-  | "production";
+export type RouteScale = "milligram" | "gram" | "kilogram" | "pilot" | "production";
 
 export const ROUTE_SCALE_LABELS: Record<RouteScale, string> = {
   milligram: "Milligram",

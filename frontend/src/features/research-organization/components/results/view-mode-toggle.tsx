@@ -1,8 +1,8 @@
 "use client";
 
-import { ChartScatter, GitFork, LayoutGrid, Table } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
+import { ChartScatter, GitFork, LayoutGrid, Table } from "lucide-react";
 import type { ViewMode } from "../../lib/use-view-mode";
 
 export interface ViewModeToggleProps {
@@ -35,7 +35,10 @@ export function ViewModeToggle({ mode, onChange, className, disabledModes }: Vie
 
   return (
     <div
-      className={cn("inline-flex items-center gap-1 rounded-md border border-input p-0.5", className)}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md border border-input p-0.5",
+        className,
+      )}
       role="group"
     >
       <Button

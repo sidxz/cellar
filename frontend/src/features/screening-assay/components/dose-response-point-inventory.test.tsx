@@ -125,20 +125,13 @@ describe("DoseResponsePointInventory", () => {
       />,
     );
     const legacyRow =
-      screen.getByText(/5\.00e-?6/i).closest("tr") ??
-      screen.getByText(/5\.00e-?6/i);
+      screen.getByText(/5\.00e-?6/i).closest("tr") ?? screen.getByText(/5\.00e-?6/i);
     fireEvent.click(legacyRow);
     expect(onToggle).not.toHaveBeenCalled();
   });
 
   it("renders empty state when rawData and exclusions are both empty", () => {
-    render(
-      <DoseResponsePointInventory
-        rawData={[]}
-        exclusions={[]}
-        onToggle={vi.fn()}
-      />,
-    );
+    render(<DoseResponsePointInventory rawData={[]} exclusions={[]} onToggle={vi.fn()} />);
     expect(screen.getByText(/no points/i)).toBeInTheDocument();
   });
 });

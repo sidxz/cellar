@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback } from "react";
 import { Editor } from "ketcher-react";
 import { StandaloneStructServiceProvider } from "ketcher-standalone";
+import { useCallback } from "react";
 import "ketcher-react/dist/index.css";
 import type { Ketcher } from "ketcher-core";
 
@@ -41,11 +41,7 @@ async function loadInitialStructure(ketcher: Ketcher, structStr: string): Promis
   });
 }
 
-export function KetcherEditor({
-  initialStructure,
-  onInit,
-  ketcherRef,
-}: KetcherEditorProps) {
+export function KetcherEditor({ initialStructure, onInit, ketcherRef }: KetcherEditorProps) {
   const handleInit = useCallback(
     (ketcher: Ketcher) => {
       ketcherRef.current = ketcher;
@@ -57,7 +53,7 @@ export function KetcherEditor({
       }
       onInit?.();
     },
-    [initialStructure, ketcherRef, onInit]
+    [initialStructure, ketcherRef, onInit],
   );
 
   return (

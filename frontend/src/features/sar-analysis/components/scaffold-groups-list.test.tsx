@@ -1,15 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ScaffoldGroupsList } from "./scaffold-groups-list";
 import {
-  NO_SCAFFOLD_SENTINEL,
-  type ScaffoldTreeResult,
-} from "../types/scaffold-tree";
-import {
-  consumeScaffoldSearch,
   STORAGE_KEY,
+  consumeScaffoldSearch,
 } from "@/features/research-organization/lib/scaffold-search-handoff";
+import { NO_SCAFFOLD_SENTINEL, type ScaffoldTreeResult } from "../types/scaffold-tree";
+import { ScaffoldGroupsList } from "./scaffold-groups-list";
 
 vi.mock("@/shared/components/chemistry", () => ({
   StructureThumbnail: ({ smiles }: { smiles: string }) => (
@@ -67,9 +64,7 @@ describe("ScaffoldGroupsList", () => {
       />,
     );
     expect(screen.queryByTestId("scaffold-group-phantom")).toBeNull();
-    expect(
-      screen.getByTestId("scaffold-group-c1ccccc1"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("scaffold-group-c1ccccc1")).toBeInTheDocument();
   });
 
   it("sorts by molecule_count DESC", () => {
@@ -102,12 +97,8 @@ describe("ScaffoldGroupsList", () => {
         onSelect={() => {}}
       />,
     );
-    expect(
-      screen.getByTestId("scaffold-group-c1ccccc1"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByTestId("scaffold-group-c1ccncc1"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("scaffold-group-c1ccccc1")).toBeInTheDocument();
+    expect(screen.getByTestId("scaffold-group-c1ccncc1")).toBeInTheDocument();
     // c1ccoc1 has count=1, hidden at min=2
     expect(screen.queryByTestId("scaffold-group-c1ccoc1")).toBeNull();
   });

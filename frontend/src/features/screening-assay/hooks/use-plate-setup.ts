@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
 import type { PlateMapResponse } from "../types";
 
 const PLATE_MAP_KEY = ["plate-map"];

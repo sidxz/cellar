@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { Collapsible } from "radix-ui";
+import { useProtocol, useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -13,19 +12,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { useProtocols, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
-import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
+import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { Collapsible } from "radix-ui";
+import { useEffect, useState } from "react";
 import type {
-  SelectivityCriterion,
   BatchCriterion,
-  RunDateCriterion,
+  BatchFieldType,
   CustomFieldCriterion,
+  CustomFieldMode,
   KeywordListCriterion,
   PropertyOperator,
-  TextOperator,
-  CustomFieldMode,
-  BatchFieldType,
   RefType,
+  RunDateCriterion,
+  SelectivityCriterion,
+  TextOperator,
 } from "../../types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -90,7 +90,13 @@ function defaultSelectivity(): SelectivityCriterion {
 }
 
 function defaultBatch(): BatchCriterion {
-  return { type: "batch", field_type: "text", field: "batch_number", operator: "contains", value: "" };
+  return {
+    type: "batch",
+    field_type: "text",
+    field: "batch_number",
+    operator: "contains",
+    value: "",
+  };
 }
 
 function defaultRunDate(): RunDateCriterion {
@@ -158,7 +164,9 @@ function SelectivityTerm({
             </SelectTrigger>
             <SelectContent>
               {activeProtocols?.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -170,13 +178,18 @@ function SelectivityTerm({
             onValueChange={(v) => onChange({ ...criterion, target_readout_definition_id: v })}
             disabled={!targetProtocolId}
           >
-            <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Select..." />
+            </SelectTrigger>
             <SelectContent>
               {targetDrReadouts.map((rd) => {
                 const ct = rd.dose_response_config?.curve_type;
                 const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
                 return (
-                  <SelectItem key={rd.id} value={rd.id}>{rd.name}{suffix}</SelectItem>
+                  <SelectItem key={rd.id} value={rd.id}>
+                    {rd.name}
+                    {suffix}
+                  </SelectItem>
                 );
               })}
             </SelectContent>
@@ -198,7 +211,9 @@ function SelectivityTerm({
             </SelectTrigger>
             <SelectContent>
               {activeProtocols?.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -210,13 +225,18 @@ function SelectivityTerm({
             onValueChange={(v) => onChange({ ...criterion, counter_readout_definition_id: v })}
             disabled={!counterProtocolId}
           >
-            <SelectTrigger className="h-9"><SelectValue placeholder="Select..." /></SelectTrigger>
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Select..." />
+            </SelectTrigger>
             <SelectContent>
               {counterDrReadouts.map((rd) => {
                 const ct = rd.dose_response_config?.curve_type;
                 const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
                 return (
-                  <SelectItem key={rd.id} value={rd.id}>{rd.name}{suffix}</SelectItem>
+                  <SelectItem key={rd.id} value={rd.id}>
+                    {rd.name}
+                    {suffix}
+                  </SelectItem>
                 );
               })}
             </SelectContent>
@@ -228,10 +248,14 @@ function SelectivityTerm({
             value={criterion.ratio_operator}
             onValueChange={(v) => onChange({ ...criterion, ratio_operator: v as PropertyOperator })}
           >
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               {PROPERTY_OPERATORS.filter((o) => o.value !== "between").map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -275,18 +299,34 @@ function BatchTerm({
           onValueChange={(v) => {
             const newFt = v as BatchFieldType;
             if (newFt === "text") {
-              onChange({ type: "batch", field_type: "text", field: "batch_number", operator: "contains", value: "" });
+              onChange({
+                type: "batch",
+                field_type: "text",
+                field: "batch_number",
+                operator: "contains",
+                value: "",
+              });
             } else if (newFt === "numeric") {
-              onChange({ type: "batch", field_type: "numeric", field: "purity", operator: "gte", value: undefined });
+              onChange({
+                type: "batch",
+                field_type: "numeric",
+                field: "purity",
+                operator: "gte",
+                value: undefined,
+              });
             } else {
               onChange({ type: "batch", field_type: "date" });
             }
           }}
         >
-          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             {BATCH_FIELD_TYPE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -300,10 +340,14 @@ function BatchTerm({
               value={criterion.field || "batch_number"}
               onValueChange={(v) => onChange({ ...criterion, field: v })}
             >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {BATCH_TEXT_FIELDS.map((f) => (
-                  <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -314,10 +358,14 @@ function BatchTerm({
               value={(criterion.operator as string) || "contains"}
               onValueChange={(v) => onChange({ ...criterion, operator: v as TextOperator })}
             >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {TEXT_OPERATORS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -342,10 +390,14 @@ function BatchTerm({
               value={criterion.field || "purity"}
               onValueChange={(v) => onChange({ ...criterion, field: v })}
             >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {BATCH_NUMERIC_FIELDS.map((f) => (
-                  <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -356,10 +408,14 @@ function BatchTerm({
               value={(criterion.operator as string) || "gte"}
               onValueChange={(v) => onChange({ ...criterion, operator: v as PropertyOperator })}
             >
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 {PROPERTY_OPERATORS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -369,17 +425,31 @@ function BatchTerm({
               <div className="w-24">
                 <Label className="text-xs text-muted-foreground">Min</Label>
                 <Input
-                  className="h-9" type="number" placeholder="Min"
+                  className="h-9"
+                  type="number"
+                  placeholder="Min"
                   value={criterion.min ?? ""}
-                  onChange={(e) => onChange({ ...criterion, min: e.target.value ? Number(e.target.value) : undefined })}
+                  onChange={(e) =>
+                    onChange({
+                      ...criterion,
+                      min: e.target.value ? Number(e.target.value) : undefined,
+                    })
+                  }
                 />
               </div>
               <div className="w-24">
                 <Label className="text-xs text-muted-foreground">Max</Label>
                 <Input
-                  className="h-9" type="number" placeholder="Max"
+                  className="h-9"
+                  type="number"
+                  placeholder="Max"
                   value={criterion.max ?? ""}
-                  onChange={(e) => onChange({ ...criterion, max: e.target.value ? Number(e.target.value) : undefined })}
+                  onChange={(e) =>
+                    onChange({
+                      ...criterion,
+                      max: e.target.value ? Number(e.target.value) : undefined,
+                    })
+                  }
                 />
               </div>
             </>
@@ -387,9 +457,16 @@ function BatchTerm({
             <div className="w-28">
               <Label className="text-xs text-muted-foreground">Value</Label>
               <Input
-                className="h-9" type="number" placeholder="Value"
+                className="h-9"
+                type="number"
+                placeholder="Value"
                 value={(criterion.value as number) ?? ""}
-                onChange={(e) => onChange({ ...criterion, value: e.target.value ? Number(e.target.value) : undefined })}
+                onChange={(e) =>
+                  onChange({
+                    ...criterion,
+                    value: e.target.value ? Number(e.target.value) : undefined,
+                  })
+                }
               />
             </div>
           )}
@@ -401,7 +478,8 @@ function BatchTerm({
           <div className="w-44">
             <Label className="text-xs text-muted-foreground">From</Label>
             <Input
-              className="h-9" type="date"
+              className="h-9"
+              type="date"
               value={criterion.date_from ?? ""}
               onChange={(e) => onChange({ ...criterion, date_from: e.target.value || undefined })}
             />
@@ -409,7 +487,8 @@ function BatchTerm({
           <div className="w-44">
             <Label className="text-xs text-muted-foreground">To</Label>
             <Input
-              className="h-9" type="date"
+              className="h-9"
+              type="date"
               value={criterion.date_to ?? ""}
               onChange={(e) => onChange({ ...criterion, date_to: e.target.value || undefined })}
             />
@@ -496,16 +575,34 @@ function CustomFieldTerm({
           onValueChange={(v) => {
             const m = v as CustomFieldMode;
             if (m === "text") {
-              onChange({ ...criterion, mode: m, operator: "contains", value: "", min: undefined, max: undefined });
+              onChange({
+                ...criterion,
+                mode: m,
+                operator: "contains",
+                value: "",
+                min: undefined,
+                max: undefined,
+              });
             } else {
-              onChange({ ...criterion, mode: m, operator: "gte", value: undefined, min: undefined, max: undefined });
+              onChange({
+                ...criterion,
+                mode: m,
+                operator: "gte",
+                value: undefined,
+                min: undefined,
+                max: undefined,
+              });
             }
           }}
         >
-          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             {CUSTOM_FIELD_MODE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -514,16 +611,24 @@ function CustomFieldTerm({
         <Label className="text-xs text-muted-foreground">Operator</Label>
         <Select
           value={(criterion.operator as string) || (isNumeric ? "gte" : "contains")}
-          onValueChange={(v) => onChange({ ...criterion, operator: v as TextOperator | PropertyOperator })}
+          onValueChange={(v) =>
+            onChange({ ...criterion, operator: v as TextOperator | PropertyOperator })
+          }
         >
-          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             {isNumeric
               ? PROPERTY_OPERATORS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
                 ))
               : TEXT_OPERATORS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
                 ))}
           </SelectContent>
         </Select>
@@ -533,17 +638,25 @@ function CustomFieldTerm({
           <div className="w-24">
             <Label className="text-xs text-muted-foreground">Min</Label>
             <Input
-              className="h-9" type="number" placeholder="Min"
+              className="h-9"
+              type="number"
+              placeholder="Min"
               value={criterion.min ?? ""}
-              onChange={(e) => onChange({ ...criterion, min: e.target.value ? Number(e.target.value) : undefined })}
+              onChange={(e) =>
+                onChange({ ...criterion, min: e.target.value ? Number(e.target.value) : undefined })
+              }
             />
           </div>
           <div className="w-24">
             <Label className="text-xs text-muted-foreground">Max</Label>
             <Input
-              className="h-9" type="number" placeholder="Max"
+              className="h-9"
+              type="number"
+              placeholder="Max"
               value={criterion.max ?? ""}
-              onChange={(e) => onChange({ ...criterion, max: e.target.value ? Number(e.target.value) : undefined })}
+              onChange={(e) =>
+                onChange({ ...criterion, max: e.target.value ? Number(e.target.value) : undefined })
+              }
             />
           </div>
         </>
@@ -558,7 +671,11 @@ function CustomFieldTerm({
             onChange={(e) =>
               onChange({
                 ...criterion,
-                value: isNumeric ? (e.target.value ? Number(e.target.value) : undefined) : e.target.value,
+                value: isNumeric
+                  ? e.target.value
+                    ? Number(e.target.value)
+                    : undefined
+                  : e.target.value,
               })
             }
           />
@@ -609,10 +726,14 @@ function KeywordListTerm({
           value={criterion.ref_type}
           onValueChange={(v) => onChange({ ...criterion, ref_type: v as RefType })}
         >
-          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-9">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             {REF_TYPE_OPTIONS.map((r) => (
-              <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+              <SelectItem key={r.value} value={r.value}>
+                {r.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -698,8 +819,13 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-muted-foreground">Selectivity</Label>
               <Button
-                type="button" variant="ghost" size="sm" className="h-6 text-xs"
-                onClick={() => onChange({ ...state, selectivity: [...state.selectivity, defaultSelectivity()] })}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs"
+                onClick={() =>
+                  onChange({ ...state, selectivity: [...state.selectivity, defaultSelectivity()] })
+                }
               >
                 <Plus className="mr-1 h-3 w-3" /> Add
               </Button>
@@ -709,7 +835,10 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
                 key={`sel-${i}`}
                 criterion={c}
                 onChange={(updated) =>
-                  onChange({ ...state, selectivity: state.selectivity.map((s, j) => (j === i ? updated : s)) })
+                  onChange({
+                    ...state,
+                    selectivity: state.selectivity.map((s, j) => (j === i ? updated : s)),
+                  })
                 }
                 onRemove={() =>
                   onChange({ ...state, selectivity: state.selectivity.filter((_, j) => j !== i) })
@@ -723,7 +852,10 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-muted-foreground">Batch Fields</Label>
               <Button
-                type="button" variant="ghost" size="sm" className="h-6 text-xs"
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs"
                 onClick={() => onChange({ ...state, batch: [...state.batch, defaultBatch()] })}
               >
                 <Plus className="mr-1 h-3 w-3" /> Add
@@ -748,8 +880,13 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-muted-foreground">Run Date</Label>
               <Button
-                type="button" variant="ghost" size="sm" className="h-6 text-xs"
-                onClick={() => onChange({ ...state, runDate: [...state.runDate, defaultRunDate()] })}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs"
+                onClick={() =>
+                  onChange({ ...state, runDate: [...state.runDate, defaultRunDate()] })
+                }
               >
                 <Plus className="mr-1 h-3 w-3" /> Add
               </Button>
@@ -759,7 +896,10 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
                 key={`rundate-${i}`}
                 criterion={c}
                 onChange={(updated) =>
-                  onChange({ ...state, runDate: state.runDate.map((s, j) => (j === i ? updated : s)) })
+                  onChange({
+                    ...state,
+                    runDate: state.runDate.map((s, j) => (j === i ? updated : s)),
+                  })
                 }
                 onRemove={() =>
                   onChange({ ...state, runDate: state.runDate.filter((_, j) => j !== i) })
@@ -773,8 +913,16 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-muted-foreground">Custom Fields</Label>
               <Button
-                type="button" variant="ghost" size="sm" className="h-6 text-xs"
-                onClick={() => onChange({ ...state, customFields: [...state.customFields, defaultCustomField()] })}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs"
+                onClick={() =>
+                  onChange({
+                    ...state,
+                    customFields: [...state.customFields, defaultCustomField()],
+                  })
+                }
               >
                 <Plus className="mr-1 h-3 w-3" /> Add
               </Button>
@@ -784,7 +932,10 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
                 key={`cf-${i}`}
                 criterion={c}
                 onChange={(updated) =>
-                  onChange({ ...state, customFields: state.customFields.map((s, j) => (j === i ? updated : s)) })
+                  onChange({
+                    ...state,
+                    customFields: state.customFields.map((s, j) => (j === i ? updated : s)),
+                  })
                 }
                 onRemove={() =>
                   onChange({ ...state, customFields: state.customFields.filter((_, j) => j !== i) })
@@ -798,8 +949,16 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-muted-foreground">Keyword List</Label>
               <Button
-                type="button" variant="ghost" size="sm" className="h-6 text-xs"
-                onClick={() => onChange({ ...state, keywordLists: [...state.keywordLists, defaultKeywordList()] })}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs"
+                onClick={() =>
+                  onChange({
+                    ...state,
+                    keywordLists: [...state.keywordLists, defaultKeywordList()],
+                  })
+                }
               >
                 <Plus className="mr-1 h-3 w-3" /> Add
               </Button>
@@ -809,7 +968,10 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
                 key={`kwl-${i}`}
                 criterion={c}
                 onChange={(updated) =>
-                  onChange({ ...state, keywordLists: state.keywordLists.map((s, j) => (j === i ? updated : s)) })
+                  onChange({
+                    ...state,
+                    keywordLists: state.keywordLists.map((s, j) => (j === i ? updated : s)),
+                  })
                 }
                 onRemove={() =>
                   onChange({ ...state, keywordLists: state.keywordLists.filter((_, j) => j !== i) })

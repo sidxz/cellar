@@ -6,9 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useBreadcrumbOverrides, useBreadcrumbTrailValue } from "./breadcrumb-context";
 
-const allNavItems = navigation.flatMap((g) =>
-  g.items.flatMap((i) => [i, ...(i.children ?? [])]),
-);
+const allNavItems = navigation.flatMap((g) => g.items.flatMap((i) => [i, ...(i.children ?? [])]));
 
 /** Set of hrefs that have actual pages (from navigation config). */
 const linkableHrefs = new Set(allNavItems.map((item) => item.href));
@@ -84,9 +82,7 @@ export function Breadcrumbs() {
                 {label}
               </Link>
             ) : (
-              <span className={isLast ? "font-medium" : "text-muted-foreground"}>
-                {label}
-              </span>
+              <span className={isLast ? "font-medium" : "text-muted-foreground"}>{label}</span>
             )}
           </span>
         );

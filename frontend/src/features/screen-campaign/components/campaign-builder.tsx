@@ -13,34 +13,30 @@
  * with the same primitives DetailShell uses (Skeleton, AlertCircle, ArrowLeft).
  */
 
-import { useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, AlertCircle } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 
-import { useCampaign, campaignKeys } from "../hooks/use-campaigns";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
 import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { ResultsGridV2 } from "./grid/results-grid";
-import { CloseSignDialog } from "./close-sign-dialog";
-import { CampaignView } from "./campaign-view";
-import {
-  CampaignFilterBar,
-  emptyFilters,
-  type CampaignFilters,
-} from "./campaign-filter-bar";
-import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
+import { campaignKeys, useCampaign } from "../hooks/use-campaigns";
 import type { CampaignResponse } from "../types";
+import { CampaignFilterBar, type CampaignFilters, emptyFilters } from "./campaign-filter-bar";
+import { CampaignView } from "./campaign-view";
+import { CloseSignDialog } from "./close-sign-dialog";
+import { ResultsGridV2 } from "./grid/results-grid";
+import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
 
+import { CampaignToolbar } from "./sections/campaign-toolbar";
+import { ChannelsSection } from "./sections/channels-section";
 // ── V2 section imports ────────────────────────────────────────────────────────
 import { HeaderStrip } from "./sections/header-strip";
 import { SourcesSection } from "./sections/sources-section";
-import { ChannelsSection } from "./sections/channels-section";
-import { CampaignToolbar } from "./sections/campaign-toolbar";
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
@@ -157,11 +153,7 @@ function CampaignBuilderV2({
         filters={filters}
         readOnly={campaign.status !== "draft"}
       />
-      <ResultsGridV2
-        campaign={campaign}
-        filters={filters}
-        readOnly={campaign.status !== "draft"}
-      />
+      <ResultsGridV2 campaign={campaign} filters={filters} readOnly={campaign.status !== "draft"} />
 
       <PreviewAsPublishedDialog
         campaignId={campaign.id}
@@ -169,11 +161,7 @@ function CampaignBuilderV2({
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
       />
-      <CloseSignDialog
-        campaign={campaign}
-        open={closeSignOpen}
-        onOpenChange={setCloseSignOpen}
-      />
+      <CloseSignDialog campaign={campaign} open={closeSignOpen} onOpenChange={setCloseSignOpen} />
     </div>
   );
 }

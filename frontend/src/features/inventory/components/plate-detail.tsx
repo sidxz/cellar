@@ -1,11 +1,10 @@
 "use client";
 
 import { AttachmentList, FileUploadZone } from "@/features/attachment";
-import { TagTable } from "@/features/tagging/components/tag-table";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { useProject } from "@/features/research-organization/hooks/use-projects";
 import { usePlateTemplate } from "@/features/screening-assay/hooks/use-plate-templates";
 import { WELL_TYPE_LABELS, type WellType } from "@/features/screening-assay/types";
+import { TagTable } from "@/features/tagging/components/tag-table";
 import { DetailShell } from "@/shared/components/detail-shell";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { Badge } from "@/shared/components/ui/badge";
@@ -36,6 +35,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { showError } from "@/shared/lib/toast";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { Copy, Download, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

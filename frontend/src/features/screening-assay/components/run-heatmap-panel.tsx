@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -11,20 +10,17 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { cn } from "@/shared/lib/utils";
+import { useMemo, useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
-import { useReadoutDataByRun } from "../hooks/use-readout-data";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { useProtocol } from "../hooks/use-protocols";
-import {
-  classifyZPrime,
-  readPerPlateQc,
-  type ZPrimeQuality,
-} from "../lib/qc-metrics";
+import { useReadoutDataByRun } from "../hooks/use-readout-data";
+import { type ZPrimeQuality, classifyZPrime, readPerPlateQc } from "../lib/qc-metrics";
 import {
   type PlateData,
+  READOUT_NORMALIZATION_LABELS,
   type ReadoutDefinition,
   type ReadoutNormalization,
-  READOUT_NORMALIZATION_LABELS,
   type Run,
 } from "../types";
 import {
@@ -76,8 +72,7 @@ interface RunHeatmapPanelProps {
 
 export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   const { data: plateMap, isLoading: plateMapLoading } = usePlateMap(run.id);
-  const { data: readoutData, isLoading: readoutLoading } =
-    useReadoutDataByRun(run.id);
+  const { data: readoutData, isLoading: readoutLoading } = useReadoutDataByRun(run.id);
   const { data: protocol } = useProtocol(run.protocol_id);
   const { data: curves } = useDoseResponseByRun(run.id);
 
@@ -99,14 +94,10 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   // Pick a sane default once readouts load. Falls back to the dose option
   // when the protocol declares no numeric readouts so the dropdown is
   // never empty for a freshly-imported run.
-  const effectiveReadoutId =
-    readoutId ?? numericReadouts[0]?.id ?? DOSE_OPTION_ID;
+  const effectiveReadoutId = readoutId ?? numericReadouts[0]?.id ?? DOSE_OPTION_ID;
   const isDose = effectiveReadoutId === DOSE_OPTION_ID;
-  const selectedDef = isDose
-    ? undefined
-    : numericReadouts.find((d) => d.id === effectiveReadoutId);
-  const layerAvailable =
-    !isDose && selectedDef ? hasComputedLayer(selectedDef) : false;
+  const selectedDef = isDose ? undefined : numericReadouts.find((d) => d.id === effectiveReadoutId);
+  const layerAvailable = !isDose && selectedDef ? hasComputedLayer(selectedDef) : false;
   const effectiveLayer: ValueLayer = layerAvailable ? layer : "raw";
 
   const wantsComputed = effectiveLayer === "normalized" && layerAvailable;
@@ -174,9 +165,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
         };
       }
       const mean = allValues.reduce((a, b) => a + b, 0) / allValues.length;
-      const variance =
-        allValues.reduce((a, b) => a + (b - mean) ** 2, 0) /
-        (allValues.length - 1);
+      const variance = allValues.reduce((a, b) => a + (b - mean) ** 2, 0) / (allValues.length - 1);
       const std = Math.sqrt(variance);
       // Symmetric ±2σ window. Outliers fall into the dark tails.
       // If σ collapses to 0 (all values identical) widen to ±1 so the
@@ -217,13 +206,9 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
       else if (w.well_type === "sample") sampleValues.push(v);
     }
     const negMean =
-      negValues.length > 0
-        ? negValues.reduce((a, b) => a + b, 0) / negValues.length
-        : undefined;
+      negValues.length > 0 ? negValues.reduce((a, b) => a + b, 0) / negValues.length : undefined;
     const posMean =
-      posValues.length > 0
-        ? posValues.reduce((a, b) => a + b, 0) / posValues.length
-        : undefined;
+      posValues.length > 0 ? posValues.reduce((a, b) => a + b, 0) / posValues.length : undefined;
 
     if (negMean != null && posMean != null) {
       return {
@@ -260,15 +245,10 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   /** Sequential palette only when the metric is unsigned magnitude AND we
    *  aren't z-scoring it — otherwise the diverging palette carries the
    *  signed semantics correctly. */
-  const palette: Palette =
-    isDose && scaleKind === "linear" ? "sequential" : "diverging";
+  const palette: Palette = isDose && scaleKind === "linear" ? "sequential" : "diverging";
 
   if (!protocol || plateMapLoading || readoutLoading) {
-    return (
-      <p className="py-12 text-center text-sm text-muted-foreground">
-        Loading…
-      </p>
-    );
+    return <p className="py-12 text-center text-sm text-muted-foreground">Loading…</p>;
   }
 
   if (plates.length === 0) {
@@ -285,94 +265,81 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   const computedUnit = isDose
     ? "Concentration"
     : selectedDef
-      ? computedUnitLabel(
-          selectedDef.normalizations?.find((n) => n !== "none") ?? "none",
-        )
+      ? computedUnitLabel(selectedDef.normalizations?.find((n) => n !== "none") ?? "none")
       : "Computed";
 
   return (
     <div className="mt-4 space-y-6">
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              Readout
-            </label>
-            <Select
-              value={effectiveReadoutId ?? undefined}
-              onValueChange={(v) => setReadoutId(v)}
-            >
-              <SelectTrigger className="h-9 w-[260px] text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {numericReadouts.map((d) => (
-                  <SelectItem key={d.id} value={d.id} className="text-sm">
-                    {d.name}
-                    {d.unit ? ` (${d.unit})` : ""}
-                  </SelectItem>
-                ))}
-                <SelectItem value={DOSE_OPTION_ID} className="text-sm">
-                  Concentration ({doseUnit})
+          <label className="text-xs font-medium text-muted-foreground">Readout</label>
+          <Select value={effectiveReadoutId ?? undefined} onValueChange={(v) => setReadoutId(v)}>
+            <SelectTrigger className="h-9 w-[260px] text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {numericReadouts.map((d) => (
+                <SelectItem key={d.id} value={d.id} className="text-sm">
+                  {d.name}
+                  {d.unit ? ` (${d.unit})` : ""}
                 </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              ))}
+              <SelectItem value={DOSE_OPTION_ID} className="text-sm">
+                Concentration ({doseUnit})
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-          {layerAvailable && (
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-muted-foreground">
-                Value
-              </label>
-              <div className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-muted/40 p-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={effectiveLayer === "raw" ? "secondary" : "ghost"}
-                  className="h-7 rounded-sm px-2.5 text-xs"
-                  onClick={() => setLayer("raw")}
-                >
-                  Raw
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={
-                    effectiveLayer === "normalized" ? "secondary" : "ghost"
-                  }
-                  className="h-7 rounded-sm px-2.5 text-xs"
-                  onClick={() => setLayer("normalized")}
-                >
-                  {computedUnit}
-                </Button>
-              </div>
-            </div>
-          )}
-
+        {layerAvailable && (
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              Scale
-            </label>
+            <label className="text-xs font-medium text-muted-foreground">Value</label>
             <div className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-muted/40 p-1">
               <Button
                 type="button"
                 size="sm"
-                variant={scaleKind === "linear" ? "secondary" : "ghost"}
+                variant={effectiveLayer === "raw" ? "secondary" : "ghost"}
                 className="h-7 rounded-sm px-2.5 text-xs"
-                onClick={() => setScaleKind("linear")}
+                onClick={() => setLayer("raw")}
               >
-                Linear
+                Raw
               </Button>
               <Button
                 type="button"
                 size="sm"
-                variant={scaleKind === "zscore" ? "secondary" : "ghost"}
+                variant={effectiveLayer === "normalized" ? "secondary" : "ghost"}
                 className="h-7 rounded-sm px-2.5 text-xs"
-                onClick={() => setScaleKind("zscore")}
+                onClick={() => setLayer("normalized")}
               >
-                Z-Score
+                {computedUnit}
               </Button>
             </div>
           </div>
+        )}
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-muted-foreground">Scale</label>
+          <div className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-muted/40 p-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={scaleKind === "linear" ? "secondary" : "ghost"}
+              className="h-7 rounded-sm px-2.5 text-xs"
+              onClick={() => setScaleKind("linear")}
+            >
+              Linear
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={scaleKind === "zscore" ? "secondary" : "ghost"}
+              className="h-7 rounded-sm px-2.5 text-xs"
+              onClick={() => setScaleKind("zscore")}
+            >
+              Z-Score
+            </Button>
+          </div>
+        </div>
       </div>
 
       {/* Per-plate heatmaps */}
@@ -413,12 +380,9 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
             <div key={plate.plate_id} className="space-y-3">
               <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div className="flex items-baseline gap-3">
-                  <h3 className="text-sm font-medium">
-                    Plate {plate.plate_number}
-                  </h3>
+                  <h3 className="text-sm font-medium">Plate {plate.plate_number}</h3>
                   <span className="text-xs text-muted-foreground">
-                    {plate.summary.total_wells} wells ·{" "}
-                    {plate.summary.sample_wells} samples ·{" "}
+                    {plate.summary.total_wells} wells · {plate.summary.sample_wells} samples ·{" "}
                     {plate.summary.control_wells} controls
                   </span>
                 </div>
@@ -427,24 +391,16 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                     <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                       Z&apos;
                     </span>
-                    <span className="font-mono text-sm tabular-nums">
-                      {zp.toFixed(3)}
-                    </span>
+                    <span className="font-mono text-sm tabular-nums">{zp.toFixed(3)}</span>
                     <Badge
                       variant="outline"
-                      className={cn(
-                        "text-[10px] font-medium",
-                        Z_PRIME_BADGE[zpQuality].className,
-                      )}
+                      className={cn("text-[10px] font-medium", Z_PRIME_BADGE[zpQuality].className)}
                     >
                       {Z_PRIME_BADGE[zpQuality].label}
                     </Badge>
                     {typeof qc?.s2b === "number" && (
                       <span className="ml-2 text-[11px] text-muted-foreground">
-                        S/B{" "}
-                        <span className="font-mono tabular-nums">
-                          {qc.s2b.toFixed(2)}
-                        </span>
+                        S/B <span className="font-mono tabular-nums">{qc.s2b.toFixed(2)}</span>
                       </span>
                     )}
                   </div>
@@ -476,8 +432,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
 
       {curves && curves.length > 0 && (
         <p className="pt-2 text-[11px] text-muted-foreground">
-          {curves.length} fitted curve{curves.length === 1 ? "" : "s"} · see
-          Dose-Response tab.
+          {curves.length} fitted curve{curves.length === 1 ? "" : "s"} · see Dose-Response tab.
         </p>
       )}
     </div>

@@ -1,11 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import type {
-  CreatePlateTemplateInput,
-  PlateTemplate,
-  UpdatePlateTemplateInput,
-} from "../types";
+import type { CreatePlateTemplateInput, PlateTemplate, UpdatePlateTemplateInput } from "../types";
 
 const ptHooks = createCrudHooks<PlateTemplate, CreatePlateTemplateInput, UpdatePlateTemplateInput>({
   entityName: "Plate template",

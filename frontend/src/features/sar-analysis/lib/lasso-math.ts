@@ -14,11 +14,12 @@ export interface IdPoint {
 export function pointInPolygon(p: Point, poly: Point[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i].x, yi = poly[i].y;
-    const xj = poly[j].x, yj = poly[j].y;
+    const xi = poly[i].x;
+    const yi = poly[i].y;
+    const xj = poly[j].x;
+    const yj = poly[j].y;
     const intersect =
-      ((yi > p.y) !== (yj > p.y)) &&
-      p.x < ((xj - xi) * (p.y - yi)) / (yj - yi || Number.EPSILON) + xi;
+      yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi || Number.EPSILON) + xi;
     if (intersect) inside = !inside;
   }
   return inside;
@@ -97,8 +98,6 @@ export function selectedIdsFromPlotlyEvent(
  * user selection always carries `lassoPoints`/`range`; a genuine clear comes via
  * `plotly_deselect`. So: ignore `plotly_selected` events that have no geometry.
  */
-export function hasSelectionGeometry(
-  ev: PlotlySelectionEvent | null | undefined,
-): boolean {
+export function hasSelectionGeometry(ev: PlotlySelectionEvent | null | undefined): boolean {
   return Boolean(ev && (ev.lassoPoints || ev.range));
 }

@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { SearchableSelect } from "@/shared/components/searchable-select";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -23,13 +21,12 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { SearchableSelect } from "@/shared/components/searchable-select";
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
+import { useCreateCollection, useUpdateCollection } from "../hooks/use-collections";
 import { useProjects } from "../hooks/use-projects";
-import {
-  useCreateCollection,
-  useUpdateCollection,
-} from "../hooks/use-collections";
 import type { Collection } from "../types";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
@@ -132,9 +129,7 @@ export function CreateCollectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Collection" : "New Collection"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Collection" : "New Collection"}</DialogTitle>
           <DialogDescription>
             {isEdit
               ? "Update the collection details."
@@ -156,9 +151,7 @@ export function CreateCollectionDialog({
                 }}
               />
               {form.formState.errors.name && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
               )}
             </div>
 
@@ -238,10 +231,7 @@ export function CreateCollectionDialog({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={form.formState.isSubmitting || mutation.isPending}
-            >
+            <Button type="submit" disabled={form.formState.isSubmitting || mutation.isPending}>
               {mutation.isPending
                 ? isEdit
                   ? "Saving..."

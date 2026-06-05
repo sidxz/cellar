@@ -11,11 +11,14 @@
  * TODO: replace with real re-authentication hook when available.
  */
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Lock, AlertTriangle } from "lucide-react";
+import { AlertTriangle, Lock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
+import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -24,11 +27,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { Checkbox } from "@/shared/components/ui/checkbox";
-import { Badge } from "@/shared/components/ui/badge";
 import { Separator } from "@/shared/components/ui/separator";
 
 import { useCloseCampaignApiV1CampaignsCampaignIdClosePost } from "@/shared/lib/api/campaigns/campaigns";
@@ -68,10 +68,10 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
   const hasChannels = campaign.channels.length > 0;
   const canClose = hasResults && hasChannels && signerName.trim().length > 0;
 
-  const decisionCounts = campaign.results.reduce<Record<string, number>>(
-    (acc, r) => ({ ...acc, [r.decision]: (acc[r.decision] ?? 0) + 1 }),
-    {},
-  );
+  const decisionCounts = campaign.results.reduce<Record<string, number>>((acc, r) => {
+    acc[r.decision] = (acc[r.decision] ?? 0) + 1;
+    return acc;
+  }, {});
 
   const handleClose = () => {
     if (!canClose) return;
@@ -102,8 +102,8 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
             Close &amp; Sign Campaign
           </DialogTitle>
           <DialogDescription>
-            This action is irreversible. The campaign will be locked and a
-            frozen Collection will be published if enabled.
+            This action is irreversible. The campaign will be locked and a frozen Collection will be
+            published if enabled.
           </DialogDescription>
         </DialogHeader>
 
@@ -114,7 +114,9 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
             <div>
               {!hasResults && <p>Campaign has no compound results.</p>}
               {!hasChannels && <p>Campaign has no channels.</p>}
-              <p className="mt-1 text-xs">Add at least one channel and one compound before closing.</p>
+              <p className="mt-1 text-xs">
+                Add at least one channel and one compound before closing.
+              </p>
             </div>
           </div>
         )}
@@ -165,9 +167,8 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
           </p>
           <p className="text-xs text-muted-foreground">
             {/* TODO: replace with useReauthenticate() when available */}
-            Type your full name to sign. A unique signature ID is generated
-            client-side as a stub — integrate with the re-authentication
-            service in a follow-up.
+            Type your full name to sign. A unique signature ID is generated client-side as a stub —
+            integrate with the re-authentication service in a follow-up.
           </p>
           <div className="space-y-1">
             <Label htmlFor="signer-name">Full name</Label>
@@ -190,10 +191,7 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
 
         {closeMutation.error && (
           <p className="text-xs text-destructive">
-            {String(
-              ((closeMutation.error as { message?: string }).message) ??
-                "An error occurred.",
-            )}
+            {String((closeMutation.error as { message?: string }).message ?? "An error occurred.")}
           </p>
         )}
 

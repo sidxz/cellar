@@ -1,8 +1,5 @@
+import type { Protocol, ReadoutDefinition } from "@/features/screening-assay/types";
 import { describe, expect, it } from "vitest";
-import type {
-  Protocol,
-  ReadoutDefinition,
-} from "@/features/screening-assay/types";
 import {
   expandParentTokens,
   resolveColumns,
@@ -150,7 +147,7 @@ describe("expandParentTokens", () => {
   });
 
   it("passes through `rd:` tokens unchanged", () => {
-    expect(expandParentTokens([`rd:p:rd`], [drProtocol])).toEqual([`rd:p:rd`]);
+    expect(expandParentTokens(["rd:p:rd"], [drProtocol])).toEqual(["rd:p:rd"]);
   });
 
   it("leaves parent tokens for rd-defs with no declared intercepts as-is", () => {
@@ -168,9 +165,7 @@ describe("expandParentTokens", () => {
         }),
       ],
     } as unknown as Protocol;
-    expect(expandParentTokens([`drc:${RD_DR}`], [legacy])).toEqual([
-      `drc:${RD_DR}`,
-    ]);
+    expect(expandParentTokens([`drc:${RD_DR}`], [legacy])).toEqual([`drc:${RD_DR}`]);
   });
 });
 
@@ -181,21 +176,15 @@ describe("toBackendProtocolColumns", () => {
     // The BE only understands `drc:<rd>`. Narrowed tokens (introduced by the
     // customizer for per-intercept visibility) collapse here so the activity
     // service doesn't try to parse them as a UUID.
-    expect(
-      toBackendProtocolColumns([
-        `drc:${RD}:ec:50`,
-        `drc:${RD}:ec:90`,
-        `drc:${RD}`,
-      ]),
-    ).toEqual([`drc:${RD}`]);
+    expect(toBackendProtocolColumns([`drc:${RD}:ec:50`, `drc:${RD}:ec:90`, `drc:${RD}`])).toEqual([
+      `drc:${RD}`,
+    ]);
   });
 
   it("preserves `rd:` tokens and their normalization suffix", () => {
-    expect(
-      toBackendProtocolColumns([
-        `rd:p1:rd1`,
-        `rd:p1:rd2:percent_inhibition`,
-      ]),
-    ).toEqual([`rd:p1:rd1`, `rd:p1:rd2:percent_inhibition`]);
+    expect(toBackendProtocolColumns(["rd:p1:rd1", "rd:p1:rd2:percent_inhibition"])).toEqual([
+      "rd:p1:rd1",
+      "rd:p1:rd2:percent_inhibition",
+    ]);
   });
 });

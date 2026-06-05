@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil } from "lucide-react";
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { DetailShell } from "@/shared/components/detail-shell";
+import { BatchName, MemberName, MoleculeName, SampleName } from "@/shared/components/entity-name";
 import { PriorityBadge } from "@/shared/components/status-badge";
-import { formatDateTime } from "@/shared/lib/format-date";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
 import {
@@ -25,35 +23,32 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { DetailShell } from "@/shared/components/detail-shell";
-import { MoleculeName, MemberName, BatchName, SampleName } from "@/shared/components/entity-name";
+import { formatDateTime } from "@/shared/lib/format-date";
+import { useAuthz } from "@sentinel-auth/nextjs";
+import { Pencil } from "lucide-react";
+import { useState } from "react";
 import {
-  useSampleRequest,
   useApproveSampleRequest,
-  useRejectSampleRequest,
-  useStartPreparingSampleRequest,
-  useFulfillSampleRequest,
   useCancelSampleRequest,
+  useFulfillSampleRequest,
+  useRejectSampleRequest,
+  useSampleRequest,
+  useStartPreparingSampleRequest,
   useUpdateSampleRequest,
 } from "../hooks/use-sample-requests";
 import { useSamplesByBatch } from "../hooks/use-samples";
 import {
-  SAMPLE_REQUEST_STATUS_LABELS,
   REQUEST_PRIORITY_LABELS,
+  SAMPLE_REQUEST_STATUS_LABELS,
   type SampleRequest,
   type SampleRequestStatus,
-  type RequestPriority,
 } from "../types/sample-request";
 
 interface SampleRequestDetailProps {
   requestId: string;
 }
 
-const TERMINAL_STATUSES = new Set<SampleRequestStatus>([
-  "fulfilled",
-  "rejected",
-  "cancelled",
-]);
+const TERMINAL_STATUSES = new Set<SampleRequestStatus>(["fulfilled", "rejected", "cancelled"]);
 
 export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
   const query = useSampleRequest(requestId);
@@ -72,7 +67,7 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
         backHref="/inventory/sample-requests"
         backLabel="Back to Sample Requests"
         title={(r) =>
-          `Sample Request${r.purpose ? ` \u2014 ${r.purpose.length > 40 ? r.purpose.slice(0, 40) + "\u2026" : r.purpose}` : ""}`
+          `Sample Request${r.purpose ? ` \u2014 ${r.purpose.length > 40 ? `${r.purpose.slice(0, 40)}\u2026` : r.purpose}` : ""}`
         }
         badge={(r) => ({
           status: r.status,
@@ -86,26 +81,14 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
             <>
               {r.status === "submitted" && (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditOpen(true)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
                     <Pencil className="mr-1 h-3.5 w-3.5" />
                     Edit
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setApproveOpen(true)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setApproveOpen(true)}>
                     Approve
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRejectOpen(true)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setRejectOpen(true)}>
                     Reject
                   </Button>
                 </>
@@ -114,20 +97,14 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
-                    startPreparing.mutate({ id: requestId })
-                  }
+                  onClick={() => startPreparing.mutate({ id: requestId })}
                   disabled={startPreparing.isPending}
                 >
                   {startPreparing.isPending ? "Starting..." : "Start Preparing"}
                 </Button>
               )}
               {r.status === "preparing" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFulfillOpen(true)}
-                >
+                <Button variant="outline" size="sm" onClick={() => setFulfillOpen(true)}>
                   Fulfill
                 </Button>
               )}
@@ -172,7 +149,9 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
                 {request.batch_id && (
                   <div>
                     <p className="text-xs text-muted-foreground">Preferred Batch</p>
-                    <p className="font-medium text-sm"><BatchName id={request.batch_id} /></p>
+                    <p className="font-medium text-sm">
+                      <BatchName id={request.batch_id} />
+                    </p>
                   </div>
                 )}
                 <div>
@@ -196,7 +175,9 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
                 {request.assigned_to && (
                   <div>
                     <p className="text-xs text-muted-foreground">Assigned To</p>
-                    <p className="font-medium text-sm"><MemberName id={request.assigned_to} /></p>
+                    <p className="font-medium text-sm">
+                      <MemberName id={request.assigned_to} />
+                    </p>
                   </div>
                 )}
                 {request.fulfilled_sample_id && (
@@ -210,9 +191,7 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
                 {request.fulfilled_at && (
                   <div>
                     <p className="text-xs text-muted-foreground">Fulfilled At</p>
-                    <p className="font-medium">
-                      {formatDateTime(request.fulfilled_at)}
-                    </p>
+                    <p className="font-medium">{formatDateTime(request.fulfilled_at)}</p>
                   </div>
                 )}
               </div>
@@ -223,9 +202,7 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
               {request.rejection_reason && (
                 <div className="mt-4">
                   <p className="text-xs text-muted-foreground">Rejection Reason</p>
-                  <p className="mt-1 text-sm text-destructive">
-                    {request.rejection_reason}
-                  </p>
+                  <p className="mt-1 text-sm text-destructive">{request.rejection_reason}</p>
                 </div>
               )}
             </Card>
@@ -235,29 +212,13 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
 
       {/* Action dialogs */}
       {query.data?.status === "submitted" && (
-        <EditSampleRequestDialog
-          request={query.data}
-          open={editOpen}
-          onOpenChange={setEditOpen}
-        />
+        <EditSampleRequestDialog request={query.data} open={editOpen} onOpenChange={setEditOpen} />
       )}
       {query.data && (
         <>
-          <ApproveDialog
-            request={query.data}
-            open={approveOpen}
-            onOpenChange={setApproveOpen}
-          />
-          <RejectDialog
-            request={query.data}
-            open={rejectOpen}
-            onOpenChange={setRejectOpen}
-          />
-          <FulfillDialog
-            request={query.data}
-            open={fulfillOpen}
-            onOpenChange={setFulfillOpen}
-          />
+          <ApproveDialog request={query.data} open={approveOpen} onOpenChange={setApproveOpen} />
+          <RejectDialog request={query.data} open={rejectOpen} onOpenChange={setRejectOpen} />
+          <FulfillDialog request={query.data} open={fulfillOpen} onOpenChange={setFulfillOpen} />
         </>
       )}
     </>
@@ -315,13 +276,11 @@ function EditSampleRequestDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(REQUEST_PRIORITY_LABELS).map(
-                  ([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  )
-                )}
+                {Object.entries(REQUEST_PRIORITY_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -363,10 +322,10 @@ function EditSampleRequestDialog({
                   id: request.id,
                   purpose: purpose.trim(),
                   priority,
-                  amount_value: parseFloat(amountValue) || request.amount_value,
+                  amount_value: Number.parseFloat(amountValue) || request.amount_value,
                   amount_unit: amountUnit,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={!purpose.trim() || mutation.isPending}
@@ -415,7 +374,7 @@ function ApproveDialog({
                   id: request.id,
                   assigned_to: user?.userId ?? undefined,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}
@@ -445,9 +404,7 @@ function RejectDialog({
       <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Reject Request</DialogTitle>
-          <DialogDescription>
-            Provide a reason for rejecting this request.
-          </DialogDescription>
+          <DialogDescription>Provide a reason for rejecting this request.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
           <Label>Reason</Label>
@@ -461,10 +418,7 @@ function RejectDialog({
           <Button
             variant="destructive"
             onClick={() => {
-              mutation.mutate(
-                { id: request.id, reason },
-                { onSuccess: () => onOpenChange(false) }
-              );
+              mutation.mutate({ id: request.id, reason }, { onSuccess: () => onOpenChange(false) });
             }}
             disabled={!reason.trim() || mutation.isPending}
           >
@@ -490,19 +444,16 @@ function FulfillDialog({
 
   // If the request targets a specific batch, offer a select of known samples.
   const { data: batchSamples, isLoading: samplesLoading } = useSamplesByBatch(
-    request.batch_id ?? undefined
+    request.batch_id ?? undefined,
   );
-  const hasBatchSamples =
-    !!request.batch_id && batchSamples && batchSamples.length > 0;
+  const hasBatchSamples = !!request.batch_id && batchSamples && batchSamples.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Fulfill Request</DialogTitle>
-          <DialogDescription>
-            Link the dispensed sample to this request.
-          </DialogDescription>
+          <DialogDescription>Link the dispensed sample to this request.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2 py-4">
           {hasBatchSamples ? (
@@ -516,9 +467,7 @@ function FulfillDialog({
                   {batchSamples.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.barcode}
-                      {s.amount_value != null
-                        ? ` — ${s.amount_value} ${s.amount_unit}`
-                        : ""}
+                      {s.amount_value != null ? ` — ${s.amount_value} ${s.amount_unit}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -529,9 +478,7 @@ function FulfillDialog({
               <Label htmlFor="fulfill-sample">Sample Barcode</Label>
               <Input
                 id="fulfill-sample"
-                placeholder={
-                  samplesLoading ? "Loading samples..." : "e.g. SMP-0042"
-                }
+                placeholder={samplesLoading ? "Loading samples..." : "e.g. SMP-0042"}
                 value={sampleId}
                 onChange={(e) => setSampleId(e.target.value)}
                 disabled={samplesLoading}
@@ -547,7 +494,7 @@ function FulfillDialog({
             onClick={() => {
               mutation.mutate(
                 { id: request.id, sample_id: sampleId },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={!sampleId.trim() || mutation.isPending}

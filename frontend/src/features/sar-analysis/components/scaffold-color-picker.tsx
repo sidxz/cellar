@@ -31,10 +31,7 @@ export function ScaffoldColorPicker({ protocols, value, onChange }: Props) {
   return (
     <div className="inline-flex items-center gap-1 shrink-0">
       <span className="text-xs text-muted-foreground">Color by:</span>
-      <Select
-        value={value ?? NONE}
-        onValueChange={(v) => onChange(v === NONE ? null : v)}
-      >
+      <Select value={value ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)}>
         <SelectTrigger className="h-7 text-xs w-auto max-w-[200px] min-w-[120px]">
           <SelectValue placeholder="none" />
         </SelectTrigger>

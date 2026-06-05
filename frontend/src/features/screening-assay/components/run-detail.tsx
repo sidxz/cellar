@@ -1,27 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  Play,
-  CheckCircle2,
-  ThumbsUp,
-  ThumbsDown,
-  Lock,
-  Unlock,
-  Calculator,
-  RotateCcw,
-  Trash2,
-} from "lucide-react";
-import { Badge } from "@/shared/components/ui/badge";
-import { Button } from "@/shared/components/ui/button";
+import { TagTable } from "@/features/tagging/components/tag-table";
+import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
+import { DetailShell } from "@/shared/components/detail-shell";
+import { ProtocolName } from "@/shared/components/entity-name";
+import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -32,11 +17,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/shared/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -45,31 +26,36 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { DetailShell } from "@/shared/components/detail-shell";
-import { MemberName, ProtocolName } from "@/shared/components/entity-name";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import {
+  Calculator,
+  CheckCircle2,
+  Lock,
+  Play,
+  RotateCcw,
+  ThumbsDown,
+  ThumbsUp,
+  Trash2,
+  Unlock,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useProtocol } from "../hooks/use-protocols";
+import { useRecomputeOverrides } from "../hooks/use-recompute-overrides";
+import {
+  useApproveRun,
+  useCompleteRun,
+  useDeleteRun,
+  useLockRun,
+  useRecomputeRun,
+  useRejectRun,
   useRun,
   useStartRun,
-  useCompleteRun,
-  useApproveRun,
-  useRejectRun,
-  useLockRun,
   useUnlockRun,
-  useRecomputeRun,
-  useDeleteRun,
 } from "../hooks/use-runs";
-import { useRecomputeOverrides } from "../hooks/use-recompute-overrides";
-import { useProtocol } from "../hooks/use-protocols";
-import {
-  PLATE_FORMAT_LABELS,
-  type PlateFormat,
-  type RunStatus,
-} from "../types";
-import { RunDataPanel } from "./run-data-panel";
+import { PLATE_FORMAT_LABELS, type PlateFormat, type RunStatus } from "../types";
 import { ResetRunDataDialog } from "./reset-run-data-dialog";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
-import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
-import { TagTable } from "@/features/tagging/components/tag-table";
+import { RunDataPanel } from "./run-data-panel";
 
 interface RunDetailProps {
   runId: string;
@@ -164,7 +150,7 @@ export function RunDetail({ runId }: RunDetailProps) {
           setRejectDialogOpen(false);
           setRejectReason("");
         },
-      }
+      },
     );
   };
 
@@ -176,7 +162,7 @@ export function RunDetail({ runId }: RunDetailProps) {
           setLockDialogOpen(false);
           setLockReason("");
         },
-      }
+      },
     );
   };
 
@@ -188,7 +174,7 @@ export function RunDetail({ runId }: RunDetailProps) {
           setUnlockDialogOpen(false);
           setUnlockReason("");
         },
-      }
+      },
     );
   };
 
@@ -245,32 +231,20 @@ export function RunDetail({ runId }: RunDetailProps) {
                     <ThumbsUp className="mr-2 h-4 w-4" />
                     {approveMutation.isPending ? "Approving..." : "Approve"}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => setRejectDialogOpen(true)}
-                  >
+                  <Button size="sm" variant="destructive" onClick={() => setRejectDialogOpen(true)}>
                     <ThumbsDown className="mr-2 h-4 w-4" />
                     Reject
                   </Button>
                 </>
               )}
               {status !== "draft" && !r.is_locked && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setLockDialogOpen(true)}
-                >
+                <Button size="sm" variant="outline" onClick={() => setLockDialogOpen(true)}>
                   <Lock className="mr-2 h-4 w-4" />
                   Lock
                 </Button>
               )}
               {status !== "draft" && r.is_locked && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setUnlockDialogOpen(true)}
-                >
+                <Button size="sm" variant="outline" onClick={() => setUnlockDialogOpen(true)}>
                   <Unlock className="mr-2 h-4 w-4" />
                   Unlock
                 </Button>
@@ -286,14 +260,9 @@ export function RunDetail({ runId }: RunDetailProps) {
                     className="rounded-r-none border-r-0"
                   >
                     <Calculator className="mr-2 h-4 w-4" />
-                    {recomputeMutation.isPending
-                      ? "Recomputing..."
-                      : "Recompute"}
+                    {recomputeMutation.isPending ? "Recomputing..." : "Recompute"}
                   </Button>
-                  <Popover
-                    open={recomputePopoverOpen}
-                    onOpenChange={setRecomputePopoverOpen}
-                  >
+                  <Popover open={recomputePopoverOpen} onOpenChange={setRecomputePopoverOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         size="sm"
@@ -305,18 +274,13 @@ export function RunDetail({ runId }: RunDetailProps) {
                         ▾
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent
-                      className="w-[28rem] space-y-3"
-                      align="end"
-                    >
+                    <PopoverContent className="w-[28rem] space-y-3" align="end">
                       <div>
-                        <p className="text-sm font-medium">
-                          Override fit constraints
-                        </p>
+                        <p className="text-sm font-medium">Override fit constraints</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          One-time overrides for this recompute. &ldquo;Inherit&rdquo;
-                          uses the protocol&apos;s setting (Free, Range, or
-                          Lock). Not saved on the run or the protocol.
+                          One-time overrides for this recompute. &ldquo;Inherit&rdquo; uses the
+                          protocol&apos;s setting (Free, Range, or Lock). Not saved on the run or
+                          the protocol.
                         </p>
                       </div>
 
@@ -336,9 +300,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                             className="h-8 text-xs"
                             placeholder="e.g., 100"
                             value={recomputeTop}
-                            onChange={(e) =>
-                              updateOverride("top", e.target.value)
-                            }
+                            onChange={(e) => updateOverride("top", e.target.value)}
                           />
                         )}
                         {recomputeTopMode === "range" && (
@@ -348,21 +310,15 @@ export function RunDetail({ runId }: RunDetailProps) {
                               className="h-8 text-xs"
                               placeholder="85"
                               value={recomputeTopMin}
-                              onChange={(e) =>
-                                updateOverride("topMin", e.target.value)
-                              }
+                              onChange={(e) => updateOverride("topMin", e.target.value)}
                             />
-                            <span className="text-xs text-muted-foreground">
-                              to
-                            </span>
+                            <span className="text-xs text-muted-foreground">to</span>
                             <Input
                               type="number"
                               className="h-8 text-xs"
                               placeholder="110"
                               value={recomputeTopMax}
-                              onChange={(e) =>
-                                updateOverride("topMax", e.target.value)
-                              }
+                              onChange={(e) => updateOverride("topMax", e.target.value)}
                             />
                           </div>
                         )}
@@ -384,9 +340,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                             className="h-8 text-xs"
                             placeholder="e.g., 0"
                             value={recomputeBottom}
-                            onChange={(e) =>
-                              updateOverride("bottom", e.target.value)
-                            }
+                            onChange={(e) => updateOverride("bottom", e.target.value)}
                           />
                         )}
                         {recomputeBottomMode === "range" && (
@@ -396,21 +350,15 @@ export function RunDetail({ runId }: RunDetailProps) {
                               className="h-8 text-xs"
                               placeholder="-10"
                               value={recomputeBottomMin}
-                              onChange={(e) =>
-                                updateOverride("bottomMin", e.target.value)
-                              }
+                              onChange={(e) => updateOverride("bottomMin", e.target.value)}
                             />
-                            <span className="text-xs text-muted-foreground">
-                              to
-                            </span>
+                            <span className="text-xs text-muted-foreground">to</span>
                             <Input
                               type="number"
                               className="h-8 text-xs"
                               placeholder="10"
                               value={recomputeBottomMax}
-                              onChange={(e) =>
-                                updateOverride("bottomMax", e.target.value)
-                              }
+                              onChange={(e) => updateOverride("bottomMax", e.target.value)}
                             />
                           </div>
                         )}
@@ -419,16 +367,11 @@ export function RunDetail({ runId }: RunDetailProps) {
                       {/* Hill */}
                       <div className="rounded-md border bg-background p-2 space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
-                          <Label className="text-xs font-medium">
-                            Hill Slope
-                          </Label>
+                          <Label className="text-xs font-medium">Hill Slope</Label>
                           <Select
                             value={recomputeHillMode}
                             onValueChange={(v) =>
-                              updateOverride(
-                                "hillMode",
-                                v as "inherit" | "enum" | "range",
-                              )
+                              updateOverride("hillMode", v as "inherit" | "enum" | "range")
                             }
                           >
                             <SelectTrigger className="h-7 w-36 text-xs">
@@ -465,18 +408,10 @@ export function RunDetail({ runId }: RunDetailProps) {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="unconstrained">
-                                Unconstrained
-                              </SelectItem>
-                              <SelectItem value="negative_only">
-                                Negative only
-                              </SelectItem>
-                              <SelectItem value="positive_only">
-                                Positive only
-                              </SelectItem>
-                              <SelectItem value="fixed_at_one">
-                                Fixed at 1
-                              </SelectItem>
+                              <SelectItem value="unconstrained">Unconstrained</SelectItem>
+                              <SelectItem value="negative_only">Negative only</SelectItem>
+                              <SelectItem value="positive_only">Positive only</SelectItem>
+                              <SelectItem value="fixed_at_one">Fixed at 1</SelectItem>
                             </SelectContent>
                           </Select>
                         )}
@@ -488,33 +423,23 @@ export function RunDetail({ runId }: RunDetailProps) {
                               className="h-8 text-xs"
                               placeholder="0.9"
                               value={recomputeHillMin}
-                              onChange={(e) =>
-                                updateOverride("hillMin", e.target.value)
-                              }
+                              onChange={(e) => updateOverride("hillMin", e.target.value)}
                             />
-                            <span className="text-xs text-muted-foreground">
-                              to
-                            </span>
+                            <span className="text-xs text-muted-foreground">to</span>
                             <Input
                               type="number"
                               step="0.1"
                               className="h-8 text-xs"
                               placeholder="1.1"
                               value={recomputeHillMax}
-                              onChange={(e) =>
-                                updateOverride("hillMax", e.target.value)
-                              }
+                              onChange={(e) => updateOverride("hillMax", e.target.value)}
                             />
                           </div>
                         )}
                       </div>
 
                       <div className="flex justify-end gap-2 pt-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={clearRecomputeOverrides}
-                        >
+                        <Button size="sm" variant="ghost" onClick={clearRecomputeOverrides}>
                           Clear
                         </Button>
                         <Button
@@ -529,23 +454,21 @@ export function RunDetail({ runId }: RunDetailProps) {
                   </Popover>
                 </div>
               )}
-              {(status === "draft" || status === "in_progress") && !r.is_locked && r.plate_count > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setResetDialogOpen(true)}
-                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                >
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Reset Data
-                </Button>
-              )}
+              {(status === "draft" || status === "in_progress") &&
+                !r.is_locked &&
+                r.plate_count > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setResetDialogOpen(true)}
+                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Reset Data
+                  </Button>
+                )}
               {(status === "draft" || status === "in_progress") && !r.is_locked && (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => setDeleteDialogOpen(true)}
-                >
+                <Button size="sm" variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                 </Button>
@@ -592,8 +515,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                     <p className="text-sm text-muted-foreground">Plate Format</p>
                     <p className="font-medium">
                       {run.plate_format
-                        ? PLATE_FORMAT_LABELS[run.plate_format as PlateFormat] ??
-                          run.plate_format
+                        ? (PLATE_FORMAT_LABELS[run.plate_format as PlateFormat] ?? run.plate_format)
                         : "\u2014"}
                     </p>
                   </div>
@@ -630,9 +552,7 @@ export function RunDetail({ runId }: RunDetailProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reject Run</DialogTitle>
-            <DialogDescription>
-              Provide a reason for rejecting this run.
-            </DialogDescription>
+            <DialogDescription>Provide a reason for rejecting this run.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -662,8 +582,7 @@ export function RunDetail({ runId }: RunDetailProps) {
           <DialogHeader>
             <DialogTitle>Lock Run</DialogTitle>
             <DialogDescription>
-              Provide a reason for locking this run. Locked runs cannot have
-              data modified.
+              Provide a reason for locking this run. Locked runs cannot have data modified.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -677,10 +596,7 @@ export function RunDetail({ runId }: RunDetailProps) {
             </div>
           </div>
           <DialogFooter>
-            <Button
-              onClick={handleLock}
-              disabled={!lockReason.trim() || lockMutation.isPending}
-            >
+            <Button onClick={handleLock} disabled={!lockReason.trim() || lockMutation.isPending}>
               {lockMutation.isPending ? "Locking..." : "Lock Run"}
             </Button>
           </DialogFooter>
@@ -710,9 +626,7 @@ export function RunDetail({ runId }: RunDetailProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Unlock Run</DialogTitle>
-            <DialogDescription>
-              Provide a reason for unlocking this run.
-            </DialogDescription>
+            <DialogDescription>Provide a reason for unlocking this run.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -751,12 +665,7 @@ function RecomputeModeToggle({
   onChange: (m: "inherit" | "free" | "range" | "lock") => void;
   idPrefix: string;
 }) {
-  const options: ("inherit" | "free" | "range" | "lock")[] = [
-    "inherit",
-    "free",
-    "range",
-    "lock",
-  ];
+  const options: ("inherit" | "free" | "range" | "lock")[] = ["inherit", "free", "range", "lock"];
   return (
     <div className="inline-flex rounded-md border" role="radiogroup">
       {options.map((opt) => (
@@ -766,12 +675,7 @@ function RecomputeModeToggle({
           role="radio"
           aria-checked={mode === opt}
           onClick={() => onChange(opt)}
-          className={
-            "px-2 py-0.5 text-[10px] capitalize first:rounded-l-md last:rounded-r-md " +
-            (mode === opt
-              ? "bg-primary text-primary-foreground"
-              : "bg-background hover:bg-muted")
-          }
+          className={`px-2 py-0.5 text-[10px] capitalize first:rounded-l-md last:rounded-r-md ${mode === opt ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
         >
           {opt}
         </button>

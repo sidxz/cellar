@@ -1,5 +1,5 @@
-import type { LucideIcon } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import type { LucideIcon } from "lucide-react";
 
 interface EmptyStateProps {
   icon: LucideIcon;
@@ -37,9 +37,7 @@ export function ErrorState({ message, details }: ErrorStateProps) {
   return (
     <div className="rounded-lg border border-dashed border-destructive/50 p-8 text-center">
       <p className="text-sm text-destructive">{message}</p>
-      {details && (
-        <p className="mt-1 text-xs text-muted-foreground">{details}</p>
-      )}
+      {details && <p className="mt-1 text-xs text-muted-foreground">{details}</p>}
     </div>
   );
 }

@@ -217,7 +217,7 @@ describe("formatInterceptDisplay", () => {
 
   it("returns scalar with toPrecision(4) on a healthy fit", () => {
     const out = formatInterceptDisplay({
-      value: 0.01310,
+      value: 0.0131,
       at_bound: false,
       curve_class: "full",
       max_dose: 50,
@@ -225,7 +225,7 @@ describe("formatInterceptDisplay", () => {
     expect(out.kind).toBe("scalar");
     expect(out.text).toBe("0.01310");
     expect(out.warning).toBe(false);
-    expect(out.sortValue).toBe(0.01310);
+    expect(out.sortValue).toBe(0.0131);
   });
 
   it("inactive overrides at_bound (worst signal wins)", () => {
@@ -360,7 +360,7 @@ describe("formatInterceptDisplay multi-run extension", () => {
       disagreement: false,
     });
     expect(out.kind).toBe("qualifier");
-    expect(out.warning).toBe(true);  // qualifier always warns
+    expect(out.warning).toBe(true); // qualifier always warns
   });
 
   it("subscript renders for multi-digit run counts", () => {

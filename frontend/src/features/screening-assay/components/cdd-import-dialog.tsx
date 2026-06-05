@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, AlertTriangle, Loader2 } from "lucide-react";
+import { SearchInput } from "@/shared/components/search-input";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -13,7 +12,6 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
-import { SearchInput } from "@/shared/components/search-input";
 import { Label } from "@/shared/components/ui/label";
 import {
   Table,
@@ -23,9 +21,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { AlertTriangle, Check, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
-  useCddProtocols,
   useCddProtocolPreview,
+  useCddProtocols,
   useImportCddProtocol,
 } from "../hooks/use-cdd-import";
 
@@ -37,11 +37,7 @@ interface CddImportDialogProps {
 
 type Step = "select" | "preview" | "importing";
 
-export function CddImportDialog({
-  open,
-  onOpenChange,
-  onImported,
-}: CddImportDialogProps) {
+export function CddImportDialog({ open, onOpenChange, onImported }: CddImportDialogProps) {
   const [step, setStep] = useState<Step>("select");
   const [selectedExternalId, setSelectedExternalId] = useState<number | null>(null);
   const [nameOverride, setNameOverride] = useState("");
@@ -53,8 +49,9 @@ export function CddImportDialog({
     isLoading: protocolsLoading,
     error: protocolsError,
   } = useCddProtocols(open);
-  const { data: preview, isLoading: previewLoading } =
-    useCddProtocolPreview(step === "preview" ? selectedExternalId : null);
+  const { data: preview, isLoading: previewLoading } = useCddProtocolPreview(
+    step === "preview" ? selectedExternalId : null,
+  );
   const importMutation = useImportCddProtocol();
 
   const filteredProtocols = useMemo(() => {
@@ -93,12 +90,7 @@ export function CddImportDialog({
         nameOverride: nameOverride || undefined,
       });
       handleOpenChange(false);
-      if (
-        onImported &&
-        result &&
-        typeof result === "object" &&
-        "id" in result
-      ) {
+      if (onImported && result && typeof result === "object" && "id" in result) {
         onImported((result as { id: string }).id);
       }
     } catch (err: unknown) {
@@ -120,9 +112,7 @@ export function CddImportDialog({
         </DialogHeader>
 
         {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         )}
 
         {/* Step 1: Select */}
@@ -142,9 +132,7 @@ export function CddImportDialog({
               </p>
             )}
             {protocols && protocols.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No protocols found in CDD Vault.
-              </p>
+              <p className="text-sm text-muted-foreground">No protocols found in CDD Vault.</p>
             )}
             {protocols && protocols.length > 0 && (
               <>
@@ -159,9 +147,7 @@ export function CddImportDialog({
                     <TableHeader>
                       <TableRow>
                         <TableHead>Protocol Name</TableHead>
-                        <TableHead className="w-[80px] text-right">
-                          Readouts
-                        </TableHead>
+                        <TableHead className="w-[80px] text-right">Readouts</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -171,20 +157,13 @@ export function CddImportDialog({
                           className="cursor-pointer hover:bg-muted/50"
                           onClick={() => handleSelectProtocol(p.external_id)}
                         >
-                          <TableCell className="font-medium">
-                            {p.name}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {p.readout_count}
-                          </TableCell>
+                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell className="text-right">{p.readout_count}</TableCell>
                         </TableRow>
                       ))}
                       {filteredProtocols.length === 0 && (
                         <TableRow>
-                          <TableCell
-                            colSpan={2}
-                            className="text-center text-muted-foreground"
-                          >
+                          <TableCell colSpan={2} className="text-center text-muted-foreground">
                             No protocols match your search.
                           </TableCell>
                         </TableRow>
@@ -230,32 +209,23 @@ export function CddImportDialog({
                         </span>
                       )}
                       {preview.description && (
-                        <span className="text-muted-foreground">
-                          {preview.description}
-                        </span>
+                        <span className="text-muted-foreground">{preview.description}</span>
                       )}
                     </div>
                   )}
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <span>
-                      <span className="font-medium text-green-600">
-                        {preview.readouts.length}
-                      </span>{" "}
+                      <span className="font-medium text-green-600">{preview.readouts.length}</span>{" "}
                       readouts mapped
                     </span>
                     {preview.conditions.length > 0 && (
                       <span>
-                        <span className="font-medium">
-                          {preview.conditions.length}
-                        </span>{" "}
-                        conditions
+                        <span className="font-medium">{preview.conditions.length}</span> conditions
                       </span>
                     )}
                     {preview.warnings.length > 0 && (
                       <span>
-                        <span className="font-medium text-warning">
-                          {preview.warnings.length}
-                        </span>{" "}
+                        <span className="font-medium text-warning">{preview.warnings.length}</span>{" "}
                         skipped
                       </span>
                     )}
@@ -282,9 +252,7 @@ export function CddImportDialog({
                               <TableCell className="pr-0">
                                 <Check className="h-4 w-4 text-green-500" />
                               </TableCell>
-                              <TableCell className="font-medium">
-                                {r.name}
-                              </TableCell>
+                              <TableCell className="font-medium">{r.name}</TableCell>
                               <TableCell>
                                 <Badge variant="outline">{r.data_type}</Badge>
                               </TableCell>
@@ -315,9 +283,7 @@ export function CddImportDialog({
                   {/* Warnings */}
                   {preview.warnings.length > 0 && (
                     <div className="space-y-1.5">
-                      <h4 className="text-sm font-medium text-warning">
-                        Skipped
-                      </h4>
+                      <h4 className="text-sm font-medium text-warning">Skipped</h4>
                       {preview.warnings.map((w, i) => (
                         <div
                           key={i}
@@ -326,10 +292,7 @@ export function CddImportDialog({
                           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
                           <span>
                             <span className="font-medium">{w.field_name}</span>
-                            <span className="text-muted-foreground">
-                              {" "}
-                              &mdash; {w.reason}
-                            </span>
+                            <span className="text-muted-foreground"> &mdash; {w.reason}</span>
                           </span>
                         </div>
                       ))}
@@ -343,10 +306,7 @@ export function CddImportDialog({
               <Button variant="outline" onClick={() => setStep("select")}>
                 Back
               </Button>
-              <Button
-                onClick={handleImport}
-                disabled={!preview || preview.readouts.length === 0}
-              >
+              <Button onClick={handleImport} disabled={!preview || preview.readouts.length === 0}>
                 Import as Draft
               </Button>
             </DialogFooter>

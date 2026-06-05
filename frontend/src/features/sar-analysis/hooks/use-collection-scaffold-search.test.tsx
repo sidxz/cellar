@@ -1,10 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  useCollectionScaffoldSearch,
   scaffoldSearchQueryKey,
+  useCollectionScaffoldSearch,
 } from "./use-collection-scaffold-search";
 
 vi.mock("@/shared/lib/api/custom-instance", () => ({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { StructureRenderer } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -13,9 +13,9 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { StructureRenderer } from "@/shared/components/chemistry";
-import { useMolecule } from "../hooks/use-molecules";
+import { useState } from "react";
 import { useResolveDisclosureConflict } from "../hooks/use-disclosures";
+import { useMolecule } from "../hooks/use-molecules";
 import type { DisclosureRequest } from "../types/disclosure";
 
 interface ResolveConflictDialogProps {
@@ -36,14 +36,12 @@ export function ResolveConflictDialog({
   const handleResolve = (resolution: string) => {
     resolve.mutate(
       { resolution, reason: reason || undefined },
-      { onSuccess: () => onOpenChange(false) }
+      { onSuccess: () => onOpenChange(false) },
     );
   };
 
   const existingSmiles =
-    molecule?.structure_status === "disclosed"
-      ? molecule.structure?.smiles
-      : null;
+    molecule?.structure_status === "disclosed" ? molecule.structure?.smiles : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -51,17 +49,14 @@ export function ResolveConflictDialog({
         <DialogHeader>
           <DialogTitle>Resolve Disclosure Conflict</DialogTitle>
           <DialogDescription>
-            Compare the disclosed structure with any existing structure and
-            choose a resolution.
+            Compare the disclosed structure with any existing structure and choose a resolution.
           </DialogDescription>
         </DialogHeader>
 
         {/* Conflict details */}
         {disclosure.conflict_reason && (
           <div className="rounded-md bg-destructive/10 p-3">
-            <p className="text-sm font-medium text-destructive">
-              {disclosure.conflict_reason}
-            </p>
+            <p className="text-sm font-medium text-destructive">{disclosure.conflict_reason}</p>
           </div>
         )}
 
@@ -73,16 +68,10 @@ export function ResolveConflictDialog({
               <Badge variant="outline">Current</Badge>
             </div>
             {existingSmiles ? (
-              <StructureRenderer
-                smiles={existingSmiles}
-                width={250}
-                height={200}
-              />
+              <StructureRenderer smiles={existingSmiles} width={250} height={200} />
             ) : (
               <div className="flex h-[200px] items-center justify-center rounded bg-muted text-sm text-muted-foreground">
-                {molecule?.structure_status === "undisclosed"
-                  ? "Undisclosed"
-                  : "No structure"}
+                {molecule?.structure_status === "undisclosed" ? "Undisclosed" : "No structure"}
               </div>
             )}
             {existingSmiles && (
@@ -97,11 +86,7 @@ export function ResolveConflictDialog({
               <h3 className="text-sm font-semibold">Disclosed Structure</h3>
               <Badge variant="secondary">New</Badge>
             </div>
-            <StructureRenderer
-              smiles={disclosure.disclosed_smiles}
-              width={250}
-              height={200}
-            />
+            <StructureRenderer smiles={disclosure.disclosed_smiles} width={250} height={200} />
             <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
               {disclosure.disclosed_smiles}
             </p>
@@ -132,10 +117,7 @@ export function ResolveConflictDialog({
           >
             Accept & Merge
           </Button>
-          <Button
-            onClick={() => handleResolve("accept_as_new")}
-            disabled={resolve.isPending}
-          >
+          <Button onClick={() => handleResolve("accept_as_new")} disabled={resolve.isPending}>
             {resolve.isPending ? "Resolving..." : "Accept as New"}
           </Button>
         </DialogFooter>

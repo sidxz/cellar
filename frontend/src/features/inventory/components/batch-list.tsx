@@ -1,25 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AlertTriangle, Boxes } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Badge } from "@/shared/components/ui/badge";
-import { EmptyState } from "@/shared/components/empty-state";
-import { formatDate } from "@/shared/lib/format-date";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState } from "@/shared/components/empty-state";
+import { Badge } from "@/shared/components/ui/badge";
+import { formatDate } from "@/shared/lib/format-date";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { AlertTriangle, Boxes } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
+  type BatchGlobalParams,
   useBatchesByMolecule,
   useBatchesGlobal,
-  type BatchGlobalParams,
 } from "../hooks/use-batches";
-import {
-  BATCH_SOURCE_LABELS,
-  type Batch,
-  type BatchListItem,
-  type BatchSource,
-} from "../types";
+import { BATCH_SOURCE_LABELS, type Batch, type BatchListItem, type BatchSource } from "../types";
 
 // ---------------------------------------------------------------------------
 // ScopedBatchList — batches for a single molecule (compound detail page)
@@ -30,10 +25,7 @@ interface ScopedBatchListProps {
   onSelectBatch?: (batchId: string | null) => void;
 }
 
-export function ScopedBatchList({
-  moleculeId,
-  onSelectBatch,
-}: ScopedBatchListProps) {
+export function ScopedBatchList({ moleculeId, onSelectBatch }: ScopedBatchListProps) {
   const router = useRouter();
   const { data: batches, isLoading } = useBatchesByMolecule(moleculeId);
 
@@ -59,8 +51,7 @@ export function ScopedBatchList({
       {
         headerName: "Amount",
         width: 120,
-        valueGetter: (p) =>
-          p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : "",
+        valueGetter: (p) => (p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : ""),
       },
       {
         headerName: "Purity",
@@ -83,7 +74,7 @@ export function ScopedBatchList({
         valueFormatter: (p) => p.value ?? "\u2014",
       },
     ],
-    []
+    [],
   );
 
   if (!moleculeId) {
@@ -155,9 +146,7 @@ export function GlobalBatchList({ params }: GlobalBatchListProps) {
         flex: 1,
         minWidth: 160,
         valueGetter: (p) =>
-          p.data
-            ? `${p.data.molecule_name} (${p.data.molecule_registration_number})`
-            : "",
+          p.data ? `${p.data.molecule_name} (${p.data.molecule_registration_number})` : "",
       },
       {
         headerName: "Source",
@@ -172,8 +161,7 @@ export function GlobalBatchList({ params }: GlobalBatchListProps) {
       {
         headerName: "Amount",
         width: 120,
-        valueGetter: (p) =>
-          p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : "",
+        valueGetter: (p) => (p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : ""),
       },
       {
         headerName: "Purity",
@@ -207,11 +195,10 @@ export function GlobalBatchList({ params }: GlobalBatchListProps) {
         headerName: "Created",
         field: "created_at",
         width: 120,
-        valueFormatter: (p) =>
-          p.value ? formatDate(p.value) : "\u2014",
+        valueFormatter: (p) => (p.value ? formatDate(p.value) : "\u2014"),
       },
     ],
-    []
+    [],
   );
 
   return (

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { CollectionHeader } from "./collection-header";
 
 vi.mock("next/link", () => ({
@@ -45,10 +45,7 @@ describe("CollectionHeader", () => {
 
   it("renders a 'Frozen' chip when is_frozen=true", () => {
     render(
-      <CollectionHeader
-        collection={{ ...baseCollection, is_frozen: true }}
-        projectName="Mtb-TB"
-      />,
+      <CollectionHeader collection={{ ...baseCollection, is_frozen: true }} projectName="Mtb-TB" />,
     );
     expect(screen.getByText(/frozen/i)).toBeInTheDocument();
   });

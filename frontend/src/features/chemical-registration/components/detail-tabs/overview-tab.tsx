@@ -1,34 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  AlertTriangle,
-  Plus,
-  Trash2,
-  FlaskConical,
-  Copy,
-  Check,
-} from "lucide-react";
+import { TagTable } from "@/features/tagging/components/tag-table";
+import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
+import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
 import { StructureRenderer } from "@/shared/components/chemistry";
-import { COPY_FEEDBACK_MS } from "@/shared/lib/timing";
+import { EmptyState } from "@/shared/components/empty-state";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/shared/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
 import {
   Select,
@@ -38,13 +17,19 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import {
-  useAddIdentifier,
-  useRemoveIdentifier,
-} from "../../hooks/use-molecules";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/shared/components/ui/table";
+import { COPY_FEEDBACK_MS } from "@/shared/lib/timing";
+import { AlertTriangle, Check, Copy, FlaskConical, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useAddIdentifier, useRemoveIdentifier } from "../../hooks/use-molecules";
 import type { Molecule } from "../../types";
-import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
-import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
-import { TagTable } from "@/features/tagging/components/tag-table";
 
 // ---------------------------------------------------------------------------
 // Identifier type options
@@ -98,9 +83,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
       <span className="text-xs font-medium text-muted-foreground w-16 shrink-0 pt-0.5">
         {label}
       </span>
-      <code className="flex-1 text-xs font-mono break-all text-muted-foreground/80">
-        {value}
-      </code>
+      <code className="flex-1 text-xs font-mono break-all text-muted-foreground/80">{value}</code>
       <button
         type="button"
         onClick={handleCopy}
@@ -150,7 +133,7 @@ function AddIdentifierForm({
           setSource("");
           onDone();
         },
-      }
+      },
     );
   };
 
@@ -199,12 +182,7 @@ function AddIdentifierForm({
       >
         {addMutation.isPending ? "Adding..." : "Add"}
       </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="h-8"
-        onClick={onDone}
-      >
+      <Button size="sm" variant="ghost" className="h-8" onClick={onDone}>
         Cancel
       </Button>
     </div>
@@ -218,8 +196,7 @@ function AddIdentifierForm({
 function CustomFieldsSection({ molecule }: { molecule: Molecule }) {
   const { data: definitions } = useCustomFields("molecule");
 
-  const hasValues =
-    molecule.custom_fields && Object.keys(molecule.custom_fields).length > 0;
+  const hasValues = molecule.custom_fields && Object.keys(molecule.custom_fields).length > 0;
 
   if (!hasValues) return null;
 
@@ -253,16 +230,12 @@ function CustomFieldsSection({ molecule }: { molecule: Molecule }) {
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {Object.entries(molecule.custom_fields as Record<string, unknown>).map(
-            ([key, value]) => (
-              <div key={key}>
-                <p className="text-sm text-muted-foreground">
-                  {key.replace(/_/g, " ")}
-                </p>
-                <p className="font-medium">{String(value ?? "\u2014")}</p>
-              </div>
-            )
-          )}
+          {Object.entries(molecule.custom_fields as Record<string, unknown>).map(([key, value]) => (
+            <div key={key}>
+              <p className="text-sm text-muted-foreground">{key.replace(/_/g, " ")}</p>
+              <p className="font-medium">{String(value ?? "\u2014")}</p>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
@@ -322,16 +295,16 @@ export function OverviewTab({ molecule, compoundId, canEditTags }: OverviewTabPr
           {isDisclosed && molecule.structure?.smiles ? (
             <>
               <div className="flex justify-center">
-                <StructureRenderer
-                  smiles={molecule.structure.smiles}
-                  width={400}
-                  height={280}
-                />
+                <StructureRenderer smiles={molecule.structure.smiles} width={400} height={280} />
               </div>
               <div className="mt-4 space-y-2">
                 <CopyField label="SMILES" value={molecule.structure.smiles} />
-                {molecule.structure.inchi && <CopyField label="InChI" value={molecule.structure.inchi} />}
-                {molecule.structure.inchi_key && <CopyField label="InChI Key" value={molecule.structure.inchi_key} />}
+                {molecule.structure.inchi && (
+                  <CopyField label="InChI" value={molecule.structure.inchi} />
+                )}
+                {molecule.structure.inchi_key && (
+                  <CopyField label="InChI Key" value={molecule.structure.inchi_key} />
+                )}
               </div>
             </>
           ) : (
@@ -353,18 +326,12 @@ export function OverviewTab({ molecule, compoundId, canEditTags }: OverviewTabPr
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
             <div>
               <p className="text-sm text-muted-foreground">Formula</p>
-              <p className="font-mono font-medium">
-                {molecule.molecular_formula ?? "\u2014"}
-              </p>
+              <p className="font-mono font-medium">{molecule.molecular_formula ?? "\u2014"}</p>
             </div>
             {DESCRIPTOR_FIELDS.map((field) => {
               const raw = descriptors?.[field.key as keyof typeof descriptors];
               const value =
-                raw != null
-                  ? field.format
-                    ? field.format(raw as number)
-                    : String(raw)
-                  : "\u2014";
+                raw != null ? (field.format ? field.format(raw as number) : String(raw)) : "\u2014";
               return (
                 <div key={field.key}>
                   <p className="text-sm text-muted-foreground">{field.label}</p>
@@ -391,16 +358,11 @@ export function OverviewTab({ molecule, compoundId, canEditTags }: OverviewTabPr
         </CardHeader>
         <CardContent className="space-y-4">
           {showAddId && (
-            <AddIdentifierForm
-              moleculeId={compoundId}
-              onDone={() => setShowAddId(false)}
-            />
+            <AddIdentifierForm moleculeId={compoundId} onDone={() => setShowAddId(false)} />
           )}
 
           {identifiers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No identifiers registered.
-            </p>
+            <p className="text-sm text-muted-foreground">No identifiers registered.</p>
           ) : (
             <div className="rounded-lg border">
               <Table>
@@ -421,9 +383,7 @@ export function OverviewTab({ molecule, compoundId, canEditTags }: OverviewTabPr
                             ident.identifier_type}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {ident.identifier}
-                      </TableCell>
+                      <TableCell className="font-mono text-sm">{ident.identifier}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {ident.source || "\u2014"}
                       </TableCell>

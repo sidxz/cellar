@@ -1,7 +1,13 @@
 "use client";
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import type { ColorMode } from "@/features/sar-analysis/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 
 export interface ProtocolOption {
   id: string;
@@ -23,10 +29,14 @@ export function ColorModePicker({ mode, protocolId, protocols, onChange }: Color
         value={mode}
         onValueChange={(v) => onChange(v as ColorMode, protocolId ?? protocols[0]?.id)}
       >
-        <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-8 w-32">
+          <SelectValue />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem value="cluster">Cluster</SelectItem>
-          <SelectItem value="activity" disabled={protocols.length === 0}>Activity</SelectItem>
+          <SelectItem value="activity" disabled={protocols.length === 0}>
+            Activity
+          </SelectItem>
           <SelectItem value="scaffold">Scaffold</SelectItem>
           <SelectItem value="none">None</SelectItem>
         </SelectContent>
@@ -36,10 +46,14 @@ export function ColorModePicker({ mode, protocolId, protocols, onChange }: Color
           value={protocolId ?? protocols[0].id}
           onValueChange={(v) => onChange("activity", v)}
         >
-          <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 w-40">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             {protocols.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>

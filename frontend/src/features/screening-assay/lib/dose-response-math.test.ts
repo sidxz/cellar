@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  computeReplicateStats,
-  extractPoints,
-  generate4PLCurve,
-} from "./dose-response-math";
+import { computeReplicateStats, extractPoints, generate4PLCurve } from "./dose-response-math";
 
 // ─── extractPoints ────────────────────────────────────────────────────────────
 

@@ -3,7 +3,7 @@ import { AuthProvider } from "@/shared/providers/auth-provider";
 import { QueryProvider } from "@/shared/providers/query-provider";
 import { ThemeProvider } from "@/shared/providers/theme-provider";
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 

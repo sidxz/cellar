@@ -1,9 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { MOLECULES_KEY } from "@/features/chemical-registration";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import { MOLECULES_KEY } from "@/features/chemical-registration";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const moleculeProjectsKey = (moleculeId: string) => [...MOLECULES_KEY, moleculeId, "projects"];
 

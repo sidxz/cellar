@@ -1,6 +1,5 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
 import { Input } from "@/shared/components/ui/input";
 import {
   Select,
@@ -9,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { Plus, Trash2 } from "lucide-react";
 import type { TextCriterion, TextOperator } from "../../types";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -45,10 +45,7 @@ function KeywordTerm({
   return (
     <div className="flex items-center gap-2 mb-1.5">
       <div className="w-28">
-        <Select
-          value={criterion.field}
-          onValueChange={(v) => onChange({ ...criterion, field: v })}
-        >
+        <Select value={criterion.field} onValueChange={(v) => onChange({ ...criterion, field: v })}>
           <SelectTrigger className="h-8 text-sm">
             <SelectValue />
           </SelectTrigger>
@@ -136,9 +133,7 @@ export function KeywordSection({ criteria, onChange }: KeywordSectionProps) {
       </div>
 
       {criteria.length === 0 && (
-        <p className="text-sm italic text-muted-foreground/50">
-          No keyword filters.
-        </p>
+        <p className="text-sm italic text-muted-foreground/50">No keyword filters.</p>
       )}
 
       <div>

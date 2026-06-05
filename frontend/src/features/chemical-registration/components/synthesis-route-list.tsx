@@ -1,11 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { GitBranch, Plus } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -22,15 +20,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { GitBranch, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
-  useSynthesisRoutesByMolecule,
   useCreateSynthesisRoute,
+  useSynthesisRoutesByMolecule,
 } from "../hooks/use-synthesis-routes";
 import {
+  ROUTE_SCALE_LABELS,
   ROUTE_STATUS_LABELS,
   ROUTE_TYPE_LABELS,
-  ROUTE_SCALE_LABELS,
   type RouteStatus,
   type SynthesisRouteSummary,
 } from "../types/synthesis-route";
@@ -46,11 +46,7 @@ interface CreateRouteDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function CreateRouteDialog({
-  moleculeId,
-  open,
-  onOpenChange,
-}: CreateRouteDialogProps) {
+function CreateRouteDialog({ moleculeId, open, onOpenChange }: CreateRouteDialogProps) {
   const createMutation = useCreateSynthesisRoute();
 
   const [name, setName] = useState("");
@@ -81,8 +77,7 @@ function CreateRouteDialog({
       reset();
       onOpenChange(false);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to create route";
+      const message = err instanceof Error ? err.message : "Failed to create route";
       setError(message);
     }
   };
@@ -150,10 +145,7 @@ function CreateRouteDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={createMutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={createMutation.isPending}>
             {createMutation.isPending ? "Creating..." : "Create Route"}
           </Button>
         </DialogFooter>
@@ -207,8 +199,7 @@ export function SynthesisRouteList({ moleculeId }: SynthesisRouteListProps) {
         field: "overall_yield",
         width: 100,
         type: "numericColumn",
-        valueFormatter: (p) =>
-          p.value != null ? `${(p.value as number).toFixed(1)}%` : "\u2014",
+        valueFormatter: (p) => (p.value != null ? `${(p.value as number).toFixed(1)}%` : "\u2014"),
       },
       {
         headerName: "Scale",
@@ -223,26 +214,21 @@ export function SynthesisRouteList({ moleculeId }: SynthesisRouteListProps) {
         headerName: "Source",
         field: "source",
         width: 110,
-        valueFormatter: (p) =>
-          (p.value as string)?.replace(/_/g, " ") ?? "\u2014",
+        valueFormatter: (p) => (p.value as string)?.replace(/_/g, " ") ?? "\u2014",
       },
     ],
-    []
+    [],
   );
 
   if (error) {
-    return (
-      <ErrorState message="Failed to load synthesis routes." details={error.message} />
-    );
+    return <ErrorState message="Failed to load synthesis routes." details={error.message} />;
   }
 
   return (
     <>
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight">
-            Synthesis Routes
-          </h2>
+          <h2 className="text-xl font-semibold tracking-tight">Synthesis Routes</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Registered synthetic pathways for this compound.
           </p>
@@ -271,20 +257,13 @@ export function SynthesisRouteList({ moleculeId }: SynthesisRouteListProps) {
         />
       </div>
 
-      <CreateRouteDialog
-        moleculeId={moleculeId}
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-      />
+      <CreateRouteDialog moleculeId={moleculeId} open={createOpen} onOpenChange={setCreateOpen} />
 
       {/* Slide-in detail panel */}
       {selectedRouteId && (
         <div className="fixed inset-0 z-40 flex">
           {/* Backdrop */}
-          <div
-            className="flex-1 bg-black/40"
-            onClick={() => setSelectedRouteId(null)}
-          />
+          <div className="flex-1 bg-black/40" onClick={() => setSelectedRouteId(null)} />
           {/* Panel */}
           <div className="relative w-full max-w-2xl overflow-y-auto bg-background shadow-xl">
             <div className="p-6">

@@ -1,7 +1,5 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -20,6 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { Plus, Trash2 } from "lucide-react";
+import { useCallback, useState } from "react";
 import { useUpdateRun } from "../hooks/use-runs";
 import type { Run } from "../types";
 
@@ -42,9 +42,7 @@ const QC_PRESETS = [
   { value: "z_factor", label: "Z Factor" },
 ] as const;
 
-function metricsToRows(
-  qcMetrics: Record<string, unknown> | null
-): MetricRow[] {
+function metricsToRows(qcMetrics: Record<string, unknown> | null): MetricRow[] {
   if (!qcMetrics || Object.keys(qcMetrics).length === 0) {
     return [];
   }
@@ -60,21 +58,15 @@ function rowsToMetrics(rows: MetricRow[]): Record<string, unknown> {
     const trimmedKey = row.key.trim();
     if (!trimmedKey) continue;
     const numVal = Number(row.value);
-    result[trimmedKey] = isNaN(numVal) ? row.value : numVal;
+    result[trimmedKey] = Number.isNaN(numVal) ? row.value : numVal;
   }
   return result;
 }
 
-export function EditQcMetricsDialog({
-  run,
-  open,
-  onOpenChange,
-}: EditQcMetricsDialogProps) {
+export function EditQcMetricsDialog({ run, open, onOpenChange }: EditQcMetricsDialogProps) {
   const updateRun = useUpdateRun();
 
-  const [rows, setRows] = useState<MetricRow[]>(() =>
-    metricsToRows(run.qc_metrics)
-  );
+  const [rows, setRows] = useState<MetricRow[]>(() => metricsToRows(run.qc_metrics));
 
   const resetForm = useCallback(() => {
     setRows(metricsToRows(run.qc_metrics));
@@ -89,15 +81,11 @@ export function EditQcMetricsDialog({
   };
 
   const handleKeyChange = (index: number, newKey: string) => {
-    setRows((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, key: newKey } : row))
-    );
+    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, key: newKey } : row)));
   };
 
   const handleValueChange = (index: number, newValue: string) => {
-    setRows((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, value: newValue } : row))
-    );
+    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, value: newValue } : row)));
   };
 
   const handleAddPreset = (preset: string) => {
@@ -120,7 +108,7 @@ export function EditQcMetricsDialog({
         onSuccess: () => {
           onOpenChange(false);
         },
-      }
+      },
     );
   };
 
@@ -132,18 +120,14 @@ export function EditQcMetricsDialog({
   };
 
   const existingKeys = new Set(rows.map((r) => r.key));
-  const availablePresets = QC_PRESETS.filter(
-    (p) => !existingKeys.has(p.value)
-  );
+  const availablePresets = QC_PRESETS.filter((p) => !existingKeys.has(p.value));
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit QC Metrics</DialogTitle>
-          <DialogDescription>
-            Add or modify quality control metrics for this run.
-          </DialogDescription>
+          <DialogDescription>Add or modify quality control metrics for this run.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
@@ -171,8 +155,7 @@ export function EditQcMetricsDialog({
             <Label>Metrics</Label>
             {rows.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No metrics defined. Add a preset above or click &quot;Add
-                Metric&quot; below.
+                No metrics defined. Add a preset above or click &quot;Add Metric&quot; below.
               </p>
             )}
             {rows.map((row, index) => (

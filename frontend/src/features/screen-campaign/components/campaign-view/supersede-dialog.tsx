@@ -10,11 +10,12 @@
  *              → campaign search/select (closed only), then POST /supersede.
  */
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowRight, Search } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -22,18 +23,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Separator } from "@/shared/components/ui/separator";
 
-import { CreateCampaignDialog } from "../create-campaign-dialog";
-import { CampaignStatusChip } from "../campaign-status-chip";
 import { campaignKeys } from "../../hooks/use-campaigns";
+import { CampaignStatusChip } from "../campaign-status-chip";
+import { CreateCampaignDialog } from "../create-campaign-dialog";
 
 import {
-  useSupersedeCampaignApiV1CampaignsCampaignIdSupersedePost,
   useListCampaignsApiV1CampaignsGet,
+  useSupersedeCampaignApiV1CampaignsCampaignIdSupersedePost,
 } from "@/shared/lib/api/campaigns/campaigns";
 
 import type { CampaignResponse } from "../../types";
@@ -48,11 +48,7 @@ interface SupersedeDialogProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function SupersedeDialog({
-  open,
-  onOpenChange,
-  campaign,
-}: SupersedeDialogProps) {
+export function SupersedeDialog({ open, onOpenChange, campaign }: SupersedeDialogProps) {
   const router = useRouter();
   const qc = useQueryClient();
 
@@ -68,25 +64,21 @@ export function SupersedeDialog({
     {
       query: {
         enabled: markStep,
-        select: (page) =>
-          page.items.filter(
-            (c) => c.status === "closed" && c.id !== campaign.id,
-          ),
+        select: (page) => page.items.filter((c) => c.status === "closed" && c.id !== campaign.id),
       },
     },
   );
 
-  const supersedeMutation =
-    useSupersedeCampaignApiV1CampaignsCampaignIdSupersedePost({
-      mutation: {
-        onSuccess: () => {
-          void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
-          onOpenChange(false);
-          // Reload to reflect superseded status
-          router.refresh();
-        },
+  const supersedeMutation = useSupersedeCampaignApiV1CampaignsCampaignIdSupersedePost({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
+        onOpenChange(false);
+        // Reload to reflect superseded status
+        router.refresh();
       },
-    });
+    },
+  });
 
   const handleMarkSuperseded = () => {
     if (!selectedNewId) return;
@@ -103,9 +95,8 @@ export function SupersedeDialog({
     onOpenChange(false);
   };
 
-  const filteredClosed = closedCampaigns.filter((c) =>
-    searchQuery.trim() === "" ||
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()),
+  const filteredClosed = closedCampaigns.filter(
+    (c) => searchQuery.trim() === "" || c.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   return (
@@ -181,9 +172,7 @@ export function SupersedeDialog({
                       key={c.id}
                       type="button"
                       className={`w-full text-left rounded px-3 py-2 text-sm flex items-center justify-between gap-2 transition-colors ${
-                        selectedNewId === c.id
-                          ? "bg-primary/10 font-medium"
-                          : "hover:bg-accent"
+                        selectedNewId === c.id ? "bg-primary/10 font-medium" : "hover:bg-accent"
                       }`}
                       onClick={() => setSelectedNewId(c.id)}
                     >
@@ -204,11 +193,7 @@ export function SupersedeDialog({
               )}
 
               <div className="flex justify-between gap-2 pt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setMarkStep(false)}
-                >
+                <Button variant="outline" size="sm" onClick={() => setMarkStep(false)}>
                   Back
                 </Button>
                 <Button
@@ -216,9 +201,7 @@ export function SupersedeDialog({
                   onClick={handleMarkSuperseded}
                   disabled={!selectedNewId || supersedeMutation.isPending}
                 >
-                  {supersedeMutation.isPending
-                    ? "Marking…"
-                    : "Mark as superseded"}
+                  {supersedeMutation.isPending ? "Marking…" : "Mark as superseded"}
                 </Button>
               </div>
             </div>

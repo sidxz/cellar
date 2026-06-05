@@ -13,8 +13,8 @@ vi.mock("@/features/screening-assay/components/dose-response-figure", () => ({
 }));
 
 import { render } from "@testing-library/react";
-import { DoseResponseCell } from "./dose-response-cell";
 import type { ActivityValue } from "../../types";
+import { DoseResponseCell } from "./dose-response-cell";
 
 function reset() {
   figureCalls.length = 0;

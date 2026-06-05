@@ -1,25 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import {
-  ArrowRight,
-  ChevronDown,
-  Loader2,
-  ShieldAlert,
-} from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
-import {
-  Card,
-  CardContent,
-} from "@/shared/components/ui/card";
+import { Card, CardContent } from "@/shared/components/ui/card";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/shared/components/ui/collapsible";
-import { useMolecule } from "../../hooks/use-molecules";
+import { ArrowRight, ChevronDown, Loader2, ShieldAlert } from "lucide-react";
+import { useState } from "react";
 import { useMergeImpact } from "../../hooks/use-disclosures";
+import { useMolecule } from "../../hooks/use-molecules";
 import type { MergeCandidateRef } from "../../types/registration-wizard";
 import { ImpactRow } from "../merge-impact-row";
 
@@ -52,7 +44,7 @@ export function MergeCandidateCard({
   // Only fetch impact when expanded
   const impactQuery = useMergeImpact(
     showImpact ? candidate.molecule_id : undefined,
-    showImpact ? candidate.matched_molecule_id : undefined
+    showImpact ? candidate.matched_molecule_id : undefined,
   );
 
   const source = sourceQuery.data;
@@ -69,18 +61,14 @@ export function MergeCandidateCard({
           <Checkbox
             checked={isConfirmed}
             disabled={disabled}
-            onCheckedChange={(checked) =>
-              onDecisionChange(checked ? "confirm" : "reject")
-            }
+            onCheckedChange={(checked) => onDecisionChange(checked ? "confirm" : "reject")}
             aria-label={`Confirm merge for row ${candidate.row_index}`}
           />
 
           <div className="flex flex-1 items-center gap-2 min-w-0">
             {/* Source */}
             <div className="min-w-0">
-              <div className="text-sm font-medium truncate">
-                {source?.name ?? "Loading..."}
-              </div>
+              <div className="text-sm font-medium truncate">{source?.name ?? "Loading..."}</div>
               <div className="text-xs text-muted-foreground font-mono">
                 {source?.registration_number ?? "..."}
               </div>
@@ -90,9 +78,7 @@ export function MergeCandidateCard({
 
             {/* Target */}
             <div className="min-w-0">
-              <div className="text-sm font-medium truncate">
-                {target?.name ?? "Loading..."}
-              </div>
+              <div className="text-sm font-medium truncate">{target?.name ?? "Loading..."}</div>
               <div className="text-xs text-muted-foreground font-mono">
                 {target?.registration_number ?? "..."}
               </div>
@@ -139,9 +125,7 @@ export function MergeCandidateCard({
               <div className="mt-2 flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/5 p-3">
                 <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-destructive">
-                    Merge blocked
-                  </p>
+                  <p className="text-xs font-medium text-destructive">Merge blocked</p>
                   {impact?.blockers.map((b, i) => (
                     <p key={i} className="text-xs text-destructive/80">
                       {b}

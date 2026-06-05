@@ -1,6 +1,6 @@
 "use client";
 
-import { useProtocols, useProtocol } from "@/features/screening-assay/hooks/use-protocols";
+import { useProtocol, useProtocols } from "@/features/screening-assay/hooks/use-protocols";
 import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import { StructureEditorDialog, StructureRenderer } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
@@ -15,10 +15,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
-import {
-  PROPERTY_OPERATORS,
-  STRUCTURE_TYPES,
-} from "../../lib/search-query-config";
+import { PROPERTY_OPERATORS, STRUCTURE_TYPES } from "../../lib/search-query-config";
 import type {
   PropertyOperator,
   SelectivityCriterion,
@@ -248,7 +245,8 @@ export function SelectivityCriterionRow({
                 const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
                 return (
                   <SelectItem key={rd.id} value={rd.id}>
-                    {rd.name}{suffix}
+                    {rd.name}
+                    {suffix}
                   </SelectItem>
                 );
               })}
@@ -294,7 +292,8 @@ export function SelectivityCriterionRow({
                 const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
                 return (
                   <SelectItem key={rd.id} value={rd.id}>
-                    {rd.name}{suffix}
+                    {rd.name}
+                    {suffix}
                   </SelectItem>
                 );
               })}

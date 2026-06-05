@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import { InterceptCell } from "./intercept-cell";
 import type { ActivityValue } from "@/features/research-organization/types";
+import { InterceptCell } from "./intercept-cell";
 
 const baseAv: ActivityValue = {
   value: 0.12,
@@ -64,7 +64,7 @@ describe("<InterceptCell />", () => {
             geometric_mean: 0.45,
             fold_range: 12.0,
             log_value_mean: -0.35,
-            log_value_sd: 0.50,
+            log_value_sd: 0.5,
           },
           disagreement_flag: true,
         },
@@ -81,25 +81,20 @@ describe("<InterceptCell />", () => {
       intercept_aggregates: [
         {
           spec: { kind: "ic", level: 50.0 },
-          selected_value: 0.10,
+          selected_value: 0.1,
           selected_qualifier: "=",
           aggregate_stats: {
             geometric_mean: 0.18,
             fold_range: 4.2,
             log_value_mean: -0.74, // log10(0.18); pIC50 (µM) = 6 - (-0.74) = 6.74
-            log_value_sd: 0.30,
+            log_value_sd: 0.3,
           },
           disagreement_flag: false,
         },
       ],
     };
     render(
-      <InterceptCell
-        av={av}
-        spec={{ kind: "ic", level: 50.0 }}
-        isPrimary={false}
-        mode="latest"
-      />,
+      <InterceptCell av={av} spec={{ kind: "ic", level: 50.0 }} isPrimary={false} mode="latest" />,
     );
     // gmean line: shows geometric mean with 3 sig figs + fold-range chip
     expect(screen.getByText(/gmean.*0\.180.*×4\.2/)).toBeTruthy();
@@ -120,19 +115,14 @@ describe("<InterceptCell />", () => {
             geometric_mean: 0.45,
             fold_range: 4.0,
             log_value_mean: -0.35,
-            log_value_sd: 0.20,
+            log_value_sd: 0.2,
           },
           disagreement_flag: false,
         },
       ],
     };
     render(
-      <InterceptCell
-        av={av}
-        spec={{ kind: "ec", level: 90.0 }}
-        isPrimary={false}
-        mode="gmean"
-      />,
+      <InterceptCell av={av} spec={{ kind: "ec", level: 90.0 }} isPrimary={false} mode="gmean" />,
     );
     // No gmean line — it's redundant when the headline IS the geometric mean
     expect(screen.queryByText(/gmean/)).toBeNull();
@@ -185,9 +175,7 @@ describe("<InterceptCell />", () => {
           curve_id: "c1",
           curve_class: "full",
           r_squared: 0.99,
-          intercept_values: [
-            { spec: { kind: "ic", level: 50.0 }, value: 0.10, at_bound: false },
-          ],
+          intercept_values: [{ spec: { kind: "ic", level: 50.0 }, value: 0.1, at_bound: false }],
         },
         {
           run_id: "r2",
@@ -195,15 +183,13 @@ describe("<InterceptCell />", () => {
           curve_id: "c2",
           curve_class: "full",
           r_squared: 0.97,
-          intercept_values: [
-            { spec: { kind: "ic", level: 50.0 }, value: 0.18, at_bound: false },
-          ],
+          intercept_values: [{ spec: { kind: "ic", level: 50.0 }, value: 0.18, at_bound: false }],
         },
       ],
       intercept_aggregates: [
         {
           spec: { kind: "ic", level: 50.0 },
-          selected_value: 0.10,
+          selected_value: 0.1,
           selected_qualifier: "=",
           aggregate_stats: {
             geometric_mean: 0.13,
@@ -216,12 +202,7 @@ describe("<InterceptCell />", () => {
       ],
     };
     render(
-      <InterceptCell
-        av={av}
-        spec={{ kind: "ic", level: 50.0 }}
-        isPrimary={false}
-        mode="latest"
-      />,
+      <InterceptCell av={av} spec={{ kind: "ic", level: 50.0 }} isPrimary={false} mode="latest" />,
     );
     // Click to open Popover (Popover defaults to click-trigger, not hover).
     const trigger = screen.getByRole("button", { name: /show run history/i });

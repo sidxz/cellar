@@ -105,10 +105,7 @@ export function validateFormula(
   const { stripped: bare, bracketNames } = stripBrackets(noCross);
 
   const readoutSet = new Set<string>(availableReadoutNames);
-  const knownSet = new Set<string>([
-    ...FORMULA_MATH_SYMBOLS,
-    ...availableReadoutNames,
-  ]);
+  const knownSet = new Set<string>([...FORMULA_MATH_SYMBOLS, ...availableReadoutNames]);
   const unknown: string[] = [];
   const known: string[] = [];
   const seen = new Set<string>();
@@ -245,9 +242,7 @@ export function buildSuggestions(
 
   if (token.kind === "@protocol") {
     const partial = token.raw.slice(1).toLowerCase();
-    const matches = protocolNames.filter((n) =>
-      n.toLowerCase().includes(partial),
-    );
+    const matches = protocolNames.filter((n) => n.toLowerCase().includes(partial));
     return matches.slice(0, MAX_SUGGESTIONS).map((n) => ({
       // Names with spaces use `@{Name}.` syntax per the BE regex.
       value: n.includes(" ") ? `@{${n}}.` : `@${n}.`,

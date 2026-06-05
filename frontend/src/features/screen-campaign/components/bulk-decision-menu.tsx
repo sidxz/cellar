@@ -12,10 +12,9 @@
  * (each decision is individually editable afterwards).
  */
 
-import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
-import { Button } from "@/shared/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,13 +25,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
-import { showSuccess, showError } from "@/shared/lib/toast";
+import { Button } from "@/shared/components/ui/button";
+import { showError, showSuccess } from "@/shared/lib/toast";
 
 import { useBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch } from "@/shared/lib/api/campaigns/campaigns";
 
-import type { CampaignResponse } from "../types";
-import { rowPassesFilters, type CampaignFilters } from "./campaign-filter-bar";
 import { campaignKeys } from "../hooks/use-campaigns";
+import type { CampaignResponse } from "../types";
+import { type CampaignFilters, rowPassesFilters } from "./campaign-filter-bar";
 
 type Decision = "selected" | "deferred" | "rejected";
 
@@ -57,41 +57,34 @@ interface BulkDecisionMenuProps {
   readOnly: boolean;
 }
 
-export function BulkDecisionMenu({
-  campaign,
-  filters,
-  readOnly,
-}: BulkDecisionMenuProps) {
+export function BulkDecisionMenu({ campaign, filters, readOnly }: BulkDecisionMenuProps) {
   const qc = useQueryClient();
   const [pending, setPending] = useState<Decision | null>(null);
 
   // Filtered result ids — recomputed only when the inputs change.
   const visibleIds = useMemo(() => {
-    return (campaign.results ?? [])
-      .filter((r) => rowPassesFilters(r, filters))
-      .map((r) => r.id);
+    return (campaign.results ?? []).filter((r) => rowPassesFilters(r, filters)).map((r) => r.id);
   }, [campaign.results, filters]);
 
   const visibleCount = visibleIds.length;
 
-  const mutation =
-    useBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch({
-      mutation: {
-        onSuccess: (data) => {
-          const updated = data.updated_count;
-          showSuccess(
-            updated === 0
-              ? "No rows changed (already at that decision)"
-              : `Updated ${updated} ${updated === 1 ? "row" : "rows"}`,
-          );
-          void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
-        },
-        onError: (err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          showError(`Bulk decision failed: ${msg}`);
-        },
+  const mutation = useBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch({
+    mutation: {
+      onSuccess: (data) => {
+        const updated = data.updated_count;
+        showSuccess(
+          updated === 0
+            ? "No rows changed (already at that decision)"
+            : `Updated ${updated} ${updated === 1 ? "row" : "rows"}`,
+        );
+        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
       },
-    });
+      onError: (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        showError(`Bulk decision failed: ${msg}`);
+      },
+    },
+  });
 
   if (readOnly) return null;
 
@@ -126,14 +119,15 @@ export function BulkDecisionMenu({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pending ? `${VERB[pending]} ${visibleCount} ${visibleCount === 1 ? "row" : "rows"}?` : ""}
+              {pending
+                ? `${VERB[pending]} ${visibleCount} ${visibleCount === 1 ? "row" : "rows"}?`
+                : ""}
             </AlertDialogTitle>
             <AlertDialogDescription>
               This sets the decision to{" "}
-              <span className="font-medium capitalize text-foreground">{pending}</span>{" "}
-              on every row currently visible in the grid. Rows already at this
-              decision are skipped. You can still edit individual rows
-              afterwards — nothing is locked.
+              <span className="font-medium capitalize text-foreground">{pending}</span> on every row
+              currently visible in the grid. Rows already at this decision are skipped. You can
+              still edit individual rows afterwards — nothing is locked.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1,14 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { FileUp, FlaskConical, Plus, Trash2 } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { PageHeader } from "@/shared/components/page-header";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
+import { PageHeader } from "@/shared/components/page-header";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import {
   Select,
   SelectContent,
@@ -16,13 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { StatusBadge } from "@/shared/components/status-badge";
-import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
-import { usePlates, useDeletePlate } from "../hooks/use-plates";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { FileUp, FlaskConical, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { useDeletePlate, usePlates } from "../hooks/use-plates";
+import type { PlateStatus, PlateType, RegisteredPlate } from "../types/plates";
+import { plateStatusLabels, plateTypeLabels } from "../types/plates";
 import { RegisterPlateDialog } from "./register-plate-dialog";
-import type { RegisteredPlate, PlateStatus, PlateType } from "../types/plates";
-import { plateTypeLabels, plateStatusLabels } from "../types/plates";
 
 const PLATE_FORMATS = ["6", "12", "24", "48", "96", "384", "1536"] as const;
 
@@ -35,7 +35,11 @@ export function PlateList() {
   const [filterFormat, setFilterFormat] = useState<string>("__all__");
   const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
 
-  const { data: plates, isLoading, error } = usePlates({
+  const {
+    data: plates,
+    isLoading,
+    error,
+  } = usePlates({
     plate_type: filterType === "__all__" ? undefined : filterType,
     status: filterStatus === "__all__" ? undefined : filterStatus,
     format: filterFormat === "__all__" ? undefined : filterFormat,
@@ -93,9 +97,7 @@ export function PlateList() {
         field: "status",
         width: 120,
         cellRenderer: (params: ICellRendererParams<RegisteredPlate>) =>
-          params.value ? (
-            <StatusBadge status={params.value as PlateStatus} />
-          ) : null,
+          params.value ? <StatusBadge status={params.value as PlateStatus} /> : null,
       },
       {
         headerName: "Wells Mapped",
@@ -126,7 +128,7 @@ export function PlateList() {
           ) : null,
       },
     ],
-    [router]
+    [router],
   );
 
   if (error) {
@@ -142,7 +144,10 @@ export function PlateList() {
             Register Plate
           </Button>
         </PageHeader>
-        <ErrorState message="Failed to load plates. Is the backend running?" details={error.message} />
+        <ErrorState
+          message="Failed to load plates. Is the backend running?"
+          details={error.message}
+        />
       </div>
     );
   }
@@ -224,14 +229,13 @@ export function PlateList() {
         }
       />
 
-      <RegisterPlateDialog
-        open={registerOpen}
-        onOpenChange={setRegisterOpen}
-      />
+      <RegisterPlateDialog open={registerOpen} onOpenChange={setRegisterOpen} />
 
       <ConfirmDeleteDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
         title="Delete plate?"
         description={`This will permanently delete plate "${deleteTarget?.barcode ?? ""}" (${deleteTarget?.plate_label ?? ""}). Well mappings will be lost.`}
         onConfirm={() => {

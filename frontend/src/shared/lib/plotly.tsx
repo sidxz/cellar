@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { ComponentType, CSSProperties } from "react";
+import type { CSSProperties, ComponentType } from "react";
 
 /** Loose Plotly props.
  *
@@ -34,7 +34,12 @@ export const Plot = dynamic(() => import("react-plotly.js"), {
 interface PlotlyGlobal {
   downloadImage?: (
     el: HTMLElement,
-    opts: { format: "png" | "svg" | "jpeg" | "webp"; width: number; height: number; filename: string },
+    opts: {
+      format: "png" | "svg" | "jpeg" | "webp";
+      width: number;
+      height: number;
+      filename: string;
+    },
   ) => void;
 }
 

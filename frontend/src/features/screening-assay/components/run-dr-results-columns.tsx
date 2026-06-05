@@ -228,8 +228,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
           max_dose: maxDoseFromRawData(params.data.data_points),
         });
         const showUnit = display.kind === "scalar" || display.kind === "qualifier";
-        const unitSuffix =
-          showUnit && params.data.fitted_unit ? ` ${params.data.fitted_unit}` : "";
+        const unitSuffix = showUnit && params.data.fitted_unit ? ` ${params.data.fitted_unit}` : "";
         if (display.warning) {
           return (
             <Badge

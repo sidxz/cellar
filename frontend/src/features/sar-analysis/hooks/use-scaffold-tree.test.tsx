@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import React from "react";
+import { renderHook, waitFor } from "@testing-library/react";
+import type React from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useScaffoldTree } from "./use-scaffold-tree";
 
@@ -87,10 +87,7 @@ describe("useScaffoldTree", () => {
 
   it("does not fire when moleculeIds is empty", () => {
     const startMock = vi.fn();
-    renderHook(
-      () => useScaffoldTree({ moleculeIds: [], startFn: startMock as any }),
-      { wrapper },
-    );
+    renderHook(() => useScaffoldTree({ moleculeIds: [], startFn: startMock as any }), { wrapper });
     expect(startMock).not.toHaveBeenCalled();
   });
 });

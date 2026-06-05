@@ -64,9 +64,7 @@ describe("buildCollectionImportTemplate", () => {
   it("returns a CSV string with all six columns and example rows", () => {
     const csv = buildCollectionImportTemplate();
     const lines = csv.trim().split("\n");
-    expect(lines[0]).toBe(
-      "registration_number,external_id,smiles,inchi_key,name,notes",
-    );
+    expect(lines[0]).toBe("registration_number,external_id,smiles,inchi_key,name,notes");
     expect(lines.length).toBeGreaterThanOrEqual(2);
   });
 });

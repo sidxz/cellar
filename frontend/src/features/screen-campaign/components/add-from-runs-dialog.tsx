@@ -17,19 +17,14 @@
  *   - At least one run AND at least one channel_config required to enable Next.
  */
 
-import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
+import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -51,26 +46,31 @@ import {
 } from "@/shared/components/ui/select";
 import { Switch } from "@/shared/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
-import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
-import { formatMeasurementValue } from "@/shared/lib/format-number";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/shared/components/ui/tooltip";
 import { formatDate } from "@/shared/lib/format-date";
+import { formatMeasurementValue } from "@/shared/lib/format-number";
 
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
+import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
+import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
+import { interceptOptionLabel } from "@/features/screening-assay/lib/intercept-label";
 import {
-  READOUT_NORMALIZATION_LABELS,
   type HitCriterion,
   type InterceptKey,
   type InterceptSpec,
+  READOUT_NORMALIZATION_LABELS,
 } from "@/features/screening-assay/types";
-import { interceptOptionLabel } from "@/features/screening-assay/lib/intercept-label";
-import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
-import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
-import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 import {
-  usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost,
   useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost,
+  usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost,
 } from "@/shared/lib/api/campaigns/campaigns";
+import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 
 import { campaignKeys } from "../hooks/use-campaigns";
 
@@ -122,10 +122,7 @@ const ALL_CURVE_CLASSES = ["full", "partial", "bell_shaped", "inactive"] as cons
  * convention) — that means primary edits on a multi-intercept readout
  * share the same key as the legacy single-channel-per-readout path.
  */
-function channelConfigKey(
-  readoutDefId: string,
-  interceptKey: InterceptKey | null,
-): string {
+function channelConfigKey(readoutDefId: string, interceptKey: InterceptKey | null): string {
   if (interceptKey) return `${readoutDefId}:${interceptKey.kind}:${interceptKey.level}`;
   return readoutDefId;
 }
@@ -139,7 +136,12 @@ interface AddFromRunsDialogProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddFromRunsDialogProps) {
+export function AddFromRunsDialog({
+  campaignId,
+  projectId,
+  open,
+  onClose,
+}: AddFromRunsDialogProps) {
   const qc = useQueryClient();
   const [step, setStep] = useState<"configure" | "preview">("configure");
 
@@ -148,14 +150,16 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
   const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
   // Only user-edited overrides live in state; the full channel config list is
   // derived below via useMemo so there is no effect feedback loop.
-  const [userEditedConfigs, setUserEditedConfigs] = useState<Map<string, ChannelConfigUI>>(new Map());
+  const [userEditedConfigs, setUserEditedConfigs] = useState<Map<string, ChannelConfigUI>>(
+    new Map(),
+  );
 
   // — Global toggles —
   const [filterMode, setFilterMode] = useState<"any" | "all">("all");
   const [scope, setScope] = useState<"hits_only" | "all">("hits_only");
-  const [defaultDecision, setDefaultDecision] = useState<
-    "selected" | "deferred" | "rejected"
-  >("selected");
+  const [defaultDecision, setDefaultDecision] = useState<"selected" | "deferred" | "rejected">(
+    "selected",
+  );
   const [refreshExisting, setRefreshExisting] = useState(false);
   const [approvedOnly, setApprovedOnly] = useState(true);
 
@@ -195,7 +199,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
     // single-intercept DR readouts (treated identically since neither needs
     // an intercept-aware filter on the recommended criteria).
     const buildConfig = (
-      rd: typeof protocolDetail.readout_definitions[number],
+      rd: (typeof protocolDetail.readout_definitions)[number],
       intercept: InterceptSpec | null,
       isPrimary: boolean,
     ): ChannelConfigUI => {
@@ -210,9 +214,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       // so the binding tracks the protocol's current primary if intercepts
       // are reordered later. Non-primary stores explicit `{kind, level}`.
       const interceptKey: InterceptKey | null =
-        !isPrimary && intercept
-          ? { kind: intercept.kind, level: intercept.level }
-          : null;
+        !isPrimary && intercept ? { kind: intercept.kind, level: intercept.level } : null;
 
       // Filter mode: explicit `null`/`{kind,level}` only when we're in the
       // multi-intercept split (intercept != null). Single-intercept and
@@ -220,9 +222,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       // on the readout" behavior — protocols predating Surface #7 didn't
       // mark their criteria with intercept_key, so filtering by null would
       // drop them incorrectly.
-      const filterKey: InterceptKey | null | undefined = intercept
-        ? interceptKey
-        : undefined;
+      const filterKey: InterceptKey | null | undefined = intercept ? interceptKey : undefined;
 
       const defaults = deriveChannelHitDefaults(
         recommended,
@@ -250,8 +250,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
         hit_value: defaults.hit_value,
         hit_value_low: defaults.hit_value_low,
         hit_value_high: defaults.hit_value_high,
-        use_for_filter:
-          hasThreshold || isDoseResponse || defaults.allowed_curve_classes.length > 0,
+        use_for_filter: hasThreshold || isDoseResponse || defaults.allowed_curve_classes.length > 0,
         allowed_curve_classes: defaults.allowed_curve_classes,
         normalization_applied: primaryNorm,
         intercept_key: isDoseResponse ? interceptKey : null,
@@ -262,8 +261,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       .filter((rd) => rd.data_type !== "text") // text-only readouts aren't filterable
       .flatMap((rd) => {
         const intercepts = rd.dose_response_config?.intercepts ?? [];
-        const isMultiIntercept =
-          rd.data_type === "dose_response" && intercepts.length >= 2;
+        const isMultiIntercept = rd.data_type === "dose_response" && intercepts.length >= 2;
 
         const fresh: ChannelConfigUI[] = isMultiIntercept
           ? intercepts.map((spec, idx) => buildConfig(rd, spec, idx === 0))
@@ -273,16 +271,14 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
         // intercept so editing the EC90 row doesn't clobber the EC50 row.
         return fresh.map(
           (cfg) =>
-            userEditedConfigs.get(
-              channelConfigKey(cfg.readout_definition_id, cfg.intercept_key),
-            ) ?? cfg,
+            userEditedConfigs.get(channelConfigKey(cfg.readout_definition_id, cfg.intercept_key)) ??
+            cfg,
         );
       });
   }, [protocolDetail, selectedRunIds.size, userEditedConfigs]);
 
   // — Mutations —
-  const previewMutation =
-    usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost();
+  const previewMutation = usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost();
   const addMutation = useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost({
     mutation: {
       onSuccess: () => {
@@ -301,14 +297,12 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       label: string;
       source_kind: string;
       selection_rule: string;
-      hit_threshold:
-        | {
-            readout_name: string;
-            operator: string;
-            value: number | number[];
-            intercept_key: InterceptKey | null;
-          }
-        | null;
+      hit_threshold: {
+        readout_name: string;
+        operator: string;
+        value: number | number[];
+        intercept_key: InterceptKey | null;
+      } | null;
       use_for_filter: boolean;
       allowed_curve_classes?: string[] | null;
       normalization_applied?: string | null;
@@ -327,20 +321,20 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
         // logic so both creation paths stay coherent.
         const interceptKey =
           c.source_kind === "dose_response_curve" ? (c.intercept_key ?? null) : null;
-        let hitThreshold:
-          | {
-              readout_name: string;
-              operator: string;
-              value: number | number[];
-              intercept_key: InterceptKey | null;
-            }
-          | null = null;
+        let hitThreshold: {
+          readout_name: string;
+          operator: string;
+          value: number | number[];
+          intercept_key: InterceptKey | null;
+        } | null = null;
         if (c.hit_operator === "between") {
           const low = c.hit_value_low === "" ? null : Number(c.hit_value_low);
           const high = c.hit_value_high === "" ? null : Number(c.hit_value_high);
           if (
-            low !== null && !Number.isNaN(low) &&
-            high !== null && !Number.isNaN(high) &&
+            low !== null &&
+            !Number.isNaN(low) &&
+            high !== null &&
+            !Number.isNaN(high) &&
             low <= high
           ) {
             hitThreshold = {
@@ -373,8 +367,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
             c.source_kind === "dose_response_curve" && c.allowed_curve_classes.length > 0
               ? c.allowed_curve_classes
               : null,
-          normalization_applied:
-            c.source_kind === "readout_data" ? c.normalization_applied : null,
+          normalization_applied: c.source_kind === "readout_data" ? c.normalization_applied : null,
           intercept_key: interceptKey,
         };
       }),
@@ -395,8 +388,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
     onClose();
   }
 
-  const canGoToPreview =
-    selectedRunIds.size > 0 && channelConfigs.length > 0;
+  const canGoToPreview = selectedRunIds.size > 0 && channelConfigs.length > 0;
 
   // — Debounced preview refresh —
   const [previewData, setPreviewData] = useState<{
@@ -426,8 +418,8 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
       );
     }, 300);
     return () => clearTimeout(t);
-  // payload depends on the state below
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // payload depends on the state below
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, channelConfigs, selectedRunIds, filterMode]);
 
   // — Render —
@@ -502,10 +494,7 @@ export function AddFromRunsDialog({ campaignId, projectId, open, onClose }: AddF
             onRefreshExistingChange={setRefreshExisting}
           />
         ) : (
-          <PreviewStep
-            data={previewData}
-            isLoading={previewMutation.isPending && !previewData}
-          />
+          <PreviewStep data={previewData} isLoading={previewMutation.isPending && !previewData} />
         )}
 
         <DialogFooter className="gap-2">
@@ -609,10 +598,7 @@ function ConfigureStep(p: ConfigureStepProps) {
             <div className="flex items-center justify-between">
               <Label>Runs ({p.selectedRunIds.size} selected)</Label>
               <label className="flex items-center gap-2 text-xs">
-                <Switch
-                  checked={p.approvedOnly}
-                  onCheckedChange={p.onApprovedOnlyChange}
-                />
+                <Switch checked={p.approvedOnly} onCheckedChange={p.onApprovedOnlyChange} />
                 Approved only
               </label>
             </div>
@@ -633,10 +619,7 @@ function ConfigureStep(p: ConfigureStepProps) {
                         onCheckedChange={() => p.onToggleRun(r.id)}
                       />
                       <span className="flex-1 min-w-0 truncate">
-                        Run on{" "}
-                        {r.run_date
-                          ? formatDate(r.run_date)
-                          : "(unknown date)"}
+                        Run on {r.run_date ? formatDate(r.run_date) : "(unknown date)"}
                       </span>
                       <Badge
                         variant={r.status === "approved" ? "secondary" : "outline"}
@@ -669,9 +652,7 @@ function ConfigureStep(p: ConfigureStepProps) {
                     <div className="flex items-center justify-between gap-2">
                       <Input
                         value={c.label}
-                        onChange={(e) =>
-                          p.onChannelConfigChange(idx, { label: e.target.value })
-                        }
+                        onChange={(e) => p.onChannelConfigChange(idx, { label: e.target.value })}
                         className="h-7 text-sm font-medium"
                       />
                       <label className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
@@ -780,9 +761,7 @@ function ConfigureStep(p: ConfigureStepProps) {
                                     className="h-7 text-xs"
                                     type="number"
                                   />
-                                  <span className="text-muted-foreground text-xs pb-1.5">
-                                    and
-                                  </span>
+                                  <span className="text-muted-foreground text-xs pb-1.5">and</span>
                                   <Input
                                     value={c.hit_value_high}
                                     onChange={(e) =>
@@ -880,7 +859,10 @@ function ConfigureStep(p: ConfigureStepProps) {
           <div className="rounded border p-3 space-y-3 bg-muted/10">
             <div className="space-y-1">
               <Label className="text-xs">Hit filter mode</Label>
-              <Tabs value={p.filterMode} onValueChange={(v) => p.onFilterModeChange(v as "any" | "all")}>
+              <Tabs
+                value={p.filterMode}
+                onValueChange={(v) => p.onFilterModeChange(v as "any" | "all")}
+              >
                 <TabsList className="h-7">
                   <TabsTrigger value="all" className="text-xs">
                     Hit per ALL criteria (strict)
@@ -935,10 +917,7 @@ function ConfigureStep(p: ConfigureStepProps) {
             </div>
 
             <label className="flex items-center gap-2 text-xs cursor-pointer">
-              <Switch
-                checked={p.refreshExisting}
-                onCheckedChange={p.onRefreshExistingChange}
-              />
+              <Switch checked={p.refreshExisting} onCheckedChange={p.onRefreshExistingChange} />
               Refresh non-override cells for molecules already in this campaign
             </label>
           </div>
@@ -1017,111 +996,109 @@ function PreviewStep({ data, isLoading }: PreviewStepProps) {
 
   return (
     <TooltipProvider delayDuration={120}>
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2 text-xs">
-        <Badge variant="secondary">{summary.molecules_total} molecules</Badge>
-        <Badge className="bg-orange-100 text-orange-800 border border-orange-200">
-          {summary.hits} hits
-        </Badge>
-        <Badge variant="outline">{summary.non_hits} non-hits</Badge>
-        {summary.molecules_already_in_campaign > 0 && (
-          <Badge variant="outline" className="text-muted-foreground">
-            {summary.molecules_already_in_campaign} already in campaign
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-2 text-xs">
+          <Badge variant="secondary">{summary.molecules_total} molecules</Badge>
+          <Badge className="bg-orange-100 text-orange-800 border border-orange-200">
+            {summary.hits} hits
           </Badge>
-        )}
-        <Badge variant="outline">
-          {summary.channels_new} new + {summary.channels_reused} reused channels
-        </Badge>
-      </div>
+          <Badge variant="outline">{summary.non_hits} non-hits</Badge>
+          {summary.molecules_already_in_campaign > 0 && (
+            <Badge variant="outline" className="text-muted-foreground">
+              {summary.molecules_already_in_campaign} already in campaign
+            </Badge>
+          )}
+          <Badge variant="outline">
+            {summary.channels_new} new + {summary.channels_reused} reused channels
+          </Badge>
+        </div>
 
-      <ScrollArea className="h-72 rounded border">
-        <table className="w-full text-xs">
-          <thead className="bg-muted/50 sticky top-0">
-            <tr>
-              <th className="text-left p-2">Compound</th>
-              {channels.map((c) => (
-                <th key={c.channel_key} className="text-left p-2">
-                  {c.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {rows.map((r) => (
-              <tr
-                key={r.molecule.id}
-                className={r.already_in_campaign ? "opacity-50" : ""}
-              >
-                <td className="p-2 flex items-center gap-2">
-                  <MoleculeThumbnail
-                    smiles={r.molecule.smiles}
-                    size="sm"
-                    fallback={r.molecule.registration_number ?? r.molecule.name ?? "…"}
-                  />
-                  <div>
-                    <div className="font-mono">
-                      {r.molecule.registration_number ?? r.molecule.name ?? "—"}
+        <ScrollArea className="h-72 rounded border">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                <th className="text-left p-2">Compound</th>
+                {channels.map((c) => (
+                  <th key={c.channel_key} className="text-left p-2">
+                    {c.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {rows.map((r) => (
+                <tr key={r.molecule.id} className={r.already_in_campaign ? "opacity-50" : ""}>
+                  <td className="p-2 flex items-center gap-2">
+                    <MoleculeThumbnail
+                      smiles={r.molecule.smiles}
+                      size="sm"
+                      fallback={r.molecule.registration_number ?? r.molecule.name ?? "…"}
+                    />
+                    <div>
+                      <div className="font-mono">
+                        {r.molecule.registration_number ?? r.molecule.name ?? "—"}
+                      </div>
+                      {r.molecule.name && (
+                        <div className="text-muted-foreground truncate max-w-[120px]">
+                          {r.molecule.name}
+                        </div>
+                      )}
+                      {r.already_in_campaign && (
+                        <div className="text-[10px] text-muted-foreground italic">
+                          already in campaign
+                        </div>
+                      )}
                     </div>
-                    {r.molecule.name && (
-                      <div className="text-muted-foreground truncate max-w-[120px]">
-                        {r.molecule.name}
-                      </div>
-                    )}
-                    {r.already_in_campaign && (
-                      <div className="text-[10px] text-muted-foreground italic">
-                        already in campaign
-                      </div>
-                    )}
-                  </div>
-                </td>
-                {channels.map((c) => {
-                  const cell = r.cells.find((x) => x.channel_key === c.channel_key);
-                  if (!cell || cell.value == null) {
+                  </td>
+                  {channels.map((c) => {
+                    const cell = r.cells.find((x) => x.channel_key === c.channel_key);
+                    if (!cell || cell.value == null) {
+                      return (
+                        <td key={c.channel_key} className="p-2 text-muted-foreground">
+                          —
+                        </td>
+                      );
+                    }
                     return (
-                      <td key={c.channel_key} className="p-2 text-muted-foreground">
-                        —
+                      <td key={c.channel_key} className="p-2">
+                        <div className="flex items-center gap-1">
+                          <span>
+                            {cell.value_qualifier !== "=" && cell.value_qualifier}
+                            {formatMeasurementValue(cell.value)}{" "}
+                            {cell.unit && cell.unit !== "-" ? cell.unit : ""}
+                          </span>
+                          {cell.hit_call === "hit" && (
+                            <Badge className="bg-orange-100 text-orange-800 text-[9px] px-1 py-0">
+                              HIT
+                            </Badge>
+                          )}
+                          {cell.replicate_count != null && cell.replicate_count > 1 && (
+                            <span className="text-[9px] text-muted-foreground">
+                              N={cell.replicate_count}
+                            </span>
+                          )}
+                          {cell.qc_pass === false && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge className="bg-amber-100 text-amber-800 border border-amber-200 text-[9px] px-1 py-0 cursor-help">
+                                  QC
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {cell.qc_reason ?? "QC heuristic failed"}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </td>
                     );
-                  }
-                  return (
-                    <td key={c.channel_key} className="p-2">
-                      <div className="flex items-center gap-1">
-                        <span>
-                          {cell.value_qualifier !== "=" && cell.value_qualifier}
-                          {formatMeasurementValue(cell.value)} {cell.unit && cell.unit !== "-" ? cell.unit : ""}
-                        </span>
-                        {cell.hit_call === "hit" && (
-                          <Badge className="bg-orange-100 text-orange-800 text-[9px] px-1 py-0">
-                            HIT
-                          </Badge>
-                        )}
-                        {cell.replicate_count != null && cell.replicate_count > 1 && (
-                          <span className="text-[9px] text-muted-foreground">
-                            N={cell.replicate_count}
-                          </span>
-                        )}
-                        {cell.qc_pass === false && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Badge className="bg-amber-100 text-amber-800 border border-amber-200 text-[9px] px-1 py-0 cursor-help">
-                                QC
-                              </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {cell.qc_reason ?? "QC heuristic failed"}
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </ScrollArea>
-    </div>
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollArea>
+      </div>
     </TooltipProvider>
   );
 }

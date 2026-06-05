@@ -1,13 +1,17 @@
 "use client";
 
+import { DetailShell } from "@/shared/components/detail-shell";
+import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
-import { useRouter } from "next/navigation";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import {
   AlertTriangle,
-  ExternalLink,
   Beaker,
-  FolderOpen,
+  ExternalLink,
   FolderKanban,
+  FolderOpen,
   Grid3X3,
   History,
   LayoutDashboard,
@@ -16,35 +20,26 @@ import {
   ShieldAlert,
   TestTubes,
 } from "lucide-react";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
-import { Badge } from "@/shared/components/ui/badge";
-import { Button } from "@/shared/components/ui/button";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/shared/components/ui/tabs";
-import { DetailShell } from "@/shared/components/detail-shell";
+import { useRouter } from "next/navigation";
 import { useMolecule } from "../hooks/use-molecules";
 import {
   LIFECYCLE_LABELS,
-  MOLECULE_TYPE_LABELS,
   type LifecycleStage,
+  MOLECULE_TYPE_LABELS,
   type MoleculeType,
   type StructureStatus,
 } from "../types";
 import {
-  OverviewTab,
-  BatchesTab,
   ActivityTab,
-  CollectionsTab,
-  PlatesTab,
-  RelationshipsTab,
-  HistoryTab,
-  FilesTab,
-  ProjectsTab,
   AdminOperationsTab,
+  BatchesTab,
+  CollectionsTab,
+  FilesTab,
+  HistoryTab,
+  OverviewTab,
+  PlatesTab,
+  ProjectsTab,
+  RelationshipsTab,
 } from "./detail-tabs";
 
 // ---------------------------------------------------------------------------
@@ -91,15 +86,16 @@ export function CompoundDetail({ compoundId }: CompoundDetailProps) {
           <>
             {/* Extra badges + name below title */}
             <div className="-mt-3 flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className={structureStatusBadgeClass(mol.structure_status as StructureStatus)}>
+              <Badge
+                variant="outline"
+                className={structureStatusBadgeClass(mol.structure_status as StructureStatus)}
+              >
                 {mol.structure_status === "disclosed" ? "Disclosed" : "Undisclosed"}
               </Badge>
               <Badge variant="outline">
                 {MOLECULE_TYPE_LABELS[mol.molecule_type as MoleculeType] ?? mol.molecule_type}
               </Badge>
-              {mol.name && (
-                <span className="text-lg text-muted-foreground">{mol.name}</span>
-              )}
+              {mol.name && <span className="text-lg text-muted-foreground">{mol.name}</span>}
             </div>
 
             {/* Tombstone banner */}

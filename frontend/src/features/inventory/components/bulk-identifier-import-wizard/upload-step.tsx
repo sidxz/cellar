@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { Download, Upload } from "lucide-react";
-import { parseBulkIdentifierCsv, generateCsvTemplate } from "../../lib/parse-bulk-identifier-csv";
+import { useRef, useState } from "react";
+import { generateCsvTemplate, parseBulkIdentifierCsv } from "../../lib/parse-bulk-identifier-csv";
 import type { BulkIdentifierRowBody } from "../../types";
 
 interface UploadStepProps {
@@ -50,14 +50,8 @@ export function UploadStep({ onParsed }: UploadStepProps) {
           <p className="text-sm text-muted-foreground">
             Upload a CSV file mapping external lot IDs to Cellar batches.
           </p>
-          {lastFile && (
-            <p className="mt-2 text-xs text-muted-foreground">Last: {lastFile}</p>
-          )}
-          <Button
-            className="mt-4"
-            onClick={() => fileRef.current?.click()}
-            disabled={parsing}
-          >
+          {lastFile && <p className="mt-2 text-xs text-muted-foreground">Last: {lastFile}</p>}
+          <Button className="mt-4" onClick={() => fileRef.current?.click()} disabled={parsing}>
             {parsing ? "Parsing…" : "Choose file"}
           </Button>
           <input
@@ -78,8 +72,8 @@ export function UploadStep({ onParsed }: UploadStepProps) {
             Required: <code>external_identifier</code>
           </p>
           <p className="mt-1">
-            Locator (either): <code>cellar_batch_number</code> OR
-            (<code>cellar_molecule_reg_number</code> + <code>cellar_batch_sequence</code>)
+            Locator (either): <code>cellar_batch_number</code> OR (
+            <code>cellar_molecule_reg_number</code> + <code>cellar_batch_sequence</code>)
           </p>
           <p className="mt-1">
             Optional: <code>identifier_type</code> (default <code>external_lot</code>),{" "}

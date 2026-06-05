@@ -33,7 +33,11 @@ export interface UpdateOntologySlotInput {
   display_order?: number;
 }
 
-const slotHooks = createCrudHooks<OntologySlotDefinition, CreateOntologySlotInput, UpdateOntologySlotInput>({
+const slotHooks = createCrudHooks<
+  OntologySlotDefinition,
+  CreateOntologySlotInput,
+  UpdateOntologySlotInput
+>({
   entityName: "Ontology slot",
   baseUrl: "/api/v1/ontology-slots",
   queryKey: ["ontology-slots"],

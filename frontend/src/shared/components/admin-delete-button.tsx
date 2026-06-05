@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { Button, buttonVariants } from "@/shared/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,12 +11,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/shared/components/ui/alert-dialog";
+import { Button, buttonVariants } from "@/shared/components/ui/button";
 import { Textarea } from "@/shared/components/ui/textarea";
-import {
-  useAdminDelete,
-  type AdminDeleteBlocker,
-} from "@/shared/hooks/use-admin-delete";
+import { type AdminDeleteBlocker, useAdminDelete } from "@/shared/hooks/use-admin-delete";
 import { Trash2 } from "lucide-react";
+import { useState } from "react";
 
 export interface AdminDeleteButtonProps {
   entityType: string;
@@ -78,16 +75,12 @@ export function AdminDeleteButton({
           <AlertDialogTitle>
             Delete {entityType}: {entityLabel}
           </AlertDialogTitle>
-          <AlertDialogDescription>
-            This is a hard delete. Audit-logged.
-          </AlertDialogDescription>
+          <AlertDialogDescription>This is a hard delete. Audit-logged.</AlertDialogDescription>
         </AlertDialogHeader>
 
         {blockers ? (
           <div className="space-y-2 text-sm">
-            <p className="font-semibold text-destructive">
-              Cannot delete — dependencies exist:
-            </p>
+            <p className="font-semibold text-destructive">Cannot delete — dependencies exist:</p>
             <ul className="list-disc pl-5">
               {blockers.map((b) => (
                 <li key={b.table}>

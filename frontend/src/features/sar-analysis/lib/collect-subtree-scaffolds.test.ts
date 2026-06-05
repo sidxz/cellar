@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { collectSubtreeScaffolds } from "./collect-subtree-scaffolds";
 import type { ScaffoldTreeResult } from "../types/scaffold-tree";
+import { collectSubtreeScaffolds } from "./collect-subtree-scaffolds";
 
 const node = (scaffold_smiles: string, molecule_ids: string[] = []) => ({
   scaffold_smiles,
@@ -24,11 +24,7 @@ describe("collectSubtreeScaffolds", () => {
   it("returns the inner node plus all descendants in a Schuffenhauer DAG", () => {
     // benzene → naphthalene → anthracene
     const tree: ScaffoldTreeResult = {
-      nodes: [
-        node("c1ccccc1"),
-        node("c1ccc2ccccc2c1"),
-        node("c1ccc2cc3ccccc3cc2c1"),
-      ],
+      nodes: [node("c1ccccc1"), node("c1ccc2ccccc2c1"), node("c1ccc2cc3ccccc3cc2c1")],
       edges: [
         { parent_smiles: "c1ccccc1", child_smiles: "c1ccc2ccccc2c1" },
         { parent_smiles: "c1ccc2ccccc2c1", child_smiles: "c1ccc2cc3ccccc3cc2c1" },
@@ -36,9 +32,7 @@ describe("collectSubtreeScaffolds", () => {
       stats,
     };
     const out = collectSubtreeScaffolds("c1ccc2ccccc2c1", tree);
-    expect(new Set(out)).toEqual(
-      new Set(["c1ccc2ccccc2c1", "c1ccc2cc3ccccc3cc2c1"]),
-    );
+    expect(new Set(out)).toEqual(new Set(["c1ccc2ccccc2c1", "c1ccc2cc3ccccc3cc2c1"]));
   });
 
   it("de-dupes when DAG has diamond shape (two parents → same descendant)", () => {

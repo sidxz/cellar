@@ -7,8 +7,8 @@
  * to the current campaign. Shows {added, skipped} in a toast on success.
  */
 
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCollections } from "@/features/research-organization/hooks/use-collections";
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -17,9 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 import { Label } from "@/shared/components/ui/label";
-import { Textarea } from "@/shared/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -27,10 +25,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { useCollections } from "@/features/research-organization/hooks/use-collections";
+import { Textarea } from "@/shared/components/ui/textarea";
 import { useAddResultsFromCollectionApiV1CampaignsCampaignIdAddFromCollectionPost } from "@/shared/lib/api/campaigns/campaigns";
+import { showError, showSuccess } from "@/shared/lib/toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { campaignKeys } from "../hooks/use-campaigns";
-import { showSuccess, showError } from "@/shared/lib/toast";
 
 interface AddFromCollectionDialogProps {
   campaignId: string;
@@ -92,17 +92,23 @@ export function AddFromCollectionDialog({
         <DialogHeader>
           <DialogTitle>Add compounds from a Collection</DialogTitle>
           <DialogDescription>
-            All compounds in the selected collection will be added. Duplicates
-            are skipped automatically.
+            All compounds in the selected collection will be added. Duplicates are skipped
+            automatically.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Collection *</Label>
-            <Select value={collectionId} onValueChange={setCollectionId} disabled={collectionsLoading}>
+            <Select
+              value={collectionId}
+              onValueChange={setCollectionId}
+              disabled={collectionsLoading}
+            >
               <SelectTrigger>
-                <SelectValue placeholder={collectionsLoading ? "Loading…" : "Select a collection…"} />
+                <SelectValue
+                  placeholder={collectionsLoading ? "Loading…" : "Select a collection…"}
+                />
               </SelectTrigger>
               <SelectContent>
                 {collections?.map((c) => (
@@ -140,11 +146,7 @@ export function AddFromCollectionDialog({
           <Button variant="outline" size="sm" onClick={handleClose}>
             Cancel
           </Button>
-          <Button
-            size="sm"
-            disabled={!collectionId || mutation.isPending}
-            onClick={handleSubmit}
-          >
+          <Button size="sm" disabled={!collectionId || mutation.isPending} onClick={handleSubmit}>
             {mutation.isPending ? "Adding…" : "Add compounds"}
           </Button>
         </DialogFooter>

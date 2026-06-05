@@ -9,14 +9,15 @@
  * icon per row (edit) — both open ChannelPopoverForm in a Popover.
  */
 
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Copy, MoreHorizontal, Plus } from "lucide-react";
+import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/shared/components/ui/popover";
+  interceptKeyLabel,
+  narrowInterceptKey,
+} from "@/features/screening-assay/lib/intercept-label";
+import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
+import { Label } from "@/shared/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -24,19 +25,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Badge } from "@/shared/components/ui/badge";
-import { Button } from "@/shared/components/ui/button";
-import { Label } from "@/shared/components/ui/label";
-import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import { useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost } from "@/shared/lib/api/campaigns/campaigns";
 import { showError, showSuccess } from "@/shared/lib/toast";
-import type { CampaignResponse, CampaignChannelResponse } from "../../types";
-import { ChannelPopoverForm, parseHitThreshold } from "../channel-popover";
+import { useQueryClient } from "@tanstack/react-query";
+import { Copy, MoreHorizontal, Plus } from "lucide-react";
+import { useState } from "react";
 import { campaignKeys } from "../../hooks/use-campaigns";
-import {
-  interceptKeyLabel,
-  narrowInterceptKey,
-} from "@/features/screening-assay/lib/intercept-label";
+import type { CampaignChannelResponse, CampaignResponse } from "../../types";
+import { ChannelPopoverForm, parseHitThreshold } from "../channel-popover";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -48,23 +44,18 @@ interface ChannelsSectionProps {
 
 // ── Style constants ───────────────────────────────────────────────────────────
 
-const SECTION_HEADING =
-  "text-sm font-semibold uppercase tracking-wide text-muted-foreground";
+const SECTION_HEADING = "text-sm font-semibold uppercase tracking-wide text-muted-foreground";
 
 const ADD_PILL =
   "inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors";
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function ChannelsSection({
-  campaign,
-  projectId,
-  readOnly,
-}: ChannelsSectionProps) {
+export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSectionProps) {
   const [addOpen, setAddOpen] = useState(false);
-  const channels = (campaign.channels ?? []).slice().sort(
-    (a, b) => a.display_order - b.display_order,
-  );
+  const channels = (campaign.channels ?? [])
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order);
 
   return (
     <section className="border-b px-6 py-4">
@@ -137,8 +128,7 @@ function formatThreshold(channel: CampaignChannelResponse): string {
   // threshold's intercept_key for legacy rows saved before the top-level
   // field existed. Primary (`null` in both) stays implicit — every
   // channel has *some* primary, naming it everywhere is noise.
-  const effectiveIk =
-    narrowInterceptKey(channel.intercept_key) ?? parsed.intercept_key;
+  const effectiveIk = narrowInterceptKey(channel.intercept_key) ?? parsed.intercept_key;
   const ik = effectiveIk ? `${interceptKeyLabel(effectiveIk)} ` : "";
   if (Array.isArray(parsed.value)) {
     const [lo, hi] = parsed.value;
@@ -160,8 +150,7 @@ function ChannelRow({
 }) {
   const [editOpen, setEditOpen] = useState(false);
 
-  const sourceKind =
-    channel.source_kind === "dose_response_curve" ? "DR" : "RD";
+  const sourceKind = channel.source_kind === "dose_response_curve" ? "DR" : "RD";
 
   const thresholdLabel = formatThreshold(channel);
 
@@ -273,9 +262,8 @@ function MirrorProtocolPopover({
         <div>
           <h4 className="text-sm font-semibold">Mirror protocol</h4>
           <p className="text-xs text-muted-foreground mt-1">
-            Creates one channel per readout. Multi-intercept dose-response
-            readouts emit one channel per intercept (EC50, EC90, …). Existing
-            channels with a matching key are skipped.
+            Creates one channel per readout. Multi-intercept dose-response readouts emit one channel
+            per intercept (EC50, EC90, …). Existing channels with a matching key are skipped.
           </p>
         </div>
         <div className="space-y-1">
@@ -294,12 +282,7 @@ function MirrorProtocolPopover({
           </Select>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setOpen(false)}
-          >
+          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
             Cancel
           </Button>
           <Button

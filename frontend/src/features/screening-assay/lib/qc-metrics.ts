@@ -37,7 +37,7 @@ export interface PlateQcEntry {
 
 /** Per-plate Z' map. Returns {} if absent or in legacy/unknown shape. */
 export function readPerPlateQc(
-  qcMetrics: Record<string, unknown> | null | undefined
+  qcMetrics: Record<string, unknown> | null | undefined,
 ): Record<string, PlateQcEntry> {
   if (!qcMetrics) return {};
   const raw = qcMetrics.z_prime;
@@ -50,9 +50,7 @@ export function readPerPlateQc(
  * Falls back to a scalar `z_prime` if `qc_metrics.z_prime` is a number
  * (defensive — older runs might still carry that shape).
  */
-export function worstZPrime(
-  qcMetrics: Record<string, unknown> | null | undefined
-): number | null {
+export function worstZPrime(qcMetrics: Record<string, unknown> | null | undefined): number | null {
   if (!qcMetrics) return null;
   const raw = qcMetrics.z_prime;
   if (typeof raw === "number") return raw;

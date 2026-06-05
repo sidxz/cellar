@@ -1,25 +1,21 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
-import { useDropzone } from "react-dropzone";
-import {
-  CloudDownload,
-  FlaskConical,
-  Upload,
-  Pencil,
-  Plus,
-  Trash2,
-  Download,
-  FileSpreadsheet,
-  FileText,
-  Info,
-} from "lucide-react";
-import Link from "next/link";
 import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
-import { formatFileSize } from "@/shared/lib/format-number";
-import type { BulkInput } from "../../types/registration-wizard";
+import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
+import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
+import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { useRegistrationForms } from "@/features/workspace-config/hooks/use-registration-forms";
+import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
+import { StructureEditorDialog } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/shared/components/ui/card";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -29,19 +25,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Textarea } from "@/shared/components/ui/textarea";
-import { Switch } from "@/shared/components/ui/switch";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Separator } from "@/shared/components/ui/separator";
-import { StructureEditorDialog } from "@/shared/components/chemistry";
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
-import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
-import { useRegistrationForms } from "@/features/workspace-config/hooks/use-registration-forms";
-import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
-import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
+import { Switch } from "@/shared/components/ui/switch";
+import { Textarea } from "@/shared/components/ui/textarea";
+import { formatFileSize } from "@/shared/lib/format-number";
+import {
+  CloudDownload,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  FlaskConical,
+  Info,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDropzone } from "react-dropzone";
 import { useMolecule } from "../../hooks/use-molecules";
-import { MOLECULE_TYPE_LABELS } from "../../types";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
+import { MOLECULE_TYPE_LABELS } from "../../types";
+import type { BulkInput } from "../../types/registration-wizard";
 import type { ExternalIdentifierInput } from "../../types/registration-wizard";
 
 // ─── CSV template ───────────────────────────────────────────────────────────
@@ -93,7 +99,7 @@ function downloadCsvTemplate() {
   const lines = [
     CSV_TEMPLATE_HEADERS.join(","),
     ...CSV_TEMPLATE_ROWS.map((row) =>
-      row.map((cell) => (cell.includes(",") ? `"${cell}"` : cell)).join(",")
+      row.map((cell) => (cell.includes(",") ? `"${cell}"` : cell)).join(","),
     ),
   ];
   const blob = new Blob([lines.join("\n")], { type: "text/csv" });
@@ -134,8 +140,8 @@ function ModeSelection({ onSelect }: { onSelect: (mode: "single" | "bulk") => vo
         </CardHeader>
         <CardContent>
           <CardDescription className="text-center">
-            Enter compound details, draw a structure, and register one compound
-            at a time with full control over metadata.
+            Enter compound details, draw a structure, and register one compound at a time with full
+            control over metadata.
           </CardDescription>
         </CardContent>
       </Card>
@@ -150,8 +156,8 @@ function ModeSelection({ onSelect }: { onSelect: (mode: "single" | "bulk") => vo
         </CardHeader>
         <CardContent>
           <CardDescription className="text-center">
-            Upload a CSV, XLSX, or SDF file to register multiple compounds in
-            a single batch operation.
+            Upload a CSV, XLSX, or SDF file to register multiple compounds in a single batch
+            operation.
           </CardDescription>
         </CardContent>
       </Card>
@@ -168,8 +174,8 @@ function ModeSelection({ onSelect }: { onSelect: (mode: "single" | "bulk") => vo
             </CardHeader>
             <CardContent>
               <CardDescription className="text-center">
-                Sync compounds from the configured CDD vault — full vault
-                import or modified-since sync.
+                Sync compounds from the configured CDD vault — full vault import or modified-since
+                sync.
               </CardDescription>
             </CardContent>
           </Card>
@@ -197,18 +203,15 @@ function SingleInputForm() {
 
   // Molecule data for disclosure mode
   const { data: disclosureMolecule } = useMolecule(
-    singleInput.disclosureMode && singleInput.moleculeId
-      ? singleInput.moleculeId
-      : undefined
+    singleInput.disclosureMode && singleInput.moleculeId ? singleInput.moleculeId : undefined,
   );
 
   const defaultFormId = registrationForms?.find((f) => f.is_default)?.id ?? "";
   const activeFormOverrides = useMemo(
     () =>
-      registrationForms?.find(
-        (f) => f.id === (selectedFormId || defaultFormId)
-      )?.field_overrides ?? [],
-    [registrationForms, selectedFormId, defaultFormId]
+      registrationForms?.find((f) => f.id === (selectedFormId || defaultFormId))?.field_overrides ??
+      [],
+    [registrationForms, selectedFormId, defaultFormId],
   );
 
   // Set default molecule type from settings on first load
@@ -216,10 +219,7 @@ function SingleInputForm() {
 
   const handleAddExternalId = () => {
     updateSingleInput({
-      externalIds: [
-        ...singleInput.externalIds,
-        { identifier: "", identifier_type: "vendor_id" },
-      ],
+      externalIds: [...singleInput.externalIds, { identifier: "", identifier_type: "vendor_id" }],
     });
   };
 
@@ -228,12 +228,9 @@ function SingleInputForm() {
     updateSingleInput({ externalIds: updated });
   };
 
-  const handleUpdateExternalId = (
-    index: number,
-    patch: Partial<ExternalIdentifierInput>
-  ) => {
+  const handleUpdateExternalId = (index: number, patch: Partial<ExternalIdentifierInput>) => {
     const updated = singleInput.externalIds.map((id, i) =>
-      i === index ? { ...id, ...patch } : id
+      i === index ? { ...id, ...patch } : id,
     );
     updateSingleInput({ externalIds: updated });
   };
@@ -273,14 +270,9 @@ function SingleInputForm() {
 
     // Validate required custom fields
     for (const field of customFieldDefs ?? []) {
-      const override = activeFormOverrides.find(
-        (o) => o.field_definition_id === field.id
-      );
+      const override = activeFormOverrides.find((o) => o.field_definition_id === field.id);
       const isRequired = override?.is_required ?? field.is_required;
-      if (
-        isRequired &&
-        !String(singleInput.customFields[field.name] ?? "").trim()
-      ) {
+      if (isRequired && !String(singleInput.customFields[field.name] ?? "").trim()) {
         setError(`${field.label} is required`);
         return;
       }
@@ -309,33 +301,26 @@ function SingleInputForm() {
       )}
 
       {/* Registration form selector */}
-      {!singleInput.disclosureMode &&
-        registrationForms &&
-        registrationForms.length > 0 && (
-          <div className="grid gap-2">
-            <Label htmlFor="reg-form">Registration Form</Label>
-            <Select
-              value={selectedFormId || defaultFormId}
-              onValueChange={setSelectedFormId}
-            >
-              <SelectTrigger id="reg-form">
-                <SelectValue placeholder="Select a form..." />
-              </SelectTrigger>
-              <SelectContent>
-                {registrationForms.map((form) => (
-                  <SelectItem key={form.id} value={form.id}>
-                    {form.name}
-                    {form.is_default && (
-                      <span className="ml-2 text-muted-foreground text-xs">
-                        (default)
-                      </span>
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+      {!singleInput.disclosureMode && registrationForms && registrationForms.length > 0 && (
+        <div className="grid gap-2">
+          <Label htmlFor="reg-form">Registration Form</Label>
+          <Select value={selectedFormId || defaultFormId} onValueChange={setSelectedFormId}>
+            <SelectTrigger id="reg-form">
+              <SelectValue placeholder="Select a form..." />
+            </SelectTrigger>
+            <SelectContent>
+              {registrationForms.map((form) => (
+                <SelectItem key={form.id} value={form.id}>
+                  {form.name}
+                  {form.is_default && (
+                    <span className="ml-2 text-muted-foreground text-xs">(default)</span>
+                  )}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Name — hidden in disclosure mode */}
       {!singleInput.disclosureMode && (
@@ -358,9 +343,7 @@ function SingleInputForm() {
           <Switch
             id="wiz-undisclosed"
             checked={isUndisclosed}
-            onCheckedChange={(checked) =>
-              updateSingleInput({ smiles: checked ? null : "" })
-            }
+            onCheckedChange={(checked) => updateSingleInput({ smiles: checked ? null : "" })}
           />
           <Label htmlFor="wiz-undisclosed">Register as undisclosed (no structure)</Label>
         </div>
@@ -371,17 +354,9 @@ function SingleInputForm() {
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="wiz-smiles">
-              SMILES{" "}
-              {singleInput.disclosureMode && (
-                <span className="text-destructive">*</span>
-              )}
+              SMILES {singleInput.disclosureMode && <span className="text-destructive">*</span>}
             </Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEditorOpen(true)}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={() => setEditorOpen(true)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
               Draw
             </Button>
@@ -414,18 +389,14 @@ function SingleInputForm() {
               id="wiz-scientist"
               placeholder="Name of disclosing scientist"
               value={singleInput.scientistName}
-              onChange={(e) =>
-                updateSingleInput({ scientistName: e.target.value })
-              }
+              onChange={(e) => updateSingleInput({ scientistName: e.target.value })}
             />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="wiz-disc-org">Disclosing Organization</Label>
             <Select
               value={singleInput.disclosingOrgId ?? ""}
-              onValueChange={(v) =>
-                updateSingleInput({ disclosingOrgId: v || null })
-              }
+              onValueChange={(v) => updateSingleInput({ disclosingOrgId: v || null })}
             >
               <SelectTrigger id="wiz-disc-org">
                 <SelectValue placeholder="Select organization" />
@@ -445,9 +416,7 @@ function SingleInputForm() {
               id="wiz-notes"
               placeholder="Optional notes about this disclosure"
               value={singleInput.notes}
-              onChange={(e) =>
-                updateSingleInput({ notes: e.target.value })
-              }
+              onChange={(e) => updateSingleInput({ notes: e.target.value })}
               rows={2}
             />
           </div>
@@ -505,12 +474,7 @@ function SingleInputForm() {
         <div className="grid gap-3">
           <div className="flex items-center justify-between">
             <Label>External Identifiers</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleAddExternalId}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={handleAddExternalId}>
               <Plus className="mr-1 h-3.5 w-3.5" />
               Add
             </Button>
@@ -527,9 +491,7 @@ function SingleInputForm() {
             <div key={index} className="flex items-center gap-2">
               <Select
                 value={extId.identifier_type}
-                onValueChange={(v) =>
-                  handleUpdateExternalId(index, { identifier_type: v })
-                }
+                onValueChange={(v) => handleUpdateExternalId(index, { identifier_type: v })}
               >
                 <SelectTrigger className="w-40">
                   <SelectValue />
@@ -545,9 +507,7 @@ function SingleInputForm() {
               <Input
                 placeholder="e.g. ABBVIE-002, 50-78-2"
                 value={extId.identifier}
-                onChange={(e) =>
-                  handleUpdateExternalId(index, { identifier: e.target.value })
-                }
+                onChange={(e) => handleUpdateExternalId(index, { identifier: e.target.value })}
                 className="flex-1"
               />
               <Button
@@ -565,22 +525,20 @@ function SingleInputForm() {
       )}
 
       {/* Custom fields — hidden in disclosure mode */}
-      {!singleInput.disclosureMode &&
-        customFieldDefs &&
-        customFieldDefs.length > 0 && (
-          <>
-            <Separator />
-            <div className="grid gap-2">
-              <Label>Custom Fields</Label>
-              <CustomFieldsRenderer
-                definitions={customFieldDefs}
-                formOverrides={activeFormOverrides}
-                values={singleInput.customFields}
-                onChange={handleCustomFieldChange}
-              />
-            </div>
-          </>
-        )}
+      {!singleInput.disclosureMode && customFieldDefs && customFieldDefs.length > 0 && (
+        <>
+          <Separator />
+          <div className="grid gap-2">
+            <Label>Custom Fields</Label>
+            <CustomFieldsRenderer
+              definitions={customFieldDefs}
+              formOverrides={activeFormOverrides}
+              values={singleInput.customFields}
+              onChange={handleCustomFieldChange}
+            />
+          </div>
+        </>
+      )}
 
       {/* Error */}
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -616,8 +574,7 @@ function BulkInputForm() {
   useEffect(() => {
     if (settings && !bulkInput.file) {
       updateBulkInput({
-        createBatchOnDuplicate:
-          settings.registration_rules?.create_batch_on_duplicate ?? false,
+        createBatchOnDuplicate: settings.registration_rules?.create_batch_on_duplicate ?? false,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -630,15 +587,13 @@ function BulkInputForm() {
 
       const fmt = detectFileFormat(file.name);
       if (!fmt) {
-        setError(
-          `Unsupported file type. Use .csv, .xlsx, .sdf or .sd — got "${file.name}".`
-        );
+        setError(`Unsupported file type. Use .csv, .xlsx, .sdf or .sd — got "${file.name}".`);
         return;
       }
       setError(null);
       updateBulkInput({ file, fileFormat: fmt });
     },
-    [updateBulkInput]
+    [updateBulkInput],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -699,9 +654,7 @@ function BulkInputForm() {
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          Applied to all compounds in the file.
-        </p>
+        <p className="text-xs text-muted-foreground">Applied to all compounds in the file.</p>
       </div>
 
       {/* Batch-on-duplicate checkbox */}
@@ -709,9 +662,7 @@ function BulkInputForm() {
         <Checkbox
           id="bulk-cbod"
           checked={bulkInput.createBatchOnDuplicate}
-          onCheckedChange={(c) =>
-            updateBulkInput({ createBatchOnDuplicate: !!c })
-          }
+          onCheckedChange={(c) => updateBulkInput({ createBatchOnDuplicate: !!c })}
           className="mt-0.5"
         />
         <div className="space-y-1">
@@ -768,11 +719,7 @@ function BulkInputForm() {
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => updateBulkInput({ file: null })}
-          >
+          <Button variant="ghost" size="sm" onClick={() => updateBulkInput({ file: null })}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>

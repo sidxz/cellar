@@ -12,7 +12,7 @@
  */
 
 import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
-import { classifyActivity, type ActivityRollupBin } from "./scaffold-rollup";
+import { type ActivityRollupBin, classifyActivity } from "./scaffold-rollup";
 
 export type ColorOption =
   | { mode: "cluster" }
@@ -40,9 +40,9 @@ const MUTED_GREY = "#a1a1aa";
  */
 const ACTIVITY_BIN_COLORS: Record<ActivityRollupBin, string> = {
   active_high: "#10b981", // emerald
-  active_mid: "#fb923c",  // orange
-  weak: "#f59e0b",        // amber
-  inactive: "#dc2626",    // red
+  active_mid: "#fb923c", // orange
+  weak: "#f59e0b", // amber
+  inactive: "#dc2626", // red
 };
 
 /**

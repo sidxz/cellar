@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Plus } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
 import { BatchList } from "@/features/inventory/components/batch-list";
 import { CreateBatchDialog } from "@/features/inventory/components/create-batch-dialog";
+import { Button } from "@/shared/components/ui/button";
+import { Plus } from "lucide-react";
+import { useState } from "react";
 
 interface BatchesTabProps {
   moleculeId: string;

@@ -45,12 +45,5 @@ export function MoleculeThumbnail({
       </div>
     );
   }
-  return (
-    <StructureRenderer
-      smiles={smiles}
-      width={width}
-      height={height}
-      className={className}
-    />
-  );
+  return <StructureRenderer smiles={smiles} width={width} height={height} className={className} />;
 }

@@ -1,23 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Loader2, AlertTriangle } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
-import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
-import {
-  useSubmitRegistration,
-  useStartBulkRegistration,
-  useBulkRegistrationStatus,
-} from "../../hooks/use-registration-wizard-api";
+import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { AlertTriangle, ArrowLeft, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useSubmitDisclosure } from "../../hooks/use-disclosures";
 import { useMolecule } from "../../hooks/use-molecules";
+import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
+import {
+  useBulkRegistrationStatus,
+  useStartBulkRegistration,
+  useSubmitRegistration,
+} from "../../hooks/use-registration-wizard-api";
 import type { RegisterMoleculeInput } from "../../types";
 import type { SubmitDisclosureInput } from "../../types/disclosure";
 
@@ -47,14 +42,13 @@ function SingleProcessing() {
   const registerMutation = useSubmitRegistration();
   const disclosureMutation = useSubmitDisclosure();
   const moleculeQuery = useMolecule(
-    singleInput.disclosureMode ? singleInput.moleculeId ?? undefined : undefined
+    singleInput.disclosureMode ? (singleInput.moleculeId ?? undefined) : undefined,
   );
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isDisclosure = singleInput.disclosureMode && !!singleInput.moleculeId;
-  const isSubmitting =
-    registerMutation.isPending || disclosureMutation.isPending;
+  const isSubmitting = registerMutation.isPending || disclosureMutation.isPending;
 
   const handleSubmit = () => {
     setConfirmed(true);
@@ -192,14 +186,15 @@ function SingleProcessing() {
         <div className="rounded-lg border bg-muted/50 p-4 space-y-2 text-sm">
           {isDisclosure ? (
             <>
-              <Row label="Compound" value={moleculeQuery.data?.name ?? singleInput.moleculeId ?? ""} />
+              <Row
+                label="Compound"
+                value={moleculeQuery.data?.name ?? singleInput.moleculeId ?? ""}
+              />
               <Row label="SMILES" value={singleInput.smiles ?? ""} mono />
               {singleInput.scientistName && (
                 <Row label="Scientist" value={singleInput.scientistName} />
               )}
-              {singleInput.notes && (
-                <Row label="Notes" value={singleInput.notes} />
-              )}
+              {singleInput.notes && <Row label="Notes" value={singleInput.notes} />}
             </>
           ) : (
             <>
@@ -340,8 +335,7 @@ function BulkProcessing() {
   // Progress display
   const chunksProcessed = progress?.chunks_processed ?? 0;
   const chunksTotal = progress?.chunks_total ?? 0;
-  const progressPercent =
-    chunksTotal > 0 ? Math.round((chunksProcessed / chunksTotal) * 100) : 0;
+  const progressPercent = chunksTotal > 0 ? Math.round((chunksProcessed / chunksTotal) * 100) : 0;
 
   return (
     <Card>
@@ -376,16 +370,8 @@ function BulkProcessing() {
               count={progress.merge_candidate_count}
               variant="warning"
             />
-            <CountBadge
-              label="Conflicts"
-              count={progress.conflict_count}
-              variant="warning"
-            />
-            <CountBadge
-              label="Errors"
-              count={progress.error_count}
-              variant="destructive"
-            />
+            <CountBadge label="Conflicts" count={progress.conflict_count} variant="warning" />
+            <CountBadge label="Errors" count={progress.error_count} variant="destructive" />
           </div>
         )}
 

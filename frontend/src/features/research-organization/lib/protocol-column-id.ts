@@ -71,10 +71,7 @@ export interface ResolvedColumn {
   interceptKey: InterceptKey | null;
 }
 
-export function resolveColumns(
-  protocolColumns: string[],
-  protocols: Protocol[],
-): ResolvedColumn[] {
+export function resolveColumns(protocolColumns: string[], protocols: Protocol[]): ResolvedColumn[] {
   // Build a reverse index so 2-segment colIds (drc:<rd_id> or legacy
   // rd:<rd_id>) can find their owning protocol.
   const protoByRdId = new Map<string, Protocol>();
@@ -147,10 +144,7 @@ export function resolveColumns(
  *  Used by the search page to decide which protocol cards on the
  *  compound detail drawer count as "selected" (i.e. visible in the
  *  results grid) vs "also tested in N other protocols". */
-export function uniqueProtocolIds(
-  protocolColumns: string[],
-  protocols: Protocol[],
-): string[] {
+export function uniqueProtocolIds(protocolColumns: string[], protocols: Protocol[]): string[] {
   return [...new Set(resolveColumns(protocolColumns, protocols).map((r) => r.protocolId))];
 }
 
@@ -167,10 +161,7 @@ export function uniqueProtocolIds(
  *  as do `rd:` tokens and parents for rd-defs whose intercepts list is empty
  *  (legacy DR readouts — the parent is the only meaningful token there).
  */
-export function expandParentTokens(
-  protocolColumns: string[],
-  protocols: Protocol[],
-): string[] {
+export function expandParentTokens(protocolColumns: string[], protocols: Protocol[]): string[] {
   const protoByRdId = new Map<string, Protocol>();
   for (const p of protocols) {
     for (const rd of p.readout_definitions ?? []) protoByRdId.set(rd.id, p);

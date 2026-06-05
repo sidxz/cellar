@@ -1,13 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { BookOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -27,14 +22,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { BookOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 import {
-  useOntologySlots,
-  useCreateOntologySlot,
-  useDeleteOntologySlot,
-  useUpdateOntologySlot,
   type CreateOntologySlotInput,
   type OntologySlotDefinition,
   type UpdateOntologySlotInput,
+  useCreateOntologySlot,
+  useDeleteOntologySlot,
+  useOntologySlots,
+  useUpdateOntologySlot,
 } from "../hooks/use-ontology-slots";
 
 // ---------------------------------------------------------------------------
@@ -146,9 +146,7 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Ontology Slot" : "New Ontology Slot"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Ontology Slot" : "New Ontology Slot"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <div className="grid gap-4 py-4">
@@ -165,33 +163,21 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
                   Machine identifier. Cannot be changed after creation.
                 </p>
                 {form.formState.errors.name && (
-                  <p className="text-xs text-destructive">
-                    {form.formState.errors.name.message}
-                  </p>
+                  <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
                 )}
               </div>
             ) : (
               <div className="grid gap-2">
                 <Label>Name</Label>
-                <Input
-                  value={editing?.name ?? ""}
-                  disabled
-                  className="font-mono"
-                />
+                <Input value={editing?.name ?? ""} disabled className="font-mono" />
               </div>
             )}
 
             <div className="grid gap-2">
               <Label htmlFor="slot-label">Label</Label>
-              <Input
-                id="slot-label"
-                {...form.register("label")}
-                placeholder="e.g., Assay Type"
-              />
+              <Input id="slot-label" {...form.register("label")} placeholder="e.g., Assay Type" />
               {form.formState.errors.label && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.label.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.label.message}</p>
               )}
             </div>
 
@@ -342,11 +328,7 @@ function DeleteDialog({ slot, onClose }: DeleteDialogProps) {
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-            disabled={deleteMutation.isPending}
-          >
+          <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>
@@ -407,14 +389,18 @@ function SlotTable({ entries, onEdit, onDelete }: SlotTableProps) {
               </TableCell>
               <TableCell>
                 {entry.is_required ? (
-                  <Badge variant="default" className="text-xs">Required</Badge>
+                  <Badge variant="default" className="text-xs">
+                    Required
+                  </Badge>
                 ) : (
                   <span className="text-sm text-muted-foreground">{"—"}</span>
                 )}
               </TableCell>
               <TableCell>
                 {entry.allow_free_text ? (
-                  <Badge variant="outline" className="text-xs">Yes</Badge>
+                  <Badge variant="outline" className="text-xs">
+                    Yes
+                  </Badge>
                 ) : (
                   <span className="text-sm text-muted-foreground">{"—"}</span>
                 )}
@@ -422,18 +408,10 @@ function SlotTable({ entries, onEdit, onDelete }: SlotTableProps) {
               <TableCell className="tabular-nums">{entry.display_order}</TableCell>
               <TableCell>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEdit(entry)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onEdit(entry)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDelete(entry)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onDelete(entry)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
@@ -487,19 +465,11 @@ export function OntologySlotAdmin() {
             ))}
           </div>
         ) : (
-          <SlotTable
-            entries={entries ?? []}
-            onEdit={openEdit}
-            onDelete={setDeleting}
-          />
+          <SlotTable entries={entries ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}
       </div>
 
-      <SlotDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editing={editing}
-      />
+      <SlotDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
       <DeleteDialog slot={deleting} onClose={() => setDeleting(null)} />
     </>

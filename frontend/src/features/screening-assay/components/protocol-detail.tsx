@@ -1,5 +1,6 @@
 "use client";
 
+import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -14,6 +15,8 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import {
   Activity,
   Archive,
@@ -32,7 +35,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import {
   useDeleteProtocol,
   useLockProtocol,
@@ -46,8 +48,6 @@ import {
 import type { ProtocolStatus } from "../types";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
-import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 
 // ---------------------------------------------------------------------------
 // ProtocolDetail — tab shell
@@ -238,11 +238,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
             </TabsList>
 
             <TabsContent value="overview">
-              <OverviewTab
-                protocol={protocol}
-                protocolId={protocolId}
-                onTabChange={setActiveTab}
-              />
+              <OverviewTab protocol={protocol} protocolId={protocolId} onTabChange={setActiveTab} />
             </TabsContent>
             <TabsContent value="activity">
               <ActivityTab protocol={protocol} protocolId={protocolId} />

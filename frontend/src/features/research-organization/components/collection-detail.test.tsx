@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { CollectionDetail } from "./collection-detail";
 
 // Stub Next.js + Sentinel + every downstream hook so we exercise ONLY the
@@ -42,9 +42,7 @@ vi.mock("@/features/chemical-registration/hooks/use-sdf-export", () => ({
 vi.mock("./create-collection-dialog", () => ({ CreateCollectionDialog: () => null }));
 vi.mock("./add-molecules-dialog", () => ({ AddMoleculesDialog: () => null }));
 vi.mock("./collection/collection-header", () => ({
-  CollectionHeader: ({ rightSlot }: { rightSlot?: React.ReactNode }) => (
-    <div>{rightSlot}</div>
-  ),
+  CollectionHeader: ({ rightSlot }: { rightSlot?: React.ReactNode }) => <div>{rightSlot}</div>,
 }));
 vi.mock("./results/results-surface", () => ({
   ResultsSurface: ({
@@ -52,11 +50,7 @@ vi.mock("./results/results-surface", () => ({
   }: {
     onSelectChange: (id: string, selected: boolean) => void;
   }) => (
-    <button
-      type="button"
-      onClick={() => onSelectChange("m1", true)}
-      data-testid="mock-select-m1"
-    >
+    <button type="button" onClick={() => onSelectChange("m1", true)} data-testid="mock-select-m1">
       select m1
     </button>
   ),
@@ -123,10 +117,7 @@ describe("CollectionDetail frozen-collection gating", () => {
     renderWith({ ...baseCollection, is_frozen: true });
     const btn = screen.getByRole("button", { name: /add molecules/i });
     expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute(
-      "title",
-      "Frozen collection — unfreeze to modify.",
-    );
+    expect(btn).toHaveAttribute("title", "Frozen collection — unfreeze to modify.");
   });
 
   it("enables Remove when not frozen and a molecule is selected", () => {
@@ -141,9 +132,6 @@ describe("CollectionDetail frozen-collection gating", () => {
     fireEvent.click(screen.getByTestId("mock-select-m1"));
     const btn = screen.getByRole("button", { name: /^remove$/i });
     expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute(
-      "title",
-      "Frozen collection — unfreeze to modify.",
-    );
+    expect(btn).toHaveAttribute("title", "Frozen collection — unfreeze to modify.");
   });
 });

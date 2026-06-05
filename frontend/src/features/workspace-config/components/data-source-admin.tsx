@@ -1,17 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  Database,
-  ExternalLink,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -38,18 +29,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { Database, Pencil, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { type ExternalApiKey, useApiKeys } from "../hooks/use-api-keys";
 import {
-  useDataSources,
+  type CreateDataSourceInput,
+  type DataSource,
   useCreateDataSource,
+  useDataSources,
   useDeleteDataSource,
   useUpdateDataSource,
-  type DataSource,
-  type CreateDataSourceInput,
 } from "../hooks/use-data-sources";
-import {
-  useApiKeys,
-  type ExternalApiKey,
-} from "../hooks/use-api-keys";
 
 // ---------------------------------------------------------------------------
 // Source type definitions
@@ -118,8 +109,7 @@ function CreateDialog({ open, onOpenChange, apiKeys }: CreateDialogProps) {
 
   const canSubmit = (() => {
     if (!sourceType || !name.trim()) return false;
-    if (sourceType === "cdd_vault" && (!vaultId.trim() || !apiKeyName))
-      return false;
+    if (sourceType === "cdd_vault" && (!vaultId.trim() || !apiKeyName)) return false;
     return true;
   })();
 
@@ -195,10 +185,7 @@ function CreateDialog({ open, onOpenChange, apiKeys }: CreateDialogProps) {
           {sourceType === "custom" && (
             <div className="grid gap-2">
               <Label>API Key (optional)</Label>
-              <Select
-                value={apiKeyName}
-                onValueChange={setApiKeyName}
-              >
+              <Select value={apiKeyName} onValueChange={setApiKeyName}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select API key..." />
                 </SelectTrigger>
@@ -225,10 +212,7 @@ function CreateDialog({ open, onOpenChange, apiKeys }: CreateDialogProps) {
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!canSubmit || create.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={!canSubmit || create.isPending}>
             {create.isPending ? "Linking..." : "Link"}
           </Button>
         </DialogFooter>
@@ -262,21 +246,14 @@ function DeleteDialog({ dataSource, onClose }: DeleteDialogProps) {
           <DialogTitle>Remove Data Source?</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Remove{" "}
-          <span className="font-medium text-foreground">
-            {dataSource?.name}
-          </span>
-          ? This will not delete any imported data.
+          Remove <span className="font-medium text-foreground">{dataSource?.name}</span>? This will
+          not delete any imported data.
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-            disabled={deleteMutation.isPending}
-          >
+          <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? "Removing..." : "Remove"}
           </Button>
         </DialogFooter>
@@ -336,11 +313,7 @@ function DataSourceTable({ entries, onEdit, onDelete }: DataSourceTableProps) {
         </TableHeader>
         <TableBody>
           {entries.map((ds) => (
-            <TableRow
-              key={ds.id}
-              className="cursor-pointer"
-              onClick={() => onEdit(ds)}
-            >
+            <TableRow key={ds.id} className="cursor-pointer" onClick={() => onEdit(ds)}>
               <TableCell className="font-medium">{ds.name}</TableCell>
               <TableCell>
                 <Badge variant="outline">{sourceTypeLabel(ds.source_type)}</Badge>
@@ -349,25 +322,18 @@ function DataSourceTable({ entries, onEdit, onDelete }: DataSourceTableProps) {
                 {ds.api_key_name ?? "\u2014"}
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
-                {ds.entity_mappings.length} {ds.entity_mappings.length === 1 ? "entity" : "entities"}
+                {ds.entity_mappings.length}{" "}
+                {ds.entity_mappings.length === 1 ? "entity" : "entities"}
               </TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
                 <ActiveToggle entry={ds} />
               </TableCell>
               <TableCell onClick={(e) => e.stopPropagation()}>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEdit(ds)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onEdit(ds)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDelete(ds)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onDelete(ds)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
@@ -416,24 +382,13 @@ export function DataSourceAdmin() {
             ))}
           </div>
         ) : (
-          <DataSourceTable
-            entries={sources ?? []}
-            onEdit={handleEdit}
-            onDelete={setDeleting}
-          />
+          <DataSourceTable entries={sources ?? []} onEdit={handleEdit} onDelete={setDeleting} />
         )}
       </div>
 
-      <CreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        apiKeys={apiKeys ?? []}
-      />
+      <CreateDialog open={createOpen} onOpenChange={setCreateOpen} apiKeys={apiKeys ?? []} />
 
-      <DeleteDialog
-        dataSource={deleting}
-        onClose={() => setDeleting(null)}
-      />
+      <DeleteDialog dataSource={deleting} onClose={() => setDeleting(null)} />
     </>
   );
 }

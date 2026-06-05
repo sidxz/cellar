@@ -1,14 +1,10 @@
 "use client";
 
-import { Fragment } from "react";
 import { cn } from "@/shared/lib/utils";
+import { Fragment } from "react";
+import { plateCellSizePx, plateDimensionsTuple, rowLabel } from "../lib/plate-dimensions";
 import type { PlateFormat, WellDesignation } from "../types";
 import { WELL_DESIGNATION_LABELS } from "../types";
-import {
-  plateDimensionsTuple,
-  plateCellSizePx,
-  rowLabel,
-} from "../lib/plate-dimensions";
 
 const WELL_COLORS: Record<WellDesignation, string> = {
   compound: "bg-primary",
@@ -42,8 +38,7 @@ export function PlateMapView({
 }: PlateMapViewProps) {
   const [rows, cols] = plateDimensionsTuple(format);
   const size = cellSize ?? plateCellSizePx(format);
-  const labelSize =
-    size >= 28 ? "text-xs" : size >= 18 ? "text-[10px]" : "text-[8px]";
+  const labelSize = size >= 28 ? "text-xs" : size >= 18 ? "text-[10px]" : "text-[8px]";
 
   // Count designations for the legend.
   const counts: Record<WellDesignation, number> = {
@@ -137,11 +132,7 @@ export function PlateMapView({
               <span className="opacity-60">({counts[d]})</span>
             </span>
           ))}
-        {counts.empty > 0 && (
-          <span className="opacity-60">
-            {counts.empty} unassigned
-          </span>
-        )}
+        {counts.empty > 0 && <span className="opacity-60">{counts.empty} unassigned</span>}
       </div>
     </div>
   );

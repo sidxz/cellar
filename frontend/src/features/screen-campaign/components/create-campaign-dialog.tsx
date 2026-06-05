@@ -10,12 +10,14 @@
  * On submit: POSTs to /api/v1/campaigns and navigates to the builder.
  */
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { Button } from "@/shared/components/ui/button";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -25,10 +27,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Textarea } from "@/shared/components/ui/textarea";
 
 import { useCreateCampaignApiV1CampaignsPost } from "@/shared/lib/api/campaigns/campaigns";
@@ -68,9 +68,7 @@ export function CreateCampaignDialog({
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolledOpen;
-  const setOpen = isControlled
-    ? (controlledOnOpenChange ?? (() => {}))
-    : setUncontrolledOpen;
+  const setOpen = isControlled ? (controlledOnOpenChange ?? (() => {})) : setUncontrolledOpen;
 
   const mutation = useCreateCampaignApiV1CampaignsPost();
 
@@ -119,8 +117,7 @@ export function CreateCampaignDialog({
         <DialogHeader>
           <DialogTitle>Create Campaign</DialogTitle>
           <DialogDescription>
-            Name your campaign. Channels and compounds are curated in the
-            builder after creation.
+            Name your campaign. Channels and compounds are curated in the builder after creation.
           </DialogDescription>
         </DialogHeader>
 
@@ -133,9 +130,7 @@ export function CreateCampaignDialog({
               placeholder="e.g. Kinase Panel Q2 2026"
               {...register("name")}
             />
-            {errors.name && (
-              <p className="text-xs text-destructive">{errors.name.message}</p>
-            )}
+            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 
           {/* Description */}
@@ -174,11 +169,7 @@ export function CreateCampaignDialog({
           )}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting || mutation.isPending}>

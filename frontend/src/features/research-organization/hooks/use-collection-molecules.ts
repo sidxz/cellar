@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MembershipResult, MoleculeReference } from "../types";
 
 const COLLECTIONS_KEY = ["collections"];
@@ -14,7 +14,7 @@ function moleculesKey(collectionId: string) {
 export function useCollectionMolecules(
   collectionId: string | undefined,
   offset?: number,
-  limit?: number
+  limit?: number,
 ) {
   return useQuery({
     queryKey: [...moleculesKey(collectionId ?? ""), { offset, limit }],
@@ -43,9 +43,7 @@ export function useAddMolecules(collectionId: string) {
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: moleculesKey(collectionId) });
       qc.invalidateQueries({ queryKey: COLLECTIONS_KEY });
-      showSuccess(
-        `Added ${result.added_count} molecule${result.added_count !== 1 ? "s" : ""}`
-      );
+      showSuccess(`Added ${result.added_count} molecule${result.added_count !== 1 ? "s" : ""}`);
     },
   });
 }
@@ -62,9 +60,7 @@ export function useRemoveMolecules(collectionId: string) {
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: moleculesKey(collectionId) });
       qc.invalidateQueries({ queryKey: COLLECTIONS_KEY });
-      showSuccess(
-        `Removed ${result.removed} molecule${result.removed !== 1 ? "s" : ""}`
-      );
+      showSuccess(`Removed ${result.removed} molecule${result.removed !== 1 ? "s" : ""}`);
     },
   });
 }

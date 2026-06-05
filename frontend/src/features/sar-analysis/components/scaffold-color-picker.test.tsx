@@ -1,5 +1,5 @@
-import { beforeAll, describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ScaffoldColorPicker } from "./scaffold-color-picker";
 
@@ -33,11 +33,7 @@ describe("ScaffoldColorPicker", () => {
 
   it("hides entirely when there are no protocols to color by", () => {
     const { container } = render(
-      <ScaffoldColorPicker
-        protocols={[]}
-        value={null}
-        onChange={() => {}}
-      />,
+      <ScaffoldColorPicker protocols={[]} value={null} onChange={() => {}} />,
     );
     expect(container).toBeEmptyDOMElement();
   });

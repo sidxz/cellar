@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
+import { useEffect, useRef } from "react";
 import "./grid-motion.css";
 
 interface GridMotionProps {
@@ -38,9 +38,7 @@ export function GridMotion({
       rowRefs.current.forEach((row, i) => {
         if (!row) return;
         const dir = i % 2 === 0 ? 1 : -1;
-        const move =
-          ((mouseXRef.current / window.innerWidth) * maxMove - maxMove / 2) *
-          dir;
+        const move = ((mouseXRef.current / window.innerWidth) * maxMove - maxMove / 2) * dir;
 
         if (Math.abs(move - (lastMoveRef.current[i] ?? 0)) < 0.5) return;
         lastMoveRef.current[i] = move;
@@ -74,15 +72,16 @@ export function GridMotion({
             <div
               key={rowIdx}
               className="grid-motion__row"
-              ref={(el) => { rowRefs.current[rowIdx] = el; }}
+              ref={(el) => {
+                rowRefs.current[rowIdx] = el;
+              }}
             >
               {Array.from({ length: COLS }, (_, colIdx) => {
                 const content = cells[rowIdx * COLS + colIdx];
                 return (
                   <div key={colIdx} className="grid-motion__cell">
                     <div className="grid-motion__cell-inner bg-muted/60 text-muted-foreground/60 border border-border/40">
-                      {typeof content === "string" &&
-                      content.startsWith("http") ? (
+                      {typeof content === "string" && content.startsWith("http") ? (
                         <div
                           style={{
                             width: "100%",
@@ -95,9 +94,7 @@ export function GridMotion({
                           }}
                         />
                       ) : (
-                        <span style={{ padding: "0.5rem", textAlign: "center" }}>
-                          {content}
-                        </span>
+                        <span style={{ padding: "0.5rem", textAlign: "center" }}>{content}</span>
                       )}
                     </div>
                   </div>

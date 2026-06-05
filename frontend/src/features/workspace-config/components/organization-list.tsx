@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Building2, Plus } from "lucide-react";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { PageHeader } from "@/shared/components/page-header";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -13,7 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import { Building2, Plus } from "lucide-react";
+import { useState } from "react";
 import { useOrganizations } from "../hooks/use-organizations";
 import { ORG_TYPE_LABELS, type Organization } from "../types";
 import { OrganizationDialog } from "./organization-dialog";
@@ -35,10 +35,7 @@ export function OrganizationList() {
 
   return (
     <>
-      <PageHeader
-        title="Organizations"
-        subtitle="Manage partner organizations, CROs, and vendors."
-      >
+      <PageHeader title="Organizations" subtitle="Manage partner organizations, CROs, and vendors.">
         <Button
           onClick={() => {
             setEditing(null);
@@ -68,9 +65,7 @@ export function OrganizationList() {
                   <TableCell className="font-medium">{org.name}</TableCell>
                   <TableCell>{ORG_TYPE_LABELS[org.org_type]}</TableCell>
                   <TableCell>
-                    {org.contact_name && (
-                      <span className="text-sm">{org.contact_name}</span>
-                    )}
+                    {org.contact_name && <span className="text-sm">{org.contact_name}</span>}
                     {org.contact_email && (
                       <span className="block text-xs text-muted-foreground">
                         {org.contact_email}
@@ -106,11 +101,7 @@ export function OrganizationList() {
         </div>
       )}
 
-      <OrganizationDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        organization={editing}
-      />
+      <OrganizationDialog open={dialogOpen} onOpenChange={setDialogOpen} organization={editing} />
     </>
   );
 }

@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   NO_SCAFFOLD_SENTINEL,
-  type ScaffoldTreeNode,
   type ScaffoldTreeEdge,
-  type ScaffoldTreeResult,
   type ScaffoldTreeJob,
+  type ScaffoldTreeNode,
+  type ScaffoldTreeResult,
 } from "./scaffold-tree";
 
 describe("scaffold-tree types", () => {

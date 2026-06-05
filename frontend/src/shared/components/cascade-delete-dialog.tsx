@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { Button, buttonVariants } from "@/shared/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,12 +11,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/shared/components/ui/alert-dialog";
+import { Button, buttonVariants } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { useCascadePreview } from "@/shared/hooks/use-cascade-preview";
 import { useCascadeDelete } from "@/shared/hooks/use-cascade-delete";
+import { useCascadePreview } from "@/shared/hooks/use-cascade-preview";
 import type { CascadeNodeResponse } from "@/shared/lib/api/model";
 import { AlertTriangle } from "lucide-react";
+import { useState } from "react";
 
 export interface CascadeDeleteDialogProps {
   entityType: string;
@@ -45,7 +45,7 @@ function NodeView({
           : "";
 
   const sampleLabels = node.samples
-    .map((s) => (s as Record<string, unknown>)["label"])
+    .map((s) => (s as Record<string, unknown>).label)
     .filter((l): l is string => typeof l === "string" && l.length > 0);
 
   return (
@@ -100,8 +100,8 @@ export function CascadeDeleteDialog({
             Force delete {entityType}: {entityLabel}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Hard delete. All dependent rows will be removed or unlinked as
-            shown. This cannot be undone.
+            Hard delete. All dependent rows will be removed or unlinked as shown. This cannot be
+            undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -110,9 +110,7 @@ export function CascadeDeleteDialog({
 
         <div className="space-y-2 pt-2">
           <label className="text-sm font-medium">
-            Type{" "}
-            <code className="bg-muted px-1 rounded">{entityLabel}</code> to
-            confirm:
+            Type <code className="bg-muted px-1 rounded">{entityLabel}</code> to confirm:
           </label>
           <Input value={typed} onChange={(e) => setTyped(e.target.value)} />
           <Textarea

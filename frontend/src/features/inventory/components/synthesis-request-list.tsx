@@ -1,14 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { FlaskRound, Plus } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { StatusBadge, PriorityBadge } from "@/shared/components/status-badge";
-import { Button } from "@/shared/components/ui/button";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EmptyState } from "@/shared/components/empty-state";
-import { PageHeader } from "@/shared/components/page-header";
 import { MoleculeName } from "@/shared/components/entity-name";
+import { PageHeader } from "@/shared/components/page-header";
+import { PriorityBadge, StatusBadge } from "@/shared/components/status-badge";
+import { Button } from "@/shared/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -16,12 +13,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { FlaskRound, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { useSynthesisRequests } from "../hooks/use-synthesis-requests";
 import {
   SYNTHESIS_REQUEST_STATUS_LABELS,
-  type SynthesisRequestSummary,
   type SynthesisRequestStatus,
+  type SynthesisRequestSummary,
 } from "../types/synthesis-request";
 import { CreateSynthesisRequestDialog } from "./create-synthesis-request-dialog";
 
@@ -31,7 +31,7 @@ export function SynthesisRequestListPage() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data: requests, isLoading } = useSynthesisRequests(
-    statusFilter === "all" ? undefined : { status: statusFilter }
+    statusFilter === "all" ? undefined : { status: statusFilter },
   );
 
   const columnDefs = useMemo<ColDef<SynthesisRequestSummary>[]>(
@@ -55,8 +55,7 @@ export function SynthesisRequestListPage() {
       {
         headerName: "Amount",
         width: 120,
-        valueGetter: (p) =>
-          p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : "",
+        valueGetter: (p) => (p.data ? `${p.data.amount_value} ${p.data.amount_unit}` : ""),
       },
       {
         headerName: "Purpose",
@@ -69,24 +68,24 @@ export function SynthesisRequestListPage() {
         headerName: "Purity Target",
         field: "target_purity",
         width: 120,
-        valueFormatter: (p) =>
-          p.value != null ? `${p.value}%` : "\u2014",
+        valueFormatter: (p) => (p.value != null ? `${p.value}%` : "\u2014"),
       },
       {
         headerName: "Status",
         field: "status",
         width: 160,
-        cellRenderer: (
-          params: ICellRendererParams<SynthesisRequestSummary>
-        ) => (
+        cellRenderer: (params: ICellRendererParams<SynthesisRequestSummary>) => (
           <StatusBadge
             status={params.value}
-            label={SYNTHESIS_REQUEST_STATUS_LABELS[params.value as SynthesisRequestStatus] ?? params.value}
+            label={
+              SYNTHESIS_REQUEST_STATUS_LABELS[params.value as SynthesisRequestStatus] ??
+              params.value
+            }
           />
         ),
       },
     ],
-    []
+    [],
   );
 
   return (
@@ -110,13 +109,11 @@ export function SynthesisRequestListPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All</SelectItem>
-            {Object.entries(SYNTHESIS_REQUEST_STATUS_LABELS).map(
-              ([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              )
-            )}
+            {Object.entries(SYNTHESIS_REQUEST_STATUS_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -127,9 +124,7 @@ export function SynthesisRequestListPage() {
         columnDefs={columnDefs}
         loading={isLoading}
         height="500px"
-        onRowClick={(req) =>
-          router.push(`/inventory/synthesis-requests/${req.id}`)
-        }
+        onRowClick={(req) => router.push(`/inventory/synthesis-requests/${req.id}`)}
         emptyState={
           <EmptyState
             icon={FlaskRound}
@@ -139,10 +134,7 @@ export function SynthesisRequestListPage() {
         }
       />
 
-      <CreateSynthesisRequestDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-      />
+      <CreateSynthesisRequestDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

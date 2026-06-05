@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import type { UmapPicker } from "@/features/sar-analysis/types";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Slider } from "@/shared/components/ui/slider";
-import type { UmapPicker } from "@/features/sar-analysis/types";
+import type { ReactNode } from "react";
 
 interface ClusterToolbarProps {
   picker: UmapPicker;
@@ -34,10 +34,7 @@ export function ClusterToolbar(props: ClusterToolbarProps) {
       {props.colorPicker}
       <div className="flex items-center gap-2 text-xs">
         <span className="text-muted-foreground">Picker:</span>
-        <Select
-          value={props.picker}
-          onValueChange={(v) => props.onPickerChange(v as UmapPicker)}
-        >
+        <Select value={props.picker} onValueChange={(v) => props.onPickerChange(v as UmapPicker)}>
           <SelectTrigger className="h-8 w-28">
             <SelectValue />
           </SelectTrigger>
@@ -64,14 +61,10 @@ export function ClusterToolbar(props: ClusterToolbarProps) {
       )}
 
       <div className="flex items-center gap-2 text-xs">
-        <Label>
-          {props.picker === "butina" ? "Threshold" : "Cluster threshold"}
-        </Label>
+        <Label>{props.picker === "butina" ? "Threshold" : "Cluster threshold"}</Label>
         <div className="w-40">
           <Slider
-            aria-label={
-              props.picker === "butina" ? "Threshold" : "Cluster threshold"
-            }
+            aria-label={props.picker === "butina" ? "Threshold" : "Cluster threshold"}
             min={0.05}
             max={0.95}
             step={0.05}

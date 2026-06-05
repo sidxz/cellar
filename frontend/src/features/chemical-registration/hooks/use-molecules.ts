@@ -1,12 +1,12 @@
 "use client";
 
+import { renderToast } from "@/features/inventory/components/mirror-summary-toast";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { AddIdentifierResponse } from "@/shared/lib/api/model/addIdentifierResponse";
 import { showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { renderToast } from "@/features/inventory/components/mirror-summary-toast";
 import type {
   Molecule,
   RegisterMoleculeInput,

@@ -1,13 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { ListFilter, Plus, Trash2, Pencil } from "lucide-react";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -35,14 +30,19 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ListFilter, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 import {
+  type CreateCustomFieldInput,
+  type CustomFieldDefinition,
+  type UpdateCustomFieldInput,
   useCreateCustomField,
   useCustomFields,
   useDeleteCustomField,
   useUpdateCustomField,
-  type CreateCustomFieldInput,
-  type CustomFieldDefinition,
-  type UpdateCustomFieldInput,
 } from "../hooks/use-custom-fields";
 
 // ---------------------------------------------------------------------------
@@ -201,33 +201,21 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
             {!isEdit && (
               <div className="grid gap-2">
                 <Label htmlFor="cf-name">Field Name (key)</Label>
-                <Input
-                  id="cf-name"
-                  {...form.register("name")}
-                  placeholder="e.g., ic50_shift"
-                />
+                <Input id="cf-name" {...form.register("name")} placeholder="e.g., ic50_shift" />
                 <p className="text-xs text-muted-foreground">
                   Lowercase, no spaces. Used as the storage key.
                 </p>
                 {form.formState.errors.name && (
-                  <p className="text-xs text-destructive">
-                    {form.formState.errors.name.message}
-                  </p>
+                  <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
                 )}
               </div>
             )}
 
             <div className="grid gap-2">
               <Label htmlFor="cf-label">Display Label</Label>
-              <Input
-                id="cf-label"
-                {...form.register("label")}
-                placeholder="e.g., IC50 Shift"
-              />
+              <Input id="cf-label" {...form.register("label")} placeholder="e.g., IC50 Shift" />
               {form.formState.errors.label && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.label.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.label.message}</p>
               )}
             </div>
 
@@ -245,13 +233,16 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {(Object.entries(DATA_TYPE_LABELS) as [CustomFieldDefinition["data_type"], string][]).map(
-                            ([val, lbl]) => (
-                              <SelectItem key={val} value={val}>
-                                {lbl}
-                              </SelectItem>
-                            )
-                          )}
+                          {(
+                            Object.entries(DATA_TYPE_LABELS) as [
+                              CustomFieldDefinition["data_type"],
+                              string,
+                            ][]
+                          ).map(([val, lbl]) => (
+                            <SelectItem key={val} value={val}>
+                              {lbl}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
@@ -277,13 +268,16 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {(Object.entries(APPLIES_TO_LABELS) as [CustomFieldDefinition["applies_to"], string][]).map(
-                            ([val, lbl]) => (
-                              <SelectItem key={val} value={val}>
-                                {lbl}
-                              </SelectItem>
-                            )
-                          )}
+                          {(
+                            Object.entries(APPLIES_TO_LABELS) as [
+                              CustomFieldDefinition["applies_to"],
+                              string,
+                            ][]
+                          ).map(([val, lbl]) => (
+                            <SelectItem key={val} value={val}>
+                              {lbl}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
@@ -339,11 +333,7 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="cf-default">Default Value</Label>
-                <Input
-                  id="cf-default"
-                  {...form.register("default_value")}
-                  placeholder="Optional"
-                />
+                <Input id="cf-default" {...form.register("default_value")} placeholder="Optional" />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="cf-order">Display Order</Label>
@@ -364,11 +354,7 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
                 name="is_required"
                 control={form.control}
                 render={({ field }) => (
-                  <Switch
-                    id="cf-required"
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
+                  <Switch id="cf-required" checked={field.value} onCheckedChange={field.onChange} />
                 )}
               />
             </div>
@@ -382,11 +368,7 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
                   name="is_active"
                   control={form.control}
                   render={({ field }) => (
-                    <Switch
-                      id="cf-active"
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
+                    <Switch id="cf-active" checked={field.value} onCheckedChange={field.onChange} />
                   )}
                 />
               </div>
@@ -431,20 +413,15 @@ function DeleteDialog({ field, onClose }: DeleteDialogProps) {
           <DialogTitle>Delete Custom Field?</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Permanently delete{" "}
-          <span className="font-medium text-foreground">{field?.label}</span>?
-          Existing data stored under this key will not be removed but will no
-          longer have a definition.
+          Permanently delete <span className="font-medium text-foreground">{field?.label}</span>?
+          Existing data stored under this key will not be removed but will no longer have a
+          definition.
         </p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-            disabled={deleteMutation.isPending}
-          >
+          <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>
@@ -500,7 +477,9 @@ function FieldsTable({ fields, onEdit, onDelete }: FieldsTableProps) {
               </TableCell>
               <TableCell>
                 {field.is_required ? (
-                  <Badge variant="destructive" className="text-xs">Required</Badge>
+                  <Badge variant="destructive" className="text-xs">
+                    Required
+                  </Badge>
                 ) : (
                   <span className="text-sm text-muted-foreground">Optional</span>
                 )}
@@ -518,18 +497,10 @@ function FieldsTable({ fields, onEdit, onDelete }: FieldsTableProps) {
               </TableCell>
               <TableCell>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEdit(field)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onEdit(field)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDelete(field)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onDelete(field)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
@@ -595,48 +566,25 @@ export function CustomFieldAdmin() {
           ) : (
             <>
               <TabsContent value="all">
-                <FieldsTable
-                  fields={fields ?? []}
-                  onEdit={openEdit}
-                  onDelete={setDeleting}
-                />
+                <FieldsTable fields={fields ?? []} onEdit={openEdit} onDelete={setDeleting} />
               </TabsContent>
               <TabsContent value="molecule">
-                <FieldsTable
-                  fields={fields ?? []}
-                  onEdit={openEdit}
-                  onDelete={setDeleting}
-                />
+                <FieldsTable fields={fields ?? []} onEdit={openEdit} onDelete={setDeleting} />
               </TabsContent>
               <TabsContent value="batch">
-                <FieldsTable
-                  fields={fields ?? []}
-                  onEdit={openEdit}
-                  onDelete={setDeleting}
-                />
+                <FieldsTable fields={fields ?? []} onEdit={openEdit} onDelete={setDeleting} />
               </TabsContent>
               <TabsContent value="sample">
-                <FieldsTable
-                  fields={fields ?? []}
-                  onEdit={openEdit}
-                  onDelete={setDeleting}
-                />
+                <FieldsTable fields={fields ?? []} onEdit={openEdit} onDelete={setDeleting} />
               </TabsContent>
             </>
           )}
         </Tabs>
       </div>
 
-      <FieldDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editing={editing}
-      />
+      <FieldDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog
-        field={deleting}
-        onClose={() => setDeleting(null)}
-      />
+      <DeleteDialog field={deleting} onClose={() => setDeleting(null)} />
     </>
   );
 }

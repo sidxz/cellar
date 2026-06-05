@@ -1,17 +1,17 @@
 "use client";
 
-import type { ReactNode } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ArrowLeft, AlertCircle } from "lucide-react";
 import {
+  type BreadcrumbCrumb,
   useBreadcrumbOverride,
   useBreadcrumbTrail,
-  type BreadcrumbCrumb,
 } from "@/shared/components/layout/breadcrumb-context";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { StatusBadge } from "@/shared/components/status-badge";
+import { AlertCircle, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
 interface DetailShellProps<T> {
   query: { data: T | undefined; isLoading: boolean };
@@ -46,14 +46,9 @@ export function DetailShell<T>({
   // Build the full trail if the page provided a trail builder,
   // otherwise fall back to the single-segment override.
   const fullTrail: BreadcrumbCrumb[] =
-    query.data && breadcrumbTrail
-      ? [...breadcrumbTrail(query.data), { label: entityTitle }]
-      : [];
+    query.data && breadcrumbTrail ? [...breadcrumbTrail(query.data), { label: entityTitle }] : [];
   useBreadcrumbTrail(fullTrail);
-  useBreadcrumbOverride(
-    !breadcrumbTrail ? lastSegment : "",
-    !breadcrumbTrail ? entityTitle : "",
-  );
+  useBreadcrumbOverride(!breadcrumbTrail ? lastSegment : "", !breadcrumbTrail ? entityTitle : "");
 
   if (query.isLoading) {
     return (
@@ -102,13 +97,9 @@ export function DetailShell<T>({
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-bold tracking-tight">{entityTitle}</h1>
-          {badgeProps && (
-            <StatusBadge status={badgeProps.status} label={badgeProps.label} />
-          )}
+          {badgeProps && <StatusBadge status={badgeProps.status} label={badgeProps.label} />}
         </div>
-        {actions && (
-          <div className="flex items-center gap-2">{actions(entity)}</div>
-        )}
+        {actions && <div className="flex items-center gap-2">{actions(entity)}</div>}
       </div>
 
       {children(entity)}

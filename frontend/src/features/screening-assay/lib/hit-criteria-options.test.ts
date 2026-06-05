@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { InterceptSpec, ReadoutDefinition } from "../types";
-import {
-  buildHitCriterionOptions,
-  optionIdForRule,
-} from "./hit-criteria-options";
+import { buildHitCriterionOptions, optionIdForRule } from "./hit-criteria-options";
 
 function rd(over: Partial<ReadoutDefinition>): ReadoutDefinition {
   return {
@@ -28,7 +25,9 @@ function spec(over: Partial<InterceptSpec>): InterceptSpec {
   return { kind: "ec", level: 50, basis: "relative_percent", label: null, ...over };
 }
 
-function drConfig(intercepts: InterceptSpec[] | undefined): ReadoutDefinition["dose_response_config"] {
+function drConfig(
+  intercepts: InterceptSpec[] | undefined,
+): ReadoutDefinition["dose_response_config"] {
   // Minimal fields the option builder consults; other DR fields ignored here.
   return {
     curve_type: "ec50",
@@ -143,7 +142,12 @@ describe("optionIdForRule", () => {
 
   it("maps a rule with explicit intercept_key to the matching option id", () => {
     const id = optionIdForRule(
-      { readout_name: "Resazurin", operator: "lt", value: 50, intercept_key: { kind: "ec", level: 90 } },
+      {
+        readout_name: "Resazurin",
+        operator: "lt",
+        value: 50,
+        intercept_key: { kind: "ec", level: 90 },
+      },
       rds,
     );
     // Same id as the option produced by buildHitCriterionOptions for EC90
@@ -152,19 +156,13 @@ describe("optionIdForRule", () => {
   });
 
   it("maps a legacy DR rule (no intercept_key) to the primary option", () => {
-    const id = optionIdForRule(
-      { readout_name: "Resazurin", operator: "lt", value: 50 },
-      rds,
-    );
+    const id = optionIdForRule({ readout_name: "Resazurin", operator: "lt", value: 50 }, rds);
     const options = buildHitCriterionOptions(rds);
     expect(id).toBe(options[0].id); // primary intercept
   });
 
   it("maps a numeric readout rule to its own option id", () => {
-    const id = optionIdForRule(
-      { readout_name: "OD600", operator: "gt", value: 0.5 },
-      rds,
-    );
+    const id = optionIdForRule({ readout_name: "OD600", operator: "gt", value: 0.5 }, rds);
     const options = buildHitCriterionOptions(rds);
     const od600 = options.find((o) => o.readout_name === "OD600");
     expect(id).toBe(od600?.id);

@@ -20,10 +20,7 @@ export function buildChildIndex(tree: ScaffoldTreeResult): Map<string, string[]>
  *
  * Returns [] when `scaffoldSmiles` is not present in the tree.
  */
-export function collectSubtreeMolIds(
-  scaffoldSmiles: string,
-  tree: ScaffoldTreeResult,
-): string[] {
+export function collectSubtreeMolIds(scaffoldSmiles: string, tree: ScaffoldTreeResult): string[] {
   const byScaffold = new Map<string, ScaffoldTreeNode>(
     tree.nodes.map((n) => [n.scaffold_smiles, n]),
   );
@@ -60,9 +57,7 @@ export function collectSubtreeMolIds(
  * parent reaches it). The ancestor guard only prevents infinite recursion on
  * a malformed cyclic edge set — real scaffold networks are acyclic.
  */
-export function buildSubtreeMolIdMap(
-  tree: ScaffoldTreeResult,
-): Map<string, string[]> {
+export function buildSubtreeMolIdMap(tree: ScaffoldTreeResult): Map<string, string[]> {
   const byScaffold = new Map<string, ScaffoldTreeNode>(
     tree.nodes.map((n) => [n.scaffold_smiles, n]),
   );

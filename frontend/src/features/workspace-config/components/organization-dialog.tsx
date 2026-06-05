@@ -1,9 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -22,10 +18,11 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Switch } from "@/shared/components/ui/switch";
-import {
-  useCreateOrganization,
-  useUpdateOrganization,
-} from "../hooks/use-organizations";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
+import { useCreateOrganization, useUpdateOrganization } from "../hooks/use-organizations";
 import { ORG_TYPE_LABELS, type Organization, type OrganizationType } from "../types";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
@@ -113,23 +110,15 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Organization" : "New Organization"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Organization" : "New Organization"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="org-name">Name</Label>
-              <Input
-                id="org-name"
-                {...form.register("name")}
-                placeholder="e.g., Eurofins Munich"
-              />
+              <Input id="org-name" {...form.register("name")} placeholder="e.g., Eurofins Munich" />
               {form.formState.errors.name && (
-                <p className="text-xs text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
+                <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
               )}
             </div>
             <div className="grid gap-2">
@@ -155,25 +144,15 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
             </div>
             <div className="grid gap-2">
               <Label htmlFor="contact-name">Contact Name</Label>
-              <Input
-                id="contact-name"
-                {...form.register("contact_name")}
-              />
+              <Input id="contact-name" {...form.register("contact_name")} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="contact-email">Contact Email</Label>
-              <Input
-                id="contact-email"
-                type="email"
-                {...form.register("contact_email")}
-              />
+              <Input id="contact-email" type="email" {...form.register("contact_email")} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="notes">Notes</Label>
-              <Input
-                id="notes"
-                {...form.register("notes")}
-              />
+              <Input id="notes" {...form.register("notes")} />
             </div>
 
             {isEdit && (
@@ -182,11 +161,7 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
                   name="is_active"
                   control={form.control}
                   render={({ field }) => (
-                    <Switch
-                      id="is-active"
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
+                    <Switch id="is-active" checked={field.value} onCheckedChange={field.onChange} />
                   )}
                 />
                 <Label htmlFor="is-active">Active</Label>
@@ -194,17 +169,10 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
             )}
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={form.formState.isSubmitting || isPending}
-            >
+            <Button type="submit" disabled={form.formState.isSubmitting || isPending}>
               {isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>

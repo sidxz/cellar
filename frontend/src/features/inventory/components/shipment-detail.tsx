@@ -1,13 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { PackageCheck, Pencil, Trash2, Truck } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
+import { DetailShell } from "@/shared/components/detail-shell";
+import { OrgName, SampleName } from "@/shared/components/entity-name";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
-import { OrgName, SampleName } from "@/shared/components/entity-name";
-import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import {
   Dialog,
   DialogContent,
@@ -18,23 +16,21 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { DetailShell } from "@/shared/components/detail-shell";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { PackageCheck, Pencil, Trash2, Truck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   useAddShipmentItem,
+  useDeleteShipment,
   useDeliverShipment,
   useMarkInTransit,
   useReturnShipment,
-  useShipment,
   useShipShipment,
+  useShipment,
   useUpdateShipment,
-  useDeleteShipment,
 } from "../hooks/use-shipments";
-import {
-  SHIPMENT_STATUS_LABELS,
-  type Shipment,
-  type ShipmentStatus,
-} from "../types/shipment";
+import { SHIPMENT_STATUS_LABELS, type Shipment } from "../types/shipment";
 
 interface ShipmentDetailProps {
   shipmentId: string;
@@ -66,26 +62,17 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
         })}
         notFoundMessage="Shipment not found."
         actions={(s) => {
-          const isTerminal =
-            s.status === "delivered" || s.status === "returned";
+          const isTerminal = s.status === "delivered" || s.status === "returned";
           if (isTerminal) return undefined;
           return (
             <>
               {s.status === "preparing" && (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditOpen(true)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
                     <Pencil className="mr-1 h-3.5 w-3.5" />
                     Edit
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAddItemOpen(true)}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setAddItemOpen(true)}>
                     Add Item
                   </Button>
                   <Button size="sm" onClick={() => setShipDialogOpen(true)}>
@@ -106,9 +93,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
               {s.status === "shipped" && (
                 <Button
                   size="sm"
-                  onClick={() =>
-                    markInTransit.mutate({ id: shipmentId })
-                  }
+                  onClick={() => markInTransit.mutate({ id: shipmentId })}
                   disabled={markInTransit.isPending}
                 >
                   {markInTransit.isPending ? "Updating..." : "Mark In Transit"}
@@ -119,17 +104,12 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      returnShipment.mutate({ id: shipmentId })
-                    }
+                    onClick={() => returnShipment.mutate({ id: shipmentId })}
                     disabled={returnShipment.isPending}
                   >
                     {returnShipment.isPending ? "Processing..." : "Return"}
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => setDeliverOpen(true)}
-                  >
+                  <Button size="sm" onClick={() => setDeliverOpen(true)}>
                     <PackageCheck className="mr-2 h-4 w-4" />
                     Deliver
                   </Button>
@@ -155,9 +135,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Tracking Number</p>
-                  <p className="font-mono text-sm">
-                    {shipment.tracking_number ?? "\u2014"}
-                  </p>
+                  <p className="font-mono text-sm">{shipment.tracking_number ?? "\u2014"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Shipping Date</p>
@@ -165,21 +143,15 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Expected Arrival</p>
-                  <p className="font-medium">
-                    {shipment.expected_arrival_date ?? "\u2014"}
-                  </p>
+                  <p className="font-medium">{shipment.expected_arrival_date ?? "\u2014"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Received Date</p>
-                  <p className="font-medium">
-                    {shipment.received_date ?? "\u2014"}
-                  </p>
+                  <p className="font-medium">{shipment.received_date ?? "\u2014"}</p>
                 </div>
                 {shipment.shipping_conditions && (
                   <div className="col-span-2">
-                    <p className="text-xs text-muted-foreground">
-                      Shipping Conditions
-                    </p>
+                    <p className="text-xs text-muted-foreground">Shipping Conditions</p>
                     <p className="font-medium">{shipment.shipping_conditions}</p>
                   </div>
                 )}
@@ -208,12 +180,8 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/50">
-                          <th className="px-4 py-2 text-left font-medium">
-                            Sample
-                          </th>
-                          <th className="px-4 py-2 text-right font-medium">
-                            Amount
-                          </th>
+                          <th className="px-4 py-2 text-left font-medium">Sample</th>
+                          <th className="px-4 py-2 text-right font-medium">Amount</th>
                           <th className="px-4 py-2 text-left font-medium">Unit</th>
                         </tr>
                       </thead>
@@ -223,9 +191,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                             <td className="px-4 py-2 text-sm">
                               <SampleName id={item.sample_id} />
                             </td>
-                            <td className="px-4 py-2 text-right">
-                              {item.amount_value}
-                            </td>
+                            <td className="px-4 py-2 text-right">{item.amount_value}</td>
                             <td className="px-4 py-2">{item.amount_unit}</td>
                           </tr>
                         ))}
@@ -248,29 +214,13 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
 
       {/* Dialogs */}
       {query.data?.status === "preparing" && (
-        <EditShipmentDialog
-          shipment={query.data}
-          open={editOpen}
-          onOpenChange={setEditOpen}
-        />
+        <EditShipmentDialog shipment={query.data} open={editOpen} onOpenChange={setEditOpen} />
       )}
       {query.data && (
-        <ShipDialog
-          shipment={query.data}
-          open={shipDialogOpen}
-          onOpenChange={setShipDialogOpen}
-        />
+        <ShipDialog shipment={query.data} open={shipDialogOpen} onOpenChange={setShipDialogOpen} />
       )}
-      <AddItemDialog
-        shipmentId={shipmentId}
-        open={addItemOpen}
-        onOpenChange={setAddItemOpen}
-      />
-      <DeliverDialog
-        shipmentId={shipmentId}
-        open={deliverOpen}
-        onOpenChange={setDeliverOpen}
-      />
+      <AddItemDialog shipmentId={shipmentId} open={addItemOpen} onOpenChange={setAddItemOpen} />
+      <DeliverDialog shipmentId={shipmentId} open={deliverOpen} onOpenChange={setDeliverOpen} />
 
       <ConfirmDeleteDialog
         open={deleteOpen}
@@ -301,12 +251,8 @@ function EditShipmentDialog({
 }) {
   const mutation = useUpdateShipment();
   const [carrier, setCarrier] = useState(shipment.carrier ?? "");
-  const [expectedArrival, setExpectedArrival] = useState(
-    shipment.expected_arrival_date ?? ""
-  );
-  const [shippingConditions, setShippingConditions] = useState(
-    shipment.shipping_conditions ?? ""
-  );
+  const [expectedArrival, setExpectedArrival] = useState(shipment.expected_arrival_date ?? "");
+  const [shippingConditions, setShippingConditions] = useState(shipment.shipping_conditions ?? "");
   const [notes, setNotes] = useState(shipment.notes ?? "");
 
   return (
@@ -379,7 +325,7 @@ function EditShipmentDialog({
                   shipping_conditions: shippingConditions.trim() || null,
                   notes: notes.trim() || null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}
@@ -450,7 +396,7 @@ function ShipDialog({
                   tracking_number: trackingNumber.trim(),
                   shipping_date: shippingDate || null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={!trackingNumber.trim() || mutation.isPending}
@@ -484,9 +430,7 @@ function AddItemDialog({
       <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Add Item</DialogTitle>
-          <DialogDescription>
-            Add a sample to this shipment.
-          </DialogDescription>
+          <DialogDescription>Add a sample to this shipment.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
@@ -536,7 +480,7 @@ function AddItemDialog({
                 {
                   id: shipmentId,
                   sample_id: sampleId.trim(),
-                  amount_value: parseFloat(amountValue) || 0,
+                  amount_value: Number.parseFloat(amountValue) || 0,
                   amount_unit: amountUnit,
                 },
                 {
@@ -546,13 +490,13 @@ function AddItemDialog({
                     setAmountUnit("mg");
                     onOpenChange(false);
                   },
-                }
+                },
               );
             }}
             disabled={
               !sampleId.trim() ||
               !amountValue ||
-              parseFloat(amountValue) <= 0 ||
+              Number.parseFloat(amountValue) <= 0 ||
               mutation.isPending
             }
           >
@@ -607,7 +551,7 @@ function DeliverDialog({
                   id: shipmentId,
                   received_date: receivedDate || null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={mutation.isPending}

@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  STORAGE_KEY,
-  stashScaffoldSearch,
-  consumeScaffoldSearch,
-} from "./scaffold-search-handoff";
+import { STORAGE_KEY, consumeScaffoldSearch, stashScaffoldSearch } from "./scaffold-search-handoff";
 
 afterEach(() => {
   if (typeof window !== "undefined") {

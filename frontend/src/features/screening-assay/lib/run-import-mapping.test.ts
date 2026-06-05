@@ -1,18 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { RunImportTemplate } from "../hooks/use-run-import";
 import {
   applyTemplateToDraft,
   emptyDraft,
   pickBestTemplate,
   suggestionToInitialDraft,
 } from "./run-import-mapping";
-import type { RunImportTemplate } from "../hooks/use-run-import";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-function makeTemplate(
-  id: string,
-  mapping: Record<string, unknown>,
-): RunImportTemplate {
+function makeTemplate(id: string, mapping: Record<string, unknown>): RunImportTemplate {
   return {
     id,
     workspace_id: "ws-1",
@@ -51,14 +48,14 @@ describe("applyTemplateToDraft", () => {
     });
     const headers = ["WELL", "PLATE", "CONC", "BATCH", "CPD", "INHIB", "EXTRA"];
     const result = applyTemplateToDraft(draft, template, headers);
-    expect(result.roles["WELL"]).toBe("well");
-    expect(result.roles["PLATE"]).toBe("plate_name");
-    expect(result.roles["CONC"]).toBe("concentration");
-    expect(result.roles["BATCH"]).toBe("batch_ref");
-    expect(result.roles["CPD"]).toBe("compound_ref");
-    expect(result.roles["INHIB"]).toBe("readout");
+    expect(result.roles.WELL).toBe("well");
+    expect(result.roles.PLATE).toBe("plate_name");
+    expect(result.roles.CONC).toBe("concentration");
+    expect(result.roles.BATCH).toBe("batch_ref");
+    expect(result.roles.CPD).toBe("compound_ref");
+    expect(result.roles.INHIB).toBe("readout");
     // Headers not in the template mapping are untouched (still undefined)
-    expect(result.roles["EXTRA"]).toBeUndefined();
+    expect(result.roles.EXTRA).toBeUndefined();
   });
 
   it("skips headers from the template that are absent in the file", () => {
@@ -69,8 +66,8 @@ describe("applyTemplateToDraft", () => {
     });
     const headers = ["WELL", "INHIB"];
     const result = applyTemplateToDraft(draft, template, headers);
-    expect(result.roles["WELL"]).toBe("well");
-    expect(result.roles["MISSING_BATCH"]).toBeUndefined();
+    expect(result.roles.WELL).toBe("well");
+    expect(result.roles.MISSING_BATCH).toBeUndefined();
   });
 
   it("does not mutate the original draft", () => {
@@ -102,9 +99,9 @@ describe("suggestionToInitialDraft", () => {
       },
     ];
     const draft = suggestionToInitialDraft(suggestions);
-    expect(draft.roles["WELL"]).toBe("well");
-    expect(draft.roles["INHIB"]).toBe("readout");
-    expect(draft.readoutDefByHeader["INHIB"]).toBe("rd-1");
+    expect(draft.roles.WELL).toBe("well");
+    expect(draft.roles.INHIB).toBe("readout");
+    expect(draft.readoutDefByHeader.INHIB).toBe("rd-1");
   });
 
   it("does not set readoutDefByHeader when readout_definition_id is null", () => {
@@ -118,7 +115,7 @@ describe("suggestionToInitialDraft", () => {
       },
     ];
     const draft = suggestionToInitialDraft(suggestions);
-    expect(draft.readoutDefByHeader["INHIB2"]).toBeUndefined();
+    expect(draft.readoutDefByHeader.INHIB2).toBeUndefined();
   });
 });
 

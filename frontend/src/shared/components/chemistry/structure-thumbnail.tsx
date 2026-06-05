@@ -1,7 +1,7 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
 import { getRDKit } from "@/shared/lib/rdkit/rdkit-loader";
+import { memo, useEffect, useState } from "react";
 
 interface StructureThumbnailProps {
   /** SMILES or CXSMILES string */
@@ -18,11 +18,7 @@ interface StructureThumbnailProps {
  * Uses SVG blob URLs to render. Memoized to avoid re-renders in lists.
  * SVG is produced by the trusted RDKit.js WASM library.
  */
-function StructureThumbnailInner({
-  smiles,
-  size = 48,
-  className,
-}: StructureThumbnailProps) {
+function StructureThumbnailInner({ smiles, size = 48, className }: StructureThumbnailProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,7 +62,7 @@ function StructureThumbnailInner({
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [smiles, size]);
 
   if (!blobUrl) {

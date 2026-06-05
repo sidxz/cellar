@@ -1,16 +1,16 @@
 import { useState } from "react";
 import {
-  useSubmitSynthesisRequest,
   useApproveSynthesisRequest,
-  useCancelSynthesisRequest,
-  useDeleteSynthesisRequest,
-  useRejectSynthesisRequest,
   useAssignSynthesisRequest,
-  useStartSynthesis,
-  useFlagInfeasible,
+  useCancelSynthesisRequest,
   useCompleteSynthesis,
-  useFulfillSynthesisRequest,
+  useDeleteSynthesisRequest,
   useFailSynthesis,
+  useFlagInfeasible,
+  useFulfillSynthesisRequest,
+  useRejectSynthesisRequest,
+  useStartSynthesis,
+  useSubmitSynthesisRequest,
   useUpdateSynthesisRequest,
 } from "./use-synthesis-requests";
 
@@ -47,11 +47,9 @@ export interface UseSynthesisRequestActionsReturn {
 }
 
 export function useSynthesisRequestActions(): UseSynthesisRequestActionsReturn {
-  const [activeDialog, setActiveDialog] =
-    useState<SynthesisRequestDialogName | null>(null);
+  const [activeDialog, setActiveDialog] = useState<SynthesisRequestDialogName | null>(null);
 
-  const openDialog = (name: SynthesisRequestDialogName) =>
-    setActiveDialog(name);
+  const openDialog = (name: SynthesisRequestDialogName) => setActiveDialog(name);
   const closeDialog = () => setActiveDialog(null);
 
   const submit = useSubmitSynthesisRequest();

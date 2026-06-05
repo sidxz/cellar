@@ -27,12 +27,7 @@ export const CONTAINER_TYPE_LABELS: Record<ContainerType, string> = {
   bag: "Bag",
 };
 
-export type SampleStatus =
-  | "available"
-  | "depleted"
-  | "expired"
-  | "quarantined"
-  | "disposed";
+export type SampleStatus = "available" | "depleted" | "expired" | "quarantined" | "disposed";
 
 export const SAMPLE_STATUS_LABELS: Record<SampleStatus, string> = {
   available: "Available",

@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
 
 export interface OntologyTerm {
   term_id: string;
@@ -10,11 +10,7 @@ export interface OntologyTerm {
   uri: string | null;
 }
 
-export function useOntologyDescendants(
-  ontology: string,
-  rootConceptId: string,
-  enabled?: boolean,
-) {
+export function useOntologyDescendants(ontology: string, rootConceptId: string, enabled?: boolean) {
   return useQuery({
     queryKey: ["ontology-descendants", ontology, rootConceptId],
     queryFn: () =>

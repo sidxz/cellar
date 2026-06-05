@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
-import { AlertCircle, CheckCircle2, XCircle } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -13,11 +11,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import { useEffect } from "react";
 import { usePreviewBulkIdentifiers } from "../../hooks/use-bulk-identifier-import";
-import type {
-  BulkIdentifierRowBody,
-  BulkAddBatchIdentifiersResponse,
-} from "../../types";
+import type { BulkAddBatchIdentifiersResponse, BulkIdentifierRowBody } from "../../types";
 
 interface PreviewStepProps {
   rows: BulkIdentifierRowBody[];
@@ -72,15 +69,9 @@ export function PreviewStep({
         <CardContent className="p-6">
           <p className="text-sm text-destructive">
             Preview failed:{" "}
-            {preview.error instanceof Error
-              ? preview.error.message
-              : String(preview.error)}
+            {preview.error instanceof Error ? preview.error.message : String(preview.error)}
           </p>
-          <Button
-            variant="outline"
-            className="mt-3"
-            onClick={() => preview.reset()}
-          >
+          <Button variant="outline" className="mt-3" onClick={() => preview.reset()}>
             Try again
           </Button>
         </CardContent>
@@ -157,15 +148,11 @@ export function PreviewStep({
                       {o.row_index + 1}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={STATUS_BADGE_VARIANT[o.status] ?? "outline"}
-                      >
+                      <Badge variant={STATUS_BADGE_VARIANT[o.status] ?? "outline"}>
                         {STATUS_LABEL[o.status] ?? o.status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {o.external_identifier}
-                    </TableCell>
+                    <TableCell className="font-mono text-xs">{o.external_identifier}</TableCell>
                     <TableCell className="font-mono text-xs">
                       {o.resolved_batch_number ?? "—"}
                     </TableCell>
@@ -187,8 +174,7 @@ export function PreviewStep({
           Back
         </Button>
         <Button onClick={onNext} disabled={!canCommit}>
-          Commit {counts.resolved ?? 0}{" "}
-          {counts.resolved === 1 ? "row" : "rows"}
+          Commit {counts.resolved ?? 0} {counts.resolved === 1 ? "row" : "rows"}
         </Button>
       </div>
     </div>

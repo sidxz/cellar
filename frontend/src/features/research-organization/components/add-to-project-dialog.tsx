@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { FolderPlus } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -17,8 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { useProjects } from "../hooks/use-projects";
+import { FolderPlus } from "lucide-react";
+import { useState } from "react";
 import { useAddMoleculeToProject } from "../hooks/use-molecule-projects";
+import { useProjects } from "../hooks/use-projects";
 
 interface AddToProjectDialogProps {
   moleculeId: string;
@@ -35,7 +35,7 @@ export function AddToProjectDialog({
   const addMutation = useAddMoleculeToProject(selectedProjectId);
 
   const availableProjects = projects?.filter(
-    (p) => p.status === "active" && !existingProjectIds.includes(p.id)
+    (p) => p.status === "active" && !existingProjectIds.includes(p.id),
   );
 
   const handleAdd = () => {

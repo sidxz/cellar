@@ -47,9 +47,7 @@ export function findInterceptValue(
   spec: InterceptSpec,
 ): InterceptValue | undefined {
   if (!values) return undefined;
-  return values.find(
-    (iv) => iv.spec.kind === spec.kind && iv.spec.level === spec.level,
-  );
+  return values.find((iv) => iv.spec.kind === spec.kind && iv.spec.level === spec.level);
 }
 
 /**
@@ -173,8 +171,7 @@ export interface InterceptDisplay {
 
 const TOOLTIP_INACTIVE =
   "ND = Not Determined. Curve was classified inactive, so the fitted scalar isn't reported.";
-const TOOLTIP_MISSING =
-  "No value for this intercept. Recompute the curve to refresh.";
+const TOOLTIP_MISSING = "No value for this intercept. Recompute the curve to refresh.";
 const TOOLTIP_QUALIFIER =
   "Response did not reach this intercept within the tested concentration range. Reported as an upper-bound qualifier.";
 const TOOLTIP_AT_BOUND_NO_RANGE =
@@ -184,12 +181,23 @@ const TOOLTIP_AT_BOUND_NO_RANGE =
  *  run-count typography (`H₂O`-style "₃" superimposed on the cell value to
  *  surface multi-run aggregation depth without stealing column width). */
 const SUBSCRIPT_DIGITS: Record<string, string> = {
-  "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄",
-  "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
+  "0": "₀",
+  "1": "₁",
+  "2": "₂",
+  "3": "₃",
+  "4": "₄",
+  "5": "₅",
+  "6": "₆",
+  "7": "₇",
+  "8": "₈",
+  "9": "₉",
 };
 
 function toSubscript(n: number): string {
-  return String(n).split("").map((d) => SUBSCRIPT_DIGITS[d] ?? d).join("");
+  return String(n)
+    .split("")
+    .map((d) => SUBSCRIPT_DIGITS[d] ?? d)
+    .join("");
 }
 
 /**
@@ -317,18 +325,15 @@ export function formatInterceptDisplay(args: {
  * qualifier.
  */
 export function maxDoseFromRawData(
-  rawData:
-    | Array<{ x?: number; concentration?: number }>
-    | null
-    | undefined,
+  rawData: Array<{ x?: number; concentration?: number }> | null | undefined,
 ): number | null {
   if (!rawData || rawData.length === 0) return null;
-  let max = -Infinity;
+  let max = Number.NEGATIVE_INFINITY;
   for (const pt of rawData) {
     const raw = pt.x ?? pt.concentration;
     if (typeof raw === "number" && Number.isFinite(raw) && raw > 0 && raw > max) {
       max = raw;
     }
   }
-  return max === -Infinity ? null : max;
+  return max === Number.NEGATIVE_INFINITY ? null : max;
 }

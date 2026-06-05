@@ -28,11 +28,7 @@ interface DoseResponsePointInventoryProps {
   onToggle: (idx: number) => void;
 }
 
-type RowStatus =
-  | "included"
-  | "excluded_manual"
-  | "suggested_3sigma"
-  | "excluded_3sigma";
+type RowStatus = "included" | "excluded_manual" | "suggested_3sigma" | "excluded_3sigma";
 
 interface ResolvedRow {
   idx: number;
@@ -44,10 +40,7 @@ interface ResolvedRow {
 }
 
 /** Find the exclusion entry for a given raw-data idx, if any. */
-function findExclusionByIdx(
-  exclusions: DraftExclusion[],
-  idx: number,
-): DraftExclusion | undefined {
+function findExclusionByIdx(exclusions: DraftExclusion[], idx: number): DraftExclusion | undefined {
   return exclusions.find((e) => e.idx === idx);
 }
 
@@ -160,10 +153,7 @@ export function DoseResponsePointInventory({
                 <TableRow
                   key={row.idx}
                   onClick={() => onToggle(row.idx)}
-                  className={cn(
-                    "cursor-pointer",
-                    isSuggestion && "bg-amber-50 hover:bg-amber-100",
-                  )}
+                  className={cn("cursor-pointer", isSuggestion && "bg-amber-50 hover:bg-amber-100")}
                 >
                   <TableCell className="text-xs font-mono text-muted-foreground">
                     {row.idx + 1}

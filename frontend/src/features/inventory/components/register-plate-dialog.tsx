@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useProjects } from "@/features/research-organization/hooks/use-projects";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -20,11 +20,11 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useEffect, useState } from "react";
 import { useRegisterPlate } from "../hooks/use-plates";
+import { useStorageLocations } from "../hooks/use-storage-locations";
 import type { PlateType } from "../types/plates";
 import { plateTypeLabels } from "../types/plates";
-import { useStorageLocations } from "../hooks/use-storage-locations";
-import { useProjects } from "@/features/research-organization/hooks/use-projects";
 
 const PLATE_FORMATS = ["6", "12", "24", "48", "96", "384", "1536"] as const;
 type PlateFormat = (typeof PLATE_FORMATS)[number];
@@ -34,10 +34,7 @@ interface RegisterPlateDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function RegisterPlateDialog({
-  open,
-  onOpenChange,
-}: RegisterPlateDialogProps) {
+export function RegisterPlateDialog({ open, onOpenChange }: RegisterPlateDialogProps) {
   const registerMutation = useRegisterPlate();
   const { data: storageLocations } = useStorageLocations();
   const { data: projects } = useProjects();
@@ -63,8 +60,7 @@ export function RegisterPlateDialog({
     }
   }, [open]);
 
-  const canSubmit =
-    barcode.trim() && label.trim() && !registerMutation.isPending;
+  const canSubmit = barcode.trim() && label.trim() && !registerMutation.isPending;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -82,7 +78,7 @@ export function RegisterPlateDialog({
         onSuccess: () => {
           onOpenChange(false);
         },
-      }
+      },
     );
   };
 
@@ -131,10 +127,7 @@ export function RegisterPlateDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label>Format</Label>
-              <Select
-                value={format}
-                onValueChange={(v) => setFormat(v as PlateFormat)}
-              >
+              <Select value={format} onValueChange={(v) => setFormat(v as PlateFormat)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -150,10 +143,7 @@ export function RegisterPlateDialog({
 
             <div className="grid gap-2">
               <Label>Type</Label>
-              <Select
-                value={plateType}
-                onValueChange={(v) => setPlateType(v as PlateType)}
-              >
+              <Select value={plateType} onValueChange={(v) => setPlateType(v as PlateType)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

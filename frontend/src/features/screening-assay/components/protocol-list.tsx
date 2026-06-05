@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { TestTubes } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { useProjects } from "@/features/research-organization/hooks/use-projects";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { SearchInput } from "@/shared/components/search-input";
 import { StatusBadge } from "@/shared/components/status-badge";
-import { EmptyState, ErrorState } from "@/shared/components/empty-state";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import {
   Select,
   SelectContent,
@@ -14,14 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
-import { useProjects } from "@/features/research-organization/hooks/use-projects";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { TestTubes } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useProtocols } from "../hooks/use-protocols";
-import {
-  PROTOCOL_TYPE_LABELS,
-  type Protocol,
-  type ProtocolType,
-} from "../types";
+import { PROTOCOL_TYPE_LABELS, type Protocol, type ProtocolType } from "../types";
 
 interface ProtocolListProps {
   onSelect?: (protocolId: string) => void;
@@ -36,8 +32,13 @@ export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
   const [projectFilter, setProjectFilter] = useState<string>(ALL_PROJECTS);
   const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
   const { data: projects } = useProjects();
-  const effectiveProjectId = projectId ?? (projectFilter !== ALL_PROJECTS ? projectFilter : undefined);
-  const { data: protocols, isLoading, error } = useProtocols(effectiveProjectId, {
+  const effectiveProjectId =
+    projectId ?? (projectFilter !== ALL_PROJECTS ? projectFilter : undefined);
+  const {
+    data: protocols,
+    isLoading,
+    error,
+  } = useProtocols(effectiveProjectId, {
     tags: tagFilter.tagIds,
     tagLogic: tagFilter.tagLogic,
   });
@@ -49,8 +50,7 @@ export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
         headerName: "Type",
         field: "protocol_type",
         width: 140,
-        valueFormatter: (p) =>
-          PROTOCOL_TYPE_LABELS[p.value as ProtocolType] ?? p.value,
+        valueFormatter: (p) => PROTOCOL_TYPE_LABELS[p.value as ProtocolType] ?? p.value,
       },
       {
         headerName: "Version",
@@ -73,12 +73,15 @@ export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
         ),
       },
     ],
-    []
+    [],
   );
 
   if (error) {
     return (
-      <ErrorState message="Failed to load protocols. Is the backend running?" details={error.message} />
+      <ErrorState
+        message="Failed to load protocols. Is the backend running?"
+        details={error.message}
+      />
     );
   }
 
@@ -95,22 +98,20 @@ export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
         <TagFilter value={tagFilter} onChange={setTagFilter} />
         {!projectId && projects && projects.length > 0 && (
           <>
-          <span className="shrink-0 text-sm text-muted-foreground">
-            Project:
-          </span>
-          <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="w-[220px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
-              {projects.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <span className="shrink-0 text-sm text-muted-foreground">Project:</span>
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </>
         )}
       </div>

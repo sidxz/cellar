@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { ChevronDown } from "lucide-react";
+import { useState } from "react";
 import type { CampaignResultResponse } from "../../types";
 import { DecisionPopover } from "../popovers/decision-popover";
 
@@ -45,10 +45,7 @@ export function DecisionChipCell({ campaignId, result, readOnly }: DecisionChipC
         </p>
       )}
       {notes && (
-        <p
-          className="text-muted-foreground/80 italic line-clamp-2"
-          title={notes}
-        >
+        <p className="text-muted-foreground/80 italic line-clamp-2" title={notes}>
           {notes}
         </p>
       )}
@@ -73,11 +70,7 @@ export function DecisionChipCell({ campaignId, result, readOnly }: DecisionChipC
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[360px]">
-        <DecisionPopover
-          campaignId={campaignId}
-          result={result}
-          onClose={() => setOpen(false)}
-        />
+        <DecisionPopover campaignId={campaignId} result={result} onClose={() => setOpen(false)} />
       </PopoverContent>
     </Popover>
   );

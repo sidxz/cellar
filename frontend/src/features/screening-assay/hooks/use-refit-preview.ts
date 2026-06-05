@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type {
-  RefitPreviewRequest,
-  RefitPreviewResponse,
-} from "@/shared/lib/api/model";
+import type { RefitPreviewRequest, RefitPreviewResponse } from "@/shared/lib/api/model";
 import { refitDoseResponseCurvePreviewApiV1DoseResponseCurvesCurveIdRefitPreviewPost } from "@/shared/lib/api/readout-data/readout-data";
 
 export interface UseRefitPreviewOptions {
@@ -38,9 +35,7 @@ export interface UseRefitPreviewApi {
  *
  * On abort: silent — aborts are expected when the user is toggling rapidly.
  */
-export function useRefitPreview(
-  options: UseRefitPreviewOptions = {},
-): UseRefitPreviewApi {
+export function useRefitPreview(options: UseRefitPreviewOptions = {}): UseRefitPreviewApi {
   const debounceMs = options.debounceMs ?? 300;
   const previewFn = options.previewFn ?? defaultPreviewFn;
   // Pin the latest previewFn in a ref so requestPreview doesn't change identity

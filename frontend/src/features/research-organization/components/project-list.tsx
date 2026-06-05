@@ -1,26 +1,30 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { FolderKanban, Plus } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
+import { MemberName } from "@/shared/components/entity-name";
+import { PageHeader } from "@/shared/components/page-header";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState, ErrorState } from "@/shared/components/empty-state";
-import { PageHeader } from "@/shared/components/page-header";
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { MemberName } from "@/shared/components/entity-name";
-import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { FolderKanban, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { useProjects } from "../hooks/use-projects";
-import { CreateProjectDialog } from "./create-project-dialog";
 import type { Project } from "../types";
+import { CreateProjectDialog } from "./create-project-dialog";
 
 export function ProjectListPage() {
   const router = useRouter();
   const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
-  const { data: projects, isLoading, error } = useProjects({
+  const {
+    data: projects,
+    isLoading,
+    error,
+  } = useProjects({
     tags: tagFilter.tagIds,
     tagLogic: tagFilter.tagLogic,
   });
@@ -59,7 +63,7 @@ export function ProjectListPage() {
           params.value ? <MemberName id={params.value} /> : "\u2014",
       },
     ],
-    []
+    [],
   );
 
   if (error) {
@@ -71,7 +75,10 @@ export function ProjectListPage() {
             New Project
           </Button>
         </PageHeader>
-        <ErrorState message="Failed to load projects. Is the backend running?" details={error.message} />
+        <ErrorState
+          message="Failed to load projects. Is the backend running?"
+          details={error.message}
+        />
       </div>
     );
   }

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 
 import type {
   ScaffoldTreeJob,
@@ -54,26 +54,17 @@ export function useScaffoldTree(params: UseScaffoldTreeParams): UseScaffoldTreeR
   // Query key prefers the (stable) collectionId when available — otherwise
   // a sorted hash of explicit mol ids.
   const key = useMemo(
-    () =>
-      collectionId
-        ? `coll:${collectionId}`
-        : `ids:${sortedKey(moleculeIds ?? [])}`,
+    () => (collectionId ? `coll:${collectionId}` : `ids:${sortedKey(moleculeIds ?? [])}`),
     [collectionId, moleculeIds],
   );
 
   // Either path must be enabled, but not both (the BE rejects {neither, both}).
-  const queryEnabled =
-    enabled &&
-    (collectionId !== undefined || (moleculeIds ?? []).length > 0);
+  const queryEnabled = enabled && (collectionId !== undefined || (moleculeIds ?? []).length > 0);
 
   const start = useQuery({
     queryKey: ["scaffold-tree", "start", key],
     queryFn: () =>
-      startFn(
-        collectionId
-          ? { collection_id: collectionId }
-          : { molecule_ids: moleculeIds ?? [] },
-      ),
+      startFn(collectionId ? { collection_id: collectionId } : { molecule_ids: moleculeIds ?? [] }),
     enabled: queryEnabled,
     staleTime: 5 * 60_000,
   });

@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
-import { Textarea } from "@/shared/components/ui/textarea";
 import { Label } from "@/shared/components/ui/label";
 import {
   Select,
@@ -20,21 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import {
-  useCreateSavedSearch,
-  useUpdateSavedSearch,
-} from "../../hooks/use-saved-searches";
+import { Textarea } from "@/shared/components/ui/textarea";
+import { useEffect, useState } from "react";
 import { useProjects } from "../../hooks/use-projects";
-import {
-  aggregationModeToWire,
-  useAggregationMode,
-} from "../../lib/use-aggregation-mode";
-import type {
-  SavedSearch,
-  SearchQuery,
-  SearchVisibility,
-  ReportConfig,
-} from "../../types";
+import { useCreateSavedSearch, useUpdateSavedSearch } from "../../hooks/use-saved-searches";
+import { aggregationModeToWire, useAggregationMode } from "../../lib/use-aggregation-mode";
+import type { ReportConfig, SavedSearch, SearchQuery, SearchVisibility } from "../../types";
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -137,9 +126,7 @@ export function SaveSearchDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {isUpdate ? "Update Saved Search" : "Save Search"}
-          </DialogTitle>
+          <DialogTitle>{isUpdate ? "Update Saved Search" : "Save Search"}</DialogTitle>
           <DialogDescription>
             {isUpdate
               ? "Update the saved search with the current query and display settings."
@@ -163,10 +150,7 @@ export function SaveSearchDialog({
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="search-description">
-              Description{" "}
-              <span className="text-muted-foreground font-normal">
-                (optional)
-              </span>
+              Description <span className="text-muted-foreground font-normal">(optional)</span>
             </Label>
             <Textarea
               id="search-description"
@@ -203,10 +187,7 @@ export function SaveSearchDialog({
           {visibility === "project" && (
             <div className="space-y-2">
               <Label htmlFor="search-project">Project</Label>
-              <Select
-                value={projectId ?? ""}
-                onValueChange={(v) => setProjectId(v || null)}
-              >
+              <Select value={projectId ?? ""} onValueChange={(v) => setProjectId(v || null)}>
                 <SelectTrigger id="search-project">
                   <SelectValue placeholder="Select a project..." />
                 </SelectTrigger>
@@ -227,13 +208,7 @@ export function SaveSearchDialog({
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!canSave}>
-            {isSaving
-              ? isUpdate
-                ? "Updating..."
-                : "Saving..."
-              : isUpdate
-                ? "Update"
-                : "Save"}
+            {isSaving ? (isUpdate ? "Updating..." : "Saving...") : isUpdate ? "Update" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -65,15 +65,7 @@ const SYNONYMS: Record<Exclude<Role, "ignore">, string[]> = {
   ],
   inchi_key: ["inchikey", "inchi"],
   smiles: ["smiles", "canonicalsmiles", "structure", "molsmiles"],
-  name: [
-    "name",
-    "compoundname",
-    "moleculename",
-    "commonname",
-    "title",
-    "label",
-    "compound",
-  ],
+  name: ["name", "compoundname", "moleculename", "commonname", "title", "label", "compound"],
   notes: ["notes", "note", "comment", "comments", "description", "remark"],
 };
 
@@ -119,15 +111,14 @@ function pickBestTemplate(
   headers: string[],
   currentUserId?: string,
 ): PickResult | null {
-  const tiers: { name: TemplateTier; filter: (t: TemplateLite) => boolean }[] =
-    [
-      { name: "used_here", filter: (t) => !!t.used_in_this_collection },
-      {
-        name: "mine",
-        filter: (t) => !!currentUserId && t.created_by === currentUserId,
-      },
-      { name: "workspace", filter: () => true },
-    ];
+  const tiers: { name: TemplateTier; filter: (t: TemplateLite) => boolean }[] = [
+    { name: "used_here", filter: (t) => !!t.used_in_this_collection },
+    {
+      name: "mine",
+      filter: (t) => !!currentUserId && t.created_by === currentUserId,
+    },
+    { name: "workspace", filter: () => true },
+  ];
   for (const tier of tiers) {
     const candidates = templates.filter(tier.filter);
     let best: { template: TemplateLite; score: number } | null = null;
@@ -202,21 +193,16 @@ export function MappingStep({
   }, [headers]);
   const [mapping, setMapping] = useState<Record<string, Role>>(initial);
   // Internal fallback when the composer doesn't lift state up (e.g. tests).
-  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(
-    null,
-  );
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
   const selectedTemplateId =
-    selectedTemplateIdProp !== undefined
-      ? (selectedTemplateIdProp ?? null)
-      : internalSelectedId;
+    selectedTemplateIdProp !== undefined ? (selectedTemplateIdProp ?? null) : internalSelectedId;
   function setSelectedTemplateId(id: string | null) {
     setInternalSelectedId(id);
     onSelectedTemplateChange?.(id);
   }
   const [save, setSave] = useState(false);
   const [tplName, setTplName] = useState("");
-  const [appliedTemplate, setAppliedTemplate] =
-    useState<AppliedTemplate | null>(null);
+  const [appliedTemplate, setAppliedTemplate] = useState<AppliedTemplate | null>(null);
   const [filter, setFilter] = useState<FilterChip>("all");
   const autoAppliedRef = useRef(false);
   const clearedSaveForRef = useRef<string | null>(null);
@@ -225,10 +211,7 @@ export function MappingStep({
   // fulfilled — clear the toggle so the just-saved name doesn't immediately
   // trip the duplicate-name guard against the template it just created.
   useEffect(() => {
-    if (
-      justSavedTemplateId &&
-      justSavedTemplateId !== clearedSaveForRef.current
-    ) {
+    if (justSavedTemplateId && justSavedTemplateId !== clearedSaveForRef.current) {
       clearedSaveForRef.current = justSavedTemplateId;
       setSave(false);
       setTplName("");
@@ -240,9 +223,7 @@ export function MappingStep({
       return templates.filter((t) => t.used_in_this_collection);
     }
     if (filter === "mine") {
-      return templates.filter(
-        (t) => !!currentUserId && t.created_by === currentUserId,
-      );
+      return templates.filter((t) => !!currentUserId && t.created_by === currentUserId);
     }
     return templates;
   }, [filter, templates, currentUserId]);
@@ -252,10 +233,7 @@ export function MappingStep({
     [templates],
   );
   const mineCount = useMemo(
-    () =>
-      templates.filter(
-        (t) => !!currentUserId && t.created_by === currentUserId,
-      ).length,
+    () => templates.filter((t) => !!currentUserId && t.created_by === currentUserId).length,
     [templates, currentUserId],
   );
 
@@ -311,13 +289,10 @@ export function MappingStep({
   // failed round-trip), matching the BE's unique (workspace, name) constraint.
   const trimmedTplName = tplName.trim();
   const isDuplicateName =
-    save &&
-    trimmedTplName.length > 0 &&
-    templates.some((t) => t.name.trim() === trimmedTplName);
+    save && trimmedTplName.length > 0 && templates.some((t) => t.name.trim() === trimmedTplName);
   // When the chemist opts to save, require a valid name before continuing so
   // the intent isn't silently dropped.
-  const saveBlocksContinue =
-    save && (trimmedTplName.length === 0 || isDuplicateName);
+  const saveBlocksContinue = save && (trimmedTplName.length === 0 || isDuplicateName);
 
   return (
     <div className="space-y-6">
@@ -362,8 +337,7 @@ export function MappingStep({
             {filteredTemplates.map((t) => {
               const tags: string[] = [];
               if (t.used_in_this_collection) tags.push("used here");
-              if (currentUserId && t.created_by === currentUserId)
-                tags.push("mine");
+              if (currentUserId && t.created_by === currentUserId) tags.push("mine");
               const suffix = tags.length > 0 ? ` (${tags.join(", ")})` : "";
               return (
                 <option key={t.id} value={t.id}>
@@ -379,8 +353,8 @@ export function MappingStep({
         <div className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm">
           <p className="text-emerald-900">
             ✓ Applied saved template &ldquo;{appliedTemplate.name}&rdquo; —{" "}
-            {TIER_MESSAGE[appliedTemplate.tier]}. You can override below or pick
-            a different template above.
+            {TIER_MESSAGE[appliedTemplate.tier]}. You can override below or pick a different
+            template above.
           </p>
         </div>
       )}
@@ -403,9 +377,7 @@ export function MappingStep({
                   id={`role-${h}`}
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
                   value={mapping[h]}
-                  onChange={(e) =>
-                    setMapping((m) => ({ ...m, [h]: e.target.value as Role }))
-                  }
+                  onChange={(e) => setMapping((m) => ({ ...m, [h]: e.target.value as Role }))}
                 >
                   {ROLES.map((r) => (
                     <option key={r} value={r}>
@@ -419,17 +391,13 @@ export function MappingStep({
         </TableBody>
       </Table>
       <div className="flex items-center gap-2">
-        <Checkbox
-          id="save"
-          checked={save}
-          onCheckedChange={(v) => setSave(!!v)}
-        />
+        <Checkbox id="save" checked={save} onCheckedChange={(v) => setSave(!!v)} />
         <Label htmlFor="save">Save this mapping as a workspace template</Label>
       </div>
       {templates.length === 0 && !save && (
         <p className="text-xs text-muted-foreground">
-          No saved templates yet. Tick the box above to save this mapping now and
-          reuse it next time.
+          No saved templates yet. Tick the box above to save this mapping now and reuse it next
+          time.
         </p>
       )}
       {save && (
@@ -442,8 +410,7 @@ export function MappingStep({
           />
           {isDuplicateName && !submitting && (
             <p className="text-xs text-destructive">
-              A template named &ldquo;{trimmedTplName}&rdquo; already exists.
-              Pick a different name.
+              A template named &ldquo;{trimmedTplName}&rdquo; already exists. Pick a different name.
             </p>
           )}
           {(!isDuplicateName || submitting) && (
@@ -453,16 +420,13 @@ export function MappingStep({
           )}
         </div>
       )}
-      {templateError && (
-        <p className="text-sm text-destructive">{templateError}</p>
-      )}
+      {templateError && <p className="text-sm text-destructive">{templateError}</p>}
       <Button
         disabled={submitting || saveBlocksContinue}
         onClick={() =>
           onContinue({
             mapping: buildOutput(),
-            saveAsTemplate:
-              save && trimmedTplName ? { name: trimmedTplName } : undefined,
+            saveAsTemplate: save && trimmedTplName ? { name: trimmedTplName } : undefined,
           })
         }
       >

@@ -7,8 +7,8 @@
  * placeholder text when the id is not yet available.
  */
 
-import Link from "next/link";
 import { LibrarySquare } from "lucide-react";
+import Link from "next/link";
 
 interface PublishedCollectionLinkProps {
   id?: string | null;
@@ -16,11 +16,7 @@ interface PublishedCollectionLinkProps {
 
 export function PublishedCollectionLink({ id }: PublishedCollectionLinkProps) {
   if (!id) {
-    return (
-      <p className="text-sm text-muted-foreground italic">
-        No collection published yet.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground italic">No collection published yet.</p>;
   }
 
   return (

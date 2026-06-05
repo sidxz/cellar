@@ -1,7 +1,7 @@
-import { describe, expect, it, vi, beforeAll } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { CardGrid } from "./card-grid";
 import type { Molecule } from "@/features/chemical-registration/types";
+import { render, screen } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { CardGrid } from "./card-grid";
 
 vi.mock("@/shared/components/molecule-thumbnail", () => ({
   MoleculeThumbnail: ({ smiles }: { smiles: string }) => (
@@ -44,20 +44,37 @@ function mol(id: string, name: string): Molecule {
 
 describe("CardGrid", () => {
   it("renders empty state when there are no molecules", () => {
-    render(<CardGrid molecules={[]} selectedIds={new Set()} onSelectChange={vi.fn()} onOpen={vi.fn()} />);
+    render(
+      <CardGrid molecules={[]} selectedIds={new Set()} onSelectChange={vi.fn()} onOpen={vi.fn()} />,
+    );
     expect(screen.getByText(/no molecules/i)).toBeInTheDocument();
   });
 
   it("renders a tile per molecule (small set)", () => {
     const mols = [mol("1", "Mol One"), mol("2", "Mol Two"), mol("3", "Mol Three")];
-    render(<CardGrid molecules={mols} selectedIds={new Set()} onSelectChange={vi.fn()} onOpen={vi.fn()} />);
+    render(
+      <CardGrid
+        molecules={mols}
+        selectedIds={new Set()}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
     expect(screen.getByText("Mol One")).toBeInTheDocument();
     expect(screen.getByText("Mol Two")).toBeInTheDocument();
     expect(screen.getByText("Mol Three")).toBeInTheDocument();
   });
 
   it("renders loading skeleton when isLoading is true", () => {
-    render(<CardGrid molecules={[]} selectedIds={new Set()} onSelectChange={vi.fn()} onOpen={vi.fn()} isLoading />);
+    render(
+      <CardGrid
+        molecules={[]}
+        selectedIds={new Set()}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+        isLoading
+      />,
+    );
     expect(screen.getAllByTestId("card-skeleton").length).toBeGreaterThan(0);
   });
 

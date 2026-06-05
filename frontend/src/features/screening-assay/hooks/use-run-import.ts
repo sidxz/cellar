@@ -211,10 +211,9 @@ export function useImportRunFile(runId: string) {
       qc.invalidateQueries({ queryKey: ["attachments", "run", runId] });
       const warnings = data.fit_warnings ?? [];
       if (warnings.length > 0) {
-        showWarning(
-          `Run imported. ${warnings.length} curve(s) had fit issues.`,
-          { description: buildFitWarningDescription(warnings) },
-        );
+        showWarning(`Run imported. ${warnings.length} curve(s) had fit issues.`, {
+          description: buildFitWarningDescription(warnings),
+        });
       }
     },
   });
@@ -250,7 +249,7 @@ export function useRunImportTemplates() {
     queryKey: ["run-import-templates"],
     queryFn: () =>
       customInstance<RunImportTemplate[]>({
-        url: `/api/v1/run-import-templates`,
+        url: "/api/v1/run-import-templates",
         method: "GET",
       }),
   });
@@ -265,7 +264,7 @@ export function useCreateRunImportTemplate() {
       column_mapping: Record<string, unknown>;
     }) =>
       customInstance<RunImportTemplate>({
-        url: `/api/v1/run-import-templates`,
+        url: "/api/v1/run-import-templates",
         method: "POST",
         data: input,
       }),

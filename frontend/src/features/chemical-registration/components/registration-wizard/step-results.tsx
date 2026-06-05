@@ -1,32 +1,14 @@
 "use client";
 
-import {
-  Check,
-  GitMerge,
-  Copy,
-  Eye,
-  AlertTriangle,
-  Loader2,
-  ExternalLink,
-} from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
+import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { AlertTriangle, Check, Copy, ExternalLink, Eye, GitMerge, Loader2 } from "lucide-react";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { useConfirmMerges } from "../../hooks/use-registration-wizard-api";
-import { MergeCandidateCard } from "./merge-candidate-card";
 import type { MergeDecision } from "../../types/registration-wizard";
+import { MergeCandidateCard } from "./merge-candidate-card";
 
 // ---------------------------------------------------------------------------
 // StepResults
@@ -120,24 +102,18 @@ function SingleMergeReview() {
       <div>
         <h2 className="text-lg font-semibold">Merge Candidate Found</h2>
         <p className="text-sm text-muted-foreground">
-          A structure match was found. Review the details and decide whether to
-          merge.
+          A structure match was found. Review the details and decide whether to merge.
         </p>
       </div>
 
       <MergeCandidateCard
         candidate={candidate}
         decision={decision}
-        onDecisionChange={(d) =>
-          setMergeDecision(candidate.disclosure_id, d)
-        }
+        onDecisionChange={(d) => setMergeDecision(candidate.disclosure_id, d)}
       />
 
       <div className="flex items-center gap-3 border-t pt-4">
-        <Button
-          onClick={handleConfirm}
-          disabled={confirmMerges.isPending}
-        >
+        <Button onClick={handleConfirm} disabled={confirmMerges.isPending}>
           {confirmMerges.isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -150,11 +126,7 @@ function SingleMergeReview() {
             </>
           )}
         </Button>
-        <Button
-          variant="outline"
-          onClick={handleReject}
-          disabled={confirmMerges.isPending}
-        >
+        <Button variant="outline" onClick={handleReject} disabled={confirmMerges.isPending}>
           Reject
         </Button>
       </div>
@@ -209,7 +181,7 @@ function BulkResults() {
       ([disclosureId, action]) => ({
         disclosure_id: disclosureId,
         action,
-      })
+      }),
     );
     await confirmMergesMutation.mutateAsync({ decisions });
     nextStep();
@@ -276,12 +248,8 @@ function BulkResults() {
       {/* Tabs for merge candidates and conflicts */}
       <Tabs defaultValue="merge-candidates">
         <TabsList>
-          <TabsTrigger value="merge-candidates">
-            Merge Candidates ({mergeCount})
-          </TabsTrigger>
-          <TabsTrigger value="conflicts">
-            Conflicts ({conflictCount})
-          </TabsTrigger>
+          <TabsTrigger value="merge-candidates">Merge Candidates ({mergeCount})</TabsTrigger>
+          <TabsTrigger value="conflicts">Conflicts ({conflictCount})</TabsTrigger>
         </TabsList>
 
         {/* Merge candidates tab */}
@@ -296,18 +264,10 @@ function BulkResults() {
             <>
               {/* Bulk actions */}
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={confirmAllMerges}
-                >
+                <Button variant="outline" size="sm" onClick={confirmAllMerges}>
                   Confirm All
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={rejectAllMerges}
-                >
+                <Button variant="outline" size="sm" onClick={rejectAllMerges}>
                   Reject All
                 </Button>
               </div>
@@ -318,12 +278,8 @@ function BulkResults() {
                   <MergeCandidateCard
                     key={candidate.disclosure_id}
                     candidate={candidate}
-                    decision={
-                      mergeDecisions[candidate.disclosure_id] ?? "confirm"
-                    }
-                    onDecisionChange={(d) =>
-                      setMergeDecision(candidate.disclosure_id, d)
-                    }
+                    decision={mergeDecisions[candidate.disclosure_id] ?? "confirm"}
+                    onDecisionChange={(d) => setMergeDecision(candidate.disclosure_id, d)}
                     disabled={confirmMergesMutation.isPending}
                   />
                 ))}
@@ -331,10 +287,7 @@ function BulkResults() {
 
               {/* Submit button */}
               <div className="border-t pt-4">
-                <Button
-                  onClick={handleConfirmSelected}
-                  disabled={confirmMergesMutation.isPending}
-                >
+                <Button onClick={handleConfirmSelected} disabled={confirmMergesMutation.isPending}>
                   {confirmMergesMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -361,15 +314,13 @@ function BulkResults() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
-                  {conflictCount} conflict{conflictCount === 1 ? "" : "s"}{" "}
-                  detected
+                  {conflictCount} conflict{conflictCount === 1 ? "" : "s"} detected
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  {conflictCount} conflict{conflictCount === 1 ? "" : "s"}{" "}
-                  detected during bulk registration. Resolve them on individual
-                  compound detail pages.
+                  {conflictCount} conflict{conflictCount === 1 ? "" : "s"} detected during bulk
+                  registration. Resolve them on individual compound detail pages.
                 </p>
                 <Button variant="outline" size="sm" asChild>
                   <a href="/compounds?disclosure_status=conflict">
@@ -399,7 +350,7 @@ function BulkResults() {
 
 function getActionDisplay(
   action: string,
-  regNumber: string
+  regNumber: string,
 ): { icon: React.ReactNode; message: string } {
   switch (action) {
     case "registered":

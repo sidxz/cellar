@@ -213,9 +213,7 @@ export function DataGrid<TData = unknown>({
       ) : toolbarLeft ? (
         <div className="flex items-center gap-3">{toolbarLeft}</div>
       ) : null}
-      <div className="ml-auto flex items-center gap-2">
-        {toolbarActions}
-      </div>
+      <div className="ml-auto flex items-center gap-2">{toolbarActions}</div>
     </div>
   ) : null;
 

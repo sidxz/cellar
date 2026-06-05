@@ -1,38 +1,34 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { cancelScaffoldTreeJobApiV1ScaffoldTreeJobsJobIdCancelPost } from "@/shared/lib/api/scaffold-tree/scaffold-tree";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
+import type { Molecule } from "@/features/chemical-registration/types";
+import { CardGrid } from "@/features/research-organization/components/results/card-grid";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/shared/components/ui/resizable";
-import { CardGrid } from "@/features/research-organization/components/results/card-grid";
-import type { Molecule } from "@/features/chemical-registration/types";
 import { cn } from "@/shared/lib/utils";
 
-import { useScaffoldTree } from "../hooks/use-scaffold-tree";
 import { useCollectionScaffoldSearch } from "../hooks/use-collection-scaffold-search";
-import { ScaffoldTreeNode } from "./scaffold-tree-node";
-import { ScaffoldGroupsList } from "./scaffold-groups-list";
-import { ScaffoldColorPicker } from "./scaffold-color-picker";
-import { useTreeSubMode } from "../lib/use-tree-sub-mode";
-import {
-  buildChildIndex,
-  buildSubtreeMolIdMap,
-  rootNodes,
-} from "../lib/scaffold-tree-math";
-import type { ScaffoldTreeNode as ScaffoldTreeNodeType } from "../types/scaffold-tree";
+import { useScaffoldTree } from "../hooks/use-scaffold-tree";
 import { collectSubtreeScaffolds } from "../lib/collect-subtree-scaffolds";
-import { NO_SCAFFOLD_SENTINEL } from "../types/scaffold-tree";
 import {
+  type ActivityRollupBin,
   classifyActivity,
   medianPic50ForMols,
-  type ActivityRollupBin,
 } from "../lib/scaffold-rollup";
+import { buildChildIndex, buildSubtreeMolIdMap, rootNodes } from "../lib/scaffold-tree-math";
+import { useTreeSubMode } from "../lib/use-tree-sub-mode";
+import type { ScaffoldTreeNode as ScaffoldTreeNodeType } from "../types/scaffold-tree";
+import { NO_SCAFFOLD_SENTINEL } from "../types/scaffold-tree";
+import { ScaffoldColorPicker } from "./scaffold-color-picker";
+import { ScaffoldGroupsList } from "./scaffold-groups-list";
+import { ScaffoldTreeNode } from "./scaffold-tree-node";
 
 type Props = {
   molecules: Molecule[];
@@ -76,11 +72,7 @@ function SubModeToggle({
   const base =
     "px-2 py-1 text-xs first:rounded-l-md last:rounded-r-md border-y border-r first:border-l shrink-0 transition-colors";
   return (
-    <div
-      role="group"
-      aria-label="Scaffold view mode"
-      className="inline-flex items-stretch text-xs"
-    >
+    <div role="group" aria-label="Scaffold view mode" className="inline-flex items-stretch text-xs">
       <button
         type="button"
         onClick={() => onChange("groups")}
@@ -119,11 +111,8 @@ function MinMembersPill({
   onChange: (next: number) => void;
 }) {
   const cycle = () => {
-    const idx = MIN_MEMBERS_CYCLE.indexOf(
-      value as (typeof MIN_MEMBERS_CYCLE)[number],
-    );
-    const next =
-      MIN_MEMBERS_CYCLE[(idx + 1) % MIN_MEMBERS_CYCLE.length] ?? 1;
+    const idx = MIN_MEMBERS_CYCLE.indexOf(value as (typeof MIN_MEMBERS_CYCLE)[number]);
+    const next = MIN_MEMBERS_CYCLE[(idx + 1) % MIN_MEMBERS_CYCLE.length] ?? 1;
     onChange(next);
   };
   return (
@@ -139,12 +128,7 @@ function MinMembersPill({
   );
 }
 
-export function ScaffoldTreeView({
-  molecules,
-  activityData,
-  collectionId,
-  onOpen,
-}: Props) {
+export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen }: Props) {
   const router = useRouter();
   const moleculeIds = useMemo(() => molecules.map((m) => m.id), [molecules]);
   // When the parent surface gave us a collection_id, prefer that — the BE will
@@ -179,17 +163,14 @@ export function ScaffoldTreeView({
     setSelectedScaffold((prev) => (prev === scaffoldSmiles ? null : scaffoldSmiles));
   }, []);
 
-  const handleSelectChange = useCallback(
-    (moleculeId: string, selected: boolean) => {
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        if (selected) next.add(moleculeId);
-        else next.delete(moleculeId);
-        return next;
-      });
-    },
-    [],
-  );
+  const handleSelectChange = useCallback((moleculeId: string, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(moleculeId);
+      else next.delete(moleculeId);
+      return next;
+    });
+  }, []);
 
   const handleOpen = useCallback(
     (moleculeId: string) => {
@@ -233,9 +214,7 @@ export function ScaffoldTreeView({
     if (!tree || !colorBy || !activityData) return map;
     for (const node of tree.nodes) {
       const ids = subtreeMolIds.get(node.scaffold_smiles) ?? [];
-      const bin = classifyActivity(
-        medianPic50ForMols(ids, activityData, colorBy),
-      );
+      const bin = classifyActivity(medianPic50ForMols(ids, activityData, colorBy));
       if (bin) map.set(node.scaffold_smiles, bin);
     }
     return map;
@@ -271,11 +250,7 @@ export function ScaffoldTreeView({
     // V4 Path A: server-side filtered result wins when we're on a collection
     // page AND a scaffold is selected. Use the server response directly —
     // it's the authoritative list (not clipped by the 10K parent-load cap).
-    if (
-      collectionId &&
-      selectedScaffolds.length > 0 &&
-      serverFiltered.data?.items
-    ) {
+    if (collectionId && selectedScaffolds.length > 0 && serverFiltered.data?.items) {
       return serverFiltered.data.items as typeof molecules;
     }
 
@@ -287,9 +262,7 @@ export function ScaffoldTreeView({
     // chemists who pick "piperidine variant A" want THOSE compounds, not also
     // every other scaffold that happens to be a substructure.
     if (subMode === "groups") {
-      const directIds = new Set(
-        nodesBySmiles.get(selectedScaffold)?.molecule_ids ?? [],
-      );
+      const directIds = new Set(nodesBySmiles.get(selectedScaffold)?.molecule_ids ?? []);
       return molecules.filter((m) => directIds.has(m.id));
     }
     const ids = new Set(subtreeMolIds.get(selectedScaffold) ?? []);
@@ -349,11 +322,7 @@ export function ScaffoldTreeView({
   useEffect(() => {
     if (sortedRoots.length > 0) {
       setExpanded(
-        new Set(
-          sortedRoots
-            .slice(0, DEFAULT_EXPAND_TOP_N)
-            .map((n) => n.scaffold_smiles),
-        ),
+        new Set(sortedRoots.slice(0, DEFAULT_EXPAND_TOP_N).map((n) => n.scaffold_smiles)),
       );
     }
     // Intentionally only re-runs when the tree identity changes; user expansion
@@ -385,7 +354,7 @@ export function ScaffoldTreeView({
       toastScheduledRef.current = true;
       toast.loading("Computing scaffold tree…", {
         id: SCAFFOLD_TREE_TOAST_ID,
-        duration: Infinity,
+        duration: Number.POSITIVE_INFINITY,
         action: {
           label: "Cancel",
           onClick: () => {
@@ -420,18 +389,12 @@ export function ScaffoldTreeView({
 
   if (error) {
     return (
-      <div className="p-6 text-sm text-rose-600">
-        Scaffold tree failed to load: {error.message}
-      </div>
+      <div className="p-6 text-sm text-rose-600">Scaffold tree failed to load: {error.message}</div>
     );
   }
 
   if (isStarting || (isPolling && !tree)) {
-    return (
-      <div className="p-6 text-sm text-muted-foreground">
-        Computing scaffold tree…
-      </div>
-    );
+    return <div className="p-6 text-sm text-muted-foreground">Computing scaffold tree…</div>;
   }
 
   if (!tree || tree.nodes.length === 0) {
@@ -453,11 +416,7 @@ export function ScaffoldTreeView({
       orientation="horizontal"
       className="h-[calc(100vh-14rem)] min-h-[480px] rounded-md border"
     >
-      <ResizablePanel
-        defaultSize={TREE_DEFAULT_PCT}
-        minSize={TREE_MIN_PCT}
-        maxSize={TREE_MAX_PCT}
-      >
+      <ResizablePanel defaultSize={TREE_DEFAULT_PCT} minSize={TREE_MIN_PCT} maxSize={TREE_MAX_PCT}>
         <div className="flex flex-col h-full">
           <div className="p-2 border-b flex flex-wrap items-center gap-2">
             <SubModeToggle value={subMode} onChange={setSubMode} />
@@ -484,11 +443,7 @@ export function ScaffoldTreeView({
                   <>
                     {" "}
                     Try{" "}
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={() => setMinMembers(1)}
-                    >
+                    <button type="button" className="underline" onClick={() => setMinMembers(1)}>
                       Min mols = 1
                     </button>
                     .

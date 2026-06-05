@@ -212,20 +212,14 @@ export function WorkspaceSettingsForm() {
                 style={{ textTransform: "uppercase" }}
               />
               <p className="text-xs text-muted-foreground">
-                2–8 uppercase letters + dash (e.g. <code>CC-</code>, <code>MTB-</code>).
-                Applies to newly-registered compounds; existing IDs are not renamed.
+                2–8 uppercase letters + dash (e.g. <code>CC-</code>, <code>MTB-</code>). Applies to
+                newly-registered compounds; existing IDs are not renamed.
               </p>
             </div>
 
             <div className="grid gap-2">
               <Label htmlFor="regWidth">Compound Number Width</Label>
-              <Input
-                id="regWidth"
-                type="number"
-                min={4}
-                max={8}
-                {...register("regWidth")}
-              />
+              <Input id="regWidth" type="number" min={4} max={8} {...register("regWidth")} />
               <p className="text-xs text-muted-foreground">
                 Zero-pad width for the numeric tail. 6 gives <code>CC-000001</code> ..{" "}
                 <code>CC-999999</code> (1M compounds).
@@ -234,13 +228,7 @@ export function WorkspaceSettingsForm() {
 
             <div className="grid gap-2">
               <Label htmlFor="batchWidth">Batch Sequence Width</Label>
-              <Input
-                id="batchWidth"
-                type="number"
-                min={2}
-                max={6}
-                {...register("batchWidth")}
-              />
+              <Input id="batchWidth" type="number" min={2} max={6} {...register("batchWidth")} />
               <p className="text-xs text-muted-foreground">
                 Zero-pad width for the per-compound batch sequence. 3 gives{" "}
                 <code>CC-000001-001</code> .. <code>CC-000001-999</code> per compound.

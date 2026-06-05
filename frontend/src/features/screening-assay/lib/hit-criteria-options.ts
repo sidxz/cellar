@@ -17,11 +17,7 @@
  * `intercept_key` is absent.
  */
 
-import type {
-  HitCriterion,
-  InterceptKey,
-  ReadoutDefinition,
-} from "../types";
+import type { HitCriterion, InterceptKey, ReadoutDefinition } from "../types";
 import { interceptOptionLabel } from "./intercept-label";
 
 export interface HitCriterionOption {
@@ -47,9 +43,7 @@ function interceptOptionId(readoutName: string, kind: string, level: number): st
   return `${readoutName}::${kind}::${level}`;
 }
 
-export function buildHitCriterionOptions(
-  readouts: ReadoutDefinition[],
-): HitCriterionOption[] {
+export function buildHitCriterionOptions(readouts: ReadoutDefinition[]): HitCriterionOption[] {
   const out: HitCriterionOption[] = [];
   for (const rd of readouts) {
     const dr = rd.dose_response_config;
@@ -94,16 +88,9 @@ export function buildHitCriterionOptions(
   return out;
 }
 
-export function optionIdForRule(
-  rule: HitCriterion,
-  readouts: ReadoutDefinition[],
-): string {
+export function optionIdForRule(rule: HitCriterion, readouts: ReadoutDefinition[]): string {
   if (rule.intercept_key) {
-    return interceptOptionId(
-      rule.readout_name,
-      rule.intercept_key.kind,
-      rule.intercept_key.level,
-    );
+    return interceptOptionId(rule.readout_name, rule.intercept_key.kind, rule.intercept_key.level);
   }
   // No intercept_key. For a DR readout, this means "the primary intercept" —
   // map onto the first option in the readout's spec list. For non-DR readouts

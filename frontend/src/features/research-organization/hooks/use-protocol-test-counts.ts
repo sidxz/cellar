@@ -1,8 +1,8 @@
 "use client";
 
+import { customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
 
 /**
  * Fetches the number of distinct protocols each molecule has been tested in.

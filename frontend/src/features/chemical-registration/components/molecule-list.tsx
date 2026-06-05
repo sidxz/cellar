@@ -1,26 +1,26 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Download, FlaskConical, ListPlus, Plus } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { StructureThumbnail } from "@/shared/components/chemistry";
-import { Badge } from "@/shared/components/ui/badge";
-import { StatusBadge } from "@/shared/components/status-badge";
-import { Button } from "@/shared/components/ui/button";
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { StatusBadge } from "@/shared/components/status-badge";
+import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { Download, FlaskConical, ListPlus, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 import { useMolecules } from "../hooks/use-molecules";
 import { useSdfExport } from "../hooks/use-sdf-export";
 import {
   LIFECYCLE_LABELS,
-  MOLECULE_TYPE_LABELS,
   type LifecycleStage,
+  MOLECULE_TYPE_LABELS,
   type Molecule,
   type MoleculeType,
 } from "../types";
-import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 import { CompoundSearchBar } from "./compound-search-bar";
 
 export function MoleculeList() {
@@ -72,8 +72,7 @@ export function MoleculeList() {
         headerName: "Type",
         field: "molecule_type",
         width: 130,
-        valueFormatter: (p) =>
-          MOLECULE_TYPE_LABELS[p.value as MoleculeType] ?? p.value,
+        valueFormatter: (p) => MOLECULE_TYPE_LABELS[p.value as MoleculeType] ?? p.value,
       },
       {
         headerName: "Formula",
@@ -132,21 +131,21 @@ export function MoleculeList() {
         },
       },
     ],
-    []
+    [],
   );
 
   if (error) {
     return (
-      <ErrorState message="Failed to load compounds. Is the backend running?" details={error.message} />
+      <ErrorState
+        message="Failed to load compounds. Is the backend running?"
+        details={error.message}
+      />
     );
   }
 
   return (
     <>
-      <PageHeader
-        title="Compounds"
-        subtitle="Search, register, and manage chemical compounds."
-      >
+      <PageHeader title="Compounds" subtitle="Search, register, and manage chemical compounds.">
         <Button variant="outline" size="sm" onClick={handleSdfExport} disabled={!molecules?.length}>
           <Download className="h-4 w-4" />
           Export SDF
@@ -172,9 +171,7 @@ export function MoleculeList() {
           }}
           selectionToolbar={(selected) => (
             <>
-              <span className="text-sm text-muted-foreground">
-                {selected.length} selected
-              </span>
+              <span className="text-sm text-muted-foreground">{selected.length} selected</span>
               <Button
                 size="sm"
                 variant="outline"
@@ -190,7 +187,11 @@ export function MoleculeList() {
               icon={FlaskConical}
               title="No compounds registered"
               description="Register your first compound to get started."
-              action={{ label: "Register Compound", onClick: () => router.push("/compounds/register"), icon: Plus }}
+              action={{
+                label: "Register Compound",
+                onClick: () => router.push("/compounds/register"),
+                icon: Plus,
+              }}
             />
           }
         />

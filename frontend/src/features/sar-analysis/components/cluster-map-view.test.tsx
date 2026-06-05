@@ -1,7 +1,6 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import React from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -10,9 +9,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/shared/components/ui/resizable", () => ({
-  ResizablePanelGroup: ({ children }: any) => (
-    <div data-testid="panel-group">{children}</div>
-  ),
+  ResizablePanelGroup: ({ children }: any) => <div data-testid="panel-group">{children}</div>,
   ResizablePanel: ({ children }: any) => <div data-testid="panel">{children}</div>,
   ResizableHandle: () => <div data-testid="resize-handle" />,
 }));
@@ -25,15 +22,8 @@ vi.mock("@/shared/lib/plotly", () => ({ Plot: () => <div data-testid="plotly" />
 vi.mock("./cluster-scatter", () => ({
   ClusterScatter: ({ onSelected }: any) => (
     <div>
-      <div
-        data-testid="cluster-scatter"
-        onClick={() => onSelected(["a", "b"])}
-      />
-      <button
-        type="button"
-        data-testid="deselect"
-        onClick={() => onSelected(null)}
-      >
+      <div data-testid="cluster-scatter" onClick={() => onSelected(["a", "b"])} />
+      <button type="button" data-testid="deselect" onClick={() => onSelected(null)}>
         deselect
       </button>
     </div>
@@ -137,13 +127,9 @@ describe("ClusterMapView", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
     // Exact-match: "Diversify" must not also match the basket bar's
     // "Add Diversify picks (N)" button (getByRole throws on multiple matches).
-    expect(
-      screen.getByRole("button", { name: "Diversify" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Diversify" })).toBeInTheDocument();
     expect(screen.getByText(/basket: 0/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /save as collection/i }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /save as collection/i })).toBeDisabled();
   });
 
   it("lasso → Add all adds the region to the basket and enables Save", () => {
@@ -152,9 +138,7 @@ describe("ClusterMapView", () => {
     expect(screen.getByText(/2 in region/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /add all \(2\)/i }));
     expect(screen.getByText(/basket: 2/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /save as collection/i }),
-    ).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /save as collection/i })).not.toBeDisabled();
   });
 
   it("clearing the lasso (deselect) resets the region pick", () => {
@@ -171,24 +155,18 @@ describe("ClusterMapView", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
     fireEvent.click(screen.getByTestId("cluster-scatter"));
     fireEvent.click(screen.getByRole("button", { name: /add all \(2\)/i }));
-    fireEvent.click(
-      screen.getByRole("button", { name: /save as collection/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /save as collection/i }));
     expect(screen.getByTestId("save-dialog")).toBeInTheDocument();
   });
 
   it("Add Diversify picks seeds the basket from representatives", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
-    fireEvent.click(
-      screen.getByRole("button", { name: /add diversify picks \(1\)/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /add diversify picks \(1\)/i }));
     expect(screen.getByText(/basket: 1/i)).toBeInTheDocument();
   });
 
   it("passes collectionId only when on a collection page (XOR moleculeIds)", async () => {
-    const { useUmapCluster } = await import(
-      "@/features/sar-analysis/hooks/use-umap-cluster"
-    );
+    const { useUmapCluster } = await import("@/features/sar-analysis/hooks/use-umap-cluster");
     (useUmapCluster as any).mockClear();
     render(<ClusterMapView {...defaultProps} collectionId="col-1" />, {
       wrapper,
@@ -199,10 +177,7 @@ describe("ClusterMapView", () => {
   });
 
   it("shows a 'not enough molecules' message when fewer than 10 mols", () => {
-    render(
-      <ClusterMapView {...defaultProps} molecules={molecules.slice(0, 3)} />,
-      { wrapper },
-    );
+    render(<ClusterMapView {...defaultProps} molecules={molecules.slice(0, 3)} />, { wrapper });
     expect(screen.getByText(/need at least 10 molecules/i)).toBeInTheDocument();
     expect(screen.queryByTestId("cluster-scatter")).not.toBeInTheDocument();
   });

@@ -1,20 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import {
-  MapPin,
-  Building2,
-  DoorOpen,
-  Snowflake,
-  Refrigerator,
-  ChevronRight,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { EmptyState } from "@/shared/components/empty-state";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -27,12 +15,24 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
+  Building2,
+  ChevronRight,
+  DoorOpen,
+  MapPin,
+  Pencil,
+  Plus,
+  Refrigerator,
+  Snowflake,
+  Trash2,
+} from "lucide-react";
+import { useState } from "react";
+import {
   useDeleteStorageLocation,
   useStorageLocationsWithCounts,
   useUpdateStorageLocation,
 } from "../hooks/use-storage-locations";
+import type { StorageLocation, StorageLocationType, StorageLocationWithCount } from "../types";
 import { CreateStorageLocationDialog } from "./create-storage-location-dialog";
-import type { StorageLocation, StorageLocationWithCount, StorageLocationType } from "../types";
 
 const TYPE_ICONS: Partial<Record<StorageLocationType, React.ReactNode>> = {
   site: <MapPin className="h-4 w-4" />,
@@ -48,7 +48,7 @@ function buildTree(locations: StorageLocationWithCount[]): StorageLocationWithCo
 
 function getChildren(
   locations: StorageLocationWithCount[],
-  parentId: string
+  parentId: string,
 ): StorageLocationWithCount[] {
   return locations.filter((loc) => loc.parent_id === parentId);
 }
@@ -96,9 +96,7 @@ function LocationNode({
           {location.type}
         </Badge>
         {location.temperature && (
-          <span className="text-xs text-muted-foreground">
-            {location.temperature}
-          </span>
+          <span className="text-xs text-muted-foreground">{location.temperature}</span>
         )}
         {location.rows != null && location.columns != null ? (
           <span className="text-xs text-muted-foreground">
@@ -106,9 +104,7 @@ function LocationNode({
           </span>
         ) : (
           location.sample_count > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {location.sample_count} samples
-            </span>
+            <span className="text-xs text-muted-foreground">{location.sample_count} samples</span>
           )
         )}
         <div className="hidden gap-1 group-hover:flex">
@@ -121,12 +117,7 @@ function LocationNode({
           >
             <Plus className="h-3 w-3" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => setEditOpen(true)}
-          >
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditOpen(true)}>
             <Pencil className="h-3 w-3" />
           </Button>
           {!hasChildren && (
@@ -151,11 +142,7 @@ function LocationNode({
             depth={depth + 1}
           />
         ))}
-      <EditStorageLocationDialog
-        location={location}
-        open={editOpen}
-        onOpenChange={setEditOpen}
-      />
+      <EditStorageLocationDialog location={location} open={editOpen} onOpenChange={setEditOpen} />
       <CreateStorageLocationDialog
         open={addChildOpen}
         onOpenChange={setAddChildOpen}
@@ -219,7 +206,7 @@ function EditStorageLocationDialog({
                   barcode: barcode || null,
                   temperature: temperature || null,
                 },
-                { onSuccess: () => onOpenChange(false) }
+                { onSuccess: () => onOpenChange(false) },
               );
             }}
             disabled={!name.trim() || mutation.isPending}
@@ -260,11 +247,7 @@ export function StorageBrowser() {
   return (
     <div className="rounded-lg border p-2">
       {roots.map((root) => (
-        <LocationNode
-          key={root.id}
-          location={root}
-          allLocations={locations}
-        />
+        <LocationNode key={root.id} location={root} allLocations={locations} />
       ))}
     </div>
   );

@@ -1,9 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { downloadFile } from "@/shared/lib/api/download";
-import { showSuccess, showError } from "@/shared/lib/toast";
+import { showError, showSuccess } from "@/shared/lib/toast";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AttachableType, AttachmentResponse } from "../types";
 
 function attachmentsKey(entityType: AttachableType, entityId: string) {
@@ -22,10 +22,7 @@ export function useAttachments(entityType: AttachableType, entityId: string) {
   });
 }
 
-export function useUploadAttachment(
-  entityType: AttachableType,
-  entityId: string
-) {
+export function useUploadAttachment(entityType: AttachableType, entityId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (file: File) => {
@@ -47,10 +44,7 @@ export function useUploadAttachment(
   });
 }
 
-export function useDeleteAttachment(
-  entityType: AttachableType,
-  entityId: string
-) {
+export function useDeleteAttachment(entityType: AttachableType, entityId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (attachmentId: string) =>

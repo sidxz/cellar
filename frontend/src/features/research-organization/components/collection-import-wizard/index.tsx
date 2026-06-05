@@ -4,23 +4,19 @@ import { useAuthz } from "@sentinel-auth/nextjs";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { useCollection } from "@/features/research-organization/hooks/use-collections";
-import { useCommitCollectionImport } from "@/features/research-organization/hooks/use-commit-collection-import";
 import {
   useCollectionImportTemplates,
   useCreateCollectionImportTemplate,
 } from "@/features/research-organization/hooks/use-collection-import-templates";
+import { useCollection } from "@/features/research-organization/hooks/use-collections";
+import { useCommitCollectionImport } from "@/features/research-organization/hooks/use-commit-collection-import";
 import { usePreviewCollectionImport } from "@/features/research-organization/hooks/use-preview-collection-import";
 import { useBreadcrumbOverride } from "@/shared/components/layout/breadcrumb-context";
-import type {
-  BulkAddRequestBody,
-  BulkAddResponse,
-  BulkAddRowBody,
-} from "@/shared/lib/api/model";
+import type { BulkAddRequestBody, BulkAddResponse, BulkAddRowBody } from "@/shared/lib/api/model";
 
 import { ConfirmStep } from "./confirm-step";
 import { MappingStep } from "./mapping-step";
-import { PreviewStep, type PreviewResult } from "./preview-step";
+import { type PreviewResult, PreviewStep } from "./preview-step";
 import { UploadStep } from "./upload-step";
 
 type Step = "upload" | "mapping" | "preview" | "confirm";
@@ -66,18 +62,14 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    null,
-  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [templateError, setTemplateError] = useState<string | null>(null);
   // Id of a template just saved from this wizard — signals the mapping step to
   // clear its "save as template" toggle so the just-saved name doesn't trip the
   // duplicate-name guard against itself.
-  const [justSavedTemplateId, setJustSavedTemplateId] = useState<string | null>(
-    null,
-  );
+  const [justSavedTemplateId, setJustSavedTemplateId] = useState<string | null>(null);
 
   const { user } = useAuthz();
   const currentUserId = user?.userId;
@@ -103,9 +95,7 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
     });
   }
 
-  function buildPreviewBody(
-    currentMapping: Record<string, string>,
-  ): BulkAddRequestBody {
+  function buildPreviewBody(currentMapping: Record<string, string>): BulkAddRequestBody {
     // Preview body never carries a preview_id — BE mints a fresh one.
     return {
       rows: buildRows(currentMapping),
@@ -179,11 +169,7 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
     <div className="mx-auto max-w-4xl p-6">
       <h1 className="mb-6 text-2xl font-semibold">
         Bulk import to{" "}
-        {collectionName ? (
-          <span className="text-primary">{collectionName}</span>
-        ) : (
-          "collection"
-        )}
+        {collectionName ? <span className="text-primary">{collectionName}</span> : "collection"}
       </h1>
       {step === "upload" && (
         <UploadStep

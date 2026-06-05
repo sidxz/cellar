@@ -1,21 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, ChevronsUpDown, CheckIcon, X } from "lucide-react";
-import { Select as SelectPrimitive } from "radix-ui";
-import { Input } from "@/shared/components/ui/input";
+import { useRunsByProtocol } from "@/features/screening-assay/hooks/use-runs";
+import type { Run, RunStatus } from "@/features/screening-assay/types";
 import { Checkbox } from "@/shared/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/shared/components/ui/popover";
 import {
   Command,
   CommandEmpty,
@@ -24,16 +11,20 @@ import {
   CommandItem,
   CommandList,
 } from "@/shared/components/ui/command";
+import { Input } from "@/shared/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { Select, SelectContent, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
-import { cn } from "@/shared/lib/utils";
-import { useRunsByProtocol } from "@/features/screening-assay/hooks/use-runs";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
-import type { Run, RunStatus } from "@/features/screening-assay/types";
+import { cn } from "@/shared/lib/utils";
+import { CheckIcon, ChevronsUpDown, X } from "lucide-react";
+import { Select as SelectPrimitive } from "radix-ui";
+import { useMemo, useState } from "react";
 import type { RunScope, RunScopeMode } from "../../types";
 
 // Ordered broad → narrow so the menu reads as a continuum of run-set
@@ -56,14 +47,12 @@ const MODE_OPTIONS: {
   {
     value: "all",
     label: "Every run",
-    description:
-      "Match only if every run for this protocol satisfies the criterion.",
+    description: "Match only if every run for this protocol satisfies the criterion.",
   },
   {
     value: "latest",
     label: "Latest run",
-    description:
-      "Restrict to the single most recent approved run for this protocol.",
+    description: "Restrict to the single most recent approved run for this protocol.",
   },
   {
     value: "past_n_days",
@@ -73,8 +62,7 @@ const MODE_OPTIONS: {
   {
     value: "date_range",
     label: "Date range",
-    description:
-      "Restrict to runs whose run date falls within the chosen window.",
+    description: "Restrict to runs whose run date falls within the chosen window.",
   },
   {
     value: "specific",
@@ -114,9 +102,7 @@ function ScopeOption({
       </span>
       <div className="flex flex-col gap-0.5">
         <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
-        <span className="text-xs text-muted-foreground">
-          {option.description}
-        </span>
+        <span className="text-xs text-muted-foreground">{option.description}</span>
       </div>
     </SelectPrimitive.Item>
   );
@@ -153,13 +139,9 @@ function runIdentifier(run: Run): string {
   return `Run ${run.run_date}`;
 }
 
-function conditionsSummary(
-  conditions: Record<string, unknown> | null
-): string | null {
+function conditionsSummary(conditions: Record<string, unknown> | null): string | null {
   if (!conditions) return null;
-  const entries = Object.entries(conditions).filter(
-    ([, v]) => v !== null && v !== ""
-  );
+  const entries = Object.entries(conditions).filter(([, v]) => v !== null && v !== "");
   if (entries.length === 0) return null;
   return entries
     .slice(0, 4)
@@ -173,11 +155,7 @@ interface RunScopePickerProps {
   onChange: (next: RunScope | undefined) => void;
 }
 
-export function RunScopePicker({
-  protocolId,
-  value,
-  onChange,
-}: RunScopePickerProps) {
+export function RunScopePicker({ protocolId, value, onChange }: RunScopePickerProps) {
   const mode: RunScopeMode = value?.mode ?? "any";
 
   function setMode(next: RunScopeMode) {
@@ -207,13 +185,9 @@ export function RunScopePicker({
         </SelectContent>
       </Select>
 
-      {value?.mode === "date_range" && (
-        <DateRangeInputs value={value} onChange={onChange} />
-      )}
+      {value?.mode === "date_range" && <DateRangeInputs value={value} onChange={onChange} />}
 
-      {value?.mode === "past_n_days" && (
-        <PastNDaysInput value={value} onChange={onChange} />
-      )}
+      {value?.mode === "past_n_days" && <PastNDaysInput value={value} onChange={onChange} />}
 
       {value?.mode === "specific" && (
         <SpecificRunPicker
@@ -249,9 +223,7 @@ function DateRangeInputs({
         type="date"
         className="h-8 w-36 text-sm"
         value={value.date_from ?? ""}
-        onChange={(e) =>
-          onChange({ ...value, date_from: e.target.value || undefined })
-        }
+        onChange={(e) => onChange({ ...value, date_from: e.target.value || undefined })}
         aria-label="From date"
       />
       <span className="text-xs text-muted-foreground">→</span>
@@ -259,9 +231,7 @@ function DateRangeInputs({
         type="date"
         className="h-8 w-36 text-sm"
         value={value.date_to ?? ""}
-        onChange={(e) =>
-          onChange({ ...value, date_to: e.target.value || undefined })
-        }
+        onChange={(e) => onChange({ ...value, date_to: e.target.value || undefined })}
         aria-label="To date"
       />
     </>
@@ -282,9 +252,7 @@ function PastNDaysInput({
         min={1}
         className="h-8 w-16 text-sm"
         value={value.days}
-        onChange={(e) =>
-          onChange({ ...value, days: Math.max(1, Number(e.target.value) || 1) })
-        }
+        onChange={(e) => onChange({ ...value, days: Math.max(1, Number(e.target.value) || 1) })}
         aria-label="Past N days"
       />
       <span className="text-xs text-muted-foreground">days</span>
@@ -307,14 +275,14 @@ function SpecificRunPicker({
 
   const memberById = useMemo(() => {
     const map = new Map<string, string>();
-    (members ?? []).forEach((m) => map.set(m.user_id, m.name || m.email));
+    for (const m of members ?? []) map.set(m.user_id, m.name || m.email);
     return map;
   }, [members]);
 
   const sortedRuns = useMemo(() => {
     if (!runs) return [];
     return [...runs].sort((a, b) =>
-      a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0
+      a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0,
     );
   }, [runs]);
 
@@ -346,7 +314,7 @@ function SpecificRunPicker({
           type="button"
           className={cn(
             "flex h-8 min-w-0 flex-1 items-center justify-between gap-1.5 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs",
-            invalid && "border-destructive text-muted-foreground"
+            invalid && "border-destructive text-muted-foreground",
           )}
           aria-invalid={invalid}
         >
@@ -355,7 +323,7 @@ function SpecificRunPicker({
               <span
                 className={cn(
                   "h-2 w-2 rounded-full shrink-0",
-                  statusColor(selectedRuns[0].status, selectedRuns[0].is_locked)
+                  statusColor(selectedRuns[0].status, selectedRuns[0].is_locked),
                 )}
                 aria-hidden
               />
@@ -367,10 +335,7 @@ function SpecificRunPicker({
           <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" />
         </button>
       </PopoverTrigger>
-      <PopoverContent
-        className="p-0 w-[28rem] max-w-[calc(100vw-2rem)]"
-        align="start"
-      >
+      <PopoverContent className="p-0 w-[28rem] max-w-[calc(100vw-2rem)]" align="start">
         <TooltipProvider delayDuration={250}>
           <Command>
             <CommandInput
@@ -383,8 +348,7 @@ function SpecificRunPicker({
               </CommandEmpty>
               <CommandGroup>
                 {sortedRuns.map((run) => {
-                  const operatorName =
-                    memberById.get(run.operator) ?? "Unknown user";
+                  const operatorName = memberById.get(run.operator) ?? "Unknown user";
                   const identifier = runIdentifier(run);
                   const conditions = conditionsSummary(run.conditions);
                   const checked = selectedSet.has(run.id);
@@ -419,16 +383,14 @@ function SpecificRunPicker({
                             <span
                               className={cn(
                                 "h-2 w-2 rounded-full shrink-0",
-                                statusColor(run.status, run.is_locked)
+                                statusColor(run.status, run.is_locked),
                               )}
                               aria-hidden
                             />
                             <span className="font-mono text-xs text-muted-foreground shrink-0 whitespace-nowrap">
                               {formatDateTime(run.created_at)}
                             </span>
-                            <span className="min-w-0 flex-1 truncate">
-                              {operatorName}
-                            </span>
+                            <span className="min-w-0 flex-1 truncate">{operatorName}</span>
                             <span className="min-w-0 flex-1 truncate font-mono text-xs">
                               {identifier}
                             </span>
@@ -438,11 +400,7 @@ function SpecificRunPicker({
                             </span>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent
-                          side="bottom"
-                          align="start"
-                          className="max-w-sm"
-                        >
+                        <TooltipContent side="bottom" align="start" className="max-w-sm">
                           <div className="space-y-1 text-xs">
                             <div>
                               <strong>Status:</strong> {run.status}
@@ -458,13 +416,11 @@ function SpecificRunPicker({
                                 <strong>Conditions:</strong> {conditions}
                               </div>
                             )}
-                            {run.plate_barcodes &&
-                              run.plate_barcodes.length > 1 && (
-                                <div>
-                                  <strong>Plates:</strong>{" "}
-                                  {run.plate_barcodes.join(", ")}
-                                </div>
-                              )}
+                            {run.plate_barcodes && run.plate_barcodes.length > 1 && (
+                              <div>
+                                <strong>Plates:</strong> {run.plate_barcodes.join(", ")}
+                              </div>
+                            )}
                             <div>
                               <strong>Plates:</strong> {run.plate_count} ·{" "}
                               <strong>Compounds:</strong> {run.molecule_count}

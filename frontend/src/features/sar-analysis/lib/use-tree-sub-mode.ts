@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 
 /**
  * Sub-mode WITHIN the scaffold-tree view:
@@ -48,9 +48,7 @@ export function useTreeSubMode(): {
   // which would clobber user-driven toggles. Back-button-mid-session
   // mode switching is a rare ask; add a popstate listener if a chemist
   // actually requests it.
-  const [subMode, setLocal] = useState<TreeSubMode>(() =>
-    parse(params.get(PARAM)),
-  );
+  const [subMode, setLocal] = useState<TreeSubMode>(() => parse(params.get(PARAM)));
 
   const setSubMode = useCallback((next: TreeSubMode) => {
     setLocal(next);

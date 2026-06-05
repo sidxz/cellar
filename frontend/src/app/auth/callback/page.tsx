@@ -1,9 +1,9 @@
 "use client";
 
+import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
+import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
-import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
 import { AuthzCallback } from "@sentinel-auth/nextjs";
 import { useRouter } from "next/navigation";
 
@@ -55,7 +55,9 @@ export default function CallbackPage() {
                 }
                 workspaceSelector={({ workspaces, onSelect, isLoading: selecting }) => (
                   <div>
-                    <h2 className="text-sm font-medium text-muted-foreground">Select workspace to continue</h2>
+                    <h2 className="text-sm font-medium text-muted-foreground">
+                      Select workspace to continue
+                    </h2>
                     <div className="mt-4 space-y-2">
                       {workspaces.map((ws) => (
                         <Button
@@ -66,9 +68,7 @@ export default function CallbackPage() {
                           onClick={() => onSelect(ws.id)}
                         >
                           <span className="truncate">{ws.name}</span>
-                          <span className="ml-auto text-xs text-muted-foreground">
-                            {ws.role}
-                          </span>
+                          <span className="ml-auto text-xs text-muted-foreground">{ws.role}</span>
                         </Button>
                       ))}
                     </div>

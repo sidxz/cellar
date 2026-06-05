@@ -45,10 +45,7 @@ type Action =
 
 const HISTORY_CAP = 50;
 
-function pushHistory(
-  history: DraftExclusion[][],
-  snapshot: DraftExclusion[],
-): DraftExclusion[][] {
+function pushHistory(history: DraftExclusion[][], snapshot: DraftExclusion[]): DraftExclusion[][] {
   const next = [...history, snapshot];
   if (next.length > HISTORY_CAP) {
     // Drop the oldest entries to keep the cap.
@@ -121,12 +118,7 @@ function reducer(state: State, action: Action): State {
       // somehow the only entry at this idx is legacy (which is impossible
       // since legacy entries have idx=null), guard anyway: applyToggle
       // looks up by exact-equality on idx, so legacy rows are untouched.
-      const nextCurrent = applyToggle(
-        state.current,
-        action.idx,
-        action.authorId,
-        action.now,
-      );
+      const nextCurrent = applyToggle(state.current, action.idx, action.authorId, action.now);
       // No-op guard: if applyToggle didn't change anything, skip history bump.
       if (nextCurrent === state.current) return state;
       return {
@@ -224,20 +216,14 @@ export function useEditSession(
 
   const undo = useCallback(() => dispatch({ type: "undo" }), []);
   const redo = useCallback(() => dispatch({ type: "redo" }), []);
-  const resetToSaved = useCallback(
-    () => dispatch({ type: "resetToSaved" }),
-    [],
-  );
+  const resetToSaved = useCallback(() => dispatch({ type: "resetToSaved" }), []);
 
   const dirtyCount = useMemo(
     () => computeDirtyCount(state.initial, state.current),
     [state.initial, state.current],
   );
 
-  const draft = useMemo(
-    () => ({ exclusions: state.current }),
-    [state.current],
-  );
+  const draft = useMemo(() => ({ exclusions: state.current }), [state.current]);
 
   return {
     draft,
@@ -258,10 +244,7 @@ export function useEditSession(
  * - it exists in `initial` but not in `current` (removed), OR
  * - both sides have the same `idx` but the `excluded` flag differs.
  */
-function computeDirtyCount(
-  initial: DraftExclusion[],
-  current: DraftExclusion[],
-): number {
+function computeDirtyCount(initial: DraftExclusion[], current: DraftExclusion[]): number {
   // Build maps keyed by numeric idx (skip nulls — legacy rows are immutable).
   const initialMap = new Map<number, DraftExclusion>();
   for (const e of initial) {

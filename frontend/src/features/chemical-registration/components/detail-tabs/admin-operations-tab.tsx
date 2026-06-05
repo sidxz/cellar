@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
+import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -13,10 +12,11 @@ import {
 } from "@/shared/components/ui/card";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useMergeMolecules } from "../../hooks/use-disclosures";
 import { useMolecule } from "../../hooks/use-molecules";
-import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 
 interface AdminOperationsTabProps {
   moleculeId: string;
@@ -51,8 +51,7 @@ export function AdminOperationsTab({ moleculeId }: AdminOperationsTabProps) {
       setTargetId(null);
       setNotes("");
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Merge failed";
+      const message = err instanceof Error ? err.message : "Merge failed";
       setError(message);
     }
   };
@@ -65,9 +64,8 @@ export function AdminOperationsTab({ moleculeId }: AdminOperationsTabProps) {
           <CardHeader>
             <CardTitle>Hard Delete</CardTitle>
             <CardDescription>
-              Permanently delete this compound and all its dependent data
-              (batches, assay results, identifiers, relationships). Cannot be
-              undone.
+              Permanently delete this compound and all its dependent data (batches, assay results,
+              identifiers, relationships). Cannot be undone.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -85,23 +83,19 @@ export function AdminOperationsTab({ moleculeId }: AdminOperationsTabProps) {
         <CardHeader>
           <CardTitle>Manual Merge</CardTitle>
           <CardDescription>
-            Merge this compound into another. All related data (batches, assay
-            results, identifiers) will be transferred to the target.
+            Merge this compound into another. All related data (batches, assay results, identifiers)
+            will be transferred to the target.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
             <AlertTriangle className="mr-2 inline h-4 w-4" />
-            This action is irreversible. The source compound will become a
-            tombstone.
+            This action is irreversible. The source compound will become a tombstone.
           </div>
 
           <div className="grid gap-2">
             <Label>Target Compound</Label>
-            <MoleculeSelector
-              selectedId={targetId}
-              onSelect={setTargetId}
-            />
+            <MoleculeSelector selectedId={targetId} onSelect={setTargetId} />
           </div>
 
           <div className="grid gap-2">

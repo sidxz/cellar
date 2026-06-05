@@ -85,7 +85,12 @@ describe("constraintsValid", () => {
 
   it("requires valid hillMin/hillMax when hillCustomRange is true", () => {
     expect(
-      constraintsValid({ ...FREE_CONSTRAINTS, hillCustomRange: true, hillMin: null, hillMax: null }),
+      constraintsValid({
+        ...FREE_CONSTRAINTS,
+        hillCustomRange: true,
+        hillMin: null,
+        hillMax: null,
+      }),
     ).toBe(false);
     expect(
       constraintsValid({ ...FREE_CONSTRAINTS, hillCustomRange: true, hillMin: 0.9, hillMax: 1.1 }),

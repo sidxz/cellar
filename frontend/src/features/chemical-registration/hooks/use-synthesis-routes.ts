@@ -1,9 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AddReactionStepInput,
   CreateSynthesisRouteInput,
@@ -14,7 +14,11 @@ import type {
 
 const SYNTHESIS_ROUTES_KEY = ["synthesis-routes"];
 
-const routeHooks = createCrudHooks<SynthesisRoute, CreateSynthesisRouteInput, Record<string, unknown>>({
+const routeHooks = createCrudHooks<
+  SynthesisRoute,
+  CreateSynthesisRouteInput,
+  Record<string, unknown>
+>({
   entityName: "Synthesis route",
   baseUrl: "/api/v1/synthesis-routes",
   queryKey: SYNTHESIS_ROUTES_KEY,

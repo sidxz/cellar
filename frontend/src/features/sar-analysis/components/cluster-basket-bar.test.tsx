@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { ClusterBasketBar } from "./cluster-basket-bar";
 
 const baseProps = {
@@ -26,16 +26,12 @@ describe("ClusterBasketBar", () => {
 
   it("Save is disabled when the basket is empty", () => {
     render(<ClusterBasketBar {...baseProps} count={0} />);
-    expect(
-      screen.getByRole("button", { name: /save as collection/i }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /save as collection/i })).toBeDisabled();
   });
 
   it("Save fires when there are compounds", () => {
     render(<ClusterBasketBar {...baseProps} count={3} />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /save as collection/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /save as collection/i }));
     expect(baseProps.onSave).toHaveBeenCalled();
   });
 

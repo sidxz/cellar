@@ -13,8 +13,8 @@
  * vertical space for Export.
  */
 
-import { ListPlus, Settings2, BookmarkPlus } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import { BookmarkPlus, ListPlus, Settings2 } from "lucide-react";
 import { useAggregationMode } from "../../lib/use-aggregation-mode";
 import { AggregationControl } from "./aggregation-control";
 
@@ -34,31 +34,18 @@ export function ResultsToolbarLeft({
   return (
     <>
       <span className="text-sm text-muted-foreground">
-        <strong className="text-foreground">
-          {resultCount?.toLocaleString() ?? "–"}
-        </strong>{" "}
-        results
+        <strong className="text-foreground">{resultCount?.toLocaleString() ?? "–"}</strong> results
       </span>
       {selectedCount > 0 && (
-        <span className="text-sm text-primary font-medium">
-          · {selectedCount} selected
-        </span>
+        <span className="text-sm text-primary font-medium">· {selectedCount} selected</span>
       )}
       <span className="text-sm text-muted-foreground/60">
         Select:{" "}
-        <button
-          type="button"
-          onClick={onSelectAll}
-          className="text-primary hover:text-primary/80"
-        >
+        <button type="button" onClick={onSelectAll} className="text-primary hover:text-primary/80">
           all
         </button>
         {" / "}
-        <button
-          type="button"
-          onClick={onSelectNone}
-          className="text-primary hover:text-primary/80"
-        >
+        <button type="button" onClick={onSelectNone} className="text-primary hover:text-primary/80">
           none
         </button>
       </span>
@@ -92,8 +79,7 @@ export function ResultsToolbarActions({
   // same hook independently for the search body, so we don't have to
   // plumb mode/setMode through props. The hook is a thin URL-state
   // wrapper (no remote calls), so duplicate subscriptions are cheap.
-  const { mode: aggregationMode, setMode: setAggregationMode } =
-    useAggregationMode();
+  const { mode: aggregationMode, setMode: setAggregationMode } = useAggregationMode();
   return (
     <>
       <AggregationControl

@@ -1,6 +1,5 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -11,12 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import type {
-  CurveType,
-  InterceptBasis,
-  InterceptKind,
-  InterceptSpec,
-} from "../types";
+import { Plus, Trash2 } from "lucide-react";
+import type { CurveType, InterceptBasis, InterceptKind, InterceptSpec } from "../types";
 
 const KIND_OPTIONS: { value: InterceptKind; label: string }[] = [
   { value: "ic", label: "IC" },
@@ -103,17 +98,12 @@ export function InterceptsEditor({
   return (
     <div className="space-y-2">
       {rows.map((spec, i) => (
-        <div
-          key={i}
-          className="flex items-end gap-2 rounded-md border bg-background p-2"
-        >
+        <div key={i} className="flex items-end gap-2 rounded-md border bg-background p-2">
           <div className="grid gap-1 w-20">
             <Label className="text-xs">Kind</Label>
             <Select
               value={spec.kind}
-              onValueChange={(v) =>
-                updateRow(i, { kind: v as InterceptKind })
-              }
+              onValueChange={(v) => updateRow(i, { kind: v as InterceptKind })}
               disabled={disabled}
             >
               <SelectTrigger>
@@ -135,8 +125,8 @@ export function InterceptsEditor({
               value={spec.level}
               onChange={(e) =>
                 updateRow(i, {
-                  level: Number.isFinite(parseFloat(e.target.value))
-                    ? parseFloat(e.target.value)
+                  level: Number.isFinite(Number.parseFloat(e.target.value))
+                    ? Number.parseFloat(e.target.value)
                     : spec.level,
                 })
               }
@@ -147,9 +137,7 @@ export function InterceptsEditor({
             <Label className="text-xs">Basis</Label>
             <Select
               value={spec.basis}
-              onValueChange={(v) =>
-                updateRow(i, { basis: v as InterceptBasis })
-              }
+              onValueChange={(v) => updateRow(i, { basis: v as InterceptBasis })}
               disabled={disabled}
             >
               <SelectTrigger>
@@ -193,13 +181,7 @@ export function InterceptsEditor({
         </div>
       ))}
       {!disabled && rows.length < max && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addRow}
-          className="gap-1"
-        >
+        <Button type="button" variant="outline" size="sm" onClick={addRow} className="gap-1">
           <Plus className="h-3.5 w-3.5" />
           Add Data Calculation
         </Button>

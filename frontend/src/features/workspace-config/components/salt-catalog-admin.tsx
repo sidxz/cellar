@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { FlaskRound, Pencil, Plus, Trash2 } from "lucide-react";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { PageHeader } from "@/shared/components/page-header";
 import {
   Dialog,
   DialogContent,
@@ -24,14 +22,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { FlaskRound, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
+  type CreateSaltEntryInput,
+  type SaltEntry,
+  type UpdateSaltEntryInput,
   useCreateSaltEntry,
   useDeleteSaltEntry,
   useSaltCatalog,
   useUpdateSaltEntry,
-  type CreateSaltEntryInput,
-  type SaltEntry,
-  type UpdateSaltEntryInput,
 } from "../hooks/use-salt-catalog";
 
 // ---------------------------------------------------------------------------
@@ -72,8 +72,8 @@ function SaltDialog({ open, onOpenChange, editing }: SaltDialogProps) {
   }, [editing, open]);
 
   const handleSubmit = async () => {
-    const mw = parseFloat(molecularWeight);
-    if (isNaN(mw)) return;
+    const mw = Number.parseFloat(molecularWeight);
+    if (Number.isNaN(mw)) return;
 
     if (isEdit) {
       const data: UpdateSaltEntryInput = {
@@ -100,7 +100,7 @@ function SaltDialog({ open, onOpenChange, editing }: SaltDialogProps) {
     name.trim() &&
     smiles.trim() &&
     molecularWeight.trim() &&
-    !isNaN(parseFloat(molecularWeight)) &&
+    !Number.isNaN(Number.parseFloat(molecularWeight)) &&
     (isEdit || code.trim());
 
   return (
@@ -127,11 +127,7 @@ function SaltDialog({ open, onOpenChange, editing }: SaltDialogProps) {
           ) : (
             <div className="grid gap-2">
               <Label>Code</Label>
-              <Input
-                value={editing?.code ?? ""}
-                disabled
-                className="font-mono"
-              />
+              <Input value={editing?.code ?? ""} disabled className="font-mono" />
             </div>
           )}
 
@@ -174,11 +170,7 @@ function SaltDialog({ open, onOpenChange, editing }: SaltDialogProps) {
               <Label htmlFor="salt-active" className="cursor-pointer">
                 Active
               </Label>
-              <Switch
-                id="salt-active"
-                checked={isActive}
-                onCheckedChange={setIsActive}
-              />
+              <Switch id="salt-active" checked={isActive} onCheckedChange={setIsActive} />
             </div>
           )}
         </div>
@@ -230,11 +222,7 @@ function DeleteDialog({ salt, onClose }: DeleteDialogProps) {
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            variant="destructive"
-            onClick={handleConfirm}
-            disabled={deleteMutation.isPending}
-          >
+          <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? "Deleting..." : "Delete"}
           </Button>
         </DialogFooter>
@@ -296,16 +284,12 @@ function SaltTable({ entries, onEdit, onDelete }: SaltTableProps) {
         <TableBody>
           {entries.map((entry) => (
             <TableRow key={entry.id}>
-              <TableCell className="font-mono font-medium text-sm">
-                {entry.code}
-              </TableCell>
+              <TableCell className="font-mono font-medium text-sm">{entry.code}</TableCell>
               <TableCell>{entry.name}</TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground max-w-[200px] truncate">
                 {entry.smiles}
               </TableCell>
-              <TableCell className="tabular-nums">
-                {entry.molecular_weight.toFixed(2)}
-              </TableCell>
+              <TableCell className="tabular-nums">{entry.molecular_weight.toFixed(2)}</TableCell>
               <TableCell>
                 {entry.is_default ? (
                   <Badge variant="secondary" className="text-xs">
@@ -320,19 +304,11 @@ function SaltTable({ entries, onEdit, onDelete }: SaltTableProps) {
               </TableCell>
               <TableCell>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEdit(entry)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => onEdit(entry)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                   {!entry.is_default && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onDelete(entry)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => onDelete(entry)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   )}
@@ -375,11 +351,7 @@ export function SaltCatalogAdmin() {
         subtitle="Manage the salt forms used during structure standardization and parent extraction."
       >
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Switch
-            id="show-all"
-            checked={showAll}
-            onCheckedChange={setShowAll}
-          />
+          <Switch id="show-all" checked={showAll} onCheckedChange={setShowAll} />
           <label htmlFor="show-all" className="cursor-pointer select-none">
             Show inactive
           </label>
@@ -398,24 +370,13 @@ export function SaltCatalogAdmin() {
             ))}
           </div>
         ) : (
-          <SaltTable
-            entries={entries ?? []}
-            onEdit={openEdit}
-            onDelete={setDeleting}
-          />
+          <SaltTable entries={entries ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}
       </div>
 
-      <SaltDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editing={editing}
-      />
+      <SaltDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog
-        salt={deleting}
-        onClose={() => setDeleting(null)}
-      />
+      <DeleteDialog salt={deleting} onClose={() => setDeleting(null)} />
     </>
   );
 }

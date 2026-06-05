@@ -265,10 +265,10 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Which layer of <span className="font-mono">{drYReadout}</span> the curve fits.
-            Pick the normalized layer (e.g. % Inhibition) when the raw column is the unprocessed
-            signal — required for CDD-imported protocols where the % column is a derived layer
-            of a raw measurement.
+            Which layer of <span className="font-mono">{drYReadout}</span> the curve fits. Pick the
+            normalized layer (e.g. % Inhibition) when the raw column is the unprocessed signal —
+            required for CDD-imported protocols where the % column is a derived layer of a raw
+            measurement.
           </p>
         </div>
       )}
@@ -284,11 +284,7 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
             One row per intercept (EC50, EC90, IC10, …) — all derived from the same Hill fit
           </span>
         </div>
-        <InterceptsEditor
-          value={drIntercepts}
-          onChange={setDrIntercepts}
-          curveType={drCurveType}
-        />
+        <InterceptsEditor value={drIntercepts} onChange={setDrIntercepts} curveType={drCurveType} />
       </div>
 
       <Collapsible defaultOpen={xIsAdvanced}>
@@ -687,7 +683,6 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
           </div>
         </div>
       </details>
-
     </div>
   );
 }

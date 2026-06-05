@@ -45,9 +45,7 @@ export function suggestionsToDraft(
  *  - neither a compound_ref nor a batch_ref column is assigned, OR
  *  - there are zero readout columns.
  */
-export function buildMapping(
-  draft: SummaryMappingDraft,
-): SummaryColumnMapping | null {
+export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping | null {
   let compoundRef: string | null = null;
   let batchRef: string | null = null;
   const readoutColumns: Record<string, string> = {};

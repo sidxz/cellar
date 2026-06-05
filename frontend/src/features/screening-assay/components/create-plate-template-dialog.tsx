@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -20,13 +19,11 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
-import {
-  useCreatePlateTemplate,
-  useUpdatePlateTemplate,
-} from "../hooks/use-plate-templates";
-import { PlateMapEditor } from "./plate-map-editor";
+import { useEffect, useState } from "react";
+import { useCreatePlateTemplate, useUpdatePlateTemplate } from "../hooks/use-plate-templates";
 import type { PlateFormat, PlateTemplate, WellDesignation } from "../types";
 import { PLATE_FORMAT_LABELS } from "../types";
+import { PlateMapEditor } from "./plate-map-editor";
 
 /** Plate formats supported for templates. */
 const TEMPLATE_FORMATS: PlateFormat[] = ["96", "384", "1536"];
@@ -50,9 +47,7 @@ export function CreatePlateTemplateDialog({
   const [name, setName] = useState("");
   const [format, setFormat] = useState<PlateFormat>("96");
   const [description, setDescription] = useState("");
-  const [templateMap, setTemplateMap] = useState<
-    Record<string, WellDesignation>
-  >({});
+  const [templateMap, setTemplateMap] = useState<Record<string, WellDesignation>>({});
 
   // Reset form when dialog opens / plateTemplate changes
   useEffect(() => {
@@ -93,9 +88,7 @@ export function CreatePlateTemplateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(95vw,1100px)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit Plate Template" : "New Plate Template"}
-          </DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Plate Template" : "New Plate Template"}</DialogTitle>
           <DialogDescription>
             {isEdit
               ? "Update the plate template configuration."
@@ -148,11 +141,7 @@ export function CreatePlateTemplateDialog({
           {/* Plate map editor */}
           <div className="grid gap-2">
             <Label>Plate Layout</Label>
-            <PlateMapEditor
-              format={format}
-              value={templateMap}
-              onChange={setTemplateMap}
-            />
+            <PlateMapEditor format={format} value={templateMap} onChange={setTemplateMap} />
           </div>
         </div>
 

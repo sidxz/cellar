@@ -11,29 +11,24 @@
  * preserved and triggered from the HeaderStrip Supersede action.
  */
 
-import { useState } from "react";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useState } from "react";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
 import { ResultsGridV2 } from "../grid/results-grid";
-import { SourceProtocolsList } from "./source-protocols-list";
 import { PublishedCollectionLink } from "./published-collection-link";
+import { SourceProtocolsList } from "./source-protocols-list";
 import { SupersedeDialog } from "./supersede-dialog";
 
-import { HeaderStrip } from "../sections/header-strip";
-import { SourcesSection } from "../sections/sources-section";
-import { ChannelsSection } from "../sections/channels-section";
 import {
   CampaignFilterBar,
-  closedCampaignFilters,
   type CampaignFilters,
+  closedCampaignFilters,
 } from "../campaign-filter-bar";
+import { ChannelsSection } from "../sections/channels-section";
+import { HeaderStrip } from "../sections/header-strip";
+import { SourcesSection } from "../sections/sources-section";
 
 import { useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet } from "@/shared/lib/api/campaigns/campaigns";
 
@@ -50,17 +45,13 @@ interface CampaignViewProps {
 export function CampaignView({ campaign }: CampaignViewProps) {
   const [supersedeOpen, setSupersedeOpen] = useState(false);
   const canEditTags = useAuthzHasRole("editor");
-  const [filters, setFilters] = useState<CampaignFilters>(() =>
-    closedCampaignFilters(),
-  );
+  const [filters, setFilters] = useState<CampaignFilters>(() => closedCampaignFilters());
 
   // Published endpoint — fetched lazily on download click.
   const { refetch: fetchPublished, isFetching: isDownloading } =
-    useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet(
-      campaign.id,
-      undefined,
-      { query: { enabled: false } },
-    );
+    useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet(campaign.id, undefined, {
+      query: { enabled: false },
+    });
 
   const handleDownload = async () => {
     const result = await fetchPublished();
@@ -76,24 +67,14 @@ export function CampaignView({ campaign }: CampaignViewProps) {
     URL.revokeObjectURL(url);
   };
 
-  const supersededBy = campaign.superseded_by_campaign_id as
-    | string
-    | undefined
-    | null;
-  const supersedesId = campaign.supersedes_campaign_id as
-    | string
-    | undefined
-    | null;
+  const supersededBy = campaign.superseded_by_campaign_id as string | undefined | null;
+  const supersedesId = campaign.supersedes_campaign_id as string | undefined | null;
   const closedAt = campaign.closed_at as string | undefined | null;
   const closedBy = campaign.closed_by as string | undefined | null;
   const signatureId = campaign.signature_id as string | undefined | null;
 
-  const sourceProtocols =
-    (campaign.source_protocols as Array<Record<string, unknown>>) ?? [];
-  const publishedCollectionId = campaign.published_collection_id as
-    | string
-    | undefined
-    | null;
+  const sourceProtocols = (campaign.source_protocols as Array<Record<string, unknown>>) ?? [];
+  const publishedCollectionId = campaign.published_collection_id as string | undefined | null;
 
   return (
     <div className="flex flex-col">
@@ -113,31 +94,17 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         onDownload={handleDownload}
         downloadDisabled={isDownloading}
         downloadLabel={isDownloading ? "Downloading…" : undefined}
-        onSupersede={
-          campaign.status !== "superseded"
-            ? () => setSupersedeOpen(true)
-            : undefined
-        }
+        onSupersede={campaign.status !== "superseded" ? () => setSupersedeOpen(true) : undefined}
         canEditTags={canEditTags}
       />
-      <SourcesSection
-        campaign={campaign}
-        projectId={campaign.project_id}
-        readOnly
-      />
-      <ChannelsSection
-        campaign={campaign}
-        projectId={campaign.project_id}
-        readOnly
-      />
+      <SourcesSection campaign={campaign} projectId={campaign.project_id} readOnly />
+      <ChannelsSection campaign={campaign} projectId={campaign.project_id} readOnly />
 
       {/* Closed-campaign-only details row */}
       <section className="grid grid-cols-1 gap-4 border-b px-6 py-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Source protocols
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Source protocols</CardTitle>
           </CardHeader>
           <CardContent>
             <SourceProtocolsList protocols={sourceProtocols} />
@@ -146,9 +113,7 @@ export function CampaignView({ campaign }: CampaignViewProps) {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Published collection
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Published collection</CardTitle>
           </CardHeader>
           <CardContent>
             <PublishedCollectionLink id={publishedCollectionId} />
@@ -164,11 +129,7 @@ export function CampaignView({ campaign }: CampaignViewProps) {
       />
       <ResultsGridV2 campaign={campaign} filters={filters} readOnly />
 
-      <SupersedeDialog
-        open={supersedeOpen}
-        onOpenChange={setSupersedeOpen}
-        campaign={campaign}
-      />
+      <SupersedeDialog open={supersedeOpen} onOpenChange={setSupersedeOpen} campaign={campaign} />
     </div>
   );
 }

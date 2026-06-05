@@ -19,14 +19,7 @@ describe("MappingStep", () => {
 
   it("calls onContinue with the user's mapping", () => {
     const onContinue = vi.fn();
-    render(
-      <MappingStep
-        headers={["Reg No."]}
-        rows={[]}
-        templates={[]}
-        onContinue={onContinue}
-      />,
-    );
+    render(<MappingStep headers={["Reg No."]} rows={[]} templates={[]} onContinue={onContinue} />);
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     expect(onContinue).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -63,14 +56,7 @@ describe("MappingStep", () => {
   });
 
   it("blocks Continue when save is checked but no name is given", () => {
-    render(
-      <MappingStep
-        headers={["Reg No."]}
-        rows={[]}
-        templates={[]}
-        onContinue={vi.fn()}
-      />,
-    );
+    render(<MappingStep headers={["Reg No."]} rows={[]} templates={[]} onContinue={vi.fn()} />);
     fireEvent.click(screen.getByRole("checkbox"));
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
   });
@@ -108,14 +94,8 @@ describe("MappingStep", () => {
         onContinue={vi.fn()}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: /all \(1\)/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /used here \(0\)/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /mine \(0\)/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /all \(1\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /used here \(0\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /mine \(0\)/i })).toBeInTheDocument();
   });
 });

@@ -1,10 +1,10 @@
 "use client";
 
-import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
-import { Checkbox } from "@/shared/components/ui/checkbox";
-import { Badge } from "@/shared/components/ui/badge";
-import { cn } from "@/shared/lib/utils";
 import type { Molecule } from "@/features/chemical-registration/types";
+import { MoleculeThumbnail } from "@/shared/components/molecule-thumbnail";
+import { Badge } from "@/shared/components/ui/badge";
+import { Checkbox } from "@/shared/components/ui/checkbox";
+import { cn } from "@/shared/lib/utils";
 
 export interface MoleculeCardProps {
   molecule: Molecule;
@@ -73,10 +73,7 @@ export function MoleculeCard({
         className="flex flex-1 flex-col text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
       >
         <div className="flex items-center justify-center bg-muted/30 p-3">
-          <MoleculeThumbnail
-            smiles={molecule.structure?.smiles ?? ""}
-            size="md"
-          />
+          <MoleculeThumbnail smiles={molecule.structure?.smiles ?? ""} size="md" />
         </div>
         <div className="flex flex-col gap-1 border-t p-3">
           <div className="flex items-baseline justify-between gap-2">

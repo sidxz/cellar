@@ -1,9 +1,9 @@
 "use client";
 
+import { cn } from "@/shared/lib/utils";
+import { Upload } from "lucide-react";
 import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
 import { useUploadAttachment } from "../hooks/use-attachments";
 import type { AttachableType } from "../types";
 
@@ -43,16 +43,14 @@ export function FileUploadZone({ entityType, entityId }: FileUploadZoneProps) {
         upload.mutate(file);
       }
     },
-    [upload]
+    [upload],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     maxSize: MAX_SIZE,
     validator: (file) => {
-      const ext = file.name.includes(".")
-        ? `.${file.name.split(".").pop()?.toLowerCase()}`
-        : "";
+      const ext = file.name.includes(".") ? `.${file.name.split(".").pop()?.toLowerCase()}` : "";
       if (BLOCKED_EXTENSIONS.has(ext)) {
         return {
           code: "blocked-type",
@@ -70,7 +68,7 @@ export function FileUploadZone({ entityType, entityId }: FileUploadZoneProps) {
         "flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors",
         isDragActive
           ? "border-primary bg-primary/5"
-          : "border-muted-foreground/25 hover:border-muted-foreground/50"
+          : "border-muted-foreground/25 hover:border-muted-foreground/50",
       )}
     >
       <input {...getInputProps()} />
@@ -84,9 +82,7 @@ export function FileUploadZone({ entityType, entityId }: FileUploadZoneProps) {
           Drag &amp; drop files here, or click to browse
         </p>
       )}
-      <p className="mt-1 text-xs text-muted-foreground/60">
-        Max 100 MB per file
-      </p>
+      <p className="mt-1 text-xs text-muted-foreground/60">Max 100 MB per file</p>
     </div>
   );
 }

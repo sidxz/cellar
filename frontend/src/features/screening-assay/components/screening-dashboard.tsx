@@ -1,22 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { TestTubes, Crosshair, Plus, Download } from "lucide-react";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
-import { Button } from "@/shared/components/ui/button";
 import { PageHeader } from "@/shared/components/page-header";
-import { ProtocolList } from "./protocol-list";
-import { TargetList } from "./target-list";
-import { CreateProtocolDialog } from "./create-protocol-dialog";
-import { CreateTargetDialog } from "./create-target-dialog";
+import { Button } from "@/shared/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { Crosshair, Download, Plus, TestTubes } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useCddEnabled } from "../hooks/use-cdd-enabled";
 import { CddImportDialog } from "./cdd-import-dialog";
+import { CreateProtocolDialog } from "./create-protocol-dialog";
+import { CreateTargetDialog } from "./create-target-dialog";
+import { ProtocolList } from "./protocol-list";
+import { TargetList } from "./target-list";
 
 export function ScreeningDashboard() {
   const router = useRouter();
@@ -28,10 +23,7 @@ export function ScreeningDashboard() {
 
   return (
     <div>
-      <PageHeader
-        title="Assays"
-        subtitle="Manage screening protocols and assay runs."
-      />
+      <PageHeader title="Assays" subtitle="Manage screening protocols and assay runs." />
 
       <Tabs value={tab} onValueChange={setTab} className="mt-6">
         <div className="flex items-center justify-between">
@@ -81,14 +73,8 @@ export function ScreeningDashboard() {
         </TabsContent>
       </Tabs>
 
-      <CreateProtocolDialog
-        open={createProtocolOpen}
-        onOpenChange={setCreateProtocolOpen}
-      />
-      <CreateTargetDialog
-        open={createTargetOpen}
-        onOpenChange={setCreateTargetOpen}
-      />
+      <CreateProtocolDialog open={createProtocolOpen} onOpenChange={setCreateProtocolOpen} />
+      <CreateTargetDialog open={createTargetOpen} onOpenChange={setCreateTargetOpen} />
       <CddImportDialog
         open={cddImportOpen}
         onOpenChange={setCddImportOpen}

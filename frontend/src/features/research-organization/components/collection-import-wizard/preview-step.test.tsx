@@ -22,32 +22,17 @@ const result = {
 
 describe("PreviewStep", () => {
   it("renders count badges", () => {
-    render(
-      <PreviewStep
-        result={result as any}
-        collectionId="c1"
-        onCommit={vi.fn()}
-      />,
-    );
+    render(<PreviewStep result={result as any} collectionId="c1" onCommit={vi.fn()} />);
     expect(screen.getByText(/1 resolved/i)).toBeInTheDocument();
     expect(screen.getByText(/1 unregistered/i)).toBeInTheDocument();
   });
 
   it("renders the Register them handoff link when preview_id is present", () => {
-    render(
-      <PreviewStep
-        result={result as any}
-        collectionId="c1"
-        onCommit={vi.fn()}
-      />,
-    );
+    render(<PreviewStep result={result as any} collectionId="c1" onCommit={vi.fn()} />);
     const link = screen.getByRole("link", { name: /register them/i });
     // Opens registration in a new tab so this import tab keeps its rows; only
     // from_collection_import is carried (the wizard re-checks client-side).
-    expect(link).toHaveAttribute(
-      "href",
-      "/compounds/register?from_collection_import=p1",
-    );
+    expect(link).toHaveAttribute("href", "/compounds/register?from_collection_import=p1");
     expect(link).toHaveAttribute("target", "_blank");
   });
 
@@ -66,13 +51,7 @@ describe("PreviewStep", () => {
   });
 
   it("enables commit button only when resolved_count > 0", () => {
-    render(
-      <PreviewStep
-        result={result as any}
-        collectionId="c1"
-        onCommit={vi.fn()}
-      />,
-    );
+    render(<PreviewStep result={result as any} collectionId="c1" onCommit={vi.fn()} />);
     // There are two commit buttons (top + bottom); both should be enabled.
     const buttons = screen.getAllByRole("button", { name: /add 1 resolved/i });
     expect(buttons.length).toBeGreaterThan(0);

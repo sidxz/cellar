@@ -1,15 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { cn } from "@/shared/lib/utils";
+import Link from "next/link";
 
-type EntityType =
-  | "compound"
-  | "batch"
-  | "sample"
-  | "protocol"
-  | "run"
-  | "organization";
+type EntityType = "compound" | "batch" | "sample" | "protocol" | "run" | "organization";
 
 const ENTITY_PATHS: Record<EntityType, string> = {
   compound: "/compounds",
@@ -31,10 +25,7 @@ export function EntityLink({ type, id, label, className }: EntityLinkProps) {
   return (
     <Link
       href={`${ENTITY_PATHS[type]}/${id}`}
-      className={cn(
-        "font-mono text-sm text-primary underline-offset-4 hover:underline",
-        className
-      )}
+      className={cn("font-mono text-sm text-primary underline-offset-4 hover:underline", className)}
       onClick={(e) => e.stopPropagation()}
     >
       {label}

@@ -1,15 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Input } from "@/shared/components/ui/input";
 import {
   Select,
@@ -26,9 +19,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import {
-  useBatchIdentifiers,
   useAddBatchIdentifier,
+  useBatchIdentifiers,
   useRemoveBatchIdentifier,
 } from "../hooks/use-batch-identifiers";
 
@@ -76,7 +71,7 @@ function AddBatchIdentifierForm({
           setSource("");
           onDone();
         },
-      }
+      },
     );
   };
 
@@ -125,12 +120,7 @@ function AddBatchIdentifierForm({
       >
         {addMutation.isPending ? "Adding..." : "Add"}
       </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="h-8"
-        onClick={onDone}
-      >
+      <Button size="sm" variant="ghost" className="h-8" onClick={onDone}>
         Cancel
       </Button>
     </div>
@@ -165,16 +155,11 @@ export function BatchIdentifiersCard({ batchId }: BatchIdentifiersCardProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {showAddForm && (
-          <AddBatchIdentifierForm
-            batchId={batchId}
-            onDone={() => setShowAddForm(false)}
-          />
+          <AddBatchIdentifierForm batchId={batchId} onDone={() => setShowAddForm(false)} />
         )}
 
         {identifiers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No identifiers registered.
-          </p>
+          <p className="text-sm text-muted-foreground">No identifiers registered.</p>
         ) : (
           <div className="rounded-lg border">
             <Table>
@@ -195,12 +180,8 @@ export function BatchIdentifiersCard({ batchId }: BatchIdentifiersCardProps) {
                           ident.identifier_type}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {ident.identifier}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {ident.source || "—"}
-                    </TableCell>
+                    <TableCell className="font-mono text-sm">{ident.identifier}</TableCell>
+                    <TableCell className="text-muted-foreground">{ident.source || "—"}</TableCell>
                     <TableCell>
                       <Button
                         variant="ghost"

@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import React from "react";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import type React from "react";
+import { describe, expect, it, vi } from "vitest";
 import { useRegionDiversePick } from "./use-region-diverse-pick";
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
@@ -38,10 +38,12 @@ describe("useRegionDiversePick", () => {
 
   it("pick() runs MaxMin over the subset and returns representative ids", async () => {
     // Typed param so mock.calls[0][0] is inspectable under strict tsc.
-    const startFn = vi.fn(async (_input: { picker: string; molecule_ids?: string[]; n?: number | null }) => ({
-      result: resultDto,
-      job: null,
-    }));
+    const startFn = vi.fn(
+      async (_input: { picker: string; molecule_ids?: string[]; n?: number | null }) => ({
+        result: resultDto,
+        job: null,
+      }),
+    );
     const { result } = renderHook(() => useRegionDiversePick({ startFn }), {
       wrapper,
     });

@@ -1,5 +1,5 @@
-import { renderHook, act } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultNForSize, usePickerConfig } from "./use-picker-config";
 
 // Mock next/navigation — production code reads URL once on mount via
@@ -24,17 +24,13 @@ describe("usePickerConfig", () => {
   });
 
   it("uses size-adaptive default N when collectionSize given", () => {
-    const { result } = renderHook(() =>
-      usePickerConfig({ collectionSize: 22 }),
-    );
+    const { result } = renderHook(() => usePickerConfig({ collectionSize: 22 }));
     // 22 * 0.1 = 2.2 → ceil = 3 → max(5, 3) = 5
     expect(result.current.n).toBe(5);
   });
 
   it("clamps N default to 50 ceiling for large collections", () => {
-    const { result } = renderHook(() =>
-      usePickerConfig({ collectionSize: 5000 }),
-    );
+    const { result } = renderHook(() => usePickerConfig({ collectionSize: 5000 }));
     expect(result.current.n).toBe(50);
   });
 
@@ -59,9 +55,7 @@ describe("usePickerConfig", () => {
   });
 
   it("switching back to maxmin restores size-adaptive default n", () => {
-    const { result } = renderHook(() =>
-      usePickerConfig({ collectionSize: 200 }),
-    );
+    const { result } = renderHook(() => usePickerConfig({ collectionSize: 200 }));
     act(() => result.current.setPicker("butina"));
     act(() => result.current.setPicker("maxmin"));
     expect(result.current.picker).toBe("maxmin");

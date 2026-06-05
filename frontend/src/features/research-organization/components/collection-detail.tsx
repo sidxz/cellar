@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
+import { TagTable } from "@/features/tagging/components/tag-table";
+import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
+import { DetailShell } from "@/shared/components/detail-shell";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,23 +15,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
-import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { Button } from "@/shared/components/ui/button";
-import { DetailShell } from "@/shared/components/detail-shell";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
-import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
-import { useSdfExport } from "@/features/chemical-registration/hooks/use-sdf-export";
-import { useCollection, useDeleteCollection } from "../hooks/use-collections";
+import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 import { useRemoveMolecules } from "../hooks/use-collection-molecules";
 import { useCollectionSearch } from "../hooks/use-collection-search";
-import { useProtocolTestCounts } from "../hooks/use-protocol-test-counts";
+import { useCollection, useDeleteCollection } from "../hooks/use-collections";
 import { useProject, useProjects } from "../hooks/use-projects";
+import { useProtocolTestCounts } from "../hooks/use-protocol-test-counts";
 import { useViewMode } from "../lib/use-view-mode";
 import type { ViewMode } from "../lib/use-view-mode";
-import { TagTable } from "@/features/tagging/components/tag-table";
-import { CreateCollectionDialog } from "./create-collection-dialog";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
 import { CollectionHeader } from "./collection/collection-header";
+import { CreateCollectionDialog } from "./create-collection-dialog";
 import { ResultsSurface } from "./results/results-surface";
 import { ViewModeToggle } from "./results/view-mode-toggle";
 
@@ -63,10 +63,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
 
   // Molecule IDs memoized so the test-count query key is stable.
   const moleculeIds = useMemo(() => molecules.map((m) => m.id), [molecules]);
-  const { data: testCounts } = useProtocolTestCounts(
-    moleculeIds,
-    query.data?.project_id ?? null,
-  );
+  const { data: testCounts } = useProtocolTestCounts(moleculeIds, query.data?.project_id ?? null);
 
   // Cluster view: disabled when molecule count is below the UMAP threshold.
   const clusterDisabledModes = useMemo<Set<ViewMode>>(() => {
@@ -90,10 +87,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
     });
   }, []);
 
-  const onOpen = useCallback(
-    (id: string) => router.push(`/compounds/${id}`),
-    [router],
-  );
+  const onOpen = useCallback((id: string) => router.push(`/compounds/${id}`), [router]);
 
   const { exportSdf } = useSdfExport();
   const handleExportSdf = useCallback(() => {
@@ -211,7 +205,11 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               rightSlot={
                 <>
                   {selectionToolbar}
-                  <ViewModeToggle mode={mode} onChange={setMode} disabledModes={clusterDisabledModes} />
+                  <ViewModeToggle
+                    mode={mode}
+                    onChange={setMode}
+                    disabledModes={clusterDisabledModes}
+                  />
                 </>
               }
             />
@@ -239,11 +237,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         )}
       </DetailShell>
 
-      <CreateCollectionDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        collection={query.data}
-      />
+      <CreateCollectionDialog open={editOpen} onOpenChange={setEditOpen} collection={query.data} />
 
       <ConfirmDeleteDialog
         open={deleteOpen}
@@ -259,7 +253,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove molecules?</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove {selectedIds.size} molecule{selectedIds.size === 1 ? "" : "s"} from this collection? The molecules themselves will not be deleted.
+              Remove {selectedIds.size} molecule{selectedIds.size === 1 ? "" : "s"} from this
+              collection? The molecules themselves will not be deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

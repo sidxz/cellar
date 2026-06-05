@@ -78,8 +78,7 @@ export function snapshotToDoseResponseCurve(
     num_points: Array.isArray(snap.raw_data) ? snap.raw_data.length : 0,
     curve_class: (snap.curve_class as CurveClass | null) ?? null,
     raw_data: (snap.raw_data ?? null) as Array<Record<string, unknown>> | null,
-    excluded_points:
-      (snap.excluded_points ?? null) as Array<Record<string, unknown>> | null,
+    excluded_points: (snap.excluded_points ?? null) as Array<Record<string, unknown>> | null,
     fit_quality_warnings: snap.fit_quality_warnings ?? [],
     intercept_values,
     // Aggregate-mode overlay carried through the snapshot so the expand
@@ -87,8 +86,7 @@ export function snapshotToDoseResponseCurve(
     // and place a single vertical marker at the cell's aggregate value
     // (rather than the rep curve's per-intercept dashed line, which
     // points at the latest run's intercept — not the aggregate).
-    additional_curves:
-      (snap.additional_curves ?? null) as Array<Record<string, unknown>> | null,
+    additional_curves: (snap.additional_curves ?? null) as Array<Record<string, unknown>> | null,
     aggregate: snap.aggregate ?? null,
   };
 }

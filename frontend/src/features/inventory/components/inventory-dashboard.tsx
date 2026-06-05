@@ -1,27 +1,22 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { useHashTab } from "@/shared/hooks/use-hash-tab";
-import { Boxes, Package, MapPin, Plus, Upload } from "lucide-react";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/shared/components/ui/tabs";
-import { Button } from "@/shared/components/ui/button";
-import { SearchInput } from "@/shared/components/search-input";
 import { PageHeader } from "@/shared/components/page-header";
-import { SummaryCards } from "./summary-cards";
-import { GlobalBatchList } from "./batch-list";
-import { GlobalSampleList } from "./sample-list";
-import { StorageBrowser } from "./storage-browser";
-import { CreateBatchDialog } from "./create-batch-dialog";
-import { CreateSampleDialog } from "./create-sample-dialog";
+import { SearchInput } from "@/shared/components/search-input";
+import { Button } from "@/shared/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
+import { Boxes, MapPin, Package, Plus, Upload } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useState } from "react";
 import type { BatchGlobalParams } from "../hooks/use-batches";
 import type { SampleGlobalParams } from "../hooks/use-samples";
+import { GlobalBatchList } from "./batch-list";
+import { CreateBatchDialog } from "./create-batch-dialog";
+import { CreateSampleDialog } from "./create-sample-dialog";
+import { GlobalSampleList } from "./sample-list";
+import { StorageBrowser } from "./storage-browser";
+import { SummaryCards } from "./summary-cards";
 
 export function InventoryDashboard() {
   const router = useRouter();
@@ -68,10 +63,7 @@ export function InventoryDashboard() {
 
   return (
     <div>
-      <PageHeader
-        title="Inventory"
-        subtitle="Manage batches, samples, and storage locations."
-      >
+      <PageHeader title="Inventory" subtitle="Manage batches, samples, and storage locations.">
         <Button variant="outline" asChild>
           <Link href="/inventory/batch-identifiers/import">
             <Upload className="mr-2 h-4 w-4" />
@@ -111,7 +103,14 @@ export function InventoryDashboard() {
       />
 
       {/* Tabs */}
-      <Tabs value={tab} onValueChange={(t) => { setTab(t); clearFilters(); }} className="mt-4">
+      <Tabs
+        value={tab}
+        onValueChange={(t) => {
+          setTab(t);
+          clearFilters();
+        }}
+        className="mt-4"
+      >
         <TabsList>
           <TabsTrigger value="batches">
             <Boxes className="mr-2 h-4 w-4" />
@@ -140,14 +139,8 @@ export function InventoryDashboard() {
         </TabsContent>
       </Tabs>
 
-      <CreateBatchDialog
-        open={createBatchOpen}
-        onOpenChange={setCreateBatchOpen}
-      />
-      <CreateSampleDialog
-        open={createSampleOpen}
-        onOpenChange={setCreateSampleOpen}
-      />
+      <CreateBatchDialog open={createBatchOpen} onOpenChange={setCreateBatchOpen} />
+      <CreateSampleDialog open={createSampleOpen} onOpenChange={setCreateSampleOpen} />
     </div>
   );
 }

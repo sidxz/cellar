@@ -1,5 +1,6 @@
 "use client";
 
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EmptyState } from "@/shared/components/empty-state";
 import { Badge } from "@/shared/components/ui/badge";
@@ -16,7 +17,6 @@ import { Eye, Filter, FlaskConical, FolderPlus, Settings2, Star } from "lucide-r
 import { useMemo } from "react";
 import { COMPACT_DR_CHART } from "../../lib/dose-response-display";
 import type { CompoundActivity, CurveClass, Protocol } from "../../types";
-import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
 import { CurveClassBadge } from "../curve-class-badge";
 import { CurveNavigator } from "../curve-navigator";

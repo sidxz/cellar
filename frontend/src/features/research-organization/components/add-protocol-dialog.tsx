@@ -1,16 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ProtocolList } from "@/features/screening-assay";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/components/ui/dialog";
-import { ProtocolList } from "@/features/screening-assay";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 interface AddProtocolDialogProps {
   projectId: string;
@@ -18,11 +13,7 @@ interface AddProtocolDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function AddProtocolDialog({
-  projectId,
-  open,
-  onOpenChange,
-}: AddProtocolDialogProps) {
+export function AddProtocolDialog({ projectId, open, onOpenChange }: AddProtocolDialogProps) {
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
 

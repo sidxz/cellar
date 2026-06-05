@@ -1,18 +1,31 @@
-import { describe, it, expect } from "vitest";
-import { medianPic50ForMols, classifyActivity } from "./scaffold-rollup";
+import { describe, expect, it } from "vitest";
+import { classifyActivity, medianPic50ForMols } from "./scaffold-rollup";
 
 // Use the loose ActivityData shape — the type test exists so consumers can adapt.
 type LooseActivityData = Record<
   string,
-  Record<string, { intercept_values?: { kind: string; level: number; value: number | null; qualifier: string }[] }>
+  Record<
+    string,
+    {
+      intercept_values?: { kind: string; level: number; value: number | null; qualifier: string }[];
+    }
+  >
 >;
 
 describe("medianPic50ForMols", () => {
   const activity: LooseActivityData = {
-    m1: { "proto-A": { intercept_values: [{ kind: "ec", level: 50, value: 1e-6, qualifier: "=" }] } },
-    m2: { "proto-A": { intercept_values: [{ kind: "ec", level: 50, value: 1e-7, qualifier: "=" }] } },
-    m3: { "proto-A": { intercept_values: [{ kind: "ec", level: 50, value: null, qualifier: "nd" }] } },
-    m4: { "proto-A": { intercept_values: [{ kind: "ec", level: 50, value: 1e-8, qualifier: "=" }] } },
+    m1: {
+      "proto-A": { intercept_values: [{ kind: "ec", level: 50, value: 1e-6, qualifier: "=" }] },
+    },
+    m2: {
+      "proto-A": { intercept_values: [{ kind: "ec", level: 50, value: 1e-7, qualifier: "=" }] },
+    },
+    m3: {
+      "proto-A": { intercept_values: [{ kind: "ec", level: 50, value: null, qualifier: "nd" }] },
+    },
+    m4: {
+      "proto-A": { intercept_values: [{ kind: "ec", level: 50, value: 1e-8, qualifier: "=" }] },
+    },
   };
 
   it("computes median pIC50 (excludes ND)", () => {

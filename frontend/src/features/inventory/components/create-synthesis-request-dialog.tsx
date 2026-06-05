@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -20,6 +19,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useState } from "react";
 import { useCreateSynthesisRequest } from "../hooks/use-synthesis-requests";
 import { MoleculeSelector } from "./molecule-selector";
 
@@ -55,25 +55,25 @@ export function CreateSynthesisRequestDialog({
     mutation.mutate(
       {
         molecule_id: moleculeId,
-        amount_value: parseFloat(amountValue),
+        amount_value: Number.parseFloat(amountValue),
         amount_unit: amountUnit,
         purpose,
         priority,
-        target_purity: targetPurity !== "" ? parseFloat(targetPurity) : null,
+        target_purity: targetPurity !== "" ? Number.parseFloat(targetPurity) : null,
       },
       {
         onSuccess: () => {
           onOpenChange(false);
           resetState();
         },
-      }
+      },
     );
   };
 
   const isValid =
     moleculeId !== null &&
     amountValue !== "" &&
-    parseFloat(amountValue) > 0 &&
+    Number.parseFloat(amountValue) > 0 &&
     purpose.trim() !== "";
 
   return (
@@ -82,18 +82,15 @@ export function CreateSynthesisRequestDialog({
         <DialogHeader>
           <DialogTitle>New Synthesis Request</DialogTitle>
           <DialogDescription>
-            Submit a request to synthesize a compound. The request is created in
-            draft status — submit it to begin the approval workflow.
+            Submit a request to synthesize a compound. The request is created in draft status —
+            submit it to begin the approval workflow.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label>Compound</Label>
-            <MoleculeSelector
-              selectedId={moleculeId}
-              onSelect={setMoleculeId}
-            />
+            <MoleculeSelector selectedId={moleculeId} onSelect={setMoleculeId} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -161,10 +158,7 @@ export function CreateSynthesisRequestDialog({
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={handleSubmit}
-            disabled={!isValid || mutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={!isValid || mutation.isPending}>
             {mutation.isPending ? "Creating..." : "Create Request"}
           </Button>
         </DialogFooter>

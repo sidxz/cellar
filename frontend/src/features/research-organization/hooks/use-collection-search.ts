@@ -1,9 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import type { EnrichedSearchResponse } from "./use-search";
+import { useQuery } from "@tanstack/react-query";
 import type { ExecuteSearchInput } from "../types";
+import type { EnrichedSearchResponse } from "./use-search";
 
 export interface UseCollectionSearchOptions {
   /**
@@ -21,10 +21,7 @@ export interface UseCollectionSearchOptions {
  * Returns the same `EnrichedSearchResponse` shape `/search` consumes, so
  * downstream views (CardGrid, ResultsGrid) reuse the existing types.
  */
-export function useCollectionSearch(
-  collectionId: string,
-  opts: UseCollectionSearchOptions = {},
-) {
+export function useCollectionSearch(collectionId: string, opts: UseCollectionSearchOptions = {}) {
   const { limit = 10000 } = opts;
 
   return useQuery({

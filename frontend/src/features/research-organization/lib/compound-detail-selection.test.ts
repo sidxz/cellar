@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CurveDetail, RunScope } from "../types";
 import {
   aggregateValue,
   filterCurvesByRunScope,
   pickRepresentative,
 } from "./compound-detail-selection";
-import type { CurveDetail, RunScope } from "../types";
 
 function makeCurve(over: Partial<CurveDetail>): CurveDetail {
   return {
@@ -78,10 +78,7 @@ describe("aggregateValue", () => {
 
   it("gmean of (0.10, 0.40) = 0.20", () => {
     // gmean = (0.1 * 0.4)^0.5 = sqrt(0.04) = 0.2
-    const xs = [
-      makeCurve({ fitted_value: 0.1 }),
-      makeCurve({ fitted_value: 0.4 }),
-    ];
+    const xs = [makeCurve({ fitted_value: 0.1 }), makeCurve({ fitted_value: 0.4 })];
     expect(aggregateValue(xs, "gmean")).toBeCloseTo(0.2, 3);
   });
 
@@ -156,19 +153,14 @@ describe("filterCurvesByRunScope", () => {
   });
 
   it("mode='specific' (legacy single-shape run_id) keeps only that run", () => {
-    const xs = [
-      makeCurve({ curve_id: "a", run_id: r1 }),
-      makeCurve({ curve_id: "b", run_id: r2 }),
-    ];
+    const xs = [makeCurve({ curve_id: "a", run_id: r1 }), makeCurve({ curve_id: "b", run_id: r2 })];
     const out = filterCurvesByRunScope(xs, { mode: "specific", run_id: r2 });
     expect(out.map((c) => c.curve_id)).toEqual(["b"]);
   });
 
   it("mode='specific' with empty selection returns empty (invalid scope = nothing in-scope)", () => {
     const xs = [makeCurve({ run_id: r1 })];
-    expect(filterCurvesByRunScope(xs, { mode: "specific", run_ids: [] })).toEqual(
-      [],
-    );
+    expect(filterCurvesByRunScope(xs, { mode: "specific", run_ids: [] })).toEqual([]);
   });
 
   it("mode='latest' keeps only curves from the most recent run", () => {
@@ -216,9 +208,7 @@ describe("filterCurvesByRunScope", () => {
 
     it("drops curves with null run_date", () => {
       const xs = [makeCurve({ run_date: null })];
-      expect(
-        filterCurvesByRunScope(xs, { mode: "past_n_days", days: 30 }),
-      ).toEqual([]);
+      expect(filterCurvesByRunScope(xs, { mode: "past_n_days", days: 30 })).toEqual([]);
     });
   });
 
@@ -265,9 +255,7 @@ describe("filterCurvesByRunScope", () => {
 
     it("with neither bound is a no-op (parity with BE RunScope.all())", () => {
       const xs = [makeCurve({ run_date: "2026-05-15" })];
-      expect(filterCurvesByRunScope(xs, { mode: "date_range" } as RunScope)).toEqual(
-        xs,
-      );
+      expect(filterCurvesByRunScope(xs, { mode: "date_range" } as RunScope)).toEqual(xs);
     });
 
     it("drops curves with null run_date when a bound exists", () => {

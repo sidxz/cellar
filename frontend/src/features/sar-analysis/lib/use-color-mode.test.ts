@@ -1,5 +1,5 @@
-import { renderHook, act } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useColorMode } from "./use-color-mode";
 
 // Mock next/navigation — production code reads URL once on mount via
@@ -18,25 +18,19 @@ describe("useColorMode", () => {
   });
 
   it("defaults to cluster", () => {
-    const { result } = renderHook(() =>
-      useColorMode({ defaultMode: "cluster" }),
-    );
+    const { result } = renderHook(() => useColorMode({ defaultMode: "cluster" }));
     expect(result.current.mode).toBe("cluster");
   });
 
   it("switching to activity preserves protocol id", () => {
-    const { result } = renderHook(() =>
-      useColorMode({ defaultMode: "cluster" }),
-    );
+    const { result } = renderHook(() => useColorMode({ defaultMode: "cluster" }));
     act(() => result.current.setMode("activity", "proto-1"));
     expect(result.current.mode).toBe("activity");
     expect(result.current.protocolId).toBe("proto-1");
   });
 
   it("switching away from activity clears protocolId", () => {
-    const { result } = renderHook(() =>
-      useColorMode({ defaultMode: "cluster" }),
-    );
+    const { result } = renderHook(() => useColorMode({ defaultMode: "cluster" }));
     act(() => result.current.setMode("activity", "proto-1"));
     act(() => result.current.setMode("scaffold"));
     expect(result.current.mode).toBe("scaffold");
@@ -44,9 +38,7 @@ describe("useColorMode", () => {
   });
 
   it("switching back to default clears the color param", () => {
-    const { result } = renderHook(() =>
-      useColorMode({ defaultMode: "cluster" }),
-    );
+    const { result } = renderHook(() => useColorMode({ defaultMode: "cluster" }));
     act(() => result.current.setMode("scaffold"));
     act(() => result.current.setMode("cluster"));
     expect(result.current.mode).toBe("cluster");
@@ -59,18 +51,14 @@ describe("useColorMode", () => {
 
   it("reads color mode from URL on mount", () => {
     params = new URLSearchParams("color=activity&color-protocol=proto-42");
-    const { result } = renderHook(() =>
-      useColorMode({ defaultMode: "cluster" }),
-    );
+    const { result } = renderHook(() => useColorMode({ defaultMode: "cluster" }));
     expect(result.current.mode).toBe("activity");
     expect(result.current.protocolId).toBe("proto-42");
   });
 
   it("ignores unknown color values from URL", () => {
     params = new URLSearchParams("color=bogus");
-    const { result } = renderHook(() =>
-      useColorMode({ defaultMode: "cluster" }),
-    );
+    const { result } = renderHook(() => useColorMode({ defaultMode: "cluster" }));
     expect(result.current.mode).toBe("cluster");
   });
 });

@@ -5,10 +5,7 @@ export * from "./scaffold-tree";
 // V3 — UMAP cluster map wire types
 // ---------------------------------------------------------------------------
 
-import type {
-  UmapResultDto,
-  UmapJobDto,
-} from "@/shared/lib/api/model";
+import type { UmapJobDto, UmapResultDto } from "@/shared/lib/api/model";
 
 export type UmapPicker = "maxmin" | "butina";
 

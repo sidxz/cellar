@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -18,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { useEffect, useState } from "react";
 
 interface MoleculeLite {
   id: string;
@@ -68,9 +68,7 @@ export function SaveSelectionDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>
-            Save {selectedMolecules.length} compounds as a new collection
-          </DialogTitle>
+          <DialogTitle>Save {selectedMolecules.length} compounds as a new collection</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -84,10 +82,7 @@ export function SaveSelectionDialog({
           </div>
           <div className="space-y-1">
             <Label>Project</Label>
-            <Select
-              value={projectId ?? ""}
-              onValueChange={(v) => setProjectId(v || null)}
-            >
+            <Select value={projectId ?? ""} onValueChange={(v) => setProjectId(v || null)}>
               <SelectTrigger>
                 <SelectValue placeholder="Workspace-wide" />
               </SelectTrigger>
@@ -105,9 +100,7 @@ export function SaveSelectionDialog({
               {selectedMolecules.map((m) => (
                 <li key={m.id} className="rounded border px-2 py-1">
                   <div className="font-mono">{m.reg_number ?? m.id.slice(0, 8)}</div>
-                  {m.name && (
-                    <div className="text-muted-foreground truncate">{m.name}</div>
-                  )}
+                  {m.name && <div className="text-muted-foreground truncate">{m.name}</div>}
                 </li>
               ))}
             </ul>

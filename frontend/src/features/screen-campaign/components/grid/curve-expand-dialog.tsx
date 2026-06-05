@@ -19,15 +19,10 @@
  * legacy curve_type label).
  */
 
-import { useMemo } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/components/ui/dialog";
 import { DoseResponseChart } from "@/features/screening-assay/components/dose-response-chart";
 import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog";
+import { useMemo } from "react";
 import { snapshotToDoseResponseCurve } from "../../lib/snapshot-adapter";
 
 export interface ExpandedCurve extends CurveSnapshot {
@@ -61,9 +56,7 @@ export function CurveExpandDialog({ data, onOpenChange }: Props) {
           <DialogTitle className="flex items-center gap-2">
             <span>{data.moleculeLabel}</span>
             <span className="text-muted-foreground">·</span>
-            <span className="text-muted-foreground font-normal">
-              {data.channelLabel}
-            </span>
+            <span className="text-muted-foreground font-normal">{data.channelLabel}</span>
           </DialogTitle>
         </DialogHeader>
         <DoseResponseChart curves={[adapted]} isInteractive={false} />

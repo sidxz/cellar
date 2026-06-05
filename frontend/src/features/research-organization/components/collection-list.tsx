@@ -1,22 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useAuthz } from "@sentinel-auth/nextjs";
-import { FolderOpen, GitMerge, Plus, User } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
+import { MemberName } from "@/shared/components/entity-name";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState, ErrorState } from "@/shared/components/empty-state";
-import { PageHeader } from "@/shared/components/page-header";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { MemberName } from "@/shared/components/entity-name";
-import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
+import { useAuthz } from "@sentinel-auth/nextjs";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { FolderOpen, GitMerge, Plus, User } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { useCollections } from "../hooks/use-collections";
 import { useProjects } from "../hooks/use-projects";
+import type { Collection } from "../types";
 import { BooleanCollectionsDialog } from "./boolean-collections-dialog";
 import { CreateCollectionDialog } from "./create-collection-dialog";
-import type { Collection } from "../types";
 
 interface CollectionListProps {
   /** Filter collections to a specific project */
@@ -27,10 +27,14 @@ export function CollectionList({ projectId }: CollectionListProps) {
   const router = useRouter();
   const { user } = useAuthz();
   const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
-  const { data: collections, isLoading, error } = useCollections(
-    projectId ? [projectId] : undefined,
-    { tags: tagFilter.tagIds, tagLogic: tagFilter.tagLogic },
-  );
+  const {
+    data: collections,
+    isLoading,
+    error,
+  } = useCollections(projectId ? [projectId] : undefined, {
+    tags: tagFilter.tagIds,
+    tagLogic: tagFilter.tagLogic,
+  });
   const { data: projects } = useProjects();
   const [createOpen, setCreateOpen] = useState(false);
   const [booleanOpsOpen, setBooleanOpsOpen] = useState(false);
@@ -38,7 +42,7 @@ export function CollectionList({ projectId }: CollectionListProps) {
 
   const projectLookup = useMemo(() => {
     const map = new Map<string, string>();
-    projects?.forEach((p) => map.set(p.id, p.name));
+    for (const p of projects ?? []) map.set(p.id, p.name);
     return map;
   }, [projects]);
 
@@ -92,13 +96,16 @@ export function CollectionList({ projectId }: CollectionListProps) {
           params.value ? <MemberName id={params.value} /> : "\u2014",
       },
     ],
-    [projectLookup]
+    [projectLookup],
   );
 
   if (error) {
     return (
       <div>
-        <ErrorState message="Failed to load collections. Is the backend running?" details={error.message} />
+        <ErrorState
+          message="Failed to load collections. Is the backend running?"
+          details={error.message}
+        />
       </div>
     );
   }
@@ -133,9 +140,7 @@ export function CollectionList({ projectId }: CollectionListProps) {
         height="500px"
         suppressFilters
         searchPlaceholder="Filter collections..."
-        onRowClick={(collection) =>
-          router.push(`/collections/${collection.id}`)
-        }
+        onRowClick={(collection) => router.push(`/collections/${collection.id}`)}
         emptyState={
           <EmptyState
             icon={FolderOpen}
@@ -152,10 +157,7 @@ export function CollectionList({ projectId }: CollectionListProps) {
         defaultProjectId={projectId}
       />
 
-      <BooleanCollectionsDialog
-        open={booleanOpsOpen}
-        onOpenChange={setBooleanOpsOpen}
-      />
+      <BooleanCollectionsDialog open={booleanOpsOpen} onOpenChange={setBooleanOpsOpen} />
     </div>
   );
 }

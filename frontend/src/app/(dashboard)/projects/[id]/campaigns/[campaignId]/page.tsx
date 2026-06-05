@@ -10,7 +10,5 @@ interface PageProps {
  */
 export default async function CampaignBuilderPage({ params }: PageProps) {
   const { id: projectId, campaignId } = await params;
-  return (
-    <CampaignBuilder campaignId={campaignId} projectId={projectId} />
-  );
+  return <CampaignBuilder campaignId={campaignId} projectId={projectId} />;
 }

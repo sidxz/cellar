@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { AlertTriangle } from "lucide-react";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState } from "@/shared/components/empty-state";
+import { MoleculeName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { EmptyState } from "@/shared/components/empty-state";
-import { DataGrid } from "@/shared/components/data-grid/data-grid";
-import { MoleculeName } from "@/shared/components/entity-name";
-import { useConflictDisclosures } from "../hooks/use-disclosures";
 import { formatDate } from "@/shared/lib/format-date";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import { AlertTriangle } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useConflictDisclosures } from "../hooks/use-disclosures";
 import type { DisclosureRequest } from "../types/disclosure";
 import { ResolveConflictDialog } from "./resolve-conflict-dialog";
 
@@ -46,16 +46,13 @@ export function DisclosureConflictList() {
         headerName: "Requested",
         field: "requested_at",
         width: 120,
-        valueFormatter: (p) =>
-          p.value ? formatDate(p.value) : "",
+        valueFormatter: (p) => (p.value ? formatDate(p.value) : ""),
       },
       {
         headerName: "Status",
         field: "status",
         width: 100,
-        cellRenderer: () => (
-          <Badge variant="destructive">Conflict</Badge>
-        ),
+        cellRenderer: () => <Badge variant="destructive">Conflict</Badge>,
       },
       {
         headerName: "",
@@ -66,18 +63,14 @@ export function DisclosureConflictList() {
           const data = params.data;
           if (!data) return null;
           return (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSelected(data)}
-            >
+            <Button variant="outline" size="sm" onClick={() => setSelected(data)}>
               Resolve
             </Button>
           );
         },
       },
     ],
-    []
+    [],
   );
 
   return (

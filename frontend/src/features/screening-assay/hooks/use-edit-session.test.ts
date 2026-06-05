@@ -1,17 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import {
-  useEditSession,
-  type DraftExclusion,
-} from "./use-edit-session";
+import { type DraftExclusion, useEditSession } from "./use-edit-session";
 
 const AUTHOR = "user-uuid-1";
 const TS = "2026-05-19T10:00:00Z";
 
-function makeEntry(
-  over: Partial<DraftExclusion> & { idx: number | null },
-): DraftExclusion {
+function makeEntry(over: Partial<DraftExclusion> & { idx: number | null }): DraftExclusion {
   return {
     source: "manual",
     excluded: true,

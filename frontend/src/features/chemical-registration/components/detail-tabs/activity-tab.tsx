@@ -1,21 +1,12 @@
 "use client";
 
-import { FlaskConical } from "lucide-react";
-import { Badge } from "@/shared/components/ui/badge";
-import { EmptyState } from "@/shared/components/empty-state";
 import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
 import { findInterceptValue, interceptLabel } from "@/features/screening-assay/lib/intercept-label";
-import type {
-  CurveClass,
-  InterceptSpec,
-  InterceptValue,
-} from "@/features/screening-assay/types";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
+import type { CurveClass, InterceptSpec, InterceptValue } from "@/features/screening-assay/types";
+import { EmptyState } from "@/shared/components/empty-state";
+import { Badge } from "@/shared/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -24,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+import { FlaskConical } from "lucide-react";
 import { useMoleculeActivity } from "../../hooks/use-molecule-activity";
 
 // ---------------------------------------------------------------------------
@@ -77,20 +68,13 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
         <Card key={protocol.protocol_id}>
           <CardHeader>
             <div className="flex items-center gap-3">
-              <CardTitle className="text-base">
-                {protocol.protocol_name}
-              </CardTitle>
-              <Badge variant="outline">
-                {protocol.protocol_type.replace(/_/g, " ")}
-              </Badge>
+              <CardTitle className="text-base">{protocol.protocol_name}</CardTitle>
+              <Badge variant="outline">{protocol.protocol_type.replace(/_/g, " ")}</Badge>
             </div>
           </CardHeader>
           <CardContent>
             {protocol.best_curves.length > 0 ? (
-              <CurveTable
-                curves={protocol.best_curves}
-                intercepts={protocol.intercepts ?? []}
-              />
+              <CurveTable curves={protocol.best_curves} intercepts={protocol.intercepts ?? []} />
             ) : protocol.readouts.length > 0 ? (
               <div className="rounded-lg border">
                 <Table>
@@ -106,15 +90,15 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                     {protocol.readouts.map((readout, idx) => (
                       <TableRow key={idx}>
                         <TableCell className="font-mono">
-                          {readout.qualifier && readout.qualifier !== "=" ? `${readout.qualifier} ` : ""}
+                          {readout.qualifier && readout.qualifier !== "="
+                            ? `${readout.qualifier} `
+                            : ""}
                           {readout.value != null ? readout.value.toFixed(3) : "—"}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {readout.unit ?? "—"}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {readout.source}
-                        </TableCell>
+                        <TableCell className="text-muted-foreground">{readout.source}</TableCell>
                         <TableCell>{readout.data_point_count}</TableCell>
                       </TableRow>
                     ))}
@@ -122,9 +106,7 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                 </Table>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                No readout data for this protocol.
-              </p>
+              <p className="text-sm text-muted-foreground">No readout data for this protocol.</p>
             )}
           </CardContent>
         </Card>
@@ -154,9 +136,9 @@ function CurveTable({
   const interceptCols: InterceptSpec[] =
     intercepts.length > 0
       ? intercepts
-      // No declared intercepts: emit one synthetic primary column so
-      // the table still surfaces `fitted_value` (legacy protocols).
-      : [{ kind: "ic", level: 50, basis: "relative_percent", label: "Fitted Value" }];
+      : // No declared intercepts: emit one synthetic primary column so
+        // the table still surfaces `fitted_value` (legacy protocols).
+        [{ kind: "ic", level: 50, basis: "relative_percent", label: "Fitted Value" }];
 
   return (
     <div className="rounded-lg border">
@@ -184,10 +166,7 @@ function CurveTable({
                 // curves that have no persisted intercept_values.
                 const value = iv?.value ?? (i === 0 ? curve.fitted_value : null);
                 return (
-                  <TableCell
-                    key={`c-${spec.kind}-${spec.level}-${i}`}
-                    className="font-mono"
-                  >
+                  <TableCell key={`c-${spec.kind}-${spec.level}-${i}`} className="font-mono">
                     {value == null ? (
                       <span
                         className="text-muted-foreground"
@@ -196,10 +175,7 @@ function CurveTable({
                         —
                       </span>
                     ) : iv?.at_bound ? (
-                      <Badge
-                        variant="outline"
-                        className="text-xs border-amber-500 text-amber-700"
-                      >
+                      <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
                         {value.toFixed(3)}
                         <span className="ml-1">⚠︎ at bound</span>
                       </Badge>
@@ -209,16 +185,10 @@ function CurveTable({
                   </TableCell>
                 );
               })}
-              <TableCell className="text-muted-foreground">
-                {curve.fitted_unit}
-              </TableCell>
-              <TableCell className="font-mono">
-                {curve.r_squared.toFixed(3)}
-              </TableCell>
+              <TableCell className="text-muted-foreground">{curve.fitted_unit}</TableCell>
+              <TableCell className="font-mono">{curve.r_squared.toFixed(3)}</TableCell>
               <TableCell>{curve.num_points}</TableCell>
-              <TableCell className="text-muted-foreground">
-                {curve.curve_class ?? "—"}
-              </TableCell>
+              <TableCell className="text-muted-foreground">{curve.curve_class ?? "—"}</TableCell>
               <TableCell>
                 {curve.hill_slope != null ? (
                   <DoseResponseSparkline

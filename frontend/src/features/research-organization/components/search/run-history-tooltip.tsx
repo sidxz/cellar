@@ -27,9 +27,8 @@ function findAggregate(av: ActivityValue, ik: InterceptKey | null) {
     return av.intercept_aggregates.find((a) => a.spec.kind === "primary") ?? null;
   }
   return (
-    av.intercept_aggregates.find(
-      (a) => a.spec.kind === ik.kind && a.spec.level === ik.level,
-    ) ?? null
+    av.intercept_aggregates.find((a) => a.spec.kind === ik.kind && a.spec.level === ik.level) ??
+    null
   );
 }
 
@@ -70,7 +69,9 @@ export function RunHistoryTooltip({ av, interceptKey, unit }: RunHistoryTooltipP
                   {isInactive ? (
                     <span className="text-muted-foreground">ND</span>
                   ) : isAtBound ? (
-                    <span>&gt; {iv?.value} {unit}</span>
+                    <span>
+                      &gt; {iv?.value} {unit}
+                    </span>
                   ) : iv?.value !== null && iv?.value !== undefined ? (
                     <span>
                       {iv.value.toPrecision(3)} {unit}
@@ -87,9 +88,7 @@ export function RunHistoryTooltip({ av, interceptKey, unit }: RunHistoryTooltipP
                 >
                   {r.r_squared?.toFixed(2) ?? "—"}
                 </td>
-                <td className="py-1 text-right uppercase text-[10px]">
-                  {r.curve_class ?? "—"}
-                </td>
+                <td className="py-1 text-right uppercase text-[10px]">{r.curve_class ?? "—"}</td>
               </tr>
             );
           })}
@@ -109,20 +108,17 @@ export function RunHistoryTooltip({ av, interceptKey, unit }: RunHistoryTooltipP
           {stats.fold_range !== null && stats.fold_range !== 1 && (
             <div>
               Fold-range:{" "}
+              <span className="font-mono text-foreground">{stats.fold_range.toPrecision(2)}×</span>
+            </div>
+          )}
+          {stats.log_value_mean !== null && stats.log_value_sd !== null && (
+            <div>
+              log<sub>10</sub>(value):{" "}
               <span className="font-mono text-foreground">
-                {stats.fold_range.toPrecision(2)}×
+                {stats.log_value_mean.toFixed(2)} ± {stats.log_value_sd.toFixed(2)}
               </span>
             </div>
           )}
-          {stats.log_value_mean !== null &&
-            stats.log_value_sd !== null && (
-              <div>
-                log<sub>10</sub>(value):{" "}
-                <span className="font-mono text-foreground">
-                  {stats.log_value_mean.toFixed(2)} ± {stats.log_value_sd.toFixed(2)}
-                </span>
-              </div>
-            )}
         </div>
       )}
     </div>

@@ -43,7 +43,10 @@ export function useCollections(
     queryFn: async () => {
       const params: Record<string, unknown> = {};
       if (scope) params.project_ids = scope;
-      if (tags) { params.tags = tags; params.tag_logic = options?.tagLogic ?? "any"; }
+      if (tags) {
+        params.tags = tags;
+        params.tag_logic = options?.tagLogic ?? "any";
+      }
       const resp = await customInstance<Collection[] | { items: Collection[] }>({
         url: "/api/v1/collections",
         method: "GET",

@@ -1,10 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Pencil } from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +12,9 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useSubmitDisclosure } from "../hooks/use-disclosures";
 import type { Molecule } from "../types";
 
@@ -24,11 +24,7 @@ interface DisclosureDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function DisclosureDialog({
-  molecule,
-  open,
-  onOpenChange,
-}: DisclosureDialogProps) {
+export function DisclosureDialog({ molecule, open, onOpenChange }: DisclosureDialogProps) {
   const router = useRouter();
   const submitMutation = useSubmitDisclosure();
 
@@ -61,13 +57,10 @@ export function DisclosureDialog({
       reset();
       onOpenChange(false);
       if (result.needs_confirmation) {
-        router.push(
-          `/compounds/${molecule.id}/merge-preview/${result.disclosure_request.id}`
-        );
+        router.push(`/compounds/${molecule.id}/merge-preview/${result.disclosure_request.id}`);
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Disclosure failed";
+      const message = err instanceof Error ? err.message : "Disclosure failed";
       setError(message);
     }
   };
@@ -85,11 +78,8 @@ export function DisclosureDialog({
           <DialogTitle>Disclose Compound</DialogTitle>
           <DialogDescription>
             Provide the structure for{" "}
-            <span className="font-mono font-semibold">
-              {molecule.registration_number}
-            </span>{" "}
-            ({molecule.name}). The structure will be standardized and
-            checked for duplicates.
+            <span className="font-mono font-semibold">{molecule.registration_number}</span> (
+            {molecule.name}). The structure will be standardized and checked for duplicates.
           </DialogDescription>
         </DialogHeader>
 
@@ -97,12 +87,7 @@ export function DisclosureDialog({
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="disclosure-smiles">SMILES</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setEditorOpen(true)}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditorOpen(true)}>
                 <Pencil className="mr-2 h-3.5 w-3.5" />
                 Draw
               </Button>
@@ -143,10 +128,7 @@ export function DisclosureDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={submitMutation.isPending}
-          >
+          <Button onClick={handleSubmit} disabled={submitMutation.isPending}>
             {submitMutation.isPending ? "Disclosing..." : "Disclose"}
           </Button>
         </DialogFooter>

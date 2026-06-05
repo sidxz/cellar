@@ -1,10 +1,10 @@
 "use client";
 
+import type { Protocol } from "@/features/screening-assay/types";
 import { Button } from "@/shared/components/ui/button";
 import { Separator } from "@/shared/components/ui/separator";
 import { RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Protocol } from "@/features/screening-assay/types";
 import { useSearchCount } from "../../hooks/use-search-count";
 import { drcColId, rdColId } from "../../lib/protocol-column-id";
 import type {
@@ -29,6 +29,11 @@ import {
   termsToCollectionCriteria,
 } from "./collection-section";
 import { KeywordSection } from "./keyword-section";
+import { ProjectFilter } from "./project-filter";
+import { PropertySection } from "./property-section";
+import { type ProtocolConjunction, ProtocolSection } from "./protocol-section";
+import { ScaffoldSection } from "./scaffold-section";
+import { StructureSection } from "./structure-section";
 import {
   TagSection,
   type TagSectionValue,
@@ -36,11 +41,6 @@ import {
   tagCriteriaToSection,
   tagSectionToCriteria,
 } from "./tag-section";
-import { ProjectFilter } from "./project-filter";
-import { PropertySection } from "./property-section";
-import { type ProtocolConjunction, ProtocolSection } from "./protocol-section";
-import { ScaffoldSection } from "./scaffold-section";
-import { StructureSection } from "./structure-section";
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -228,9 +228,7 @@ function defaultProtocolColumns(protocolId: string, protocols: Protocol[]): stri
   const proto = protocols.find((p) => p.id === protocolId);
   if (!proto) return [];
 
-  const ordered = [...proto.readout_definitions].sort(
-    (a, b) => a.display_order - b.display_order,
-  );
+  const ordered = [...proto.readout_definitions].sort((a, b) => a.display_order - b.display_order);
 
   // Every DR readout-def becomes its own column. A protocol with two DR
   // readouts of the same curve_type (target IC50 + counter IC50) now
@@ -611,10 +609,7 @@ export function SearchForm({
             "find in search" action stashes a criterion in sessionStorage; the
             page reads it on mount, fires the search, and populates this
             section so the active filter is visible + editable. */}
-        <ScaffoldSection
-          criteria={scaffoldCriteria}
-          onChange={setScaffoldCriteria}
-        />
+        <ScaffoldSection criteria={scaffoldCriteria} onChange={setScaffoldCriteria} />
 
         {/* More Filters */}
         <div className="mt-3 pt-3 border-t border-border">
@@ -660,9 +655,7 @@ export function SearchForm({
                   </span>{" "}
                   compound{totalCount === 1 ? "" : "s"} match
                   {isSimilarityQuery && (
-                    <span className="ml-1.5 text-muted-foreground/70">
-                      · ranked, top 50 shown
-                    </span>
+                    <span className="ml-1.5 text-muted-foreground/70">· ranked, top 50 shown</span>
                   )}
                 </>
               ) : (

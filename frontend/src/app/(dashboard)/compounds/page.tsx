@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
 import { MoleculeList } from "@/features/chemical-registration";
 import { DisclosureConflictList } from "@/features/chemical-registration/components/disclosure-conflict-list";
 import { useConflictDisclosures } from "@/features/chemical-registration/hooks/use-disclosures";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { useState } from "react";
 
 type Tab = "compounds" | "conflicts";
 

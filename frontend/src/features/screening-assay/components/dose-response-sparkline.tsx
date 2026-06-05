@@ -15,10 +15,10 @@
 
 import type { CurveClass, CurveParams } from "../types";
 import {
-  DoseResponseFigure,
   type AdditionalCurve,
   type AggregateMarker,
   type CurveSnapshot,
+  DoseResponseFigure,
 } from "./dose-response-figure";
 
 interface DoseResponseSparklineProps {
@@ -58,12 +58,5 @@ export function DoseResponseSparkline({
     aggregate: aggregate ?? null,
   };
 
-  return (
-    <DoseResponseFigure
-      curve={curve}
-      size="sparkline"
-      width={width}
-      height={height}
-    />
-  );
+  return <DoseResponseFigure curve={curve} size="sparkline" width={width} height={height} />;
 }

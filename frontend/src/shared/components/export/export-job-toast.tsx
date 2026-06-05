@@ -11,13 +11,7 @@ interface Props {
   onDismiss: () => void;
 }
 
-export function ExportJobToast({
-  job,
-  error,
-  onCancel,
-  onDownload,
-  onDismiss,
-}: Props) {
+export function ExportJobToast({ job, error, onCancel, onDownload, onDismiss }: Props) {
   useEffect(() => {
     if (!job && !error) return;
     if (error) {
@@ -50,13 +44,13 @@ export function ExportJobToast({
     } else if (["pending", "running"].includes(job.status)) {
       toast.loading(`Exporting${label}…`, {
         id: "export-job",
-        duration: Infinity,
+        duration: Number.POSITIVE_INFINITY,
         action: { label: "Cancel", onClick: onCancel },
         cancel: undefined,
         closeButton: false,
       });
     } else if (job.status === "cancelled") {
-      toast(`Export cancelled`, {
+      toast("Export cancelled", {
         id: "export-job",
         action: undefined,
         cancel: undefined,
@@ -71,10 +65,11 @@ export function ExportJobToast({
 function formatBytes(n: number | null): string {
   if (!n) return "—";
   const u = ["B", "KB", "MB", "GB"];
+  let size = n;
   let i = 0;
-  while (n >= 1024 && i < u.length - 1) {
-    n /= 1024;
+  while (size >= 1024 && i < u.length - 1) {
+    size /= 1024;
     i++;
   }
-  return `${n.toFixed(1)} ${u[i]}`;
+  return `${size.toFixed(1)} ${u[i]}`;
 }

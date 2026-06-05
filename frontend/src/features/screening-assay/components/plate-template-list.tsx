@@ -1,18 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Grid3x3, Plus, Trash2 } from "lucide-react";
-import type { ColDef } from "ag-grid-community";
-import { PageHeader } from "@/shared/components/page-header";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
-import { Button } from "@/shared/components/ui/button";
-import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { MemberName } from "@/shared/components/entity-name";
-import { usePlateTemplates, useDeletePlateTemplate } from "../hooks/use-plate-templates";
-import { CreatePlateTemplateDialog } from "./create-plate-template-dialog";
+import { PageHeader } from "@/shared/components/page-header";
+import { Button } from "@/shared/components/ui/button";
+import type { ColDef } from "ag-grid-community";
+import { Grid3x3, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useDeletePlateTemplate, usePlateTemplates } from "../hooks/use-plate-templates";
 import type { PlateTemplate } from "../types";
 import { PLATE_FORMAT_LABELS, type PlateFormat } from "../types";
+import { CreatePlateTemplateDialog } from "./create-plate-template-dialog";
 
 export function PlateTemplateListPage() {
   const { data: templates, isLoading, error } = usePlateTemplates();
@@ -28,8 +28,7 @@ export function PlateTemplateListPage() {
         headerName: "Format",
         field: "format",
         width: 100,
-        valueFormatter: (p) =>
-          PLATE_FORMAT_LABELS[p.value as PlateFormat] ?? p.value,
+        valueFormatter: (p) => PLATE_FORMAT_LABELS[p.value as PlateFormat] ?? p.value,
       },
       {
         headerName: "Description",
@@ -66,7 +65,7 @@ export function PlateTemplateListPage() {
           ) : null,
       },
     ],
-    []
+    [],
   );
 
   const handleRowClick = (template: PlateTemplate) => {
@@ -82,20 +81,29 @@ export function PlateTemplateListPage() {
   if (error) {
     return (
       <div>
-        <PageHeader title="Plate Templates" subtitle="Manage plate layout templates for screening runs.">
+        <PageHeader
+          title="Plate Templates"
+          subtitle="Manage plate layout templates for screening runs."
+        >
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             New Plate Template
           </Button>
         </PageHeader>
-        <ErrorState message="Failed to load plate templates. Is the backend running?" details={error.message} />
+        <ErrorState
+          message="Failed to load plate templates. Is the backend running?"
+          details={error.message}
+        />
       </div>
     );
   }
 
   return (
     <div>
-      <PageHeader title="Plate Templates" subtitle="Manage plate layout templates for screening runs.">
+      <PageHeader
+        title="Plate Templates"
+        subtitle="Manage plate layout templates for screening runs."
+      >
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           New Plate Template
@@ -127,7 +135,9 @@ export function PlateTemplateListPage() {
 
       <ConfirmDeleteDialog
         open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
         title="Delete plate template?"
         description={`This will permanently delete "${deleteTarget?.name ?? ""}". Existing runs using this template will not be affected.`}
         onConfirm={() => {

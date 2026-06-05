@@ -1,20 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  CheckCircle2,
-  Loader2,
-} from "lucide-react";
-import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/shared/components/ui/card";
+import { Button } from "@/shared/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { usePreviewBulkRegistration } from "../../hooks/use-registration-wizard-api";
 
@@ -61,9 +51,7 @@ export function StepPreview() {
         <CardContent className="py-12">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">
-              Parsing {bulkInput.file.name}…
-            </p>
+            <p className="text-sm text-muted-foreground">Parsing {bulkInput.file.name}…</p>
           </div>
         </CardContent>
       </Card>
@@ -79,8 +67,7 @@ export function StepPreview() {
             <div>
               <p className="text-sm font-medium">Could not parse file</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {previewMutation.error?.message ??
-                  "Parser returned an unknown error."}
+                {previewMutation.error?.message ?? "Parser returned an unknown error."}
               </p>
             </div>
             <Button variant="outline" onClick={prevStep}>
@@ -112,11 +99,7 @@ export function StepPreview() {
 
       {/* Counters */}
       <div className="grid grid-cols-3 gap-3 max-w-xl">
-        <SummaryStat
-          label="Total"
-          value={bulkPreview.total_count}
-          tone="default"
-        />
+        <SummaryStat label="Total" value={bulkPreview.total_count} tone="default" />
         <SummaryStat
           label="Parseable"
           value={validCount}
@@ -156,13 +139,9 @@ export function StepPreview() {
                 {bulkPreview.items.map((item) => (
                   <tr
                     key={item.row_index}
-                    className={`border-b last:border-b-0 ${
-                      item.error ? "bg-destructive/5" : ""
-                    }`}
+                    className={`border-b last:border-b-0 ${item.error ? "bg-destructive/5" : ""}`}
                   >
-                    <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.row_index + 1}
-                    </td>
+                    <td className="px-3 py-1.5 text-muted-foreground">{item.row_index + 1}</td>
                     <td className="px-3 py-1.5">{item.name ?? "\u2014"}</td>
                     <td className="px-3 py-1.5 font-mono">
                       {item.smiles ? truncate(item.smiles, 40) : "\u2014"}
@@ -188,9 +167,7 @@ export function StepPreview() {
                     <td className="px-3 py-1.5 text-muted-foreground">
                       {item.batch_source ?? "\u2014"}
                     </td>
-                    <td className="px-3 py-1.5 text-destructive">
-                      {item.error ?? ""}
-                    </td>
+                    <td className="px-3 py-1.5 text-destructive">{item.error ?? ""}</td>
                   </tr>
                 ))}
               </tbody>
@@ -203,9 +180,9 @@ export function StepPreview() {
         <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
           <p className="text-muted-foreground">
-            {bulkPreview.error_count} row{bulkPreview.error_count === 1 ? "" : "s"}{" "}
-            failed to parse and will be reported as errors. The remaining{" "}
-            {validCount} row{validCount === 1 ? "" : "s"} will be imported.
+            {bulkPreview.error_count} row{bulkPreview.error_count === 1 ? "" : "s"} failed to parse
+            and will be reported as errors. The remaining {validCount} row
+            {validCount === 1 ? "" : "s"} will be imported.
           </p>
         </div>
       )}

@@ -4,9 +4,7 @@ export type ParsedCsv =
   | { kind: "ok"; headers: string[]; rows: Record<string, string>[] }
   | { kind: "error"; message: string };
 
-export async function parseCollectionImportFile(
-  input: File,
-): Promise<ParsedCsv> {
+export async function parseCollectionImportFile(input: File): Promise<ParsedCsv> {
   const ext = input.name.toLowerCase().split(".").pop();
   if (ext === "xlsx" || ext === "xls") {
     return parseExcel(input);
@@ -18,9 +16,7 @@ export async function parseCollectionImportFile(
  * Backward-compatible alias. Accepts both `File` (production) and `string`
  * (tests + the original API). Delegates to `parseCsv` for the string path.
  */
-export async function parseCollectionImportCsv(
-  input: string | File,
-): Promise<ParsedCsv> {
+export async function parseCollectionImportCsv(input: string | File): Promise<ParsedCsv> {
   if (typeof input !== "string" && (input as File).name) {
     return parseCollectionImportFile(input as File);
   }

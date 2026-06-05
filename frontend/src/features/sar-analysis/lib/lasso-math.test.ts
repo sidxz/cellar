@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  pointInPolygon,
-  idsInsidePolygon,
-  selectedIdsFromPlotlyEvent,
   hasSelectionGeometry,
+  idsInsidePolygon,
+  pointInPolygon,
+  selectedIdsFromPlotlyEvent,
 } from "./lasso-math";
 
 const SQUARE = [
@@ -81,9 +81,7 @@ describe("selectedIdsFromPlotlyEvent", () => {
 
 describe("hasSelectionGeometry", () => {
   it("is true for a lasso event (lassoPoints present)", () => {
-    expect(
-      hasSelectionGeometry({ lassoPoints: { x: [0, 1, 2], y: [0, 1, 2] } }),
-    ).toBe(true);
+    expect(hasSelectionGeometry({ lassoPoints: { x: [0, 1, 2], y: [0, 1, 2] } })).toBe(true);
   });
 
   it("is true for a box event (range present)", () => {

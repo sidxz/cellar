@@ -1,11 +1,11 @@
 "use client";
 
+import {
+  type CurveSnapshot,
+  DoseResponseFigure,
+} from "@/features/screening-assay/components/dose-response-figure";
 import { memo } from "react";
 import type { ActivityValue } from "../../types";
-import {
-  DoseResponseFigure,
-  type CurveSnapshot,
-} from "@/features/screening-assay/components/dose-response-figure";
 
 interface DoseResponseCellProps {
   value?: ActivityValue;

@@ -1,8 +1,8 @@
 "use client";
 
 import { useDebounce } from "@/shared/hooks/use-debounce";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { SearchQuery } from "../types";
 
 interface CountResponse {

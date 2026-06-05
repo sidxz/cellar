@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { customInstance } from "@/shared/lib/api/custom-instance";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useQuery } from "@tanstack/react-query";
 
 export interface SaltEntry {
   id: string;

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock customInstance so tests don't require a live Sentinel/localStorage.
 const mockCustomInstance = vi.fn();
@@ -154,9 +154,7 @@ describe("useExport", () => {
   it("reset clears job and error", async () => {
     mockCustomInstance
       .mockResolvedValueOnce({ job_id: "j4" })
-      .mockResolvedValueOnce(
-        makeJob({ id: "j4", status: "failed", error_message: "bad" }),
-      );
+      .mockResolvedValueOnce(makeJob({ id: "j4", status: "failed", error_message: "bad" }));
 
     const { result } = renderHook(() => useExport());
 
@@ -226,7 +224,8 @@ describe("useExport", () => {
 
     const calls = mockCustomInstance.mock.calls;
     const cancelCall = calls.find(
-      (c) => typeof c[0]?.url === "string" && c[0].url.includes("/cancel") && c[0].method === "POST",
+      (c) =>
+        typeof c[0]?.url === "string" && c[0].url.includes("/cancel") && c[0].method === "POST",
     );
     expect(cancelCall).toBeDefined();
   });

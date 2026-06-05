@@ -1,9 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess, showWarning } from "@/shared/lib/toast";
-import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateRunInput, Run } from "../types";
 
 const RUNS_KEY = ["runs"];
@@ -32,7 +32,10 @@ export function useRunsByProtocol(
     ],
     queryFn: () => {
       const params: Record<string, unknown> = {};
-      if (tags) { params.tags = tags; params.tag_logic = options?.tagLogic ?? "any"; }
+      if (tags) {
+        params.tags = tags;
+        params.tag_logic = options?.tagLogic ?? "any";
+      }
       return customInstance<Run[]>({
         url: `/api/v1/protocols/${protocolId}/runs`,
         method: "GET",
@@ -53,7 +56,10 @@ export function useStartRun() {
         url: `/api/v1/runs/${id}/start`,
         method: "POST",
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run started"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Run started");
+    },
   });
 }
 
@@ -74,7 +80,10 @@ export function useCompleteRun() {
         method: "POST",
         data: { plate_count, data_point_count },
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run completed"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Run completed");
+    },
   });
 }
 
@@ -86,7 +95,10 @@ export function useApproveRun() {
         url: `/api/v1/runs/${id}/approve`,
         method: "POST",
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run approved"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Run approved");
+    },
   });
 }
 
@@ -99,7 +111,10 @@ export function useRejectRun() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run rejected"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Run rejected");
+    },
   });
 }
 
@@ -112,7 +127,10 @@ export function useLockRun() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run locked"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Run locked");
+    },
   });
 }
 
@@ -125,7 +143,10 @@ export function useUnlockRun() {
         method: "POST",
         data: { reason },
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run unlocked"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Run unlocked");
+    },
   });
 }
 
@@ -147,7 +168,10 @@ export function useUpdateRun() {
         method: "PATCH",
         data,
       }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: RUNS_KEY }); showSuccess("Run updated"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Run updated");
+    },
   });
 }
 
@@ -214,19 +238,15 @@ export function useRecomputeRun() {
       qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
       qc.invalidateQueries({ queryKey: ["compound-curves"] });
       qc.invalidateQueries({ queryKey: ["protocol-activity"] });
-      showSuccess(
-        `Recomputed ${data.computed_readouts} readouts and refit curves`,
-      );
+      showSuccess(`Recomputed ${data.computed_readouts} readouts and refit curves`);
       const warnings = data.fit_warnings ?? [];
       if (warnings.length > 0) {
         const head = warnings.slice(0, 3);
         const rest = warnings.length - head.length;
-        const description =
-          rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n");
-        showWarning(
-          `${warnings.length} curve(s) had fit issues — see the chart for details.`,
-          { description },
-        );
+        const description = rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n");
+        showWarning(`${warnings.length} curve(s) had fit issues — see the chart for details.`, {
+          description,
+        });
       }
     },
   });

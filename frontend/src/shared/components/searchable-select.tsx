@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/shared/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { Button } from "@/shared/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/shared/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { useState } from "react";
 
 export interface SearchableSelectOption {
   value: string;
@@ -41,7 +48,11 @@ export function SearchableSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between font-normal", !selectedLabel && "text-muted-foreground", className)}
+          className={cn(
+            "w-full justify-between font-normal",
+            !selectedLabel && "text-muted-foreground",
+            className,
+          )}
         >
           {selectedLabel ?? placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

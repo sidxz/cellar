@@ -7,10 +7,11 @@
  * registration number search.
  */
 
-import { useState } from "react";
 import { SearchInput } from "@/shared/components/search-input";
 import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Button } from "@/shared/components/ui/button";
 
 import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
 import { useAddResultRowApiV1CampaignsCampaignIdResultsPost } from "@/shared/lib/api/campaigns/campaigns";
@@ -64,9 +64,7 @@ export function ManualAddDialog({ open, onOpenChange, campaignId }: ManualAddDia
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Add Compound</DialogTitle>
-          <DialogDescription>
-            Search for a compound to add to this campaign.
-          </DialogDescription>
+          <DialogDescription>Search for a compound to add to this campaign.</DialogDescription>
         </DialogHeader>
 
         <SearchInput

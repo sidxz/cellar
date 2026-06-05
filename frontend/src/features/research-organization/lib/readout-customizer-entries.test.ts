@@ -1,8 +1,5 @@
+import type { Protocol, ReadoutDefinition } from "@/features/screening-assay/types";
 import { describe, expect, it } from "vitest";
-import type {
-  Protocol,
-  ReadoutDefinition,
-} from "@/features/screening-assay/types";
 import {
   buildReadoutCustomizerEntries,
   replaceProtocolEntries,
@@ -88,16 +85,11 @@ describe("buildReadoutCustomizerEntries", () => {
       }),
     ]);
     const entries = buildReadoutCustomizerEntries(protocol, PROTO_ID);
-    expect(entries.map((e) => e.label)).toEqual([
-      "Resazurin EC50 (uM)",
-      "Resazurin EC90 (uM)",
-    ]);
+    expect(entries.map((e) => e.label)).toEqual(["Resazurin EC50 (uM)", "Resazurin EC90 (uM)"]);
   });
 
   it("emits a single entry for a numeric readout", () => {
-    const protocol = proto([
-      rd({ id: RD_NUM, name: "OD600", unit: null, data_type: "numeric" }),
-    ]);
+    const protocol = proto([rd({ id: RD_NUM, name: "OD600", unit: null, data_type: "numeric" })]);
     const entries = buildReadoutCustomizerEntries(protocol, PROTO_ID);
     expect(entries).toEqual([{ key: `rd:${PROTO_ID}:${RD_NUM}`, label: "OD600" }]);
   });
@@ -150,8 +142,6 @@ describe("replaceProtocolEntries", () => {
   });
 
   it("empties the owned set when nextOwned is []", () => {
-    expect(
-      replaceProtocolEntries([A, B, B_EC90, C], new Set([B, B_EC90]), []),
-    ).toEqual([A, C]);
+    expect(replaceProtocolEntries([A, B, B_EC90, C], new Set([B, B_EC90]), [])).toEqual([A, C]);
   });
 });

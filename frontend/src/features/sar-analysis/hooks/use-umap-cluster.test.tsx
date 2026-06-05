@@ -1,10 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import React from "react";
+import { renderHook, waitFor } from "@testing-library/react";
+import type React from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useUmapCluster } from "./use-umap-cluster";
-import type { UmapResult, UmapJob } from "../types";
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

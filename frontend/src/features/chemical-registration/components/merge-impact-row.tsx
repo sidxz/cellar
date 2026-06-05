@@ -1,10 +1,10 @@
-import { ChevronDown } from "lucide-react";
 import { Badge } from "@/shared/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/shared/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 import type { MergeImpactCategory } from "../types/disclosure";
 
 export function ImpactRow({ category }: { category: MergeImpactCategory }) {
@@ -19,9 +19,7 @@ export function ImpactRow({ category }: { category: MergeImpactCategory }) {
           <div className="h-4 w-4" />
         )}
         <span className="flex-1 text-left">{category.label}</span>
-        <Badge variant={category.is_blocker ? "destructive" : "secondary"}>
-          {category.count}
-        </Badge>
+        <Badge variant={category.is_blocker ? "destructive" : "secondary"}>{category.count}</Badge>
       </CollapsibleTrigger>
       {hasItems && (
         <CollapsibleContent className="px-9 pb-2">

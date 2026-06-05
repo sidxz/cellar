@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback } from "react";
 
 export type ViewMode = "table" | "cards" | "scaffold-tree" | "clusters";
 
-const ALL_MODES: ViewMode[] = ["table", "cards", "scaffold-tree", "clusters"];
+const _ALL_MODES: ViewMode[] = ["table", "cards", "scaffold-tree", "clusters"];
 
 /** Maps URL param values to ViewMode values (and vice versa for short forms). */
 const URL_TO_MODE: Record<string, ViewMode> = {

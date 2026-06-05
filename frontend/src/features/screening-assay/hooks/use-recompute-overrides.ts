@@ -63,8 +63,7 @@ export interface UseRecomputeOverridesReturn {
 }
 
 export function useRecomputeOverrides(): UseRecomputeOverridesReturn {
-  const [overrides, setOverrides] =
-    useState<RecomputeOverrides>(DEFAULT_OVERRIDES);
+  const [overrides, setOverrides] = useState<RecomputeOverrides>(DEFAULT_OVERRIDES);
 
   const updateOverride = <K extends keyof RecomputeOverrides>(
     field: K,
@@ -76,7 +75,7 @@ export function useRecomputeOverrides(): UseRecomputeOverridesReturn {
   const clearOverrides = () => setOverrides(DEFAULT_OVERRIDES);
 
   const buildPayload = () => {
-    const parseOrNull = (s: string) => (s !== "" ? parseFloat(s) : null);
+    const parseOrNull = (s: string) => (s !== "" ? Number.parseFloat(s) : null);
     const {
       topMode,
       top,
@@ -98,10 +97,8 @@ export function useRecomputeOverrides(): UseRecomputeOverridesReturn {
       top_constraint_max: topMode === "range" ? parseOrNull(topMax) : null,
       override_bottom: bottomMode !== "inherit",
       bottom_constraint: bottomMode === "lock" ? parseOrNull(bottom) : null,
-      bottom_constraint_min:
-        bottomMode === "range" ? parseOrNull(bottomMin) : null,
-      bottom_constraint_max:
-        bottomMode === "range" ? parseOrNull(bottomMax) : null,
+      bottom_constraint_min: bottomMode === "range" ? parseOrNull(bottomMin) : null,
+      bottom_constraint_max: bottomMode === "range" ? parseOrNull(bottomMax) : null,
       override_hill: hillMode !== "inherit",
       hill_slope_constraint: hillMode === "enum" ? hillEnum : null,
       hill_slope_min: hillMode === "range" ? parseOrNull(hillMin) : null,

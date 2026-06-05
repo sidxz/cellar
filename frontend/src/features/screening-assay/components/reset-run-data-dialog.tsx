@@ -49,12 +49,12 @@ export function ResetRunDataDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Reset run data?</AlertDialogTitle>
           <AlertDialogDescription>
-            This will delete all plates ({plateCount}), wells, readout data,
-            dose-response curves, and QC metrics for this run.
+            This will delete all plates ({plateCount}), wells, readout data, dose-response curves,
+            and QC metrics for this run.
             <br />
             <br />
-            The run itself, its metadata, and any uploaded files will be
-            kept. This cannot be undone.
+            The run itself, its metadata, and any uploaded files will be kept. This cannot be
+            undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

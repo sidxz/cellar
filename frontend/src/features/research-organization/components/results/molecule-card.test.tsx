@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { MoleculeCard } from "./molecule-card";
 import type { Molecule } from "@/features/chemical-registration/types";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { MoleculeCard } from "./molecule-card";
 
 // MoleculeThumbnail renders an <img> via RDKit.js WASM — stub it in tests.
 vi.mock("@/shared/components/molecule-thumbnail", () => ({
@@ -49,38 +49,70 @@ const baseMol: Molecule = {
 
 describe("MoleculeCard", () => {
   it("renders the structure thumbnail with the molecule's SMILES", () => {
-    render(<MoleculeCard molecule={baseMol} selected={false} onSelectChange={vi.fn()} onOpen={vi.fn()} />);
+    render(
+      <MoleculeCard
+        molecule={baseMol}
+        selected={false}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
     expect(screen.getByTestId("mol-thumb")).toHaveAttribute("data-smiles", "CCO");
   });
 
   it("renders the registration number and name", () => {
-    render(<MoleculeCard molecule={baseMol} selected={false} onSelectChange={vi.fn()} onOpen={vi.fn()} />);
+    render(
+      <MoleculeCard
+        molecule={baseMol}
+        selected={false}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
     expect(screen.getByText(/CV-00001/)).toBeInTheDocument();
     expect(screen.getByText(/Test Mol/)).toBeInTheDocument();
   });
 
   it("renders MW + cLogP + Ro5 ✓ when descriptors are present", () => {
-    render(<MoleculeCard molecule={baseMol} selected={false} onSelectChange={vi.fn()} onOpen={vi.fn()} />);
+    render(
+      <MoleculeCard
+        molecule={baseMol}
+        selected={false}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
     expect(screen.getByText(/MW 412/)).toBeInTheDocument();
     expect(screen.getByText(/cLogP 3\.2/)).toBeInTheDocument();
     expect(screen.getByText(/Ro5/)).toBeInTheDocument();
   });
 
   it("reflects selected state on the checkbox", () => {
-    render(<MoleculeCard molecule={baseMol} selected={true} onSelectChange={vi.fn()} onOpen={vi.fn()} />);
+    render(
+      <MoleculeCard molecule={baseMol} selected={true} onSelectChange={vi.fn()} onOpen={vi.fn()} />,
+    );
     expect(screen.getByRole("checkbox")).toBeChecked();
   });
 
   it("calls onSelectChange when the checkbox is toggled", () => {
     const onSelectChange = vi.fn();
-    render(<MoleculeCard molecule={baseMol} selected={false} onSelectChange={onSelectChange} onOpen={vi.fn()} />);
+    render(
+      <MoleculeCard
+        molecule={baseMol}
+        selected={false}
+        onSelectChange={onSelectChange}
+        onOpen={vi.fn()}
+      />,
+    );
     fireEvent.click(screen.getByRole("checkbox"));
     expect(onSelectChange).toHaveBeenCalledWith("mol-1", true);
   });
 
   it("calls onOpen when the tile body is clicked", () => {
     const onOpen = vi.fn();
-    render(<MoleculeCard molecule={baseMol} selected={false} onSelectChange={vi.fn()} onOpen={onOpen} />);
+    render(
+      <MoleculeCard molecule={baseMol} selected={false} onSelectChange={vi.fn()} onOpen={onOpen} />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /open Test Mol detail/i }));
     expect(onOpen).toHaveBeenCalledWith("mol-1");
   });
@@ -100,7 +132,12 @@ describe("MoleculeCard", () => {
 
   it("does not render protocol count line when protocolCount is 0 or undefined", () => {
     const { rerender } = render(
-      <MoleculeCard molecule={baseMol} selected={false} onSelectChange={vi.fn()} onOpen={vi.fn()} />,
+      <MoleculeCard
+        molecule={baseMol}
+        selected={false}
+        onSelectChange={vi.fn()}
+        onOpen={vi.fn()}
+      />,
     );
     expect(screen.queryByText(/tested in/i)).not.toBeInTheDocument();
 

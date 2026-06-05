@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { BookOpen, Lock, Plus, Trash2, Unlock } from "lucide-react";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
-import { useQueryClient } from "@tanstack/react-query";
+import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
+import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { PageHeader } from "@/shared/components/page-header";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -15,14 +13,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { Skeleton } from "@/shared/components/ui/skeleton";
-import {
-  useDeleteVocabulary,
-  useVocabularies,
-} from "../hooks/use-vocabularies";
+import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useQueryClient } from "@tanstack/react-query";
+import { BookOpen, Lock, Plus, Trash2, Unlock } from "lucide-react";
+import { useState } from "react";
+import { useDeleteVocabulary, useVocabularies } from "../hooks/use-vocabularies";
 import type { Vocabulary } from "../types";
 import { VocabularyDialog } from "./vocabulary-dialog";
-import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
 
 export function VocabularyList() {
   const { data: vocabs, isLoading } = useVocabularies();
@@ -122,9 +119,7 @@ export function VocabularyList() {
                           entityType="vocabulary"
                           entityId={vocab.id}
                           entityLabel={vocab.name}
-                          onDeleted={() =>
-                            qc.invalidateQueries({ queryKey: ["vocabularies"] })
-                          }
+                          onDeleted={() => qc.invalidateQueries({ queryKey: ["vocabularies"] })}
                         />
                       )}
                     </div>
@@ -141,11 +136,7 @@ export function VocabularyList() {
         </div>
       )}
 
-      <VocabularyDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        vocabulary={editing}
-      />
+      <VocabularyDialog open={dialogOpen} onOpenChange={setDialogOpen} vocabulary={editing} />
     </>
   );
 }

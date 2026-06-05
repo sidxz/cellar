@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { type SaltEntry, useSaltCatalog } from "@/features/workspace-config/hooks/use-salt-catalog";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -19,12 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import {
-  useSaltCatalog,
-  type SaltEntry,
-} from "@/features/workspace-config/hooks/use-salt-catalog";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCreateBatch } from "../hooks/use-batches";
-import { BATCH_SOURCE_LABELS, type BatchSource } from "../types";
+import { BATCH_SOURCE_LABELS } from "../types";
 import { MoleculeSelector } from "./molecule-selector";
 
 const NONE_VALUE = "__none__";
@@ -51,9 +48,7 @@ export function CreateBatchDialog({
   const createMutation = useCreateBatch();
   const { data: saltEntries } = useSaltCatalog(true);
 
-  const [selectedMoleculeId, setSelectedMoleculeId] = useState<string | null>(
-    moleculeId ?? null
-  );
+  const [selectedMoleculeId, setSelectedMoleculeId] = useState<string | null>(moleculeId ?? null);
   const [source, setSource] = useState<string>("synthesized");
   const [amountValue, setAmountValue] = useState("");
   const [amountUnit, setAmountUnit] = useState("mg");
@@ -63,11 +58,8 @@ export function CreateBatchDialog({
   const [appearance, setAppearance] = useState("");
 
   const selectedSalt = useMemo<SaltEntry | undefined>(
-    () =>
-      saltEntryId !== NONE_VALUE
-        ? saltEntries?.find((e) => e.id === saltEntryId)
-        : undefined,
-    [saltEntryId, saltEntries]
+    () => (saltEntryId !== NONE_VALUE ? saltEntries?.find((e) => e.id === saltEntryId) : undefined),
+    [saltEntryId, saltEntries],
   );
 
   const formulaWeight = useMemo<number | null>(() => {
@@ -78,9 +70,7 @@ export function CreateBatchDialog({
   // Auto-fill from detected salt
   useEffect(() => {
     if (!detectedSalt || !saltEntries?.length) return;
-    const match = saltEntries.find(
-      (e) => e.smiles === detectedSalt.salt_smiles
-    );
+    const match = saltEntries.find((e) => e.smiles === detectedSalt.salt_smiles);
     if (match) {
       setSaltEntryId(match.id);
       setStoichiometry(detectedSalt.stoichiometry);
@@ -106,14 +96,14 @@ export function CreateBatchDialog({
       {
         molecule_id: resolvedMoleculeId,
         source,
-        amount_value: parseFloat(amountValue),
+        amount_value: Number.parseFloat(amountValue),
         amount_unit: amountUnit,
         salt_entry_id: selectedSalt ? selectedSalt.id : null,
         salt_name: selectedSalt ? selectedSalt.name : null,
         salt_smiles: selectedSalt ? selectedSalt.smiles : null,
         salt_stoichiometry: selectedSalt ? stoichiometry : undefined,
         formula_weight: formulaWeight,
-        purity: purity ? parseFloat(purity) : null,
+        purity: purity ? Number.parseFloat(purity) : null,
         appearance: appearance || null,
       },
       {
@@ -121,7 +111,7 @@ export function CreateBatchDialog({
           onOpenChange(false);
           resetForm();
         },
-      }
+      },
     );
   };
 
@@ -130,19 +120,14 @@ export function CreateBatchDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Batch</DialogTitle>
-          <DialogDescription>
-            Register a new batch for this compound.
-          </DialogDescription>
+          <DialogDescription>Register a new batch for this compound.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           {!moleculeId && (
             <div className="grid gap-2">
               <Label>Compound *</Label>
-              <MoleculeSelector
-                selectedId={selectedMoleculeId}
-                onSelect={setSelectedMoleculeId}
-              />
+              <MoleculeSelector selectedId={selectedMoleculeId} onSelect={setSelectedMoleculeId} />
             </div>
           )}
 
@@ -227,7 +212,7 @@ export function CreateBatchDialog({
                   step={1}
                   value={stoichiometry}
                   onChange={(e) =>
-                    setStoichiometry(Math.max(1, parseInt(e.target.value) || 1))
+                    setStoichiometry(Math.max(1, Number.parseInt(e.target.value) || 1))
                   }
                 />
               </div>
@@ -235,9 +220,7 @@ export function CreateBatchDialog({
                 <Label>Formula Weight</Label>
                 <Input
                   readOnly
-                  value={
-                    formulaWeight != null ? formulaWeight.toFixed(2) : "\u2014"
-                  }
+                  value={formulaWeight != null ? formulaWeight.toFixed(2) : "\u2014"}
                   className="bg-muted"
                 />
               </div>

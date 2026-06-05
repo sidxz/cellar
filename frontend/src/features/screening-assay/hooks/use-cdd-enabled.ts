@@ -7,9 +7,7 @@ export function useCddEnabled() {
 
   if (isLoading) return { enabled: false, loading: true };
 
-  const hasActiveCdd = sources?.some(
-    (ds) => ds.source_type === "cdd_vault" && ds.is_active
-  );
+  const hasActiveCdd = sources?.some((ds) => ds.source_type === "cdd_vault" && ds.is_active);
 
   return { enabled: !!hasActiveCdd, loading: false };
 }

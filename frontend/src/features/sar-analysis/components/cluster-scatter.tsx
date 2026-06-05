@@ -1,22 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
-import { flushSync } from "react-dom";
-import { Plot } from "@/shared/lib/plotly";
+import { buildOverlayTraces } from "@/features/sar-analysis/lib/cluster-overlay";
+import { type ColorOption, colorForPoint } from "@/features/sar-analysis/lib/cluster-palette";
+import {
+  hasSelectionGeometry,
+  selectedIdsFromPlotlyEvent,
+} from "@/features/sar-analysis/lib/lasso-math";
 import type {
   ClusterAssignment,
   RepresentativePick,
   UmapPoint,
 } from "@/features/sar-analysis/types";
-import {
-  colorForPoint,
-  type ColorOption,
-} from "@/features/sar-analysis/lib/cluster-palette";
-import {
-  hasSelectionGeometry,
-  selectedIdsFromPlotlyEvent,
-} from "@/features/sar-analysis/lib/lasso-math";
-import { buildOverlayTraces } from "@/features/sar-analysis/lib/cluster-overlay";
+import { Plot } from "@/shared/lib/plotly";
+import { useMemo } from "react";
+import { flushSync } from "react-dom";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -133,10 +130,7 @@ export function ClusterScatter({
     // customdata carries [moleculeId, hoverLabel] for hovertemplate + click
     // handlers; selection uses pointNumber index lookup against `points` so
     // it works regardless of whether scattergl threads customdata through.
-    customdata: points.map((p) => [
-      p.moleculeId,
-      labelByMolId?.[p.moleculeId] ?? p.moleculeId,
-    ]),
+    customdata: points.map((p) => [p.moleculeId, labelByMolId?.[p.moleculeId] ?? p.moleculeId]),
     hovertemplate: "%{customdata[1]}<extra></extra>",
   };
 
@@ -180,17 +174,8 @@ export function ClusterScatter({
         }
       : null;
 
-  const overlayTraces = buildOverlayTraces(
-    points,
-    basketIds,
-    regionPickIds,
-    traceType,
-  );
-  const data = [
-    baseTrace,
-    ...(starTrace ? [starTrace] : []),
-    ...overlayTraces,
-  ];
+  const overlayTraces = buildOverlayTraces(points, basketIds, regionPickIds, traceType);
+  const data = [baseTrace, ...(starTrace ? [starTrace] : []), ...overlayTraces];
 
   // PlotProps.onClick / onSelected are not declared on the shared PlotProps
   // interface (which is intentionally loose). We pass them via a cast so the

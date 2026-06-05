@@ -1,7 +1,7 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MOLECULES_KEY } from "./query-keys";
 
 export interface CddMoleculeImportAccepted {
@@ -86,11 +86,7 @@ export function useCddMoleculeImportStatus(workflowId: string | null) {
     enabled: !!workflowId,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (
-        status === "completed" ||
-        status === "completed_with_errors" ||
-        status === "failed"
-      ) {
+      if (status === "completed" || status === "completed_with_errors" || status === "failed") {
         return false;
       }
       return 2000;
