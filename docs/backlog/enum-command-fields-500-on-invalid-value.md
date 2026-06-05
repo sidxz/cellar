@@ -14,6 +14,11 @@ a 500 instead of a 422.
 Affected (at minimum): `visibility` and `type` on collection create/update. Any other route
 that converts a body `str` to a domain enum the same way shares the gap.
 
+**Update (same day):** `type` bodies were shipped enum-typed (option 1 below), so invalid
+*strings* for `type` now 422 at the Pydantic boundary. Residual gap for `type` is only the
+explicit-`null` PATCH edge (`body.type.value` → AttributeError → 500); `visibility` retains
+the full gap.
+
 ## Fix options (pick one, apply pattern-wide)
 
 1. **Pydantic `Literal` constraints on body models** — FastAPI rejects invalid values with 422
