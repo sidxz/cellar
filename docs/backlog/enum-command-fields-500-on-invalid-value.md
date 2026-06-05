@@ -19,6 +19,12 @@ that converts a body `str` to a domain enum the same way shares the gap.
 explicit-`null` PATCH edge (`body.type.value` → AttributeError → 500); `visibility` retains
 the full gap.
 
+**Update (fix landed):** The explicit-`null` PATCH edge for `type` is now closed —
+`UpdateCollectionBody.type` changed from `CollectionType | None = None` to
+`CollectionType = CollectionType.GENERIC` (non-nullable with inert default), so Pydantic
+422s a JSON `null` before the route runs. `type` has no remaining gap; `visibility` retains
+the full gap.
+
 ## Fix options (pick one, apply pattern-wide)
 
 1. **Pydantic `Literal` constraints on body models** — FastAPI rejects invalid values with 422

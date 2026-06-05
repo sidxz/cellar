@@ -101,7 +101,8 @@ class UpdateCollectionBody(BaseModel):
     project_id: uuid.UUID | None = None
     owned_by_org_id: uuid.UUID | None = None
     visibility: str | None = None
-    type: CollectionType | None = None
+    # Non-nullable: explicit JSON null 422s at Pydantic boundary (matches invalid-string).
+    type: CollectionType = CollectionType.GENERIC
 
     model_config = {"extra": "forbid"}
 

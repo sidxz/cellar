@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
 from httpx import AsyncClient
 
 
@@ -220,5 +219,25 @@ class TestCollectionTypeAttribute:
     async def test_invalid_type_returns_422(self, client: AsyncClient) -> None:
         resp = await client.post(
             "/api/v1/collections", json={"name": "Bad type", "type": "nonexistent"}
+        )
+        assert resp.status_code == 422
+
+    async def test_patch_invalid_type_returns_422(self, client: AsyncClient) -> None:
+        created = await client.post("/api/v1/collections", json={"name": "PatchBadType"})
+        assert created.status_code == 201
+        coll_id = created.json()["id"]
+
+        resp = await client.patch(
+            f"/api/v1/collections/{coll_id}", json={"type": "bogus"}
+        )
+        assert resp.status_code == 422
+
+    async def test_patch_null_type_returns_422(self, client: AsyncClient) -> None:
+        created = await client.post("/api/v1/collections", json={"name": "PatchNullType"})
+        assert created.status_code == 201
+        coll_id = created.json()["id"]
+
+        resp = await client.patch(
+            f"/api/v1/collections/{coll_id}", json={"type": None}
         )
         assert resp.status_code == 422
