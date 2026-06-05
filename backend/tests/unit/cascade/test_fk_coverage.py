@@ -246,17 +246,39 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # -------------------------------------------------------------------------
     # Tag link tables → tags: DB CASCADE clears links on tag delete
     # -------------------------------------------------------------------------
-    # The four per-entity tag link tables (molecule_tags, protocol_tags,
-    # project_tags, collection_tags) have ondelete=CASCADE on tag_id -> tags.
+    # The per-entity tag link tables (molecule_tags, protocol_tags, project_tags,
+    # collection_tags, run_tags, campaign_tags, batch_tags, registered_plate_tags)
+    # have ondelete=CASCADE on tag_id -> tags.
     # `tags` is not a Tier-1 admin-deletable entity; tags are deleted via the
     # tagging admin use cases (Phase 4) and the DB engine cascades the delete to
     # the link rows automatically (verified by test_cascade_on_tag_delete). The
     # <entity>_id side of each link table points at a Tier-1 parent
-    # (molecules/protocols/projects/collections) and is covered by Tier-1 RESTRICT.
+    # (molecules/protocols/projects/collections/runs/batches) and is covered by
+    # Tier-1 RESTRICT; the two non-Tier-1 entity sides (campaign, registered
+    # plates) are categorized separately below.
     ("molecule_tags", "tag_id", "tags"),
     ("protocol_tags", "tag_id", "tags"),
     ("project_tags", "tag_id", "tags"),
     ("collection_tags", "tag_id", "tags"),
+    ("run_tags", "tag_id", "tags"),
+    ("campaign_tags", "tag_id", "tags"),
+    ("batch_tags", "tag_id", "tags"),
+    ("registered_plate_tags", "tag_id", "tags"),
+
+    # -------------------------------------------------------------------------
+    # Tag link tables → non-Tier-1 entity parents: DB CASCADE on entity delete
+    # -------------------------------------------------------------------------
+    # campaign_tags.campaign_id has ondelete=CASCADE — campaigns are aggregate
+    # roots whose lifecycle is managed via the campaign use cases, not the
+    # Tier-1 admin-delete pathway (same rationale as the campaign children
+    # block above); deleting a campaign clears its tag links automatically.
+    ("campaign_tags", "campaign_id", "campaign"),
+    # registered_plate_tags.registered_plate_id has ondelete=CASCADE —
+    # registered_plates is not a Tier-1 admin-deletable entity; plate lifecycle
+    # is managed via the inventory module (same rationale as the
+    # registered_plates self-ref block above); deleting a plate clears its tag
+    # links automatically.
+    ("registered_plate_tags", "registered_plate_id", "registered_plates"),
 }
 
 
