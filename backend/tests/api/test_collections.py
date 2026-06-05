@@ -172,3 +172,53 @@ class TestCollectionMolecules:
         resp = await client.get(f"/api/v1/collections/{coll_id}/molecules")
         assert resp.status_code == 200
         assert resp.json() == []
+
+
+class TestCollectionTypeAttribute:
+    async def test_create_defaults_type_generic(self, client: AsyncClient) -> None:
+        resp = await client.post("/api/v1/collections", json={"name": "Ad-hoc set"})
+        assert resp.status_code == 201
+        assert resp.json()["type"] == "generic"
+
+    async def test_create_with_explicit_type(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/collections", json={"name": "Kinase Lib", "type": "library"}
+        )
+        assert resp.status_code == 201
+        assert resp.json()["type"] == "library"
+
+    async def test_patch_type(self, client: AsyncClient) -> None:
+        created = await client.post("/api/v1/collections", json={"name": "X"})
+        assert created.status_code == 201
+        coll_id = created.json()["id"]
+
+        resp = await client.patch(
+            f"/api/v1/collections/{coll_id}", json={"type": "hit_list"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["type"] == "hit_list"
+
+    async def test_get_returns_type(self, client: AsyncClient) -> None:
+        created = await client.post(
+            "/api/v1/collections", json={"name": "Series set", "type": "series"}
+        )
+        coll_id = created.json()["id"]
+        resp = await client.get(f"/api/v1/collections/{coll_id}")
+        assert resp.status_code == 200
+        assert resp.json()["type"] == "series"
+
+    async def test_list_includes_type(self, client: AsyncClient) -> None:
+        await client.post(
+            "/api/v1/collections", json={"name": "Ref Set", "type": "reference_set"}
+        )
+        resp = await client.get("/api/v1/collections")
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["type"] == "reference_set"
+
+    async def test_invalid_type_returns_422(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/collections", json={"name": "Bad type", "type": "nonexistent"}
+        )
+        assert resp.status_code == 422

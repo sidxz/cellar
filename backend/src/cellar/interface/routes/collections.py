@@ -28,6 +28,7 @@ from cellar.application.shared.molecule_resolver import MoleculeReference, RefTy
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.research_organization.bulk_add_types import BulkAddRow
 from cellar.domain.research_organization.collection import Collection
+from cellar.domain.research_organization.enums import CollectionType
 from cellar.interface.dependencies import (
     AddMoleculesToCollectionDep,
     AuthDep,
@@ -61,6 +62,7 @@ class CollectionResponse(BaseModel):
     created_by: uuid.UUID
     molecule_count: int
     visibility: str
+    type: str
     is_frozen: bool = False
     derived_from_campaign_id: uuid.UUID | None = None
     version: int
@@ -77,6 +79,7 @@ class CollectionResponse(BaseModel):
             created_by=coll.created_by,
             molecule_count=coll.molecule_count,
             visibility=coll.visibility.value,
+            type=coll.type.value,
             is_frozen=coll.is_frozen,
             derived_from_campaign_id=coll.derived_from_campaign_id,
             version=coll.version,
@@ -89,6 +92,7 @@ class CreateCollectionBody(BaseModel):
     project_id: uuid.UUID | None = None
     owned_by_org_id: uuid.UUID | None = None
     visibility: str = "private"
+    type: CollectionType = CollectionType.GENERIC
 
 
 class UpdateCollectionBody(BaseModel):
@@ -97,6 +101,7 @@ class UpdateCollectionBody(BaseModel):
     project_id: uuid.UUID | None = None
     owned_by_org_id: uuid.UUID | None = None
     visibility: str | None = None
+    type: CollectionType | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -237,6 +242,7 @@ async def create_collection(
         owned_by_org_id=body.owned_by_org_id,
         created_by=auth.user_id,
         visibility=body.visibility,
+        type=body.type.value,
     )
     collection = result_to_response(await use_case(command, auth=auth))
     return CollectionResponse.from_domain(collection)
@@ -258,6 +264,7 @@ async def update_collection(
         project_id=body.project_id if "project_id" in provided else UNSET,
         owned_by_org_id=body.owned_by_org_id if "owned_by_org_id" in provided else UNSET,
         visibility=body.visibility if "visibility" in provided else UNSET,
+        type=body.type.value if "type" in provided else UNSET,
     )
     collection = result_to_response(await use_case(command, auth=auth))
     return CollectionResponse.from_domain(collection)
