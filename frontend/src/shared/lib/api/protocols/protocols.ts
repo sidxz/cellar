@@ -36,6 +36,7 @@ import type {
   PaginatedResponseProtocolResponse,
   ProtocolResponse,
   ProtocolSummaryResponse,
+  ProtocolTargetRefResponse,
   RetireRequest,
   SetControlLayoutRequest,
   SetOntologyAnnotationRequest,
@@ -1615,6 +1616,226 @@ export const useRemoveProtocolFromProjectApiV1ProtocolsProtocolIdProjectsProject
       > => {
 
       const mutationOptions = getRemoveProtocolFromProjectApiV1ProtocolsProtocolIdProjectsProjectIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Effective targets for a protocol with provenance (direct vs from-runs).
+ * @summary List Protocol Targets
+ */
+export const listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet = (
+    protocolId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ProtocolTargetRefResponse[]>(
+      {url: `/api/v1/protocols/${protocolId}/targets`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGetQueryKey = (protocolId?: string,) => {
+    return [
+    `/api/v1/protocols/${protocolId}/targets`
+    ] as const;
+    }
+
+    
+export const getListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGetQueryOptions = <TData = Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError = HTTPValidationError>(protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGetQueryKey(protocolId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>> = ({ signal }) => listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet(protocolId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(protocolId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>>
+export type ListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGetQueryError = HTTPValidationError
+
+
+export function useListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet<TData = Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError = HTTPValidationError>(
+ protocolId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet<TData = Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet<TData = Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Protocol Targets
+ */
+
+export function useListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet<TData = Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGetQueryOptions(protocolId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Attach a direct target to a protocol (idempotent).
+ * @summary Add Protocol Target
+ */
+export const addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost = (
+    protocolId: string,
+    targetId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/protocols/${protocolId}/targets/${targetId}`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getAddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, TError,{protocolId: string;targetId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, TError,{protocolId: string;targetId: string}, TContext> => {
+
+const mutationKey = ['addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, {protocolId: string;targetId: string}> = (props) => {
+          const {protocolId,targetId} = props ?? {};
+
+          return  addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost(protocolId,targetId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostMutationResult = NonNullable<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>>
+    
+    export type AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Add Protocol Target
+ */
+export const useAddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, TError,{protocolId: string;targetId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>,
+        TError,
+        {protocolId: string;targetId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getAddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Remove a direct target from a protocol.
+ * @summary Remove Protocol Target
+ */
+export const removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete = (
+    protocolId: string,
+    targetId: string,
+ ) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/protocols/${protocolId}/targets/${targetId}`, method: 'DELETE'
+    },
+      );
+    }
+  
+
+
+export const getRemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, TError,{protocolId: string;targetId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, TError,{protocolId: string;targetId: string}, TContext> => {
+
+const mutationKey = ['removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, {protocolId: string;targetId: string}> = (props) => {
+          const {protocolId,targetId} = props ?? {};
+
+          return  removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete(protocolId,targetId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>>
+    
+    export type RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteMutationError = HTTPValidationError
+
+    /**
+ * @summary Remove Protocol Target
+ */
+export const useRemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, TError,{protocolId: string;targetId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>,
+        TError,
+        {protocolId: string;targetId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getRemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

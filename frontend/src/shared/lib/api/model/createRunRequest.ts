@@ -22,4 +22,5 @@ export interface CreateRunRequest {
   plate_template_id?: CreateRunRequestPlateTemplateId;
   conditions?: CreateRunRequestConditions;
   notes?: CreateRunRequestNotes;
+  target_ids?: string[];
 }

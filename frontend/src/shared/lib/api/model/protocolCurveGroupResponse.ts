@@ -4,13 +4,13 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
-import type { ProtocolCurveGroupResponseTargetId } from './protocolCurveGroupResponseTargetId';
+import type { TargetRefResponse } from './targetRefResponse';
 import type { CurveDetailResponse } from './curveDetailResponse';
 
 export interface ProtocolCurveGroupResponse {
   protocol_id: string;
   protocol_name: string;
   protocol_type: string;
-  target_id?: ProtocolCurveGroupResponseTargetId;
+  targets?: TargetRefResponse[];
   curves?: CurveDetailResponse[];
 }
