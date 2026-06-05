@@ -116,14 +116,12 @@ class TestProtocolCreation:
     def test_create_sets_all_fields(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
-        target_id = uuid.uuid4()
         protocol = _make_protocol(
             workspace_id,
             user_id,
             name="Kinase Assay",
             description="Measures kinase inhibition",
             protocol_type=ProtocolType.CELL_BASED,
-            target_id=target_id,
             category="kinase",
         )
 
@@ -131,7 +129,6 @@ class TestProtocolCreation:
         assert protocol.name == "Kinase Assay"
         assert protocol.description == "Measures kinase inhibition"
         assert protocol.protocol_type == ProtocolType.CELL_BASED
-        assert protocol.target_id == target_id
         assert protocol.category == "kinase"
         assert protocol.protocol_version == 1
         assert protocol.parent_protocol_id is None
