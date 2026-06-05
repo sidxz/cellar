@@ -14,6 +14,12 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# public/ is not in git (its only content, the RDKit wasm, is gitignored) and
+# the postinstall hook that copies the wasm ran in the deps stage where
+# public/ didn't exist. Materialize it here so the build is hermetic and the
+# runner stage's COPY of /app/public always has something to copy — and fail
+# loudly if the wasm ever moves inside the package.
+RUN mkdir -p public && cp node_modules/@rdkit/rdkit/dist/RDKit_minimal.wasm public/RDKit_minimal.wasm
 RUN pnpm build
 
 FROM base AS runner
