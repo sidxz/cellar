@@ -53,6 +53,10 @@ export function TargetMultiSelect({
   const selected = value.map((id) => byId.get(id)).filter((t): t is Target => Boolean(t));
 
   const toggle = (id: string) => {
+    // Guard the in-popover items too: the popover stays open across selects,
+    // so without this a click during an in-flight mutation diffs against a
+    // stale `value` and the gesture is silently swallowed.
+    if (disabled) return;
     onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
   };
 

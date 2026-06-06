@@ -1,17 +1,28 @@
 "use client";
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { showSuccess } from "@/shared/lib/toast";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { showError, showSuccess } from "@/shared/lib/toast";
+import { type QueryClient, useMutation } from "@tanstack/react-query";
 
 const RUNS_KEY = ["runs"];
 const PROTOCOLS_KEY = ["protocols"];
 
-/** Link a target to a run (idempotent server-side). Rejected by the API (409)
- *  when the run is locked. A run's targets roll up into its protocol's
- *  effective targets, so the protocol queries are invalidated too. */
+/** One invalidation pass after a run-target gesture (single toggle or a
+ *  batched diff): the run detail, the run lists, and — because run targets
+ *  roll up into the protocol's effective targets — the protocol queries.
+ *  Once per gesture, not once per mutation. */
+export function invalidateRunTargetQueries(qc: QueryClient, runId: string) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: [...RUNS_KEY, runId] }),
+    qc.invalidateQueries({ queryKey: RUNS_KEY }),
+    qc.invalidateQueries({ queryKey: PROTOCOLS_KEY }),
+  ]);
+}
+
+/** Link a target to a run (idempotent server-side). 409 when the run is
+ *  locked; 404 for an unknown target. Query invalidation is the CALLER's job
+ *  via `invalidateRunTargetQueries` — batched diffs must invalidate once. */
 export function useAddRunTarget(runId: string) {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (targetId: string) =>
       customInstance<void>({
@@ -19,10 +30,10 @@ export function useAddRunTarget(runId: string) {
         method: "POST",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: RUNS_KEY });
-      qc.invalidateQueries({ queryKey: [...RUNS_KEY, runId] });
-      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       showSuccess("Target added to run");
+    },
+    onError: (err: Error) => {
+      showError(err.message || "Failed to add target");
     },
   });
 }
@@ -30,7 +41,6 @@ export function useAddRunTarget(runId: string) {
 /** Remove a target from a run. If no other run (and no direct link) references
  *  it, the protocol auto-prunes it from its effective targets. */
 export function useRemoveRunTarget(runId: string) {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (targetId: string) =>
       customInstance<void>({
@@ -38,10 +48,10 @@ export function useRemoveRunTarget(runId: string) {
         method: "DELETE",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: RUNS_KEY });
-      qc.invalidateQueries({ queryKey: [...RUNS_KEY, runId] });
-      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       showSuccess("Target removed from run");
+    },
+    onError: (err: Error) => {
+      showError(err.message || "Failed to remove target");
     },
   });
 }
