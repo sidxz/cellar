@@ -49,11 +49,32 @@ async def _make_run(client: AsyncClient, protocol_id: str, **extra) -> str:
 class TestProtocolTargets:
     async def test_create_with_direct_targets(self, client: AsyncClient) -> None:
         t3 = await _make_target(client, "Pks13")
-        pid = await _make_protocol(client, target_ids=[t3])
+
+        # The 201 body itself must carry the just-linked targets (mutation
+        # responses match GET).
+        created = await client.post(
+            "/api/v1/protocols",
+            json={
+                "name": "TargetProtoCreate",
+                "protocol_type": "biochemical",
+                "target_ids": [t3],
+                "readout_definitions": [
+                    {"name": "IC50", "data_type": "numeric", "display_order": 0}
+                ],
+            },
+        )
+        assert created.status_code in (200, 201), created.text
+        assert [t["id"] for t in created.json()["targets"]] == [t3]
+        pid = created.json()["id"]
 
         got = await client.get(f"/api/v1/protocols/{pid}")
         assert got.status_code == 200, got.text
         assert [t["id"] for t in got.json()["targets"]] == [t3]
+
+        # State transitions carry targets too.
+        published = await client.post(f"/api/v1/protocols/{pid}/publish")
+        assert published.status_code in (200, 201), published.text
+        assert [t["id"] for t in published.json()["targets"]] == [t3]
 
         rich = await client.get(f"/api/v1/protocols/{pid}/targets")
         assert rich.status_code == 200, rich.text
@@ -119,6 +140,11 @@ class TestRunTargetRollup:
 
         run = await client.get(f"/api/v1/runs/{rid}")
         assert [t["id"] for t in run.json()["targets"]] == [t1]
+
+        # Run state transitions carry targets in the response body too.
+        started = await client.post(f"/api/v1/runs/{rid}/start")
+        assert started.status_code in (200, 201), started.text
+        assert [t["id"] for t in started.json()["targets"]] == [t1]
 
     async def test_locked_run_rejects_target_edit(self, client: AsyncClient) -> None:
         t1 = await _make_target(client, "NadD")

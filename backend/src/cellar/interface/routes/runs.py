@@ -258,6 +258,7 @@ async def update_run(
     run_id: uuid.UUID,
     body: UpdateRunRequest,
     auth: AuthDep,
+    targets_uc: ResolveRunTargetsDep,
     uc: UpdateRunDep,
 ) -> RunResponse:
 
@@ -268,7 +269,8 @@ async def update_run(
         notes=body.notes if "notes" in body.model_fields_set else UNSET,
     )
     result = await uc(cmd, auth=auth)
-    return RunResponse.from_domain(result_to_response(result))
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
 
 
 @router.delete("/runs/{run_id}", status_code=204)
@@ -322,16 +324,19 @@ async def reset_run_data(
 async def start_run(
     run_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveRunTargetsDep,
     uc: StartRunDep,
 ) -> RunResponse:
     result = await uc(StartRunCommand(workspace_id=auth.workspace_id, run_id=run_id), auth=auth)
-    return RunResponse.from_domain(result_to_response(result))
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
 
 
 @router.post("/runs/{run_id}/complete", response_model=RunResponse)
 async def complete_run(
     run_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveRunTargetsDep,
     body: CompleteRunRequest,
     uc: CompleteRunDep,
 ) -> RunResponse:
@@ -344,23 +349,27 @@ async def complete_run(
         ),
         auth=auth,
     )
-    return RunResponse.from_domain(result_to_response(result))
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
 
 
 @router.post("/runs/{run_id}/approve", response_model=RunResponse)
 async def approve_run(
     run_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveRunTargetsDep,
     uc: ApproveRunDep,
 ) -> RunResponse:
     result = await uc(ApproveRunCommand(workspace_id=auth.workspace_id, run_id=run_id), auth=auth)
-    return RunResponse.from_domain(result_to_response(result))
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
 
 
 @router.post("/runs/{run_id}/reject", response_model=RunResponse)
 async def reject_run(
     run_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveRunTargetsDep,
     body: RejectRequest,
     uc: RejectRunDep,
 ) -> RunResponse:
@@ -368,13 +377,15 @@ async def reject_run(
         RejectRunCommand(workspace_id=auth.workspace_id, run_id=run_id, reason=body.reason),
         auth=auth,
     )
-    return RunResponse.from_domain(result_to_response(result))
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
 
 
 @router.post("/runs/{run_id}/lock", response_model=RunResponse)
 async def lock_run(
     run_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveRunTargetsDep,
     body: LockRequest,
     uc: LockRunDep,
 ) -> RunResponse:
@@ -386,13 +397,15 @@ async def lock_run(
         ),
         auth=auth,
     )
-    return RunResponse.from_domain(result_to_response(result))
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
 
 
 @router.post("/runs/{run_id}/unlock", response_model=RunResponse)
 async def unlock_run(
     run_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveRunTargetsDep,
     body: UnlockRequest,
     uc: UnlockRunDep,
 ) -> RunResponse:
@@ -404,7 +417,8 @@ async def unlock_run(
         ),
         auth=auth,
     )
-    return RunResponse.from_domain(result_to_response(result))
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
 
 
 # ---------------------------------------------------------------------------

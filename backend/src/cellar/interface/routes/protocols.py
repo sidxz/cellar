@@ -102,6 +102,31 @@ from cellar.interface.routes._target_refs import (
 router = APIRouter(prefix="/api/v1")
 
 
+async def _protocol_response(targets_uc, auth, result) -> ProtocolResponse:
+    """Build a ProtocolResponse from a mutation Result, resolving targets.
+
+    Mutation responses must carry the same ``targets`` the GET endpoints do —
+    a 201/200 with ``targets: []`` right after target_ids were linked misleads
+    API consumers.
+    """
+    protocol = result_to_response(result)
+    targets_by_protocol = result_to_response(
+        await targets_uc(
+            ResolveProtocolTargetsQuery(
+                workspace_id=auth.workspace_id, protocol_ids=(protocol.id,)
+            ),
+            auth=auth,
+        )
+    )
+    return ProtocolResponse.from_domain(
+        protocol,
+        targets=[
+            TargetRefResponse.from_ref(t)
+            for t in targets_by_protocol.get(protocol.id, [])
+        ],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Response models
 # ---------------------------------------------------------------------------
@@ -344,6 +369,7 @@ class UpdateReadoutDefinitionRequest(BaseModel):
 @router.post("/protocols", response_model=ProtocolResponse, status_code=201, tags=["protocols"])
 async def create_protocol(
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     body: CreateProtocolRequest,
     uc: CreateProtocolDep,
 ) -> ProtocolResponse:
@@ -360,7 +386,7 @@ async def create_protocol(
         condition_definitions=body.condition_definitions or [],
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 class ProtocolSummaryResponse(BaseModel):
@@ -489,12 +515,13 @@ async def get_protocol(
 async def publish_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: PublishProtocolDep,
 ) -> ProtocolResponse:
     result = await uc(
         PublishProtocolCommand(workspace_id=auth.workspace_id, protocol_id=protocol_id), auth=auth
     )
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 @router.post(
@@ -503,6 +530,7 @@ async def publish_protocol(
 async def retire_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     body: RetireRequest,
     uc: RetireProtocolDep,
 ) -> ProtocolResponse:
@@ -512,7 +540,7 @@ async def retire_protocol(
         ),
         auth=auth,
     )
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 class LockProtocolRequest(BaseModel):
@@ -527,6 +555,7 @@ class LockProtocolRequest(BaseModel):
 async def lock_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     body: LockProtocolRequest,
     uc: LockProtocolDep,
 ) -> ProtocolResponse:
@@ -541,7 +570,7 @@ async def lock_protocol(
         ),
         auth=auth,
     )
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 @router.post(
@@ -552,6 +581,7 @@ async def lock_protocol(
 async def unlock_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     body: LockProtocolRequest,
     uc: UnlockProtocolDep,
 ) -> ProtocolResponse:
@@ -564,7 +594,7 @@ async def unlock_protocol(
         ),
         auth=auth,
     )
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 @router.post(
@@ -576,12 +606,13 @@ async def unlock_protocol(
 async def version_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: VersionProtocolDep,
 ) -> ProtocolResponse:
     result = await uc(
         VersionProtocolCommand(workspace_id=auth.workspace_id, protocol_id=protocol_id), auth=auth
     )
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 class UpdateProtocolRequest(BaseModel):
@@ -599,6 +630,7 @@ async def update_protocol(
     protocol_id: uuid.UUID,
     body: UpdateProtocolRequest,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: UpdateProtocolDep,
 ) -> ProtocolResponse:
     """Update a DRAFT protocol's metadata."""
@@ -618,7 +650,7 @@ async def update_protocol(
         pos_control_signal=body.pos_control_signal,
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 @router.delete("/protocols/{protocol_id}", status_code=204, tags=["protocols"])
@@ -651,6 +683,7 @@ async def add_readout_definition(
     protocol_id: uuid.UUID,
     body: AddReadoutDefinitionRequest,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: AddReadoutDefinitionDep,
 ) -> ProtocolResponse:
     """Add a readout definition to a DRAFT protocol."""
@@ -671,7 +704,7 @@ async def add_readout_definition(
         dose_response_config=body.dose_response_config,
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 @router.put(
@@ -684,6 +717,7 @@ async def update_readout_definition(
     definition_id: uuid.UUID,
     body: UpdateReadoutDefinitionRequest,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: UpdateReadoutDefinitionDep,
 ) -> ProtocolResponse:
     """Edit a readout definition on a DRAFT protocol. Partial-update semantics."""
@@ -718,7 +752,7 @@ async def update_readout_definition(
 
     cmd = UpdateReadoutDefinitionCommand(**cmd_kwargs)
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 @router.delete(
@@ -730,6 +764,7 @@ async def remove_readout_definition(
     protocol_id: uuid.UUID,
     definition_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: RemoveReadoutDefinitionDep,
 ) -> ProtocolResponse:
     """Remove a readout definition from a DRAFT protocol."""
@@ -739,7 +774,7 @@ async def remove_readout_definition(
         definition_id=definition_id,
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 # ---------------------------------------------------------------------------
@@ -764,6 +799,7 @@ async def add_condition_definition(
     protocol_id: uuid.UUID,
     body: AddConditionDefinitionRequest,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: AddConditionDefinitionDep,
 ) -> ProtocolResponse:
     """Add a condition definition to a DRAFT protocol."""
@@ -776,7 +812,7 @@ async def add_condition_definition(
         pick_list_values=body.pick_list_values,
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 class UpdateConditionDefinitionRequest(BaseModel):
@@ -798,6 +834,7 @@ async def update_condition_definition(
     definition_id: uuid.UUID,
     body: UpdateConditionDefinitionRequest,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: UpdateConditionDefinitionDep,
 ) -> ProtocolResponse:
     """Edit a condition definition on a DRAFT protocol. Partial-update semantics."""
@@ -813,7 +850,7 @@ async def update_condition_definition(
 
     cmd = UpdateConditionDefinitionCommand(**cmd_kwargs)
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 @router.delete(
@@ -825,6 +862,7 @@ async def remove_condition_definition(
     protocol_id: uuid.UUID,
     definition_id: uuid.UUID,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: RemoveConditionDefinitionDep,
 ) -> ProtocolResponse:
     """Remove a condition definition from a DRAFT protocol."""
@@ -834,7 +872,7 @@ async def remove_condition_definition(
         definition_id=definition_id,
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 # ---------------------------------------------------------------------------
@@ -856,6 +894,7 @@ async def set_control_layout(
     protocol_id: uuid.UUID,
     body: SetControlLayoutRequest,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: SetControlLayoutDep,
 ) -> ProtocolResponse:
     """Set a default control layout (plate template) for a plate format on a DRAFT protocol."""
@@ -866,7 +905,7 @@ async def set_control_layout(
         template_id=body.template_id,
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 @router.delete(
@@ -878,6 +917,7 @@ async def remove_control_layout(
     protocol_id: uuid.UUID,
     plate_format: str,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: RemoveControlLayoutDep,
 ) -> ProtocolResponse:
     """Remove the default control layout for a plate format from a DRAFT protocol."""
@@ -887,7 +927,7 @@ async def remove_control_layout(
         plate_format=plate_format,
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 # ---------------------------------------------------------------------------
@@ -909,6 +949,7 @@ async def set_ontology_annotation(
     protocol_id: uuid.UUID,
     body: SetOntologyAnnotationRequest,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: SetOntologyAnnotationDep,
 ) -> ProtocolResponse:
     """Set ontology terms for a slot on a DRAFT protocol."""
@@ -919,7 +960,7 @@ async def set_ontology_annotation(
         terms=body.terms,
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 @router.delete(
@@ -931,6 +972,7 @@ async def remove_ontology_annotation(
     protocol_id: uuid.UUID,
     slot: str,
     auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
     uc: RemoveOntologyAnnotationDep,
 ) -> ProtocolResponse:
     """Remove all ontology terms for a slot from a DRAFT protocol."""
@@ -940,7 +982,7 @@ async def remove_ontology_annotation(
         slot=slot,
     )
     result = await uc(cmd, auth=auth)
-    return ProtocolResponse.from_domain(result_to_response(result))
+    return await _protocol_response(targets_uc, auth, result)
 
 
 # ---------------------------------------------------------------------------
