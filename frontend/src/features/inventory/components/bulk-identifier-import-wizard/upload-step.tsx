@@ -1,10 +1,11 @@
 "use client";
 
+import { CsvDropzone } from "@/shared/components/csv-dropzone";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { saveText } from "@/shared/lib/api/download";
-import { Download, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { Download } from "lucide-react";
+import { useState } from "react";
 import { generateCsvTemplate, parseBulkIdentifierCsv } from "../../lib/parse-bulk-identifier-csv";
 import type { BulkIdentifierRowBody } from "../../types";
 
@@ -13,14 +14,13 @@ interface UploadStepProps {
 }
 
 export function UploadStep({ onParsed }: UploadStepProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
-  const [lastFile, setLastFile] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
 
-  const handleFile = async (file: File) => {
+  const handleFile = async (f: File) => {
     setParsing(true);
-    setLastFile(file.name);
-    const { rows, errors } = await parseBulkIdentifierCsv(file);
+    setFile(f);
+    const { rows, errors } = await parseBulkIdentifierCsv(f);
     setParsing(false);
     onParsed(rows, errors);
   };
@@ -39,27 +39,14 @@ export function UploadStep({ onParsed }: UploadStepProps) {
             Download template
           </Button>
         </div>
-        <div className="rounded-lg border-2 border-dashed p-8 text-center">
-          <Upload className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            Upload a CSV file mapping external lot IDs to Cellar batches.
-          </p>
-          {lastFile && <p className="mt-2 text-xs text-muted-foreground">Last: {lastFile}</p>}
-          <Button className="mt-4" onClick={() => fileRef.current?.click()} disabled={parsing}>
-            {parsing ? "Parsing…" : "Choose file"}
-          </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) handleFile(f);
-              e.target.value = ""; // allow re-upload of same file
-            }}
-          />
-        </div>
+        <CsvDropzone
+          file={file}
+          onFile={handleFile}
+          isPending={parsing}
+          accept={{ "text/csv": [".csv"] }}
+          prompt="Drop a CSV here, or click to browse"
+          hint="CSV mapping external lot IDs to Cellar batches"
+        />
         <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
           <p className="font-medium text-foreground">CSV columns</p>
           <p className="mt-1">

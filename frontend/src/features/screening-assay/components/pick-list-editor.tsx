@@ -3,10 +3,10 @@
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { CATEGORY_COLORS, resolveCategoryColor } from "@/shared/lib/category-colors";
 import { cn } from "@/shared/lib/utils";
 import { Plus, Trash2 } from "lucide-react";
 import { useRef } from "react";
-import { PICK_LIST_COLORS, resolvePickListColor } from "../lib/pick-list-colors";
 import type { PickListValue } from "../types";
 
 interface PickListEditorProps {
@@ -63,7 +63,7 @@ export function PickListEditor({
         </p>
       )}
       {value.map((v, i) => {
-        const resolved = resolvePickListColor(v.label || "—", v.color);
+        const resolved = resolveCategoryColor(v.label || "—", v.color);
         return (
           <div key={keysRef.current[i]} className="flex items-center gap-2">
             <Input
@@ -96,7 +96,7 @@ export function PickListEditor({
               </PopoverTrigger>
               <PopoverContent align="end" className="w-auto p-2" sideOffset={4}>
                 <div className="grid grid-cols-4 gap-2">
-                  {PICK_LIST_COLORS.map((c) => (
+                  {CATEGORY_COLORS.map((c) => (
                     <button
                       key={c.hex}
                       type="button"

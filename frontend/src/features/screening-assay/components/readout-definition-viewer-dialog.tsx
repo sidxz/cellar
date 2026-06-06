@@ -11,8 +11,8 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { resolveCategoryColor } from "@/shared/lib/category-colors";
 import { cn } from "@/shared/lib/utils";
-import { resolvePickListColor } from "../lib/pick-list-colors";
 import { CLASSIFICATION_THRESHOLD_DEFAULTS } from "../lib/readout-constants";
 import {
   CURVE_TYPE_LABELS,
@@ -106,7 +106,7 @@ export function ReadoutDefinitionViewerDialog({
                 <Label className="text-xs">Pick List Values</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {readoutDef.pick_list_values.map((v) => {
-                    const c = resolvePickListColor(v.label, v.color);
+                    const c = resolveCategoryColor(v.label, v.color);
                     return (
                       <Badge
                         key={v.label}

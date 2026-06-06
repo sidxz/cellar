@@ -5,6 +5,7 @@ import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { resolveCategoryColor } from "@/shared/lib/category-colors";
 import { cn } from "@/shared/lib/utils";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Hexagon } from "lucide-react";
@@ -18,7 +19,6 @@ import {
   interceptOptionLabel,
   maxDoseFromRawData,
 } from "../lib/intercept-label";
-import { resolvePickListColor } from "../lib/pick-list-colors";
 import { type PivotRow, pivotReadoutData, valueKey } from "../lib/readout-data-pivot";
 import {
   type DoseResponseCurve,
@@ -339,7 +339,7 @@ export function ReadoutDataTable({
             // declared color (or hash-derived fallback when null).
             if (isPickList && row.value_text) {
               const declared = rd.pick_list_values?.find((v) => v.label === row.value_text);
-              const color = resolvePickListColor(row.value_text, declared?.color);
+              const color = resolveCategoryColor(row.value_text, declared?.color);
               return (
                 <Badge variant="outline" className={cn("text-xs", color.bg, color.text)}>
                   {row.value_text}
