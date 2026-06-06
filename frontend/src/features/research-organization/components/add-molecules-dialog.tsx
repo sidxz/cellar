@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui
 import { Textarea } from "@/shared/components/ui/textarea";
 import { saveText } from "@/shared/lib/api/download";
 import { parseCsv } from "@/shared/lib/parse-csv";
+import { SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import type { ColDef, GridApi } from "ag-grid-community";
 import { ChevronDown, ChevronRight, Download, Upload } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -200,7 +201,7 @@ function SearchTab({
       <DataGrid<MoleculeSearchRow>
         rowData={rows}
         columnDefs={columnDefs}
-        loading={searching && searchTerm.length >= 2}
+        loading={searching && searchTerm.length >= SEARCH_MIN_QUERY_LEN}
         height="250px"
         suppressFilters
         rowSelection="multiple"
@@ -208,7 +209,7 @@ function SearchTab({
           gridApiRef.current = e.api;
         }}
         emptyState={
-          searchTerm.length < 2 ? (
+          searchTerm.length < SEARCH_MIN_QUERY_LEN ? (
             <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-center">
               <p className="text-sm text-muted-foreground">Type at least 2 characters to search.</p>
             </div>

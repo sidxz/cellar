@@ -4,6 +4,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { cn } from "@/shared/lib/utils";
 import {
   AlertCircle,
   AlertTriangle,
@@ -521,7 +522,7 @@ function CountBadge({
   return (
     <Badge
       variant="outline"
-      className={`inline-flex items-center gap-1 font-semibold tabular-nums ${className}`}
+      className={cn("inline-flex items-center gap-1 font-semibold tabular-nums", className)}
     >
       {icon}
       {count}

@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { cn } from "@/shared/lib/utils";
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useBatchesByMolecule } from "../hooks/use-batches";
@@ -377,7 +378,7 @@ export function StartDialog({
               disabled={routesLoading}
               title="Refresh routes"
             >
-              <RefreshCw className={`h-4 w-4 ${routesLoading ? "animate-spin" : ""}`} />
+              <RefreshCw className={cn("h-4 w-4", routesLoading && "animate-spin")} />
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">

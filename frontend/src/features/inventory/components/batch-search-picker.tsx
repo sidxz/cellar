@@ -2,7 +2,11 @@
 
 import { SearchCombobox } from "@/shared/components/search-combobox";
 import { useDebounce } from "@/shared/hooks/use-debounce";
-import { PICKER_RESULT_LIMIT, SEARCH_DEBOUNCE_MS } from "@/shared/lib/timing";
+import {
+  PICKER_RESULT_LIMIT,
+  SEARCH_DEBOUNCE_MS,
+  SEARCH_MIN_QUERY_LEN,
+} from "@/shared/lib/timing";
 import { useCallback, useState } from "react";
 import { useBatchesGlobal } from "../hooks/use-batches";
 
@@ -28,7 +32,7 @@ export function BatchSearchPicker({ value, onSelect, onClear, onEnter }: BatchSe
     search: debounced,
     page_size: PICKER_RESULT_LIMIT,
   });
-  const results = debounced.length >= 2 ? (data?.items ?? []) : [];
+  const results = debounced.length >= SEARCH_MIN_QUERY_LEN ? (data?.items ?? []) : [];
 
   const handleSelect = useCallback(
     (batchNumber: string) => {
@@ -40,14 +44,14 @@ export function BatchSearchPicker({ value, onSelect, onClear, onEnter }: BatchSe
   );
 
   const displayValue = searchTerm !== "" ? searchTerm : value;
-  const showDropdown = isOpen && debounced.length >= 2;
+  const showDropdown = isOpen && debounced.length >= SEARCH_MIN_QUERY_LEN;
 
   return (
     <SearchCombobox
       searchValue={displayValue}
       onSearchChange={(next) => {
         setSearchTerm(next);
-        setIsOpen(next.length >= 2);
+        setIsOpen(next.length >= SEARCH_MIN_QUERY_LEN);
       }}
       items={results}
       getItemKey={(b) => b.id}

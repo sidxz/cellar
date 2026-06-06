@@ -2,6 +2,8 @@
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { OntologyTermResponse } from "@/shared/lib/api/model";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
+import { SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import { useQuery } from "@tanstack/react-query";
 
 // Alias of the orval-generated DTO (source of truth).
@@ -17,7 +19,7 @@ export function useOntologyDescendants(ontology: string, rootConceptId: string, 
         params: { ontology, root_concept_id: rootConceptId },
       }),
     enabled: enabled !== false && !!ontology && !!rootConceptId,
-    staleTime: 30 * 60 * 1000, // 30 min — ontology trees don't change
+    staleTime: STALE_TIME.LONG, // ontology trees don't change
   });
 }
 
@@ -39,6 +41,6 @@ export function useOntologySearch(
           ...(subtreeRootId ? { subtree_root_id: subtreeRootId } : {}),
         },
       }),
-    enabled: enabled !== false && query.length >= 2,
+    enabled: enabled !== false && query.length >= SEARCH_MIN_QUERY_LEN,
   });
 }

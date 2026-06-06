@@ -28,6 +28,7 @@ import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { Badge } from "@/shared/components/ui/badge";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { groupBy } from "@/shared/lib/group-by";
+import { shortId } from "@/shared/lib/utils";
 
 import {
   CurveClassBadge,
@@ -246,7 +247,7 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
         const r = params.data?.result;
         if (!r) return null;
         const m = moleculesById.get(r.molecule_id);
-        const label = m?.registration_number ?? r.molecule_id.slice(0, 8);
+        const label = m?.registration_number ?? shortId(r.molecule_id);
         // Stack id → name → synonyms vertically. Saves horizontal space and
         // makes use of the taller row. Synonyms are deduped against the
         // primary name so we don't repeat the same string.
@@ -428,7 +429,7 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
                 return <span className="text-muted-foreground">--</span>;
               }
               const mol = moleculesById.get(r.molecule_id);
-              const moleculeLabel = mol?.registration_number ?? r.molecule_id.slice(0, 8);
+              const moleculeLabel = mol?.registration_number ?? shortId(r.molecule_id);
               return (
                 <button
                   type="button"

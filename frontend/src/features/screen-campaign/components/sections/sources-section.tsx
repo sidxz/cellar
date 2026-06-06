@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/shared/components/ui/button";
+import { shortId } from "@/shared/lib/utils";
 import { X } from "lucide-react";
 import { useMemo } from "react";
 import type { CampaignResponse } from "../../types";
@@ -80,7 +81,7 @@ function describeSource(source: SourceEntry, runInfoById: Map<string, RunInfo>):
       parts.push("Collection");
       const collectionLabel =
         source.description?.trim() ||
-        (source.collection_id ? source.collection_id.slice(0, 8) : null);
+        (source.collection_id ? shortId(source.collection_id) : null);
       if (collectionLabel) parts.push(collectionLabel);
       break;
     }
@@ -88,7 +89,7 @@ function describeSource(source: SourceEntry, runInfoById: Map<string, RunInfo>):
     case "campaign": {
       parts.push("Campaign");
       const campaignLabel =
-        source.description?.trim() || (source.campaign_id ? source.campaign_id.slice(0, 8) : null);
+        source.description?.trim() || (source.campaign_id ? shortId(source.campaign_id) : null);
       if (campaignLabel) parts.push(campaignLabel);
       break;
     }
@@ -105,7 +106,7 @@ function describeSource(source: SourceEntry, runInfoById: Map<string, RunInfo>):
       const runLabel =
         source.description?.trim() ||
         snapshotLabel ||
-        (source.run_id ? source.run_id.slice(0, 8) : null);
+        (source.run_id ? shortId(source.run_id) : null);
       if (runLabel) parts.push(runLabel);
       const scientist = source.scientist?.trim();
       if (scientist) parts.push(`by ${scientist}`);
@@ -116,7 +117,7 @@ function describeSource(source: SourceEntry, runInfoById: Map<string, RunInfo>):
       parts.push("Saved search");
       const label =
         source.description?.trim() ||
-        (source.saved_search_id ? source.saved_search_id.slice(0, 8) : null);
+        (source.saved_search_id ? shortId(source.saved_search_id) : null);
       if (label) parts.push(label);
       break;
     }
@@ -126,9 +127,9 @@ function describeSource(source: SourceEntry, runInfoById: Map<string, RunInfo>):
       parts.push(source.kind);
       const fallbackId =
         source.description?.trim() ||
-        source.collection_id?.slice(0, 8) ||
-        source.campaign_id?.slice(0, 8) ||
-        source.run_id?.slice(0, 8) ||
+        (source.collection_id && shortId(source.collection_id)) ||
+        (source.campaign_id && shortId(source.campaign_id)) ||
+        (source.run_id && shortId(source.run_id)) ||
         null;
       if (fallbackId) parts.push(fallbackId);
       break;

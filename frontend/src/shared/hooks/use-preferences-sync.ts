@@ -1,6 +1,7 @@
 "use client";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
 import { type UserPreferences, usePreferencesStore } from "@/shared/lib/stores/preferences-store";
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { useQuery } from "@tanstack/react-query";
@@ -49,7 +50,7 @@ export function usePreferencesSync() {
     queryKey: ["user", "preferences"],
     queryFn: fetchPreferences,
     enabled: isAuthenticated,
-    staleTime: Number.POSITIVE_INFINITY,
+    staleTime: STALE_TIME.STATIC,
     retry: 1,
   });
 

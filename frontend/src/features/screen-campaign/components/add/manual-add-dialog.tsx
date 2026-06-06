@@ -23,6 +23,7 @@ import {
 
 import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
 import { useAddResultRowApiV1CampaignsCampaignIdResultsPost } from "@/shared/lib/api/campaigns/campaigns";
+import { SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import { campaignKeys } from "../../hooks/use-campaigns";
 
 export interface ManualAddDialogProps {
@@ -75,11 +76,13 @@ export function ManualAddDialog({ open, onOpenChange, campaignId }: ManualAddDia
         />
 
         <div className="max-h-52 overflow-y-auto border rounded divide-y text-sm">
-          {search.length < 2 && (
-            <p className="p-2 text-muted-foreground text-xs">Type at least 2 characters</p>
+          {search.length < SEARCH_MIN_QUERY_LEN && (
+            <p className="p-2 text-muted-foreground text-xs">
+              Type at least {SEARCH_MIN_QUERY_LEN} characters
+            </p>
           )}
           {isLoading && <p className="p-2 text-muted-foreground text-xs">Searching…</p>}
-          {!isLoading && search.length >= 2 && !results?.length && (
+          {!isLoading && search.length >= SEARCH_MIN_QUERY_LEN && !results?.length && (
             <p className="p-2 text-muted-foreground text-xs">No results</p>
           )}
           {results?.map((mol) => (

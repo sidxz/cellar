@@ -14,6 +14,7 @@ import {
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { cn } from "@/shared/lib/utils";
 import {
   Building2,
   ChevronRight,
@@ -84,7 +85,7 @@ function LocationNode({
             onClick={() => setExpanded(!expanded)}
           >
             <ChevronRight
-              className={`h-3 w-3 transition-transform ${expanded ? "rotate-90" : ""}`}
+              className={cn("h-3 w-3 transition-transform", expanded && "rotate-90")}
             />
           </Button>
         ) : (

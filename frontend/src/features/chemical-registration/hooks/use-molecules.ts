@@ -5,7 +5,7 @@ import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { MoleculeResponse, StructureSearchResponse } from "@/shared/lib/api/model";
 import type { AddIdentifierResponse } from "@/shared/lib/api/model/addIdentifierResponse";
-import { PICKER_RESULT_LIMIT } from "@/shared/lib/timing";
+import { PICKER_RESULT_LIMIT, SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import { showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -75,7 +75,7 @@ export function useMoleculeSearch(q: string) {
       });
       return page.items;
     },
-    enabled: q.length >= 2,
+    enabled: q.length >= SEARCH_MIN_QUERY_LEN,
   });
 }
 

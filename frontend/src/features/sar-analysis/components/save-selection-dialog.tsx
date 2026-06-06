@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { shortId } from "@/shared/lib/utils";
 import { useEffect, useState } from "react";
 
 interface MoleculeLite {
@@ -99,7 +100,7 @@ export function SaveSelectionDialog({
             <ul className="grid grid-cols-3 gap-2 text-xs">
               {selectedMolecules.map((m) => (
                 <li key={m.id} className="rounded border px-2 py-1">
-                  <div className="font-mono">{m.reg_number ?? m.id.slice(0, 8)}</div>
+                  <div className="font-mono">{m.reg_number ?? shortId(m.id)}</div>
                   {m.name && <div className="text-muted-foreground truncate">{m.name}</div>}
                 </li>
               ))}

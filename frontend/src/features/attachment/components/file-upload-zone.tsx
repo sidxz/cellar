@@ -27,7 +27,10 @@ const BLOCKED_EXTENSIONS = new Set([
   ".jar",
 ]);
 
-const MAX_SIZE = 104_857_600; // 100 MB
+/** Per-file upload cap. The byte limit and the UI copy both derive from this
+ *  single value so they can't silently disagree. */
+const MAX_FILE_MB = 100;
+const MAX_SIZE = MAX_FILE_MB * 1024 * 1024;
 
 interface FileUploadZoneProps {
   entityType: AttachableType;
@@ -82,7 +85,7 @@ export function FileUploadZone({ entityType, entityId }: FileUploadZoneProps) {
           Drag &amp; drop files here, or click to browse
         </p>
       )}
-      <p className="mt-1 text-xs text-muted-foreground/60">Max 100 MB per file</p>
+      <p className="mt-1 text-xs text-muted-foreground/60">Max {MAX_FILE_MB} MB per file</p>
     </div>
   );
 }

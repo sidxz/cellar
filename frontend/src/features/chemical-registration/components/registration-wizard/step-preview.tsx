@@ -3,6 +3,7 @@
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { cn } from "@/shared/lib/utils";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
@@ -139,7 +140,7 @@ export function StepPreview() {
                 {bulkPreview.items.map((item) => (
                   <tr
                     key={item.row_index}
-                    className={`border-b last:border-b-0 ${item.error ? "bg-destructive/5" : ""}`}
+                    className={cn("border-b last:border-b-0", item.error && "bg-destructive/5")}
                   >
                     <td className="px-3 py-1.5 text-muted-foreground">{item.row_index + 1}</td>
                     <td className="px-3 py-1.5">{item.name ?? "\u2014"}</td>

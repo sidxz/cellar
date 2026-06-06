@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { StructureRenderer } from "@/shared/components/chemistry/structure-renderer";
+import { cn } from "@/shared/lib/utils";
 
 /**
  * MoleculeThumbnail — size-presetted wrapper around StructureRenderer (B1).
@@ -38,7 +39,10 @@ export function MoleculeThumbnail({
   if (!smiles) {
     return (
       <div
-        className={`inline-flex items-center justify-center rounded border border-dashed text-[10px] text-muted-foreground ${className ?? ""}`}
+        className={cn(
+          "inline-flex items-center justify-center rounded border border-dashed text-[10px] text-muted-foreground",
+          className,
+        )}
         style={{ width, height }}
       >
         {fallback ?? "no structure"}

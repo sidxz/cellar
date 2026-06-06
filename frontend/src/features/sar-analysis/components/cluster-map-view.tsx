@@ -8,6 +8,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/shared/components/ui/resizable";
+import { shortId } from "@/shared/lib/utils";
 
 import { useCherrypickBasket } from "../hooks/use-cherrypick-basket";
 import { useRegionDiversePick } from "../hooks/use-region-diverse-pick";
@@ -153,7 +154,7 @@ export function ClusterMapView({
       if (reg && name) map[m.id] = `${reg} · ${name}`;
       else if (reg) map[m.id] = reg;
       else if (name) map[m.id] = name;
-      else map[m.id] = m.id.slice(0, 8);
+      else map[m.id] = shortId(m.id);
     }
     return map;
   }, [molecules]);

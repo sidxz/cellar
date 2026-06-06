@@ -2,6 +2,7 @@
 
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { getRDKit } from "@/shared/lib/rdkit/rdkit-loader";
+import { cn } from "@/shared/lib/utils";
 import { memo, useEffect, useState } from "react";
 
 interface StructureRendererProps {
@@ -99,7 +100,10 @@ function StructureRendererInner({
   if (error || !blobUrl) {
     return (
       <div
-        className={`flex items-center justify-center rounded border border-dashed text-xs text-muted-foreground ${className ?? ""}`}
+        className={cn(
+          "flex items-center justify-center rounded border border-dashed text-xs text-muted-foreground",
+          className,
+        )}
         style={{ width, height }}
       >
         Invalid structure
@@ -113,7 +117,7 @@ function StructureRendererInner({
       alt={`Structure: ${smiles}`}
       width={width}
       height={height}
-      className={`dark:invert ${className ?? ""}`}
+      className={cn("dark:invert", className)}
     />
   );
 }

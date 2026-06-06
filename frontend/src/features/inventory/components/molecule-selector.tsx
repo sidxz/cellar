@@ -4,7 +4,7 @@ import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-mo
 import type { Molecule } from "@/features/chemical-registration/types";
 import { SearchCombobox } from "@/shared/components/search-combobox";
 import { useDebounce } from "@/shared/hooks/use-debounce";
-import { SEARCH_DEBOUNCE_MS } from "@/shared/lib/timing";
+import { SEARCH_DEBOUNCE_MS, SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 interface MoleculeSelectorProps {
@@ -44,7 +44,7 @@ export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps
   const handleSearchChange = useCallback(
     (value: string) => {
       setSearchTerm(value);
-      setIsOpen(value.length >= 2);
+      setIsOpen(value.length >= SEARCH_MIN_QUERY_LEN);
       // If user types while a molecule is selected, clear the selection
       if (selectedMolecule) {
         onSelect(null);
@@ -57,7 +57,7 @@ export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps
     ? `${selectedMolecule.registration_number} — ${selectedMolecule.name}`
     : searchTerm;
 
-  const showDropdown = isOpen && debouncedTerm.length >= 2;
+  const showDropdown = isOpen && debouncedTerm.length >= SEARCH_MIN_QUERY_LEN;
 
   return (
     <SearchCombobox
@@ -78,7 +78,7 @@ export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps
       open={showDropdown}
       onOpenChange={setIsOpen}
       onInputFocus={() => {
-        if (debouncedTerm.length >= 2 && !selectedMolecule) {
+        if (debouncedTerm.length >= SEARCH_MIN_QUERY_LEN && !selectedMolecule) {
           setIsOpen(true);
         }
       }}
