@@ -1,12 +1,19 @@
 # Frontend maintainability — deferred low-severity findings
 
 **Created:** 2026-06-06
+**STATUS: RESOLVED 2026-06-06** — all 22 items below were fixed on branch
+`fe-review-1` (wave-4 commits `5ec5cebb..6ebdaa50`). Intentional skips,
+each judged at fix time: three message-only empty states stayed as plain
+text (forcing icon+title would regress them); JSDoc `/api/v1` route
+references keep the literal; generated orval files untouched. Kept for
+the historical record of what was found and why.
+
 **Context:** A 6-dimension multi-agent review of `frontend/src` (duplication,
 data-layer duplication, hand-rolled-vs-native, escape hatches, hardcoded
 values, convention drift) produced 46 adversarially-verified findings.
 The 9 high + 15 medium items were fixed on branch `fe-review-1`
-(2026-06-06). The 22 low-severity items below were deliberately deferred —
-real but cosmetic-or-small; fix opportunistically or as a batch pass.
+(2026-06-06). The 22 low-severity items below were initially deferred,
+then fixed the same day in a follow-up wave.
 
 ## Duplication
 
