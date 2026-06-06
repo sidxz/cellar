@@ -1,7 +1,6 @@
 "use client";
 
 import { AttachmentList, FileUploadZone } from "@/features/attachment";
-import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import {
@@ -12,12 +11,11 @@ import {
 } from "@/shared/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
-import { cn } from "@/shared/lib/utils";
 import { Grid3x3, Paperclip, Pencil, Upload } from "lucide-react";
 import { useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
-import { type ZPrimeQuality, classifyZPrime, readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
+import { readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
 import type { PlateFormat, Run } from "../types";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
 import { GridImportDialog } from "./grid-import-dialog";
@@ -28,33 +26,12 @@ import { RunDoseResponseResults } from "./run-dr-results";
 import { RunHeatmapPanel } from "./run-heatmap-panel";
 import { RunImportWizard } from "./run-import-wizard";
 import { SummaryImportWizard } from "./summary-import-wizard";
-
-const Z_PRIME_BADGE: Record<ZPrimeQuality, { label: string; className: string }> = {
-  excellent: {
-    label: "Excellent",
-    className: "bg-green-500/20 text-green-400 border-green-500/30",
-  },
-  marginal: {
-    label: "Marginal",
-    className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  },
-  poor: { label: "Poor", className: "bg-destructive/20 text-destructive border-destructive/30" },
-};
+import { ZPrimeBadge } from "./z-prime-badge";
 
 // ─── QC Metrics Panel (inline) ────────────────────────────────────────────────
 
 interface QcMetricsPanelProps {
   qcMetrics: Record<string, unknown> | null;
-}
-
-/** Z' factor quality badge */
-function ZPrimeBadge({ value }: { value: number }) {
-  const { label, className } = Z_PRIME_BADGE[classifyZPrime(value)];
-  return (
-    <Badge variant="outline" className={cn("text-xs font-medium", className)}>
-      {label}
-    </Badge>
-  );
 }
 
 function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
