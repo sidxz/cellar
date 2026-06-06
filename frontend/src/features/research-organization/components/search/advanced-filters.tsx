@@ -705,9 +705,9 @@ function KeywordListTerm({
 
   // Re-sync local text when criterion changes externally (e.g. loading saved search)
   const canonicalValues = criterion.values.join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-sync local text only when the canonical value string changes externally; keying on `criterion.values` directly would clobber in-progress edits on every parent re-render.
   useEffect(() => {
     setRawText(criterion.values.join("\n"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canonicalValues]);
 
   function handleBlur() {

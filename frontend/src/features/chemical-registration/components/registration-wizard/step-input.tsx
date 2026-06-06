@@ -566,13 +566,13 @@ function BulkInputForm() {
   const [error, setError] = useState<string | null>(null);
 
   // Hydrate createBatchOnDuplicate from workspace default on first load (before any file is selected)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: hydrate the duplicate-batch default only when workspace settings arrive; `bulkInput.file`/`updateBulkInput` are omitted so a later file selection doesn't re-hydrate.
   useEffect(() => {
     if (settings && !bulkInput.file) {
       updateBulkInput({
         createBatchOnDuplicate: settings.registration_rules?.create_batch_on_duplicate ?? false,
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
   const onDrop = useCallback(

@@ -257,6 +257,7 @@ function BulkProcessing() {
   const [startError, setStartError] = useState<string | null>(null);
 
   // Kick off the bulk job on mount
+  // biome-ignore lint/correctness/useExhaustiveDependencies: kick off the bulk job once on mount (guarded by hasStarted ref); the captured bulkInput/startMutation must not re-trigger the job.
   useEffect(() => {
     if (hasStarted.current || !bulkInput.file) return;
     hasStarted.current = true;
@@ -274,7 +275,6 @@ function BulkProcessing() {
       .catch((err: Error) => {
         setStartError(err.message ?? "Failed to start bulk registration");
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Poll for progress.
@@ -292,6 +292,7 @@ function BulkProcessing() {
 
   // Auto-advance when complete
   const hasAdvanced = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: auto-advance keys only on `progress` (guarded by hasAdvanced ref); the store actions (setMergeCandidates/nextStep/setCurrentStep) are stable and intentionally omitted.
   useEffect(() => {
     if (!progress || hasAdvanced.current) return;
 
@@ -306,7 +307,6 @@ function BulkProcessing() {
         setCurrentStep(4);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress]);
 
   // Error states

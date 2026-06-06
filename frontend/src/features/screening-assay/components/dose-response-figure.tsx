@@ -253,9 +253,9 @@ export const DoseResponseFigure = memo(DoseResponseFigureInner);
 // ─── Trace + layout construction (the SHARED logic that was duplicated) ────
 
 interface FigureInputs {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: Plotly trace objects are dynamically constructed and not typed by the lib
   traces: any[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: Plotly layout is dynamically constructed and not typed by the lib
   layout: any;
 }
 
@@ -287,7 +287,7 @@ function buildPlotInputs(curve: CurveSnapshot, preset: Preset, unit: string | nu
     for (const pt of curve.excluded_points) flagged.push({ ...pt, is_excluded: true });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: Plotly trace objects are dynamically constructed and not typed by the lib
   const traces: any[] = [];
 
   if (kept.length > 0) {
@@ -389,7 +389,7 @@ function buildPlotInputs(curve: CurveSnapshot, preset: Preset, unit: string | nu
   //    dashed line at the curve's own fitted_value.
   //  - Inactive single-curve: no shapes (showFit=false).
   const isAggregateMode = curve.aggregate != null && Number.isFinite(curve.aggregate.marker_x);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: Plotly shape objects are dynamically constructed and not typed by the lib
   const shapes: any[] = [];
   if (isAggregateMode) {
     shapes.push({

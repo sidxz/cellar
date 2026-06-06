@@ -21,6 +21,7 @@ interface StructureThumbnailProps {
 function StructureThumbnailInner({ smiles, size = 48, className }: StructureThumbnailProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-render the thumbnail only when smiles/size change; `setBlobUrl` is a stable state setter.
   useEffect(() => {
     let cancelled = false;
     let url: string | null = null;
@@ -62,7 +63,6 @@ function StructureThumbnailInner({ smiles, size = 48, className }: StructureThum
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [smiles, size]);
 
   if (!blobUrl) {

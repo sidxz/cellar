@@ -201,9 +201,9 @@ export function useEditSession(
   // that an in-place re-fetch (same id, new object reference) doesn't blow
   // away the user's in-progress edits. The consumer should bump curveId
   // when the underlying curve identity truly changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: key ONLY on curveId so an in-place re-fetch (same id, new object ref) doesn't blow away in-progress edits; `curve` is intentionally omitted.
   useEffect(() => {
     dispatch({ type: "seed", entries: initialEntriesFrom(curve) });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curveId]);
 
   const toggleExclusion = useCallback(

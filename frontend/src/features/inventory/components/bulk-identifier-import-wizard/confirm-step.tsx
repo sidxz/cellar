@@ -18,6 +18,7 @@ export function ConfirmStep({ rows, sourceDefault, onDone }: ConfirmStepProps) {
   const router = useRouter();
   const commit = useCommitBulkIdentifiers();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount to commit the rows; re-running on commit/rows/sourceDefault changes would re-submit the import.
   useEffect(() => {
     if (!commit.isPending && !commit.data) {
       commit.mutate(
@@ -25,7 +26,6 @@ export function ConfirmStep({ rows, sourceDefault, onDone }: ConfirmStepProps) {
         { onSuccess: (data) => onDone(data) },
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (commit.isPending) {

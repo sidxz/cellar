@@ -49,6 +49,7 @@ export function PreviewStep({
 }: PreviewStepProps) {
   const preview = usePreviewBulkIdentifiers();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fire the preview mutation once when rows arrive; `preview`/`onPreviewReady` are omitted so the effect re-runs only on a genuine input change (rows.length/sourceDefault).
   useEffect(() => {
     if (rows.length > 0 && !preview.isPending && !preview.data) {
       preview.mutate(
@@ -56,7 +57,6 @@ export function PreviewStep({
         { onSuccess: (data) => onPreviewReady(data) },
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows.length, sourceDefault]);
 
   if (preview.isPending) {

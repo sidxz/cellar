@@ -23,6 +23,7 @@ export function StepPreview() {
   const hasRequested = useRef(false);
 
   // Kick off preview on mount when no data yet
+  // biome-ignore lint/correctness/useExhaustiveDependencies: kick off the preview once on mount (guarded by hasRequested ref); the captured bulkInput/previewMutation are intentionally not re-subscribed.
   useEffect(() => {
     if (hasRequested.current || bulkPreview || !bulkInput.file) return;
     hasRequested.current = true;
@@ -32,7 +33,6 @@ export function StepPreview() {
       .catch(() => {
         // Error surfaced via mutation state below.
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!bulkInput.file) {

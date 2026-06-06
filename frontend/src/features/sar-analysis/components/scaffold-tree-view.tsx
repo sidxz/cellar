@@ -319,15 +319,13 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
 
   // Path A: default-expand only the top-N roots once the tree arrives.
   // Previously we expanded ALL roots — visually overwhelming for diverse sets.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only re-runs when the tree identity changes; `sortedRoots` is omitted so user expansion state survives min-members filter tweaks.
   useEffect(() => {
     if (sortedRoots.length > 0) {
       setExpanded(
         new Set(sortedRoots.slice(0, DEFAULT_EXPAND_TOP_N).map((n) => n.scaffold_smiles)),
       );
     }
-    // Intentionally only re-runs when the tree identity changes; user expansion
-    // state survives min-members filter tweaks.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree]);
 
   // Sonner toast for long-running async compute. After 3 seconds in a

@@ -29,6 +29,7 @@ export function useExport(): UseExportReturn {
     }
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: poll recurses on itself (can't list itself as a dep); triggerDownload is a module-level fn and the setters are stable, so the dep array stays minimal.
   const poll = useCallback(
     async (jobId: string, attempt = 0) => {
       if (cancelled.current) return;
@@ -53,7 +54,7 @@ export function useExport(): UseExportReturn {
         setError((e as Error).message);
       }
     },
-    [stop], // eslint-disable-line react-hooks/exhaustive-deps
+    [stop],
   );
 
   const start = useCallback(

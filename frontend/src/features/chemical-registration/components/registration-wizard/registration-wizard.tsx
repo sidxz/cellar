@@ -86,6 +86,7 @@ export function RegistrationWizard() {
   useCollectionImportHandoff();
 
   // ─── URL param initialization ───────────────────────────────────────────
+  // biome-ignore lint/correctness/useExhaustiveDependencies: read the initial mode/disclose URL params once on mount; later searchParams changes should not re-seed the wizard.
   useEffect(() => {
     const modeParam = searchParams.get("mode");
     if (modeParam === "bulk") {
@@ -100,8 +101,6 @@ export function RegistrationWizard() {
         moleculeId: discloseId,
       });
     }
-    // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ─── Unsaved changes warning ────────────────────────────────────────────
@@ -118,11 +117,11 @@ export function RegistrationWizard() {
   }, [mode]);
 
   // ─── Cleanup on unmount ─────────────────────────────────────────────────
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run the wizard reset only on unmount; `reset` is a stable store action and must not re-run the cleanup mid-session.
   useEffect(() => {
     return () => {
       reset();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ─── Render step content ────────────────────────────────────────────────
