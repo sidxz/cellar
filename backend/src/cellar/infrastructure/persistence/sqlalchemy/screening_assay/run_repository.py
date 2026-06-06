@@ -138,16 +138,8 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         return bool(row)
 
     # ------------------------------------------------------------------
-    # Target association methods
+    # Target association methods (_owns lives on the shared base repository)
     # ------------------------------------------------------------------
-
-    async def _owns(
-        self, model: type, id_: uuid.UUID, workspace_id: uuid.UUID
-    ) -> bool:
-        result = await self._session.execute(
-            select(model.id).where(model.id == id_, model.workspace_id == workspace_id)
-        )
-        return result.scalar_one_or_none() is not None
 
     async def find_lock_state(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
@@ -203,24 +195,6 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             )
         )
         return bool(result.rowcount)
-
-    async def find_target_refs(
-        self, workspace_id: uuid.UUID, run_id: uuid.UUID
-    ) -> list[TargetRef]:
-        result = await self._session.execute(
-            select(TargetModel.id, TargetModel.name, TargetModel.target_type)
-            .select_from(
-                run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id)
-            )
-            .where(
-                run_targets.c.run_id == run_id,
-                TargetModel.workspace_id == workspace_id,
-            )
-            .order_by(TargetModel.name)
-        )
-        return [
-            TargetRef(id=tid, name=name, target_type=tt) for tid, name, tt in result.all()
-        ]
 
     async def find_target_refs_for_runs(
         self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]

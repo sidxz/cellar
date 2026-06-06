@@ -59,6 +59,18 @@ class SQLAlchemyRepository[T: AggregateRoot, ModelType: Base](ABC):
         self._uow.track(domain_entity)
         return domain_entity
 
+    async def _owns(self, model: type, id_: uuid.UUID, workspace_id: uuid.UUID) -> bool:
+        """Defense-in-depth ownership check: row exists AND is in the workspace.
+
+        ``model`` may be any workspace-scoped SA model, not just
+        ``model_class`` — link-table methods use it to validate both sides
+        of an association.
+        """
+        result = await self._session.execute(
+            select(model.id).where(model.id == id_, model.workspace_id == workspace_id)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def _find_by_id_unscoped(self, id: uuid.UUID) -> T | None:
         """Load an aggregate by primary key with NO workspace check.
 

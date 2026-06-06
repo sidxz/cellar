@@ -137,7 +137,7 @@ class TestTargetLinks:
             await rrepo.add_target(workspace_id, r, t)  # no-op, no duplicate-PK error
             await uow.commit()
         async with uow:
-            refs = await rrepo.find_target_refs(workspace_id, r)
+            refs = (await rrepo.find_target_refs_for_runs(workspace_id, [r])).get(r, [])
         assert [x.id for x in refs] == [t]
 
     async def test_delete_referenced_target_is_blocked(self, uow, workspace_id):
@@ -166,7 +166,7 @@ class TestTargetLinks:
 
         # Still linked; after unlinking, the delete goes through.
         async with uow:
-            refs = await rrepo.find_target_refs(workspace_id, r)
+            refs = (await rrepo.find_target_refs_for_runs(workspace_id, [r])).get(r, [])
         assert [x.id for x in refs] == [t]
 
         async with uow:
@@ -195,7 +195,7 @@ class TestTargetLinks:
             await rrepo.add_target(workspace_id, r, t_other)
             await uow.commit()
         async with uow:
-            refs = await rrepo.find_target_refs(workspace_id, r)
+            refs = (await rrepo.find_target_refs_for_runs(workspace_id, [r])).get(r, [])
         assert refs == []
 
     async def test_batched_effective_targets(self, uow, workspace_id):

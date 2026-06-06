@@ -256,16 +256,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         return list(result.scalars().all())
 
     # ------------------------------------------------------------------
-    # Target association methods
+    # Target association methods (_owns lives on the shared base repository)
     # ------------------------------------------------------------------
-
-    async def _owns(
-        self, model: type, id_: uuid.UUID, workspace_id: uuid.UUID
-    ) -> bool:
-        result = await self._session.execute(
-            select(model.id).where(model.id == id_, model.workspace_id == workspace_id)
-        )
-        return result.scalar_one_or_none() is not None
 
     async def find_lock_state(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
