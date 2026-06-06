@@ -14,6 +14,7 @@ import type { RunResponseRunRelationshipType } from './runResponseRunRelationshi
 import type { RunResponsePlateFormat } from './runResponsePlateFormat';
 import type { RunResponsePlateTemplateId } from './runResponsePlateTemplateId';
 import type { RunResponseConditions } from './runResponseConditions';
+import type { TargetRefResponse } from './targetRefResponse';
 
 export interface RunResponse {
   id: string;
@@ -37,4 +38,5 @@ export interface RunResponse {
   plate_format?: RunResponsePlateFormat;
   plate_template_id?: RunResponsePlateTemplateId;
   conditions?: RunResponseConditions;
+  targets?: TargetRefResponse[];
 }

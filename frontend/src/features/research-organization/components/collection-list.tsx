@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useCollections } from "../hooks/use-collections";
 import { useProjects } from "../hooks/use-projects";
-import type { Collection } from "../types";
+import { COLLECTION_TYPE_LABELS, type Collection } from "../types";
 import { BooleanCollectionsDialog } from "./boolean-collections-dialog";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 
@@ -87,6 +87,17 @@ export function CollectionList({ projectId }: CollectionListProps) {
         cellRenderer: (params: { value: string }) => {
           return params.value === "shared" ? "Shared" : "Private";
         },
+      },
+      {
+        headerName: "Type",
+        field: "type",
+        width: 130,
+        cellRenderer: (params: ICellRendererParams<Collection>) => (
+          <Badge variant="outline">
+            {COLLECTION_TYPE_LABELS[params.value as keyof typeof COLLECTION_TYPE_LABELS] ??
+              params.value}
+          </Badge>
+        ),
       },
       {
         headerName: "Created By",

@@ -21,6 +21,7 @@ class ProjectArchived(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class CollectionCreated(DomainEvent):
     name: str
+    type: str
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -6,7 +6,6 @@
  */
 import type { UpdateProtocolRequestName } from './updateProtocolRequestName';
 import type { UpdateProtocolRequestDescription } from './updateProtocolRequestDescription';
-import type { UpdateProtocolRequestTargetId } from './updateProtocolRequestTargetId';
 import type { UpdateProtocolRequestCategory } from './updateProtocolRequestCategory';
 import type { UpdateProtocolRequestRecommendedHitCriteria } from './updateProtocolRequestRecommendedHitCriteria';
 import type { UpdateProtocolRequestPosControlSignal } from './updateProtocolRequestPosControlSignal';
@@ -14,7 +13,6 @@ import type { UpdateProtocolRequestPosControlSignal } from './updateProtocolRequ
 export interface UpdateProtocolRequest {
   name?: UpdateProtocolRequestName;
   description?: UpdateProtocolRequestDescription;
-  target_id?: UpdateProtocolRequestTargetId;
   category?: UpdateProtocolRequestCategory;
   recommended_hit_criteria?: UpdateProtocolRequestRecommendedHitCriteria;
   pos_control_signal?: UpdateProtocolRequestPosControlSignal;

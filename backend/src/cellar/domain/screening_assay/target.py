@@ -3,11 +3,41 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from cellar.domain.screening_assay.enums import TargetType
 from cellar.domain.shared.entity import Entity
 from cellar.domain.shared.errors import ValidationError
+
+
+@dataclass(frozen=True)
+class TargetRef:
+    """Lightweight target reference for read models (grids, chips, run lists).
+
+    Carries only what a display needs — never the full Target entity.
+    """
+
+    id: uuid.UUID
+    name: str
+    target_type: str
+
+
+@dataclass(frozen=True)
+class EffectiveTarget:
+    """A target on a protocol's *effective* list, with provenance.
+
+    ``is_direct`` — attached directly at the protocol level; survives the
+    auto-prune that removes inherited-only targets when their last run drops
+    them. ``run_count`` — how many of the protocol's runs reference it (0 when
+    the target is direct-only).
+    """
+
+    id: uuid.UUID
+    name: str
+    target_type: str
+    is_direct: bool
+    run_count: int
 
 
 class Target(Entity):

@@ -38,11 +38,13 @@ from cellar.application.screening.manage_ontology_annotations import (
     SetOntologyAnnotationCommand,
 )
 from cellar.application.screening.manage_protocol import (
+    AddProtocolTargetCommand,
     AddProtocolToProjectCommand,
     DeleteProtocolCommand,
     ListProtocolsByProjectQuery,
     PublishProtocolCommand,
     RemoveProtocolFromProjectCommand,
+    RemoveProtocolTargetCommand,
     RetireProtocolCommand,
     UpdateProtocolCommand,
     VersionProtocolCommand,
@@ -52,10 +54,15 @@ from cellar.application.screening.manage_readout_definitions import (
     RemoveReadoutDefinitionCommand,
     UpdateReadoutDefinitionCommand,
 )
+from cellar.application.screening.resolve_target_links import (
+    GetProtocolTargetsQuery,
+    ResolveProtocolTargetsQuery,
+)
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.interface.dependencies import (
     AddConditionDefinitionDep,
+    AddProtocolTargetDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
     AuthDep,
@@ -63,6 +70,7 @@ from cellar.interface.dependencies import (
     CreateProtocolDep,
     DeleteProtocolDep,
     GetProtocolDep,
+    GetProtocolTargetsDep,
     ListProtocolsByProjectDep,
     ListProtocolsDep,
     ListProtocolSummariesDep,
@@ -72,7 +80,9 @@ from cellar.interface.dependencies import (
     RemoveControlLayoutDep,
     RemoveOntologyAnnotationDep,
     RemoveProtocolFromProjectDep,
+    RemoveProtocolTargetDep,
     RemoveReadoutDefinitionDep,
+    ResolveProtocolTargetsDep,
     RetireProtocolDep,
     SetControlLayoutDep,
     SetOntologyAnnotationDep,
@@ -84,6 +94,10 @@ from cellar.interface.dependencies import (
 )
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
+from cellar.interface.routes._target_refs import (
+    ProtocolTargetRefResponse,
+    TargetRefResponse,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -129,7 +143,10 @@ class ProtocolResponse(BaseModel):
     name: str
     description: str | None = None
     protocol_type: str
-    target_id: uuid.UUID | None = None
+    # Effective targets (direct union run-derived), lightweight for display.
+    # The design tab fetches the richer provenance list via
+    # GET /protocols/{id}/targets.
+    targets: list[TargetRefResponse] = []
     category: str | None = None
     protocol_version: int
     parent_protocol_id: uuid.UUID | None = None
@@ -158,6 +175,7 @@ class ProtocolResponse(BaseModel):
         p: Protocol,
         *,
         project_ids: list[uuid.UUID] | None = None,
+        targets: list[TargetRefResponse] | None = None,
     ) -> ProtocolResponse:
         # Serialize ontology_annotations
         onto_annots = None
@@ -181,7 +199,7 @@ class ProtocolResponse(BaseModel):
             name=p.name,
             description=p.description,
             protocol_type=p.protocol_type.value,
-            target_id=p.target_id,
+            targets=targets or [],
             category=p.category,
             protocol_version=p.protocol_version,
             parent_protocol_id=p.parent_protocol_id,
@@ -269,7 +287,7 @@ class CreateProtocolRequest(BaseModel):
     name: str
     description: str | None = None
     protocol_type: str
-    target_id: uuid.UUID | None = None
+    target_ids: list[uuid.UUID] = []
     category: str | None = None
     dose_unit: str = "uM"
     pos_control_signal: str = "high"
@@ -334,7 +352,7 @@ async def create_protocol(
         name=body.name,
         description=body.description,
         protocol_type=body.protocol_type,
-        target_id=body.target_id,
+        target_ids=body.target_ids,
         category=body.category,
         dose_unit=body.dose_unit,
         pos_control_signal=body.pos_control_signal,
@@ -353,8 +371,7 @@ class ProtocolSummaryResponse(BaseModel):
     status: str
     protocol_type: str
     description: str | None = None
-    target_id: uuid.UUID | None = None
-    target_name: str | None = None
+    targets: list[TargetRefResponse] = []
     run_count: int = 0
     last_run_date: date | None = None
 
@@ -389,8 +406,7 @@ async def list_protocol_summaries(
             status=s.status,
             protocol_type=s.protocol_type,
             description=s.description,
-            target_id=s.target_id,
-            target_name=s.target_name,
+            targets=[TargetRefResponse.from_ref(t) for t in s.targets],
             run_count=s.run_count,
             last_run_date=s.last_run_date,
         )
@@ -403,6 +419,7 @@ async def list_protocols(
     auth: AuthDep,
     uc: ListProtocolsDep,
     uc_by_project: ListProtocolsByProjectDep,
+    targets_uc: ResolveProtocolTargetsDep,
     project_id: uuid.UUID | None = Query(default=None),
     cursor: str | None = None,
     limit: int | None = None,
@@ -424,23 +441,39 @@ async def list_protocols(
             auth=auth,
         )
         page = result_to_response(result)
-        return PaginatedResponse(
-            items=[ProtocolResponse.from_domain(p) for p in page.items],
-            next_cursor=page.next_cursor,
+    else:
+        result = await uc(
+            ListProtocolsQuery(
+                workspace_id=auth.workspace_id,
+                cursor_id=parsed_cursor,
+                limit=clamped_limit,
+                tags=tags,
+                tag_logic=tag_logic,
+            ),
+            auth=auth,
         )
-    result = await uc(
-        ListProtocolsQuery(
-            workspace_id=auth.workspace_id,
-            cursor_id=parsed_cursor,
-            limit=clamped_limit,
-            tags=tags,
-            tag_logic=tag_logic,
-        ),
-        auth=auth,
+        page = result_to_response(result)
+
+    targets_by_protocol = result_to_response(
+        await targets_uc(
+            ResolveProtocolTargetsQuery(
+                workspace_id=auth.workspace_id,
+                protocol_ids=tuple(p.id for p in page.items),
+            ),
+            auth=auth,
+        )
     )
-    page = result_to_response(result)
     return PaginatedResponse(
-        items=[ProtocolResponse.from_domain(p) for p in page.items],
+        items=[
+            ProtocolResponse.from_domain(
+                p,
+                targets=[
+                    TargetRefResponse.from_ref(t)
+                    for t in targets_by_protocol.get(p.id, [])
+                ],
+            )
+            for p in page.items
+        ],
         next_cursor=page.next_cursor,
     )
 
@@ -450,12 +483,28 @@ async def get_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
     uc: GetProtocolDep,
+    targets_uc: ResolveProtocolTargetsDep,
 ) -> ProtocolResponse:
     result = await uc(
         GetProtocolQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
         auth=auth,
     )
-    return ProtocolResponse.from_domain(result_to_response(result))
+    protocol = result_to_response(result)
+    targets_by_protocol = result_to_response(
+        await targets_uc(
+            ResolveProtocolTargetsQuery(
+                workspace_id=auth.workspace_id, protocol_ids=(protocol.id,)
+            ),
+            auth=auth,
+        )
+    )
+    return ProtocolResponse.from_domain(
+        protocol,
+        targets=[
+            TargetRefResponse.from_ref(t)
+            for t in targets_by_protocol.get(protocol.id, [])
+        ],
+    )
 
 
 @router.post(
@@ -562,7 +611,6 @@ async def version_protocol(
 class UpdateProtocolRequest(BaseModel):
     name: str | None = None
     description: str | None = None
-    target_id: uuid.UUID | None = None
     category: str | None = None
     recommended_hit_criteria: list[dict] | None = None
     # Allowed on ACTIVE protocols (unlike the other fields above which are
@@ -587,7 +635,6 @@ async def update_protocol(
         protocol_id=protocol_id,
         name=body.name,
         description=body.description if "description" in body.model_fields_set else UNSET,
-        target_id=body.target_id if "target_id" in body.model_fields_set else UNSET,
         category=body.category if "category" in body.model_fields_set else UNSET,
         recommended_hit_criteria=body.recommended_hit_criteria
         if "recommended_hit_criteria" in body.model_fields_set
@@ -966,6 +1013,77 @@ async def remove_protocol_from_project(
             workspace_id=auth.workspace_id,
             protocol_id=protocol_id,
             project_id=project_id,
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Protocol-Target association routes
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/protocols/{protocol_id}/targets",
+    response_model=list[ProtocolTargetRefResponse],
+    tags=["protocols"],
+)
+async def list_protocol_targets(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetProtocolTargetsDep,
+) -> list[ProtocolTargetRefResponse]:
+    """Effective targets for a protocol with provenance (direct vs from-runs)."""
+    result = await uc(
+        GetProtocolTargetsQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
+        auth=auth,
+    )
+    return [ProtocolTargetRefResponse.from_effective(t) for t in result_to_response(result)]
+
+
+@router.post(
+    "/protocols/{protocol_id}/targets/{target_id}",
+    status_code=204,
+    tags=["protocols"],
+)
+async def add_protocol_target(
+    protocol_id: uuid.UUID,
+    target_id: uuid.UUID,
+    auth: AuthDep,
+    uc: AddProtocolTargetDep,
+) -> Response:
+    """Attach a direct target to a protocol (idempotent)."""
+    result = await uc(
+        AddProtocolTargetCommand(
+            workspace_id=auth.workspace_id,
+            protocol_id=protocol_id,
+            target_id=target_id,
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
+    return Response(status_code=204)
+
+
+@router.delete(
+    "/protocols/{protocol_id}/targets/{target_id}",
+    status_code=204,
+    tags=["protocols"],
+)
+async def remove_protocol_target(
+    protocol_id: uuid.UUID,
+    target_id: uuid.UUID,
+    auth: AuthDep,
+    uc: RemoveProtocolTargetDep,
+) -> Response:
+    """Remove a direct target from a protocol."""
+    result = await uc(
+        RemoveProtocolTargetCommand(
+            workspace_id=auth.workspace_id,
+            protocol_id=protocol_id,
+            target_id=target_id,
         ),
         auth=auth,
     )

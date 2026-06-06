@@ -17,6 +17,7 @@ from cellar.application.screening.get_molecule_activity_detail import (
 )
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.enums import CurveClass, CurveType, ProtocolType
+from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
@@ -125,10 +126,16 @@ def _make_uc(
         # Tests that exercise the date-aware selection logic must override
         # this with a populated `{run_id: Run}` dict.
         run_repo.find_by_ids = AsyncMock(return_value={})
+    pr = protocol_repo or AsyncMock()
+    # Effective-targets resolver must yield a real dict (not a coroutine mock).
+    if not isinstance(
+        getattr(pr.find_effective_targets_for_protocols, "return_value", None), dict
+    ):
+        pr.find_effective_targets_for_protocols.return_value = {}
     return GetMoleculeActivityDetail(
         uow=_FakeUoW(),
         curve_repo=curve_repo or AsyncMock(),
-        protocol_repo=protocol_repo or AsyncMock(),
+        protocol_repo=pr,
         run_repo=run_repo,
     )
 
@@ -156,11 +163,15 @@ class TestGroupedByProtocol:
 
         protocol_repo = AsyncMock()
         protocol_repo.find_by_ids.return_value = [
-            _FakeProtocol(id=PROTO_A, name="Kinase IC50", target_id=target_id),
+            _FakeProtocol(id=PROTO_A, name="Kinase IC50"),
             _FakeProtocol(
                 id=PROTO_B, name="Cell Viability", protocol_type=ProtocolType.CELL_BASED
             ),
         ]
+        protocol_repo.find_effective_targets_for_protocols.return_value = {
+            PROTO_A: [TargetRef(id=target_id, name="EGFR", target_type="single_protein")],
+            PROTO_B: [],
+        }
 
         auth = FakeAuth(workspace_id=WS)
         query = GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID)
@@ -181,7 +192,7 @@ class TestGroupedByProtocol:
         # Protocol A: 2 curves, sorted by r_squared DESC
         assert proto_a_group.protocol_name == "Kinase IC50"
         assert proto_a_group.protocol_type == "biochemical"
-        assert proto_a_group.target_id == target_id
+        assert [t.id for t in proto_a_group.targets] == [target_id]
         assert len(proto_a_group.curves) == 2
         assert proto_a_group.curves[0].r_squared == 0.99
         assert proto_a_group.curves[1].r_squared == 0.95
@@ -189,7 +200,7 @@ class TestGroupedByProtocol:
         # Protocol B: 1 curve
         assert proto_b_group.protocol_name == "Cell Viability"
         assert proto_b_group.protocol_type == "cell_based"
-        assert proto_b_group.target_id is None
+        assert proto_b_group.targets == []
         assert len(proto_b_group.curves) == 1
         assert proto_b_group.curves[0].curve_type == "ec50"
 
@@ -291,7 +302,7 @@ class TestEmptyResults:
         assert len(detail.protocols) == 1
         assert detail.protocols[0].protocol_name == "Unknown"
         assert detail.protocols[0].protocol_type == "unknown"
-        assert detail.protocols[0].target_id is None
+        assert detail.protocols[0].targets == []
 
 
 class TestRunDateSurfaced:

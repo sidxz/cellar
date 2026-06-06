@@ -10,6 +10,7 @@ import { FlaskConical } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useRunsByProtocol } from "../hooks/use-runs";
 import { PLATE_FORMAT_LABELS, type PlateFormat, type Run } from "../types";
+import { TargetChips } from "./target-chips";
 
 interface RunListProps {
   protocolId: string;
@@ -39,6 +40,16 @@ export function RunList({ protocolId, onSelect }: RunListProps) {
         width: 100,
         valueFormatter: (p) =>
           p.value ? (PLATE_FORMAT_LABELS[p.value as PlateFormat] ?? p.value) : "\u2014",
+      },
+      {
+        headerName: "Targets",
+        field: "targets",
+        flex: 1,
+        minWidth: 140,
+        sortable: false,
+        cellRenderer: (params: ICellRendererParams<Run>) => (
+          <TargetChips targets={params.data?.targets} />
+        ),
       },
       {
         headerName: "Status",

@@ -5,8 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ProtocolSummaryResponseDescription } from './protocolSummaryResponseDescription';
-import type { ProtocolSummaryResponseTargetId } from './protocolSummaryResponseTargetId';
-import type { ProtocolSummaryResponseTargetName } from './protocolSummaryResponseTargetName';
+import type { TargetRefResponse } from './targetRefResponse';
 import type { ProtocolSummaryResponseLastRunDate } from './protocolSummaryResponseLastRunDate';
 
 /**
@@ -18,8 +17,7 @@ export interface ProtocolSummaryResponse {
   status: string;
   protocol_type: string;
   description?: ProtocolSummaryResponseDescription;
-  target_id?: ProtocolSummaryResponseTargetId;
-  target_name?: ProtocolSummaryResponseTargetName;
+  targets?: TargetRefResponse[];
   run_count?: number;
   last_run_date?: ProtocolSummaryResponseLastRunDate;
 }

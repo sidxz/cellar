@@ -85,7 +85,6 @@ class ProtocolVersioningService:
             name=parent.name,
             description=parent.description,
             protocol_type=parent.protocol_type,
-            target_id=parent.target_id,
             category=parent.category,
             protocol_version=parent.protocol_version + 1,
             parent_protocol_id=parent.id,

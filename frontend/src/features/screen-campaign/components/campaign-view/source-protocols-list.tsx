@@ -24,7 +24,20 @@ export function SourceProtocolsList({ protocols }: SourceProtocolsListProps) {
         const id = String(p.id ?? "");
         const name = String(p.name ?? "Unknown protocol");
         const version = p.version ?? p.protocol_version;
-        const target = p.target_name ?? p.target;
+        // Newer snapshots freeze a `targets: [{ name }]` array (multi-target);
+        // older closed campaigns only carry the scalar `target_name` / `target`.
+        const targetNames = Array.isArray(p.targets)
+          ? (p.targets as Array<{ name?: unknown }>)
+              .map((t) => String(t?.name ?? "").trim())
+              .filter(Boolean)
+          : [];
+        const legacyTarget = p.target_name ?? p.target;
+        const target =
+          targetNames.length > 0
+            ? targetNames.join(", ")
+            : legacyTarget != null
+              ? String(legacyTarget)
+              : null;
 
         return (
           <li key={id || i} className="flex items-start gap-2 text-sm">
@@ -34,9 +47,7 @@ export function SourceProtocolsList({ protocols }: SourceProtocolsListProps) {
               {version != null && (
                 <span className="text-muted-foreground ml-1.5">v{String(version)}</span>
               )}
-              {target != null && (
-                <span className="text-muted-foreground ml-1.5">— {String(target)}</span>
-              )}
+              {target != null && <span className="text-muted-foreground ml-1.5">— {target}</span>}
             </span>
           </li>
         );

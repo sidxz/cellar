@@ -6,6 +6,7 @@ import uuid
 from datetime import date
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.screening_assay.enums import (
     PlateFormat,
@@ -14,6 +15,7 @@ from cellar.domain.screening_assay.enums import (
     WellType,
 )
 from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.value_objects import Barcode
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -21,7 +23,9 @@ from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     PlateModel,
     RunModel,
+    TargetModel,
     WellModel,
+    run_targets,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import RunTagLinkModel
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import tag_filter_subquery
@@ -131,6 +135,91 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         if row is None:
             return False
         return bool(row)
+
+    # ------------------------------------------------------------------
+    # Target association methods
+    # ------------------------------------------------------------------
+
+    async def _owns(
+        self, model: type, id_: uuid.UUID, workspace_id: uuid.UUID
+    ) -> bool:
+        result = await self._session.execute(
+            select(model.id).where(model.id == id_, model.workspace_id == workspace_id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def add_target(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
+    ) -> None:
+        """Link a target to a run (idempotent). Workspace-checked on both sides."""
+        if not await self._owns(RunModel, run_id, workspace_id):
+            return
+        if not await self._owns(TargetModel, target_id, workspace_id):
+            return
+        await self._session.execute(
+            pg_insert(run_targets)
+            .values(run_id=run_id, target_id=target_id)
+            .on_conflict_do_nothing()
+        )
+
+    async def remove_target(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
+    ) -> None:
+        await self._session.execute(
+            run_targets.delete().where(
+                run_targets.c.run_id == run_id,
+                run_targets.c.target_id == target_id,
+                run_targets.c.run_id.in_(
+                    select(RunModel.id).where(RunModel.workspace_id == workspace_id)
+                ),
+            )
+        )
+
+    async def find_target_refs(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> list[TargetRef]:
+        result = await self._session.execute(
+            select(TargetModel.id, TargetModel.name, TargetModel.target_type)
+            .select_from(
+                run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id)
+            )
+            .where(
+                run_targets.c.run_id == run_id,
+                TargetModel.workspace_id == workspace_id,
+            )
+            .order_by(TargetModel.name)
+        )
+        return [
+            TargetRef(id=tid, name=name, target_type=tt) for tid, name, tt in result.all()
+        ]
+
+    async def find_target_refs_for_runs(
+        self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[TargetRef]]:
+        if not run_ids:
+            return {}
+        result = await self._session.execute(
+            select(
+                run_targets.c.run_id,
+                TargetModel.id,
+                TargetModel.name,
+                TargetModel.target_type,
+            )
+            .select_from(
+                run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id)
+            )
+            .where(
+                run_targets.c.run_id.in_(run_ids),
+                TargetModel.workspace_id == workspace_id,
+            )
+            .order_by(TargetModel.name)
+        )
+        out: dict[uuid.UUID, list[TargetRef]] = {rid: [] for rid in run_ids}
+        for run_id, tid, name, tt in result.all():
+            out.setdefault(run_id, []).append(
+                TargetRef(id=tid, name=name, target_type=tt)
+            )
+        return out
 
     # ------------------------------------------------------------------
     # Mapping: SA model <-> domain aggregate

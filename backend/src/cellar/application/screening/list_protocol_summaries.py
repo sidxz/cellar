@@ -1,14 +1,14 @@
 """ListProtocolSummaries — lightweight rows for the protocol picker.
 
 Returns one row per protocol in the workspace with run_count + last_run_date
-joined in, plus the resolved target name. Sorted with most-recently-run
-protocols first; never-run protocols come last.
+joined in, plus the protocol's effective targets (direct union run-derived). Sorted
+with most-recently-run protocols first; never-run protocols come last.
 """
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from returns.result import Result, Success
@@ -19,8 +19,8 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import (
     ProtocolRepository,
     RunRepository,
-    TargetRepository,
 )
+from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.errors import DomainError
 
 
@@ -39,10 +39,9 @@ class ProtocolSummary:
     status: str
     protocol_type: str
     description: str | None
-    target_id: uuid.UUID | None
-    target_name: str | None
-    run_count: int
-    last_run_date: date | None
+    targets: list[TargetRef] = field(default_factory=list)
+    run_count: int = 0
+    last_run_date: date | None = None
 
 
 class ListProtocolSummaries:
@@ -52,12 +51,10 @@ class ListProtocolSummaries:
         self,
         uow: UnitOfWork,
         protocol_repo: ProtocolRepository,
-        target_repo: TargetRepository,
         run_repo: RunRepository,
     ) -> None:
         self._uow = uow
         self._protocol_repo = protocol_repo
-        self._target_repo = target_repo
         self._run_repo = run_repo
 
     async def __call__(
@@ -68,7 +65,6 @@ class ListProtocolSummaries:
         require_workspace_role(auth, "viewer")
         async with self._uow:
             protocols = await self._protocol_repo.find_by_workspace(input.workspace_id)
-            targets = await self._target_repo.find_by_workspace(input.workspace_id)
             stats = await self._run_repo.aggregate_stats_by_protocol(input.workspace_id)
             scoped_ids: set[uuid.UUID] | None = None
             if input.project_ids:
@@ -76,12 +72,17 @@ class ListProtocolSummaries:
                     input.workspace_id, list(input.project_ids)
                 )
 
-        target_name_by_id: dict[uuid.UUID, str] = {t.id: t.name for t in targets}
+            visible = [
+                p for p in protocols if scoped_ids is None or p.id in scoped_ids
+            ]
+            targets_by_protocol = (
+                await self._protocol_repo.find_effective_targets_for_protocols(
+                    input.workspace_id, [p.id for p in visible]
+                )
+            )
 
         summaries: list[ProtocolSummary] = []
-        for p in protocols:
-            if scoped_ids is not None and p.id not in scoped_ids:
-                continue
+        for p in visible:
             count, last = stats.get(p.id, (0, None))
             summaries.append(
                 ProtocolSummary(
@@ -90,8 +91,7 @@ class ListProtocolSummaries:
                     status=p.status.value,
                     protocol_type=p.protocol_type.value,
                     description=p.description,
-                    target_id=p.target_id,
-                    target_name=target_name_by_id.get(p.target_id) if p.target_id else None,
+                    targets=targets_by_protocol.get(p.id, []),
                     run_count=count,
                     last_run_date=last,
                 )

@@ -21,14 +21,17 @@ import {
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useState } from "react";
 import { useCreateTarget } from "../hooks/use-targets";
-import { TARGET_TYPE_LABELS, type TargetType } from "../types";
+import { TARGET_TYPE_LABELS, type Target, type TargetType } from "../types";
 
 interface CreateTargetDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Fired with the newly-created target after a successful create. Lets a
+   *  caller (e.g. an inline picker) auto-select what was just made. */
+  onCreated?: (target: Target) => void;
 }
 
-export function CreateTargetDialog({ open, onOpenChange }: CreateTargetDialogProps) {
+export function CreateTargetDialog({ open, onOpenChange, onCreated }: CreateTargetDialogProps) {
   const createMutation = useCreateTarget();
   const [name, setName] = useState("");
   const [targetType, setTargetType] = useState<string>("single_protein");
@@ -57,9 +60,10 @@ export function CreateTargetDialog({ open, onOpenChange }: CreateTargetDialogPro
         description: description || null,
       },
       {
-        onSuccess: () => {
+        onSuccess: (created) => {
           onOpenChange(false);
           resetForm();
+          onCreated?.(created);
         },
       },
     );

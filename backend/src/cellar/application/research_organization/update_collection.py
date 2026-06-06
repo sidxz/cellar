@@ -14,6 +14,7 @@ from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.collection import Collection, CollectionVisibility
+from cellar.domain.research_organization.enums import CollectionType
 from cellar.domain.research_organization.repository import CollectionRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
@@ -27,6 +28,7 @@ class UpdateCollectionCommand(Command):
     project_id: uuid.UUID | None | object = UNSET
     owned_by_org_id: uuid.UUID | None | object = UNSET
     visibility: str | object = UNSET
+    type: str | object = UNSET
 
 
 class UpdateCollection:
@@ -66,6 +68,8 @@ class UpdateCollection:
                 fields["owned_by_org_id"] = input.owned_by_org_id
             if input.visibility is not UNSET:
                 fields["visibility"] = CollectionVisibility(input.visibility)
+            if input.type is not UNSET:
+                fields["type"] = CollectionType(input.type)
 
             if fields:
                 collection.update(**fields)

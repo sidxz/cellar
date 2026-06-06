@@ -91,11 +91,13 @@ from cellar.application.screening.manage_ontology_annotations import (
     SetOntologyAnnotation,
 )
 from cellar.application.screening.manage_protocol import (
+    AddProtocolTarget,
     AddProtocolToProject,
     DeleteProtocol,
     ListProtocolsByProject,
     PublishProtocol,
     RemoveProtocolFromProject,
+    RemoveProtocolTarget,
     RetireProtocol,
     UpdateProtocol,
     VersionProtocol,
@@ -110,6 +112,10 @@ from cellar.application.screening.manage_run import (
     CompleteRun,
     RejectRun,
     StartRun,
+)
+from cellar.application.screening.manage_run_targets import (
+    AddRunTarget,
+    RemoveRunTarget,
 )
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
 from cellar.application.screening.plate_map_reader import PlateMapReader
@@ -132,6 +138,11 @@ from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
 from cellar.application.screening.reset_run_data import ResetRunData
+from cellar.application.screening.resolve_target_links import (
+    GetProtocolTargets,
+    ResolveProtocolTargets,
+    ResolveRunTargets,
+)
 from cellar.application.screening.run_import_templates import (
     CreateRunImportTemplate,
     DeleteRunImportTemplate,
@@ -248,13 +259,22 @@ def register_screening(container: Container) -> None:
         return ListProtocolSummaries(
             uow=uow,
             protocol_repo=SQLAlchemyProtocolRepository(uow),
-            target_repo=SQLAlchemyTargetRepository(uow),
             run_repo=SQLAlchemyRunRepository(uow),
         )
 
     container.define(ListProtocolSummaries, _list_protocol_summaries)
     container.define(AddProtocolToProject, _protocol_cmd(AddProtocolToProject))
     container.define(RemoveProtocolFromProject, _protocol_cmd(RemoveProtocolFromProject))
+    container.define(AddProtocolTarget, _protocol_cmd(AddProtocolTarget))
+    container.define(RemoveProtocolTarget, _protocol_cmd(RemoveProtocolTarget))
+    container.define(GetProtocolTargets, _protocol_query(GetProtocolTargets))
+    container.define(ResolveProtocolTargets, _protocol_query(ResolveProtocolTargets))
+
+    def _resolve_run_targets(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResolveRunTargets(uow, SQLAlchemyRunRepository(uow))
+
+    container.define(ResolveRunTargets, _resolve_run_targets)
 
     # --- Computation Primitives ---
     container.define(AstevalFormulaEvaluator, Singleton(AstevalFormulaEvaluator))
@@ -392,6 +412,8 @@ def register_screening(container: Container) -> None:
     container.define(UpdateRun, _run_cmd(UpdateRun))
     container.define(LockRun, _run_cmd(LockRun))
     container.define(UnlockRun, _run_cmd(UnlockRun))
+    container.define(AddRunTarget, _run_cmd(AddRunTarget))
+    container.define(RemoveRunTarget, _run_cmd(RemoveRunTarget))
 
     def _list_runs_with_counts(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

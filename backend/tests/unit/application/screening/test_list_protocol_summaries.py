@@ -16,6 +16,7 @@ from cellar.application.screening.list_protocol_summaries import (
     ListProtocolSummariesQuery,
     ProtocolSummary,
 )
+from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
@@ -70,25 +71,20 @@ class _FakeProtocol:
         self.description = description
 
 
-class _FakeTarget:
-    def __init__(self, *, id: uuid.UUID, name: str) -> None:
-        self.id = id
-        self.name = name
-
-
 @pytest.mark.asyncio
 async def test_list_protocol_summaries_merges_run_stats() -> None:
-    """Each summary carries run_count + last_run_date computed by repo."""
+    """Each summary carries run_count + last_run_date + effective targets."""
     proto_repo = AsyncMock()
     proto_repo.find_by_workspace.return_value = [
-        _FakeProtocol(id=P_A, name="NadD-Sumo DR", target_id=T_NADD),
+        _FakeProtocol(id=P_A, name="NadD-Sumo DR"),
         _FakeProtocol(id=P_B, name="NadD-Sumo single-point"),
         _FakeProtocol(id=P_C, name="MtbNadD biochem", status="archived"),
     ]
-    target_repo = AsyncMock()
-    target_repo.find_by_workspace.return_value = [
-        _FakeTarget(id=T_NADD, name="NadD"),
-    ]
+    proto_repo.find_effective_targets_for_protocols.return_value = {
+        P_A: [TargetRef(id=T_NADD, name="NadD", target_type="single_protein")],
+        P_B: [],
+        P_C: [],
+    }
     run_repo = AsyncMock()
     run_repo.aggregate_stats_by_protocol.return_value = {
         P_A: (142, date(2026, 4, 20)),
@@ -99,7 +95,6 @@ async def test_list_protocol_summaries_merges_run_stats() -> None:
     uc = ListProtocolSummaries(
         uow=_FakeUoW(),
         protocol_repo=proto_repo,
-        target_repo=target_repo,
         run_repo=run_repo,
     )
     result = await uc(
@@ -113,12 +108,11 @@ async def test_list_protocol_summaries_merges_run_stats() -> None:
     by_id = {s.id: s for s in summaries}
     assert by_id[P_A].run_count == 142
     assert by_id[P_A].last_run_date == date(2026, 4, 20)
-    assert by_id[P_A].target_id == T_NADD
-    assert by_id[P_A].target_name == "NadD"
+    assert [t.name for t in by_id[P_A].targets] == ["NadD"]
 
     assert by_id[P_B].run_count == 38
     assert by_id[P_B].last_run_date == date(2025, 11, 4)
-    assert by_id[P_B].target_name is None  # no target_id
+    assert by_id[P_B].targets == []  # no targets
 
     # Protocol with no runs: count = 0, last_run_date = None
     assert by_id[P_C].run_count == 0
@@ -139,8 +133,7 @@ async def test_list_protocol_summaries_scopes_to_projects_union() -> None:
         _FakeProtocol(id=P_B, name="In project B"),
         _FakeProtocol(id=P_C, name="In neither (excluded)"),
     ]
-    target_repo = AsyncMock()
-    target_repo.find_by_workspace.return_value = []
+    proto_repo.find_effective_targets_for_protocols.return_value = {}
     run_repo = AsyncMock()
     run_repo.aggregate_stats_by_protocol.return_value = {}
     proto_repo.find_protocol_ids_in_projects.return_value = {P_A, P_B}
@@ -151,7 +144,6 @@ async def test_list_protocol_summaries_scopes_to_projects_union() -> None:
     uc = ListProtocolSummaries(
         uow=_FakeUoW(),
         protocol_repo=proto_repo,
-        target_repo=target_repo,
         run_repo=run_repo,
     )
     result = await uc(
@@ -173,15 +165,13 @@ async def test_list_protocol_summaries_unscoped_skips_project_lookup() -> None:
     proto_repo.find_by_workspace.return_value = [
         _FakeProtocol(id=P_A, name="anything"),
     ]
-    target_repo = AsyncMock()
-    target_repo.find_by_workspace.return_value = []
+    proto_repo.find_effective_targets_for_protocols.return_value = {}
     run_repo = AsyncMock()
     run_repo.aggregate_stats_by_protocol.return_value = {}
 
     uc = ListProtocolSummaries(
         uow=_FakeUoW(),
         protocol_repo=proto_repo,
-        target_repo=target_repo,
         run_repo=run_repo,
     )
     result = await uc(
@@ -201,8 +191,7 @@ async def test_list_protocol_summaries_orders_by_last_run_desc() -> None:
         _FakeProtocol(id=P_A, name="newest"),
         _FakeProtocol(id=P_B, name="never-run"),
     ]
-    target_repo = AsyncMock()
-    target_repo.find_by_workspace.return_value = []
+    proto_repo.find_effective_targets_for_protocols.return_value = {}
     run_repo = AsyncMock()
     run_repo.aggregate_stats_by_protocol.return_value = {
         P_A: (5, date(2026, 4, 20)),
@@ -212,7 +201,6 @@ async def test_list_protocol_summaries_orders_by_last_run_desc() -> None:
     uc = ListProtocolSummaries(
         uow=_FakeUoW(),
         protocol_repo=proto_repo,
-        target_repo=target_repo,
         run_repo=run_repo,
     )
     result = await uc(

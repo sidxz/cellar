@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
 from cellar.application.screening.create_run import CreateRunCommand
@@ -25,13 +25,19 @@ from cellar.application.screening.manage_run import (
     RejectRunCommand,
     StartRunCommand,
 )
+from cellar.application.screening.manage_run_targets import (
+    AddRunTargetCommand,
+    RemoveRunTargetCommand,
+)
 from cellar.application.screening.reset_run_data import (
     ResetRunDataCommand,
 )
+from cellar.application.screening.resolve_target_links import ResolveRunTargetsQuery
 from cellar.application.screening.update_run import UpdateRunCommand
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.run import Run
 from cellar.interface.dependencies import (
+    AddRunTargetDep,
     ApproveRunDep,
     AuthDep,
     CompleteRunDep,
@@ -41,14 +47,29 @@ from cellar.interface.dependencies import (
     ListRunsWithCountsDep,
     LockRunDep,
     RejectRunDep,
+    RemoveRunTargetDep,
     ResetRunDataDep,
+    ResolveRunTargetsDep,
     StartRunDep,
     UnlockRunDep,
     UpdateRunDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes._target_refs import TargetRefResponse
 
 router = APIRouter(prefix="/api/v1", tags=["runs"])
+
+
+async def _run_targets(
+    targets_uc: Any, auth: Any, run_id: uuid.UUID
+) -> list[TargetRefResponse]:
+    """Resolve a single run's target refs for a response."""
+    result = await targets_uc(
+        ResolveRunTargetsQuery(workspace_id=auth.workspace_id, run_ids=(run_id,)),
+        auth=auth,
+    )
+    refs = result_to_response(result).get(run_id, [])
+    return [TargetRefResponse.from_ref(t) for t in refs]
 
 
 # ---------------------------------------------------------------------------
@@ -78,9 +99,16 @@ class RunResponse(BaseModel):
     plate_format: str | None = None
     plate_template_id: uuid.UUID | None = None
     conditions: dict[str, Any] | None = None
+    targets: list[TargetRefResponse] = []
 
     @classmethod
-    def from_domain(cls, r: Run, *, molecule_count: int = 0) -> RunResponse:
+    def from_domain(
+        cls,
+        r: Run,
+        *,
+        molecule_count: int = 0,
+        targets: list[TargetRefResponse] | None = None,
+    ) -> RunResponse:
         plate_barcodes = [p.barcode.value for p in r.plates if getattr(p, "barcode", None)]
         return cls(
             id=r.id,
@@ -106,6 +134,7 @@ class RunResponse(BaseModel):
             plate_format=r.plate_format.value if r.plate_format else None,
             plate_template_id=r.plate_template_id,
             conditions=r.conditions,
+            targets=targets or [],
         )
 
 
@@ -124,6 +153,7 @@ class CreateRunRequest(BaseModel):
     plate_template_id: uuid.UUID | None = None
     conditions: dict[str, Any] | None = None
     notes: str | None = None
+    target_ids: list[uuid.UUID] = []
 
 
 class CompleteRunRequest(BaseModel):
@@ -158,6 +188,7 @@ async def create_run(
     auth: AuthDep,
     body: CreateRunRequest,
     uc: CreateRunDep,
+    targets_uc: ResolveRunTargetsDep,
 ) -> RunResponse:
     cmd = CreateRunCommand(
         workspace_id=auth.workspace_id,
@@ -170,9 +201,11 @@ async def create_run(
         plate_template_id=body.plate_template_id,
         conditions=body.conditions,
         notes=body.notes,
+        target_ids=body.target_ids,
     )
     result = await uc(cmd, auth=auth)
-    return RunResponse.from_domain(result_to_response(result))
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
 
 
 @router.get("/protocols/{protocol_id}/runs", response_model=list[RunResponse])
@@ -180,6 +213,7 @@ async def list_runs_by_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
     uc: ListRunsWithCountsDep,
+    targets_uc: ResolveRunTargetsDep,
     tags: list[uuid.UUID] | None = Query(default=None),
     tag_logic: Literal["any", "all"] = Query(default="any"),
 ) -> list[RunResponse]:
@@ -193,8 +227,24 @@ async def list_runs_by_protocol(
         auth=auth,
     )
     items = result_to_response(result)
+    targets_by_run = result_to_response(
+        await targets_uc(
+            ResolveRunTargetsQuery(
+                workspace_id=auth.workspace_id,
+                run_ids=tuple(item.run.id for item in items),
+            ),
+            auth=auth,
+        )
+    )
     return [
-        RunResponse.from_domain(item.run, molecule_count=item.molecule_count) for item in items
+        RunResponse.from_domain(
+            item.run,
+            molecule_count=item.molecule_count,
+            targets=[
+                TargetRefResponse.from_ref(t) for t in targets_by_run.get(item.run.id, [])
+            ],
+        )
+        for item in items
     ]
 
 
@@ -203,12 +253,14 @@ async def get_run(
     run_id: uuid.UUID,
     auth: AuthDep,
     uc: GetRunDep,
+    targets_uc: ResolveRunTargetsDep,
 ) -> RunResponse:
     result = await uc(
         GetRunQuery(workspace_id=auth.workspace_id, run_id=run_id),
         auth=auth,
     )
-    return RunResponse.from_domain(result_to_response(result))
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
 
 
 @router.patch("/runs/{run_id}", response_model=RunResponse)
@@ -363,3 +415,44 @@ async def unlock_run(
         auth=auth,
     )
     return RunResponse.from_domain(result_to_response(result))
+
+
+# ---------------------------------------------------------------------------
+# Run-Target association routes
+# ---------------------------------------------------------------------------
+
+
+@router.post("/runs/{run_id}/targets/{target_id}", status_code=204)
+async def add_run_target(
+    run_id: uuid.UUID,
+    target_id: uuid.UUID,
+    auth: AuthDep,
+    uc: AddRunTargetDep,
+) -> Response:
+    """Attach a target to a run (idempotent). Rolls up to the run's protocol."""
+    result = await uc(
+        AddRunTargetCommand(
+            workspace_id=auth.workspace_id, run_id=run_id, target_id=target_id
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
+    return Response(status_code=204)
+
+
+@router.delete("/runs/{run_id}/targets/{target_id}", status_code=204)
+async def remove_run_target(
+    run_id: uuid.UUID,
+    target_id: uuid.UUID,
+    auth: AuthDep,
+    uc: RemoveRunTargetDep,
+) -> Response:
+    """Remove a target from a run. Auto-prunes the protocol if it was inherited-only."""
+    result = await uc(
+        RemoveRunTargetCommand(
+            workspace_id=auth.workspace_id, run_id=run_id, target_id=target_id
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
+    return Response(status_code=204)

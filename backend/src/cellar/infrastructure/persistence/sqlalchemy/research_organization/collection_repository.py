@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import aliased
 
 from cellar.domain.research_organization.collection import Collection, CollectionVisibility
+from cellar.domain.research_organization.enums import CollectionType
 from cellar.domain.shared.errors import CollectionFrozenError, NotFoundError
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -41,6 +42,7 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
             created_by=model.created_by,
             molecule_count=0,
             visibility=CollectionVisibility(model.visibility),
+            type=CollectionType(model.type),
             is_frozen=model.is_frozen,
             derived_from_campaign_id=model.derived_from_campaign_id,
             created_at=model.created_at,
@@ -64,6 +66,7 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
             owned_by_org_id=aggregate.owned_by_org_id,
             created_by=aggregate.created_by,
             visibility=aggregate.visibility.value,
+            type=aggregate.type.value,
             is_frozen=aggregate.is_frozen,
             derived_from_campaign_id=aggregate.derived_from_campaign_id,
             version=aggregate.version,
@@ -75,6 +78,7 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         model.project_id = aggregate.project_id
         model.owned_by_org_id = aggregate.owned_by_org_id
         model.visibility = aggregate.visibility.value
+        model.type = aggregate.type.value
         model.is_frozen = aggregate.is_frozen
         model.derived_from_campaign_id = aggregate.derived_from_campaign_id
 

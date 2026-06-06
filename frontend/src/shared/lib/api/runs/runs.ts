@@ -873,4 +873,131 @@ export const useUnlockRunApiV1RunsRunIdUnlockPost = <TError = HTTPValidationErro
 
       return useMutation(mutationOptions, queryClient);
     }
+    /**
+ * Attach a target to a run (idempotent). Rolls up to the run's protocol.
+ * @summary Add Run Target
+ */
+export const addRunTargetApiV1RunsRunIdTargetsTargetIdPost = (
+    runId: string,
+    targetId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/runs/${runId}/targets/${targetId}`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getAddRunTargetApiV1RunsRunIdTargetsTargetIdPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addRunTargetApiV1RunsRunIdTargetsTargetIdPost>>, TError,{runId: string;targetId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addRunTargetApiV1RunsRunIdTargetsTargetIdPost>>, TError,{runId: string;targetId: string}, TContext> => {
+
+const mutationKey = ['addRunTargetApiV1RunsRunIdTargetsTargetIdPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addRunTargetApiV1RunsRunIdTargetsTargetIdPost>>, {runId: string;targetId: string}> = (props) => {
+          const {runId,targetId} = props ?? {};
+
+          return  addRunTargetApiV1RunsRunIdTargetsTargetIdPost(runId,targetId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddRunTargetApiV1RunsRunIdTargetsTargetIdPostMutationResult = NonNullable<Awaited<ReturnType<typeof addRunTargetApiV1RunsRunIdTargetsTargetIdPost>>>
+    
+    export type AddRunTargetApiV1RunsRunIdTargetsTargetIdPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Add Run Target
+ */
+export const useAddRunTargetApiV1RunsRunIdTargetsTargetIdPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addRunTargetApiV1RunsRunIdTargetsTargetIdPost>>, TError,{runId: string;targetId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addRunTargetApiV1RunsRunIdTargetsTargetIdPost>>,
+        TError,
+        {runId: string;targetId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getAddRunTargetApiV1RunsRunIdTargetsTargetIdPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Remove a target from a run. Auto-prunes the protocol if it was inherited-only.
+ * @summary Remove Run Target
+ */
+export const removeRunTargetApiV1RunsRunIdTargetsTargetIdDelete = (
+    runId: string,
+    targetId: string,
+ ) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/runs/${runId}/targets/${targetId}`, method: 'DELETE'
+    },
+      );
+    }
+  
+
+
+export const getRemoveRunTargetApiV1RunsRunIdTargetsTargetIdDeleteMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeRunTargetApiV1RunsRunIdTargetsTargetIdDelete>>, TError,{runId: string;targetId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof removeRunTargetApiV1RunsRunIdTargetsTargetIdDelete>>, TError,{runId: string;targetId: string}, TContext> => {
+
+const mutationKey = ['removeRunTargetApiV1RunsRunIdTargetsTargetIdDelete'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeRunTargetApiV1RunsRunIdTargetsTargetIdDelete>>, {runId: string;targetId: string}> = (props) => {
+          const {runId,targetId} = props ?? {};
+
+          return  removeRunTargetApiV1RunsRunIdTargetsTargetIdDelete(runId,targetId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveRunTargetApiV1RunsRunIdTargetsTargetIdDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof removeRunTargetApiV1RunsRunIdTargetsTargetIdDelete>>>
+    
+    export type RemoveRunTargetApiV1RunsRunIdTargetsTargetIdDeleteMutationError = HTTPValidationError
+
+    /**
+ * @summary Remove Run Target
+ */
+export const useRemoveRunTargetApiV1RunsRunIdTargetsTargetIdDelete = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeRunTargetApiV1RunsRunIdTargetsTargetIdDelete>>, TError,{runId: string;targetId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeRunTargetApiV1RunsRunIdTargetsTargetIdDelete>>,
+        TError,
+        {runId: string;targetId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getRemoveRunTargetApiV1RunsRunIdTargetsTargetIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
     

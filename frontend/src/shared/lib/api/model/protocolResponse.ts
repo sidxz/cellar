@@ -5,7 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ProtocolResponseDescription } from './protocolResponseDescription';
-import type { ProtocolResponseTargetId } from './protocolResponseTargetId';
+import type { TargetRefResponse } from './targetRefResponse';
 import type { ProtocolResponseCategory } from './protocolResponseCategory';
 import type { ProtocolResponseParentProtocolId } from './protocolResponseParentProtocolId';
 import type { ReadoutDefinitionResponse } from './readoutDefinitionResponse';
@@ -23,7 +23,7 @@ export interface ProtocolResponse {
   name: string;
   description?: ProtocolResponseDescription;
   protocol_type: string;
-  target_id?: ProtocolResponseTargetId;
+  targets?: TargetRefResponse[];
   category?: ProtocolResponseCategory;
   protocol_version: number;
   parent_protocol_id?: ProtocolResponseParentProtocolId;

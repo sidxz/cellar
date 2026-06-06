@@ -12,6 +12,7 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.collection import Collection, CollectionVisibility
+from cellar.domain.research_organization.enums import CollectionType
 from cellar.domain.research_organization.repository import CollectionRepository
 from cellar.domain.shared.errors import DomainError
 
@@ -25,6 +26,7 @@ class CreateCollectionCommand(Command):
     owned_by_org_id: uuid.UUID | None = None
     created_by: uuid.UUID
     visibility: str = "private"
+    type: str = "generic"
 
 
 class CreateCollection:
@@ -52,6 +54,7 @@ class CreateCollection:
                 owned_by_org_id=input.owned_by_org_id,
                 created_by=input.created_by,
                 visibility=CollectionVisibility(input.visibility),
+                type=CollectionType(input.type),
             )
             await self._repo.save(collection)
             events = await self._uow.commit()

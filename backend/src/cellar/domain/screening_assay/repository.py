@@ -14,7 +14,7 @@ from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_import_template import RunImportTemplate
 from cellar.domain.screening_assay.run_scope import RunScope
-from cellar.domain.screening_assay.target import Target
+from cellar.domain.screening_assay.target import EffectiveTarget, Target, TargetRef
 
 
 @runtime_checkable
@@ -65,6 +65,39 @@ class ProtocolRepository(Protocol):
     async def find_project_ids(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[uuid.UUID]: ...
+
+    # --- Target associations -------------------------------------------
+    async def add_direct_target(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
+    ) -> None:
+        """Attach a direct target to a protocol (idempotent, workspace-checked)."""
+        ...
+
+    async def remove_direct_target(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
+    ) -> None: ...
+
+    async def find_direct_target_ids(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> list[uuid.UUID]: ...
+
+    async def find_effective_targets(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> list[EffectiveTarget]:
+        """Direct targets union the distinct targets of all the protocol's runs.
+
+        Inherited (non-direct) targets carry ``run_count`` and are pruned
+        automatically once no run references them — the union is computed, never
+        stored.
+        """
+        ...
+
+    async def find_effective_targets_for_protocols(
+        self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[TargetRef]]:
+        """Batched effective-target lookup for list views (avoids N+1)."""
+        ...
+
     async def save(self, aggregate: AssayProtocol) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
@@ -132,6 +165,28 @@ class RunRepository(Protocol):
     async def find_children(
         self, workspace_id: uuid.UUID, parent_run_id: uuid.UUID
     ) -> list[Run]: ...
+
+    # --- Target associations -------------------------------------------
+    async def add_target(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
+    ) -> None:
+        """Attach a target to a run (idempotent, workspace-checked)."""
+        ...
+
+    async def remove_target(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
+    ) -> None: ...
+
+    async def find_target_refs(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> list[TargetRef]: ...
+
+    async def find_target_refs_for_runs(
+        self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[TargetRef]]:
+        """Batched target-ref lookup for the run list grid (avoids N+1)."""
+        ...
+
     async def save(self, aggregate: Run) -> None: ...
     async def is_locked(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool: ...
     async def delete(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> None: ...

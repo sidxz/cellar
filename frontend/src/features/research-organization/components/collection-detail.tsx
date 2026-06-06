@@ -199,6 +199,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
                 visibility: collection.visibility,
                 molecule_count: collection.molecule_count,
                 is_frozen: collection.is_frozen ?? false,
+                type: collection.type,
                 derived_from_campaign_id: collection.derived_from_campaign_id,
               }}
               projectName={project?.name}

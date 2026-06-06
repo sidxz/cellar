@@ -175,6 +175,9 @@ def _make_protocol_repo(protocols: list | None = None) -> AsyncMock:
     """Return an AsyncMock protocol repository returning given protocols."""
     repo = AsyncMock()
     repo.find_by_ids = AsyncMock(return_value=protocols or [])
+    # Effective-targets resolver — empty by default; tests asserting targets
+    # override this.
+    repo.find_effective_targets_for_protocols = AsyncMock(return_value={})
     return repo
 
 

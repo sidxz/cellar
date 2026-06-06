@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { useAddProtocolTarget, useRemoveProtocolTarget } from "../../hooks/use-protocol-targets";
 import {
   useRemoveOntologyAnnotation,
   useSetOntologyAnnotation,
@@ -29,6 +30,7 @@ import {
   type Protocol,
   type ProtocolStatus,
 } from "../../types";
+import { TargetMultiSelect } from "../target-multi-select";
 
 // ---------------------------------------------------------------------------
 // DesignTabProtocolCard
@@ -49,15 +51,84 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   const isLocked = protocol.is_locked;
   // Destructive / structural ops — strict DRAFT only. Lock blocks DRAFT too.
   const canStructurallyEdit = isDraft && !isLocked;
+  // Metadata-like ops (targets, annotations) — allowed post-publish, blocked
+  // only by lock or retirement (mirrors the backend add/remove-target guard).
+  const canEditTargets = !isLocked && !isRetired;
 
   const updateProtocol = useUpdateProtocol(protocolId);
   const setOntologyAnnotation = useSetOntologyAnnotation(protocolId);
   const removeOntologyAnnotation = useRemoveOntologyAnnotation(protocolId);
+  const addProtocolTarget = useAddProtocolTarget(protocolId);
+  const removeProtocolTarget = useRemoveProtocolTarget(protocolId);
 
   const { data: ontologySlots } = useOntologySlots();
 
+  const directTargets = protocol.targets.filter((t) => t.is_direct);
+  const inheritedTargets = protocol.targets.filter((t) => !t.is_direct);
+  const directTargetIds = directTargets.map((t) => t.id);
+
+  // Explicit gesture: each select/deselect persists immediately. Diffing the
+  // new id set against the current direct ids dispatches one add or remove.
+  const handleDirectTargetsChange = (ids: string[]) => {
+    for (const id of ids) {
+      if (!directTargetIds.includes(id)) addProtocolTarget.mutate(id);
+    }
+    for (const id of directTargetIds) {
+      if (!ids.includes(id)) removeProtocolTarget.mutate(id);
+    }
+  };
+
   return (
     <>
+      {/* ── Targets ─────────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Targets</CardTitle>
+          <CardDescription>
+            Biological targets for this protocol. Direct targets stay attached even when no run
+            references them; inherited targets come from this protocol&apos;s runs and prune
+            automatically when their last referencing run drops them.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {inheritedTargets.length > 0 && (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Inherited from runs</Label>
+              <div className="flex flex-wrap gap-1">
+                {inheritedTargets.map((t) => (
+                  <Badge key={t.id} variant="outline" className="font-normal text-muted-foreground">
+                    {t.name}
+                    <span className="ml-1 text-[10px]">
+                      · from {t.run_count} run{t.run_count === 1 ? "" : "s"}
+                    </span>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="space-y-1">
+            <Label className="text-xs">Direct targets</Label>
+            {canEditTargets ? (
+              <TargetMultiSelect
+                value={directTargetIds}
+                onChange={handleDirectTargetsChange}
+                placeholder="Add a target…"
+              />
+            ) : directTargets.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {directTargets.map((t) => (
+                  <Badge key={t.id} variant="secondary" className="font-normal">
+                    {t.name}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No direct targets.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* ── 1. Ontology Annotations ─────────────────────────────────────── */}
       {ontologySlots && ontologySlots.length > 0 && (
         <Card>

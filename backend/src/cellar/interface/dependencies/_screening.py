@@ -50,11 +50,13 @@ from cellar.application.screening.manage_control_layouts import (
     SetControlLayout,
 )
 from cellar.application.screening.manage_protocol import (
+    AddProtocolTarget,
     AddProtocolToProject,
     DeleteProtocol,
     ListProtocolsByProject,
     PublishProtocol,
     RemoveProtocolFromProject,
+    RemoveProtocolTarget,
     RetireProtocol,
     UpdateProtocol,
     VersionProtocol,
@@ -69,6 +71,10 @@ from cellar.application.screening.manage_run import (
     CompleteRun,
     RejectRun,
     StartRun,
+)
+from cellar.application.screening.manage_run_targets import (
+    AddRunTarget,
+    RemoveRunTarget,
 )
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
 from cellar.application.screening.plate_setup import ParsePlateMapFile, SetUpRunPlate
@@ -87,6 +93,11 @@ from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
 from cellar.application.screening.reset_run_data import ResetRunData
+from cellar.application.screening.resolve_target_links import (
+    GetProtocolTargets,
+    ResolveProtocolTargets,
+    ResolveRunTargets,
+)
 from cellar.application.screening.update_run import UpdateRun
 from cellar.application.screening.update_target import UpdateTarget
 
@@ -94,8 +105,10 @@ from ._core import _get_use_case
 
 __all__ = [
     "AddConditionDefinitionDep",
+    "AddProtocolTargetDep",
     "AddProtocolToProjectDep",
     "AddReadoutDefinitionDep",
+    "AddRunTargetDep",
     "ApproveRunDep",
     "BulkCreateReadoutDataDep",
     "ClassifyDoseResponseCurveDep",
@@ -128,6 +141,7 @@ __all__ = [
     "GetProtocolActivitySummaryDep",
     "GetProtocolDep",
     "GetProtocolStatsDep",
+    "GetProtocolTargetsDep",
     "GetRunDep",
     "GetTargetDep",
     "ImportRunReadoutsDep",
@@ -160,8 +174,12 @@ __all__ = [
     "RemoveConditionDefinitionDep",
     "RemoveControlLayoutDep",
     "RemoveProtocolFromProjectDep",
+    "RemoveProtocolTargetDep",
     "RemoveReadoutDefinitionDep",
+    "RemoveRunTargetDep",
     "ResetRunDataDep",
+    "ResolveProtocolTargetsDep",
+    "ResolveRunTargetsDep",
     "RetireProtocolDep",
     "SetControlLayoutDep",
     "SetUpRunPlateDep",
@@ -198,6 +216,23 @@ AddProtocolToProjectDep = Annotated[
 RemoveProtocolFromProjectDep = Annotated[
     RemoveProtocolFromProject, Depends(_get_use_case(RemoveProtocolFromProject))
 ]
+AddProtocolTargetDep = Annotated[
+    AddProtocolTarget, Depends(_get_use_case(AddProtocolTarget))
+]
+RemoveProtocolTargetDep = Annotated[
+    RemoveProtocolTarget, Depends(_get_use_case(RemoveProtocolTarget))
+]
+GetProtocolTargetsDep = Annotated[
+    GetProtocolTargets, Depends(_get_use_case(GetProtocolTargets))
+]
+ResolveProtocolTargetsDep = Annotated[
+    ResolveProtocolTargets, Depends(_get_use_case(ResolveProtocolTargets))
+]
+ResolveRunTargetsDep = Annotated[
+    ResolveRunTargets, Depends(_get_use_case(ResolveRunTargets))
+]
+AddRunTargetDep = Annotated[AddRunTarget, Depends(_get_use_case(AddRunTarget))]
+RemoveRunTargetDep = Annotated[RemoveRunTarget, Depends(_get_use_case(RemoveRunTarget))]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
 DeleteProtocolDep = Annotated[DeleteProtocol, Depends(_get_use_case(DeleteProtocol))]
 AddReadoutDefinitionDep = Annotated[

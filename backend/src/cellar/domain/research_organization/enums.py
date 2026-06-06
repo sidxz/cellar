@@ -21,6 +21,15 @@ class CollectionVisibility(StrEnum):
     SHARED = "shared"
 
 
+class CollectionType(StrEnum):
+    GENERIC = "generic"
+    REFERENCE_SET = "reference_set"
+    LIBRARY = "library"
+    HIT_LIST = "hit_list"
+    SERIES = "series"
+    DISTRIBUTION_SET = "distribution_set"
+
+
 class CollectionBooleanOp(StrEnum):
     UNION = "union"
     INTERSECT = "intersect"
@@ -68,6 +77,7 @@ __all__ = [
     "CampaignStatus",
     "ChannelSourceKind",
     "CollectionBooleanOp",
+    "CollectionType",
     "CollectionVisibility",
     "HitCall",
     "ProjectStatus",

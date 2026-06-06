@@ -18,6 +18,7 @@ import { TestTubes } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useProtocols } from "../hooks/use-protocols";
 import { PROTOCOL_TYPE_LABELS, type Protocol, type ProtocolType } from "../types";
+import { TargetChips } from "./target-chips";
 
 interface ProtocolListProps {
   onSelect?: (protocolId: string) => void;
@@ -63,6 +64,16 @@ export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
         headerName: "Readouts",
         width: 100,
         valueGetter: (p) => p.data?.readout_definitions.length ?? 0,
+      },
+      {
+        headerName: "Targets",
+        field: "targets",
+        flex: 1,
+        minWidth: 140,
+        sortable: false,
+        cellRenderer: (params: ICellRendererParams<Protocol>) => (
+          <TargetChips targets={params.data?.targets} />
+        ),
       },
       {
         headerName: "Status",

@@ -23,6 +23,7 @@ from cellar.interface.routes._intercept_response import (
     InterceptSpecResponse,
     InterceptValueResponse,
 )
+from cellar.interface.routes._target_refs import TargetRefResponse
 
 __all__ = ["InterceptSpecResponse", "InterceptValueResponse"]
 
@@ -67,7 +68,7 @@ class ProtocolCurveGroupResponse(BaseModel):
     protocol_id: uuid.UUID
     protocol_name: str
     protocol_type: str
-    target_id: uuid.UUID | None = None
+    targets: list[TargetRefResponse] = []
     curves: list[CurveDetailResponse] = []
 
 
@@ -84,7 +85,7 @@ class MoleculeActivityDetailResponse(BaseModel):
                     protocol_id=g.protocol_id,
                     protocol_name=g.protocol_name,
                     protocol_type=g.protocol_type,
-                    target_id=g.target_id,
+                    targets=[TargetRefResponse.from_ref(t) for t in g.targets],
                     curves=[
                         CurveDetailResponse(
                             curve_id=c.curve_id,

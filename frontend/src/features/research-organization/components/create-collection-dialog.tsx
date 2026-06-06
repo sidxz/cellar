@@ -27,7 +27,7 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { useCreateCollection, useUpdateCollection } from "../hooks/use-collections";
 import { useProjects } from "../hooks/use-projects";
-import type { Collection } from "../types";
+import { COLLECTION_TYPE_OPTIONS, type Collection } from "../types";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +35,7 @@ const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   visibility: z.enum(["private", "shared"]),
+  type: z.enum(["generic", "reference_set", "library", "hit_list", "series", "distribution_set"]),
   // null = no project selected; stored as null in the form
   project_id: z.string().nullable(),
   org_id: z.string().nullable(),
@@ -49,6 +50,7 @@ function makeDefaultValues(defaultProjectId?: string): FormValues {
     name: "",
     description: "",
     visibility: "private",
+    type: "generic",
     project_id: defaultProjectId ?? null,
     org_id: null,
   };
@@ -59,6 +61,7 @@ function toFormValues(collection: Collection, defaultProjectId?: string): FormVa
     name: collection.name,
     description: collection.description ?? "",
     visibility: collection.visibility ?? "private",
+    type: collection.type ?? "generic",
     project_id: collection.project_id ?? defaultProjectId ?? null,
     org_id: collection.owned_by_org_id ?? null,
   };
@@ -115,6 +118,7 @@ export function CreateCollectionDialog({
       project_id: values.project_id,
       owned_by_org_id: values.org_id,
       visibility: values.visibility,
+      type: values.type,
     };
 
     mutation.mutate(payload, {
@@ -177,6 +181,28 @@ export function CreateCollectionDialog({
                     <SelectContent>
                       <SelectItem value="private">Private</SelectItem>
                       <SelectItem value="shared">Shared</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Type</Label>
+              <Controller
+                name="type"
+                control={form.control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COLLECTION_TYPE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 )}

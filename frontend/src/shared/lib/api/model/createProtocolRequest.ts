@@ -5,7 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateProtocolRequestDescription } from './createProtocolRequestDescription';
-import type { CreateProtocolRequestTargetId } from './createProtocolRequestTargetId';
 import type { CreateProtocolRequestCategory } from './createProtocolRequestCategory';
 import type { CreateProtocolRequestReadoutDefinitionsItem } from './createProtocolRequestReadoutDefinitionsItem';
 import type { CreateProtocolRequestConditionDefinitions } from './createProtocolRequestConditionDefinitions';
@@ -14,7 +13,7 @@ export interface CreateProtocolRequest {
   name: string;
   description?: CreateProtocolRequestDescription;
   protocol_type: string;
-  target_id?: CreateProtocolRequestTargetId;
+  target_ids?: string[];
   category?: CreateProtocolRequestCategory;
   dose_unit?: string;
   pos_control_signal?: string;

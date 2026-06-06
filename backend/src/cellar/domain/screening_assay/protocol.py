@@ -306,7 +306,6 @@ class Protocol(AggregateRoot):
         name: str,
         description: str | None = None,
         protocol_type: ProtocolType,
-        target_id: uuid.UUID | None = None,
         category: str | None = None,
         protocol_version: int = 1,
         parent_protocol_id: uuid.UUID | None = None,
@@ -336,7 +335,6 @@ class Protocol(AggregateRoot):
         self.name = name.strip()
         self.description = description
         self.protocol_type = protocol_type
-        self.target_id = target_id
         self.category = category
         self.protocol_version = protocol_version
         self.parent_protocol_id = parent_protocol_id
@@ -428,7 +426,6 @@ class Protocol(AggregateRoot):
         protocol_type: ProtocolType,
         created_by: uuid.UUID,
         description: str | None = None,
-        target_id: uuid.UUID | None = None,
         category: str | None = None,
         dose_unit: ConcentrationUnit = ConcentrationUnit.UM,
         pos_control_signal: PosControlSignal = PosControlSignal.HIGH,
@@ -443,7 +440,6 @@ class Protocol(AggregateRoot):
             name=name,
             description=description,
             protocol_type=protocol_type,
-            target_id=target_id,
             category=category,
             created_by=created_by,
             dose_unit=dose_unit,
@@ -507,7 +503,6 @@ class Protocol(AggregateRoot):
         *,
         name: str | None = None,
         description: str | None = ...,  # type: ignore[assignment]
-        target_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         category: str | None = ...,  # type: ignore[assignment]
         pos_control_signal: PosControlSignal | None = None,
     ) -> None:
@@ -524,8 +519,6 @@ class Protocol(AggregateRoot):
             self.name = name.strip()
         if description is not ...:
             self.description = description
-        if target_id is not ...:
-            self.target_id = target_id
         if category is not ...:
             self.category = category
         if pos_control_signal is not None:

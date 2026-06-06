@@ -46,6 +46,7 @@ from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
+    CollectionType,
 )
 from cellar.domain.research_organization.events import (
     CampaignPublishedCollectionCreated,
@@ -156,22 +157,28 @@ class CloseCampaign:
                     distinct_protocol_ids.append(ch.protocol_id)
 
             protocols: list[Protocol] = []
+            targets_by_protocol: dict[uuid.UUID, list] = {}
             if distinct_protocol_ids:
                 protocols = await self._protocol_repo.find_by_ids(
                     input.workspace_id, distinct_protocol_ids
                 )
+                targets_by_protocol = (
+                    await self._protocol_repo.find_effective_targets_for_protocols(
+                        input.workspace_id, distinct_protocol_ids
+                    )
+                )
 
             source_protocols: list[dict[str, Any]] = []
             for p in protocols:
-                # TODO: load p.target relationship to populate target_name when
-                # the SQLAlchemy mapper eagerly joins the Target row.
                 source_protocols.append(
                     {
                         "id": str(p.id),
                         "name": p.name,
                         "version": p.protocol_version,
-                        "target_id": str(p.target_id) if p.target_id else None,
-                        "target_name": None,
+                        "targets": [
+                            {"id": str(t.id), "name": t.name}
+                            for t in targets_by_protocol.get(p.id, [])
+                        ],
                     }
                 )
 
@@ -233,6 +240,7 @@ class CloseCampaign:
                     description=(f'Frozen output of campaign "{campaign.name}"'),
                     project_id=campaign.project_id,
                     created_by=input.user_id,
+                    type=CollectionType.HIT_LIST,
                 )
                 # Save BEFORE freeze so membership can be written while the
                 # persisted row is still mutable — add_molecules checks
