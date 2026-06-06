@@ -1,6 +1,6 @@
 "use client";
 
-import { Input } from "@/shared/components/ui/input";
+import { SearchCombobox } from "@/shared/components/search-combobox";
 import { useState } from "react";
 import { useTags } from "../hooks/use-tags";
 
@@ -31,44 +31,31 @@ export function TagAutocomplete({
     .filter((s) => s.toLowerCase() !== value.toLowerCase())
     .slice(0, 6);
 
-  const showList = focused && value.length > 0 && suggestions.length > 0;
-
   return (
-    <div className="relative">
-      <Input
-        autoFocus={autoFocus}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setTimeout(() => setFocused(false), 120)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onEnter?.();
-          }
-        }}
-        placeholder={placeholder}
-        className="h-8 text-sm"
-      />
-      {showList && (
-        <ul className="absolute z-50 mt-1 max-h-40 w-full overflow-auto rounded-md border bg-popover py-1 text-sm shadow-md">
-          {suggestions.map((s) => (
-            <li key={s}>
-              <button
-                type="button"
-                className="flex w-full items-center px-2 py-1 text-left hover:bg-accent"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onChange(s);
-                  setFocused(false);
-                }}
-              >
-                {s}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <SearchCombobox<string>
+      searchValue={value}
+      onSearchChange={onChange}
+      items={suggestions}
+      getItemKey={(s) => s}
+      renderItem={(s) => s}
+      onSelect={(s) => {
+        onChange(s);
+        setFocused(false);
+      }}
+      open={focused && value.length > 0 && suggestions.length > 0}
+      onOpenChange={(o) => {
+        if (!o) setFocused(false);
+      }}
+      onInputFocus={() => setFocused(true)}
+      onInputKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onEnter?.();
+        }
+      }}
+      autoFocus={autoFocus}
+      placeholder={placeholder}
+      inputClassName="h-8 text-sm"
+    />
   );
 }

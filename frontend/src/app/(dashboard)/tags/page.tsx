@@ -1,4 +1,4 @@
-import { TagBrowse } from "@/features/tagging/components/tag-browse";
+import { TagBrowse } from "@/features/tagging";
 
 export default function TagBrowsePage() {
   return <TagBrowse />;

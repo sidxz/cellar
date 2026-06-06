@@ -12,6 +12,8 @@ import { useCallback, useMemo, useState } from "react";
  *   `onSelectChange(id, selected)` grid contract).
  * - `toggle(id)` — flip membership (click-to-toggle).
  * - `clear()` — empty the selection.
+ * - `reset(ids)` — replace the whole membership at once (bulk default
+ *   expansion, select-all); `reset()` is equivalent to `clear()`.
  * - `has(id)` — membership test.
  *
  * The returned helpers are stable (memoized), so they're safe to pass as
@@ -22,6 +24,7 @@ export interface SelectionSet<T> {
   set: (id: T, on: boolean) => void;
   toggle: (id: T) => void;
   clear: () => void;
+  reset: (ids?: Iterable<T>) => void;
   has: (id: T) => boolean;
 }
 
@@ -48,10 +51,12 @@ export function useSelectionSet<T = string>(initial?: Iterable<T>): SelectionSet
 
   const clear = useCallback(() => setSelected(new Set()), []);
 
+  const reset = useCallback((ids?: Iterable<T>) => setSelected(new Set(ids)), []);
+
   const has = useCallback((id: T) => selected.has(id), [selected]);
 
   return useMemo(
-    () => ({ selected, set, toggle, clear, has }),
-    [selected, set, toggle, clear, has],
+    () => ({ selected, set, toggle, clear, reset, has }),
+    [selected, set, toggle, clear, reset, has],
   );
 }

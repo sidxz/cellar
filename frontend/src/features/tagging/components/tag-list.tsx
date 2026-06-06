@@ -14,9 +14,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/shared/components/ui/alert-dialog";
+import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -54,12 +54,7 @@ export function TagList() {
       </PageHeader>
 
       {isLoading ? (
-        <div className="mt-6 space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list, order never changes
-            <Skeleton key={i} className="h-10 w-full" />
-          ))}
-        </div>
+        <SkeletonList rows={5} rowClassName="h-10 w-full" className="mt-6 space-y-2" />
       ) : tags && tags.length > 0 ? (
         <div className="mt-6 rounded-md border">
           <Table>

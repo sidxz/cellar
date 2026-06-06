@@ -8,10 +8,19 @@ import {
 import { SearchCombobox } from "@/shared/components/search-combobox";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { useClickOutside } from "@/shared/hooks/use-click-outside";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/shared/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { useDebounce } from "@/shared/hooks/use-debounce";
+import { SEARCH_DEBOUNCE_MS, SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import { ChevronDown, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 export type { OntologyTerm };
 
@@ -78,18 +87,17 @@ function OntologyDropdown({
   placeholder: string;
 }) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
   const { data: descendants, isLoading } = useOntologyDescendants(ontology, rootConceptId);
 
-  const closeDropdown = useCallback(() => setOpen(false), []);
-  useClickOutside(containerRef, closeDropdown, open);
-
-  const addTerm = (term: OntologyTerm) => {
-    if (!value.some((t) => t.term_id === term.term_id)) {
-      onChange([...value, term]);
-    }
-    setOpen(false);
-  };
+  const addTerm = useCallback(
+    (term: OntologyTerm) => {
+      if (!value.some((t) => t.term_id === term.term_id)) {
+        onChange([...value, term]);
+      }
+      setOpen(false);
+    },
+    [value, onChange],
+  );
 
   const removeTerm = (termId: string) => {
     onChange(value.filter((t) => t.term_id !== termId));
@@ -98,7 +106,7 @@ function OntologyDropdown({
   const available = (descendants ?? []).filter((d) => !value.some((v) => v.term_id === d.term_id));
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       {value.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">
           {value.map((term) => (
@@ -116,38 +124,42 @@ function OntologyDropdown({
         </div>
       )}
 
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full justify-between font-normal"
-        onClick={() => setOpen(!open)}
-      >
-        <span className="text-muted-foreground">{placeholder}</span>
-        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-      </Button>
-
-      {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-60 overflow-y-auto">
-          {isLoading ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
-          ) : available.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">
-              {descendants?.length ? "All terms selected." : "No terms found."}
-            </div>
-          ) : (
-            available.map((term) => (
-              <button
-                key={term.term_id}
-                type="button"
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
-                onClick={() => addTerm(term)}
-              >
-                <span>{term.label}</span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" className="w-full justify-between font-normal">
+            <span className="text-muted-foreground">{placeholder}</span>
+            <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Filter terms…" />
+            <CommandList>
+              {isLoading ? (
+                <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+              ) : (
+                <>
+                  <CommandEmpty>
+                    {descendants?.length ? "All terms selected." : "No terms found."}
+                  </CommandEmpty>
+                  <CommandGroup>
+                    {available.map((term) => (
+                      <CommandItem
+                        key={term.term_id}
+                        value={term.label}
+                        onSelect={() => addTerm(term)}
+                        className="cursor-pointer"
+                      >
+                        {term.label}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
@@ -172,7 +184,7 @@ function OntologySearchMode({
   placeholder: string;
 }) {
   const [query, setQuery] = useState("");
-  const debouncedQuery = useDebounce(query, 300);
+  const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS);
   const [showDropdown, setShowDropdown] = useState(false);
 
   const { data: results, isLoading } = useOntologySearch(
@@ -254,10 +266,10 @@ function OntologySearchMode({
         )}
         onSelect={addTerm}
         isLoading={isLoading}
-        open={showDropdown && debouncedQuery.length >= 2}
+        open={showDropdown && debouncedQuery.length >= SEARCH_MIN_QUERY_LEN}
         onOpenChange={setShowDropdown}
         onInputFocus={() => {
-          if (query.length >= 2) setShowDropdown(true);
+          if (query.length >= SEARCH_MIN_QUERY_LEN) setShowDropdown(true);
         }}
         placeholder={placeholder}
         emptyMessage="No results found."

@@ -44,6 +44,16 @@ describe("useSelectionSet", () => {
     expect(result.current.selected.size).toBe(0);
   });
 
+  it("reset(ids) replaces the whole membership; reset() clears", () => {
+    const { result } = renderHook(() => useSelectionSet<string>(["a"]));
+    act(() => result.current.reset(["b", "c"]));
+    expect(result.current.has("a")).toBe(false);
+    expect(result.current.has("b")).toBe(true);
+    expect(result.current.has("c")).toBe(true);
+    act(() => result.current.reset());
+    expect(result.current.selected.size).toBe(0);
+  });
+
   it("treats the backing set immutably (new reference per change)", () => {
     const { result } = renderHook(() => useSelectionSet<string>());
     const before = result.current.selected;

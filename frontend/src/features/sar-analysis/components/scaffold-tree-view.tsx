@@ -142,7 +142,11 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
   );
 
   const { subMode, setSubMode } = useTreeSubMode();
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const {
+    selected: expanded,
+    toggle: handleToggle,
+    reset: resetExpanded,
+  } = useSelectionSet<string>();
   const [selectedScaffold, setSelectedScaffold] = useState<string | null>(null);
   const { selected: selectedIds, set: handleSelectChange } = useSelectionSet<string>();
   const [colorBy, setColorBy] = useState<string | null>(null);
@@ -151,15 +155,6 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
   // Number of top roots to auto-expand on first arrival. Beyond this, chemists
   // expand explicitly. Keeps the initial visual scan to the cluster heads only.
   const DEFAULT_EXPAND_TOP_N = 3;
-
-  const handleToggle = useCallback((scaffoldSmiles: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(scaffoldSmiles)) next.delete(scaffoldSmiles);
-      else next.add(scaffoldSmiles);
-      return next;
-    });
-  }, []);
 
   const handleSelect = useCallback((scaffoldSmiles: string) => {
     setSelectedScaffold((prev) => (prev === scaffoldSmiles ? null : scaffoldSmiles));
@@ -315,9 +310,7 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only re-runs when the tree identity changes; `sortedRoots` is omitted so user expansion state survives min-members filter tweaks.
   useEffect(() => {
     if (sortedRoots.length > 0) {
-      setExpanded(
-        new Set(sortedRoots.slice(0, DEFAULT_EXPAND_TOP_N).map((n) => n.scaffold_smiles)),
-      );
+      resetExpanded(sortedRoots.slice(0, DEFAULT_EXPAND_TOP_N).map((n) => n.scaffold_smiles));
     }
   }, [tree]);
 

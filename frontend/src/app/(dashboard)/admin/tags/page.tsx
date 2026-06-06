@@ -1,4 +1,4 @@
-import { TagList } from "@/features/tagging/components/tag-list";
+import { TagList } from "@/features/tagging";
 
 export default function TagsPage() {
   return <TagList />;

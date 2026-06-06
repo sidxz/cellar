@@ -52,6 +52,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
+import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { formatDate } from "@/shared/lib/format-date";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 
@@ -147,7 +148,8 @@ export function AddFromRunsDialog({
 
   // — Step 1 state —
   const [protocolId, setProtocolId] = useState<string | null>(null);
-  const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
+  const runSelection = useSelectionSet<string>();
+  const selectedRunIds = runSelection.selected;
   // Only user-edited overrides live in state; the full channel config list is
   // derived below via useMemo so there is no effect feedback loop.
   const [userEditedConfigs, setUserEditedConfigs] = useState<Map<string, ChannelConfigUI>>(
@@ -378,7 +380,7 @@ export function AddFromRunsDialog({
   function handleClose() {
     setStep("configure");
     setProtocolId(null);
-    setSelectedRunIds(new Set());
+    runSelection.clear();
     setUserEditedConfigs(new Map());
     setFilterMode("all");
     setScope("hits_only");
@@ -454,18 +456,12 @@ export function AddFromRunsDialog({
             protocolId={protocolId}
             onProtocolChange={(id) => {
               setProtocolId(id);
-              setSelectedRunIds(new Set());
+              runSelection.clear();
               setUserEditedConfigs(new Map());
             }}
             runs={filteredRuns}
             selectedRunIds={selectedRunIds}
-            onToggleRun={(id) => {
-              setSelectedRunIds((prev) => {
-                const next = new Set(prev);
-                next.has(id) ? next.delete(id) : next.add(id);
-                return next;
-              });
-            }}
+            onToggleRun={runSelection.toggle}
             approvedOnly={approvedOnly}
             onApprovedOnlyChange={setApprovedOnly}
             channelConfigs={channelConfigs}

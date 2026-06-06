@@ -1,9 +1,8 @@
 "use client";
 
-import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { API_V1 } from "@/shared/lib/api/custom-instance";
 import type { ImportTemplateResponse } from "@/shared/lib/api/model";
-import { showSuccess } from "@/shared/lib/toast";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // Aggregate DTO — aliased to the orval-generated type (source of truth).
 export type ImportTemplate = ImportTemplateResponse;
@@ -16,46 +15,15 @@ export interface CreateImportTemplateInput {
   default_protocol_id?: string | null;
 }
 
-const IMPORT_TEMPLATES_KEY = ["import-templates"];
+const importTemplateHooks = createCrudHooks<ImportTemplate, CreateImportTemplateInput>({
+  entityName: "Import template",
+  baseUrl: `${API_V1}/import-templates`,
+  queryKey: ["import-templates"],
+  messages: {
+    created: () => "Import template saved",
+  },
+});
 
-export function useImportTemplates() {
-  return useQuery({
-    queryKey: IMPORT_TEMPLATES_KEY,
-    queryFn: () =>
-      customInstance<ImportTemplate[]>({
-        url: `${API_V1}/import-templates`,
-        method: "GET",
-      }),
-  });
-}
-
-export function useCreateImportTemplate() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateImportTemplateInput) =>
-      customInstance<ImportTemplate>({
-        url: `${API_V1}/import-templates`,
-        method: "POST",
-        data,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: IMPORT_TEMPLATES_KEY });
-      showSuccess("Import template saved");
-    },
-  });
-}
-
-export function useDeleteImportTemplate() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      customInstance<void>({
-        url: `${API_V1}/import-templates/${id}`,
-        method: "DELETE",
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: IMPORT_TEMPLATES_KEY });
-      showSuccess("Import template deleted");
-    },
-  });
-}
+export const useImportTemplates = importTemplateHooks.useList;
+export const useCreateImportTemplate = importTemplateHooks.useCreate;
+export const useDeleteImportTemplate = importTemplateHooks.useDelete;
