@@ -38,6 +38,8 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import {
   type CreateCustomFieldInput,
+  type CustomFieldAppliesTo,
+  type CustomFieldDataType,
   type CustomFieldDefinition,
   type UpdateCustomFieldInput,
   useCreateCustomField,
@@ -50,7 +52,7 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const DATA_TYPE_LABELS: Record<CustomFieldDefinition["data_type"], string> = {
+const DATA_TYPE_LABELS: Record<CustomFieldDataType, string> = {
   text: "Text",
   number: "Number",
   date: "Date",
@@ -59,7 +61,7 @@ const DATA_TYPE_LABELS: Record<CustomFieldDefinition["data_type"], string> = {
   batch_link: "Batch Link",
 };
 
-const APPLIES_TO_LABELS: Record<CustomFieldDefinition["applies_to"], string> = {
+const APPLIES_TO_LABELS: Record<CustomFieldAppliesTo, string> = {
   molecule: "Molecule",
   batch: "Batch",
   sample: "Sample",
@@ -103,8 +105,9 @@ function toFormValues(editing: CustomFieldDefinition): FormValues {
   return {
     name: editing.name,
     label: editing.label,
-    data_type: editing.data_type,
-    applies_to: editing.applies_to,
+    // Backend types these as bare `str`; narrow to the form's allowed values.
+    data_type: editing.data_type as CustomFieldDataType,
+    applies_to: editing.applies_to as CustomFieldAppliesTo,
     is_required: editing.is_required,
     default_value: editing.default_value != null ? String(editing.default_value) : "",
     display_order: editing.display_order,
@@ -235,10 +238,7 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
                         </SelectTrigger>
                         <SelectContent>
                           {(
-                            Object.entries(DATA_TYPE_LABELS) as [
-                              CustomFieldDefinition["data_type"],
-                              string,
-                            ][]
+                            Object.entries(DATA_TYPE_LABELS) as [CustomFieldDataType, string][]
                           ).map(([val, lbl]) => (
                             <SelectItem key={val} value={val}>
                               {lbl}
@@ -252,7 +252,10 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
               ) : (
                 <div className="grid gap-2">
                   <Label>Data Type</Label>
-                  <Input value={DATA_TYPE_LABELS[editing!.data_type]} disabled />
+                  <Input
+                    value={DATA_TYPE_LABELS[editing!.data_type as CustomFieldDataType]}
+                    disabled
+                  />
                 </div>
               )}
 
@@ -270,10 +273,7 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
                         </SelectTrigger>
                         <SelectContent>
                           {(
-                            Object.entries(APPLIES_TO_LABELS) as [
-                              CustomFieldDefinition["applies_to"],
-                              string,
-                            ][]
+                            Object.entries(APPLIES_TO_LABELS) as [CustomFieldAppliesTo, string][]
                           ).map(([val, lbl]) => (
                             <SelectItem key={val} value={val}>
                               {lbl}
@@ -287,7 +287,10 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
               ) : (
                 <div className="grid gap-2">
                   <Label>Applies To</Label>
-                  <Input value={APPLIES_TO_LABELS[editing!.applies_to]} disabled />
+                  <Input
+                    value={APPLIES_TO_LABELS[editing!.applies_to as CustomFieldAppliesTo]}
+                    disabled
+                  />
                 </div>
               )}
             </div>
@@ -466,10 +469,14 @@ function FieldsTable({ fields, onEdit, onDelete }: FieldsTableProps) {
               <TableCell className="font-mono text-sm">{field.name}</TableCell>
               <TableCell className="font-medium">{field.label}</TableCell>
               <TableCell>
-                <Badge variant="outline">{DATA_TYPE_LABELS[field.data_type]}</Badge>
+                <Badge variant="outline">
+                  {DATA_TYPE_LABELS[field.data_type as CustomFieldDataType]}
+                </Badge>
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{APPLIES_TO_LABELS[field.applies_to]}</Badge>
+                <Badge variant="secondary">
+                  {APPLIES_TO_LABELS[field.applies_to as CustomFieldAppliesTo]}
+                </Badge>
               </TableCell>
               <TableCell>
                 {field.is_required ? (

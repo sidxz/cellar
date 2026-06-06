@@ -22,7 +22,7 @@ import { useEffect } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { useUpdateWorkspaceSettings, useWorkspaceSettings } from "../hooks/use-workspace-settings";
-import type { AuditReasonPolicy, CustomFieldDefinition } from "../types";
+import type { AuditReasonPolicy, CustomFieldDefinition, RegistrationRules } from "../types";
 import { CustomFieldBuilder } from "./custom-field-builder";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
@@ -99,6 +99,9 @@ export function WorkspaceSettingsForm() {
   // Seed from server data on load / refresh
   useEffect(() => {
     if (settings) {
+      // Backend types `registration_rules` as an opaque `dict`; read it as the
+      // FE's structured RegistrationRules view at this boundary.
+      const rules = (settings.registration_rules ?? {}) as RegistrationRules;
       reset({
         defaultMolType: settings.default_molecule_type ?? "",
         retentionDays: settings.audit_retention_days?.toString() ?? "",
@@ -108,10 +111,10 @@ export function WorkspaceSettingsForm() {
         customFields: Array.isArray(settings.custom_field_definitions)
           ? (settings.custom_field_definitions as CustomFieldDefinition[])
           : [],
-        createBatchOnDup: !!settings.registration_rules?.create_batch_on_duplicate,
-        regPrefix: settings.registration_rules?.registration_number_prefix ?? "CC-",
-        regWidth: settings.registration_rules?.registration_number_width ?? 6,
-        batchWidth: settings.registration_rules?.batch_sequence_width ?? 3,
+        createBatchOnDup: !!rules.create_batch_on_duplicate,
+        regPrefix: rules.registration_number_prefix ?? "CC-",
+        regWidth: rules.registration_number_width ?? 6,
+        batchWidth: rules.batch_sequence_width ?? 3,
       });
     }
   }, [settings, reset]);

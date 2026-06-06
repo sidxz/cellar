@@ -2,12 +2,24 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type {
+  CreateDataSourceBody,
+  DataSourceResponse,
+  EntityMappingResponse,
+  UpdateDataSourceBody,
+} from "@/shared/lib/api/model";
 import { useQuery } from "@tanstack/react-query";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+// CLIENT-SIDE form-editor working types — NOT backend DTOs. The backend types
+// `target_type` / `storage_type` as bare `str`, so the generated
+// EntityMappingResponse widens them to `string`. The data-source mapping editor
+// constrains them to the allowed values (enforced at runtime by its zod schema),
+// so these narrowed shapes back the editable form state. They are narrowed from /
+// validated against the generated EntityMappingResponse at the consumption edge.
 export interface IdStorageConfig {
   storage_type: "identifier" | "custom_field";
   identifier_type: string | null;
@@ -28,35 +40,10 @@ export interface EntityMapping {
   parent_path?: string | null;
 }
 
-export interface DataSource {
-  id: string;
-  workspace_id: string;
-  name: string;
-  source_type: string;
-  config: Record<string, unknown>;
-  api_key_name: string | null;
-  is_active: boolean;
-  create_batch_on_duplicate: boolean;
-  entity_mappings: EntityMapping[];
-  created_by: string;
-  version: number;
-}
-
-export interface CreateDataSourceInput {
-  name: string;
-  source_type: string;
-  config?: Record<string, unknown>;
-  api_key_name?: string | null;
-}
-
-export interface UpdateDataSourceInput {
-  name?: string;
-  is_active?: boolean;
-  create_batch_on_duplicate?: boolean | null;
-  config?: Record<string, unknown>;
-  api_key_name?: string | null;
-  entity_mappings?: EntityMapping[];
-}
+// Aliases of the orval-generated DTOs (source of truth).
+export type DataSource = DataSourceResponse;
+export type CreateDataSourceInput = CreateDataSourceBody;
+export type UpdateDataSourceInput = UpdateDataSourceBody;
 
 // ---------------------------------------------------------------------------
 // CRUD hooks
@@ -82,7 +69,7 @@ export function useDataSourceTemplate(sourceType: string | null) {
   return useQuery({
     queryKey: ["data-sources", "templates", sourceType],
     queryFn: () =>
-      customInstance<EntityMapping[]>({
+      customInstance<EntityMappingResponse[]>({
         url: `${API_V1}/data-sources/templates/${sourceType}`,
         method: "GET",
       }),

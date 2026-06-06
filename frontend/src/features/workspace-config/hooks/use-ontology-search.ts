@@ -1,14 +1,11 @@
 "use client";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { OntologyTermResponse } from "@/shared/lib/api/model";
 import { useQuery } from "@tanstack/react-query";
 
-export interface OntologyTerm {
-  term_id: string;
-  label: string;
-  ontology_source: string;
-  uri: string | null;
-}
+// Alias of the orval-generated DTO (source of truth).
+export type OntologyTerm = OntologyTermResponse;
 
 export function useOntologyDescendants(ontology: string, rootConceptId: string, enabled?: boolean) {
   return useQuery({

@@ -2,33 +2,17 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type {
+  CreateSaltEntryBody,
+  SaltEntryResponse,
+  UpdateSaltEntryBody,
+} from "@/shared/lib/api/model";
 import { useQuery } from "@tanstack/react-query";
 
-export interface SaltEntry {
-  id: string;
-  workspace_id: string;
-  code: string;
-  name: string;
-  smiles: string;
-  molecular_weight: number;
-  is_default: boolean;
-  is_active: boolean;
-  version: number;
-}
-
-export interface CreateSaltEntryInput {
-  code: string;
-  name: string;
-  smiles: string;
-  molecular_weight: number;
-}
-
-export interface UpdateSaltEntryInput {
-  name?: string;
-  smiles?: string;
-  molecular_weight?: number;
-  is_active?: boolean;
-}
+// Aliases of the orval-generated DTOs (source of truth).
+export type SaltEntry = SaltEntryResponse;
+export type CreateSaltEntryInput = CreateSaltEntryBody;
+export type UpdateSaltEntryInput = UpdateSaltEntryBody;
 
 const SALT_CATALOG_KEY = ["salt-catalog"];
 

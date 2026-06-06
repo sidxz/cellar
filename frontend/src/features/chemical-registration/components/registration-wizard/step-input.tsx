@@ -4,7 +4,11 @@ import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled"
 import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
 import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
-import { useRegistrationForms } from "@/features/workspace-config/hooks/use-registration-forms";
+import {
+  type FieldOverride,
+  useRegistrationForms,
+} from "@/features/workspace-config/hooks/use-registration-forms";
+import type { RegistrationRules } from "@/features/workspace-config/types";
 import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
@@ -202,10 +206,13 @@ function SingleInputForm() {
   );
 
   const defaultFormId = registrationForms?.find((f) => f.is_default)?.id ?? "";
+  // Backend types `field_overrides` entries as opaque dicts; read them as the
+  // FE's structured view at this consumption edge (same double-cast convention
+  // as registration-form-admin — see FieldOverride in use-registration-forms).
   const activeFormOverrides = useMemo(
     () =>
-      registrationForms?.find((f) => f.id === (selectedFormId || defaultFormId))?.field_overrides ??
-      [],
+      (registrationForms?.find((f) => f.id === (selectedFormId || defaultFormId))
+        ?.field_overrides ?? []) as unknown as FieldOverride[],
     [registrationForms, selectedFormId, defaultFormId],
   );
 
@@ -569,8 +576,11 @@ function BulkInputForm() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: hydrate the duplicate-batch default only when workspace settings arrive; `bulkInput.file`/`updateBulkInput` are omitted so a later file selection doesn't re-hydrate.
   useEffect(() => {
     if (settings && !bulkInput.file) {
+      // Backend types `registration_rules` as an opaque dict; read it as the
+      // FE's structured view (same convention as workspace-settings-form).
+      const rules = (settings.registration_rules ?? {}) as RegistrationRules;
       updateBulkInput({
-        createBatchOnDuplicate: settings.registration_rules?.create_batch_on_duplicate ?? false,
+        createBatchOnDuplicate: rules.create_batch_on_duplicate ?? false,
       });
     }
   }, [settings]);

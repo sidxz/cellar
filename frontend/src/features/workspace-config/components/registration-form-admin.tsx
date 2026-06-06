@@ -182,9 +182,12 @@ const defaultValues: FormValues = {
 function toFormValues(editing: RegistrationForm): FormValues {
   return {
     name: editing.name,
-    applies_to: editing.applies_to,
+    // Backend types `applies_to` as bare `str`; narrow to the form's values.
+    applies_to: editing.applies_to as "molecule" | "batch",
     is_default: editing.is_default,
-    field_overrides: editing.field_overrides ?? [],
+    // `field_overrides` is an opaque `{ [key: string]: unknown }[]` from the
+    // backend (typed `list[dict]`); read it as the FE's structured override view.
+    field_overrides: (editing.field_overrides ?? []) as unknown as FieldOverride[],
   };
 }
 
@@ -211,11 +214,14 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
   }, [open, editing, form]);
 
   const onSubmit = async (values: FormValues) => {
+    // The backend `field_overrides` body field is an opaque `list[dict]`; widen
+    // the FE's structured overrides back to that generated record-array shape.
+    const fieldOverrides = values.field_overrides as unknown as Array<Record<string, unknown>>;
     if (isEdit) {
       const data: UpdateRegistrationFormInput = {
         name: values.name.trim(),
         is_default: values.is_default,
-        field_overrides: values.field_overrides,
+        field_overrides: fieldOverrides,
       };
       await update.mutateAsync(data);
     } else {
@@ -223,7 +229,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
         name: values.name.trim(),
         applies_to: values.applies_to,
         is_default: values.is_default,
-        field_overrides: values.field_overrides,
+        field_overrides: fieldOverrides,
       };
       await create.mutateAsync(data);
     }
@@ -311,7 +317,9 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                 control={form.control}
                 render={({ field }) => (
                   <FieldOverridesEditor
-                    appliesTo={isEdit ? editing!.applies_to : watchedAppliesTo}
+                    appliesTo={
+                      isEdit ? (editing!.applies_to as "molecule" | "batch") : watchedAppliesTo
+                    }
                     overrides={field.value}
                     onChange={field.onChange}
                   />

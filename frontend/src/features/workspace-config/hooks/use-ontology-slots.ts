@@ -2,37 +2,16 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1 } from "@/shared/lib/api/custom-instance";
+import type {
+  CreateOntologySlotBody,
+  OntologySlotResponse,
+  UpdateOntologySlotBody,
+} from "@/shared/lib/api/model";
 
-export interface OntologySlotDefinition {
-  id: string;
-  workspace_id: string;
-  name: string;
-  label: string;
-  ontology_sources: string[];
-  root_concept_id: string | null;
-  is_required: boolean;
-  allow_free_text: boolean;
-  display_order: number;
-}
-
-export interface CreateOntologySlotInput {
-  name: string;
-  label: string;
-  ontology_sources: string[];
-  root_concept_id?: string | null;
-  is_required?: boolean;
-  allow_free_text?: boolean;
-  display_order?: number;
-}
-
-export interface UpdateOntologySlotInput {
-  label?: string;
-  ontology_sources?: string[];
-  root_concept_id?: string | null;
-  is_required?: boolean;
-  allow_free_text?: boolean;
-  display_order?: number;
-}
+// Aliases of the orval-generated DTOs (source of truth).
+export type OntologySlotDefinition = OntologySlotResponse;
+export type CreateOntologySlotInput = CreateOntologySlotBody;
+export type UpdateOntologySlotInput = UpdateOntologySlotBody;
 
 const slotHooks = createCrudHooks<
   OntologySlotDefinition,

@@ -2,32 +2,17 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1 } from "@/shared/lib/api/custom-instance";
+import type {
+  CreateExternalApiKeyBody,
+  ExternalApiKeyResponse,
+  UpdateExternalApiKeyBody,
+} from "@/shared/lib/api/model";
 
-export interface ExternalApiKey {
-  id: string;
-  workspace_id: string;
-  key_name: string;
-  label: string;
-  description: string | null;
-  key_prefix: string;
-  is_active: boolean;
-  created_by: string;
-  last_used_at: string | null;
-}
-
-export interface CreateApiKeyInput {
-  key_name: string;
-  label: string;
-  description?: string | null;
-  secret_value: string;
-}
-
-export interface UpdateApiKeyInput {
-  label?: string;
-  description?: string | null;
-  secret_value?: string;
-  is_active?: boolean;
-}
+// Aliases of the orval-generated DTOs (source of truth). Domain-friendly names
+// keep call sites stable while the shapes stay in lockstep with the backend.
+export type ExternalApiKey = ExternalApiKeyResponse;
+export type CreateApiKeyInput = CreateExternalApiKeyBody;
+export type UpdateApiKeyInput = UpdateExternalApiKeyBody;
 
 const apiKeyHooks = createCrudHooks<ExternalApiKey, CreateApiKeyInput, UpdateApiKeyInput>({
   entityName: "API key",
