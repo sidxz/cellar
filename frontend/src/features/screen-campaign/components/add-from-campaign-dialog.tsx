@@ -43,14 +43,14 @@ interface AddFromCampaignDialogProps {
   campaignId: string;
   projectId: string;
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
 export function AddFromCampaignDialog({
   campaignId,
   projectId,
   open,
-  onClose,
+  onOpenChange,
 }: AddFromCampaignDialogProps) {
   const qc = useQueryClient();
   const [sourceCampaignId, setSourceCampaignId] = useState("");
@@ -86,7 +86,7 @@ export function AddFromCampaignDialog({
     setSourceCampaignId("");
     setDecisionFilter(["selected"]);
     setDescription("");
-    onClose();
+    onOpenChange(false);
   };
 
   const toggleDecision = (value: string) => {

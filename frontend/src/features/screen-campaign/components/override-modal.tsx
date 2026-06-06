@@ -57,7 +57,7 @@ function HitCallChip({ hitCall }: { hitCall: string }) {
 
 export interface OverrideModalProps {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   campaignId: string;
   result: CampaignResultResponse;
   channel: CampaignChannelResponse;
@@ -66,7 +66,7 @@ export interface OverrideModalProps {
 
 export function OverrideModal({
   open,
-  onClose,
+  onOpenChange,
   campaignId,
   result,
   channel,
@@ -116,7 +116,7 @@ export function OverrideModal({
       mutation: {
         onSuccess: () => {
           void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
-          onClose();
+          onOpenChange(false);
         },
       },
     });
@@ -138,7 +138,7 @@ export function OverrideModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Override Cell — {channel.label}</DialogTitle>
@@ -261,7 +261,7 @@ export function OverrideModal({
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button

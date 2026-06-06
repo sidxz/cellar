@@ -30,7 +30,7 @@ interface PreviewAsPublishedDialogProps {
   campaignId: string;
   campaignName: string;
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
 interface PublishedShape {
@@ -59,7 +59,7 @@ export function PreviewAsPublishedDialog({
   campaignId,
   campaignName,
   open,
-  onClose,
+  onOpenChange,
 }: PreviewAsPublishedDialogProps) {
   const { data, isLoading } =
     usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet(campaignId, undefined, {
@@ -78,7 +78,7 @@ export function PreviewAsPublishedDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -229,7 +229,7 @@ export function PreviewAsPublishedDialog({
         )}
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
           <Button onClick={handleDownload} disabled={!doc}>

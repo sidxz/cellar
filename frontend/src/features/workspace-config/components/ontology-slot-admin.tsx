@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -299,20 +300,20 @@ function SlotDialog({ open, onOpenChange, editing }: SlotDialogProps) {
 
 interface DeleteDialogProps {
   slot: OntologySlotDefinition | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ slot, onClose }: DeleteDialogProps) {
+function DeleteDialog({ slot, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteOntologySlot();
 
   const handleConfirm = async () => {
     if (!slot) return;
     await deleteMutation.mutateAsync(slot.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={slot !== null} onOpenChange={onClose}>
+    <Dialog open={slot !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete Ontology Slot?</DialogTitle>
@@ -325,7 +326,7 @@ function DeleteDialog({ slot, onClose }: DeleteDialogProps) {
           ? This action cannot be undone.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -349,12 +350,7 @@ interface SlotTableProps {
 
 function SlotTable({ entries, onEdit, onDelete }: SlotTableProps) {
   if (entries.length === 0) {
-    return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <BookOpen className="h-10 w-10" />
-        <p>No ontology slots defined yet.</p>
-      </div>
-    );
+    return <EmptyState variant="inline" icon={BookOpen} title="No ontology slots defined yet." />;
   }
 
   return (
@@ -471,7 +467,7 @@ export function OntologySlotAdmin() {
 
       <SlotDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog slot={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog slot={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

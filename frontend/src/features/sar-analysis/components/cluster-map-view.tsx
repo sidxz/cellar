@@ -351,7 +351,7 @@ export function ClusterMapView({
 
       <SaveSelectionDialog
         open={saveOpen}
-        onClose={() => setSaveOpen(false)}
+        onOpenChange={setSaveOpen}
         onSave={async (args) => {
           await onSaveCollection(args);
           setSaveOpen(false);

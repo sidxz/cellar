@@ -546,7 +546,7 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
       {overrideTarget && (
         <OverrideModal
           open
-          onClose={() => setOverrideTarget(null)}
+          onOpenChange={(o) => !o && setOverrideTarget(null)}
           campaignId={campaign.id}
           result={overrideTarget.result}
           channel={overrideTarget.channel}

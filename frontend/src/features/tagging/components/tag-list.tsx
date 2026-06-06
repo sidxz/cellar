@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { TagChip } from "@/shared/components/tag-chip";
 import {
@@ -120,10 +121,7 @@ export function TagList() {
           </Table>
         </div>
       ) : (
-        <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-          <TagIcon className="h-10 w-10" />
-          <p>No tags yet.</p>
-        </div>
+        <EmptyState variant="inline" icon={TagIcon} title="No tags yet." />
       )}
 
       <TagRenameDialog

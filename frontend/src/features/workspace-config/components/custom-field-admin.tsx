@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -394,20 +395,20 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
 
 interface DeleteDialogProps {
   field: CustomFieldDefinition | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ field, onClose }: DeleteDialogProps) {
+function DeleteDialog({ field, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteCustomField();
 
   const handleConfirm = async () => {
     if (!field) return;
     await deleteMutation.mutateAsync(field.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={field !== null} onOpenChange={onClose}>
+    <Dialog open={field !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete Custom Field?</DialogTitle>
@@ -418,7 +419,7 @@ function DeleteDialog({ field, onClose }: DeleteDialogProps) {
           definition.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -442,12 +443,7 @@ interface FieldsTableProps {
 
 function FieldsTable({ fields, onEdit, onDelete }: FieldsTableProps) {
   if (fields.length === 0) {
-    return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <ListFilter className="h-10 w-10" />
-        <p>No custom fields defined yet.</p>
-      </div>
-    );
+    return <EmptyState variant="inline" icon={ListFilter} title="No custom fields defined yet." />;
   }
 
   return (
@@ -584,7 +580,7 @@ export function CustomFieldAdmin() {
 
       <FieldDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog field={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog field={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

@@ -676,13 +676,13 @@ function SearchPageInner() {
         currentIndex={selectedIndex}
         totalCount={results.length}
         onNavigate={handleDetailNavigate}
-        onClose={() => dispatch({ type: "clearSelection" })}
+        onOpenChange={(open) => !open && dispatch({ type: "clearSelection" })}
         currentQuery={currentQuery}
       />
 
       <ReportCustomizer
         open={reportOpen}
-        onClose={() => setReportOpen(false)}
+        onOpenChange={setReportOpen}
         onUpdate={handleUpdateReport}
         protocols={protocols ?? []}
         activeProtocolIds={visibleProtocolIds}
@@ -693,7 +693,7 @@ function SearchPageInner() {
       {currentQuery && (
         <SaveSearchDialog
           open={saveOpen}
-          onClose={() => setSaveOpen(false)}
+          onOpenChange={setSaveOpen}
           query={currentQuery}
           protocolColumns={protocolColumns}
           reportConfig={reportConfig}

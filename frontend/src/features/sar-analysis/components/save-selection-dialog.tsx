@@ -32,7 +32,7 @@ interface ProjectOption {
 
 interface SaveSelectionDialogProps {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   onSave: (args: {
     name: string;
     projectId: string | null;
@@ -46,7 +46,7 @@ interface SaveSelectionDialogProps {
 
 export function SaveSelectionDialog({
   open,
-  onClose,
+  onOpenChange,
   onSave,
   selectedMolecules,
   defaultName,
@@ -65,7 +65,7 @@ export function SaveSelectionDialog({
   }, [open, defaultName, defaultProjectId]);
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Save {selectedMolecules.length} compounds as a new collection</DialogTitle>
@@ -108,7 +108,7 @@ export function SaveSelectionDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button

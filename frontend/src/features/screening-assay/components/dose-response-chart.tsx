@@ -582,12 +582,10 @@ export function DoseResponseChart({
     [editSession.draft.exclusions],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refitPreview.requestPreview is stable across renders (useCallback); depending on editMode + editCurve.id + draftExcludedIndices is enough.
   useEffect(() => {
     if (!editMode || !editCurve) return;
     refitPreview.requestPreview(editCurve.id, draftExcludedIndices);
-    // refitPreview.requestPreview is stable across renders (useCallback);
-    // depending on `editMode + editCurve.id + draftExcludedIndices` is enough.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editMode, editCurve?.id, draftExcludedIndices]);
 
   // The preview-fit overlay: when the hook has data, build a synthetic
@@ -1296,9 +1294,8 @@ export function DoseResponseChart({
   // Pre-fix this code walked raw_data with isHiddenFromIncluded counting,
   // which silently diverged from the BE's domain after any save that
   // shortened raw_data.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlePlotClick = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: Plotly click event is untyped by the lib; fields read defensively below
     (event: any) => {
       if (!isInteractive || !editMode || !editCurve) return;
       const pt = event?.points?.[0];
@@ -1798,7 +1795,7 @@ export function DoseResponseChart({
       {editCurve && (
         <SaveExclusionsDialog
           open={saveDialogOpen}
-          onClose={() => setSaveDialogOpen(false)}
+          onOpenChange={setSaveDialogOpen}
           onSave={handleSaveSubmit}
           dirtyCount={dirtyCount}
           isSaving={isSaving}

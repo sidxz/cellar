@@ -159,7 +159,7 @@ function CampaignBuilderV2({
         campaignId={campaign.id}
         campaignName={campaign.name}
         open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
+        onOpenChange={setPreviewOpen}
       />
       <CloseSignDialog campaign={campaign} open={closeSignOpen} onOpenChange={setCloseSignOpen} />
     </div>

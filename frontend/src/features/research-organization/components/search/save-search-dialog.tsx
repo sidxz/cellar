@@ -29,7 +29,7 @@ import type { ReportConfig, SavedSearch, SearchQuery, SearchVisibility } from ".
 
 interface SaveSearchDialogProps {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   query: SearchQuery;
   protocolColumns: string[];
   reportConfig: ReportConfig;
@@ -40,7 +40,7 @@ interface SaveSearchDialogProps {
 
 export function SaveSearchDialog({
   open,
-  onClose,
+  onOpenChange,
   query,
   protocolColumns,
   reportConfig,
@@ -103,7 +103,7 @@ export function SaveSearchDialog({
           visibility,
           project_id: visibility === "project" ? projectId : null,
         },
-        { onSuccess: () => onClose() },
+        { onSuccess: () => onOpenChange(false) },
       );
     } else {
       createMutation.mutate(
@@ -115,7 +115,7 @@ export function SaveSearchDialog({
           visibility,
           project_id: visibility === "project" ? projectId : null,
         },
-        { onSuccess: () => onClose() },
+        { onSuccess: () => onOpenChange(false) },
       );
     }
   }
@@ -123,7 +123,7 @@ export function SaveSearchDialog({
   const canSave = name.trim().length > 0 && !isSaving;
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isUpdate ? "Update Saved Search" : "Save Search"}</DialogTitle>
@@ -204,7 +204,7 @@ export function SaveSearchDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!canSave}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -193,20 +194,20 @@ function SaltDialog({ open, onOpenChange, editing }: SaltDialogProps) {
 
 interface DeleteDialogProps {
   salt: SaltEntry | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ salt, onClose }: DeleteDialogProps) {
+function DeleteDialog({ salt, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteSaltEntry();
 
   const handleConfirm = async () => {
     if (!salt) return;
     await deleteMutation.mutateAsync(salt.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={salt !== null} onOpenChange={onClose}>
+    <Dialog open={salt !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete Salt Entry?</DialogTitle>
@@ -219,7 +220,7 @@ function DeleteDialog({ salt, onClose }: DeleteDialogProps) {
           ? This action cannot be undone.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -259,12 +260,7 @@ interface SaltTableProps {
 
 function SaltTable({ entries, onEdit, onDelete }: SaltTableProps) {
   if (entries.length === 0) {
-    return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <FlaskRound className="h-10 w-10" />
-        <p>No salt entries defined yet.</p>
-      </div>
-    );
+    return <EmptyState variant="inline" icon={FlaskRound} title="No salt entries defined yet." />;
   }
 
   return (
@@ -376,7 +372,7 @@ export function SaltCatalogAdmin() {
 
       <SaltDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog salt={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog salt={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

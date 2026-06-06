@@ -6,6 +6,7 @@ import {
   READOUT_DATA_TYPE_LABELS,
   READOUT_NORMALIZATION_LABELS,
 } from "@/features/screening-assay/types";
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -454,20 +455,20 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
 
 interface DeleteDialogProps {
   form: ProtocolForm | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ form, onClose }: DeleteDialogProps) {
+function DeleteDialog({ form, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteProtocolForm();
 
   const handleConfirm = async () => {
     if (!form) return;
     await deleteMutation.mutateAsync(form.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={form !== null} onOpenChange={onClose}>
+    <Dialog open={form !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete Protocol Form?</DialogTitle>
@@ -477,7 +478,7 @@ function DeleteDialog({ form, onClose }: DeleteDialogProps) {
           action cannot be undone.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -501,12 +502,7 @@ interface FormTableProps {
 
 function FormTable({ entries, onEdit, onDelete }: FormTableProps) {
   if (entries.length === 0) {
-    return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <FileText className="h-10 w-10" />
-        <p>No protocol forms defined yet.</p>
-      </div>
-    );
+    return <EmptyState variant="inline" icon={FileText} title="No protocol forms defined yet." />;
   }
 
   return (
@@ -614,7 +610,7 @@ export function ProtocolFormAdmin() {
 
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog form={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog form={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

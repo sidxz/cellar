@@ -131,7 +131,7 @@ interface AddFromRunsDialogProps {
   campaignId: string;
   projectId: string;
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ export function AddFromRunsDialog({
   campaignId,
   projectId,
   open,
-  onClose,
+  onOpenChange,
 }: AddFromRunsDialogProps) {
   const qc = useQueryClient();
   const [step, setStep] = useState<"configure" | "preview">("configure");
@@ -385,7 +385,7 @@ export function AddFromRunsDialog({
     setDefaultDecision("selected");
     setRefreshExisting(false);
     setApprovedOnly(true);
-    onClose();
+    onOpenChange(false);
   }
 
   const canGoToPreview = selectedRunIds.size > 0 && channelConfigs.length > 0;
@@ -405,6 +405,7 @@ export function AddFromRunsDialog({
     channels: { channel_key: string; label: string }[];
   } | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: buildPayload/previewMutation are derived from the listed state; keying on the underlying state (step/channelConfigs/selectedRunIds/filterMode) is what should re-trigger the debounced preview.
   useEffect(() => {
     if (step !== "preview") return;
     const payload = buildPayload();
@@ -418,8 +419,6 @@ export function AddFromRunsDialog({
       );
     }, 300);
     return () => clearTimeout(t);
-    // payload depends on the state below
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, channelConfigs, selectedRunIds, filterMode]);
 
   // — Render —

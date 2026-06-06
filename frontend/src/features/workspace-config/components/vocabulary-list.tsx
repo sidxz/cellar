@@ -1,6 +1,7 @@
 "use client";
 
 import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -130,10 +131,7 @@ export function VocabularyList() {
           </Table>
         </div>
       ) : (
-        <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-          <BookOpen className="h-10 w-10" />
-          <p>No vocabularies yet.</p>
-        </div>
+        <EmptyState variant="inline" icon={BookOpen} title="No vocabularies yet." />
       )}
 
       <VocabularyDialog open={dialogOpen} onOpenChange={setDialogOpen} vocabulary={editing} />

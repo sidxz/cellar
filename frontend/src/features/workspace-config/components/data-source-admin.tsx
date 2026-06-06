@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -227,20 +228,20 @@ function CreateDialog({ open, onOpenChange, apiKeys }: CreateDialogProps) {
 
 interface DeleteDialogProps {
   dataSource: DataSource | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ dataSource, onClose }: DeleteDialogProps) {
+function DeleteDialog({ dataSource, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteDataSource();
 
   const handleConfirm = async () => {
     if (!dataSource) return;
     await deleteMutation.mutateAsync(dataSource.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={dataSource !== null} onOpenChange={onClose}>
+    <Dialog open={dataSource !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Remove Data Source?</DialogTitle>
@@ -250,7 +251,7 @@ function DeleteDialog({ dataSource, onClose }: DeleteDialogProps) {
           not delete any imported data.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -290,12 +291,7 @@ interface DataSourceTableProps {
 
 function DataSourceTable({ entries, onEdit, onDelete }: DataSourceTableProps) {
   if (entries.length === 0) {
-    return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <Database className="h-10 w-10" />
-        <p>No data sources linked yet.</p>
-      </div>
-    );
+    return <EmptyState variant="inline" icon={Database} title="No data sources linked yet." />;
   }
 
   return (
@@ -388,7 +384,7 @@ export function DataSourceAdmin() {
 
       <CreateDialog open={createOpen} onOpenChange={setCreateOpen} apiKeys={apiKeys ?? []} />
 
-      <DeleteDialog dataSource={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog dataSource={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

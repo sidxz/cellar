@@ -39,7 +39,7 @@ interface CompoundDetailSheetProps {
   currentIndex: number;
   totalCount: number;
   onNavigate: (direction: "prev" | "next") => void;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   /**
    * The executed search query. Used to derive per-protocol `run_scope`
    * filters so the drawer's curve list (fetched separately via
@@ -246,7 +246,7 @@ export function CompoundDetailSheet({
   currentIndex,
   totalCount,
   onNavigate,
-  onClose,
+  onOpenChange,
   currentQuery,
 }: CompoundDetailSheetProps) {
   const [othersExpanded, setOthersExpanded] = useState(false);
@@ -307,7 +307,7 @@ export function CompoundDetailSheet({
   const descriptors = molecule?.descriptors;
 
   return (
-    <Sheet open={!!molecule} onOpenChange={(open) => !open && onClose()}>
+    <Sheet open={!!molecule} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         showCloseButton={false}
@@ -340,7 +340,7 @@ export function CompoundDetailSheet({
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 shrink-0"
-                    onClick={onClose}
+                    onClick={() => onOpenChange(false)}
                   >
                     <X className="h-4 w-4" />
                   </Button>

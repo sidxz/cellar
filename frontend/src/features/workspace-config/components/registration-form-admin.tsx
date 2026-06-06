@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -345,20 +346,20 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
 
 interface DeleteDialogProps {
   form: RegistrationForm | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ form, onClose }: DeleteDialogProps) {
+function DeleteDialog({ form, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteRegistrationForm();
 
   const handleConfirm = async () => {
     if (!form) return;
     await deleteMutation.mutateAsync(form.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={form !== null} onOpenChange={onClose}>
+    <Dialog open={form !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete Registration Form?</DialogTitle>
@@ -368,7 +369,7 @@ function DeleteDialog({ form, onClose }: DeleteDialogProps) {
           action cannot be undone.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -393,10 +394,11 @@ interface FormsTableProps {
 function FormsTable({ forms, onEdit, onDelete }: FormsTableProps) {
   if (forms.length === 0) {
     return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <ClipboardList className="h-10 w-10" />
-        <p>No registration forms defined yet.</p>
-      </div>
+      <EmptyState
+        variant="inline"
+        icon={ClipboardList}
+        title="No registration forms defined yet."
+      />
     );
   }
 
@@ -502,7 +504,7 @@ export function RegistrationFormAdmin() {
 
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog form={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog form={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

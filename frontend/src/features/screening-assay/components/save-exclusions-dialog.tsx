@@ -52,7 +52,7 @@ const REASON_OPTIONS: ReasonOption[] = [
 
 interface SaveExclusionsDialogProps {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   onSave: (input: {
     reason: ExclusionReason;
     note: string | null;
@@ -69,7 +69,7 @@ interface SaveExclusionsDialogProps {
 
 export function SaveExclusionsDialog({
   open,
-  onClose,
+  onOpenChange,
   onSave,
   dirtyCount,
   isSaving = false,
@@ -94,7 +94,14 @@ export function SaveExclusionsDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && !isSaving && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // Don't allow closing mid-save (would orphan the in-flight write).
+        if (!next && isSaving) return;
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
@@ -137,7 +144,7 @@ export function SaveExclusionsDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!canSave}>
