@@ -1,7 +1,7 @@
 "use client";
 
-import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
 import { ArrowLeft } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -25,43 +25,6 @@ function getSteps(mode: WizardMode | null): string[] {
   if (mode === "single") return SINGLE_STEPS;
   if (mode === "bulk") return BULK_STEPS;
   return [];
-}
-
-// ─── Step indicator ─────────────────────────────────────────────────────────
-
-function StepIndicator({
-  steps,
-  currentStep,
-}: {
-  steps: string[];
-  currentStep: number;
-}) {
-  if (steps.length === 0) return null;
-
-  return (
-    <div className="flex items-center gap-2" role="navigation" aria-label="Wizard steps">
-      {steps.map((name, index) => {
-        const isActive = index === currentStep;
-        const isCompleted = index < currentStep;
-
-        return (
-          <div key={name} className="flex items-center gap-2">
-            {index > 0 && (
-              <div className={`h-px w-6 ${isCompleted ? "bg-primary" : "bg-border"}`} />
-            )}
-            <Badge
-              variant={isActive ? "default" : isCompleted ? "secondary" : "outline"}
-              className={`text-xs font-medium ${
-                isActive ? "" : isCompleted ? "opacity-80" : "opacity-50"
-              }`}
-            >
-              {index + 1}. {name}
-            </Badge>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 // ─── Wizard shell ───────────────────────────────────────────────────────────
@@ -194,7 +157,7 @@ export function RegistrationWizard() {
       </div>
 
       {/* Step indicator */}
-      {mode !== null && <StepIndicator steps={steps} currentStep={currentStep} />}
+      {mode !== null && <WizardStepIndicator steps={steps} current={currentStep + 1} />}
 
       {/* Step content */}
       {renderStep()}

@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
 import { cn } from "@/shared/lib/utils";
 import type {
   SummaryImportResponse,
@@ -112,7 +113,7 @@ export function SummaryImportWizard({
           </DialogDescription>
         </DialogHeader>
 
-        <StepIndicator step={step} />
+        <WizardStepIndicator steps={["Upload", "Mapping", "Preview", "Confirm"]} current={step} />
 
         {step === 1 && (
           <CsvDropzone
@@ -169,39 +170,6 @@ export function SummaryImportWizard({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ─── Step indicator ──────────────────────────────────────────────────────────
-
-function StepIndicator({ step }: { step: 1 | 2 | 3 | 4 }) {
-  const steps = ["Upload", "Map", "Preview", "Confirm"];
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      {steps.map((label, i) => {
-        const n = (i + 1) as 1 | 2 | 3 | 4;
-        const active = step === n;
-        const done = step > n;
-        return (
-          <div key={label} className="flex items-center gap-2">
-            <span
-              className={cn(
-                "flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-medium",
-                active && "border-primary bg-primary/10 text-primary",
-                done && "border-green-500 bg-green-500/10 text-green-400",
-                !active && !done && "border-muted text-muted-foreground",
-              )}
-            >
-              {n}
-            </span>
-            <span className={cn(active && "text-foreground", !active && "text-muted-foreground")}>
-              {label}
-            </span>
-            {i < steps.length - 1 && <span className="mx-1 h-px w-6 bg-border" />}
-          </div>
-        );
-      })}
-    </div>
   );
 }
 

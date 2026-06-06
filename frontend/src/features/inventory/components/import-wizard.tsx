@@ -26,7 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { saveText } from "@/shared/lib/api/download";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { CheckCircle2, Download, FileUp, Loader2, XCircle } from "lucide-react";
@@ -69,42 +70,6 @@ interface ImportResult {
   errors: string[];
 }
 
-// ── Step indicator ─────────────────────────────────────────────────────────────
-
-function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
-  const steps = [
-    { n: 1, label: "Upload" },
-    { n: 2, label: "Map Columns" },
-    { n: 3, label: "Confirm" },
-  ] as const;
-
-  return (
-    <div className="flex items-center gap-2 mb-6">
-      {steps.map(({ n, label }, idx) => (
-        <div key={n} className="flex items-center gap-2">
-          {idx > 0 && <div className={`h-px w-8 ${current > idx ? "bg-primary" : "bg-border"}`} />}
-          <div className="flex items-center gap-1.5">
-            <div
-              className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold ${
-                current === n
-                  ? "bg-primary text-primary-foreground"
-                  : current > n
-                    ? "bg-primary/20 text-primary"
-                    : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {n}
-            </div>
-            <span className={`text-sm ${current === n ? "font-medium" : "text-muted-foreground"}`}>
-              {label}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ── Main wizard ────────────────────────────────────────────────────────────────
 
 export function ImportWizard() {
@@ -140,7 +105,7 @@ export function ImportWizard() {
       const formData = new FormData();
       formData.append("file", file);
       const response = await customInstance<PreviewResponse>({
-        url: "/api/v1/plates/import/preview",
+        url: `${API_V1}/plates/import/preview`,
         method: "POST",
         data: formData,
       });
@@ -206,7 +171,7 @@ export function ImportWizard() {
     setValidating(true);
     try {
       const response = await customInstance<ValidationResponse>({
-        url: "/api/v1/plates/import/validate",
+        url: `${API_V1}/plates/import/validate`,
         method: "POST",
         data: {
           file_id: preview.file_id,
@@ -246,7 +211,7 @@ export function ImportWizard() {
     setImporting(true);
     try {
       const response = await customInstance<ImportResult>({
-        url: "/api/v1/plates/import/execute",
+        url: `${API_V1}/plates/import/execute`,
         method: "POST",
         data: {
           file_id: preview.file_id,
@@ -273,7 +238,11 @@ export function ImportWizard() {
         subtitle='Import screening results (readout values) from plate reader exports. To map compounds to wells, use the "Map Wells" button on a plate&apos;s detail page instead.'
       />
 
-      <StepIndicator current={step} />
+      <WizardStepIndicator
+        steps={["Upload", "Map Columns", "Confirm"]}
+        current={step}
+        className="mb-6"
+      />
 
       {/* Saved templates management */}
       {importTemplates && importTemplates.length > 0 && (
