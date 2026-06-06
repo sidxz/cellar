@@ -43,8 +43,6 @@ export interface UseRunImportWizardResult {
   templateName: string;
   autoCreateUnmatchedBatches: boolean;
   compoundPicks: Record<string, string>;
-  isDragging: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
 
   // Mutations (expose for pending/data inspection in the component)
   previewMutation: ReturnType<typeof usePreviewRunFile>;
@@ -64,7 +62,6 @@ export interface UseRunImportWizardResult {
 
   // Actions
   setStep: (s: 1 | 2 | 3 | 4) => void;
-  setIsDragging: (v: boolean) => void;
   setAppliedTemplate: (t: RunImportTemplate | null) => void;
   setSaveAsTemplate: (v: boolean) => void;
   setTemplateName: (v: string) => void;
@@ -73,7 +70,6 @@ export interface UseRunImportWizardResult {
   reset: () => void;
   handleOpenChange: (next: boolean) => void;
   handleFile: (f: File) => void;
-  handleDrop: (e: React.DragEvent) => void;
   handleSetRole: (header: string, role: ImportRole | "ignore") => void;
   handleSetReadoutDef: (header: string, defId: string) => void;
   handleContinueFromMapping: () => void;
@@ -98,9 +94,6 @@ export function useRunImportWizard({
   // Per-molecule batch picks from the disambiguation panel. Cleared when
   // the wizard resets. ``molecule_id -> batch_id``.
   const [compoundPicks, setCompoundPicks] = useState<Record<string, string>>({});
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
 
   // ─── Mutations / queries ─────────────────────────────────────────────────────
   const previewMutation = usePreviewRunFile(runId);
@@ -134,7 +127,6 @@ export function useRunImportWizard({
     setCompoundPicks({});
     previewMutationRef.current.reset();
     importMutationRef.current.reset();
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
   const handleOpenChange = useCallback(
@@ -169,16 +161,6 @@ export function useRunImportWizard({
       );
     },
     [previewMutation, templates],
-  );
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-      const f = e.dataTransfer.files[0];
-      if (f) handleFile(f);
-    },
-    [handleFile],
   );
 
   // ─── Step 2 — mapping derived values ─────────────────────────────────────────
@@ -358,8 +340,6 @@ export function useRunImportWizard({
     templateName,
     autoCreateUnmatchedBatches,
     compoundPicks,
-    isDragging,
-    fileInputRef,
     previewMutation,
     repreviewMutation,
     importMutation,
@@ -371,7 +351,6 @@ export function useRunImportWizard({
     readoutHeaders,
     canContinueStep2,
     setStep,
-    setIsDragging,
     setAppliedTemplate,
     setSaveAsTemplate,
     setTemplateName,
@@ -380,7 +359,6 @@ export function useRunImportWizard({
     reset,
     handleOpenChange,
     handleFile,
-    handleDrop,
     handleSetRole,
     handleSetReadoutDef,
     handleContinueFromMapping,

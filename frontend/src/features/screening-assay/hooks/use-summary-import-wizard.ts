@@ -34,8 +34,6 @@ export interface UseSummaryImportWizardResult {
   draft: SummaryMappingDraft;
   resolvePreview: SummaryResolveResponse | null;
   result: SummaryImportResponse | null;
-  isDragging: boolean;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
 
   // Mutations (expose for pending/data inspection in the component)
   previewMutation: ReturnType<typeof usePreviewSummaryFile>;
@@ -54,11 +52,9 @@ export interface UseSummaryImportWizardResult {
 
   // Actions
   setStep: (s: 1 | 2 | 3 | 4) => void;
-  setIsDragging: (v: boolean) => void;
   reset: () => void;
   handleOpenChange: (next: boolean) => void;
   handleFile: (f: File) => void;
-  handleDrop: (e: React.DragEvent) => void;
   setRole: (header: string, role: SummaryRole) => void;
   setReadoutDef: (header: string, defId: string) => void;
   handleContinueToPreview: () => void;
@@ -85,9 +81,6 @@ export function useSummaryImportWizard({
   const [draft, setDraft] = useState<SummaryMappingDraft>(emptyDraft());
   const [resolvePreview, setResolvePreview] = useState<SummaryResolveResponse | null>(null);
   const [result, setResult] = useState<SummaryImportResponse | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
 
   // ─── Mutations / queries ─────────────────────────────────────────────────────
   const previewMutation = usePreviewSummaryFile(runId);
@@ -124,7 +117,6 @@ export function useSummaryImportWizard({
     previewMutationRef.current.reset();
     resolveMutationRef.current.reset();
     importMutationRef.current.reset();
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
   const handleOpenChange = useCallback(
@@ -152,16 +144,6 @@ export function useSummaryImportWizard({
       );
     },
     [previewMutation],
-  );
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-      const f = e.dataTransfer.files[0];
-      if (f) handleFile(f);
-    },
-    [handleFile],
   );
 
   // ─── Step 2 — role / readout-def mutations ───────────────────────────────────
@@ -242,8 +224,6 @@ export function useSummaryImportWizard({
     draft,
     resolvePreview,
     result,
-    isDragging,
-    fileInputRef,
     previewMutation,
     resolveMutation,
     importMutation,
@@ -254,11 +234,9 @@ export function useSummaryImportWizard({
     isResolving: resolveMutation.isPending,
     isImporting: importMutation.isPending,
     setStep,
-    setIsDragging,
     reset,
     handleOpenChange,
     handleFile,
-    handleDrop,
     setRole,
     setReadoutDef,
     handleContinueToPreview,

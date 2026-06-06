@@ -1,7 +1,9 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Upload } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback, useRef } from "react";
 
+import { CsvDropzone } from "@/shared/components/csv-dropzone";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -76,8 +78,6 @@ export function SummaryImportWizard({
     draft,
     resolvePreview,
     result,
-    isDragging,
-    fileInputRef,
     readoutDefOptions,
     canContinueMapping,
     canImport,
@@ -85,15 +85,19 @@ export function SummaryImportWizard({
     isResolving,
     isImporting,
     setStep,
-    setIsDragging,
     handleOpenChange,
     handleFile,
-    handleDrop,
     setRole,
     setReadoutDef,
     handleContinueToPreview,
     handleImport,
   } = useSummaryImportWizard({ runId, protocolId, open, onOpenChange });
+
+  // The footer "Choose file" button opens the dropzone's native file picker.
+  const openPickerRef = useRef<(() => void) | null>(null);
+  const handleOpenReady = useCallback((open: () => void) => {
+    openPickerRef.current = open;
+  }, []);
 
   // ─── Render ──────────────────────────────────────────────────────────────────
 
@@ -111,14 +115,11 @@ export function SummaryImportWizard({
         <StepIndicator step={step} />
 
         {step === 1 && (
-          <UploadStep
-            isDragging={isDragging}
+          <CsvDropzone
             file={file}
             isPending={isPreviewing}
             onFile={handleFile}
-            onDrop={handleDrop}
-            setIsDragging={setIsDragging}
-            inputRef={fileInputRef}
+            onOpenReady={handleOpenReady}
           />
         )}
 
@@ -148,7 +149,7 @@ export function SummaryImportWizard({
             </Button>
           )}
           {step === 1 && (
-            <Button onClick={() => fileInputRef.current?.click()} disabled={isPreviewing}>
+            <Button onClick={() => openPickerRef.current?.()} disabled={isPreviewing}>
               Choose file
             </Button>
           )}
@@ -200,70 +201,6 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 | 4 }) {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-// ─── Step 1 — Upload ─────────────────────────────────────────────────────────
-
-function UploadStep({
-  isDragging,
-  file,
-  isPending,
-  onFile,
-  onDrop,
-  setIsDragging,
-  inputRef,
-}: {
-  isDragging: boolean;
-  file: File | null;
-  isPending: boolean;
-  onFile: (f: File) => void;
-  onDrop: (e: React.DragEvent) => void;
-  setIsDragging: (b: boolean) => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-}) {
-  return (
-    <div className="py-2">
-      {/* Click-to-browse forwards to the hidden, keyboard-accessible file input. */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: dropzone delegates keyboard interaction to the inner file <input>. */}
-      <div
-        onDrop={onDrop}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          setIsDragging(false);
-        }}
-        onClick={() => inputRef.current?.click()}
-        className={cn(
-          "flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 transition-colors",
-          isDragging
-            ? "border-primary bg-primary/5"
-            : "border-muted-foreground/25 hover:border-muted-foreground/50",
-        )}
-      >
-        <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">
-          {isPending
-            ? "Parsing…"
-            : file
-              ? file.name
-              : "Drop a CSV or XLSX here, or click to browse"}
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv,.xlsx"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onFile(f);
-          }}
-        />
-      </div>
     </div>
   );
 }
