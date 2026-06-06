@@ -14,6 +14,7 @@ from cellar.application.auth import (
     require_editor,
     require_same_workspace,
 )
+from cellar.application.screening.get_protocol import ProtocolWithTargets
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.pagination import PageResult
@@ -308,7 +309,7 @@ class DeleteProtocol:
 
 
 class ListProtocolsByProject:
-    """List protocols linked to a project."""
+    """List protocols linked to a project (targets resolved in the same UoW)."""
 
     def __init__(self, uow: UnitOfWork, repo: ProtocolRepository) -> None:
         self._uow = uow
@@ -318,7 +319,7 @@ class ListProtocolsByProject:
         self,
         input: ListProtocolsByProjectQuery,
         auth: AuthContext | None = None,
-    ) -> Result[PageResult[Protocol], DomainError]:
+    ) -> Result[PageResult[ProtocolWithTargets], DomainError]:
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             effective_limit = input.limit
@@ -337,7 +338,18 @@ class ListProtocolsByProject:
                 protocols = protocols[:effective_limit]
                 next_cursor = str(protocols[-1].id)
 
-            return Success(PageResult(items=protocols, next_cursor=next_cursor))
+            targets = await self._repo.find_effective_targets_for_protocols(
+                input.workspace_id, [p.id for p in protocols]
+            )
+            return Success(
+                PageResult(
+                    items=[
+                        ProtocolWithTargets(protocol=p, targets=targets.get(p.id, []))
+                        for p in protocols
+                    ],
+                    next_cursor=next_cursor,
+                )
+            )
 
 
 class AddProtocolToProject:

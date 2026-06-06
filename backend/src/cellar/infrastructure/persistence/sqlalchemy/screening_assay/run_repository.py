@@ -236,9 +236,13 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             )
             .select_from(
                 run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id)
+                # Workspace-scoped on the owner side too — tenant isolation
+                # must not rest solely on the TargetModel filter.
+                .join(RunModel, run_targets.c.run_id == RunModel.id)
             )
             .where(
                 run_targets.c.run_id.in_(run_ids),
+                RunModel.workspace_id == workspace_id,
                 TargetModel.workspace_id == workspace_id,
             )
             .order_by(TargetModel.name)

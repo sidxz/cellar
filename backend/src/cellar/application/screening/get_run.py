@@ -1,9 +1,13 @@
-"""GetRun and ListRunsByProtocol query use cases."""
+"""GetRun and ListRunsByProtocol query use cases.
+
+``GetRun`` resolves the run's target refs inside the SAME unit of work as
+the primary read, so a response never mixes two snapshots.
+"""
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
@@ -12,6 +16,7 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import RunRepository
 from cellar.domain.screening_assay.run import Run
+from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 
@@ -27,6 +32,14 @@ class ListRunsByProtocolQuery(Query):
     protocol_id: uuid.UUID
 
 
+@dataclass(frozen=True)
+class RunWithTargets:
+    """A run plus its target refs, read in one transaction."""
+
+    run: Run
+    targets: list[TargetRef] = field(default_factory=list)
+
+
 class GetRun:
     def __init__(self, uow: UnitOfWork, repo: RunRepository) -> None:
         self._uow = uow
@@ -34,13 +47,16 @@ class GetRun:
 
     async def __call__(
         self, input: GetRunQuery, auth: AuthContext | None = None
-    ) -> Result[Run, DomainError]:
+    ) -> Result[RunWithTargets, DomainError]:
         require_workspace_role(auth, "viewer")
         async with self._uow:
             run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
                 return Failure(NotFoundError("Run", str(input.run_id)))
-            return Success(run)
+            targets = await self._repo.find_target_refs_for_runs(
+                input.workspace_id, [run.id]
+            )
+            return Success(RunWithTargets(run=run, targets=targets.get(run.id, [])))
 
 
 class ListRunsByProtocol:

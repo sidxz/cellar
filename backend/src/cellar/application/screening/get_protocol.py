@@ -1,9 +1,14 @@
-"""GetProtocol and ListProtocols query use cases."""
+"""GetProtocol and ListProtocols query use cases.
+
+Both resolve the protocol's effective target refs inside the SAME unit of
+work as the primary read, so a response never mixes two snapshots (the
+``list_protocol_summaries`` precedent).
+"""
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
@@ -13,6 +18,7 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import ProtocolRepository
+from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 
@@ -31,6 +37,14 @@ class ListProtocolsQuery(Query):
     tag_logic: str = "any"
 
 
+@dataclass(frozen=True)
+class ProtocolWithTargets:
+    """A protocol plus its effective target refs, read in one transaction."""
+
+    protocol: Protocol
+    targets: list[TargetRef] = field(default_factory=list)
+
+
 class GetProtocol:
     def __init__(self, uow: UnitOfWork, repo: ProtocolRepository) -> None:
         self._uow = uow
@@ -38,7 +52,7 @@ class GetProtocol:
 
     async def __call__(
         self, input: GetProtocolQuery, auth: AuthContext | None = None
-    ) -> Result[Protocol, DomainError]:
+    ) -> Result[ProtocolWithTargets, DomainError]:
         require_workspace_role(auth, "viewer")
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
@@ -46,7 +60,12 @@ class GetProtocol:
             )
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
-            return Success(protocol)
+            targets = await self._repo.find_effective_targets_for_protocols(
+                input.workspace_id, [protocol.id]
+            )
+            return Success(
+                ProtocolWithTargets(protocol=protocol, targets=targets.get(protocol.id, []))
+            )
 
 
 class ListProtocols:
@@ -56,7 +75,7 @@ class ListProtocols:
 
     async def __call__(
         self, input: ListProtocolsQuery, auth: AuthContext | None = None
-    ) -> Result[PageResult[Protocol], DomainError]:
+    ) -> Result[PageResult[ProtocolWithTargets], DomainError]:
         require_workspace_role(auth, "viewer")
         async with self._uow:
             effective_limit = input.limit
@@ -74,4 +93,15 @@ class ListProtocols:
                 protocols = protocols[:effective_limit]
                 next_cursor = str(protocols[-1].id)
 
-            return Success(PageResult(items=protocols, next_cursor=next_cursor))
+            targets = await self._repo.find_effective_targets_for_protocols(
+                input.workspace_id, [p.id for p in protocols]
+            )
+            return Success(
+                PageResult(
+                    items=[
+                        ProtocolWithTargets(protocol=p, targets=targets.get(p.id, []))
+                        for p in protocols
+                    ],
+                    next_cursor=next_cursor,
+                )
+            )

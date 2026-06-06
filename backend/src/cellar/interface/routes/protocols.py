@@ -419,7 +419,6 @@ async def list_protocols(
     auth: AuthDep,
     uc: ListProtocolsDep,
     uc_by_project: ListProtocolsByProjectDep,
-    targets_uc: ResolveProtocolTargetsDep,
     project_id: uuid.UUID | None = Query(default=None),
     cursor: str | None = None,
     limit: int | None = None,
@@ -454,25 +453,14 @@ async def list_protocols(
         )
         page = result_to_response(result)
 
-    targets_by_protocol = result_to_response(
-        await targets_uc(
-            ResolveProtocolTargetsQuery(
-                workspace_id=auth.workspace_id,
-                protocol_ids=tuple(p.id for p in page.items),
-            ),
-            auth=auth,
-        )
-    )
+    # Targets ride along from the use case — same transaction as the rows.
     return PaginatedResponse(
         items=[
             ProtocolResponse.from_domain(
-                p,
-                targets=[
-                    TargetRefResponse.from_ref(t)
-                    for t in targets_by_protocol.get(p.id, [])
-                ],
+                item.protocol,
+                targets=[TargetRefResponse.from_ref(t) for t in item.targets],
             )
-            for p in page.items
+            for item in page.items
         ],
         next_cursor=page.next_cursor,
     )
@@ -483,27 +471,15 @@ async def get_protocol(
     protocol_id: uuid.UUID,
     auth: AuthDep,
     uc: GetProtocolDep,
-    targets_uc: ResolveProtocolTargetsDep,
 ) -> ProtocolResponse:
     result = await uc(
         GetProtocolQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
         auth=auth,
     )
-    protocol = result_to_response(result)
-    targets_by_protocol = result_to_response(
-        await targets_uc(
-            ResolveProtocolTargetsQuery(
-                workspace_id=auth.workspace_id, protocol_ids=(protocol.id,)
-            ),
-            auth=auth,
-        )
-    )
+    item = result_to_response(result)
     return ProtocolResponse.from_domain(
-        protocol,
-        targets=[
-            TargetRefResponse.from_ref(t)
-            for t in targets_by_protocol.get(protocol.id, [])
-        ],
+        item.protocol,
+        targets=[TargetRefResponse.from_ref(t) for t in item.targets],
     )
 
 

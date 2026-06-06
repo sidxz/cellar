@@ -335,10 +335,17 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         )
         return list(result.scalars().all())
 
-    async def _direct_ids(self, protocol_id: uuid.UUID) -> set[uuid.UUID]:
+    async def _direct_ids(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> set[uuid.UUID]:
+        # Workspace-scoped via the owner join: tenant isolation must not rest
+        # solely on the trailing TargetModel filter in the callers.
         result = await self._session.execute(
-            select(protocol_targets.c.target_id).where(
-                protocol_targets.c.protocol_id == protocol_id
+            select(protocol_targets.c.target_id)
+            .join(ProtocolModel, protocol_targets.c.protocol_id == ProtocolModel.id)
+            .where(
+                protocol_targets.c.protocol_id == protocol_id,
+                ProtocolModel.workspace_id == workspace_id,
             )
         )
         return set(result.scalars().all())
@@ -346,12 +353,15 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     async def find_effective_targets(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[EffectiveTarget]:
-        direct_ids = await self._direct_ids(protocol_id)
+        direct_ids = await self._direct_ids(workspace_id, protocol_id)
 
         run_count_rows = await self._session.execute(
             select(run_targets.c.target_id, func.count(run_targets.c.run_id))
             .select_from(run_targets.join(RunModel, run_targets.c.run_id == RunModel.id))
-            .where(RunModel.protocol_id == protocol_id)
+            .where(
+                RunModel.protocol_id == protocol_id,
+                RunModel.workspace_id == workspace_id,
+            )
             .group_by(run_targets.c.target_id)
         )
         run_counts = {tid: count for tid, count in run_count_rows.all()}
@@ -385,10 +395,15 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         if not protocol_ids:
             return {}
 
-        # protocol_id -> set(target_id): direct
+        # protocol_id -> set(target_id): direct. Workspace-scoped via the
+        # owner join — tenant isolation must not rest solely on the trailing
+        # TargetModel filter below.
         direct_rows = await self._session.execute(
-            select(protocol_targets.c.protocol_id, protocol_targets.c.target_id).where(
-                protocol_targets.c.protocol_id.in_(protocol_ids)
+            select(protocol_targets.c.protocol_id, protocol_targets.c.target_id)
+            .join(ProtocolModel, protocol_targets.c.protocol_id == ProtocolModel.id)
+            .where(
+                protocol_targets.c.protocol_id.in_(protocol_ids),
+                ProtocolModel.workspace_id == workspace_id,
             )
         )
         by_protocol: dict[uuid.UUID, set[uuid.UUID]] = {pid: set() for pid in protocol_ids}
@@ -399,7 +414,10 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         inherited_rows = await self._session.execute(
             select(RunModel.protocol_id, run_targets.c.target_id)
             .select_from(run_targets.join(RunModel, run_targets.c.run_id == RunModel.id))
-            .where(RunModel.protocol_id.in_(protocol_ids))
+            .where(
+                RunModel.protocol_id.in_(protocol_ids),
+                RunModel.workspace_id == workspace_id,
+            )
         )
         for pid, tid in inherited_rows.all():
             by_protocol.setdefault(pid, set()).add(tid)

@@ -195,6 +195,14 @@ class TestUnknownTarget404:
         assert resp.status_code == 204, resp.text
 
 
+class TestTargetsOfUnknownProtocol:
+    async def test_targets_of_unknown_protocol_404(self, client: AsyncClient) -> None:
+        """Foreign/missing protocol must 404 like every sibling GET-by-id,
+        not 200 []."""
+        resp = await client.get(f"/api/v1/protocols/{uuid.uuid4()}/targets")
+        assert resp.status_code == 404, resp.text
+
+
 class TestDeleteTargetGuard:
     """Deleting an in-use target must 409 — never silently strip links."""
 

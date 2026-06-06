@@ -1,9 +1,13 @@
-"""ListRunsWithCounts query — runs by protocol enriched with molecule counts."""
+"""ListRunsWithCounts query — runs by protocol enriched with molecule counts.
+
+Target refs are resolved in the SAME unit of work as the run rows, so a
+response never mixes two snapshots.
+"""
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from returns.result import Result, Success
 
@@ -12,6 +16,7 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import ReadoutDataRepository, RunRepository
 from cellar.domain.screening_assay.run import Run
+from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.errors import DomainError
 
 
@@ -27,10 +32,11 @@ class ListRunsWithCountsQuery(Query):
 class RunWithCounts:
     run: Run
     molecule_count: int
+    targets: list[TargetRef] = field(default_factory=list)
 
 
 class ListRunsWithCounts:
-    """Return runs for a protocol with molecule counts per run."""
+    """Return runs for a protocol with molecule counts and targets per run."""
 
     def __init__(
         self,
@@ -58,6 +64,16 @@ class ListRunsWithCounts:
             counts = await self._rd_repo.get_molecule_counts(
                 input.workspace_id, [r.id for r in runs]
             )
+            targets = await self._run_repo.find_target_refs_for_runs(
+                input.workspace_id, [r.id for r in runs]
+            )
             return Success(
-                [RunWithCounts(run=r, molecule_count=counts.get(r.id, 0)) for r in runs]
+                [
+                    RunWithCounts(
+                        run=r,
+                        molecule_count=counts.get(r.id, 0),
+                        targets=targets.get(r.id, []),
+                    )
+                    for r in runs
+                ]
             )
