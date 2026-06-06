@@ -8,7 +8,12 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.auth import (
+    AuthContext,
+    require_authenticated,
+    require_editor,
+    require_same_workspace,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
@@ -31,7 +36,6 @@ from cellar.domain.chemical_registration.synthesis_route import (
     SynthesisRoute,
 )
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -164,9 +168,9 @@ class CreateSynthesisRoute:
     async def __call__(
         self, input: CreateSynthesisRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
+        require_authenticated(auth)
         require_editor(auth)
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required"))
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             molecule = await self._molecule_repo.find_by_id_in_workspace(
@@ -242,6 +246,7 @@ class AddReactionStep:
         self, input: AddReactionStepCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             route = await self._route_repo.find_by_id_in_workspace(
                 input.workspace_id, input.route_id
@@ -304,6 +309,7 @@ class RecordStepOutcome:
         self, input: RecordStepOutcomeCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             route = await self._route_repo.find_by_id_in_workspace(
                 input.workspace_id, input.route_id
@@ -340,6 +346,7 @@ class ValidateSynthesisRoute:
         self, input: ValidateSynthesisRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             route = await self._route_repo.find_by_id_in_workspace(
                 input.workspace_id, input.route_id
@@ -369,6 +376,7 @@ class SetPreferredRoute:
         self, input: SetPreferredRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             route = await self._route_repo.find_by_id_in_workspace(
                 input.workspace_id, input.route_id
@@ -409,6 +417,7 @@ class DeprecateSynthesisRoute:
         self, input: DeprecateSynthesisRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             route = await self._route_repo.find_by_id_in_workspace(
                 input.workspace_id, input.route_id
@@ -438,6 +447,7 @@ class UpdateSynthesisRoute:
         self, input: UpdateSynthesisRouteCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             route = await self._route_repo.find_by_id_in_workspace(
                 input.workspace_id, input.route_id
@@ -477,6 +487,7 @@ class DeleteSynthesisRoute:
         self, input: DeleteSynthesisRouteCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             route = await self._route_repo.find_by_id_in_workspace(
                 input.workspace_id, input.route_id
@@ -509,6 +520,7 @@ class RemoveReactionStep:
         self, input: RemoveReactionStepCommand, auth: AuthContext | None = None
     ) -> Result[SynthesisRoute, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             route = await self._route_repo.find_by_id_in_workspace(
                 input.workspace_id, input.route_id

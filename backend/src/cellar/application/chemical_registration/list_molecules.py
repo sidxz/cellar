@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -36,6 +36,7 @@ class ListMolecules:
         self, input: ListMoleculesQuery, auth: AuthContext | None = None
     ) -> Result[PageResult[Molecule], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             filters = {}
             if input.molecule_type:

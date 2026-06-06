@@ -17,7 +17,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import (
@@ -108,6 +108,7 @@ class GetPublishedCampaign:
         # Step 1 — auth guard (lowest available: editor).
         # TODO viewer-level auth: replace with require_viewer(auth) once that guard exists.
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             return await self._execute(input)

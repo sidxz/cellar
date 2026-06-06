@@ -10,7 +10,7 @@ from typing import Any
 from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.inventory.sync_batch_identifier_mirrors import (
     MirrorSummary,
     SyncBatchIdentifierMirrors,
@@ -97,6 +97,7 @@ class CreateBatch:
         self, input: CreateBatchCommand, auth: AuthContext | None = None
     ) -> Result[CreateBatchResult, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             # Validate molecule exists, belongs to workspace, and is not tombstoned

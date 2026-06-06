@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.screening.compound_curves_reader import (
     CompoundCurvesReader,
 )
@@ -39,6 +39,7 @@ class GetCompoundCurves:
         self, input: GetCompoundCurvesQuery, auth: AuthContext | None = None
     ) -> Result[list[dict], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         # IC50 unit comes from the protocol — single source of truth.
         async with self._uow:
             protocol = await self._protocol_repo.find_by_id_in_workspace(

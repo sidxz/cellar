@@ -8,7 +8,7 @@ from enum import StrEnum
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.chemical_registration.merge_service import MergeCommand, MergeService
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.shared.command import Command
@@ -70,6 +70,7 @@ class ResolveDisclosureConflict:
         auth: AuthContext | None = None,
     ) -> Result[DisclosureRequest, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         try:
             resolution = ConflictResolution(input.resolution)

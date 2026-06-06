@@ -8,7 +8,7 @@ from enum import StrEnum
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 from cellar.application.chemical_registration.protocols import (
     ProcessedStructureDTO,
@@ -81,6 +81,7 @@ class SearchMolecules:
         self, input: SearchMoleculesQuery, auth: AuthContext | None = None
     ) -> Result[SearchResults, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         try:
             search_type = SearchType(input.search_type)
         except ValueError:

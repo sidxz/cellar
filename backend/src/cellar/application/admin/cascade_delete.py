@@ -13,7 +13,7 @@ from cellar.application.admin.cascade_service import (
 )
 from cellar.application.admin.tier2_entities import TIER2_ENTITY_TYPES
 from cellar.application.audit.audit_recording_service import AuditRecordingService
-from cellar.application.auth import AuthContext, require_admin
+from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.audit_compliance.enums import OperationType
@@ -50,6 +50,7 @@ class CascadeDelete:
         auth: AuthContext | None = None,
     ) -> Result[None, DomainError]:
         require_admin(auth)
+        require_same_workspace(auth, input.workspace_id)
         if input.entity_type not in TIER2_ENTITY_TYPES:
             return Failure(NotFoundError("entity_type", input.entity_type))
         if not input.reason.strip():

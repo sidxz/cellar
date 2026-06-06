@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.repository import SavedSearchRepository
@@ -30,6 +30,7 @@ class GetSavedSearch:
         self, input: GetSavedSearchQuery, auth: AuthContext | None = None
     ) -> Result[SavedSearch, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             search = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.saved_search_id
@@ -55,6 +56,7 @@ class ListSavedSearches:
         self, input: ListSavedSearchesQuery, auth: AuthContext | None = None
     ) -> Result[list[SavedSearch], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             if input.created_by is not None:
                 searches = await self._repo.find_by_creator(input.workspace_id, input.created_by)

@@ -7,7 +7,6 @@ from types import TracebackType
 from typing import Self
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from returns.result import Failure, Success
 
 from cellar.application.chemical_registration.disclosure_service import (
@@ -18,19 +17,16 @@ from cellar.application.chemical_registration.protocols import (
     ProcessedStructureDTO,
     QCResultDTO,
 )
-from cellar.infrastructure.rdkit.fingerprint_generator import Fingerprints
 from cellar.application.chemical_registration.register_molecule import (
     ExternalId,
     RegisterMolecule,
     RegisterMoleculeCommand,
-    RegistrationOutcome,
 )
 from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
 from cellar.domain.chemical_registration.enums import (
     MoleculeType,
     RegistrationAction,
     Stereochemistry,
-    StructureStatus,
 )
 from cellar.domain.chemical_registration.molecule import Molecule
 from cellar.domain.shared.errors import ValidationError
@@ -40,8 +36,8 @@ from cellar.domain.shared.value_objects import (
     ComputedDescriptors,
     RegistrationNumber,
 )
+from cellar.infrastructure.rdkit.fingerprint_generator import Fingerprints
 from tests.fakes.fake_auth import FakeAuth
-
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -160,15 +156,11 @@ def _make_repo(
     """Create a mock MoleculeRepository with configurable return values."""
     repo = AsyncMock()
     repo.find_by_inchi_key = AsyncMock(return_value=find_by_inchi_key)
-    repo.find_undisclosed_by_identifiers = AsyncMock(
-        return_value=find_undisclosed_by_identifiers
-    )
+    repo.find_undisclosed_by_identifiers = AsyncMock(return_value=find_undisclosed_by_identifiers)
     repo.find_identifiers_in_workspace = AsyncMock(
         return_value=find_identifiers_in_workspace or {}
     )
-    repo.next_registration_number = AsyncMock(
-        return_value=RegistrationNumber(value="CV-00099")
-    )
+    repo.next_registration_number = AsyncMock(return_value=RegistrationNumber(value="CV-00099"))
     repo.save = AsyncMock()
     return repo
 
@@ -248,7 +240,7 @@ class TestDisclosureDetection:
         uc = _make_use_case(repo=repo, disclosure_service=mock_ds)
         cmd = _make_command(auto_approve=False, name="Undisclosed-001")
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
@@ -289,7 +281,7 @@ class TestDisclosureDetection:
         uc = _make_use_case(repo=repo, disclosure_service=mock_ds)
         cmd = _make_command(name="Undisclosed-001")
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
@@ -322,7 +314,7 @@ class TestDisclosureDetection:
         uc = _make_use_case(repo=repo, disclosure_service=mock_ds)
         cmd = _make_command(name="Undisclosed-001", auto_approve=True)
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
@@ -341,7 +333,7 @@ class TestDisclosureDetection:
         uc = _make_use_case(repo=repo, disclosure_service=mock_ds)
         cmd = _make_command(name="Brand New Compound")
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
@@ -357,7 +349,7 @@ class TestDisclosureDetection:
         uc = _make_use_case(repo=repo, disclosure_service=None)
         cmd = _make_command(name="Normal Compound")
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
@@ -375,14 +367,12 @@ class TestDisclosureDetection:
         )
 
         mock_ds = AsyncMock()
-        mock_ds.return_value = Failure(
-            ValidationError("Structure processing failed: Bad SMILES")
-        )
+        mock_ds.return_value = Failure(ValidationError("Structure processing failed: Bad SMILES"))
 
         uc = _make_use_case(repo=repo, disclosure_service=mock_ds)
         cmd = _make_command(name="Undisclosed-001")
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Failure)
         assert "Structure processing failed" in str(result.failure())
@@ -409,7 +399,7 @@ class TestDisclosureDetection:
         uc = _make_use_case(repo=repo, disclosure_service=mock_ds)
         cmd = _make_command(name="Dup Compound")
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         outcome = result.unwrap()
@@ -449,7 +439,7 @@ class TestDisclosureDetection:
         uc = _make_use_case(repo=repo, disclosure_service=mock_ds)
         cmd = _make_command(name="Undisclosed-001")
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         # Should succeed (not fail with ConflictError) because the matched
         # molecule's ID is passed as allowed_molecule_id
@@ -467,7 +457,7 @@ class TestStereochemistryWiring:
         uc = _make_use_case(repo=repo)
         cmd = _make_command()
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         assert repo.save.await_count == 1
@@ -480,7 +470,7 @@ class TestStereochemistryWiring:
 # ---------------------------------------------------------------------------
 
 
-def _make_settings_repo(*, settings: "WorkspaceSettings | None") -> AsyncMock:
+def _make_settings_repo(*, settings: WorkspaceSettings | None) -> AsyncMock:
     """Create a mock WorkspaceSettingsRepository."""
     repo = AsyncMock()
     repo.find_by_workspace_id = AsyncMock(return_value=settings)
@@ -515,7 +505,7 @@ class TestRegistrationNumberConfig:
         )
         cmd = _make_command()  # smiles provided → disclosed branch
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         repo.next_registration_number.assert_awaited_once_with(WS_ID, prefix="CC-", width=6)
@@ -534,7 +524,7 @@ class TestRegistrationNumberConfig:
         )
         cmd = _make_command()  # smiles provided → disclosed branch
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         repo.next_registration_number.assert_awaited_once_with(WS_ID, prefix="CC-", width=6)
@@ -563,7 +553,7 @@ class TestRegistrationNumberConfig:
         )
         cmd = _make_command()  # smiles provided → disclosed branch
 
-        result = await uc(cmd, auth=FakeAuth())
+        result = await uc(cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         repo.next_registration_number.assert_awaited_once_with(WS_ID, prefix="MTB-", width=7)

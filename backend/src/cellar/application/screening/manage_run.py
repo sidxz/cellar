@@ -7,13 +7,18 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import (
+    AuthContext,
+    require_authenticated,
+    require_editor,
+    require_same_workspace,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import RunRepository
 from cellar.domain.screening_assay.run import Run
-from cellar.domain.shared.errors import AuthorizationError, DomainError, NotFoundError
+from cellar.domain.shared.errors import DomainError, NotFoundError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -58,6 +63,7 @@ class StartRun:
         self, input: StartRunCommand, auth: AuthContext | None = None
     ) -> Result[Run, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
@@ -87,6 +93,7 @@ class CompleteRun:
         auth: AuthContext | None = None,
     ) -> Result[Run, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
@@ -113,9 +120,9 @@ class ApproveRun:
     async def __call__(
         self, input: ApproveRunCommand, auth: AuthContext | None = None
     ) -> Result[Run, DomainError]:
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required to approve a run"))
+        require_authenticated(auth)
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
@@ -144,9 +151,9 @@ class RejectRun:
         input: RejectRunCommand,
         auth: AuthContext | None = None,
     ) -> Result[Run, DomainError]:
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required to reject a run"))
+        require_authenticated(auth)
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:

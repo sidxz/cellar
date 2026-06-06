@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.research_organization.campaign_scientist_reader import (
     CampaignScientistReader,
 )
@@ -46,6 +46,7 @@ class GetCampaign:
         self, input: GetCampaignQuery, auth: AuthContext | None = None
     ) -> Result[GetCampaignResult, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             campaign = await self._campaign_repo.find_by_id_in_workspace(
                 input.workspace_id, input.campaign_id

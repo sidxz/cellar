@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.chemical_registration.merge_side_effect_registry import (
     MergeSideEffectRegistry,
 )
@@ -85,6 +85,7 @@ class MergeService:
         Raises ``AuthorizationError`` if the caller lacks editor role.
         """
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         if input.source_molecule_id == input.target_molecule_id:
             return Failure(ValidationError("A molecule cannot be merged into itself"))

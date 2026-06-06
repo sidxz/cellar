@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import structlog
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.screening.summary_import_models import (
     SummaryColumnMapping,
     SummaryImportPlanPreview,
@@ -93,6 +93,7 @@ class PreviewSummaryImport:
         auth: AuthContext | None = None,
     ) -> Result[SummaryImportPlanPreview, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, command.workspace_id)
 
         # Own + enter the read UoW so the repos have an active session. Read-only:
         # no commit, no write (mirrors PreviewSummaryFile / ImportSummaryFile).

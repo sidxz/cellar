@@ -64,6 +64,7 @@ class PublishProtocol:
         self, input: PublishProtocolCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -105,6 +106,7 @@ class RetireProtocol:
         auth: AuthContext | None = None,
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -134,6 +136,7 @@ class VersionProtocol:
         self, input: VersionProtocolCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -185,6 +188,7 @@ class UpdateProtocol:
         self, input: UpdateProtocolCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -282,6 +286,7 @@ class DeleteProtocol:
         self, input: DeleteProtocolCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_admin(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -367,6 +372,7 @@ class AddProtocolToProject:
         auth: AuthContext | None = None,
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -401,6 +407,7 @@ class RemoveProtocolFromProject:
         auth: AuthContext | None = None,
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -439,6 +446,7 @@ class AddProtocolTarget:
         self, input: AddProtocolTargetCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             state = await self._repo.find_lock_state(input.workspace_id, input.protocol_id)
             if state is None:
@@ -489,6 +497,7 @@ class RemoveProtocolTarget:
         self, input: RemoveProtocolTargetCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             state = await self._repo.find_lock_state(input.workspace_id, input.protocol_id)
             if state is None:

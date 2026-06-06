@@ -8,7 +8,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -231,6 +231,7 @@ class BulkCreateReadoutData:
         require_batch: bool = True,
     ) -> Result[BulkReadoutResult, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         if not input.items:
             return Failure(ValidationError("No items provided"))

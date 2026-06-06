@@ -109,7 +109,7 @@ class TestDeleteRelationship:
                 workspace_id=WS_ID,
                 relationship_id=rel.id,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Success)
@@ -128,7 +128,7 @@ class TestDeleteRelationship:
                 workspace_id=WS_ID,
                 relationship_id=uuid.uuid4(),
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)
@@ -150,13 +150,13 @@ class TestDeleteRelationship:
         rel_repo.add(rel)
 
         uc = DeleteRelationship(uow, rel_repo, dispatcher)
-        result = await uc(
-            DeleteRelationshipCommand(
-                workspace_id=uuid.uuid4(),  # different workspace
-                relationship_id=rel.id,
-            ),
-            auth=FakeAuth(),
-        )
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), NotFoundError)
+        # The workspace guard rejects a command whose workspace differs from
+        # the caller's, raising NotFoundError to avoid leaking entity existence.
+        with pytest.raises(NotFoundError):
+            await uc(
+                DeleteRelationshipCommand(
+                    workspace_id=uuid.uuid4(),  # different workspace
+                    relationship_id=rel.id,
+                ),
+                auth=FakeAuth(workspace_id=WS_ID),
+            )

@@ -40,12 +40,7 @@ from cellar.interface.dependencies._sar_analysis import (
     StartScaffoldTreeJobDep,
 )
 from cellar.interface.error_handlers import result_to_response
-
-# A cap that's well above any realistic curated collection size. Bypasses the
-# generic search-endpoint pagination clamp (MAX_PAGE_SIZE=200) which exists for
-# /search but is wrong for a collection-scoped scaffold-tree compute — the tree
-# must see EVERY member, or it under-counts every cluster head.
-COLLECTION_EXPANSION_LIMIT = 100_000
+from cellar.interface.pagination import COLLECTION_EXPANSION_LIMIT
 
 router = APIRouter(prefix="/api/v1/scaffold-tree", tags=["scaffold-tree"])
 

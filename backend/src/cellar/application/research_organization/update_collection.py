@@ -8,7 +8,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.sentinel import UNSET
@@ -46,6 +46,7 @@ class UpdateCollection:
         self, input: UpdateCollectionCommand, auth: AuthContext | None = None
     ) -> Result[Collection, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             collection = await self._repo.find_by_id_in_workspace(

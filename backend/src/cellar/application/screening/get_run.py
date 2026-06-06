@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import RunRepository
@@ -49,6 +49,7 @@ class GetRun:
         self, input: GetRunQuery, auth: AuthContext | None = None
     ) -> Result[RunWithTargets, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
@@ -68,6 +69,7 @@ class ListRunsByProtocol:
         auth: AuthContext | None = None,
     ) -> Result[list[Run], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             runs = await self._repo.find_by_protocol(input.workspace_id, input.protocol_id)
             return Success(runs)

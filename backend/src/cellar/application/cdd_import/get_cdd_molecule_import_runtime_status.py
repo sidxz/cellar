@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.cdd_import.cdd_molecule_import_orchestrator import (
     CddMoleculeImportOrchestrator,
 )
@@ -73,6 +73,7 @@ class GetCddMoleculeImportRuntimeStatus:
         auth: AuthContext | None = None,
     ) -> Result[CddMoleculeImportStatusView, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
 
         try:
             progress = await self._orchestrator.get_progress(input.workflow_id)

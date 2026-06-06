@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.project_scope_stats import ProjectScopeStats
@@ -30,6 +30,7 @@ class GetProjectScopeStats:
         self, input: GetProjectScopeStatsQuery, auth: AuthContext | None = None
     ) -> Result[dict[uuid.UUID, ProjectScopeStats], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             if not input.project_ids:
                 return Success({})

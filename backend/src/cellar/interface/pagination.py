@@ -14,6 +14,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from cellar.application.shared.pagination import (
+    COLLECTION_EXPANSION_LIMIT,
     COLLECTION_FETCH_MAX_PAGE_SIZE,
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -24,6 +25,7 @@ from cellar.application.shared.pagination import (
 )
 
 __all__ = [
+    "COLLECTION_EXPANSION_LIMIT",
     "COLLECTION_FETCH_MAX_PAGE_SIZE",
     "DEFAULT_PAGE_SIZE",
     "MAX_PAGE_SIZE",

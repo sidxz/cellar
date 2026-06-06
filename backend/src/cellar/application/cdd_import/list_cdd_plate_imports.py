@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.cdd_plate_import import CddPlateImport
@@ -37,6 +37,7 @@ class ListCddPlateImports:
         auth: AuthContext | None = None,
     ) -> Result[list[CddPlateImport], DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             imports = await self._repo.find_by_workspace(input.workspace_id)

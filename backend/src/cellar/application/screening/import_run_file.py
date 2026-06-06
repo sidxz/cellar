@@ -49,7 +49,7 @@ from cellar.application.attachment.upload_attachment import (
     UploadAttachment,
     UploadAttachmentCommand,
 )
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.screening.compound_ref_resolver import resolve_rows
 
 # Re-exported here so existing callers `from import_run_file import WellConflict`
@@ -191,6 +191,7 @@ class ImportRunFile:
         auth: AuthContext | None = None,
     ) -> Result[ImportRunFileResult, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         # Pull the preview here; the rest happens inside the UoW.
         preview = self._store.consume(input.preview_id)
@@ -321,6 +322,7 @@ class ImportRunFile:
                 workspace_id=cmd.workspace_id,
                 importing_user_id=auth.user_id,
                 source_label=f"screening import: {preview.filename or 'run file'}",
+                auth=auth,
             )
             if auto_created_batches > 0:
                 resolutions = resolve_rows(

@@ -10,6 +10,7 @@ from cellar.domain.inventory.enums import ContainerType, SampleStatus
 from cellar.domain.inventory.sample import Sample
 from cellar.domain.shared.pagination import PageResult
 from cellar.domain.shared.value_objects import Barcode
+from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -83,11 +84,6 @@ class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
     # Global list (read-model query — returns flat dicts, not aggregates)
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _escape_like(value: str) -> str:
-        """Escape special LIKE/ILIKE characters."""
-        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
     async def list_global(
         self,
         workspace_id: uuid.UUID,
@@ -129,7 +125,7 @@ class SQLAlchemySampleRepository(SQLAlchemyRepository[Sample, SampleModel]):
 
         # --- filters ---
         if search:
-            pattern = f"%{self._escape_like(search)}%"
+            pattern = f"%{escape_like(search)}%"
             stmt = stmt.where(
                 or_(
                     SampleModel.barcode.ilike(pattern),

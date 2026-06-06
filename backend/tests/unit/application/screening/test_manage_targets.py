@@ -72,7 +72,9 @@ class FakeUoW:
 @dataclass
 class FakeAuth:
     user_id: uuid.UUID = field(default_factory=uuid.uuid4)
-    workspace_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    # Default to the module-level workspace so the require_same_workspace guard
+    # matches the WS carried on every command in this module.
+    workspace_id: uuid.UUID = field(default_factory=lambda: WS)
     workspace_role: str = "editor"
     is_admin: bool = False
 

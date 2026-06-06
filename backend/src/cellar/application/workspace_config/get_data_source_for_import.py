@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
@@ -54,6 +54,7 @@ class GetDataSourceForImport:
         self, input: GetDataSourceForImportQuery, auth: AuthContext | None = None
     ) -> Result[DataSourceImportConfig, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             ds = await self._ds_repo.find_active_by_source_type(
                 input.workspace_id, input.source_type

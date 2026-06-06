@@ -8,7 +8,12 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import (
+    AuthContext,
+    require_authenticated,
+    require_editor,
+    require_same_workspace,
+)
 from cellar.application.cdd_import._check_config import check_cdd_configured
 from cellar.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 from cellar.application.cdd_import.gateway import CddProtocolGateway
@@ -27,7 +32,6 @@ from cellar.domain.screening_assay.protocol import (
 )
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -59,9 +63,9 @@ class ImportCddProtocol:
     async def __call__(
         self, input: ImportCddProtocolCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
+        require_authenticated(auth)
         require_editor(auth)
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required"))
+        require_same_workspace(auth, input.workspace_id)
 
         config = await check_cdd_configured(input.workspace_id, self._get_data_source)
         if isinstance(config, Failure):

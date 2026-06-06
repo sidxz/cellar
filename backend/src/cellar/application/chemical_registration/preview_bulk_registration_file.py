@@ -13,7 +13,7 @@ from typing import Protocol
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.query import Query
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
 from cellar.domain.shared.errors import DomainError, ValidationError
@@ -96,6 +96,7 @@ class PreviewBulkRegistrationFile:
         auth: AuthContext | None = None,
     ) -> Result[PreviewBulkRegistrationFileOutcome, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         if not input.filename.strip():
             return Failure(ValidationError("filename is required"))

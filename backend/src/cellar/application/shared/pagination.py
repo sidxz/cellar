@@ -12,6 +12,7 @@ from cellar.domain.shared.pagination import EnrichedPageResult, PageResult
 
 # Re-export domain types so existing application-layer imports continue to work.
 __all__ = [
+    "COLLECTION_EXPANSION_LIMIT",
     "COLLECTION_FETCH_MAX_PAGE_SIZE",
     "DEFAULT_PAGE_SIZE",
     "MAX_PAGE_SIZE",
@@ -30,6 +31,12 @@ MAX_PAGE_SIZE = 200
 # pathological 50K-mol collections don't blow up the response, but the limit
 # is large enough to atomically load every realistic curated collection.
 COLLECTION_FETCH_MAX_PAGE_SIZE = 10_000
+
+# Expansion limit for collection-scoped analysis inputs (scaffold tree, UMAP
+# clustering). Far above the fetch clamp: an analysis compute must see EVERY
+# member of the collection or its output silently under-counts, so this cap
+# only guards against pathological inputs.
+COLLECTION_EXPANSION_LIMIT = 100_000
 
 
 def parse_cursor(cursor: str | None) -> uuid.UUID | None:

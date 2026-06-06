@@ -14,11 +14,10 @@ from returns.result import Failure, Success
 
 from cellar.application.screening.plate_setup import (
     CompoundAssignment,
-    ParsePlateMapFile,
     ParsedPlateMap,
+    ParsePlateMapFile,
     SetUpRunPlate,
     SetUpRunPlateCommand,
-    _DEFAULT_DOSE_SERIES,
 )
 from cellar.application.shared.molecule_resolver import (
     MoleculeReference,
@@ -31,13 +30,12 @@ from cellar.domain.screening_assay.enums import (
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
-    WellType,
 )
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.run import Run
+from cellar.domain.shared.errors import AuthorizationError
 from cellar.domain.shared.events import DomainEvent
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -287,9 +285,7 @@ class TestSetUpRunPlate:
         )
 
         resolver = AsyncMock(spec=MoleculeResolver)
-        resolver.resolve = AsyncMock(
-            return_value=(resolved or [], unresolved or [])
-        )
+        resolver.resolve = AsyncMock(return_value=(resolved or [], unresolved or []))
 
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
@@ -519,7 +515,7 @@ class TestSetUpRunPlate:
         assert data["wells_created"] == 4
 
     @pytest.mark.asyncio
-    async def test_no_auth_returns_failure(self):
+    async def test_no_auth_raises(self):
         uc, _, _, _ = self._build(run=None)
 
         cmd = SetUpRunPlateCommand(
@@ -528,8 +524,8 @@ class TestSetUpRunPlate:
             compound_assignments=[],
         )
 
-        result = await uc(cmd, auth=None)
-        assert isinstance(result, Failure)
+        with pytest.raises(AuthorizationError):
+            await uc(cmd, auth=None)
 
     @pytest.mark.asyncio
     async def test_row_letter_positions_generate_columns(self):

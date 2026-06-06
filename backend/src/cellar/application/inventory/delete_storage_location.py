@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_admin
+from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -41,6 +41,7 @@ class DeleteStorageLocation:
         self, input: DeleteStorageLocationCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_admin(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             loc = await self._repo.find_by_id_in_workspace(input.workspace_id, input.location_id)

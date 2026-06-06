@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
@@ -41,6 +41,7 @@ class GetDisclosure:
         self, input: GetDisclosureQuery, auth: AuthContext | None = None
     ) -> Result[DisclosureRequest, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             dr = await self._disclosure_repo.find_by_id_in_workspace(
                 input.workspace_id, input.disclosure_id

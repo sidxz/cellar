@@ -8,7 +8,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_admin
+from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.sentinel import UNSET
@@ -48,6 +48,7 @@ class UpdateDataSource:
         self, input: UpdateDataSourceCommand, auth: AuthContext | None = None
     ) -> Result[DataSource, DomainError]:
         require_admin(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             ds = await self._repo.find_by_id_in_workspace(input.workspace_id, input.data_source_id)

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.cdd_import.cdd_molecule_import_orchestrator import (
     CddMoleculeImportOrchestrator,
     StartCddMoleculeImportRequest,
@@ -60,6 +60,7 @@ class StartCddMoleculeImport:
         auth: AuthContext | None = None,
     ) -> Result[StartCddMoleculeImportResult, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         if input.import_mode not in ("full_vault", "filtered", "sync"):
             return Failure(ValidationError(f"Invalid import_mode: {input.import_mode}"))

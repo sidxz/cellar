@@ -35,7 +35,6 @@ from cellar.domain.shared.value_objects import (
 )
 from tests.fakes.fake_auth import FakeAuth
 
-
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
@@ -233,7 +232,7 @@ class TestMergeServiceSuccess:
         _deps["mol_repo"].add(target)
 
         cmd = _make_command(source.id, target.id)
-        result = await _deps["service"](cmd, auth=FakeAuth())
+        result = await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Success)
         merge_event = result.unwrap()
@@ -255,9 +254,7 @@ class TestMergeServiceSuccess:
         assert _deps["uow"].committed
 
     @pytest.mark.asyncio
-    async def test_merge_transfers_registration_number_as_identifier(
-        self, _deps: dict
-    ) -> None:
+    async def test_merge_transfers_registration_number_as_identifier(self, _deps: dict) -> None:
         """Target gains source's registration number as INTERNAL_LEGACY identifier."""
         source = _make_source()
         target = _make_target()
@@ -265,7 +262,7 @@ class TestMergeServiceSuccess:
         _deps["mol_repo"].add(target)
 
         cmd = _make_command(source.id, target.id)
-        await _deps["service"](cmd, auth=FakeAuth())
+        await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         saved_target = await _deps["mol_repo"].find_by_id(target.id)
         assert saved_target is not None
@@ -297,13 +294,11 @@ class TestMergeServiceSuccess:
         _deps["mol_repo"].add(target)
 
         cmd = _make_command(source.id, target.id)
-        await _deps["service"](cmd, auth=FakeAuth())
+        await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         saved_target = await _deps["mol_repo"].find_by_id(target.id)
         assert saved_target is not None
-        legacy_ids = [
-            i for i in saved_target.identifiers if i.identifier == "CV-00001"
-        ]
+        legacy_ids = [i for i in saved_target.identifiers if i.identifier == "CV-00001"]
         # Should still be just the one that was there before
         assert len(legacy_ids) == 1
 
@@ -315,7 +310,7 @@ class TestMergeServiceFailures:
         _deps["mol_repo"].add(target)
 
         cmd = _make_command(uuid.uuid4(), target.id)
-        result = await _deps["service"](cmd, auth=FakeAuth())
+        result = await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Failure)
         err = result.failure()
@@ -327,7 +322,7 @@ class TestMergeServiceFailures:
         _deps["mol_repo"].add(source)
 
         cmd = _make_command(source.id, uuid.uuid4())
-        result = await _deps["service"](cmd, auth=FakeAuth())
+        result = await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Failure)
         err = result.failure()
@@ -350,7 +345,7 @@ class TestMergeServiceFailures:
         _deps["mol_repo"].add(target)
 
         cmd = _make_command(source.id, target.id)
-        result = await _deps["service"](cmd, auth=FakeAuth())
+        result = await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Failure)
         err = result.failure()
@@ -374,7 +369,7 @@ class TestMergeServiceFailures:
         _deps["mol_repo"].add(target)
 
         cmd = _make_command(source.id, target.id)
-        result = await _deps["service"](cmd, auth=FakeAuth())
+        result = await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Failure)
         err = result.failure()
@@ -387,7 +382,7 @@ class TestMergeServiceFailures:
         _deps["mol_repo"].add(mol)
 
         cmd = _make_command(mol.id, mol.id)
-        result = await _deps["service"](cmd, auth=FakeAuth())
+        result = await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         assert isinstance(result, Failure)
         err = result.failure()
@@ -408,7 +403,7 @@ class TestMergeServiceSideEffects:
         _deps["registry"].register(handler)
 
         cmd = _make_command(source.id, target.id)
-        await _deps["service"](cmd, auth=FakeAuth())
+        await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         handler.on_merge.assert_awaited_once_with(
             _deps["uow"],
@@ -419,9 +414,7 @@ class TestMergeServiceSideEffects:
 
 class TestMergeSnapshot:
     @pytest.mark.asyncio
-    async def test_merge_snapshot_contains_registration_number(
-        self, _deps: dict
-    ) -> None:
+    async def test_merge_snapshot_contains_registration_number(self, _deps: dict) -> None:
         """The snapshot dict persisted in MergeEvent captures source state."""
         source = _make_source()
         target = _make_target()
@@ -429,7 +422,7 @@ class TestMergeSnapshot:
         _deps["mol_repo"].add(target)
 
         cmd = _make_command(source.id, target.id)
-        result = await _deps["service"](cmd, auth=FakeAuth())
+        result = await _deps["service"](cmd, auth=FakeAuth(workspace_id=WS_ID))
 
         merge_event = result.unwrap()
         snap = merge_event.snapshot
@@ -453,6 +446,4 @@ class TestMergeSnapshot:
         )
         snap = _build_snapshot(mol)
         assert snap["registration_number"] == "CV-00001"
-        assert snap["identifiers"] == [
-            {"identifier": "CAS-123", "type": "cas_number"}
-        ]
+        assert snap["identifiers"] == [{"identifier": "CAS-123", "type": "cas_number"}]

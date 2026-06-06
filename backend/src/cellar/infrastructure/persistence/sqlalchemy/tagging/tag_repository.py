@@ -8,11 +8,9 @@ from sqlalchemy import column, delete, func, or_, select, table
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.workspace_config.tagging.tag import Tag, TagName
+from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._field_clauses import (
-    escape_like,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import TagModel
 

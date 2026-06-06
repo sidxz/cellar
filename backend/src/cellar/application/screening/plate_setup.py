@@ -7,7 +7,12 @@ from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import (
+    AuthContext,
+    require_authenticated,
+    require_editor,
+    require_same_workspace,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.molecule_resolver import (
@@ -26,7 +31,6 @@ from cellar.domain.screening_assay.enums import ReadoutDataType, WellType
 from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from cellar.domain.screening_assay.run import Plate, Well
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -235,9 +239,9 @@ class SetUpRunPlate:
         input: SetUpRunPlateCommand,
         auth: AuthContext | None = None,
     ) -> Result[dict, DomainError]:
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required"))
+        require_authenticated(auth)
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             # 1. Load run

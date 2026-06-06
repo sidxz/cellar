@@ -9,7 +9,12 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import (
+    AuthContext,
+    require_authenticated,
+    require_editor,
+    require_same_workspace,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -22,7 +27,6 @@ from cellar.domain.screening_assay.repository import (
 )
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     ConflictError,
     DomainError,
     NotFoundError,
@@ -62,9 +66,9 @@ class CreateRun:
     async def __call__(
         self, input: CreateRunCommand, auth: AuthContext | None = None
     ) -> Result[Run, DomainError]:
+        require_authenticated(auth)
         require_editor(auth)
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required"))
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             # Guard: protocol must exist, belong to same workspace, and be ACTIVE

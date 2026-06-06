@@ -15,7 +15,7 @@ from typing import Protocol, runtime_checkable
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError
@@ -61,6 +61,8 @@ class ListTagEntities:
     async def __call__(
         self, input: ListTagEntitiesQuery, auth: AuthContext | None = None
     ) -> Result[list[TaggedEntityRow], DomainError]:
+        require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             rows = await self._repo.find_entities_for_tags(
                 input.workspace_id,

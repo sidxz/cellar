@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolutionQuery,
     ResolvedCandidate,
@@ -223,6 +223,7 @@ class PreviewRunImport:
         auth: AuthContext | None = None,
     ) -> Result[dict[str, Any], DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             return await self._execute(input)
 

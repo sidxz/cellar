@@ -211,6 +211,7 @@ class PreviewRunFile:
                         workspace_id=input.workspace_id,
                         importing_user_id=auth.user_id,
                         source_label=f"screening import: {input.filename or 'run file'}",
+                        auth=auth,
                     )
                     if auto_created_batches > 0:
                         # Re-resolve with the expanded batch_index.

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.inventory.resolve_batch_ref import resolve_batch_ref
 from cellar.application.inventory.sync_batch_identifier_mirrors import (
     SyncBatchIdentifierMirrors,
@@ -70,8 +71,12 @@ class EnsureBatchExists:
         self._molecule_repo = molecule_repo
 
     async def __call__(
-        self, input: EnsureBatchExistsCommand
+        self,
+        input: EnsureBatchExistsCommand,
+        auth: AuthContext | None = None,
     ) -> Result[EnsureBatchExistsOutcome, DomainError]:
+        require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             existing = await resolve_batch_ref(
                 self._batch_repo, input.workspace_id, input.external_batch_ref

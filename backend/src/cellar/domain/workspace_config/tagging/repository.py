@@ -101,7 +101,9 @@ class TagLinkRepository(Protocol):
         match_all: bool,
     ) -> list[uuid.UUID]: ...
 
-    async def repoint(self, from_tag_id: uuid.UUID, to_tag_id: uuid.UUID) -> None: ...
+    async def repoint(
+        self, workspace_id: uuid.UUID, from_tag_id: uuid.UUID, to_tag_id: uuid.UUID
+    ) -> None: ...
 
 
 @runtime_checkable

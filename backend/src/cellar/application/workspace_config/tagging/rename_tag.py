@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_admin
+from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -44,6 +44,7 @@ class RenameTag:
         self, input: RenameTagCommand, auth: AuthContext | None = None
     ) -> Result[Tag, DomainError]:
         require_admin(auth)
+        require_same_workspace(auth, input.workspace_id)
         try:
             new_name = TagName(key=input.key, value=input.value)
         except ValueError as exc:

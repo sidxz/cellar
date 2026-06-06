@@ -9,7 +9,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.admin.admin_delete_registry import get_entry
 from cellar.application.admin.cascade_service import CascadeService
 from cellar.application.admin.tier2_entities import TIER2_ENTITY_TYPES
-from cellar.application.auth import AuthContext, require_admin
+from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.cascade import CascadeNode
@@ -37,6 +37,7 @@ class CascadePreview:
         auth: AuthContext | None = None,
     ) -> Result[CascadeNode, DomainError]:
         require_admin(auth)
+        require_same_workspace(auth, input.workspace_id)
         if input.entity_type not in TIER2_ENTITY_TYPES:
             return Failure(NotFoundError("entity_type", input.entity_type))
         entry = get_entry(input.entity_type)

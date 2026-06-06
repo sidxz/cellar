@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -74,6 +74,7 @@ class AliquotSample:
         self, input: AliquotSampleCommand, auth: AuthContext | None = None
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             sample = await self._repo.find_by_id_in_workspace(input.workspace_id, input.sample_id)
             if sample is None:
@@ -105,6 +106,7 @@ class MoveSample:
         auth: AuthContext | None = None,
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             sample = await self._repo.find_by_id_in_workspace(input.workspace_id, input.sample_id)
             if sample is None:
@@ -140,6 +142,7 @@ class QuarantineSample:
         auth: AuthContext | None = None,
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             sample = await self._repo.find_by_id_in_workspace(input.workspace_id, input.sample_id)
             if sample is None:
@@ -169,6 +172,7 @@ class ClearQuarantineSample:
         auth: AuthContext | None = None,
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             sample = await self._repo.find_by_id_in_workspace(input.workspace_id, input.sample_id)
             if sample is None:
@@ -198,6 +202,7 @@ class DisposeSample:
         auth: AuthContext | None = None,
     ) -> Result[Sample, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             sample = await self._repo.find_by_id_in_workspace(input.workspace_id, input.sample_id)
             if sample is None:

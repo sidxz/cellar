@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.cdd_import.cdd_plate_import_orchestrator import (
     CddPlateImportOrchestrator,
 )
@@ -63,6 +63,7 @@ class GetCddPlateImportRuntimeStatus:
         auth: AuthContext | None = None,
     ) -> Result[CddPlateImportStatusView, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
 
         try:
             progress = await self._orchestrator.get_progress(input.workflow_id)

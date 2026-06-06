@@ -1574,7 +1574,7 @@ class TestAutoCreateMissingBatches:
 
         mock_uc = AsyncMock()
 
-        async def _side_effect(cmd):
+        async def _side_effect(cmd, auth=None):
             return _Success(EnsureBatchExistsOutcome(batch=batch, created=created))
 
         mock_uc.side_effect = _side_effect
