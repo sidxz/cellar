@@ -2,11 +2,7 @@
 
 import { SearchCombobox } from "@/shared/components/search-combobox";
 import { useDebounce } from "@/shared/hooks/use-debounce";
-import {
-  PICKER_RESULT_LIMIT,
-  SEARCH_DEBOUNCE_MS,
-  SEARCH_MIN_QUERY_LEN,
-} from "@/shared/lib/timing";
+import { PICKER_RESULT_LIMIT, SEARCH_DEBOUNCE_MS, SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import { useCallback, useState } from "react";
 import { useBatchesGlobal } from "../hooks/use-batches";
 

@@ -22,7 +22,6 @@ interface StructureThumbnailProps {
 function StructureThumbnailInner({ smiles, size = 48, className }: StructureThumbnailProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-render the thumbnail only when smiles/size change; `setBlobUrl` is a stable state setter.
   useEffect(() => {
     let cancelled = false;
     let url: string | null = null;
@@ -68,10 +67,7 @@ function StructureThumbnailInner({ smiles, size = 48, className }: StructureThum
 
   if (!blobUrl) {
     return (
-      <div
-        className={cn("rounded bg-muted", className)}
-        style={{ width: size, height: size }}
-      />
+      <div className={cn("rounded bg-muted", className)} style={{ width: size, height: size }} />
     );
   }
 

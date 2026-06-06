@@ -84,9 +84,7 @@ function LocationNode({
             className="h-5 w-5"
             onClick={() => setExpanded(!expanded)}
           >
-            <ChevronRight
-              className={cn("h-3 w-3 transition-transform", expanded && "rotate-90")}
-            />
+            <ChevronRight className={cn("h-3 w-3 transition-transform", expanded && "rotate-90")} />
           </Button>
         ) : (
           <div className="h-5 w-5" />

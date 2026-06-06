@@ -80,8 +80,7 @@ function describeSource(source: SourceEntry, runInfoById: Map<string, RunInfo>):
     case "collection": {
       parts.push("Collection");
       const collectionLabel =
-        source.description?.trim() ||
-        (source.collection_id ? shortId(source.collection_id) : null);
+        source.description?.trim() || (source.collection_id ? shortId(source.collection_id) : null);
       if (collectionLabel) parts.push(collectionLabel);
       break;
     }
