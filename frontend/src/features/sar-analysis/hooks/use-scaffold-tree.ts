@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { useJobPoll } from "@/shared/hooks/use-job-poll";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
 import type {
   ScaffoldTreeJob,
   ScaffoldTreeResult,
@@ -67,7 +68,7 @@ export function useScaffoldTree(params: UseScaffoldTreeParams): UseScaffoldTreeR
     queryFn: () =>
       startFn(collectionId ? { collection_id: collectionId } : { molecule_ids: moleculeIds ?? [] }),
     enabled: queryEnabled,
-    staleTime: 5 * 60_000,
+    staleTime: STALE_TIME.MEDIUM,
   });
 
   const inlineTree = start.data?.tree ?? null;

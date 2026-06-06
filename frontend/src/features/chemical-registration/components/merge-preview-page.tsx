@@ -1,10 +1,10 @@
 "use client";
 
 import { StructureThumbnail } from "@/shared/components/chemistry";
-import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, Loader2, ShieldAlert, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {

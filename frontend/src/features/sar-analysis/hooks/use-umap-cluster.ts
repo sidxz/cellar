@@ -12,6 +12,7 @@ import {
 } from "@/features/sar-analysis/types";
 import { useJobPoll } from "@/shared/hooks/use-job-poll";
 import type { StartUmapClusterBody, StartUmapClusterResponse } from "@/shared/lib/api/model";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
 
 // ---------------------------------------------------------------------------
 // Input / output types
@@ -112,7 +113,7 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
         threshold: threshold ?? null,
       }),
     enabled: queryEnabled,
-    staleTime: 5 * 60_000,
+    staleTime: STALE_TIME.MEDIUM,
   });
 
   const inlineResult: UmapResult | null = start.data?.result

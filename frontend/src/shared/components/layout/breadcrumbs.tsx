@@ -1,10 +1,13 @@
 "use client";
 
 import { navigation } from "@/shared/lib/navigation";
+import {
+  useBreadcrumbOverrides,
+  useBreadcrumbTrailValue,
+} from "@/shared/lib/stores/breadcrumb-store";
 import { ChevronRight, Home } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useBreadcrumbOverrides, useBreadcrumbTrailValue } from "./breadcrumb-context";
 
 const allNavItems = navigation.flatMap((g) => g.items.flatMap((i) => [i, ...(i.children ?? [])]));
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 
 export interface ProjectScopeStats {
@@ -29,11 +29,11 @@ export function useProjectScopeStats(projectIds: string[]) {
     queryKey: [...STATS_KEY, { projectIds: sortedIds }],
     queryFn: () =>
       customInstance<Record<string, ProjectScopeStats>>({
-        url: "/api/v1/projects/stats",
+        url: `${API_V1}/projects/stats`,
         method: "GET",
         params: { project_ids: sortedIds },
       }),
     enabled,
-    staleTime: 60_000,
+    // staleTime omitted — inherits the global default (STALE_TIME.DEFAULT, 60s).
   });
 }

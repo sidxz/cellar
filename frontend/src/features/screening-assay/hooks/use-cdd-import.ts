@@ -1,6 +1,7 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -55,11 +56,11 @@ export function useCddProtocols(enabled: boolean) {
     queryKey: CDD_PROTOCOLS_KEY,
     queryFn: () =>
       customInstance<CddProtocolSummary[]>({
-        url: "/api/v1/cdd-import/protocols",
+        url: `${API_V1}/cdd-import/protocols`,
         method: "GET",
       }),
     enabled,
-    staleTime: 5 * 60 * 1000, // 5 min — CDD protocols don't change often
+    staleTime: STALE_TIME.MEDIUM, // CDD protocols don't change often
   });
 }
 
@@ -68,11 +69,11 @@ export function useCddProtocolPreview(externalId: number | null) {
     queryKey: ["cdd-import", "preview", externalId],
     queryFn: () =>
       customInstance<CddProtocolMappingResult>({
-        url: `/api/v1/cdd-import/protocols/${externalId}/preview`,
+        url: `${API_V1}/cdd-import/protocols/${externalId}/preview`,
         method: "GET",
       }),
     enabled: externalId !== null,
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME.MEDIUM,
   });
 }
 
@@ -87,7 +88,7 @@ export function useImportCddProtocol() {
       nameOverride?: string;
     }) =>
       customInstance({
-        url: `/api/v1/cdd-import/protocols/${externalId}`,
+        url: `${API_V1}/cdd-import/protocols/${externalId}`,
         method: "POST",
         data: nameOverride ? { name_override: nameOverride } : undefined,
       }),

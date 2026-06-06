@@ -2,8 +2,9 @@
 
 import type { Molecule } from "@/features/chemical-registration/types";
 import { CardGrid } from "@/features/research-organization/components/results/card-grid";
+import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 
 interface ClusterSelectionPaneProps {
   allMolecules: Molecule[];
@@ -13,16 +14,7 @@ interface ClusterSelectionPaneProps {
 
 export function ClusterSelectionPane({ allMolecules, basketIds }: ClusterSelectionPaneProps) {
   const router = useRouter();
-  const [gridSelectedIds, setGridSelectedIds] = useState<Set<string>>(new Set());
-
-  const handleSelectChange = useCallback((moleculeId: string, selected: boolean) => {
-    setGridSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (selected) next.add(moleculeId);
-      else next.delete(moleculeId);
-      return next;
-    });
-  }, []);
+  const { selected: gridSelectedIds, set: handleSelectChange } = useSelectionSet<string>();
 
   const handleOpen = useCallback(
     (moleculeId: string) => router.push(`/compounds/${moleculeId}`),
