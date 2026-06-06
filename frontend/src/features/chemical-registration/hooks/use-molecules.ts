@@ -3,6 +3,7 @@
 import { renderToast } from "@/features/inventory/components/mirror-summary-toast";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import type { MoleculeResponse, StructureSearchResponse } from "@/shared/lib/api/model";
 import type { AddIdentifierResponse } from "@/shared/lib/api/model/addIdentifierResponse";
 import { showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
@@ -77,22 +78,16 @@ export function useMoleculeSearch(q: string) {
   });
 }
 
-export interface SimilaritySearchResult {
-  molecule: Molecule;
-  similarity: number;
-}
-
+/**
+ * Client-side search row: a molecule plus an optional similarity score. There
+ * is no backend counterpart (the API splits results into `molecules` and
+ * `similarity_results`); we normalise both shapes into this for the UI. The
+ * molecule field carries the generated `MoleculeResponse` shape.
+ */
 export type SearchResult = {
-  molecule: Molecule;
+  molecule: MoleculeResponse;
   similarity: number | null;
 };
-
-interface StructureSearchResponse {
-  search_type: string;
-  molecules: Molecule[] | null;
-  similarity_results: SimilaritySearchResult[] | null;
-  count: number;
-}
 
 export function useSearchMolecules(
   params:

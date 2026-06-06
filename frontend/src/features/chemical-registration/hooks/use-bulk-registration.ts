@@ -2,47 +2,19 @@
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { getApiBaseUrl } from "@/shared/lib/api/custom-instance";
+import type {
+  BulkRegistrationAcceptedResponse,
+  BulkRegistrationStatusResponse,
+  BulkRegistrationResponse as GeneratedBulkRegistrationResponse,
+} from "@/shared/lib/api/model";
 import { getSentinelClient } from "@/shared/lib/auth/config";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MOLECULES_KEY } from "./query-keys";
 
-export interface BulkRegistrationItemResult {
-  row_index: number;
-  success: boolean;
-  is_new: boolean;
-  molecule_id: string | null;
-  batch_id: string | null;
-  batch_number: string | null;
-  salt_matched: boolean;
-  error: string | null;
-}
-
-export interface BulkRegistrationResponse {
-  id: string;
-  status: string;
-  total_count: number;
-  registered_count: number;
-  duplicate_count: number;
-  error_count: number;
-  items: BulkRegistrationItemResult[];
-}
-
-export interface BulkRegistrationAccepted {
-  workflow_id: string;
-  status: string;
-  message: string;
-}
-
-export interface BulkRegistrationStatus {
-  bulk_reg_id: string;
-  status: string;
-  total_count: number;
-  registered_count: number;
-  duplicate_count: number;
-  error_count: number;
-  chunks_processed: number;
-  chunks_total: number;
-}
+// Backend DTOs — aliased from the orval-generated model (source of truth).
+export type BulkRegistrationResponse = GeneratedBulkRegistrationResponse;
+export type BulkRegistrationAccepted = BulkRegistrationAcceptedResponse;
+export type BulkRegistrationStatus = BulkRegistrationStatusResponse;
 
 /** Result type: either sync (201 with full results) or async (202 with workflow_id). */
 export type BulkRegistrationResult =

@@ -87,13 +87,5 @@ export interface MergeInput {
   notes?: string | null;
 }
 
-export interface MergeEventResponse {
-  id: string;
-  source_molecule_id: string;
-  target_molecule_id: string;
-  reason: string;
-  merged_by: string;
-  merged_at: string;
-  snapshot: Record<string, unknown>;
-  notes: string | null;
-}
+// Backend DTO — aliased from the orval-generated model (source of truth).
+export type MergeEventResponse = import("@/shared/lib/api/model").MergeEventResponse;

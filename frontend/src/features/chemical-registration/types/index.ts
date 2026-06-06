@@ -110,18 +110,8 @@ export interface BatchInput {
   appearance?: string | null;
 }
 
-export interface RegistrationResponse {
-  molecule: Molecule;
-  is_new: boolean;
-  qc_warnings: string[];
-  batch?: { id: string; batch_number: string } | null;
-  batch_skipped: boolean;
-  action: string;
-  needs_merge_confirmation: boolean;
-  matched_molecule_id: string | null;
-  disclosure_id: string | null;
-  conflict_reason: string | null;
-}
+// Backend DTO — aliased from the orval-generated model (source of truth).
+export type RegistrationResponse = import("@/shared/lib/api/model").RegistrationResponse;
 
 export interface RegisterMoleculeInput {
   name: string;

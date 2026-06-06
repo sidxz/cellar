@@ -1,3 +1,11 @@
+import type {
+  BulkRegItemRowResponse,
+  ConfirmMergesResponse as GeneratedConfirmMergesResponse,
+  ListBulkRegItemsResponse as GeneratedListBulkRegItemsResponse,
+  MergeDecisionResult as GeneratedMergeDecisionResult,
+  PreviewBulkRegistrationResponse as GeneratedPreviewBulkRegistrationResponse,
+  PreviewItem as GeneratedPreviewItem,
+} from "@/shared/lib/api/model";
 import type { BatchInput, Molecule } from "./index";
 
 export type WizardMode = "single" | "bulk";
@@ -53,28 +61,11 @@ export interface BulkInput {
 }
 
 // ─── Preview (parse-only) result returned by /preview ───────────────────────
+// Backend DTOs — aliased from the orval-generated model (source of truth).
 
-export interface PreviewItem {
-  row_index: number;
-  name: string | null;
-  smiles: string | null;
-  molecule_type: string;
-  external_ids: { identifier: string; identifier_type: string }[];
-  amount_value: number | null;
-  amount_unit: string;
-  salt_code: string | null;
-  salt_stoichiometry: number;
-  purity: number | null;
-  batch_source: string;
-  appearance: string | null;
-  error: string | null;
-}
+export type PreviewItem = GeneratedPreviewItem;
 
-export interface PreviewBulkRegistrationResponse {
-  total_count: number;
-  error_count: number;
-  items: PreviewItem[];
-}
+export type PreviewBulkRegistrationResponse = GeneratedPreviewBulkRegistrationResponse;
 
 // ─── Per-row results returned by /{wf}/items ────────────────────────────────
 
@@ -86,24 +77,12 @@ export type BulkRegItemAction =
   | "conflict"
   | "error";
 
-export interface BulkRegItemRow {
-  row_index: number;
-  action: BulkRegItemAction;
-  success: boolean;
-  molecule_id: string | null;
-  molecule_name: string | null;
-  registration_number: string | null;
-  batch_id: string | null;
-  batch_number: string | null;
-  error: string | null;
-}
+// Backend DTOs — aliased from the orval-generated model (source of truth).
+// `action` is typed `string` on the wire; the BulkRegItemAction union above is
+// the client-side narrowing used for the results filter tabs.
+export type BulkRegItemRow = BulkRegItemRowResponse;
 
-export interface ListBulkRegItemsResponse {
-  rows: BulkRegItemRow[];
-  total: number;
-  limit: number;
-  offset: number;
-}
+export type ListBulkRegItemsResponse = GeneratedListBulkRegItemsResponse;
 
 export type JobStatus = "pending" | "processing" | "completed" | "failed";
 
@@ -135,20 +114,10 @@ export interface MergeDecision {
   reason?: string;
 }
 
-export interface MergeDecisionResult {
-  disclosure_id: string;
-  action: string;
-  success: boolean;
-  error: string | null;
-  merged_into_molecule_id: string | null;
-}
+// Backend DTOs — aliased from the orval-generated model (source of truth).
+export type MergeDecisionResult = GeneratedMergeDecisionResult;
 
-export interface ConfirmMergesResponse {
-  results: MergeDecisionResult[];
-  confirmed_count: number;
-  rejected_count: number;
-  error_count: number;
-}
+export type ConfirmMergesResponse = GeneratedConfirmMergesResponse;
 
 // Re-export BatchInput so wizard code can import from this module
 export type { Molecule, BatchInput };

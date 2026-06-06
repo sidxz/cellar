@@ -32,7 +32,7 @@ function SingleSuccessCard() {
 
   if (!singleResult) return null;
 
-  const action = singleResult.action;
+  const action = singleResult.action ?? "";
   const regNumber = singleResult.molecule.registration_number;
 
   const { icon, message } = getActionDisplay(action, regNumber);

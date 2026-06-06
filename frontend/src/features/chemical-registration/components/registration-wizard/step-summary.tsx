@@ -59,7 +59,8 @@ function SingleSummary() {
     );
   }
 
-  const { molecule, action, batch } = singleResult;
+  const { molecule, batch } = singleResult;
+  const action = singleResult.action ?? "";
   const actionLabel = ACTION_LABELS[action] ?? action;
 
   function handleViewCompound() {
@@ -431,8 +432,8 @@ function BulkResultsTable({
   );
 }
 
-function ActionPill({ action }: { action: BulkRegItemAction }) {
-  const map: Record<BulkRegItemAction, { label: string; className: string }> = {
+function ActionPill({ action }: { action: string }) {
+  const map: Record<string, { label: string; className: string }> = {
     registered: {
       label: "Registered",
       className: "text-emerald-600 bg-emerald-500/10 border-emerald-500/30",
@@ -458,7 +459,10 @@ function ActionPill({ action }: { action: BulkRegItemAction }) {
       className: "text-destructive bg-destructive/10 border-destructive/30",
     },
   };
-  const cfg = map[action];
+  const cfg = map[action] ?? {
+    label: action || "Unknown",
+    className: "text-muted-foreground bg-muted border-border",
+  };
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${cfg.className}`}

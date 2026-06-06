@@ -147,14 +147,14 @@ export function StepPreview() {
                       {item.smiles ? truncate(item.smiles, 40) : "\u2014"}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.external_ids.length > 0
+                      {item.external_ids && item.external_ids.length > 0
                         ? item.external_ids
                             .map((e) => `${e.identifier_type}:${e.identifier}`)
                             .join(", ")
                         : "\u2014"}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.amount_value !== null
+                      {item.amount_value != null
                         ? `${item.amount_value} ${item.amount_unit}`
                         : "\u2014"}
                     </td>
@@ -162,7 +162,7 @@ export function StepPreview() {
                       {item.salt_code ?? "\u2014"}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.purity !== null ? `${item.purity}%` : "\u2014"}
+                      {item.purity != null ? `${item.purity}%` : "\u2014"}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
                       {item.batch_source ?? "\u2014"}
