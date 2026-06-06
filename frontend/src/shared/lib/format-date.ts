@@ -58,3 +58,42 @@ export function formatRelativeDate(input: string | Date | null | undefined): str
   if (weeks < 8) return `${weeks}w ago`;
   return formatDate(d);
 }
+
+/**
+ * Day-granular relative date for *date-only* values (no time component), e.g.
+ * a "last run on" calendar date. Unlike {@link formatRelativeDate} this has no
+ * sub-day buckets and labels the current day "today" rather than "Xh ago":
+ *   same day → "today"
+ *   1 day    → "yesterday"
+ *   < 14 d   → "Xd ago"
+ *   < 60 d   → "Xw ago"
+ *   else     → calendar date, omitting the year when it's the current year
+ *
+ * A bare `YYYY-MM-DD` string is interpreted at local midnight so the day
+ * arithmetic doesn't drift across the UTC boundary.
+ */
+export function formatRelativeDay(input: string | Date | null | undefined): string {
+  if (input == null) return "";
+  // Anchor a bare date string at local midnight; pass Date / full timestamps through.
+  const d =
+    typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)
+      ? new Date(`${input}T00:00:00`)
+      : toDate(input);
+  if (!d || Number.isNaN(d.getTime())) return "";
+
+  const startOfDay = new Date(d);
+  startOfDay.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.floor((today.getTime() - startOfDay.getTime()) / 86_400_000);
+  if (diffDays <= 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 14) return `${diffDays}d ago`;
+  if (diffDays < 60) return `${Math.floor(diffDays / 7)}w ago`;
+  return startOfDay.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: today.getFullYear() === startOfDay.getFullYear() ? undefined : "numeric",
+  });
+}

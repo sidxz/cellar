@@ -204,11 +204,7 @@ export interface SampleListItem {
   created_at: string;
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  next_cursor: string | null;
-  total_count: number | null;
-}
+export type { PaginatedResponse } from "@/shared/types/pagination";
 
 export interface ActivityItem {
   description: string;

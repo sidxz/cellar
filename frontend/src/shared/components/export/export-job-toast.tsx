@@ -1,4 +1,5 @@
 "use client";
+import { formatFileSize } from "@/shared/lib/format-number";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import type { ExportJob } from "./types";
@@ -33,7 +34,8 @@ export function ExportJobToast({ job, error, onCancel, onDownload, onDismiss }: 
       // close icon to dismiss. The Cancel button used to live on this
       // toast and would 409 the BE — we explicitly clear `cancel` so
       // sonner doesn't carry it across from the loading toast.
-      toast.success(`Exported ${formatBytes(job.byte_size)} — ${job.filename}`, {
+      const sizeLabel = job.byte_size != null ? formatFileSize(job.byte_size) : "—";
+      toast.success(`Exported ${sizeLabel} — ${job.filename}`, {
         id: "export-job",
         duration: 30_000,
         action: { label: "Download", onClick: onDownload },
@@ -60,16 +62,4 @@ export function ExportJobToast({ job, error, onCancel, onDownload, onDismiss }: 
     }
   }, [job, error, onCancel, onDownload, onDismiss]);
   return null;
-}
-
-function formatBytes(n: number | null): string {
-  if (!n) return "—";
-  const u = ["B", "KB", "MB", "GB"];
-  let size = n;
-  let i = 0;
-  while (size >= 1024 && i < u.length - 1) {
-    size /= 1024;
-    i++;
-  }
-  return `${size.toFixed(1)} ${u[i]}`;
 }

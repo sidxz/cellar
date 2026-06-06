@@ -288,7 +288,7 @@ function Field({
         readOnly
         aria-readonly="true"
         value={value}
-        className={`bg-muted cursor-not-allowed ${monospace ? "font-mono text-xs" : ""}`}
+        className={cn("bg-muted cursor-not-allowed", monospace && "font-mono text-xs")}
       />
     </div>
   );

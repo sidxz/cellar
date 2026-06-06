@@ -21,6 +21,7 @@
  */
 
 import { Badge } from "@/shared/components/ui/badge";
+import { cn } from "@/shared/lib/utils";
 import { CURVE_CLASS_LABELS, type CurveClass } from "../types";
 
 const FULL_STYLES: Record<string, string> = {
@@ -58,10 +59,7 @@ export function CurveClassBadge({
   if (!curveClass) {
     if (renderNullAs === "nothing") return null;
     return (
-      <Badge
-        variant="outline"
-        className={`text-muted-foreground${className ? ` ${className}` : ""}`}
-      >
+      <Badge variant="outline" className={cn("text-muted-foreground", className)}>
         --
       </Badge>
     );
@@ -72,11 +70,7 @@ export function CurveClassBadge({
     const cls = COMPACT_STYLES[key] ?? COMPACT_STYLES.inactive;
     const letter = key.charAt(0).toUpperCase();
     return (
-      <Badge
-        className={`ml-1.5 text-[10px] px-1 py-0 border-0 ${cls}${
-          className ? ` ${className}` : ""
-        }`}
-      >
+      <Badge className={cn("ml-1.5 text-[10px] px-1 py-0 border-0", cls, className)}>
         {letter}
       </Badge>
     );
@@ -85,7 +79,7 @@ export function CurveClassBadge({
   const cls = FULL_STYLES[key] ?? FULL_STYLES.inactive;
   const label = (CURVE_CLASS_LABELS as Record<string, string>)[curveClass] ?? curveClass;
   return (
-    <Badge variant="outline" className={`${cls}${className ? ` ${className}` : ""}`}>
+    <Badge variant="outline" className={cn(cls, className)}>
       {label}
     </Badge>
   );

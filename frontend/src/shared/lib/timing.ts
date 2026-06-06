@@ -9,6 +9,20 @@ export const COPY_FEEDBACK_MS = 1500;
 export const SUCCESS_DIALOG_AUTOCLOSE_MS = 1500;
 
 // ---------------------------------------------------------------------------
+// Search-as-you-type defaults
+//
+// Shared cadence + page-size for typeahead pickers (molecule/batch selectors,
+// search inputs) so the "debounce the keystrokes, cap the result list" UX
+// decision lives in one place instead of as bare literals per component.
+// ---------------------------------------------------------------------------
+
+/** Debounce delay before a typeahead picker fires its search query. */
+export const SEARCH_DEBOUNCE_MS = 300;
+
+/** Default number of results a typeahead picker fetches per query. */
+export const PICKER_RESULT_LIMIT = 20;
+
+// ---------------------------------------------------------------------------
 // Async-job poll cadence
 //
 // Shared cadence for the "start returns a job id, then poll a /status endpoint

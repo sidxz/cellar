@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatDate, formatDateTime, formatRelativeDate } from "./format-date";
+import { formatDate, formatDateTime, formatRelativeDate, formatRelativeDay } from "./format-date";
 
 describe("formatDate", () => {
   it("formats a Date object", () => {
@@ -97,5 +97,58 @@ describe("formatRelativeDate", () => {
 
   it("returns empty string for null", () => {
     expect(formatRelativeDate(null)).toBe("");
+  });
+});
+
+describe("formatRelativeDay", () => {
+  // Pin to a fixed *local* noon so date-only strings (parsed at local midnight)
+  // resolve to deterministic day offsets regardless of the runner's timezone.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 4, 12, 12, 0, 0)); // May 12 2026, local noon
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('returns "today" for the current day', () => {
+    expect(formatRelativeDay("2026-05-12")).toBe("today");
+  });
+
+  it('returns "today" for a future date (clamped)', () => {
+    expect(formatRelativeDay("2026-05-20")).toBe("today");
+  });
+
+  it('returns "yesterday" for the prior day', () => {
+    expect(formatRelativeDay("2026-05-11")).toBe("yesterday");
+  });
+
+  it('returns "Xd ago" within two weeks', () => {
+    expect(formatRelativeDay("2026-05-07")).toBe("5d ago");
+  });
+
+  it('returns "Xw ago" within ~two months', () => {
+    expect(formatRelativeDay("2026-04-12")).toBe("4w ago");
+  });
+
+  it("falls back to a calendar date omitting the year in the current year", () => {
+    const result = formatRelativeDay("2026-01-01");
+    expect(result).toMatch(/Jan\s+1/);
+    expect(result).not.toMatch(/2026/);
+    expect(result).not.toMatch(/ago/);
+  });
+
+  it("includes the year for a different-year fallback", () => {
+    const result = formatRelativeDay("2024-01-01");
+    expect(result).toMatch(/Jan\s+1,\s+2024/);
+  });
+
+  it("returns empty string for null", () => {
+    expect(formatRelativeDay(null)).toBe("");
+  });
+
+  it("returns empty string for an unparseable value", () => {
+    expect(formatRelativeDay("not-a-date")).toBe("");
   });
 });

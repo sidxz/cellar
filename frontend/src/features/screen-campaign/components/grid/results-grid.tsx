@@ -27,6 +27,7 @@ import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { Badge } from "@/shared/components/ui/badge";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
+import { groupBy } from "@/shared/lib/group-by";
 
 import {
   CurveClassBadge,
@@ -297,12 +298,7 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
     // 3. Per-channel grouped by protocol — mirrors the search-results layout
     //    so chemists comparing multiple protocols can scan "NadD-Sumo HTS"
     //    columns separately from "NadD Dose Response".
-    const groupedChannels = new Map<string, typeof sortedChannels>();
-    for (const ch of sortedChannels) {
-      const arr = groupedChannels.get(ch.protocol_id) ?? [];
-      arr.push(ch);
-      groupedChannels.set(ch.protocol_id, arr);
-    }
+    const groupedChannels = groupBy(sortedChannels, (ch) => ch.protocol_id);
 
     for (const [protoId, channels] of groupedChannels) {
       const protoName = protocolNameById.get(protoId) ?? "Protocol";

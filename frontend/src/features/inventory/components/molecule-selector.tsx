@@ -4,6 +4,7 @@ import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-mo
 import type { Molecule } from "@/features/chemical-registration/types";
 import { SearchCombobox } from "@/shared/components/search-combobox";
 import { useDebounce } from "@/shared/hooks/use-debounce";
+import { SEARCH_DEBOUNCE_MS } from "@/shared/lib/timing";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 interface MoleculeSelectorProps {
@@ -13,7 +14,7 @@ interface MoleculeSelectorProps {
 
 export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const debouncedTerm = useDebounce(searchTerm, 300);
+  const debouncedTerm = useDebounce(searchTerm, SEARCH_DEBOUNCE_MS);
   const [isOpen, setIsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 

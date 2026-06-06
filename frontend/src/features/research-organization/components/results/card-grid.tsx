@@ -1,6 +1,7 @@
 "use client";
 
 import type { Molecule } from "@/features/chemical-registration/types";
+import { EmptyState } from "@/shared/components/empty-state";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FolderOpen } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -115,10 +116,7 @@ export function CardGrid({
           ))}
         </div>
       ) : !molecules.length ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-          <FolderOpen className="h-10 w-10 text-muted-foreground/40" />
-          <p className="mt-3 text-sm text-muted-foreground">No molecules to display.</p>
-        </div>
+        <EmptyState icon={FolderOpen} title="No molecules to display." />
       ) : useFallback ? (
         <>
           {rows.map((row, rowIdx) => (

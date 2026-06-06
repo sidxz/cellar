@@ -2,6 +2,7 @@
 
 import { SearchCombobox } from "@/shared/components/search-combobox";
 import { useDebounce } from "@/shared/hooks/use-debounce";
+import { PICKER_RESULT_LIMIT, SEARCH_DEBOUNCE_MS } from "@/shared/lib/timing";
 import { useCallback, useState } from "react";
 import { useBatchesGlobal } from "../hooks/use-batches";
 
@@ -20,10 +21,13 @@ interface BatchSearchPickerProps {
  */
 export function BatchSearchPicker({ value, onSelect, onClear, onEnter }: BatchSearchPickerProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const debounced = useDebounce(searchTerm, 300);
+  const debounced = useDebounce(searchTerm, SEARCH_DEBOUNCE_MS);
   const [isOpen, setIsOpen] = useState(false);
 
-  const { data, isLoading } = useBatchesGlobal({ search: debounced, page_size: 20 });
+  const { data, isLoading } = useBatchesGlobal({
+    search: debounced,
+    page_size: PICKER_RESULT_LIMIT,
+  });
   const results = debounced.length >= 2 ? (data?.items ?? []) : [];
 
   const handleSelect = useCallback(

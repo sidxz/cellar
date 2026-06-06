@@ -3,7 +3,8 @@
 import { cancelScaffoldTreeJobApiV1ScaffoldTreeJobsJobIdCancelPost } from "@/shared/lib/api/scaffold-tree/scaffold-tree";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+
+import { dismissToast, showLoading, showSuccess } from "@/shared/lib/toast";
 
 import type { Molecule } from "@/features/chemical-registration/types";
 import { CardGrid } from "@/features/research-organization/components/results/card-grid";
@@ -12,6 +13,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/shared/components/ui/resizable";
+import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { cn } from "@/shared/lib/utils";
 
 import { useCollectionScaffoldSearch } from "../hooks/use-collection-scaffold-search";
@@ -142,7 +144,7 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
   const { subMode, setSubMode } = useTreeSubMode();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selectedScaffold, setSelectedScaffold] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const { selected: selectedIds, set: handleSelectChange } = useSelectionSet<string>();
   const [colorBy, setColorBy] = useState<string | null>(null);
   const [minMembers, setMinMembers] = useState<number>(1);
 
@@ -161,15 +163,6 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
 
   const handleSelect = useCallback((scaffoldSmiles: string) => {
     setSelectedScaffold((prev) => (prev === scaffoldSmiles ? null : scaffoldSmiles));
-  }, []);
-
-  const handleSelectChange = useCallback((moleculeId: string, selected: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (selected) next.add(moleculeId);
-      else next.delete(moleculeId);
-      return next;
-    });
   }, []);
 
   const handleOpen = useCallback(
@@ -340,7 +333,7 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
     const isWorking = isStarting || (isPolling && !tree);
     if (!isWorking) {
       if (toastScheduledRef.current) {
-        toast.dismiss(SCAFFOLD_TREE_TOAST_ID);
+        dismissToast(SCAFFOLD_TREE_TOAST_ID);
         toastScheduledRef.current = false;
       }
       return;
@@ -350,7 +343,7 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
       // same tick that the timer fired, skip the toast entirely.
       if (!isWorking) return;
       toastScheduledRef.current = true;
-      toast.loading("Computing scaffold tree…", {
+      showLoading("Computing scaffold tree…", {
         id: SCAFFOLD_TREE_TOAST_ID,
         duration: Number.POSITIVE_INFINITY,
         action: {
@@ -359,10 +352,10 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
             if (jobId) {
               void cancelScaffoldTreeJobApiV1ScaffoldTreeJobsJobIdCancelPost(jobId);
             }
-            toast.dismiss(SCAFFOLD_TREE_TOAST_ID);
+            dismissToast(SCAFFOLD_TREE_TOAST_ID);
             // id makes the success toast idempotent — rapid double-clicks
             // replace rather than stack a second notification.
-            toast.success("Scaffold tree cancelled", { id: SCAFFOLD_TREE_TOAST_ID });
+            showSuccess("Scaffold tree cancelled", { id: SCAFFOLD_TREE_TOAST_ID });
             toastScheduledRef.current = false;
           },
         },

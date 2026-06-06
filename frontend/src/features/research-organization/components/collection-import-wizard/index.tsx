@@ -2,7 +2,6 @@
 
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import {
   useCollectionImportTemplates,
@@ -11,8 +10,9 @@ import {
 import { useCollection } from "@/features/research-organization/hooks/use-collections";
 import { useCommitCollectionImport } from "@/features/research-organization/hooks/use-commit-collection-import";
 import { usePreviewCollectionImport } from "@/features/research-organization/hooks/use-preview-collection-import";
-import { useBreadcrumbOverride } from "@/shared/components/layout/breadcrumb-context";
 import type { BulkAddRequestBody, BulkAddResponse, BulkAddRowBody } from "@/shared/lib/api/model";
+import { useBreadcrumbOverride } from "@/shared/lib/stores/breadcrumb-store";
+import { showSuccess } from "@/shared/lib/toast";
 
 import { ConfirmStep } from "./confirm-step";
 import { MappingStep } from "./mapping-step";
@@ -137,7 +137,7 @@ export function CollectionImportWizard({ collectionId }: { collectionId: string 
         // usage against it (used_in_this_collection).
         setSelectedTemplateId(created.id);
         setJustSavedTemplateId(created.id);
-        toast.success(`Template "${created.name}" saved`);
+        showSuccess(`Template "${created.name}" saved`);
       } catch (e) {
         setTemplateError(templateSaveErrorMessage(e, out.saveAsTemplate.name));
         return; // stay on mapping; nothing imported yet
