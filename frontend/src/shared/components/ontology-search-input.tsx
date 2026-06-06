@@ -5,11 +5,13 @@ import {
   useOntologyDescendants,
   useOntologySearch,
 } from "@/features/workspace-config/hooks/use-ontology-search";
+import { SearchCombobox } from "@/shared/components/search-combobox";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
+import { useClickOutside } from "@/shared/hooks/use-click-outside";
+import { useDebounce } from "@/shared/hooks/use-debounce";
 import { ChevronDown, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 export type { OntologyTerm };
 
@@ -79,15 +81,8 @@ function OntologyDropdown({
   const containerRef = useRef<HTMLDivElement>(null);
   const { data: descendants, isLoading } = useOntologyDescendants(ontology, rootConceptId);
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const closeDropdown = useCallback(() => setOpen(false), []);
+  useClickOutside(containerRef, closeDropdown, open);
 
   const addTerm = (term: OntologyTerm) => {
     if (!value.some((t) => t.term_id === term.term_id)) {
@@ -177,14 +172,8 @@ function OntologySearchMode({
   placeholder: string;
 }) {
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const debouncedQuery = useDebounce(query, 300);
   const [showDropdown, setShowDropdown] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 300);
-    return () => clearTimeout(timer);
-  }, [query]);
 
   const { data: results, isLoading } = useOntologySearch(
     debouncedQuery,
@@ -192,16 +181,6 @@ function OntologySearchMode({
     showDropdown,
     rootConceptId,
   );
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const addTerm = useCallback(
     (term: OntologyTerm) => {
@@ -238,7 +217,7 @@ function OntologySearchMode({
   );
 
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       {value.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">
           {value.map((term) => (
@@ -257,41 +236,33 @@ function OntologySearchMode({
         </div>
       )}
 
-      <Input
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
+      <SearchCombobox
+        searchValue={query}
+        onSearchChange={(value) => {
+          setQuery(value);
           setShowDropdown(true);
         }}
-        onFocus={() => {
+        items={filteredResults}
+        getItemKey={(term) => term.term_id}
+        renderItem={(term) => (
+          <span className="flex w-full items-center justify-between text-sm">
+            <span>{term.label}</span>
+            <Badge variant="outline" className="ml-2 text-[10px]">
+              {term.ontology_source}
+            </Badge>
+          </span>
+        )}
+        onSelect={addTerm}
+        isLoading={isLoading}
+        open={showDropdown && debouncedQuery.length >= 2}
+        onOpenChange={setShowDropdown}
+        onInputFocus={() => {
           if (query.length >= 2) setShowDropdown(true);
         }}
         placeholder={placeholder}
-      />
-
-      {showDropdown && debouncedQuery.length >= 2 && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-60 overflow-y-auto">
-          {isLoading ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">Searching...</div>
-          ) : filteredResults.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">No results found.</div>
-          ) : (
-            filteredResults.map((term) => (
-              <button
-                key={term.term_id}
-                type="button"
-                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
-                onClick={() => addTerm(term)}
-              >
-                <span>{term.label}</span>
-                <Badge variant="outline" className="ml-2 text-[10px]">
-                  {term.ontology_source}
-                </Badge>
-              </button>
-            ))
-          )}
-
-          {allowFreeText && query.trim() && (
+        emptyMessage="No results found."
+        footer={
+          allowFreeText && query.trim() ? (
             <div className="border-t">
               <Button
                 type="button"
@@ -303,9 +274,9 @@ function OntologySearchMode({
                 + Free Text: &quot;{query.trim()}&quot;
               </Button>
             </div>
-          )}
-        </div>
-      )}
+          ) : null
+        }
+      />
     </div>
   );
 }

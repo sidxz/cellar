@@ -2,10 +2,9 @@
 
 import { useMoleculeSearch } from "@/features/chemical-registration/hooks/use-molecules";
 import type { Molecule } from "@/features/chemical-registration/types";
-import { Input } from "@/shared/components/ui/input";
+import { SearchCombobox } from "@/shared/components/search-combobox";
 import { useDebounce } from "@/shared/hooks/use-debounce";
-import { X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 interface MoleculeSelectorProps {
   selectedId: string | null;
@@ -16,8 +15,6 @@ export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedTerm = useDebounce(searchTerm, 300);
   const [isOpen, setIsOpen] = useState(false);
-
-  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: results, isLoading } = useMoleculeSearch(debouncedTerm);
@@ -27,17 +24,6 @@ export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps
     () => results?.find((m) => m.id === selectedId) ?? null,
     [results, selectedId],
   );
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const handleSelect = useCallback(
     (mol: Molecule) => {
@@ -54,14 +40,10 @@ export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps
     inputRef.current?.focus();
   }, [onSelect]);
 
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setSearchTerm(e.target.value);
-      if (e.target.value.length >= 2) {
-        setIsOpen(true);
-      } else {
-        setIsOpen(false);
-      }
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchTerm(value);
+      setIsOpen(value.length >= 2);
       // If user types while a molecule is selected, clear the selection
       if (selectedMolecule) {
         onSelect(null);
@@ -77,58 +59,33 @@ export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps
   const showDropdown = isOpen && debouncedTerm.length >= 2;
 
   return (
-    <div ref={containerRef} className="relative min-w-[240px]">
-      <div className="relative">
-        <Input
-          ref={inputRef}
-          value={displayValue}
-          onChange={handleInputChange}
-          onFocus={() => {
-            if (debouncedTerm.length >= 2 && !selectedMolecule) {
-              setIsOpen(true);
-            }
-          }}
-          placeholder="Search compounds..."
-          className="pr-8"
-        />
-        {selectedMolecule && (
-          <button
-            type="button"
-            onClick={handleClear}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
-            aria-label="Clear selection"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      {showDropdown && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md">
-          {isLoading && <div className="px-3 py-2 text-sm text-muted-foreground">Searching...</div>}
-          {!isLoading && results && results.length === 0 && (
-            <div className="px-3 py-2 text-sm text-muted-foreground">No compounds found.</div>
-          )}
-          {results?.map((mol) => (
-            <button
-              key={mol.id}
-              type="button"
-              className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-              onMouseDown={(e) => {
-                // Use mousedown to fire before onBlur
-                e.preventDefault();
-                handleSelect(mol);
-              }}
-            >
-              <span className="font-mono text-xs text-muted-foreground">
-                {mol.registration_number}
-              </span>
-              <span className="mx-1.5">&mdash;</span>
-              <span>{mol.name}</span>
-            </button>
-          ))}
-        </div>
+    <SearchCombobox
+      className="min-w-[240px]"
+      searchValue={displayValue}
+      onSearchChange={handleSearchChange}
+      items={results ?? []}
+      getItemKey={(mol) => mol.id}
+      renderItem={(mol) => (
+        <span className="text-sm">
+          <span className="font-mono text-xs text-muted-foreground">{mol.registration_number}</span>
+          <span className="mx-1.5">&mdash;</span>
+          <span>{mol.name}</span>
+        </span>
       )}
-    </div>
+      onSelect={handleSelect}
+      isLoading={isLoading}
+      open={showDropdown}
+      onOpenChange={setIsOpen}
+      onInputFocus={() => {
+        if (debouncedTerm.length >= 2 && !selectedMolecule) {
+          setIsOpen(true);
+        }
+      }}
+      placeholder="Search compounds..."
+      emptyMessage="No compounds found."
+      onClear={selectedMolecule ? handleClear : undefined}
+      clearAriaLabel="Clear selection"
+      inputRef={inputRef}
+    />
   );
 }
