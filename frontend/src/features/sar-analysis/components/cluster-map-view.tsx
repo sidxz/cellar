@@ -69,7 +69,12 @@ function buildActivityPic50(
 function buildScaffoldByMol(molecules: Molecule[]): Record<string, string | null> {
   const out: Record<string, string | null> = {};
   for (const mol of molecules) {
-    const s = (mol as any).bemis_murcko_smiles;
+    // KNOWN-INERT: the backend domain model has bemis_murcko_smiles but no
+    // route serializes it, so this is always undefined and scaffold color
+    // mode never activates. Typed as an optional extension (not `as any`)
+    // pending a decision to either serialize the field or drop the mode —
+    // see docs/backlog/frontend-maintainability-low-findings.md.
+    const s = (mol as Molecule & { bemis_murcko_smiles?: string }).bemis_murcko_smiles;
     out[mol.id] = typeof s === "string" && s.length > 0 ? s : null;
   }
   return out;
