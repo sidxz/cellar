@@ -53,9 +53,7 @@ class GetRun:
             run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
                 return Failure(NotFoundError("Run", str(input.run_id)))
-            targets = await self._repo.find_target_refs_for_runs(
-                input.workspace_id, [run.id]
-            )
+            targets = await self._repo.find_target_refs_for_runs(input.workspace_id, [run.id])
             return Success(RunWithTargets(run=run, targets=targets.get(run.id, [])))
 
 

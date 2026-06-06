@@ -148,13 +148,9 @@ class VersionProtocol:
             await self._repo.save(new_protocol)
             # Carry forward the parent's DIRECT targets. Inherited targets are
             # not copied — they re-derive from the new version's own runs.
-            direct_ids = await self._repo.find_direct_target_ids(
-                input.workspace_id, protocol.id
-            )
+            direct_ids = await self._repo.find_direct_target_ids(input.workspace_id, protocol.id)
             for target_id in direct_ids:
-                await self._repo.add_direct_target(
-                    input.workspace_id, new_protocol.id, target_id
-                )
+                await self._repo.add_direct_target(input.workspace_id, new_protocol.id, target_id)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
@@ -449,13 +445,9 @@ class AddProtocolTarget:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             is_locked, status = state
             if is_locked:
-                return Failure(
-                    ConflictError("Protocol is locked — unlock to change targets")
-                )
+                return Failure(ConflictError("Protocol is locked — unlock to change targets"))
             if status == ProtocolStatus.RETIRED.value:
-                return Failure(
-                    ConflictError("Cannot change targets on a retired protocol")
-                )
+                return Failure(ConflictError("Cannot change targets on a retired protocol"))
             link = await self._repo.add_direct_target(
                 input.workspace_id, input.protocol_id, input.target_id
             )
@@ -503,13 +495,9 @@ class RemoveProtocolTarget:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             is_locked, status = state
             if is_locked:
-                return Failure(
-                    ConflictError("Protocol is locked — unlock to change targets")
-                )
+                return Failure(ConflictError("Protocol is locked — unlock to change targets"))
             if status == ProtocolStatus.RETIRED.value:
-                return Failure(
-                    ConflictError("Cannot change targets on a retired protocol")
-                )
+                return Failure(ConflictError("Cannot change targets on a retired protocol"))
             removed = await self._repo.remove_direct_target(
                 input.workspace_id, input.protocol_id, input.target_id
             )

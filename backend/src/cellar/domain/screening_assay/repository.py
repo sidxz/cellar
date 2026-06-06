@@ -202,9 +202,7 @@ class RunRepository(Protocol):
     ) -> list[Run]: ...
 
     # --- Target associations -------------------------------------------
-    async def find_lock_state(
-        self, workspace_id: uuid.UUID, run_id: uuid.UUID
-    ) -> bool | None:
+    async def find_lock_state(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool | None:
         """Column-only guard query: ``is_locked``, or None if the run is
         missing / cross-workspace. Unlike ``is_locked()`` this distinguishes
         not-found from unlocked, without hydrating plates and wells."""

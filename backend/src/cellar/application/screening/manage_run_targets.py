@@ -65,9 +65,7 @@ class AddRunTarget:
                 return Failure(NotFoundError("Run", str(input.run_id)))
             if is_locked:
                 return Failure(ConflictError("Cannot modify a locked run — unlock it first"))
-            link = await self._repo.add_target(
-                input.workspace_id, input.run_id, input.target_id
-            )
+            link = await self._repo.add_target(input.workspace_id, input.run_id, input.target_id)
             if link is TargetLinkResult.TARGET_NOT_FOUND:
                 return Failure(NotFoundError("Target", str(input.target_id)))
             if link is TargetLinkResult.OWNER_NOT_FOUND:

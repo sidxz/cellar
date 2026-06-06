@@ -141,9 +141,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
     # Target association methods (_owns lives on the shared base repository)
     # ------------------------------------------------------------------
 
-    async def find_lock_state(
-        self, workspace_id: uuid.UUID, run_id: uuid.UUID
-    ) -> bool | None:
+    async def find_lock_state(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool | None:
         """Column-only guard query. None = run missing / cross-workspace.
 
         Unlike ``is_locked()`` this distinguishes not-found from unlocked,
@@ -223,9 +221,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         )
         out: dict[uuid.UUID, list[TargetRef]] = {rid: [] for rid in run_ids}
         for run_id, tid, name, tt in result.all():
-            out.setdefault(run_id, []).append(
-                TargetRef(id=tid, name=name, target_type=tt)
-            )
+            out.setdefault(run_id, []).append(TargetRef(id=tid, name=name, target_type=tt))
         return out
 
     # ------------------------------------------------------------------

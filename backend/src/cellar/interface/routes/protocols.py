@@ -120,10 +120,7 @@ async def _protocol_response(targets_uc, auth, result) -> ProtocolResponse:
     )
     return ProtocolResponse.from_domain(
         protocol,
-        targets=[
-            TargetRefResponse.from_ref(t)
-            for t in targets_by_protocol.get(protocol.id, [])
-        ],
+        targets=[TargetRefResponse.from_ref(t) for t in targets_by_protocol.get(protocol.id, [])],
     )
 
 

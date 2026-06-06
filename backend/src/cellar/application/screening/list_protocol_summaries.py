@@ -72,13 +72,9 @@ class ListProtocolSummaries:
                     input.workspace_id, list(input.project_ids)
                 )
 
-            visible = [
-                p for p in protocols if scoped_ids is None or p.id in scoped_ids
-            ]
-            targets_by_protocol = (
-                await self._protocol_repo.find_effective_targets_for_protocols(
-                    input.workspace_id, [p.id for p in visible]
-                )
+            visible = [p for p in protocols if scoped_ids is None or p.id in scoped_ids]
+            targets_by_protocol = await self._protocol_repo.find_effective_targets_for_protocols(
+                input.workspace_id, [p.id for p in visible]
             )
 
         summaries: list[ProtocolSummary] = []

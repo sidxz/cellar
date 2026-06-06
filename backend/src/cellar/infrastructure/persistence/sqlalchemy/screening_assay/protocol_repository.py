@@ -327,9 +327,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         )
         return list(result.scalars().all())
 
-    async def _direct_ids(
-        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
-    ) -> set[uuid.UUID]:
+    async def _direct_ids(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> set[uuid.UUID]:
         # Workspace-scoped via the owner join: tenant isolation must not rest
         # solely on the trailing TargetModel filter in the callers.
         result = await self._session.execute(

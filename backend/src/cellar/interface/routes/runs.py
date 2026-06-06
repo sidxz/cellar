@@ -60,9 +60,7 @@ from cellar.interface.routes._target_refs import TargetRefResponse
 router = APIRouter(prefix="/api/v1", tags=["runs"])
 
 
-async def _run_targets(
-    targets_uc: Any, auth: Any, run_id: uuid.UUID
-) -> list[TargetRefResponse]:
+async def _run_targets(targets_uc: Any, auth: Any, run_id: uuid.UUID) -> list[TargetRefResponse]:
     """Resolve a single run's target refs for a response."""
     result = await targets_uc(
         ResolveRunTargetsQuery(workspace_id=auth.workspace_id, run_ids=(run_id,)),
@@ -435,9 +433,7 @@ async def add_run_target(
 ) -> Response:
     """Attach a target to a run (idempotent). Rolls up to the run's protocol."""
     result = await uc(
-        AddRunTargetCommand(
-            workspace_id=auth.workspace_id, run_id=run_id, target_id=target_id
-        ),
+        AddRunTargetCommand(workspace_id=auth.workspace_id, run_id=run_id, target_id=target_id),
         auth=auth,
     )
     result_to_response(result)
@@ -453,9 +449,7 @@ async def remove_run_target(
 ) -> Response:
     """Remove a target from a run. Auto-prunes the protocol if it was inherited-only."""
     result = await uc(
-        RemoveRunTargetCommand(
-            workspace_id=auth.workspace_id, run_id=run_id, target_id=target_id
-        ),
+        RemoveRunTargetCommand(workspace_id=auth.workspace_id, run_id=run_id, target_id=target_id),
         auth=auth,
     )
     result_to_response(result)
