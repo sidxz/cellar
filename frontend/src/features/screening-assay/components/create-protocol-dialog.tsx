@@ -38,7 +38,6 @@ import { useMemo, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
-import { useTargets } from "../hooks/use-targets";
 import {
   VISIBLE_READOUT_DATA_TYPES,
   WELL_CONC_X,
@@ -64,6 +63,7 @@ import { FormulaInput } from "./formula-input";
 import { InterceptsEditor } from "./intercepts-editor";
 import { PickListEditor } from "./pick-list-editor";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
+import { TargetMultiSelect } from "./target-multi-select";
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -108,7 +108,7 @@ const conditionSchema = z.object({
 const protocolSchema = z.object({
   name: z.string().min(1, "Protocol name is required"),
   protocol_type: z.string(),
-  target_id: z.string(),
+  target_ids: z.array(z.string()),
   category: z.string(),
   description: z.string(),
   dose_unit: z.string() as z.ZodType<DoseUnit>,
@@ -164,7 +164,6 @@ export function CreateProtocolDialog({
   defaultProjectId,
 }: CreateProtocolDialogProps) {
   const createMutation = useCreateProtocol();
-  const { data: targets } = useTargets();
   const { data: projects } = useProjects();
   const { data: vocabularies } = useVocabularies();
   const { data: protocolForms } = useProtocolForms();
@@ -193,7 +192,7 @@ export function CreateProtocolDialog({
     defaultValues: {
       name: "",
       protocol_type: "biochemical",
-      target_id: "",
+      target_ids: [],
       category: "",
       description: "",
       dose_unit: "uM",
@@ -228,7 +227,7 @@ export function CreateProtocolDialog({
     form.reset({
       name: "",
       protocol_type: "biochemical",
-      target_id: "",
+      target_ids: [],
       category: "",
       description: "",
       dose_unit: "uM",
@@ -365,7 +364,7 @@ export function CreateProtocolDialog({
       {
         name: values.name.trim(),
         protocol_type: values.protocol_type as ProtocolType,
-        target_id: values.target_id || null,
+        target_ids: values.target_ids,
         category: values.category || null,
         description: values.description || null,
         dose_unit: values.dose_unit,
@@ -471,18 +470,12 @@ export function CreateProtocolDialog({
             </div>
 
             <div className="grid gap-2">
-              <Label>Target (optional)</Label>
+              <Label>Targets (optional)</Label>
               <Controller
                 control={form.control}
-                name="target_id"
+                name="target_ids"
                 render={({ field }) => (
-                  <SearchableSelect
-                    options={targets?.map((t) => ({ value: t.id, label: t.name })) ?? []}
-                    value={field.value || null}
-                    onValueChange={(v) => field.onChange(v ?? "")}
-                    placeholder="Select target..."
-                    searchPlaceholder="Search targets..."
-                  />
+                  <TargetMultiSelect value={field.value} onChange={field.onChange} />
                 )}
               />
             </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { TargetChips } from "@/features/screening-assay/components/target-chips";
 import {
   type ProtocolSummary,
   useProtocol,
@@ -129,8 +130,13 @@ interface ProtocolRowProps {
 
 function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
   const isArchived = protocol.status === "retired" || protocol.status === "archived";
-  // Build a haystack so Command's filter can hit name + target + status.
-  const value = [protocol.id, protocol.name, protocol.target_name ?? "", protocol.status]
+  // Build a haystack so Command's filter can hit name + all targets + status.
+  const value = [
+    protocol.id,
+    protocol.name,
+    protocol.targets.map((t) => t.name).join(" "),
+    protocol.status,
+  ]
     .join(" ")
     .toLowerCase();
 
@@ -159,11 +165,7 @@ function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
             )}
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {protocol.target_name && (
-              <span className="rounded-sm bg-muted px-1.5 py-0.5 text-foreground/70">
-                {protocol.target_name}
-              </span>
-            )}
+            {protocol.targets.length > 0 && <TargetChips targets={protocol.targets} />}
             <span className="tabular-nums">
               {protocol.run_count} run{protocol.run_count === 1 ? "" : "s"}
             </span>

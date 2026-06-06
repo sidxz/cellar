@@ -1,4 +1,8 @@
-import type { ReadoutDataResponse } from "@/shared/lib/api/model";
+import type {
+  ProtocolTargetRefResponse,
+  ReadoutDataResponse,
+  TargetRefResponse,
+} from "@/shared/lib/api/model";
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
@@ -305,13 +309,24 @@ export const POS_CONTROL_SIGNAL_LABELS: Record<PosControlSignal, string> = {
   low: "Low (POS = known inhibitor / blank)",
 };
 
+/** Lightweight target reference — `{ id, name, target_type }`. Aliases the
+ *  generated orval type so the shape can't silently drift from the backend. */
+export type TargetRef = TargetRefResponse;
+
+/** A protocol's effective target, with provenance for the design tab.
+ *  `is_direct` = attached directly (survives auto-prune); `run_count` = how
+ *  many of the protocol's runs reference it. Aliases the generated type. */
+export type ProtocolTargetRef = ProtocolTargetRefResponse;
+
 export interface Protocol {
   id: string;
   workspace_id: string;
   name: string;
   description: string | null;
   protocol_type: ProtocolType;
-  target_id: string | null;
+  /** Effective targets = direct additions ∪ the union of this protocol's
+   *  runs' targets. Computed read-time by the backend. */
+  targets: ProtocolTargetRef[];
   category: string | null;
   protocol_version: number;
   parent_protocol_id: string | null;
@@ -370,6 +385,8 @@ export interface Run {
   run_relationship_type: RunRelationshipType | null;
   plate_format: PlateFormat | null;
   conditions: Record<string, unknown> | null;
+  /** Biological targets linked directly to this run (independent set). */
+  targets: TargetRef[];
 }
 
 /** A readout-data row for a run. Alias of the generated API type — do not
@@ -497,7 +514,8 @@ export interface CreateProtocolInput {
   name: string;
   protocol_type: ProtocolType;
   description?: string | null;
-  target_id?: string | null;
+  /** Direct targets to attach on create (each rolled up to the protocol). */
+  target_ids?: string[];
   category?: string | null;
   dose_unit?: DoseUnit;
   pos_control_signal?: PosControlSignal;
@@ -537,6 +555,8 @@ export interface CreateRunInput {
   run_relationship_type?: RunRelationshipType | null;
   notes?: string | null;
   conditions?: Record<string, unknown> | null;
+  /** Biological targets to link to the run on create. */
+  target_ids?: string[];
 }
 
 export interface CreateReadoutDataInput {

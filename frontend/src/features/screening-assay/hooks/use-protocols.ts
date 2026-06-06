@@ -4,7 +4,7 @@ import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateProtocolInput, Protocol } from "../types";
+import type { CreateProtocolInput, Protocol, TargetRef } from "../types";
 
 const PROTOCOLS_KEY = ["protocols"];
 
@@ -14,7 +14,6 @@ const protocolHooks = createCrudHooks<
   {
     name?: string;
     description?: string | null;
-    target_id?: string | null;
     category?: string | null;
     pos_control_signal?: "high" | "low";
   }
@@ -67,8 +66,8 @@ export interface ProtocolSummary {
   status: string;
   protocol_type: string;
   description: string | null;
-  target_id: string | null;
-  target_name: string | null;
+  /** Effective target refs (direct ∪ run-union), name-only for the picker. */
+  targets: TargetRef[];
   run_count: number;
   /** ISO date (YYYY-MM-DD) or null when no runs yet. */
   last_run_date: string | null;

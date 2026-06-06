@@ -42,6 +42,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useRecomputeOverrides } from "../hooks/use-recompute-overrides";
+import { useAddRunTarget, useRemoveRunTarget } from "../hooks/use-run-targets";
 import {
   useApproveRun,
   useCompleteRun,
@@ -56,6 +57,8 @@ import {
 import { PLATE_FORMAT_LABELS, type PlateFormat, type RunStatus } from "../types";
 import { ResetRunDataDialog } from "./reset-run-data-dialog";
 import { RunDataPanel } from "./run-data-panel";
+import { TargetChips } from "./target-chips";
+import { TargetMultiSelect } from "./target-multi-select";
 
 interface RunDetailProps {
   runId: string;
@@ -67,6 +70,8 @@ export function RunDetail({ runId }: RunDetailProps) {
   const canEditTags = useAuthzHasRole("editor");
   const query = useRun(runId);
   const { data: protocol } = useProtocol(query.data?.protocol_id ?? "");
+  const addRunTarget = useAddRunTarget(runId);
+  const removeRunTarget = useRemoveRunTarget(runId);
   const startMutation = useStartRun();
   const completeMutation = useCompleteRun();
   const approveMutation = useApproveRun();
@@ -534,6 +539,32 @@ export function RunDetail({ runId }: RunDetailProps) {
                       Lock reason: {run.lock_reason}
                     </p>
                   </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Targets */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Targets</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {canEditTags && !run.is_locked ? (
+                  <TargetMultiSelect
+                    value={run.targets.map((t) => t.id)}
+                    onChange={(ids) => {
+                      const current = run.targets.map((t) => t.id);
+                      for (const id of ids) {
+                        if (!current.includes(id)) addRunTarget.mutate(id);
+                      }
+                      for (const id of current) {
+                        if (!ids.includes(id)) removeRunTarget.mutate(id);
+                      }
+                    }}
+                    placeholder="Add a target…"
+                  />
+                ) : (
+                  <TargetChips targets={run.targets} max={20} />
                 )}
               </CardContent>
             </Card>

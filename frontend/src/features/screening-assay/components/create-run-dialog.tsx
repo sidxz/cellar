@@ -27,6 +27,7 @@ import { z } from "zod";
 import { usePlateTemplates } from "../hooks/use-plate-templates";
 import { useCreateRun } from "../hooks/use-runs";
 import { type ConditionDefinition, PLATE_FORMAT_LABELS, type PlateFormat } from "../types";
+import { TargetMultiSelect } from "./target-multi-select";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ const schema = z.object({
   plateTemplateId: z.string(),
   notes: z.string(),
   conditionValues: z.record(z.string(), z.string()),
+  targetIds: z.array(z.string()),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -93,6 +95,7 @@ export function CreateRunDialog({
       plateTemplateId: "",
       notes: "",
       conditionValues: {},
+      targetIds: [],
     },
   });
 
@@ -109,6 +112,7 @@ export function CreateRunDialog({
       plateTemplateId: protocolControlLayouts?.[fmt] ?? "",
       notes: "",
       conditionValues: {},
+      targetIds: [],
     });
   }, [open, protocolControlLayouts, reset]);
 
@@ -163,6 +167,7 @@ export function CreateRunDialog({
             : null,
         notes: values.notes || null,
         conditions: buildConditionsPayload(values),
+        target_ids: values.targetIds,
       },
       {
         onSuccess: () => {
@@ -320,6 +325,17 @@ export function CreateRunDialog({
                 })}
               </div>
             )}
+
+            <div className="grid gap-2">
+              <Label>Targets (optional)</Label>
+              <Controller
+                name="targetIds"
+                control={control}
+                render={({ field }) => (
+                  <TargetMultiSelect value={field.value} onChange={field.onChange} />
+                )}
+              />
+            </div>
 
             <div className="grid gap-2">
               <Label>Notes (optional)</Label>
