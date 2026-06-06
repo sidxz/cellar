@@ -319,6 +319,11 @@ class CreateProtocolRequest(BaseModel):
     readout_definitions: list[dict[str, Any]]
     condition_definitions: list[dict[str, Any]] | None = None
 
+    # The single target_id field was replaced by target_ids (migration 051);
+    # forbid extras so a client still sending it gets a 422 instead of a
+    # silent no-op.
+    model_config = {"extra": "forbid"}
+
 
 class RetireRequest(BaseModel):
     reason: str | None = None
@@ -623,6 +628,11 @@ class UpdateProtocolRequest(BaseModel):
     # Allowed on ACTIVE protocols (unlike the other fields above which are
     # DRAFT-only). The use case applies it via Protocol.set_pos_control_signal.
     pos_control_signal: str | None = None
+
+    # The single target_id field was replaced by the /targets sub-resource
+    # (migration 051); forbid extras so an old client PATCHing target_id gets
+    # a 422 instead of a silent 200 no-op.
+    model_config = {"extra": "forbid"}
 
 
 @router.patch("/protocols/{protocol_id}", response_model=ProtocolResponse, tags=["protocols"])
