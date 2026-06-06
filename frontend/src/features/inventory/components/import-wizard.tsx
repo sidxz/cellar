@@ -1,6 +1,7 @@
 "use client";
 
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import { CsvDropzone } from "@/shared/components/csv-dropzone";
 import { PageHeader } from "@/shared/components/page-header";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -35,9 +36,9 @@ import type {
   ValidationResultResponse,
 } from "@/shared/lib/api/model";
 import { showError, showSuccess } from "@/shared/lib/toast";
-import { CheckCircle2, Download, FileUp, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   useCreateImportTemplate,
   useDeleteImportTemplate,
@@ -56,7 +57,6 @@ type ImportResult = ExecuteImportResponse;
 
 export function ImportWizard() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -311,36 +311,18 @@ export function ImportWizard() {
             </div>
 
             {/* Drop zone */}
-            <div
-              className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 p-10 text-center cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const dropped = e.dataTransfer.files[0];
-                if (dropped) setFile(dropped);
+            <CsvDropzone
+              file={file}
+              onFile={setFile}
+              accept={{
+                "text/csv": [".csv"],
+                "text/tab-separated-values": [".tsv"],
+                "text/plain": [".txt"],
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
               }}
-            >
-              <FileUp className="h-10 w-10 text-muted-foreground/40 mb-3" />
-              {file ? (
-                <p className="text-sm font-medium">{file.name}</p>
-              ) : (
-                <>
-                  <p className="text-sm font-medium">Drop a file here or click to browse</p>
-                  <p className="mt-1 text-xs text-muted-foreground">CSV, TSV, TXT, XLSX</p>
-                </>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.tsv,.txt,.xlsx"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) setFile(f);
-                }}
-              />
-            </div>
+              prompt="Drop a file here or click to browse"
+              hint="CSV, TSV, TXT, XLSX"
+            />
 
             <div className="flex justify-end">
               <Button onClick={handleUpload} disabled={!file || uploading}>

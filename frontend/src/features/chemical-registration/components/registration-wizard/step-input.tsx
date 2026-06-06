@@ -8,9 +8,10 @@ import {
   type FieldOverride,
   useRegistrationForms,
 } from "@/features/workspace-config/hooks/use-registration-forms";
-import type { RegistrationRules } from "@/features/workspace-config/types";
 import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
+import type { RegistrationRules } from "@/features/workspace-config/types";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
+import { CsvDropzone } from "@/shared/components/csv-dropzone";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -48,7 +49,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useDropzone } from "react-dropzone";
 import { useMolecule } from "../../hooks/use-molecules";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { MOLECULE_TYPE_LABELS } from "../../types";
@@ -585,11 +585,8 @@ function BulkInputForm() {
     }
   }, [settings]);
 
-  const onDrop = useCallback(
-    (accepted: File[]) => {
-      const file = accepted[0];
-      if (!file) return;
-
+  const handleFile = useCallback(
+    (file: File) => {
       const fmt = detectFileFormat(file.name);
       if (!fmt) {
         setError(`Unsupported file type. Use .csv, .xlsx, .sdf or .sd — got "${file.name}".`);
@@ -600,17 +597,6 @@ function BulkInputForm() {
     },
     [updateBulkInput],
   );
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      "text/csv": [".csv"],
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-      "chemical/x-mdl-sdfile": [".sdf", ".sd"],
-    },
-    maxFiles: 1,
-    multiple: false,
-  });
 
   const handleNext = () => {
     setError(null);
@@ -682,30 +668,20 @@ function BulkInputForm() {
         </div>
       </div>
 
-      {/* Drop zone */}
-      <div
-        {...getRootProps()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
-          isDragActive
-            ? "border-primary bg-primary/5"
-            : "border-muted-foreground/25 hover:border-muted-foreground/50"
-        }`}
-      >
-        <input {...getInputProps()} />
-        <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
-        {isDragActive ? (
-          <p className="text-sm text-muted-foreground">Drop file here</p>
-        ) : (
-          <>
-            <p className="text-sm text-muted-foreground">
-              Drag &amp; drop a file here, or click to browse
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground/60">
-              Accepts .csv, .xlsx, .sdf, .sd — format detected automatically
-            </p>
-          </>
-        )}
-      </div>
+      {/* Drop zone. The "Selected file info" card below is owned by this parent
+          (CsvDropzone shows only the name); the format-detection + unsupported-type
+          error lives in handleFile. */}
+      <CsvDropzone
+        file={bulkInput.file}
+        onFile={handleFile}
+        accept={{
+          "text/csv": [".csv"],
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+          "chemical/x-mdl-sdfile": [".sdf", ".sd"],
+        }}
+        prompt="Drag & drop a file here, or click to browse"
+        hint="Accepts .csv, .xlsx, .sdf, .sd — format detected automatically"
+      />
 
       {/* Selected file info */}
       {bulkInput.file && (
