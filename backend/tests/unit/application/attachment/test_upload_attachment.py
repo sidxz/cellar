@@ -13,7 +13,6 @@ from cellar.application.attachment.upload_attachment import (
 from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.shared.errors import ValidationError
 
-
 WS = uuid.uuid4()
 MOL = uuid.uuid4()
 USER = uuid.uuid4()
@@ -45,11 +44,18 @@ def _cmd(**overrides):
     return UploadAttachmentCommand(**defaults)
 
 
+def _auth():
+    """Auth context scoped to the same workspace the command targets."""
+    a = MagicMock()
+    a.workspace_id = WS
+    return a
+
+
 class TestUploadAttachment:
     async def test_success(self, deps):
         uow, repo, storage, dispatcher = deps
         uc = UploadAttachment(uow, repo, storage, dispatcher)
-        result = await uc(_cmd(), auth=MagicMock())
+        result = await uc(_cmd(), auth=_auth())
         assert isinstance(result, Success)
         att = result.unwrap()
         assert att.file_name == "spectrum.pdf"
@@ -59,7 +65,7 @@ class TestUploadAttachment:
     async def test_blocked_extension(self, deps):
         uow, repo, storage, dispatcher = deps
         uc = UploadAttachment(uow, repo, storage, dispatcher)
-        result = await uc(_cmd(file_name="malware.exe"), auth=MagicMock())
+        result = await uc(_cmd(file_name="malware.exe"), auth=_auth())
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), ValidationError)
 
@@ -67,6 +73,6 @@ class TestUploadAttachment:
         uow, repo, storage, dispatcher = deps
         uc = UploadAttachment(uow, repo, storage, dispatcher)
         big_data = b"x" * (104_857_601)
-        result = await uc(_cmd(file_data=big_data), auth=MagicMock())
+        result = await uc(_cmd(file_data=big_data), auth=_auth())
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), ValidationError)

@@ -15,7 +15,7 @@ from returns.result import (
     Success,
 )
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.chemical_registration.merge_service import MergeCommand, MergeService
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.shared.command import Command
@@ -103,6 +103,7 @@ class DisclosureService:
         Raises ``AuthorizationError`` if caller lacks editor role.
         """
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         # --- Process SMILES before opening the UoW (pure computation) ---
         process_result = self._structure_processor.process(input.disclosed_smiles)

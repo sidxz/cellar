@@ -1,14 +1,13 @@
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
-from returns.result import Failure, Success
+from returns.result import Failure
 
 from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.admin.admin_hard_delete import (
     AdminHardDelete,
     AdminHardDeleteCommand,
-    BlockedByDependenciesError,
 )
 from cellar.domain.shared.errors import (
     AuthorizationError,
@@ -49,15 +48,16 @@ async def test_empty_reason_rejected():
         table="controlled_vocabularies",
         label_field="name",
     )
+    ws = uuid.uuid4()
     uc = AdminHardDelete(uow=MagicMock(), audit=MagicMock(), repos={}, cascade_service=MagicMock())
     result = await uc(
         AdminHardDeleteCommand(
-            workspace_id=uuid.uuid4(),
+            workspace_id=ws,
             entity_type="vocabulary",
             entity_id=uuid.uuid4(),
             reason="   ",
         ),
-        auth=_auth(uuid.uuid4()),
+        auth=_auth(ws),
     )
     assert isinstance(result, Failure)
     assert isinstance(result.failure(), ValidationError)
@@ -65,15 +65,16 @@ async def test_empty_reason_rejected():
 
 @pytest.mark.asyncio
 async def test_unknown_entity_type_404():
+    ws = uuid.uuid4()
     uc = AdminHardDelete(uow=MagicMock(), audit=MagicMock(), repos={}, cascade_service=MagicMock())
     result = await uc(
         AdminHardDeleteCommand(
-            workspace_id=uuid.uuid4(),
+            workspace_id=ws,
             entity_type="not_a_real_thing",
             entity_id=uuid.uuid4(),
             reason="r",
         ),
-        auth=_auth(uuid.uuid4()),
+        auth=_auth(ws),
     )
     assert isinstance(result, Failure)
     assert isinstance(result.failure(), NotFoundError)

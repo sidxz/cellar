@@ -26,6 +26,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable
 
+from cellar.application.auth import AuthContext
 from cellar.application.screening.compound_ref_resolver import (
     AmbiguousCompound,
     BatchSummary,
@@ -101,6 +102,7 @@ async def _auto_create_missing_batches(
     workspace_id: uuid.UUID,
     importing_user_id: uuid.UUID,
     source_label: str,
+    auth: AuthContext | None = None,
 ) -> int:
     """Auto-create placeholder batches for unmatched refs whose compound is known.
 
@@ -143,7 +145,8 @@ async def _auto_create_missing_batches(
                 external_batch_ref=batch_ref,
                 importing_user_id=importing_user_id,
                 source_label=source_label,
-            )
+            ),
+            auth=auth,
         )
         if isinstance(outcome, Success):
             result = outcome.unwrap()

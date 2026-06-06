@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from returns.result import Failure, Result, Success
 
 from cellar.application.audit.audit_recording_service import AuditRecordingService
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
@@ -176,6 +176,7 @@ class RefitDoseResponseCurve:
         self, input: RefitDoseResponseCurveCommand, auth: AuthContext | None = None
     ) -> Result[DoseResponseCurve, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         # Sprint 2 path REQUIRES an authenticated user — the AuditOperation
         # has no defensible author otherwise. Sprint 1 path is unchanged

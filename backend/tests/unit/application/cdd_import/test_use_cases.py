@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
+from cellar.application.cdd_import.errors import CddAuthError
 from cellar.application.cdd_import.import_cdd_protocol import (
     ImportCddProtocol,
     ImportCddProtocolCommand,
@@ -33,8 +34,6 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from cellar.application.cdd_import.errors import CddAuthError
-
 from tests.fakes.fake_auth import FakeAuth
 
 WORKSPACE_ID = uuid.uuid4()
@@ -99,7 +98,7 @@ class FakeGetDataSource:
             )
         self._result = result
 
-    async def __call__(self, query):  # noqa: ARG002
+    async def __call__(self, query):
         return self._result
 
 
@@ -143,7 +142,11 @@ class TestListCddProtocols:
     async def test_success(self):
         gateway = FakeGateway(
             protocols=[
-                {"id": 1, "name": "P1", "readout_definitions": [{"name": "R1", "data_type": "Number"}]},
+                {
+                    "id": 1,
+                    "name": "P1",
+                    "readout_definitions": [{"name": "R1", "data_type": "Number"}],
+                },
             ]
         )
         uc = ListCddProtocols(gateway=gateway, get_data_source=FakeGetDataSource())
@@ -188,7 +191,9 @@ class TestListCddProtocols:
     async def test_viewer_rejected(self):
         uc = ListCddProtocols(gateway=FakeGateway(), get_data_source=FakeGetDataSource())
         with pytest.raises(AuthorizationError):
-            await uc(ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth(role="viewer"))
+            await uc(
+                ListCddProtocolsQuery(workspace_id=WORKSPACE_ID), auth=_make_auth(role="viewer")
+            )
 
     @pytest.mark.asyncio
     async def test_cdd_auth_error_returns_failure(self):
@@ -309,11 +314,11 @@ class TestImportCddProtocol:
     @pytest.mark.asyncio
     async def test_auth_required(self):
         uc, _repo = self._make_uc()
-        result = await uc(
-            ImportCddProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
-            auth=None,
-        )
-        assert isinstance(result, Failure)
+        with pytest.raises(AuthorizationError):
+            await uc(
+                ImportCddProtocolCommand(workspace_id=WORKSPACE_ID, external_protocol_id=1),
+                auth=None,
+            )
 
     @pytest.mark.asyncio
     async def test_conditions_mapped(self):

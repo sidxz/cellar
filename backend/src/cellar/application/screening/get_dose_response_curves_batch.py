@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.screening import _condense_raw_data
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -40,6 +40,7 @@ class GetDoseResponseCurvesBatch:
         auth: AuthContext | None = None,
     ) -> Result[list[DoseResponseCurve], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         if not input.curve_ids:
             return Success([])
         async with self._uow:

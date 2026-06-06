@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.shared.errors import DomainError
@@ -37,6 +37,7 @@ class UpdatePreferences:
         self, input: UpdatePreferencesCommand, auth: AuthContext | None = None
     ) -> Result[UserPreferences, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         prefs = await self._repo.get_by_user(input.workspace_id, input.user_id)
 
         if prefs is None:

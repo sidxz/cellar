@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.domain.shared.errors import DomainError
 from cellar.domain.shared.ontology import OntologyTerm
@@ -31,6 +31,7 @@ class SearchOntology:
         self, input: SearchOntologyQuery, auth: AuthContext | None = None
     ) -> Result[list[OntologyTerm], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         results = await self._search_service.search(
             query=input.query,
             ontology_sources=input.ontology_sources,

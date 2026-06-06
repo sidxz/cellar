@@ -32,7 +32,7 @@ from cellar.application.admin.cascade_service import (
     InboundReference,
 )
 from cellar.application.audit.audit_recording_service import AuditRecordingService
-from cellar.application.auth import AuthContext, require_admin
+from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.audit_compliance.enums import AuditAction, OperationType
@@ -108,6 +108,7 @@ class AdminHardDelete:
         auth: AuthContext | None = None,
     ) -> Result[None, DomainError]:
         require_admin(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         if not (input.reason or "").strip():
             return Failure(ValidationError("reason is required"))

@@ -31,7 +31,7 @@ from dataclasses import dataclass
 import structlog
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.screening.bulk_create_readout_data import (
     BulkCreateReadoutData,
     BulkCreateReadoutDataCommand,
@@ -103,6 +103,7 @@ class ImportSummaryFile:
         auth: AuthContext | None = None,
     ) -> Result[SummaryImportResult, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, command.workspace_id)
 
         # Own + enter the read UoW for run/protocol/snapshot/resolution reads.
         # ``self._bulk`` opens its OWN write UoW (separate instance) that commits

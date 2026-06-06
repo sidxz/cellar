@@ -8,7 +8,12 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor, require_workspace_role
+from cellar.application.auth import (
+    AuthContext,
+    require_editor,
+    require_same_workspace,
+    require_workspace_role,
+)
 from cellar.application.inventory.resolve_batch_ref import resolve_batch_ref
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -150,6 +155,7 @@ class RegisterPlate:
         self, input: RegisterPlateCommand, auth: AuthContext | None = None
     ) -> Result[RegisteredPlate, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             # Barcode uniqueness check
@@ -194,6 +200,7 @@ class GetPlate:
         self, input: GetPlateQuery, auth: AuthContext | None = None
     ) -> Result[RegisteredPlate, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
             if plate is None:
@@ -212,6 +219,7 @@ class ListPlates:
         self, input: ListPlatesQuery, auth: AuthContext | None = None
     ) -> Result[list[RegisteredPlate], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             plates = await self._repo.search(
                 input.workspace_id,
@@ -245,6 +253,7 @@ class UpdatePlate:
         self, input: UpdatePlateCommand, auth: AuthContext | None = None
     ) -> Result[RegisteredPlate, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
@@ -292,6 +301,7 @@ class MapWells:
         self, input: MapWellsCommand, auth: AuthContext | None = None
     ) -> Result[RegisteredPlate, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
@@ -348,6 +358,7 @@ class ChangeStatus:
         self, input: ChangeStatusCommand, auth: AuthContext | None = None
     ) -> Result[RegisteredPlate, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
@@ -380,6 +391,7 @@ class DerivePlate:
         self, input: DerivePlateCommand, auth: AuthContext | None = None
     ) -> Result[RegisteredPlate, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             parent = await self._repo.find_by_id_in_workspace(
@@ -427,6 +439,7 @@ class DeletePlate:
         self, input: DeletePlateCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
@@ -460,6 +473,7 @@ class ListChildren:
         self, input: ListChildrenQuery, auth: AuthContext | None = None
     ) -> Result[list[RegisteredPlate], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             children = await self._repo.find_children(input.workspace_id, input.parent_plate_id)
             return Success(children)

@@ -36,8 +36,8 @@ def _make_batch(ws: uuid.UUID, mol: uuid.UUID) -> Batch:
     )
 
 
-def _editor_auth() -> FakeAuth:
-    return FakeAuth(role="editor")
+def _editor_auth(ws: uuid.UUID) -> FakeAuth:
+    return FakeAuth(role="editor", workspace_id=ws)
 
 
 def _mock_uow() -> MagicMock:
@@ -50,7 +50,6 @@ def _mock_uow() -> MagicMock:
 
 @pytest.mark.asyncio
 class TestAddBatchIdentifier:
-
     async def test_adds_identifier_when_unique(self) -> None:
         ws = uuid.uuid4()
         mol = uuid.uuid4()
@@ -72,7 +71,7 @@ class TestAddBatchIdentifier:
                 source="CDD",
                 registered_by=uuid.uuid4(),
             ),
-            auth=_editor_auth(),
+            auth=_editor_auth(ws),
         )
         assert isinstance(result, Success)
         assert len(result.unwrap().identifiers) == 1
@@ -99,7 +98,7 @@ class TestAddBatchIdentifier:
                 source="CDD",
                 registered_by=uuid.uuid4(),
             ),
-            auth=_editor_auth(),
+            auth=_editor_auth(ws),
         )
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), ConflictError)
@@ -121,7 +120,7 @@ class TestAddBatchIdentifier:
                 source="user",
                 registered_by=uuid.uuid4(),
             ),
-            auth=_editor_auth(),
+            auth=_editor_auth(ws),
         )
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
@@ -129,7 +128,6 @@ class TestAddBatchIdentifier:
 
 @pytest.mark.asyncio
 class TestRemoveBatchIdentifier:
-
     async def test_removes_existing(self) -> None:
         ws = uuid.uuid4()
         mol = uuid.uuid4()
@@ -155,7 +153,7 @@ class TestRemoveBatchIdentifier:
                 batch_id=batch.id,
                 identifier_id=ident.id,
             ),
-            auth=_editor_auth(),
+            auth=_editor_auth(ws),
         )
         assert isinstance(result, Success)
         assert batch.identifiers == []
@@ -163,25 +161,28 @@ class TestRemoveBatchIdentifier:
 
 @pytest.mark.asyncio
 class TestListBatchIdentifiers:
-
     async def test_lists_identifiers(self) -> None:
         ws = uuid.uuid4()
         mol = uuid.uuid4()
         batch = _make_batch(ws, mol)
-        batch.add_identifier(BatchIdentifier.create(
-            batch_id=batch.id,
-            identifier="A",
-            identifier_type="custom",
-            source="user",
-            registered_by=uuid.uuid4(),
-        ))
-        batch.add_identifier(BatchIdentifier.create(
-            batch_id=batch.id,
-            identifier="B",
-            identifier_type="custom",
-            source="user",
-            registered_by=uuid.uuid4(),
-        ))
+        batch.add_identifier(
+            BatchIdentifier.create(
+                batch_id=batch.id,
+                identifier="A",
+                identifier_type="custom",
+                source="user",
+                registered_by=uuid.uuid4(),
+            )
+        )
+        batch.add_identifier(
+            BatchIdentifier.create(
+                batch_id=batch.id,
+                identifier="B",
+                identifier_type="custom",
+                source="user",
+                registered_by=uuid.uuid4(),
+            )
+        )
         repo = AsyncMock()
         repo.find_by_id_in_workspace = AsyncMock(return_value=batch)
         uow = _mock_uow()
@@ -189,7 +190,7 @@ class TestListBatchIdentifiers:
         uc = ListBatchIdentifiers(uow=uow, repo=repo)
         result = await uc(
             ListBatchIdentifiersQuery(workspace_id=ws, batch_id=batch.id),
-            auth=_editor_auth(),
+            auth=_editor_auth(ws),
         )
         assert isinstance(result, Success)
         assert len(result.unwrap()) == 2

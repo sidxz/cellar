@@ -8,7 +8,7 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.export.orchestration import (
     ExportOrchestrator,
     StartExportWorkflowRequest,
@@ -56,6 +56,7 @@ class StartExport:
         auth: AuthContext,
     ) -> Result[StartExportResult, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, cmd.workspace_id)
 
         if cmd.source != ExportSource.SEARCH:
             return Failure(ValidationError(f"Unsupported export source: {cmd.source}"))

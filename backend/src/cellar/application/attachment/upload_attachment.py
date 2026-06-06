@@ -9,7 +9,7 @@ from pathlib import PurePosixPath
 from returns.result import Failure, Result, Success
 
 from cellar.application.attachment.storage import StorageClient
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -48,6 +48,7 @@ class UploadAttachment:
         self, input: UploadAttachmentCommand, auth: AuthContext | None = None
     ) -> Result[Attachment, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         try:
             validate_extension(input.file_name)

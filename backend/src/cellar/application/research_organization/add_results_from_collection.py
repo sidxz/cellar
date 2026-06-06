@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
 )
@@ -83,6 +83,7 @@ class AddResultsFromCollection:
         auth: AuthContext | None = None,
     ) -> Result[AddResultsOutcome, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             campaign = await self._campaign_repo.find_by_id_in_workspace(

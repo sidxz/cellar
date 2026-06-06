@@ -123,7 +123,7 @@ class TestRejectDisclosureSuccess:
                 reason="I don't want to merge",
                 rejected_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Success)
@@ -149,7 +149,7 @@ class TestRejectDisclosureSuccess:
                 disclosure_id=dr.id,
                 rejected_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Success)
@@ -171,7 +171,7 @@ class TestRejectDisclosureValidation:
                 disclosure_id=uuid.uuid4(),
                 rejected_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)
@@ -202,7 +202,7 @@ class TestRejectDisclosureValidation:
                 disclosure_id=dr.id,
                 rejected_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)

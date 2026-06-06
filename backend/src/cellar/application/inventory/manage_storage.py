@@ -7,7 +7,12 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor, require_workspace_role
+from cellar.application.auth import (
+    AuthContext,
+    require_editor,
+    require_same_workspace,
+    require_workspace_role,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.pagination import PageResult
@@ -48,6 +53,7 @@ class CreateStorageLocation:
         self, input: CreateStorageLocationCommand, auth: AuthContext | None = None
     ) -> Result[StorageLocation, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             parent_type: StorageLocationType | None = None
@@ -101,6 +107,7 @@ class ListStorageLocations:
         self, input: ListStorageLocationsQuery, auth: AuthContext | None = None
     ) -> Result[PageResult[StorageLocation], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             effective_limit = input.limit
             fetch_limit = effective_limit + 1 if effective_limit is not None else None
@@ -127,6 +134,7 @@ class GetStorageLocationChildren:
         self, input: GetStorageLocationChildrenQuery, auth: AuthContext | None = None
     ) -> Result[list[StorageLocation], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             children = await self._repo.find_children(input.workspace_id, input.parent_id)
             return Success(children)
@@ -143,6 +151,7 @@ class ListStorageLocationsWithCounts:
         self, input: ListStorageLocationsQuery, auth: AuthContext | None = None
     ) -> Result[list[dict], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             rows = await self._repo.find_by_workspace_with_counts(input.workspace_id)
             return Success(rows)

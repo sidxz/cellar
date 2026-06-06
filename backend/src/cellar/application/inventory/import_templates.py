@@ -51,6 +51,7 @@ class CreateImportTemplate:
         self, input: CreateImportTemplateCommand, auth: AuthContext | None = None
     ) -> Result[ImportTemplate, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             template = ImportTemplate.create(
                 workspace_id=input.workspace_id,
@@ -94,6 +95,7 @@ class DeleteImportTemplate:
         self, input: DeleteImportTemplateCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             template = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.template_id

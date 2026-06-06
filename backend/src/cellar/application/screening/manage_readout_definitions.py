@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.screening._dose_response_config_serde import (
     deserialize_dose_response_config,
 )
@@ -106,6 +106,7 @@ class AddReadoutDefinition:
         self, input: AddReadoutDefinitionCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -173,6 +174,7 @@ class RemoveReadoutDefinition:
         self, input: RemoveReadoutDefinitionCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -207,6 +209,7 @@ class UpdateReadoutDefinition:
         self, input: UpdateReadoutDefinitionCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id

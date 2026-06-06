@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.inventory.resolve_batch_ref import resolve_batch_ref
 from cellar.application.shared.amount_parser import parse_amount
 from cellar.application.shared.query import Query
@@ -88,6 +88,7 @@ class PreviewShipmentImport:
         auth: AuthContext | None = None,
     ) -> Result[ImportPreviewResult, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         results: list[ResolvedRow] = []
 
         async with self._uow:

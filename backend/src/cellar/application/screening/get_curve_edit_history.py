@@ -17,7 +17,7 @@ from datetime import datetime
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.domain.audit_compliance.models import AuditOperation
 from cellar.domain.audit_compliance.repository import AuditRepository
@@ -69,6 +69,7 @@ class GetCurveEditHistory:
         auth: AuthContext | None = None,
     ) -> Result[GetCurveEditHistoryResult, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         ops = await self._audit.find_by_entity(
             input.workspace_id,
             _DOSE_RESPONSE_CURVE_ENTITY_TYPE,

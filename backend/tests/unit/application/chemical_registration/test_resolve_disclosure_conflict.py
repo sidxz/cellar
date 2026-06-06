@@ -142,9 +142,7 @@ class FakeMoleculeRepo:
             return None
         return entity
 
-    async def find_by_inchi_key(
-        self, workspace_id: uuid.UUID, inchi_key: str
-    ) -> Molecule | None:
+    async def find_by_inchi_key(self, workspace_id: uuid.UUID, inchi_key: str) -> Molecule | None:
         for m in self._store.values():
             if (
                 m.workspace_id == workspace_id
@@ -234,7 +232,7 @@ class TestResolveReject:
                 reason="Bad data",
                 resolved_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Success)
@@ -271,7 +269,7 @@ class TestResolveAcceptAsNew:
                 resolution="accept_as_new",
                 resolved_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Success)
@@ -304,7 +302,7 @@ class TestValidation:
                 resolution="invalid",
                 resolved_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)
@@ -329,7 +327,7 @@ class TestValidation:
                 resolution="reject",
                 resolved_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)
@@ -370,7 +368,7 @@ class TestValidation:
                 resolution="reject",
                 resolved_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)

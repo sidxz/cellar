@@ -13,7 +13,7 @@ from datetime import date
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import (
@@ -63,6 +63,7 @@ class ListProtocolSummaries:
         auth: AuthContext | None = None,
     ) -> Result[list[ProtocolSummary], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocols = await self._protocol_repo.find_by_workspace(input.workspace_id)
             stats = await self._run_repo.aggregate_stats_by_protocol(input.workspace_id)

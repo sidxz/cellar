@@ -419,7 +419,7 @@ async def preview_bulk_add_batch_identifiers(
         dry_run=True,
         rows=rows,
     )
-    result = result_to_response(await use_case(command))
+    result = result_to_response(await use_case(command, auth=auth))
     return BulkAddBatchIdentifiersResponse(
         outcomes=[RowOutcomeResponse(**o.__dict__) for o in result.outcomes],
         counts=result.counts,
@@ -456,7 +456,7 @@ async def bulk_add_batch_identifiers(
         dry_run=False,
         rows=rows,
     )
-    result = result_to_response(await use_case(command))
+    result = result_to_response(await use_case(command, auth=auth))
     return BulkAddBatchIdentifiersResponse(
         outcomes=[RowOutcomeResponse(**o.__dict__) for o in result.outcomes],
         counts=result.counts,

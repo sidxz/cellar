@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
@@ -52,6 +52,7 @@ class GetProtocolTargets:
         self, input: GetProtocolTargetsQuery, auth: AuthContext | None = None
     ) -> Result[list[EffectiveTarget], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             # Ownership check first: a foreign/missing protocol must 404 like
             # every sibling GET-by-id, not return 200 [].
@@ -77,6 +78,7 @@ class ResolveProtocolTargets:
         self, input: ResolveProtocolTargetsQuery, auth: AuthContext | None = None
     ) -> Result[dict[uuid.UUID, list[TargetRef]], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             result = await self._protocol_repo.find_effective_targets_for_protocols(
                 input.workspace_id, list(input.protocol_ids)
@@ -95,6 +97,7 @@ class ResolveRunTargets:
         self, input: ResolveRunTargetsQuery, auth: AuthContext | None = None
     ) -> Result[dict[uuid.UUID, list[TargetRef]], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             result = await self._run_repo.find_target_refs_for_runs(
                 input.workspace_id, list(input.run_ids)

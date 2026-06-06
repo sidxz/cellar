@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -60,6 +60,7 @@ class SetControlLayout:
         self, input: SetControlLayoutCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             # Verify template belongs to this workspace
             if self._plate_template_repo is not None:
@@ -100,6 +101,7 @@ class RemoveControlLayout:
         self, input: RemoveControlLayoutCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id

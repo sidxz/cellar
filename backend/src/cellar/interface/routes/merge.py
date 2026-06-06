@@ -187,5 +187,5 @@ async def get_merge_impact(
         source_molecule_id=source_molecule_id,
         target_molecule_id=target_molecule_id,
     )
-    impact = result_to_response(await use_case(query))
+    impact = result_to_response(await use_case(query, auth=auth))
     return MergeImpactResponse.from_domain(impact)

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.batch import Batch
@@ -36,6 +36,7 @@ class GetBatch:
         self, input: GetBatchQuery, auth: AuthContext | None = None
     ) -> Result[Batch, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             batch = await self._repo.find_by_id_in_workspace(input.workspace_id, input.batch_id)
             if batch is None:
@@ -54,6 +55,7 @@ class ListBatchesByMolecule:
         auth: AuthContext | None = None,
     ) -> Result[list[Batch], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             batches = await self._repo.find_by_molecule(input.workspace_id, input.molecule_id)
             return Success(batches)

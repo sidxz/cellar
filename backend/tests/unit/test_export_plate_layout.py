@@ -82,11 +82,13 @@ class TestExportUseCase:
         uc = ExportPlateLayout(
             _FakeUow(),
             _FakePlateRepo(plate),
-            _FakeBatchRepo([_FakeBatch(id=batch_id, batch_number=BatchNumber(value="CC-000001-001"))]),
+            _FakeBatchRepo(
+                [_FakeBatch(id=batch_id, batch_number=BatchNumber(value="CC-000001-001"))]
+            ),
         )
         result = await uc(
             ExportPlateLayoutQuery(workspace_id=ws, plate_id=plate.id),
-            auth=FakeAuth(role="viewer"),
+            auth=FakeAuth(role="viewer", workspace_id=ws),
         )
         assert isinstance(result, Success)
         rows = {r.well: r for r in result.unwrap().rows}
@@ -104,7 +106,7 @@ class TestExportUseCase:
         uc = ExportPlateLayout(_FakeUow(), _FakePlateRepo(None), _FakeBatchRepo([]))
         result = await uc(
             ExportPlateLayoutQuery(workspace_id=ws, plate_id=uuid.uuid4()),
-            auth=FakeAuth(role="viewer"),
+            auth=FakeAuth(role="viewer", workspace_id=ws),
         )
         assert isinstance(result, Failure)
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import ReadoutDataRepository, RunRepository
@@ -54,6 +54,7 @@ class ListRunsWithCounts:
         auth: AuthContext | None = None,
     ) -> Result[list[RunWithCounts], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             runs = await self._run_repo.find_by_protocol(
                 input.workspace_id,

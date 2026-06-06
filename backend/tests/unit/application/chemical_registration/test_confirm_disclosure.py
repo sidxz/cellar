@@ -19,7 +19,6 @@ from cellar.domain.chemical_registration.disclosure_request import DisclosureReq
 from cellar.domain.chemical_registration.enums import DisclosureStatus
 from cellar.domain.shared.errors import (
     ConflictError,
-    DomainError,
     NotFoundError,
     ValidationError,
 )
@@ -124,9 +123,7 @@ class TestConfirmDisclosureSuccess:
         # Mock merge_service.merge_in_transaction to return success
         mock_merge_event = AsyncMock(spec=MergeEvent)
         merge_service = AsyncMock()
-        merge_service.merge_in_transaction = AsyncMock(
-            return_value=Success(mock_merge_event)
-        )
+        merge_service.merge_in_transaction = AsyncMock(return_value=Success(mock_merge_event))
 
         uc = ConfirmDisclosure(
             uow=uow,
@@ -141,7 +138,7 @@ class TestConfirmDisclosureSuccess:
                 disclosure_id=dr.id,
                 confirmed_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Success)
@@ -177,7 +174,7 @@ class TestConfirmDisclosureSuccess:
                 disclosure_id=dr.id,
                 confirmed_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)
@@ -203,7 +200,7 @@ class TestConfirmDisclosureValidation:
                 disclosure_id=uuid.uuid4(),
                 confirmed_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)
@@ -236,7 +233,7 @@ class TestConfirmDisclosureValidation:
                 disclosure_id=dr.id,
                 confirmed_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)

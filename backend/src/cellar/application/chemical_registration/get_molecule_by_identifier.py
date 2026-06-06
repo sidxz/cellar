@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.molecule import Molecule
@@ -36,6 +36,7 @@ class GetMoleculeByIdentifier:
         self, input: GetMoleculeByIdentifierQuery, auth: AuthContext | None = None
     ) -> Result[Molecule, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             mol = await self._repo.find_by_identifier(input.workspace_id, input.identifier)
             if mol is None:

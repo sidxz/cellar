@@ -11,6 +11,7 @@ from cellar.application.auth import (
     AuthContext,
     require_editor,
     require_project_role,
+    require_same_workspace,
     require_workspace_role,
 )
 from cellar.application.shared.command import Command
@@ -63,6 +64,7 @@ class AddProjectMember:
         self, input: AddProjectMemberCommand, auth: AuthContext | None = None
     ) -> Result[ProjectMember, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         # Validate role string early — before any I/O
         try:
             role = ProjectRole(input.role)
@@ -143,6 +145,7 @@ class RemoveProjectMember:
         self, input: RemoveProjectMemberCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             project = await self._project_repo.find_by_id_in_workspace(
                 input.workspace_id, input.project_id
@@ -209,6 +212,7 @@ class UpdateProjectMemberRole:
         self, input: UpdateProjectMemberRoleCommand, auth: AuthContext | None = None
     ) -> Result[ProjectMember, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         # Validate role string early
         try:
             role = ProjectRole(input.role)
@@ -285,6 +289,7 @@ class ListProjectMembers:
         self, input: ListProjectMembersQuery, auth: AuthContext | None = None
     ) -> Result[list[ProjectMember], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             project = await self._project_repo.find_by_id_in_workspace(
                 input.workspace_id, input.project_id

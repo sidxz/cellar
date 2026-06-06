@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.screening._dr_point_reconstruction import (
     build_points_with_exclusions,
 )
@@ -98,6 +98,7 @@ class RefitDoseResponseCurvePreview:
         auth: AuthContext | None = None,
     ) -> Result[PreviewRefitResult, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             curve = await self._curve_repo.find_by_id_in_workspace(

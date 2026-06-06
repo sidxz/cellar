@@ -16,7 +16,7 @@ from typing import Literal
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.chemical_registration.bulk_registration_orchestrator import (
     BulkRegistrationOrchestrator,
     StartBulkRegistrationRequest,
@@ -86,6 +86,7 @@ class StartBulkRegistration:
         auth: AuthContext | None = None,
     ) -> Result[StartBulkRegistrationResult, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         if not input.content:
             return Failure(ValidationError("file is empty"))

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError
@@ -31,6 +31,8 @@ class ListTags:
     async def __call__(
         self, input: ListTagsQuery, auth: AuthContext | None = None
     ) -> Result[list[Tag], DomainError]:
+        require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             tags = await self._tag_repo.search(
                 input.workspace_id,

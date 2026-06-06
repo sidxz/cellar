@@ -59,6 +59,17 @@ def require_admin(auth: AuthContext | None) -> None:
     require_workspace_role(auth, "admin")
 
 
+def require_authenticated(auth: AuthContext | None) -> None:
+    """Raise if no user identity is present.
+
+    For use cases that record the acting user (``created_by``, ``approved_by``,
+    ``locked_by``, …) — these cannot run as system calls, so ``auth=None`` is
+    rejected instead of bypassed.
+    """
+    if auth is None:
+        raise AuthorizationError("Authentication required")
+
+
 def require_same_workspace(auth: AuthContext | None, workspace_id: uuid.UUID | None) -> None:
     """Raise if the entity belongs to a different workspace.
 

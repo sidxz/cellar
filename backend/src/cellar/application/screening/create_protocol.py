@@ -8,7 +8,12 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import (
+    AuthContext,
+    require_authenticated,
+    require_editor,
+    require_same_workspace,
+)
 from cellar.application.screening._dose_response_config_serde import (
     deserialize_dose_response_config,
 )
@@ -33,7 +38,6 @@ from cellar.domain.screening_assay.protocol import (
 from cellar.domain.screening_assay.repository import ProtocolRepository, TargetLinkResult
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.errors import (
-    AuthorizationError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -68,9 +72,9 @@ class CreateProtocol:
     async def __call__(
         self, input: CreateProtocolCommand, auth: AuthContext | None = None
     ) -> Result[Protocol, DomainError]:
+        require_authenticated(auth)
         require_editor(auth)
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required"))
+        require_same_workspace(auth, input.workspace_id)
 
         # Reserved-name guard runs at the use-case boundary (the entity
         # constructor stays permissive so legacy DB rows hydrate cleanly).

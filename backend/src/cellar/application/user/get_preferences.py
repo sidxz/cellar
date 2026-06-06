@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.domain.shared.errors import DomainError
 from cellar.domain.shared.user_preferences import (
@@ -32,6 +32,7 @@ class GetPreferences:
         self, input: GetPreferencesQuery, auth: AuthContext | None = None
     ) -> Result[UserPreferences, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         prefs = await self._repo.get_by_user(input.workspace_id, input.user_id)
         if prefs is None:
             prefs = UserPreferences(

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.cdd_import._check_config import check_cdd_configured
 from cellar.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 from cellar.application.cdd_import.gateway import CddProtocolGateway
@@ -41,6 +41,7 @@ class PreviewCddProtocolImport:
         self, input: PreviewCddProtocolImportQuery, auth: AuthContext | None = None
     ) -> Result[CddProtocolMappingResult, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         config = await check_cdd_configured(input.workspace_id, self._get_data_source)
         if isinstance(config, Failure):

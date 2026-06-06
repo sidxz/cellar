@@ -8,7 +8,12 @@ from datetime import date
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor, require_workspace_role
+from cellar.application.auth import (
+    AuthContext,
+    require_editor,
+    require_same_workspace,
+    require_workspace_role,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
@@ -143,6 +148,7 @@ class CreateShipment:
         self, input: CreateShipmentCommand, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             # Verify all samples belong to this workspace
@@ -196,6 +202,7 @@ class GetShipment:
         self, input: GetShipmentQuery, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             shipment = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.shipment_id
@@ -214,6 +221,7 @@ class ListShipments:
         self, input: ListShipmentsQuery, auth: AuthContext | None = None
     ) -> Result[list[Shipment], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             shipments = await self._repo.find_by_workspace(input.workspace_id, status=input.status)
             return Success(shipments)
@@ -234,6 +242,7 @@ class ShipShipment:
         self, input: ShipShipmentCommand, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             shipment = await self._repo.find_by_id_in_workspace(
@@ -266,6 +275,7 @@ class MarkShipmentInTransit:
         self, input: MarkInTransitCommand, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             shipment = await self._repo.find_by_id_in_workspace(
@@ -298,6 +308,7 @@ class DeliverShipment:
         self, input: DeliverShipmentCommand, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             shipment = await self._repo.find_by_id_in_workspace(
@@ -330,6 +341,7 @@ class ReturnShipment:
         self, input: ReturnShipmentCommand, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             shipment = await self._repo.find_by_id_in_workspace(
@@ -364,6 +376,7 @@ class AddShipmentItem:
         self, input: AddShipmentItemCommand, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             shipment = await self._repo.find_by_id_in_workspace(
@@ -412,6 +425,7 @@ class UpdateShipment:
         self, input: UpdateShipmentCommand, auth: AuthContext | None = None
     ) -> Result[Shipment, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             shipment = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.shipment_id
@@ -455,6 +469,7 @@ class DeleteShipment:
         self, input: DeleteShipmentCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             shipment = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.shipment_id

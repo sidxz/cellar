@@ -12,13 +12,18 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import (
+    AuthContext,
+    require_authenticated,
+    require_editor,
+    require_same_workspace,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import ProtocolRepository
-from cellar.domain.shared.errors import AuthorizationError, DomainError, NotFoundError
+from cellar.domain.shared.errors import DomainError, NotFoundError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -51,9 +56,9 @@ class LockProtocol:
         input: LockProtocolCommand,
         auth: AuthContext | None = None,
     ) -> Result[Protocol, DomainError]:
+        require_authenticated(auth)
         require_editor(auth)
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required"))
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
@@ -85,9 +90,9 @@ class UnlockProtocol:
         input: UnlockProtocolCommand,
         auth: AuthContext | None = None,
     ) -> Result[Protocol, DomainError]:
+        require_authenticated(auth)
         require_editor(auth)
-        if auth is None:
-            return Failure(AuthorizationError("Authentication required"))
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(

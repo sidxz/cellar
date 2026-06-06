@@ -7,7 +7,12 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor, require_workspace_role
+from cellar.application.auth import (
+    AuthContext,
+    require_editor,
+    require_same_workspace,
+    require_workspace_role,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
@@ -126,6 +131,7 @@ class CreateSampleRequest:
         self, input: CreateSampleRequestCommand, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             # Verify molecule belongs to this workspace
             if self._molecule_repo is not None:
@@ -172,6 +178,7 @@ class GetSampleRequest:
         self, input: GetSampleRequestQuery, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             request = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.request_id
@@ -190,6 +197,7 @@ class ListSampleRequests:
         self, input: ListSampleRequestsQuery, auth: AuthContext | None = None
     ) -> Result[list[SampleRequest], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             requests = await self._repo.find_by_workspace(input.workspace_id, status=input.status)
             return Success(requests)
@@ -210,6 +218,7 @@ class ApproveSampleRequest:
         self, input: ApproveSampleRequestCommand, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             request = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.request_id
@@ -239,6 +248,7 @@ class RejectSampleRequest:
         self, input: RejectSampleRequestCommand, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             request = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.request_id
@@ -270,6 +280,7 @@ class FulfillSampleRequest:
         self, input: FulfillSampleRequestCommand, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             request = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.request_id
@@ -308,6 +319,7 @@ class CancelSampleRequest:
         self, input: CancelSampleRequestCommand, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             request = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.request_id
@@ -337,6 +349,7 @@ class StartPreparingSampleRequest:
         self, input: StartPreparingSampleRequestCommand, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             request = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.request_id
@@ -366,6 +379,7 @@ class UpdateSampleRequest:
         self, input: UpdateSampleRequestCommand, auth: AuthContext | None = None
     ) -> Result[SampleRequest, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             request = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.request_id

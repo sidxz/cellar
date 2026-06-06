@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
@@ -32,6 +32,7 @@ class ClassifyDoseResponseCurve:
         self, input: ClassifyDoseResponseCurveCommand, auth: AuthContext | None = None
     ) -> Result[DoseResponseCurve, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             curve = await self._curve_repo.find_by_id_in_workspace(

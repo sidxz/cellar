@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_editor
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.compound_flag import CompoundFlag, FlagType
@@ -34,6 +34,7 @@ class CreateCompoundFlag:
         self, input: CreateCompoundFlagCommand, auth: AuthContext | None = None
     ) -> Result[CompoundFlag, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         flag = CompoundFlag(
             workspace_id=input.workspace_id,

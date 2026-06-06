@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from types import TracebackType
 from typing import Self
-from unittest.mock import AsyncMock
 
 import pytest
 from returns.result import Failure, Success
@@ -129,7 +128,7 @@ class TestCreateRelationship:
                 notes="hydrochloride salt",
                 created_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Success)
@@ -160,7 +159,7 @@ class TestCreateRelationship:
                 relationship_type="salt_of",
                 created_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)
@@ -185,7 +184,7 @@ class TestCreateRelationship:
                 relationship_type="salt_of",
                 created_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)
@@ -212,7 +211,7 @@ class TestCreateRelationship:
                     relationship_type="analog_of",
                     created_by=USER_ID,
                 ),
-                auth=FakeAuth(),
+                auth=FakeAuth(workspace_id=WS_ID),
             )
 
     @pytest.mark.asyncio
@@ -236,7 +235,7 @@ class TestCreateRelationship:
                 relationship_type="invalid_type",
                 created_by=USER_ID,
             ),
-            auth=FakeAuth(),
+            auth=FakeAuth(workspace_id=WS_ID),
         )
 
         assert isinstance(result, Failure)
@@ -255,16 +254,16 @@ class TestCreateRelationship:
         mol_repo.add(target)
 
         uc = CreateRelationship(uow, mol_repo, rel_repo, dispatcher)
-        result = await uc(
-            CreateRelationshipCommand(
-                workspace_id=uuid.uuid4(),  # different workspace
-                source_molecule_id=source.id,
-                target_molecule_id=target.id,
-                relationship_type="salt_of",
-                created_by=USER_ID,
-            ),
-            auth=FakeAuth(),
-        )
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), NotFoundError)
+        # The workspace guard rejects a command whose workspace differs from
+        # the caller's, raising NotFoundError to avoid leaking entity existence.
+        with pytest.raises(NotFoundError):
+            await uc(
+                CreateRelationshipCommand(
+                    workspace_id=uuid.uuid4(),  # different workspace
+                    source_molecule_id=source.id,
+                    target_molecule_id=target.id,
+                    relationship_type="salt_of",
+                    created_by=USER_ID,
+                ),
+                auth=FakeAuth(workspace_id=WS_ID),
+            )

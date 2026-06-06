@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.molecule import Molecule
@@ -35,6 +35,7 @@ class ListMoleculesByIds:
         self, input: ListMoleculesByIdsQuery, auth: AuthContext | None = None
     ) -> Result[list[Molecule], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         if not input.ids:
             return Success([])
         async with self._uow:

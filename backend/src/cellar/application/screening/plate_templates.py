@@ -8,7 +8,12 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor, require_workspace_role
+from cellar.application.auth import (
+    AuthContext,
+    require_editor,
+    require_same_workspace,
+    require_workspace_role,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
@@ -83,6 +88,7 @@ class CreatePlateTemplate:
         self, input: CreatePlateTemplateCommand, auth: AuthContext | None = None
     ) -> Result[PlateTemplate, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             template = PlateTemplate.create(
@@ -112,6 +118,7 @@ class UpdatePlateTemplate:
         self, input: UpdatePlateTemplateCommand, auth: AuthContext | None = None
     ) -> Result[PlateTemplate, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             template = await self._repo.find_by_id_in_workspace(
@@ -152,6 +159,7 @@ class DeletePlateTemplate:
         self, input: DeletePlateTemplateCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
         require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             template = await self._repo.find_by_id_in_workspace(
@@ -185,6 +193,7 @@ class GetPlateTemplate:
         self, input: GetPlateTemplateQuery, auth: AuthContext | None = None
     ) -> Result[PlateTemplate, DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             template = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.template_id
@@ -203,6 +212,7 @@ class ListPlateTemplates:
         self, input: ListPlateTemplatesQuery, auth: AuthContext | None = None
     ) -> Result[list[PlateTemplate], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             templates = await self._repo.find_by_workspace(input.workspace_id)
             return Success(templates)

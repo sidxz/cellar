@@ -19,6 +19,7 @@ from typing import Literal
 
 from returns.result import Result, Success
 
+from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.batch_identifier import BatchIdentifier
@@ -84,8 +85,12 @@ class BulkAddBatchIdentifiers:
         self._settings_repo = settings_repo
 
     async def __call__(
-        self, input: BulkAddBatchIdentifiersCommand
+        self,
+        input: BulkAddBatchIdentifiersCommand,
+        auth: AuthContext | None = None,
     ) -> Result[BulkAddBatchIdentifiersResult, DomainError]:
+        require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             settings = await self._settings_repo.find_by_workspace_id(input.workspace_id)
             if settings is None:

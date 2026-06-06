@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_admin
+from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -44,6 +44,7 @@ class MergeTags:
         self, input: MergeTagsCommand, auth: AuthContext | None = None
     ) -> Result[Tag, DomainError]:
         require_admin(auth)
+        require_same_workspace(auth, input.workspace_id)
         if input.source_tag_id == input.target_tag_id:
             return Failure(ValidationError("Cannot merge a tag into itself"))
 

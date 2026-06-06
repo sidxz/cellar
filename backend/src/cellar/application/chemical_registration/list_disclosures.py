@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_workspace_role
+from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -49,6 +49,7 @@ class ListDisclosures:
         self, input: ListDisclosuresQuery, auth: AuthContext | None = None
     ) -> Result[PageResult[DisclosureRequest], DomainError]:
         require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             # Workspace isolation: verify molecule belongs to caller's workspace
             molecule = await self._molecule_repo.find_by_id_in_workspace(

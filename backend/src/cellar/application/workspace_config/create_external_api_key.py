@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_admin
+from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -43,6 +43,7 @@ class CreateExternalApiKey:
         self, input: CreateExternalApiKeyCommand, auth: AuthContext | None = None
     ) -> Result[ExternalApiKey, DomainError]:
         require_admin(auth)
+        require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
             # Check for duplicate key_name in this workspace
