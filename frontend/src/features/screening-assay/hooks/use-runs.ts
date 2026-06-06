@@ -2,6 +2,7 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { RecomputeRunRequest, RecomputeRunResponse } from "@/shared/lib/api/model";
 import { showSuccess, showWarning } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateRunInput, Run } from "../types";
@@ -196,32 +197,10 @@ export function useDeleteRun() {
   });
 }
 
-interface RecomputeResponse {
-  computed_readouts: number;
-  /** Per-compound fit failure messages from the post-recompute curve fit.
-   *  Optional for back-compat with older backend deployments. */
-  fit_warnings?: string[];
-}
-
-export interface RecomputeOverrides {
-  override_top?: boolean;
-  top_constraint?: number | null;
-  top_constraint_min?: number | null;
-  top_constraint_max?: number | null;
-  override_bottom?: boolean;
-  bottom_constraint?: number | null;
-  bottom_constraint_min?: number | null;
-  bottom_constraint_max?: number | null;
-  override_hill?: boolean;
-  hill_slope_constraint?:
-    | "unconstrained"
-    | "negative_only"
-    | "positive_only"
-    | "fixed_at_one"
-    | null;
-  hill_slope_min?: number | null;
-  hill_slope_max?: number | null;
-}
+// Aliases of the orval-generated recompute DTOs (request sent verbatim as the
+// POST body; the generated HillSlopeConstraint enum carries the mode union).
+type RecomputeResponse = RecomputeRunResponse;
+export type RecomputeOverrides = RecomputeRunRequest;
 
 export interface RecomputeRunArgs {
   runId: string;

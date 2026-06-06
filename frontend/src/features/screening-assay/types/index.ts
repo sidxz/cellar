@@ -1,4 +1,5 @@
 import type {
+  ClassifyDoseResponseCurveRequest,
   ConditionGroupReadoutResponse,
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
@@ -11,6 +12,7 @@ import type {
   PlateMapWellModel,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
+  RefitDoseResponseCurveRequest,
   RunCountsResponse as RunCountsResponseModel,
   TargetRefResponse,
 } from "@/shared/lib/api/model";
@@ -611,28 +613,11 @@ export type ConditionGroupsResponse = ConditionGroupsResponseModel;
 
 // ─── Refit / Classify Input Types ────────────────────────────────────────────
 
-export interface RefitDoseResponseInput {
-  excluded_point_indices: number[];
-  hill_slope_constraint?: string | null;
-  top_constraint?: number | null;
-  bottom_constraint?: number | null;
-  /** Phase B per-curve overrides. Set `override_<param>` true when the client
-   *  controls that param's mode end-to-end (Free/Range/Lock); false inherits
-   *  from the protocol's config. */
-  override_top?: boolean;
-  top_constraint_min?: number | null;
-  top_constraint_max?: number | null;
-  override_bottom?: boolean;
-  bottom_constraint_min?: number | null;
-  bottom_constraint_max?: number | null;
-  override_hill?: boolean;
-  hill_slope_min?: number | null;
-  hill_slope_max?: number | null;
-}
-
-export interface ClassifyDoseResponseInput {
-  curve_class: string;
-}
+/** Aliases of the orval-generated refit/classify request DTOs — the previous
+ *  hand-written mirror had silently dropped the newer disable_auto_outliers /
+ *  exclusions / save_reason / save_note fields. */
+export type RefitDoseResponseInput = RefitDoseResponseCurveRequest;
+export type ClassifyDoseResponseInput = ClassifyDoseResponseCurveRequest;
 
 // ─── Plate Setup ─────────────────────────────────────────────────────────────
 

@@ -20,6 +20,7 @@ import { useAuthz } from "@sentinel-auth/nextjs";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, ImageIcon, Redo2, RotateCcw, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DOSE_RESPONSE_KEY } from "../hooks/query-keys";
 import { type DraftExclusion, useEditSession } from "../hooks/use-edit-session";
 import { useClassifyDoseResponse, useRefitDoseResponse } from "../hooks/use-refit-dose-response";
 import { useRefitPreview } from "../hooks/use-refit-preview";
@@ -562,7 +563,7 @@ export function DoseResponseChart({
         save_note: saveNote,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dose-response-curves"] });
+      queryClient.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
       setSaveDialogOpen(false);
       setEditMode(false);
       refitPreview.reset();

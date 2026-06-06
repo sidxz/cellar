@@ -1,6 +1,7 @@
 "use client";
 
 import { ProtocolList } from "@/features/screening-assay";
+import { PROTOCOLS_KEY } from "@/features/screening-assay/hooks/query-keys";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
@@ -24,7 +25,7 @@ export function AddProtocolDialog({ projectId, open, onOpenChange }: AddProtocol
         url: `${API_V1}/protocols/${protocolId}/projects/${projectId}`,
         method: "POST",
       });
-      qc.invalidateQueries({ queryKey: ["protocols"] });
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       showSuccess("Protocol added to project");
       onOpenChange(false);
     } finally {
