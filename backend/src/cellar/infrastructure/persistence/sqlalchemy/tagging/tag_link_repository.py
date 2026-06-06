@@ -196,20 +196,34 @@ class SQLAlchemyTagLinkRepository:
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
-    async def repoint(self, from_tag_id: uuid.UUID, to_tag_id: uuid.UUID) -> None:
+    async def repoint(
+        self, workspace_id: uuid.UUID, from_tag_id: uuid.UUID, to_tag_id: uuid.UUID
+    ) -> None:
         """Move every link from ``from_tag_id`` to ``to_tag_id`` (merge).
 
         Copies the source links onto the target tag (skipping rows where the
         entity already carries the target — composite-PK conflict), then deletes
-        the source links.
+        the source links. Both statements verify that both tags belong to
+        ``workspace_id`` (defence-in-depth — link tables carry no workspace
+        column), so a cross-workspace call is a no-op rather than a leak or
+        a delete-without-merge.
         """
+
+        def _owned(tag_id: uuid.UUID):
+            return select(TagModel.id).where(
+                TagModel.id == tag_id, TagModel.workspace_id == workspace_id
+            )
+
         col = self._entity_col
         src = select(
             col,
             literal(to_tag_id),
             self.link_model.assigned_by,
             self.link_model.assigned_at,
-        ).where(self.link_model.tag_id == from_tag_id)
+        ).where(
+            self.link_model.tag_id.in_(_owned(from_tag_id)),
+            _owned(to_tag_id).exists(),
+        )
         ins = (
             pg_insert(self.link_model)
             .from_select([self.entity_id_attr, "tag_id", "assigned_by", "assigned_at"], src)
@@ -217,7 +231,10 @@ class SQLAlchemyTagLinkRepository:
         )
         await self._session.execute(ins)
         await self._session.execute(
-            delete(self.link_model).where(self.link_model.tag_id == from_tag_id)
+            delete(self.link_model).where(
+                self.link_model.tag_id.in_(_owned(from_tag_id)),
+                _owned(to_tag_id).exists(),
+            )
         )
 
 

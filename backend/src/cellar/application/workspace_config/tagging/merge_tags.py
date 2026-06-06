@@ -62,7 +62,7 @@ class MergeTags:
 
             for entity_type in TaggableEntityType:
                 link_repo = self._link_provider.for_type(entity_type)
-                await link_repo.repoint(source.id, target.id)
+                await link_repo.repoint(input.workspace_id, source.id, target.id)
 
             source.register_event(
                 TagMerged(

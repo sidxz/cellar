@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from cellar.domain.workspace_config.tagging.tag import TaggableEntityType, TagName
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
+    SQLAlchemyTagLinkRepositoryProvider,
     get_tag_link_repository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import (
@@ -52,7 +53,7 @@ class TestRepoint:
             await uow.commit()
         async with uow:
             links = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
-            await links.repoint(a.id, b.id)
+            await links.repoint(ws, a.id, b.id)
             await uow.commit()
         async with uow:
             links = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
@@ -66,16 +67,29 @@ class TestRepoint:
             )
             assert res.scalar_one() == 0
 
-
-from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
-    SQLAlchemyTagLinkRepositoryProvider,
-)
+    async def test_repoint_foreign_workspace_is_noop(self, uow: AsyncUnitOfWork) -> None:
+        """Defence-in-depth: a repoint scoped to the wrong workspace must
+        neither move nor delete any links."""
+        ws, user = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            tag_repo = SQLAlchemyTagRepository(uow)
+            a = await tag_repo.get_or_create(ws, TagName(key="a"), user)
+            b = await tag_repo.get_or_create(ws, TagName(key="b"), user)
+            m1 = await _org_and_molecule(uow, ws, "RP-3")
+            links = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            await links.add(ws, m1, a.id, user)
+            await uow.commit()
+        async with uow:
+            links = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            await links.repoint(uuid.uuid4(), a.id, b.id)  # foreign workspace
+            await uow.commit()
+        async with uow:
+            links = get_tag_link_repository(TaggableEntityType.MOLECULE, uow)
+            assert {t.key for t in await links.find_tags_for_entity(ws, m1)} == {"a"}
 
 
 class TestMergeIntegration:
-    async def test_merge_moves_links_and_drops_source_tag(
-        self, uow: AsyncUnitOfWork
-    ) -> None:
+    async def test_merge_moves_links_and_drops_source_tag(self, uow: AsyncUnitOfWork) -> None:
         from unittest.mock import AsyncMock
 
         from cellar.application.workspace_config.tagging.merge_tags import (
