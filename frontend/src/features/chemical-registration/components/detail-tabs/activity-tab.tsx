@@ -15,6 +15,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import type {
+  ProtocolActivityResponse,
+  ProtocolActivityResponseBestCurvesItem,
+  ProtocolActivityResponseInterceptsItem,
+} from "@/shared/lib/api/model";
 import { FlaskConical } from "lucide-react";
 import { useMoleculeActivity } from "../../hooks/use-molecule-activity";
 
@@ -26,6 +31,11 @@ interface ActivityTabProps {
   moleculeId: string;
 }
 
+// The backend serializes `best_curves` / `intercepts` as untyped JSONB
+// records (orval emits `ProtocolActivityResponse{BestCurvesItem,InterceptsItem}`
+// as `{ [key: string]: unknown }`). These are the shapes the activity
+// endpoint actually returns; we narrow the opaque records into them at the
+// render edge below rather than re-typing the backend DTO.
 interface BestCurve {
   curve_type: string;
   fitted_value: number;
@@ -38,6 +48,26 @@ interface BestCurve {
   curve_class: string | null;
   data_points: Array<{ x: number; y: number }> | null;
   intercept_values?: InterceptValue[];
+}
+
+/** Narrow an opaque generated `best_curves` JSONB record into the typed
+ *  client shape rendered by `CurveTable`. */
+function asBestCurve(item: ProtocolActivityResponseBestCurvesItem): BestCurve {
+  return item as unknown as BestCurve;
+}
+
+/** Narrow an opaque generated `intercepts` JSONB record into the protocol
+ *  intercept spec that drives the dynamic column set. */
+function asInterceptSpec(item: ProtocolActivityResponseInterceptsItem): InterceptSpec {
+  return item as unknown as InterceptSpec;
+}
+
+function bestCurves(protocol: ProtocolActivityResponse): BestCurve[] {
+  return (protocol.best_curves ?? []).map(asBestCurve);
+}
+
+function interceptSpecs(protocol: ProtocolActivityResponse): InterceptSpec[] {
+  return (protocol.intercepts ?? []).map(asInterceptSpec);
 }
 
 export function ActivityTab({ moleculeId }: ActivityTabProps) {
@@ -64,53 +94,57 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
 
   return (
     <div className="space-y-6">
-      {activity.protocols.map((protocol) => (
-        <Card key={protocol.protocol_id}>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <CardTitle className="text-base">{protocol.protocol_name}</CardTitle>
-              <Badge variant="outline">{protocol.protocol_type.replace(/_/g, " ")}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {protocol.best_curves.length > 0 ? (
-              <CurveTable curves={protocol.best_curves} intercepts={protocol.intercepts ?? []} />
-            ) : protocol.readouts.length > 0 ? (
-              <div className="rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Value</TableHead>
-                      <TableHead>Unit</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Points</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {protocol.readouts.map((readout, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-mono">
-                          {readout.qualifier && readout.qualifier !== "="
-                            ? `${readout.qualifier} `
-                            : ""}
-                          {readout.value != null ? readout.value.toFixed(3) : "—"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {readout.unit ?? "—"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{readout.source}</TableCell>
-                        <TableCell>{readout.data_point_count}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+      {activity.protocols.map((protocol) => {
+        const curves = bestCurves(protocol);
+        const readouts = protocol.readouts ?? [];
+        return (
+          <Card key={protocol.protocol_id}>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <CardTitle className="text-base">{protocol.protocol_name}</CardTitle>
+                <Badge variant="outline">{protocol.protocol_type.replace(/_/g, " ")}</Badge>
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No readout data for this protocol.</p>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+            </CardHeader>
+            <CardContent>
+              {curves.length > 0 ? (
+                <CurveTable curves={curves} intercepts={interceptSpecs(protocol)} />
+              ) : readouts.length > 0 ? (
+                <div className="rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Value</TableHead>
+                        <TableHead>Unit</TableHead>
+                        <TableHead>Source</TableHead>
+                        <TableHead>Points</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {readouts.map((readout, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell className="font-mono">
+                            {readout.qualifier && readout.qualifier !== "="
+                              ? `${readout.qualifier} `
+                              : ""}
+                            {readout.value != null ? readout.value.toFixed(3) : "—"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {readout.unit ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{readout.source}</TableCell>
+                          <TableCell>{readout.data_point_count ?? 0}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No readout data for this protocol.</p>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
