@@ -1,4 +1,7 @@
-import { act, renderHook } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { createElement } from "react";
+import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock customInstance so tests don't require a live Sentinel/localStorage.
@@ -36,39 +39,33 @@ function makeJob(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// useExport composes useJobPoll, which runs as a TanStack Query — so the hook
+// needs a QueryClientProvider. A fresh client per test keeps the poll cache
+// isolated. retry:false so a rejected poll surfaces immediately.
+function wrapper({ children }: { children: React.ReactNode }) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return createElement(QueryClientProvider, { client: qc }, children);
+}
+
+const renderUseExport = () => renderHook(() => useExport(), { wrapper });
+
 // ── setup ─────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  vi.useFakeTimers();
   mockCustomInstance.mockReset();
   mockDownloadFile.mockReset();
   mockDownloadFile.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
-  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
-
-// Helper: flush all pending timers + microtasks inside act so React state
-// updates are applied. Works with vi.useFakeTimers().
-async function flushTimers() {
-  await act(async () => {
-    await vi.runAllTimersAsync();
-  });
-}
-
-// Helper: flush a single timer tick (fires the next pending timer then drains microtasks).
-async function flushNextTimer() {
-  await act(async () => {
-    await vi.advanceTimersByTimeAsync(600);
-  });
-}
 
 // ── tests ─────────────────────────────────────────────────────────────────
 
 describe("useExport", () => {
   it("starts idle: job null, isPending false, error null", () => {
-    const { result } = renderHook(() => useExport());
+    const { result } = renderUseExport();
     expect(result.current.job).toBeNull();
     expect(result.current.isPending).toBe(false);
     expect(result.current.error).toBeNull();
@@ -92,20 +89,14 @@ describe("useExport", () => {
         }),
       );
 
-    const { result } = renderHook(() => useExport());
+    const { result } = renderUseExport();
 
-    // Kick off: POST fires, poll() called immediately (no timer), first GET fires.
     await act(async () => {
       await result.current.start({ source: "search", format: "csv", payload: {} });
     });
 
-    // At this point: first GET either resolved or is in-flight.
-    // Drain microtasks + fire the 500ms timer for the second poll.
-    await flushTimers();
-    // Drain microtasks from the second poll resolving.
-    await flushTimers();
+    await waitFor(() => expect(result.current.job?.status).toBe("ready"), { timeout: 3000 });
 
-    expect(result.current.job?.status).toBe("ready");
     expect(result.current.isPending).toBe(false);
     expect(result.current.error).toBeNull();
     expect(mockDownloadFile).toHaveBeenCalledOnce();
@@ -123,16 +114,13 @@ describe("useExport", () => {
         makeJob({ id: "j2", status: "failed", error_message: "Out of memory" }),
       );
 
-    const { result } = renderHook(() => useExport());
+    const { result } = renderUseExport();
 
     await act(async () => {
       await result.current.start({ source: "search", format: "csv", payload: {} });
     });
 
-    // First poll → failed (no retry timer scheduled)
-    await flushTimers();
-
-    expect(result.current.error).toBe("Out of memory");
+    await waitFor(() => expect(result.current.error).toBe("Out of memory"), { timeout: 3000 });
     expect(result.current.isPending).toBe(false);
   });
 
@@ -141,15 +129,15 @@ describe("useExport", () => {
       .mockResolvedValueOnce({ job_id: "j3" })
       .mockRejectedValueOnce(new Error("Network offline"));
 
-    const { result } = renderHook(() => useExport());
+    const { result } = renderUseExport();
 
     await act(async () => {
       await result.current.start({ source: "search", format: "csv", payload: {} });
     });
 
-    await flushTimers();
-
-    expect(result.current.error).toBe("Network offline");
+    await waitFor(() => expect(result.current.error).toContain("Network offline"), {
+      timeout: 3000,
+    });
   });
 
   it("reset clears job and error", async () => {
@@ -157,14 +145,13 @@ describe("useExport", () => {
       .mockResolvedValueOnce({ job_id: "j4" })
       .mockResolvedValueOnce(makeJob({ id: "j4", status: "failed", error_message: "bad" }));
 
-    const { result } = renderHook(() => useExport());
+    const { result } = renderUseExport();
 
     await act(async () => {
       await result.current.start({ source: "search", format: "csv", payload: {} });
     });
 
-    await flushTimers();
-    expect(result.current.error).toBe("bad");
+    await waitFor(() => expect(result.current.error).toBe("bad"), { timeout: 3000 });
 
     act(() => {
       result.current.reset();
@@ -176,55 +163,43 @@ describe("useExport", () => {
   });
 
   it("isPending true while job is running", async () => {
-    // POST → job_id; first poll → running. We assert BEFORE the second poll fires.
-    mockCustomInstance
-      .mockResolvedValueOnce({ job_id: "j5" })
-      .mockResolvedValueOnce(makeJob({ id: "j5", status: "running" }));
+    // POST → job_id; every poll returns "running" so the job never reaches a
+    // terminal state — isPending stays true.
+    mockCustomInstance.mockImplementation(async (cfg: { method: string; url: string }) => {
+      if (cfg.method === "POST" && cfg.url.endsWith("/exports")) return { job_id: "j5" };
+      return makeJob({ id: "j5", status: "running" });
+    });
 
-    const { result } = renderHook(() => useExport());
+    const { result } = renderUseExport();
 
-    // start() fires POST then immediately calls poll() (no timer).
-    // act flushes the POST + the first GET resolution + setJob("running") call.
     await act(async () => {
       await result.current.start({ source: "search", format: "csv", payload: {} });
     });
 
-    // Advance time to flush the first poll's Promise resolution (it was fired without a timer).
-    // The second poll is scheduled 500ms later — we only advance 1ms so it doesn't fire.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1);
-    });
-
-    // job should now be "running" and isPending should be true.
-    expect(result.current.job?.status).toBe("running");
+    await waitFor(() => expect(result.current.job?.status).toBe("running"), { timeout: 3000 });
     expect(result.current.isPending).toBe(true);
   });
 
   it("cancel stops polling and calls the cancel endpoint", async () => {
-    mockCustomInstance
-      .mockResolvedValueOnce({ job_id: "j6" })
-      .mockResolvedValueOnce(makeJob({ id: "j6", status: "running" }))
-      // cancel endpoint (POST /exports/j6/cancel)
-      .mockResolvedValueOnce(undefined);
+    mockCustomInstance.mockImplementation(async (cfg: { method: string; url: string }) => {
+      if (cfg.method === "POST" && cfg.url.endsWith("/exports")) return { job_id: "j6" };
+      if (cfg.url.includes("/cancel")) return undefined;
+      return makeJob({ id: "j6", status: "running" });
+    });
 
-    const { result } = renderHook(() => useExport());
+    const { result } = renderUseExport();
 
     await act(async () => {
       await result.current.start({ source: "search", format: "csv", payload: {} });
     });
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1);
-    });
-
-    expect(result.current.job?.status).toBe("running");
+    await waitFor(() => expect(result.current.job?.status).toBe("running"), { timeout: 3000 });
 
     await act(async () => {
       await result.current.cancel();
     });
 
-    const calls = mockCustomInstance.mock.calls;
-    const cancelCall = calls.find(
+    const cancelCall = mockCustomInstance.mock.calls.find(
       (c) =>
         typeof c[0]?.url === "string" && c[0].url.includes("/cancel") && c[0].method === "POST",
     );

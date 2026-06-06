@@ -29,6 +29,14 @@ describe("isTerminalJobStatus", () => {
     expect(isTerminalJobStatus(null)).toBe(false);
     expect(isTerminalJobStatus(undefined)).toBe(false);
   });
+
+  it("honors a caller-supplied terminal set (e.g. exports add `expired`)", () => {
+    const exportTerminal = new Set(["ready", "failed", "cancelled", "expired"]);
+    expect(isTerminalJobStatus("expired", exportTerminal)).toBe(true);
+    // The default set does NOT treat `expired` as terminal.
+    expect(isTerminalJobStatus("expired")).toBe(false);
+    expect(isTerminalJobStatus("running", exportTerminal)).toBe(false);
+  });
 });
 
 describe("useJobPoll", () => {
@@ -135,5 +143,101 @@ describe("useJobPoll", () => {
     const callsAfterError = pollFn.mock.calls.length;
     await new Promise((r) => setTimeout(r, 60));
     expect(pollFn.mock.calls.length).toBe(callsAfterError);
+  });
+
+  it("exposes the latest raw poll response via `data`", async () => {
+    const pollFn = vi.fn(async (): Promise<Job> => ({ id: "j", status: "ready", payload: "done" }));
+    const { result } = renderHook(
+      () =>
+        useJobPoll<Job, string>({
+          job: { id: "j", status: "pending" },
+          pollFn,
+          ...jobExtractors,
+          pollIntervalMs: 10,
+        }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.data?.status).toBe("ready"), { timeout: 2000 });
+    expect(result.current.data?.payload).toBe("done");
+  });
+
+  it("treats a caller-supplied terminal status as terminal (e.g. `expired`)", async () => {
+    // `expired` is NOT in the default SAR terminal set, so without the override
+    // the poll would spin forever; with it, the poll stops.
+    const pollFn = vi.fn(async (): Promise<Job> => ({ id: "j", status: "expired" }));
+    const { result } = renderHook(
+      () =>
+        useJobPoll<Job, string>({
+          job: { id: "j", status: "pending" },
+          pollFn,
+          getStatus: (j) => j.status,
+          getResult: () => null,
+          getError: (j) => (j.status === "expired" ? "expired" : null),
+          pollIntervalMs: 10,
+          terminalStatuses: new Set(["ready", "failed", "cancelled", "expired"]),
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.error).toBe("expired"), { timeout: 2000 });
+    const callsAtTerminal = pollFn.mock.calls.length;
+    await new Promise((r) => setTimeout(r, 60));
+    expect(pollFn.mock.calls.length).toBe(callsAtTerminal);
+  });
+
+  it("fires onTerminal exactly once when the job reaches a terminal status", async () => {
+    let count = 0;
+    const pollFn = vi.fn(async (): Promise<Job> => {
+      count++;
+      return count < 2
+        ? { id: "j", status: "running" }
+        : { id: "j", status: "ready", payload: "done" };
+    });
+    const onTerminal = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useJobPoll<Job, string>({
+          job: { id: "j", status: "pending" },
+          pollFn,
+          ...jobExtractors,
+          pollIntervalMs: 10,
+          onTerminal,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.result).toBe("done"), { timeout: 2000 });
+    // Give re-renders a chance to (incorrectly) re-fire it.
+    await new Promise((r) => setTimeout(r, 60));
+    expect(onTerminal).toHaveBeenCalledTimes(1);
+    expect(onTerminal).toHaveBeenCalledWith({ id: "j", status: "ready", payload: "done" });
+  });
+
+  it("honors a caller-supplied backoff ramp", async () => {
+    const backoffMs = vi.fn((attempt: number) => (attempt < 2 ? 5 : 50));
+    let count = 0;
+    const pollFn = vi.fn(async (): Promise<Job> => {
+      count++;
+      return count < 3
+        ? { id: "j", status: "running" }
+        : { id: "j", status: "ready", payload: "done" };
+    });
+
+    const { result } = renderHook(
+      () =>
+        useJobPoll<Job, string>({
+          job: { id: "j", status: "pending" },
+          pollFn,
+          ...jobExtractors,
+          pollIntervalMs: 999, // would be ignored in favor of backoffMs
+          backoffMs,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.result).toBe("done"), { timeout: 2000 });
+    // The custom ramp was consulted (proving pollIntervalMs was not used).
+    expect(backoffMs).toHaveBeenCalled();
   });
 });

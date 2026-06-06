@@ -19,6 +19,13 @@ export const SUCCESS_DIALOG_AUTOCLOSE_MS = 1500;
 /** Debounce delay before a typeahead picker fires its search query. */
 export const SEARCH_DEBOUNCE_MS = 300;
 
+/**
+ * Minimum number of characters before a typeahead picker starts searching /
+ * shows its results dropdown. Below this the query is suppressed so a single
+ * keystroke doesn't fire a (useless) wide-open search.
+ */
+export const SEARCH_MIN_QUERY_LEN = 2;
+
 /** Default number of results a typeahead picker fetches per query. */
 export const PICKER_RESULT_LIMIT = 20;
 
@@ -39,6 +46,17 @@ export const JOB_POLL_SLOW_INTERVAL_MS = 3000;
 
 /** Number of poll attempts before the backoff doubles the interval. */
 export const JOB_POLL_BACKOFF_AFTER = 3;
+
+/**
+ * Fast warm-up poll interval used while a freshly-started job is most likely
+ * to flip to a terminal state quickly (e.g. small exports). Pollers that want
+ * snappy first-completion feedback use this for an initial fast phase before
+ * settling to {@link JOB_POLL_INTERVAL_MS}.
+ */
+export const JOB_POLL_FAST_INTERVAL_MS = 500;
+
+/** Number of fast warm-up polls before settling to the slower interval. */
+export const JOB_POLL_FAST_ATTEMPTS = 6;
 
 /**
  * Poll interval with a simple step backoff: the base interval for the first
