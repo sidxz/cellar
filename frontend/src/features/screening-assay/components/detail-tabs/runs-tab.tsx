@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
+import { shortId } from "@/shared/lib/utils";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { FlaskConical } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -112,7 +113,7 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         field: "operator",
         width: 120,
         valueGetter: (p) =>
-          p.data ? (memberName(p.data.operator) ?? p.data.operator.slice(0, 8)) : null,
+          p.data ? (memberName(p.data.operator) ?? shortId(p.data.operator)) : null,
       },
       {
         headerName: "Lab",

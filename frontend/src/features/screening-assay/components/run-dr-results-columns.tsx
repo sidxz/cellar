@@ -1,4 +1,3 @@
-import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import {
@@ -10,6 +9,7 @@ import {
 import type { CurveClass, InterceptSpec } from "../types";
 import { CurveClassBadge } from "./curve-class-badge";
 import { DoseResponseSparkline } from "./dose-response-sparkline";
+import { structureColumn } from "./grid-columns";
 import type { CompoundCurveRow } from "./run-dr-results-transforms";
 
 // ---------------------------------------------------------------------------
@@ -83,20 +83,7 @@ export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCur
         );
       },
     },
-    {
-      headerName: "Structure",
-      colId: "structure",
-      width: 130,
-      sortable: false,
-      cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
-        if (!params.data?.smiles) return <span className="text-muted-foreground">--</span>;
-        return (
-          <div className="flex h-full items-center justify-center py-1">
-            <StructureThumbnail smiles={params.data.smiles} size={104} />
-          </div>
-        );
-      },
-    },
+    structureColumn<CompoundCurveRow>((row) => row.smiles),
     ...interceptColumns,
     {
       headerName: "R²",

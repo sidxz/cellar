@@ -11,6 +11,7 @@ import {
 } from "@/shared/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
+import { shortId } from "@/shared/lib/utils";
 import { Grid3x3, Paperclip, Pencil, Upload } from "lucide-react";
 import { useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
@@ -87,7 +88,7 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
                   <tr key={pid} className="border-b last:border-b-0">
                     <td className="px-3 py-2 text-xs text-muted-foreground">
                       {i + 1}
-                      <span className="ml-2 font-mono text-[10px]">{pid.slice(0, 8)}…</span>
+                      <span className="ml-2 font-mono text-[10px]">{shortId(pid)}…</span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {typeof q.z_prime === "number" ? q.z_prime.toFixed(3) : "—"}
