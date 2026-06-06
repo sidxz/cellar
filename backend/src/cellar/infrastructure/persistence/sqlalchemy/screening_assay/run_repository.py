@@ -14,6 +14,7 @@ from cellar.domain.screening_assay.enums import (
     RunStatus,
     WellType,
 )
+from cellar.domain.screening_assay.repository import TargetLinkResult
 from cellar.domain.screening_assay.run import Plate, Run, Well
 from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.value_objects import Barcode
@@ -148,24 +149,51 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         )
         return result.scalar_one_or_none() is not None
 
+    async def find_lock_state(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> bool | None:
+        """Column-only guard query. None = run missing / cross-workspace.
+
+        Unlike ``is_locked()`` this distinguishes not-found from unlocked,
+        and avoids hydrating the plates -> wells selectin chain.
+        """
+        result = await self._session.execute(
+            select(RunModel.is_locked).where(
+                RunModel.id == run_id,
+                RunModel.workspace_id == workspace_id,
+            )
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return bool(row)
+
     async def add_target(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
-        """Link a target to a run (idempotent). Workspace-checked on both sides."""
+    ) -> TargetLinkResult:
+        """Link a target to a run (idempotent). Workspace-checked on both sides.
+
+        The distinct not-found outcomes let callers surface a 404 instead of
+        a silent success.
+        """
         if not await self._owns(RunModel, run_id, workspace_id):
-            return
+            return TargetLinkResult.OWNER_NOT_FOUND
         if not await self._owns(TargetModel, target_id, workspace_id):
-            return
-        await self._session.execute(
+            return TargetLinkResult.TARGET_NOT_FOUND
+        result = await self._session.execute(
             pg_insert(run_targets)
             .values(run_id=run_id, target_id=target_id)
             .on_conflict_do_nothing()
         )
+        if result.rowcount:
+            return TargetLinkResult.ADDED
+        return TargetLinkResult.ALREADY_LINKED
 
     async def remove_target(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
-        await self._session.execute(
+    ) -> bool:
+        """Unlink a run target. Returns True if a link row was removed."""
+        result = await self._session.execute(
             run_targets.delete().where(
                 run_targets.c.run_id == run_id,
                 run_targets.c.target_id == target_id,
@@ -174,6 +202,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
                 ),
             )
         )
+        return bool(result.rowcount)
 
     async def find_target_refs(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID

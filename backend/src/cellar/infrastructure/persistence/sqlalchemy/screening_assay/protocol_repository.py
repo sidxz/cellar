@@ -26,6 +26,7 @@ from cellar.domain.screening_assay.protocol import (
     Protocol,
     ReadoutDefinition,
 )
+from cellar.domain.screening_assay.repository import TargetLinkResult
 from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.hit_criterion import HitCriterion
@@ -266,29 +267,51 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         )
         return result.scalar_one_or_none() is not None
 
+    async def find_lock_state(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> tuple[bool, str] | None:
+        """Column-only guard query — avoids hydrating the full aggregate."""
+        result = await self._session.execute(
+            select(ProtocolModel.is_locked, ProtocolModel.status).where(
+                ProtocolModel.id == protocol_id,
+                ProtocolModel.workspace_id == workspace_id,
+            )
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return bool(row.is_locked), row.status
+
     async def add_direct_target(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
+    ) -> TargetLinkResult:
         """Link a direct target to a protocol (idempotent via ON CONFLICT DO NOTHING).
 
         Defense-in-depth: only inserts if BOTH the protocol AND the target
-        belong to the workspace.
+        belong to the workspace; the distinct not-found outcomes let callers
+        surface a 404 instead of a silent success.
         """
         if not await self._owns(ProtocolModel, protocol_id, workspace_id):
-            return
+            return TargetLinkResult.OWNER_NOT_FOUND
         if not await self._owns(TargetModel, target_id, workspace_id):
-            return
-        await self._session.execute(
+            return TargetLinkResult.TARGET_NOT_FOUND
+        result = await self._session.execute(
             pg_insert(protocol_targets)
             .values(protocol_id=protocol_id, target_id=target_id)
             .on_conflict_do_nothing()
         )
+        if result.rowcount:
+            return TargetLinkResult.ADDED
+        return TargetLinkResult.ALREADY_LINKED
 
     async def remove_direct_target(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
-        """Unlink a direct target. Defense-in-depth: workspace-scoped."""
-        await self._session.execute(
+    ) -> bool:
+        """Unlink a direct target. Defense-in-depth: workspace-scoped.
+
+        Returns True if a link row was actually removed.
+        """
+        result = await self._session.execute(
             protocol_targets.delete().where(
                 protocol_targets.c.protocol_id == protocol_id,
                 protocol_targets.c.target_id == target_id,
@@ -297,6 +320,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 ),
             )
         )
+        return bool(result.rowcount)
 
     async def find_direct_target_ids(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID

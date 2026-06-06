@@ -18,6 +18,7 @@ from cellar.domain.screening_assay.repository import (
     PlateTemplateRepository,
     ProtocolRepository,
     RunRepository,
+    TargetLinkResult,
 )
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import (
@@ -107,8 +108,12 @@ class CreateRun:
             )
             await self._repo.save(run)
             # Initial run targets — idempotent, workspace-checked in the repo.
+            # An unknown/cross-workspace target aborts the create (404) instead
+            # of being silently dropped from the new run.
             for target_id in dict.fromkeys(input.target_ids):
-                await self._repo.add_target(input.workspace_id, run.id, target_id)
+                link = await self._repo.add_target(input.workspace_id, run.id, target_id)
+                if link is TargetLinkResult.TARGET_NOT_FOUND:
+                    return Failure(NotFoundError("Target", str(target_id)))
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)

@@ -21,9 +21,10 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import PosControlSignal, ProtocolStatus
+from cellar.domain.screening_assay.events import ProtocolTargetAdded, ProtocolTargetRemoved
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.protocol_versioning_service import ProtocolVersioningService
-from cellar.domain.screening_assay.repository import ProtocolRepository
+from cellar.domain.screening_assay.repository import ProtocolRepository, TargetLinkResult
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from cellar.domain.shared.hit_criterion import HitCriterion
 
@@ -408,7 +409,13 @@ class RemoveProtocolFromProject:
 
 
 class AddProtocolTarget:
-    """Attach a direct target to a protocol (idempotent)."""
+    """Attach a direct target to a protocol (idempotent).
+
+    Targets are an M2M association (not aggregate state), so the lock/status
+    guard uses a column-only query and the audit event is constructed here
+    rather than registered on the aggregate. No version bump: idempotent
+    association edits must not trigger optimistic-concurrency conflicts.
+    """
 
     def __init__(
         self,
@@ -425,30 +432,44 @@ class AddProtocolTarget:
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            protocol = await self._repo.find_by_id_in_workspace(
-                input.workspace_id, input.protocol_id
-            )
-            if protocol is None:
+            state = await self._repo.find_lock_state(input.workspace_id, input.protocol_id)
+            if state is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
-            if protocol.is_locked:
+            is_locked, status = state
+            if is_locked:
                 return Failure(
                     ConflictError("Protocol is locked — unlock to change targets")
                 )
-            if protocol.status == ProtocolStatus.RETIRED:
+            if status == ProtocolStatus.RETIRED.value:
                 return Failure(
                     ConflictError("Cannot change targets on a retired protocol")
                 )
-            await self._repo.add_direct_target(
+            link = await self._repo.add_direct_target(
                 input.workspace_id, input.protocol_id, input.target_id
             )
+            if link is TargetLinkResult.TARGET_NOT_FOUND:
+                return Failure(NotFoundError("Target", str(input.target_id)))
+            if link is TargetLinkResult.OWNER_NOT_FOUND:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             events = await self._uow.commit()
 
+        if link is TargetLinkResult.ADDED:
+            events.append(
+                ProtocolTargetAdded(
+                    aggregate_id=input.protocol_id,
+                    aggregate_type="Protocol",
+                    workspace_id=input.workspace_id,
+                    target_id=input.target_id,
+                    user_id=auth.user_id if auth else None,
+                )
+            )
         await self._dispatcher.dispatch_all(events)
         return Success(None)
 
 
 class RemoveProtocolTarget:
-    """Remove a direct target from a protocol."""
+    """Remove a direct target from a protocol. See ``AddProtocolTarget`` for
+    the guard/event conventions."""
 
     def __init__(
         self,
@@ -465,23 +486,32 @@ class RemoveProtocolTarget:
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            protocol = await self._repo.find_by_id_in_workspace(
-                input.workspace_id, input.protocol_id
-            )
-            if protocol is None:
+            state = await self._repo.find_lock_state(input.workspace_id, input.protocol_id)
+            if state is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
-            if protocol.is_locked:
+            is_locked, status = state
+            if is_locked:
                 return Failure(
                     ConflictError("Protocol is locked — unlock to change targets")
                 )
-            if protocol.status == ProtocolStatus.RETIRED:
+            if status == ProtocolStatus.RETIRED.value:
                 return Failure(
                     ConflictError("Cannot change targets on a retired protocol")
                 )
-            await self._repo.remove_direct_target(
+            removed = await self._repo.remove_direct_target(
                 input.workspace_id, input.protocol_id, input.target_id
             )
             events = await self._uow.commit()
 
+        if removed:
+            events.append(
+                ProtocolTargetRemoved(
+                    aggregate_id=input.protocol_id,
+                    aggregate_type="Protocol",
+                    workspace_id=input.workspace_id,
+                    target_id=input.target_id,
+                    user_id=auth.user_id if auth else None,
+                )
+            )
         await self._dispatcher.dispatch_all(events)
         return Success(None)

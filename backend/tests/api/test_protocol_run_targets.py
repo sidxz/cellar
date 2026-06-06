@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -137,3 +139,57 @@ class TestRunTargetRollup:
 
         rejected = await client.post(f"/api/v1/runs/{rid}/targets/{t1}")
         assert rejected.status_code == 409, rejected.text
+
+
+class TestUnknownTarget404:
+    """An unknown / cross-workspace target must 404, never silently succeed."""
+
+    async def test_add_unknown_target_to_protocol_404(self, client: AsyncClient) -> None:
+        pid = await _make_protocol(client)
+        bogus = str(uuid.uuid4())
+        resp = await client.post(f"/api/v1/protocols/{pid}/targets/{bogus}")
+        assert resp.status_code == 404, resp.text
+        # Nothing was attached.
+        rich = await client.get(f"/api/v1/protocols/{pid}/targets")
+        assert rich.json() == []
+
+    async def test_add_unknown_target_to_run_404(self, client: AsyncClient) -> None:
+        pid = await _make_protocol(client)
+        await _publish(client, pid)
+        rid = await _make_run(client, pid)
+        resp = await client.post(f"/api/v1/runs/{rid}/targets/{uuid.uuid4()}")
+        assert resp.status_code == 404, resp.text
+
+    async def test_create_protocol_with_unknown_target_404(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/protocols",
+            json={
+                "name": "BadTargetProto",
+                "protocol_type": "biochemical",
+                "target_ids": [str(uuid.uuid4())],
+                "readout_definitions": [
+                    {"name": "IC50", "data_type": "numeric", "display_order": 0}
+                ],
+            },
+        )
+        assert resp.status_code == 404, resp.text
+
+    async def test_create_run_with_unknown_target_404(self, client: AsyncClient) -> None:
+        pid = await _make_protocol(client)
+        await _publish(client, pid)
+        resp = await client.post(
+            "/api/v1/runs",
+            json={
+                "protocol_id": pid,
+                "run_date": "2026-06-05",
+                "target_ids": [str(uuid.uuid4())],
+            },
+        )
+        assert resp.status_code == 404, resp.text
+
+    async def test_remove_unlinked_target_is_idempotent_204(self, client: AsyncClient) -> None:
+        # DELETE of a never-linked (but real) target stays idempotent.
+        pid = await _make_protocol(client)
+        t1 = await _make_target(client, "NadD")
+        resp = await client.delete(f"/api/v1/protocols/{pid}/targets/{t1}")
+        assert resp.status_code == 204, resp.text

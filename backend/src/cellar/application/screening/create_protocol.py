@@ -30,9 +30,14 @@ from cellar.domain.screening_assay.protocol import (
     ReadoutDefinition,
     is_reserved_readout_name,
 )
-from cellar.domain.screening_assay.repository import ProtocolRepository
+from cellar.domain.screening_assay.repository import ProtocolRepository, TargetLinkResult
 from cellar.domain.shared.enums import ConcentrationUnit
-from cellar.domain.shared.errors import AuthorizationError, DomainError, ValidationError
+from cellar.domain.shared.errors import (
+    AuthorizationError,
+    DomainError,
+    NotFoundError,
+    ValidationError,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -152,10 +157,14 @@ class CreateProtocol:
             )
             await self._repo.save(protocol)
             # Initial direct targets — idempotent, workspace-checked in the repo.
+            # An unknown/cross-workspace target aborts the create (404) instead
+            # of being silently dropped from the new protocol.
             for target_id in dict.fromkeys(input.target_ids):
-                await self._repo.add_direct_target(
+                link = await self._repo.add_direct_target(
                     input.workspace_id, protocol.id, target_id
                 )
+                if link is TargetLinkResult.TARGET_NOT_FOUND:
+                    return Failure(NotFoundError("Target", str(target_id)))
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)

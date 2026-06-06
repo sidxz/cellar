@@ -47,6 +47,26 @@ class ProtocolUnlocked(DomainEvent):
     reason: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class ProtocolTargetAdded(DomainEvent):
+    """A direct target was attached to a protocol.
+
+    Targets are an M2M association, not aggregate state, so these events are
+    constructed by the use case (not registered on the aggregate) and emitted
+    only when a link row was actually inserted — idempotent re-adds stay
+    silent. ``user_id`` feeds actor attribution in the audit catch-all.
+    """
+
+    target_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProtocolTargetRemoved(DomainEvent):
+    target_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
 # ---------------------------------------------------------------------------
 # Run events
 # ---------------------------------------------------------------------------
@@ -85,6 +105,21 @@ class RunLocked(DomainEvent):
 class RunUnlocked(DomainEvent):
     unlocked_by: uuid.UUID
     reason: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunTargetAdded(DomainEvent):
+    """A target was attached to a run. See ``ProtocolTargetAdded`` for the
+    use-case-constructed emission convention."""
+
+    target_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunTargetRemoved(DomainEvent):
+    target_id: uuid.UUID
+    user_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
