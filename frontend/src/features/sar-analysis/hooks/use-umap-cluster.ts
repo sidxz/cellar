@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import {
   type UmapJob,
@@ -10,7 +10,8 @@ import {
   dtoToUmapJob,
   dtoToUmapResult,
 } from "@/features/sar-analysis/types";
-import type { UmapJobDto, UmapResultDto } from "@/shared/lib/api/model";
+import { useJobPoll } from "@/shared/hooks/use-job-poll";
+import type { StartUmapClusterBody, StartUmapClusterResponse } from "@/shared/lib/api/model";
 
 // ---------------------------------------------------------------------------
 // Input / output types
@@ -24,16 +25,10 @@ export interface UseUmapClusterInput {
   threshold?: number;
   enabled: boolean;
   /** Override for tests — defaults to the orval-generated POST. */
-  startFn?: (input: {
-    collection_id?: string;
-    molecule_ids?: string[];
-    picker: string;
-    n?: number | null;
-    threshold?: number | null;
-  }) => Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }>;
+  startFn?: (input: StartUmapClusterBody) => Promise<StartUmapClusterResponse>;
   /** Override for tests — defaults to the orval-generated GET. The route
    *  returns `StartUmapClusterResponse` ({result, job}), not a flat UmapJobDto. */
-  pollFn?: (jobId: string) => Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }>;
+  pollFn?: (jobId: string) => Promise<StartUmapClusterResponse>;
   /** Override for tests — defaults to the orval-generated cancel POST. */
   cancelFn?: (jobId: string) => Promise<void>;
   pollIntervalMs?: number;
@@ -51,26 +46,18 @@ export interface UseUmapClusterReturn {
 // Defaults (lazy-imported orval functions to avoid circular dep in tests)
 // ---------------------------------------------------------------------------
 
-async function defaultStartFn(input: {
-  collection_id?: string;
-  molecule_ids?: string[];
-  picker: string;
-  n?: number | null;
-  threshold?: number | null;
-}): Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }> {
+async function defaultStartFn(input: StartUmapClusterBody): Promise<StartUmapClusterResponse> {
   const { startUmapClusterApiV1SarUmapClusterPost } = await import(
     "@/shared/lib/api/sar-analysis/sar-analysis"
   );
-  return startUmapClusterApiV1SarUmapClusterPost(input as any) as any;
+  return startUmapClusterApiV1SarUmapClusterPost(input);
 }
 
-async function defaultPollFn(
-  jobId: string,
-): Promise<{ result: UmapResultDto | null; job: UmapJobDto | null }> {
+async function defaultPollFn(jobId: string): Promise<StartUmapClusterResponse> {
   const { getUmapClusterJobApiV1SarUmapClusterJobsJobIdGet } = await import(
     "@/shared/lib/api/sar-analysis/sar-analysis"
   );
-  return getUmapClusterJobApiV1SarUmapClusterJobsJobIdGet(jobId) as any;
+  return getUmapClusterJobApiV1SarUmapClusterJobsJobIdGet(jobId);
 }
 
 async function defaultCancelFn(jobId: string): Promise<void> {
@@ -134,87 +121,45 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
 
   const asyncJobDto = start.data?.job ?? null;
   // MUST be memoized on the (stable, React-Query-cached) DTO. Deriving a fresh
-  // object every render makes the polling effect below — which depends on
-  // `asyncJob` — re-run on EVERY render, firing a new poll each time. That was
-  // a runaway request storm (thousands of polls of the same job id). With the
-  // DTO stable, this reference is stable and the effect runs once per job.
+  // object every render would invalidate the poll query's enabled/key inputs
+  // and re-fire the poll on EVERY render — a runaway request storm (thousands
+  // of polls of the same job id). With the DTO stable, this reference is stable
+  // and the poll runs once per job.
   const asyncJob: UmapJob | null = useMemo(
     () => (asyncJobDto ? dtoToUmapJob(asyncJobDto) : null),
     [asyncJobDto],
   );
 
-  // Polling state (only used when the initial response returned a job, not a result).
-  const [polledResult, setPolledResult] = useState<UmapResult | null>(null);
-  const [polledJob, setPolledJob] = useState<UmapJob | null>(null);
-  const [pollError, setPollError] = useState<string | null>(null);
-  const [_cancelRequested, setCancelRequested] = useState(false);
+  // Poll the job until terminal. The polled result/error live in the query
+  // cache (not component state). The route returns { result, job } — the job
+  // carries status, the result is the payload once status === "ready".
+  const {
+    result: polledResult,
+    error: pollError,
+    isPolling,
+  } = useJobPoll<StartUmapClusterResponse, UmapResult>({
+    job: asyncJob,
+    pollFn,
+    getStatus: (resp) => resp.job?.status,
+    getResult: (resp) =>
+      resp.job?.status === "ready" && resp.result ? dtoToUmapResult(resp.result) : null,
+    getError: (resp) => {
+      // Defensive: the route always returns a job; stop rather than spin if it
+      // ever goes missing.
+      if (!resp.job) return "Job not found";
+      if (resp.job.status === "failed")
+        return resp.job.error_message ?? "UMAP cluster compute failed";
+      if (resp.job.status === "cancelled") return "UMAP cluster compute cancelled";
+      return null;
+    },
+    pollIntervalMs,
+    queryKey: "umap-cluster-poll",
+  });
 
-  // Reset polling state whenever the query key changes (new input).
-  useEffect(() => {
-    setPolledResult(null);
-    setPolledJob(null);
-    setPollError(null);
-    setCancelRequested(false);
-  }, [key, picker, n, threshold]);
-
-  // Polling loop — mirrors useScaffoldTree's manual setTimeout approach.
-  useEffect(() => {
-    if (!asyncJob) return;
-    const terminalStatuses = new Set(["ready", "failed", "cancelled"]);
-    if (terminalStatuses.has(asyncJob.status)) return;
-
-    let cancelled = false;
-    let attempts = 0;
-
-    const tick = async () => {
-      try {
-        const resp = await pollFn(asyncJob.id);
-        if (cancelled) return;
-
-        // Route returns { result, job } — job carries status, result is the
-        // payload once status === "ready".
-        const jobDto = resp.job;
-        if (!jobDto) {
-          // Defensive: shouldn't happen (route always returns job), but stop
-          // polling if we lose the job entry rather than spin forever.
-          setPollError("Job not found");
-          return;
-        }
-        const mappedJob = dtoToUmapJob(jobDto);
-        setPolledJob(mappedJob);
-
-        if (jobDto.status === "ready") {
-          if (resp.result) setPolledResult(dtoToUmapResult(resp.result));
-          return;
-        }
-        if (jobDto.status === "failed") {
-          setPollError(jobDto.error_message ?? "UMAP cluster compute failed");
-          return;
-        }
-        if (jobDto.status === "cancelled") {
-          setPollError("UMAP cluster compute cancelled");
-          return;
-        }
-
-        attempts++;
-        const interval = attempts < 3 ? pollIntervalMs : pollIntervalMs * 2;
-        window.setTimeout(tick, interval);
-      } catch (e) {
-        if (!cancelled) setPollError(String(e));
-      }
-    };
-
-    tick();
-    return () => {
-      cancelled = true;
-    };
-  }, [asyncJob, pollFn, pollIntervalMs]);
-
-  // Cancel handler.
+  // Cancel handler — best-effort fire-and-forget.
   const cancel = () => {
-    const jobId = asyncJob?.id ?? polledJob?.id;
+    const jobId = asyncJob?.id;
     if (!jobId) return;
-    setCancelRequested(true);
     cancelFn(jobId).catch(() => {
       // Cancel is best-effort; swallow errors.
     });
@@ -222,14 +167,8 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
 
   // Derive exposed state.
   const result = inlineResult ?? polledResult;
-  const job = asyncJob ?? polledJob;
-  const isJobPending =
-    job !== null &&
-    job.status !== "ready" &&
-    job.status !== "failed" &&
-    job.status !== "cancelled" &&
-    result === null; // once we have a result, stop showing loading
-  const loading = start.isPending || isJobPending;
+  const job = asyncJob;
+  const loading = start.isPending || (isPolling && result === null);
   const error = pollError ?? (start.error as Error | null)?.message ?? null;
 
   return { result, job, loading, error, cancel };

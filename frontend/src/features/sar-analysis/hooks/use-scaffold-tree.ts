@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
+import { useJobPoll } from "@/shared/hooks/use-job-poll";
 import type {
   ScaffoldTreeJob,
   ScaffoldTreeResult,
@@ -70,53 +71,39 @@ export function useScaffoldTree(params: UseScaffoldTreeParams): UseScaffoldTreeR
   });
 
   const inlineTree = start.data?.tree ?? null;
-  const job = start.data?.job ?? null;
+  const startJob = start.data?.job ?? null;
 
-  const [jobTreeResult, setJobTreeResult] = useState<ScaffoldTreeResult | null>(null);
-  const [jobError, setJobError] = useState<Error | null>(null);
+  // Stable job reference for the poller (memoized on the React-Query-cached
+  // start response) — an inline-mapped object would re-fire the poll.
+  const job = useMemo(
+    () => (startJob ? { id: startJob.id, status: startJob.status } : null),
+    [startJob],
+  );
 
-  useEffect(() => {
-    if (!job) return;
-    if (job.status === "ready" || job.status === "failed" || job.status === "cancelled") {
-      return;
-    }
-    let cancelled = false;
-    let attempts = 0;
-    const tick = async () => {
-      try {
-        const status = await pollFn(job.id);
-        if (cancelled) return;
-        if (status.status === "ready" && status.tree) {
-          setJobTreeResult(status.tree);
-          return;
-        }
-        if (status.status === "failed") {
-          setJobError(new Error(status.error_message ?? "scaffold tree compute failed"));
-          return;
-        }
-        if (status.status === "cancelled") {
-          setJobError(new Error("scaffold tree compute cancelled"));
-          return;
-        }
-        attempts++;
-        const interval = attempts < 3 ? pollIntervalMs : pollIntervalMs * 2;
-        window.setTimeout(tick, interval);
-      } catch (e) {
-        if (!cancelled) setJobError(e as Error);
-      }
-    };
-    tick();
-    return () => {
-      cancelled = true;
-    };
-  }, [job, pollFn, pollIntervalMs]);
+  // Poll the job until terminal. The polled tree lives in the query cache, not
+  // in component state. The GET returns the full ScaffoldTreeJob (status + tree).
+  const { result: polledTree, error: pollError } = useJobPoll<ScaffoldTreeJob, ScaffoldTreeResult>({
+    job,
+    pollFn,
+    getStatus: (j) => j.status,
+    getResult: (j) => (j.status === "ready" ? (j.tree ?? null) : null),
+    getError: (j) => {
+      if (j.status === "failed") return j.error_message ?? "scaffold tree compute failed";
+      if (j.status === "cancelled") return "scaffold tree compute cancelled";
+      return null;
+    },
+    pollIntervalMs,
+    queryKey: "scaffold-tree-poll",
+  });
+
+  const tree = inlineTree ?? polledTree;
 
   return {
-    tree: inlineTree ?? jobTreeResult,
+    tree,
     jobId: job?.id ?? null,
     isStarting: start.isPending,
-    isPolling: job != null && jobTreeResult === null && jobError === null,
-    error: jobError ?? (start.error as Error | null) ?? null,
+    isPolling: job != null && tree === null && pollError === null,
+    error: (pollError ? new Error(pollError) : null) ?? (start.error as Error | null) ?? null,
   };
 }
 
