@@ -1,6 +1,7 @@
 "use client";
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { unwrapList } from "@/shared/types/pagination";
 import { useQuery } from "@tanstack/react-query";
 import type { AuditOperation } from "../types";
 
@@ -26,7 +27,7 @@ export function useAuditOperations(filters?: {
             )
           : undefined,
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
   });
 }
@@ -40,7 +41,7 @@ export function useAuditByEntity(entityType: string, entityId: string | undefine
         method: "GET",
         params: { entity_type: entityType, entity_id: entityId! },
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
     enabled: !!entityId,
   });

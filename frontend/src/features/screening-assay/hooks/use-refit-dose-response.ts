@@ -7,8 +7,7 @@ import type {
   DoseResponseCurve,
   RefitDoseResponseInput,
 } from "../types";
-
-const DOSE_RESPONSE_KEY = ["dose-response-curves"];
+import { DOSE_RESPONSE_KEY } from "./query-keys";
 
 export function useRefitDoseResponse() {
   const qc = useQueryClient();

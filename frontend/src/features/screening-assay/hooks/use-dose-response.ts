@@ -3,8 +3,7 @@
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { DoseResponseCurve } from "../types";
-
-const DOSE_RESPONSE_KEY = ["dose-response-curves"];
+import { DOSE_RESPONSE_KEY } from "./query-keys";
 
 export function useDoseResponseByRun(runId: string | undefined) {
   return useQuery({

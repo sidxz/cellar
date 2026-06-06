@@ -2,6 +2,7 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { unwrapList } from "@/shared/types/pagination";
 import { useQuery } from "@tanstack/react-query";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "../types";
 
@@ -35,7 +36,7 @@ export function useProjects(options?: { tags?: string[]; tagLogic?: "any" | "all
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
   });
 }

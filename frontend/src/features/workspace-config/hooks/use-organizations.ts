@@ -2,6 +2,7 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { unwrapList } from "@/shared/types/pagination";
 import { useQuery } from "@tanstack/react-query";
 import type { CreateOrganizationInput, Organization, UpdateOrganizationInput } from "../types";
 
@@ -23,7 +24,7 @@ export function useOrganizations(includeInactive = false) {
         method: "GET",
         params: includeInactive ? { include_inactive: "true" } : undefined,
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
   });
 }

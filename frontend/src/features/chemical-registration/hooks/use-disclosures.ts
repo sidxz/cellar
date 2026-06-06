@@ -2,6 +2,7 @@
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   DisclosureOutcome,
@@ -25,7 +26,7 @@ export function useDisclosures(status?: string) {
         method: "GET",
         params: status ? { status } : undefined,
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
   });
 }
@@ -42,7 +43,7 @@ export function useDisclosuresForMolecule(moleculeId: string | undefined) {
         url: `/api/v1/disclosures/by-molecule/${moleculeId}`,
         method: "GET",
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
     enabled: !!moleculeId,
   });

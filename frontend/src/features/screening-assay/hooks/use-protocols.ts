@@ -3,10 +3,10 @@
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
+import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateProtocolInput, Protocol, TargetRef } from "../types";
-
-const PROTOCOLS_KEY = ["protocols"];
+import { PROTOCOLS_KEY } from "./query-keys";
 
 const protocolHooks = createCrudHooks<
   Protocol,
@@ -53,7 +53,7 @@ export function useProtocols(
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
   });
 }

@@ -4,10 +4,7 @@ import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { type QueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import type { ProtocolTargetRef } from "../types";
-
-const PROTOCOLS_KEY = ["protocols"];
-
-const protocolTargetsKey = (protocolId: string) => [...PROTOCOLS_KEY, protocolId, "targets"];
+import { PROTOCOLS_KEY, protocolTargetsKey } from "./query-keys";
 
 /** Rich effective-target list with provenance (`is_direct` / `run_count`) for
  *  the design tab. The lightweight `protocol.targets` on GET /protocols/{id}

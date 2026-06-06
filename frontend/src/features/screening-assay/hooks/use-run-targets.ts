@@ -3,9 +3,7 @@
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { type QueryClient, useMutation } from "@tanstack/react-query";
-
-const RUNS_KEY = ["runs"];
-const PROTOCOLS_KEY = ["protocols"];
+import { PROTOCOLS_KEY, RUNS_KEY } from "./query-keys";
 
 /** One invalidation pass after a run-target gesture (single toggle or a
  *  batched diff): the run detail, the run lists, and — because run targets

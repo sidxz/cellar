@@ -5,8 +5,7 @@ import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess, showWarning } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateRunInput, Run } from "../types";
-
-const RUNS_KEY = ["runs"];
+import { DOSE_RESPONSE_KEY, RUNS_KEY } from "./query-keys";
 
 const runHooks = createCrudHooks<Run, CreateRunInput, Record<string, unknown>>({
   entityName: "Run",
@@ -235,7 +234,7 @@ export function useRecomputeRun() {
       qc.invalidateQueries({ queryKey: RUNS_KEY });
       qc.invalidateQueries({ queryKey: ["readout-data"] });
       qc.invalidateQueries({ queryKey: ["plate-map"] });
-      qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
+      qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
       qc.invalidateQueries({ queryKey: ["compound-curves"] });
       qc.invalidateQueries({ queryKey: ["protocol-activity"] });
       showSuccess(`Recomputed ${data.computed_readouts} readouts and refit curves`);

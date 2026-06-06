@@ -2,10 +2,10 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { unwrapList } from "@/shared/types/pagination";
 import { useQuery } from "@tanstack/react-query";
 import type { Collection, CreateCollectionInput, UpdateCollectionInput } from "../types";
-
-const COLLECTIONS_KEY = ["collections"];
+import { COLLECTIONS_KEY } from "./query-keys";
 
 const collectionHooks = createCrudHooks<Collection, CreateCollectionInput, UpdateCollectionInput>({
   entityName: "Collection",
@@ -52,7 +52,7 @@ export function useCollections(
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
   });
 }
