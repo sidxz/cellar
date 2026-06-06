@@ -17,6 +17,7 @@ import { Separator } from "@/shared/components/ui/separator";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Switch } from "@/shared/components/ui/switch";
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { useEffect } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -209,7 +210,7 @@ export function WorkspaceSettingsForm() {
                 {...register("regPrefix")}
                 placeholder="CC-"
                 maxLength={9}
-                style={{ textTransform: "uppercase" }}
+                className="uppercase"
               />
               <p className="text-xs text-muted-foreground">
                 2–8 uppercase letters + dash (e.g. <code>CC-</code>, <code>MTB-</code>). Applies to
@@ -263,9 +264,9 @@ export function WorkspaceSettingsForm() {
           <div className="mt-4 grid gap-6 max-w-lg">
             <p className="text-sm text-muted-foreground">
               External data sources are managed in{" "}
-              <a href="/admin/data-sources" className="underline text-primary">
+              <Link href="/admin/data-sources" className="underline text-primary">
                 Data Sources
-              </a>
+              </Link>
               .
             </p>
           </div>

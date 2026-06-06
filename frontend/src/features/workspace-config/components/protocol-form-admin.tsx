@@ -8,6 +8,7 @@ import {
 } from "@/features/screening-assay/types";
 import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
+import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -26,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Switch } from "@/shared/components/ui/switch";
 import {
   Table,
@@ -54,6 +54,8 @@ import {
 // ---------------------------------------------------------------------------
 
 interface ReadoutRow {
+  /** Stable client-side key so React reconciles rows across add/remove. Not sent to the API. */
+  _key: string;
   name: string;
   data_type: string;
   unit: string;
@@ -62,17 +64,26 @@ interface ReadoutRow {
 }
 
 interface ConditionRow {
+  /** Stable client-side key so React reconciles rows across add/remove. Not sent to the API. */
+  _key: string;
   name: string;
   data_type: string;
   unit: string;
 }
 
 function emptyReadoutRow(): ReadoutRow {
-  return { name: "", data_type: "numeric", unit: "", aggregation: "none", normalization: "none" };
+  return {
+    _key: crypto.randomUUID(),
+    name: "",
+    data_type: "numeric",
+    unit: "",
+    aggregation: "none",
+    normalization: "none",
+  };
 }
 
 function emptyConditionRow(): ConditionRow {
-  return { name: "", data_type: "text", unit: "" };
+  return { _key: crypto.randomUUID(), name: "", data_type: "text", unit: "" };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +117,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
       setReadoutRows(
         editing.readout_templates.length > 0
           ? editing.readout_templates.map((t) => ({
+              _key: crypto.randomUUID(),
               name: (t.name as string) ?? "",
               data_type: (t.data_type as string) ?? "numeric",
               unit: (t.unit as string) ?? "",
@@ -117,6 +129,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
       setConditionRows(
         editing.condition_templates
           ? editing.condition_templates.map((t) => ({
+              _key: crypto.randomUUID(),
               name: (t.name as string) ?? "",
               data_type: (t.data_type as string) ?? "text",
               unit: (t.unit as string) ?? "",
@@ -245,7 +258,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
             </div>
             <div className="space-y-2">
               {readoutRows.map((row, idx) => (
-                <div key={idx} className="flex items-end gap-2 rounded-md border p-2">
+                <div key={row._key} className="flex items-end gap-2 rounded-md border p-2">
                   <div className="grid gap-1 flex-1">
                     <Label className="text-[11px]">Name</Label>
                     <Input
@@ -374,7 +387,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
             {conditionRows.length > 0 && (
               <div className="space-y-2">
                 {conditionRows.map((row, idx) => (
-                  <div key={idx} className="flex items-end gap-2">
+                  <div key={row._key} className="flex items-end gap-2">
                     <div className="grid gap-1 flex-1">
                       <Label className="text-[11px]">Name</Label>
                       <Input
@@ -598,11 +611,7 @@ export function ProtocolFormAdmin() {
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
+          <SkeletonList />
         ) : (
           <FormTable entries={entries ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}

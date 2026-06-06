@@ -3,9 +3,9 @@
 import { AdminDeleteButton } from "@/shared/components/admin-delete-button";
 import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
+import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -31,13 +31,7 @@ export function VocabularyList() {
   const [editing, setEditing] = useState<Vocabulary | null>(null);
 
   if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
+    return <SkeletonList />;
   }
 
   return (

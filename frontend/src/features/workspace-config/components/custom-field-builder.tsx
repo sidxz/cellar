@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { useRef } from "react";
 import { useVocabularies } from "../hooks/use-vocabularies";
 import type { CustomFieldDefinition } from "../types";
 
@@ -31,11 +32,26 @@ interface CustomFieldBuilderProps {
 export function CustomFieldBuilder({ fields, onChange }: CustomFieldBuilderProps) {
   const { data: vocabularies } = useVocabularies();
 
+  // Stable per-row keys, tracked in parallel with `fields` by position. Keeping
+  // them off the row data avoids leaking a client-only field into the saved
+  // payload; index keys would misreconcile focus/uncommitted text on add/remove.
+  const rowKeys = useRef<string[]>([]);
+  // Reconcile length when `fields` changes from outside (e.g. parent re-seed):
+  // mint keys for any new trailing slots, trim extras.
+  while (rowKeys.current.length < fields.length) {
+    rowKeys.current.push(crypto.randomUUID());
+  }
+  if (rowKeys.current.length > fields.length) {
+    rowKeys.current.length = fields.length;
+  }
+
   const addField = () => {
+    rowKeys.current.push(crypto.randomUUID());
     onChange([...fields, { name: "", label: "", data_type: "text", required: false }]);
   };
 
   const removeField = (index: number) => {
+    rowKeys.current.splice(index, 1);
     onChange(fields.filter((_, i) => i !== index));
   };
 
@@ -46,7 +62,7 @@ export function CustomFieldBuilder({ fields, onChange }: CustomFieldBuilderProps
   return (
     <div className="space-y-3">
       {fields.map((field, index) => (
-        <Card key={index}>
+        <Card key={rowKeys.current[index]}>
           <CardContent className="pt-4">
             <div className="flex items-start gap-2">
               <GripVertical className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" />

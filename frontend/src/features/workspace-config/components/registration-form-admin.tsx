@@ -2,6 +2,7 @@
 
 import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
+import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -20,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Switch } from "@/shared/components/ui/switch";
 import {
   Table,
@@ -61,13 +61,7 @@ function FieldOverridesEditor({ appliesTo, overrides, onChange }: FieldOverrides
   const { data: fields, isLoading } = useCustomFields(appliesTo, true);
 
   if (isLoading) {
-    return (
-      <div className="space-y-2">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-full" />
-        ))}
-      </div>
-    );
+    return <SkeletonList rowClassName="h-10 w-full" className="space-y-2" />;
   }
 
   if (!fields || fields.length === 0) {
@@ -492,11 +486,7 @@ export function RegistrationFormAdmin() {
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
+          <SkeletonList rows={4} />
         ) : (
           <FormsTable forms={forms ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}
