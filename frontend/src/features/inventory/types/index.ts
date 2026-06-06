@@ -1,3 +1,13 @@
+import type {
+  ActivityItemResponse,
+  BatchListItemResponse,
+  BatchResponse,
+  InventorySummaryResponse,
+  SampleListItemResponse,
+  SampleResponse,
+  StorageLocationResponse,
+  StorageLocationWithCountResponse,
+} from "@/shared/lib/api/model";
 import type { BatchIdentifierResponse } from "@/shared/lib/api/model/batchIdentifierResponse";
 export type { BatchIdentifierResponse };
 
@@ -7,6 +17,25 @@ export type {
   BulkIdentifierRowBody,
   RowOutcomeResponse,
 } from "@/shared/lib/api/model";
+
+// ---------------------------------------------------------------------------
+// Aggregate / list DTOs — aliased to orval-generated types (source of truth).
+// ---------------------------------------------------------------------------
+
+export type Batch = BatchResponse;
+export type Sample = SampleResponse;
+export type StorageLocation = StorageLocationResponse;
+export type StorageLocationWithCount = StorageLocationWithCountResponse;
+export type BatchListItem = BatchListItemResponse;
+export type SampleListItem = SampleListItemResponse;
+export type ActivityItem = ActivityItemResponse;
+export type InventorySummary = InventorySummaryResponse;
+
+// ---------------------------------------------------------------------------
+// Client-only narrowed enums + display-label maps (UI state, not DTO mirrors).
+// The generated DTOs type these fields as plain `string`; these unions drive
+// the controlled-vocabulary label lookups and form selects in the UI.
+// ---------------------------------------------------------------------------
 
 export type BatchSource = "synthesized" | "purchased" | "donated" | "natural_extract";
 
@@ -48,29 +77,9 @@ export type StorageLocationType =
   | "box"
   | "drawer";
 
-export interface Batch {
-  id: string;
-  workspace_id: string;
-  molecule_id: string;
-  batch_number: string;
-  salt_entry_id: string | null;
-  salt_name: string | null;
-  salt_smiles: string | null;
-  salt_stoichiometry: number;
-  formula_weight: number | null;
-  purity: number | null;
-  amount_value: number;
-  amount_unit: string;
-  source: BatchSource;
-  chemist: string;
-  supplier_org_id: string | null;
-  vendor_catalog_number: string | null;
-  vendor_lot_number: string | null;
-  synthesis_date: string | null;
-  expiry_date: string | null;
-  appearance: string | null;
-  identifiers?: BatchIdentifierResponse[];
-}
+// ---------------------------------------------------------------------------
+// Client-only form-input shapes for create/update mutations.
+// ---------------------------------------------------------------------------
 
 export interface CreateBatchInput {
   molecule_id: string;
@@ -102,21 +111,6 @@ export interface UpdateBatchInput {
   storage_conditions_notes?: string | null;
 }
 
-export interface Sample {
-  id: string;
-  workspace_id: string;
-  batch_id: string;
-  barcode: string;
-  container_type: ContainerType;
-  amount_value: number;
-  amount_unit: string;
-  solvent: string | null;
-  status: SampleStatus;
-  location_id: string | null;
-  freeze_thaw_count: number;
-  low_stock_threshold: number | null;
-}
-
 export interface CreateSampleInput {
   batch_id: string;
   barcode: string;
@@ -126,19 +120,6 @@ export interface CreateSampleInput {
   solvent?: string | null;
   location_id?: string | null;
   low_stock_threshold?: number | null;
-}
-
-export interface StorageLocation {
-  id: string;
-  workspace_id: string;
-  name: string;
-  type: StorageLocationType;
-  parent_id: string | null;
-  barcode: string | null;
-  temperature: string | null;
-  rows: number | null;
-  columns: number | null;
-  capacity: number | null;
 }
 
 export interface CreateStorageLocationInput {
@@ -161,65 +142,4 @@ export interface UpdateStorageLocationInput {
   capacity?: number | null;
 }
 
-// ---------------------------------------------------------------------------
-// Global list item types (flat DTOs from hub endpoints)
-// ---------------------------------------------------------------------------
-
-export interface BatchListItem {
-  id: string;
-  batch_number: string;
-  molecule_id: string;
-  molecule_name: string;
-  molecule_registration_number: string;
-  source: BatchSource;
-  amount_value: number;
-  amount_unit: string;
-  purity: number | null;
-  salt_name: string | null;
-  appearance: string | null;
-  expiry_date: string | null;
-  sample_count: number;
-  has_low_stock_sample: boolean;
-  created_at: string;
-}
-
-export interface SampleListItem {
-  id: string;
-  barcode: string;
-  batch_id: string;
-  batch_number: string;
-  molecule_id: string;
-  molecule_name: string;
-  molecule_registration_number: string;
-  container_type: ContainerType;
-  amount_value: number;
-  amount_unit: string;
-  status: SampleStatus;
-  solvent: string | null;
-  freeze_thaw_count: number;
-  low_stock_threshold: number | null;
-  location_id: string | null;
-  location_name: string | null;
-  location_type: string | null;
-  created_at: string;
-}
-
 export type { PaginatedResponse } from "@/shared/types/pagination";
-
-export interface ActivityItem {
-  description: string;
-  entity_type: string;
-  entity_id: string;
-  occurred_at: string;
-}
-
-export interface InventorySummary {
-  low_stock_count: number;
-  expiring_soon_count: number;
-  pending_requests_count: number;
-  recent_activity: ActivityItem[];
-}
-
-export interface StorageLocationWithCount extends StorageLocation {
-  sample_count: number;
-}

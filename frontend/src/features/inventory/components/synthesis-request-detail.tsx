@@ -19,6 +19,7 @@ import { useSynthesisRequestActions } from "../hooks/use-synthesis-request-actio
 import { useSynthesisRequest } from "../hooks/use-synthesis-requests";
 import {
   FEASIBILITY_STATUS_LABELS,
+  type FeasibilityStatus,
   SYNTHESIS_REQUEST_STATUS_LABELS,
   type SynthesisRequestStatus,
 } from "../types/synthesis-request";
@@ -82,12 +83,12 @@ export function SynthesisRequestDetail({ requestId }: SynthesisRequestDetailProp
         }
         badge={(r) => ({
           status: r.status,
-          label: SYNTHESIS_REQUEST_STATUS_LABELS[r.status] ?? r.status,
+          label: SYNTHESIS_REQUEST_STATUS_LABELS[r.status as SynthesisRequestStatus] ?? r.status,
         })}
         notFoundMessage="Request not found."
         actions={(r) => {
-          const isTerminal = TERMINAL_STATUSES.has(r.status);
-          const isCancellable = CANCELLABLE_STATUSES.has(r.status);
+          const isTerminal = TERMINAL_STATUSES.has(r.status as SynthesisRequestStatus);
+          const isCancellable = CANCELLABLE_STATUSES.has(r.status as SynthesisRequestStatus);
           if (isTerminal) return undefined;
           return (
             <>
@@ -240,7 +241,10 @@ export function SynthesisRequestDetail({ requestId }: SynthesisRequestDetailProp
                   <p className="text-xs text-muted-foreground">Status</p>
                   <StatusBadge
                     status={request.status}
-                    label={SYNTHESIS_REQUEST_STATUS_LABELS[request.status] ?? request.status}
+                    label={
+                      SYNTHESIS_REQUEST_STATUS_LABELS[request.status as SynthesisRequestStatus] ??
+                      request.status
+                    }
                     className="mt-1"
                   />
                 </div>
@@ -328,8 +332,9 @@ export function SynthesisRequestDetail({ requestId }: SynthesisRequestDetailProp
                     <div>
                       <p className="text-xs text-muted-foreground">Feasibility Status</p>
                       <p className="font-medium">
-                        {FEASIBILITY_STATUS_LABELS[request.feasibility_status] ??
-                          request.feasibility_status}
+                        {FEASIBILITY_STATUS_LABELS[
+                          request.feasibility_status as FeasibilityStatus
+                        ] ?? request.feasibility_status}
                       </p>
                     </div>
                   )}

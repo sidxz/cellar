@@ -1,3 +1,16 @@
+import type { SampleRequestResponse } from "@/shared/lib/api/model";
+
+// ---------------------------------------------------------------------------
+// Aggregate DTO — aliased to the orval-generated type (source of truth).
+// ---------------------------------------------------------------------------
+
+export type SampleRequest = SampleRequestResponse;
+
+// ---------------------------------------------------------------------------
+// Client-only narrowed enums + display-label maps (UI state, not DTO mirrors).
+// The generated SampleRequestResponse types `status`/`priority` as `string`.
+// ---------------------------------------------------------------------------
+
 export type SampleRequestStatus =
   | "submitted"
   | "approved"
@@ -23,22 +36,9 @@ export const REQUEST_PRIORITY_LABELS: Record<RequestPriority, string> = {
   critical: "Critical",
 };
 
-export interface SampleRequest {
-  id: string;
-  workspace_id: string;
-  requester_id: string;
-  molecule_id: string;
-  batch_id: string | null;
-  amount_value: number;
-  amount_unit: string;
-  purpose: string;
-  priority: RequestPriority;
-  status: SampleRequestStatus;
-  assigned_to: string | null;
-  fulfilled_sample_id: string | null;
-  rejection_reason: string | null;
-  fulfilled_at: string | null;
-}
+// ---------------------------------------------------------------------------
+// Client-only form-input shape for create mutations.
+// ---------------------------------------------------------------------------
 
 export interface CreateSampleRequestInput {
   molecule_id: string;

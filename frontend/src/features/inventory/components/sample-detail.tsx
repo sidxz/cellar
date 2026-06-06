@@ -276,7 +276,7 @@ function MoveDialog({
   open,
   onOpenChange,
 }: {
-  sample: { id: string; barcode: string; location_id: string | null };
+  sample: { id: string; barcode: string; location_id?: string | null };
   locations: StorageLocation[];
   open: boolean;
   onOpenChange: (open: boolean) => void;

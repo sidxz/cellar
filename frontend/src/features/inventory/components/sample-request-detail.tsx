@@ -39,6 +39,7 @@ import {
 import { useSamplesByBatch } from "../hooks/use-samples";
 import {
   REQUEST_PRIORITY_LABELS,
+  type RequestPriority,
   SAMPLE_REQUEST_STATUS_LABELS,
   type SampleRequest,
   type SampleRequestStatus,
@@ -71,11 +72,11 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
         }
         badge={(r) => ({
           status: r.status,
-          label: SAMPLE_REQUEST_STATUS_LABELS[r.status] ?? r.status,
+          label: SAMPLE_REQUEST_STATUS_LABELS[r.status as SampleRequestStatus] ?? r.status,
         })}
         notFoundMessage="Request not found."
         actions={(r) => {
-          const isTerminal = TERMINAL_STATUSES.has(r.status);
+          const isTerminal = TERMINAL_STATUSES.has(r.status as SampleRequestStatus);
           if (isTerminal) return undefined;
           return (
             <>
@@ -129,7 +130,9 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
             <div className="-mt-3 flex items-center gap-2">
               <PriorityBadge
                 priority={request.priority}
-                label={REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}
+                label={
+                  REQUEST_PRIORITY_LABELS[request.priority as RequestPriority] ?? request.priority
+                }
               />
               <span className="text-muted-foreground text-sm">
                 Requested by <MemberName id={request.requester_id} />
@@ -163,13 +166,15 @@ export function SampleRequestDetail({ requestId }: SampleRequestDetailProps) {
                 <div>
                   <p className="text-xs text-muted-foreground">Priority</p>
                   <p className="font-medium">
-                    {REQUEST_PRIORITY_LABELS[request.priority] ?? request.priority}
+                    {REQUEST_PRIORITY_LABELS[request.priority as RequestPriority] ??
+                      request.priority}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Status</p>
                   <p className="font-medium">
-                    {SAMPLE_REQUEST_STATUS_LABELS[request.status] ?? request.status}
+                    {SAMPLE_REQUEST_STATUS_LABELS[request.status as SampleRequestStatus] ??
+                      request.status}
                   </p>
                 </div>
                 {request.assigned_to && (

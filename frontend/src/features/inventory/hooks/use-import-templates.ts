@@ -1,19 +1,14 @@
 "use client";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { ImportTemplateResponse } from "@/shared/lib/api/model";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-export interface ImportTemplate {
-  id: string;
-  workspace_id: string;
-  name: string;
-  description: string | null;
-  column_mappings: Record<string, string>;
-  default_protocol_id: string | null;
-  created_by: string;
-}
+// Aggregate DTO — aliased to the orval-generated type (source of truth).
+export type ImportTemplate = ImportTemplateResponse;
 
+// Client-only form-input shape for the create mutation.
 export interface CreateImportTemplateInput {
   name: string;
   column_mappings: Record<string, string>;

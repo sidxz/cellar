@@ -29,6 +29,11 @@ import {
 import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { saveText } from "@/shared/lib/api/download";
+import type {
+  CellarInterfaceRoutesPlateImportImportPreviewResponse,
+  ExecuteImportResponse,
+  ValidationResultResponse,
+} from "@/shared/lib/api/model";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { CheckCircle2, Download, FileUp, Loader2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -41,34 +46,11 @@ import {
 import { ColumnMappingStep } from "./column-mapping-step";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+// Aliased to orval-generated DTOs (source of truth) — see plate-import routes.
 
-interface PreviewResponse {
-  headers: string[];
-  preview_rows: string[][];
-  total_rows: number;
-  file_id: string;
-}
-
-interface ValidationDetail {
-  row: number;
-  issue: string;
-  severity: string;
-}
-
-interface ValidationResponse {
-  total_rows: number;
-  matched: number;
-  unresolved: number;
-  errors: number;
-  details: ValidationDetail[];
-}
-
-interface ImportResult {
-  imported_count: number;
-  skipped_count: number;
-  readout_count: number;
-  errors: string[];
-}
+type PreviewResponse = CellarInterfaceRoutesPlateImportImportPreviewResponse;
+type ValidationResponse = ValidationResultResponse;
+type ImportResult = ExecuteImportResponse;
 
 // ── Main wizard ────────────────────────────────────────────────────────────────
 
@@ -138,7 +120,9 @@ export function ImportWizard() {
   function handleTemplateLoad(templateId: string) {
     const tpl = importTemplates?.find((t) => t.id === templateId);
     if (!tpl) return;
-    setColumnMappings(tpl.column_mappings);
+    // column_mappings is an untyped dict in the backend schema (orval emits
+    // `{ [key: string]: unknown }`); the stored values are always string→string.
+    setColumnMappings(tpl.column_mappings as Record<string, string>);
     if (tpl.default_protocol_id) setProtocolId(tpl.default_protocol_id);
   }
 
@@ -370,7 +354,7 @@ export function ImportWizard() {
               <PreviewTable
                 headers={preview.headers}
                 rows={preview.preview_rows.slice(0, 10)}
-                totalRows={preview.total_rows}
+                totalRows={preview.row_count}
               />
             )}
           </CardContent>
@@ -384,7 +368,7 @@ export function ImportWizard() {
             <CardHeader>
               <CardTitle>Map Columns</CardTitle>
               <CardDescription>
-                {preview.total_rows} data rows detected. Assign each file column to a plate field.
+                {preview.row_count} data rows detected. Assign each file column to a plate field.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -641,7 +625,7 @@ function ImportResultCard({
       <CardContent className="space-y-4">
         <div className="grid grid-cols-4 gap-4">
           <Stat label="Rows Resolved" value={result.imported_count} variant="success" />
-          <Stat label="Readouts Created" value={result.readout_count} variant="success" />
+          <Stat label="Readouts Created" value={result.readout_count ?? 0} variant="success" />
           <Stat label="Skipped" value={result.skipped_count} variant="warn" />
           <Stat label="Errors" value={result.errors.length} variant="error" />
         </div>

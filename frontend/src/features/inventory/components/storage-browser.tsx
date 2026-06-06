@@ -68,7 +68,7 @@ function LocationNode({
   const deleteMutation = useDeleteStorageLocation();
   const children = getChildren(allLocations, location.id);
   const hasChildren = children.length > 0;
-  const icon = TYPE_ICONS[location.type] ?? <MapPin className="h-4 w-4" />;
+  const icon = TYPE_ICONS[location.type as StorageLocationType] ?? <MapPin className="h-4 w-4" />;
 
   return (
     <div>
@@ -103,7 +103,7 @@ function LocationNode({
             {location.sample_count}/{location.rows * location.columns}
           </span>
         ) : (
-          location.sample_count > 0 && (
+          (location.sample_count ?? 0) > 0 && (
             <span className="text-xs text-muted-foreground">{location.sample_count} samples</span>
           )
         )}
