@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { unwrapList } from "@/shared/types/pagination";
 import { useQuery } from "@tanstack/react-query";
 import type { Collection, CreateCollectionInput, UpdateCollectionInput } from "../types";
@@ -9,7 +9,7 @@ import { COLLECTIONS_KEY } from "./query-keys";
 
 const collectionHooks = createCrudHooks<Collection, CreateCollectionInput, UpdateCollectionInput>({
   entityName: "Collection",
-  baseUrl: "/api/v1/collections",
+  baseUrl: `${API_V1}/collections`,
   queryKey: COLLECTIONS_KEY,
 });
 
@@ -48,7 +48,7 @@ export function useCollections(
         params.tag_logic = options?.tagLogic ?? "any";
       }
       const resp = await customInstance<Collection[] | { items: Collection[] }>({
-        url: "/api/v1/collections",
+        url: `${API_V1}/collections`,
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
       });

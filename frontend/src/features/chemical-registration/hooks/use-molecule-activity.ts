@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
   ActivitySummaryResponse as GeneratedActivitySummaryResponse,
   ProtocolActivityResponse as GeneratedProtocolActivityResponse,
@@ -22,7 +22,7 @@ export function useMoleculeActivity(moleculeId: string | undefined) {
     queryKey: [...MOLECULES_KEY, moleculeId, "activity"],
     queryFn: () =>
       customInstance<ActivitySummaryResponse>({
-        url: `/api/v1/molecules/${moleculeId}/activity`,
+        url: `${API_V1}/molecules/${moleculeId}/activity`,
         method: "GET",
       }),
     enabled: !!moleculeId,

@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -42,7 +42,7 @@ export function useStartCddPlateImport() {
   return useMutation({
     mutationFn: () =>
       customInstance<CddPlateImportAccepted>({
-        url: "/api/v1/cdd-import/plates",
+        url: `${API_V1}/cdd-import/plates`,
         method: "POST",
       }),
   });
@@ -55,7 +55,7 @@ export function useCddPlateImportStatus(workflowId: string | null) {
     queryKey: ["cdd-plate-import", "status", workflowId],
     queryFn: async () => {
       const result = await customInstance<CddPlateImportStatus>({
-        url: `/api/v1/cdd-import/plates/${workflowId}/status`,
+        url: `${API_V1}/cdd-import/plates/${workflowId}/status`,
         method: "GET",
       });
       if (
@@ -82,7 +82,7 @@ export function useCancelCddPlateImport() {
   return useMutation({
     mutationFn: (workflowId: string) =>
       customInstance({
-        url: `/api/v1/cdd-import/plates/${workflowId}/cancel`,
+        url: `${API_V1}/cdd-import/plates/${workflowId}/cancel`,
         method: "POST",
       }),
   });
@@ -93,7 +93,7 @@ export function useForceFailPlateImport() {
   return useMutation({
     mutationFn: (importId: string) =>
       customInstance({
-        url: `/api/v1/cdd-import/plates/${importId}/force-fail`,
+        url: `${API_V1}/cdd-import/plates/${importId}/force-fail`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -107,7 +107,7 @@ export function usePlateImportHistory() {
     queryKey: ["cdd-plate-import", "history"],
     queryFn: () =>
       customInstance<CddPlateImportSummary[]>({
-        url: "/api/v1/cdd-import/plates",
+        url: `${API_V1}/cdd-import/plates`,
         method: "GET",
       }),
     staleTime: 30_000,

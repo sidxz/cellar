@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 
@@ -25,7 +25,7 @@ export function useProtocolTestCounts(
     enabled: sortedIds.length > 0,
     queryFn: async () => {
       const res = await customInstance<{ counts: Record<string, number> }>({
-        url: "/api/v1/molecules/test-counts",
+        url: `${API_V1}/molecules/test-counts`,
         method: "POST",
         data: {
           molecule_ids: sortedIds,

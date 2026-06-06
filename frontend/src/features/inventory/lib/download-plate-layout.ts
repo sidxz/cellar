@@ -1,3 +1,4 @@
+import { API_V1 } from "@/shared/lib/api/custom-instance";
 import { downloadFile } from "@/shared/lib/api/download";
 
 /**
@@ -10,7 +11,7 @@ import { downloadFile } from "@/shared/lib/api/download";
  */
 export async function downloadPlateLayout(plateId: string, format: "csv" | "xlsx"): Promise<void> {
   await downloadFile({
-    url: `/api/v1/plates/${plateId}/export?format=${format}`,
+    url: `${API_V1}/plates/${plateId}/export?format=${format}`,
     method: "GET",
     fallbackFilename: `plate_well_map.${format}`,
   });

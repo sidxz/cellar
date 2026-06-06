@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/shared/lib/api/custom-instance", () => ({
+  API_V1: "/api/v1",
   customInstance: vi.fn(),
 }));
 vi.mock("@/shared/lib/toast", () => ({

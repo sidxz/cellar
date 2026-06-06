@@ -3,7 +3,7 @@
  * Returns a map of SMILES → base64 PNG string.
  */
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 
 interface DepictResponse {
   images: Record<string, string>;
@@ -18,7 +18,7 @@ export async function fetchStructureImages(
   if (unique.length === 0) return {};
 
   const resp = await customInstance<DepictResponse>({
-    url: "/api/v1/molecules/depict",
+    url: `${API_V1}/molecules/depict`,
     method: "POST",
     data: { smiles_list: unique, width, height },
   });

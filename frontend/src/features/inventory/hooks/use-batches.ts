@@ -2,7 +2,7 @@
 
 import { renderToast } from "@/features/inventory/components/mirror-summary-toast";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { CreateBatchResponse } from "@/shared/lib/api/model/createBatchResponse";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,7 +16,7 @@ import type {
 
 const batchHooks = createCrudHooks<Batch, CreateBatchInput, UpdateBatchInput>({
   entityName: "Batch",
-  baseUrl: "/api/v1/batches",
+  baseUrl: `${API_V1}/batches`,
   queryKey: ["batches"],
 });
 
@@ -33,7 +33,7 @@ export function useCreateBatch() {
   return useMutation<CreateBatchResponse, Error, CreateBatchInput>({
     mutationFn: (data: CreateBatchInput) =>
       customInstance<CreateBatchResponse>({
-        url: "/api/v1/batches",
+        url: `${API_V1}/batches`,
         method: "POST",
         data,
       }),
@@ -56,7 +56,7 @@ export function useBatchesByMolecule(moleculeId: string | undefined) {
     queryKey: ["batches", "molecule", moleculeId],
     queryFn: () =>
       customInstance<Batch[]>({
-        url: `/api/v1/molecules/${moleculeId}/batches`,
+        url: `${API_V1}/molecules/${moleculeId}/batches`,
         method: "GET",
       }),
     enabled: !!moleculeId,
@@ -95,7 +95,7 @@ export function useBatchesGlobal(params: BatchGlobalParams = {}) {
     queryKey: ["batches", "global", reqParams],
     queryFn: () =>
       customInstance<PaginatedResponse<BatchListItem>>({
-        url: "/api/v1/batches",
+        url: `${API_V1}/batches`,
         method: "GET",
         params: Object.keys(reqParams).length > 0 ? reqParams : undefined,
       }),

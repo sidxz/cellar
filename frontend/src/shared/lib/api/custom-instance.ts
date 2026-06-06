@@ -6,6 +6,14 @@ import { getSentinelClient } from "@/shared/lib/auth/config";
 
 let _baseUrl = "http://localhost:8000";
 
+/**
+ * Versioned API path prefix shared by every hand-written hook/component that
+ * builds a request URL by hand. Compose URLs as `` `${API_V1}/...` `` instead
+ * of hard-coding the `/api/v1` literal at each call site, so a future version
+ * bump is a single edit. (orval-generated clients embed the prefix themselves.)
+ */
+export const API_V1 = "/api/v1";
+
 /** Called by AuthProvider after fetching runtime AppConfig. */
 export function setApiBaseUrl(url: string) {
   _baseUrl = url;

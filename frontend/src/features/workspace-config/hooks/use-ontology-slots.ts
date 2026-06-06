@@ -1,6 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { API_V1 } from "@/shared/lib/api/custom-instance";
 
 export interface OntologySlotDefinition {
   id: string;
@@ -39,7 +40,7 @@ const slotHooks = createCrudHooks<
   UpdateOntologySlotInput
 >({
   entityName: "Ontology slot",
-  baseUrl: "/api/v1/ontology-slots",
+  baseUrl: `${API_V1}/ontology-slots`,
   queryKey: ["ontology-slots"],
 });
 

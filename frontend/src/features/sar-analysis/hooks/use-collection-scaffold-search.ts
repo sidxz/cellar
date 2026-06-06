@@ -7,7 +7,7 @@ import type {
   GroupCriterion,
   ScaffoldCriterion,
 } from "@/features/research-organization/types";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 
 export interface UseCollectionScaffoldSearchOptions {
@@ -73,7 +73,7 @@ export function useCollectionScaffoldSearch({
         },
       };
       return customInstance<EnrichedSearchResponse>({
-        url: "/api/v1/search/execute",
+        url: `${API_V1}/search/execute`,
         method: "POST",
         data: input,
         params: { limit: String(limit) },

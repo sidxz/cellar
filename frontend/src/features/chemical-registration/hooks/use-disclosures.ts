@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,7 +22,7 @@ export function useDisclosures(status?: string) {
     queryKey: [...DISCLOSURES_KEY, { status }],
     queryFn: async () => {
       const resp = await customInstance<DisclosureRequest[] | { items: DisclosureRequest[] }>({
-        url: "/api/v1/disclosures",
+        url: `${API_V1}/disclosures`,
         method: "GET",
         params: status ? { status } : undefined,
       });
@@ -40,7 +40,7 @@ export function useDisclosuresForMolecule(moleculeId: string | undefined) {
     queryKey: [...DISCLOSURES_KEY, "by-molecule", moleculeId],
     queryFn: async () => {
       const resp = await customInstance<DisclosureRequest[] | { items: DisclosureRequest[] }>({
-        url: `/api/v1/disclosures/by-molecule/${moleculeId}`,
+        url: `${API_V1}/disclosures/by-molecule/${moleculeId}`,
         method: "GET",
       });
       return unwrapList(resp);
@@ -54,7 +54,7 @@ export function useSubmitDisclosure() {
   return useMutation({
     mutationFn: (data: SubmitDisclosureInput) =>
       customInstance<DisclosureOutcome>({
-        url: "/api/v1/disclosures",
+        url: `${API_V1}/disclosures`,
         method: "POST",
         data,
       }),
@@ -71,7 +71,7 @@ export function useMergeMolecules(sourceMoleculeId: string) {
   return useMutation({
     mutationFn: (data: MergeInput) =>
       customInstance<MergeEventResponse>({
-        url: `/api/v1/molecules/${sourceMoleculeId}/merge`,
+        url: `${API_V1}/molecules/${sourceMoleculeId}/merge`,
         method: "POST",
         data,
       }),
@@ -87,7 +87,7 @@ export function useResolveDisclosureConflict(disclosureId: string) {
   return useMutation({
     mutationFn: (data: { resolution: string; reason?: string }) =>
       customInstance<DisclosureRequest>({
-        url: `/api/v1/disclosures/${disclosureId}/resolve`,
+        url: `${API_V1}/disclosures/${disclosureId}/resolve`,
         method: "PATCH",
         data,
       }),
@@ -104,7 +104,7 @@ export function useMergeHistory(moleculeId: string | undefined) {
     queryKey: ["merge-history", moleculeId],
     queryFn: () =>
       customInstance<MergeEventResponse[]>({
-        url: `/api/v1/molecules/${moleculeId}/merge-history`,
+        url: `${API_V1}/molecules/${moleculeId}/merge-history`,
         method: "GET",
       }),
     enabled: !!moleculeId,
@@ -120,7 +120,7 @@ export function useConfirmDisclosure(disclosureId: string) {
   return useMutation({
     mutationFn: () =>
       customInstance<DisclosureOutcome>({
-        url: `/api/v1/disclosures/${disclosureId}/confirm`,
+        url: `${API_V1}/disclosures/${disclosureId}/confirm`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -136,7 +136,7 @@ export function useRejectDisclosure(disclosureId: string) {
   return useMutation({
     mutationFn: (data: { reason?: string }) =>
       customInstance<DisclosureRequest>({
-        url: `/api/v1/disclosures/${disclosureId}/reject`,
+        url: `${API_V1}/disclosures/${disclosureId}/reject`,
         method: "POST",
         data,
       }),
@@ -153,7 +153,7 @@ export function useMergeImpact(sourceId: string | undefined, targetId: string | 
     queryKey: ["merge-impact", sourceId, targetId],
     queryFn: () =>
       customInstance<MergeImpact>({
-        url: `/api/v1/molecules/${sourceId}/merge-impact/${targetId}`,
+        url: `${API_V1}/molecules/${sourceId}/merge-impact/${targetId}`,
         method: "GET",
       }),
     enabled: !!sourceId && !!targetId,

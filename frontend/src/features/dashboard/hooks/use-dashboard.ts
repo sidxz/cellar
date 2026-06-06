@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { DashboardStats } from "../types";
 
@@ -9,7 +9,7 @@ export function useDashboardStats() {
     queryKey: ["dashboard-stats"],
     queryFn: () =>
       customInstance<DashboardStats>({
-        url: "/api/v1/dashboard/stats",
+        url: `${API_V1}/dashboard/stats`,
         method: "GET",
       }),
   });

@@ -1,7 +1,11 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
-import { getApiBaseUrl, getAuthHeaders } from "@/shared/lib/api/custom-instance";
+import {
+  API_V1,
+  customInstance,
+  getApiBaseUrl,
+  getAuthHeaders,
+} from "@/shared/lib/api/custom-instance";
 import type {
   BulkRegistrationAcceptedResponse,
   BulkRegistrationStatusResponse,
@@ -40,7 +44,7 @@ export function useBulkRegistration() {
       formData.append("file_format", fileFormat);
       formData.append("originating_org_id", originatingOrgId);
 
-      const res = await fetch(`${getApiBaseUrl()}/api/v1/bulk-registrations`, {
+      const res = await fetch(`${getApiBaseUrl()}${API_V1}/bulk-registrations`, {
         method: "POST",
         headers: { ...authHeaders },
         body: formData,
@@ -74,7 +78,7 @@ export function useBulkRegistrationStatus(workflowId: string | null) {
     queryKey: ["bulk-registration", "status", workflowId],
     queryFn: async () => {
       const result = await customInstance<BulkRegistrationStatus>({
-        url: `/api/v1/bulk-registrations/${workflowId}/status`,
+        url: `${API_V1}/bulk-registrations/${workflowId}/status`,
         method: "GET",
       });
       if (result.status === "completed" || result.status === "completed_with_errors") {

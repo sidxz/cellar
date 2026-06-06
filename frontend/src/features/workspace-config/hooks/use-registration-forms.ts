@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 
 // ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ const formHooks = createCrudHooks<
   UpdateRegistrationFormInput
 >({
   entityName: "Registration form",
-  baseUrl: "/api/v1/registration-forms",
+  baseUrl: `${API_V1}/registration-forms`,
   queryKey: REGISTRATION_FORMS_KEY,
 });
 
@@ -63,7 +63,7 @@ export function useRegistrationForms(appliesTo?: string) {
       const params: Record<string, string> = {};
       if (appliesTo) params.applies_to = appliesTo;
       return customInstance<RegistrationForm[]>({
-        url: "/api/v1/registration-forms",
+        url: `${API_V1}/registration-forms`,
         method: "GET",
         params,
       });

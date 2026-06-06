@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -28,7 +28,7 @@ export function useImportTemplates() {
     queryKey: IMPORT_TEMPLATES_KEY,
     queryFn: () =>
       customInstance<ImportTemplate[]>({
-        url: "/api/v1/import-templates",
+        url: `${API_V1}/import-templates`,
         method: "GET",
       }),
   });
@@ -39,7 +39,7 @@ export function useCreateImportTemplate() {
   return useMutation({
     mutationFn: (data: CreateImportTemplateInput) =>
       customInstance<ImportTemplate>({
-        url: "/api/v1/import-templates",
+        url: `${API_V1}/import-templates`,
         method: "POST",
         data,
       }),
@@ -55,7 +55,7 @@ export function useDeleteImportTemplate() {
   return useMutation({
     mutationFn: (id: string) =>
       customInstance<void>({
-        url: `/api/v1/import-templates/${id}`,
+        url: `${API_V1}/import-templates/${id}`,
         method: "DELETE",
       }),
     onSuccess: () => {

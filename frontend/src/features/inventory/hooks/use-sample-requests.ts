@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateSampleRequestInput, SampleRequest } from "../types/sample-request";
@@ -10,7 +10,7 @@ const SAMPLE_REQUESTS_KEY = ["sample-requests"];
 
 const srHooks = createCrudHooks<SampleRequest, CreateSampleRequestInput, Record<string, unknown>>({
   entityName: "Sample request",
-  baseUrl: "/api/v1/sample-requests",
+  baseUrl: `${API_V1}/sample-requests`,
   queryKey: SAMPLE_REQUESTS_KEY,
 });
 
@@ -20,7 +20,7 @@ export function useSampleRequests(status?: string) {
     queryKey: [...SAMPLE_REQUESTS_KEY, { status }],
     queryFn: () =>
       customInstance<SampleRequest[]>({
-        url: "/api/v1/sample-requests",
+        url: `${API_V1}/sample-requests`,
         method: "GET",
         params: status ? { status } : undefined,
       }),
@@ -37,7 +37,7 @@ export function useApproveSampleRequest() {
   return useMutation({
     mutationFn: ({ id, assigned_to }: { id: string; assigned_to?: string }) =>
       customInstance<SampleRequest>({
-        url: `/api/v1/sample-requests/${id}/approve`,
+        url: `${API_V1}/sample-requests/${id}/approve`,
         method: "POST",
         data: { assigned_to },
       }),
@@ -53,7 +53,7 @@ export function useRejectSampleRequest() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       customInstance<SampleRequest>({
-        url: `/api/v1/sample-requests/${id}/reject`,
+        url: `${API_V1}/sample-requests/${id}/reject`,
         method: "POST",
         data: { reason },
       }),
@@ -69,7 +69,7 @@ export function useStartPreparingSampleRequest() {
   return useMutation({
     mutationFn: ({ id }: { id: string }) =>
       customInstance<SampleRequest>({
-        url: `/api/v1/sample-requests/${id}/prepare`,
+        url: `${API_V1}/sample-requests/${id}/prepare`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -84,7 +84,7 @@ export function useFulfillSampleRequest() {
   return useMutation({
     mutationFn: ({ id, sample_id }: { id: string; sample_id: string }) =>
       customInstance<SampleRequest>({
-        url: `/api/v1/sample-requests/${id}/fulfill`,
+        url: `${API_V1}/sample-requests/${id}/fulfill`,
         method: "POST",
         data: { sample_id },
       }),
@@ -100,7 +100,7 @@ export function useCancelSampleRequest() {
   return useMutation({
     mutationFn: ({ id }: { id: string }) =>
       customInstance<SampleRequest>({
-        url: `/api/v1/sample-requests/${id}/cancel`,
+        url: `${API_V1}/sample-requests/${id}/cancel`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -124,7 +124,7 @@ export function useUpdateSampleRequest() {
       amount_unit?: string;
     }) =>
       customInstance<SampleRequest>({
-        url: `/api/v1/sample-requests/${id}`,
+        url: `${API_V1}/sample-requests/${id}`,
         method: "PATCH",
         data,
       }),

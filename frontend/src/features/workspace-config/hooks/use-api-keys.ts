@@ -1,6 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { API_V1 } from "@/shared/lib/api/custom-instance";
 
 export interface ExternalApiKey {
   id: string;
@@ -30,7 +31,7 @@ export interface UpdateApiKeyInput {
 
 const apiKeyHooks = createCrudHooks<ExternalApiKey, CreateApiKeyInput, UpdateApiKeyInput>({
   entityName: "API key",
-  baseUrl: "/api/v1/api-keys",
+  baseUrl: `${API_V1}/api-keys`,
   queryKey: ["api-keys"],
 });
 

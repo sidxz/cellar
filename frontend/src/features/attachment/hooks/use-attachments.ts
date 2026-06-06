@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { downloadFile } from "@/shared/lib/api/download";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +15,7 @@ export function useAttachments(entityType: AttachableType, entityId: string) {
     queryKey: attachmentsKey(entityType, entityId),
     queryFn: () =>
       customInstance<AttachmentResponse[]>({
-        url: `/api/v1/${entityType}/${entityId}/attachments`,
+        url: `${API_V1}/${entityType}/${entityId}/attachments`,
         method: "GET",
       }),
     enabled: !!entityId,
@@ -29,7 +29,7 @@ export function useUploadAttachment(entityType: AttachableType, entityId: string
       const formData = new FormData();
       formData.append("file", file);
       return customInstance<AttachmentResponse>({
-        url: `/api/v1/${entityType}/${entityId}/attachments`,
+        url: `${API_V1}/${entityType}/${entityId}/attachments`,
         method: "POST",
         data: formData,
       });
@@ -49,7 +49,7 @@ export function useDeleteAttachment(entityType: AttachableType, entityId: string
   return useMutation({
     mutationFn: (attachmentId: string) =>
       customInstance<void>({
-        url: `/api/v1/attachments/${attachmentId}`,
+        url: `${API_V1}/attachments/${attachmentId}`,
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -66,7 +66,7 @@ export function useDownloadAttachment() {
   return useMutation({
     mutationFn: ({ attachmentId, fileName }: { attachmentId: string; fileName: string }) =>
       downloadFile({
-        url: `/api/v1/attachments/${attachmentId}/download`,
+        url: `${API_V1}/attachments/${attachmentId}/download`,
         method: "GET",
         filename: fileName,
       }),

@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 
 export interface OntologyTerm {
@@ -15,7 +15,7 @@ export function useOntologyDescendants(ontology: string, rootConceptId: string, 
     queryKey: ["ontology-descendants", ontology, rootConceptId],
     queryFn: () =>
       customInstance<OntologyTerm[]>({
-        url: "/api/v1/ontology/descendants",
+        url: `${API_V1}/ontology/descendants`,
         method: "GET",
         params: { ontology, root_concept_id: rootConceptId },
       }),
@@ -34,7 +34,7 @@ export function useOntologySearch(
     queryKey: ["ontology-search", query, ontologies, subtreeRootId],
     queryFn: () =>
       customInstance<OntologyTerm[]>({
-        url: "/api/v1/ontology/search",
+        url: `${API_V1}/ontology/search`,
         method: "GET",
         params: {
           q: query,

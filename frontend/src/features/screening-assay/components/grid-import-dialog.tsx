@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -64,7 +64,7 @@ export function GridImportDialog({ runId, protocolId, open, onOpenChange }: Grid
       const form = new FormData();
       form.append("file", file);
       const res = await customInstance<ImportReadoutsResult>({
-        url: `/api/v1/runs/${runId}/import-readouts`,
+        url: `${API_V1}/runs/${runId}/import-readouts`,
         method: "POST",
         params: { readout_definition_id: readoutId, layout: "grid" },
         data: form,

@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 
 export interface CustomFieldDefinition {
@@ -50,7 +50,7 @@ const cfHooks = createCrudHooks<
   UpdateCustomFieldInput
 >({
   entityName: "Custom field",
-  baseUrl: "/api/v1/custom-fields",
+  baseUrl: `${API_V1}/custom-fields`,
   queryKey: CUSTOM_FIELDS_KEY,
 });
 
@@ -63,7 +63,7 @@ export function useCustomFields(appliesTo?: string, activeOnly?: boolean) {
       if (appliesTo) params.applies_to = appliesTo;
       if (activeOnly !== undefined) params.active_only = String(activeOnly);
       return customInstance<CustomFieldDefinition[]>({
-        url: "/api/v1/custom-fields",
+        url: `${API_V1}/custom-fields`,
         method: "GET",
         params,
       });

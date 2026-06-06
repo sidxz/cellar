@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { type UserPreferences, usePreferencesStore } from "@/shared/lib/stores/preferences-store";
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { useQuery } from "@tanstack/react-query";
@@ -15,14 +15,14 @@ interface ServerPreferences {
 
 async function fetchPreferences(): Promise<ServerPreferences> {
   return customInstance<ServerPreferences>({
-    url: "/api/v1/user/preferences",
+    url: `${API_V1}/user/preferences`,
     method: "GET",
   });
 }
 
 async function patchPreferences(prefs: ServerPreferences): Promise<void> {
   await customInstance<void>({
-    url: "/api/v1/user/preferences",
+    url: `${API_V1}/user/preferences`,
     method: "PATCH",
     data: prefs,
   });

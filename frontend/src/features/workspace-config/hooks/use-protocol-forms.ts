@@ -1,6 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { API_V1 } from "@/shared/lib/api/custom-instance";
 
 export interface ProtocolForm {
   id: string;
@@ -36,7 +37,7 @@ export interface UpdateProtocolFormInput {
 
 const pfHooks = createCrudHooks<ProtocolForm, CreateProtocolFormInput, UpdateProtocolFormInput>({
   entityName: "Protocol form",
-  baseUrl: "/api/v1/protocol-forms",
+  baseUrl: `${API_V1}/protocol-forms`,
   queryKey: ["protocol-forms"],
 });
 

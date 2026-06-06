@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
   AmbiguousCompoundModel,
   BatchOptionModel,
@@ -120,7 +120,7 @@ export function usePreviewRunFile(runId: string) {
       const formData = new FormData();
       formData.append("file", file);
       return customInstance<PreviewRunFileResponse>({
-        url: `/api/v1/runs/${runId}/preview-file`,
+        url: `${API_V1}/runs/${runId}/preview-file`,
         method: "POST",
         data: formData,
       });
@@ -134,7 +134,7 @@ export function useRepreviewRunFile(runId: string) {
   return useMutation({
     mutationFn: async (payload: RepreviewRunFilePayload) =>
       customInstance<PreviewRunFileResponse>({
-        url: `/api/v1/runs/${runId}/repreview-file`,
+        url: `${API_V1}/runs/${runId}/repreview-file`,
         method: "POST",
         data: payload,
       }),
@@ -146,7 +146,7 @@ export function useImportRunFile(runId: string) {
   return useMutation({
     mutationFn: async (payload: ImportRunFilePayload) =>
       customInstance<ImportRunFileResponse>({
-        url: `/api/v1/runs/${runId}/import-file`,
+        url: `${API_V1}/runs/${runId}/import-file`,
         method: "POST",
         data: payload,
       }),
@@ -173,7 +173,7 @@ export function useResetRunData(runId: string) {
   return useMutation({
     mutationFn: async () =>
       customInstance<ResetRunDataResponse>({
-        url: `/api/v1/runs/${runId}/reset-data`,
+        url: `${API_V1}/runs/${runId}/reset-data`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -191,7 +191,7 @@ export function useRunImportTemplates() {
     queryKey: ["run-import-templates"],
     queryFn: () =>
       customInstance<RunImportTemplate[]>({
-        url: "/api/v1/run-import-templates",
+        url: `${API_V1}/run-import-templates`,
         method: "GET",
       }),
   });
@@ -202,7 +202,7 @@ export function useCreateRunImportTemplate() {
   return useMutation({
     mutationFn: async (input: CreateRunImportTemplateRequest) =>
       customInstance<RunImportTemplate>({
-        url: "/api/v1/run-import-templates",
+        url: `${API_V1}/run-import-templates`,
         method: "POST",
         data: input,
       }),

@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Protocol } from "../types";
@@ -22,7 +22,7 @@ export function useAssignProtocolToProject() {
   return useMutation({
     mutationFn: ({ protocolId, projectId }: { protocolId: string; projectId: string }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/projects/${projectId}`,
+        url: `${API_V1}/protocols/${protocolId}/projects/${projectId}`,
         method: "POST",
       }),
     onSuccess: (_data, { protocolId }) => {
@@ -42,7 +42,7 @@ export function useAddProtocolToProject(protocolId: string) {
   return useMutation({
     mutationFn: (projectId: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/projects/${projectId}`,
+        url: `${API_V1}/protocols/${protocolId}/projects/${projectId}`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -58,7 +58,7 @@ export function useRemoveProtocolFromProject(protocolId: string) {
   return useMutation({
     mutationFn: (projectId: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/projects/${projectId}`,
+        url: `${API_V1}/protocols/${protocolId}/projects/${projectId}`,
         method: "DELETE",
       }),
     onSuccess: () => {

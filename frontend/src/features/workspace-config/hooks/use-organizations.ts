@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { unwrapList } from "@/shared/types/pagination";
 import { useQuery } from "@tanstack/react-query";
 import type { CreateOrganizationInput, Organization, UpdateOrganizationInput } from "../types";
@@ -10,7 +10,7 @@ const ORGS_KEY = ["organizations"];
 
 const orgHooks = createCrudHooks<Organization, CreateOrganizationInput, UpdateOrganizationInput>({
   entityName: "Organization",
-  baseUrl: "/api/v1/organizations",
+  baseUrl: `${API_V1}/organizations`,
   queryKey: ORGS_KEY,
 });
 
@@ -20,7 +20,7 @@ export function useOrganizations(includeInactive = false) {
     queryKey: [...ORGS_KEY, { includeInactive }],
     queryFn: async () => {
       const resp = await customInstance<Organization[] | { items: Organization[] }>({
-        url: "/api/v1/organizations",
+        url: `${API_V1}/organizations`,
         method: "GET",
         params: includeInactive ? { include_inactive: "true" } : undefined,
       });

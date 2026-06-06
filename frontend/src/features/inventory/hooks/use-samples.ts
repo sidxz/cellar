@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateSampleInput, PaginatedResponse, Sample, SampleListItem } from "../types";
@@ -10,7 +10,7 @@ const SAMPLES_KEY = ["samples"];
 
 const sampleHooks = createCrudHooks<Sample, CreateSampleInput, Record<string, unknown>>({
   entityName: "Sample",
-  baseUrl: "/api/v1/samples",
+  baseUrl: `${API_V1}/samples`,
   queryKey: SAMPLES_KEY,
 });
 
@@ -23,7 +23,7 @@ export function useSamplesByBatch(batchId: string | undefined) {
     queryKey: [...SAMPLES_KEY, "batch", batchId],
     queryFn: () =>
       customInstance<Sample[]>({
-        url: `/api/v1/batches/${batchId}/samples`,
+        url: `${API_V1}/batches/${batchId}/samples`,
         method: "GET",
       }),
     enabled: !!batchId,
@@ -37,7 +37,7 @@ export function useAliquotSample() {
   return useMutation({
     mutationFn: ({ sampleId, amount }: { sampleId: string; amount: number }) =>
       customInstance<Sample>({
-        url: `/api/v1/samples/${sampleId}/aliquot`,
+        url: `${API_V1}/samples/${sampleId}/aliquot`,
         method: "POST",
         data: { amount },
       }),
@@ -53,7 +53,7 @@ export function useMoveSample() {
   return useMutation({
     mutationFn: ({ sampleId, locationId }: { sampleId: string; locationId: string | null }) =>
       customInstance<Sample>({
-        url: `/api/v1/samples/${sampleId}/move`,
+        url: `${API_V1}/samples/${sampleId}/move`,
         method: "POST",
         data: { location_id: locationId },
       }),
@@ -69,7 +69,7 @@ export function useDisposeSample() {
   return useMutation({
     mutationFn: ({ sampleId, reason }: { sampleId: string; reason?: string }) =>
       customInstance<Sample>({
-        url: `/api/v1/samples/${sampleId}/dispose`,
+        url: `${API_V1}/samples/${sampleId}/dispose`,
         method: "POST",
         data: { reason },
       }),
@@ -85,7 +85,7 @@ export function useQuarantineSample() {
   return useMutation({
     mutationFn: ({ sampleId, reason }: { sampleId: string; reason: string }) =>
       customInstance<Sample>({
-        url: `/api/v1/samples/${sampleId}/quarantine`,
+        url: `${API_V1}/samples/${sampleId}/quarantine`,
         method: "POST",
         data: { reason },
       }),
@@ -101,7 +101,7 @@ export function useClearQuarantine() {
   return useMutation({
     mutationFn: (sampleId: string) =>
       customInstance<Sample>({
-        url: `/api/v1/samples/${sampleId}/clear-quarantine`,
+        url: `${API_V1}/samples/${sampleId}/clear-quarantine`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -139,7 +139,7 @@ export function useSamplesGlobal(params: SampleGlobalParams = {}) {
     queryKey: ["samples", "global", searchParams],
     queryFn: () =>
       customInstance<PaginatedResponse<SampleListItem>>({
-        url: "/api/v1/samples",
+        url: `${API_V1}/samples`,
         method: "GET",
         params: searchParams,
       }),

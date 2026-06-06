@@ -11,7 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 
 import { getCampaignApiV1CampaignsCampaignIdGet } from "@/shared/lib/api/campaigns/campaigns";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { CampaignResponse, PaginatedResponseCampaignResponse } from "@/shared/lib/api/model";
 
 // ─── Query key factory ───────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ export function useCampaigns(
         params.tag_logic = tagLogic ?? "any";
       }
       const page = await customInstance<PaginatedResponseCampaignResponse>({
-        url: "/api/v1/campaigns",
+        url: `${API_V1}/campaigns`,
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
       });

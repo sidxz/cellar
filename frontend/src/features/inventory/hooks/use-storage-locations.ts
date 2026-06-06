@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +18,7 @@ export function useStorageLocations() {
     queryKey: STORAGE_KEY,
     queryFn: async () => {
       const resp = await customInstance<StorageLocation[] | { items: StorageLocation[] }>({
-        url: "/api/v1/storage-locations",
+        url: `${API_V1}/storage-locations`,
         method: "GET",
       });
       return unwrapList(resp);
@@ -31,7 +31,7 @@ export function useStorageLocationChildren(parentId: string | undefined) {
     queryKey: [...STORAGE_KEY, "children", parentId],
     queryFn: () =>
       customInstance<StorageLocation[]>({
-        url: `/api/v1/storage-locations/${parentId}/children`,
+        url: `${API_V1}/storage-locations/${parentId}/children`,
         method: "GET",
       }),
     enabled: !!parentId,
@@ -43,7 +43,7 @@ export function useCreateStorageLocation() {
   return useMutation({
     mutationFn: (data: CreateStorageLocationInput) =>
       customInstance<StorageLocation>({
-        url: "/api/v1/storage-locations",
+        url: `${API_V1}/storage-locations`,
         method: "POST",
         data,
       }),
@@ -59,7 +59,7 @@ export function useUpdateStorageLocation(locationId: string) {
   return useMutation({
     mutationFn: (data: UpdateStorageLocationInput) =>
       customInstance<StorageLocation>({
-        url: `/api/v1/storage-locations/${locationId}`,
+        url: `${API_V1}/storage-locations/${locationId}`,
         method: "PATCH",
         data,
       }),
@@ -75,7 +75,7 @@ export function useDeleteStorageLocation() {
   return useMutation({
     mutationFn: (locationId: string) =>
       customInstance<void>({
-        url: `/api/v1/storage-locations/${locationId}`,
+        url: `${API_V1}/storage-locations/${locationId}`,
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -94,7 +94,7 @@ export function useStorageLocationsWithCounts() {
     queryKey: ["storage-locations", "with-counts"],
     queryFn: () =>
       customInstance<StorageLocationWithCount[]>({
-        url: "/api/v1/storage-locations-summary",
+        url: `${API_V1}/storage-locations-summary`,
         method: "GET",
       }),
   });

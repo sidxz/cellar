@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 
 // ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ export interface UpdateDataSourceInput {
 
 const dataSourceHooks = createCrudHooks<DataSource, CreateDataSourceInput, UpdateDataSourceInput>({
   entityName: "Data source",
-  baseUrl: "/api/v1/data-sources",
+  baseUrl: `${API_V1}/data-sources`,
   queryKey: ["data-sources"],
 });
 
@@ -83,7 +83,7 @@ export function useDataSourceTemplate(sourceType: string | null) {
     queryKey: ["data-sources", "templates", sourceType],
     queryFn: () =>
       customInstance<EntityMapping[]>({
-        url: `/api/v1/data-sources/templates/${sourceType}`,
+        url: `${API_V1}/data-sources/templates/${sourceType}`,
         method: "GET",
       }),
     enabled: !!sourceType,

@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MOLECULES_KEY } from "./query-keys";
@@ -52,7 +52,7 @@ export function useStartCddMoleculeImport() {
       maxMolecules?: number;
     }) =>
       customInstance<CddMoleculeImportAccepted>({
-        url: "/api/v1/cdd-import/molecules",
+        url: `${API_V1}/cdd-import/molecules`,
         method: "POST",
         data: {
           originating_org_id: originatingOrgId,
@@ -71,7 +71,7 @@ export function useCddMoleculeImportStatus(workflowId: string | null) {
     queryKey: ["cdd-molecule-import", "status", workflowId],
     queryFn: async () => {
       const result = await customInstance<CddMoleculeImportStatus>({
-        url: `/api/v1/cdd-import/molecules/${workflowId}/status`,
+        url: `${API_V1}/cdd-import/molecules/${workflowId}/status`,
         method: "GET",
       });
       // When complete, invalidate the molecule list
@@ -99,7 +99,7 @@ export function useCancelCddMoleculeImport() {
   return useMutation({
     mutationFn: (workflowId: string) =>
       customInstance({
-        url: `/api/v1/cdd-import/molecules/${workflowId}/cancel`,
+        url: `${API_V1}/cdd-import/molecules/${workflowId}/cancel`,
         method: "POST",
       }),
   });
@@ -110,7 +110,7 @@ export function useForceFailImport() {
   return useMutation({
     mutationFn: (importId: string) =>
       customInstance({
-        url: `/api/v1/cdd-import/molecules/${importId}/force-fail`,
+        url: `${API_V1}/cdd-import/molecules/${importId}/force-fail`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -124,7 +124,7 @@ export function useImportHistory() {
     queryKey: ["cdd-molecule-import", "history"],
     queryFn: () =>
       customInstance<CddMoleculeImportSummary[]>({
-        url: "/api/v1/cdd-import/molecules",
+        url: `${API_V1}/cdd-import/molecules`,
         method: "GET",
       }),
     staleTime: 30_000,

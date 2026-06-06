@@ -7,7 +7,7 @@ import { ScaffoldTreeView } from "@/features/sar-analysis/components/scaffold-tr
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { Button } from "@/shared/components/ui/button";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { ColDef } from "ag-grid-community";
 import { ExternalLink } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -193,7 +193,7 @@ export function ResultsSurface({
       // Step 2: add the selected molecules to the new collection.
       if (args.moleculeIds.length > 0) {
         await customInstance<MembershipResult>({
-          url: `/api/v1/collections/${newCollection.id}/molecules`,
+          url: `${API_V1}/collections/${newCollection.id}/molecules`,
           method: "POST",
           data: {
             references: args.moleculeIds.map((id) => ({

@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { CreateSavedSearchInput, SavedSearch, UpdateSavedSearchInput } from "../types";
 
@@ -13,7 +13,7 @@ const savedSearchHooks = createCrudHooks<
   UpdateSavedSearchInput
 >({
   entityName: "Saved search",
-  baseUrl: "/api/v1/saved-searches",
+  baseUrl: `${API_V1}/saved-searches`,
   queryKey: SAVED_SEARCHES_KEY,
 });
 
@@ -23,7 +23,7 @@ export function useSavedSearches(projectId?: string, mine?: boolean) {
     queryKey: [...SAVED_SEARCHES_KEY, { projectId, mine }],
     queryFn: () =>
       customInstance<SavedSearch[]>({
-        url: "/api/v1/saved-searches",
+        url: `${API_V1}/saved-searches`,
         method: "GET",
         params: {
           ...(projectId ? { project_id: projectId } : {}),

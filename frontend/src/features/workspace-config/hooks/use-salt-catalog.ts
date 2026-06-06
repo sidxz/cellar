@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 
 export interface SaltEntry {
@@ -34,7 +34,7 @@ const SALT_CATALOG_KEY = ["salt-catalog"];
 
 const saltHooks = createCrudHooks<SaltEntry, CreateSaltEntryInput, UpdateSaltEntryInput>({
   entityName: "Salt entry",
-  baseUrl: "/api/v1/salt-catalog",
+  baseUrl: `${API_V1}/salt-catalog`,
   queryKey: SALT_CATALOG_KEY,
 });
 
@@ -44,7 +44,7 @@ export function useSaltCatalog(activeOnly = true) {
     queryKey: [...SALT_CATALOG_KEY, activeOnly],
     queryFn: () =>
       customInstance<SaltEntry[]>({
-        url: "/api/v1/salt-catalog",
+        url: `${API_V1}/salt-catalog`,
         method: "GET",
         params: { active_only: String(activeOnly) },
       }),

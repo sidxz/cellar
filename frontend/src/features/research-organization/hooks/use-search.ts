@@ -1,7 +1,7 @@
 "use client";
 
 import type { Molecule } from "@/features/chemical-registration/types";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useMutation } from "@tanstack/react-query";
 import type { ActivityValue, ExecuteSearchInput, SortDir, SortField } from "../types";
 
@@ -28,7 +28,7 @@ export function useExecuteSearch() {
       if (params.sort_dir) searchParams.sort_dir = params.sort_dir;
 
       return customInstance<EnrichedSearchResponse>({
-        url: "/api/v1/search/execute",
+        url: `${API_V1}/search/execute`,
         method: "POST",
         data: params.input,
         params: Object.keys(searchParams).length ? searchParams : undefined,

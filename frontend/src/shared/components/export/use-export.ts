@@ -1,5 +1,5 @@
 "use client";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { downloadFile } from "@/shared/lib/api/download";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ExportJob, ExportRequest } from "./types";
@@ -35,7 +35,7 @@ export function useExport(): UseExportReturn {
       if (cancelled.current) return;
       try {
         const next = await customInstance<ExportJob>({
-          url: `/api/v1/exports/${jobId}`,
+          url: `${API_V1}/exports/${jobId}`,
           method: "GET",
         });
         setJob(next);
@@ -63,7 +63,7 @@ export function useExport(): UseExportReturn {
       setJob(null);
       cancelled.current = false;
       const resp = await customInstance<{ job_id: string }>({
-        url: "/api/v1/exports",
+        url: `${API_V1}/exports`,
         method: "POST",
         data: req,
       });
@@ -86,7 +86,7 @@ export function useExport(): UseExportReturn {
     cancelled.current = true;
     stop();
     await customInstance<void>({
-      url: `/api/v1/exports/${job.id}/cancel`,
+      url: `${API_V1}/exports/${job.id}/cancel`,
       method: "POST",
     });
   }, [job, stop]);

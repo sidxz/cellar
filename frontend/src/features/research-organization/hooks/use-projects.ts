@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { unwrapList } from "@/shared/types/pagination";
 import { useQuery } from "@tanstack/react-query";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "../types";
@@ -10,7 +10,7 @@ const PROJECTS_KEY = ["projects"];
 
 const projectHooks = createCrudHooks<Project, CreateProjectInput, UpdateProjectInput>({
   entityName: "Project",
-  baseUrl: "/api/v1/projects",
+  baseUrl: `${API_V1}/projects`,
   queryKey: PROJECTS_KEY,
 });
 
@@ -32,7 +32,7 @@ export function useProjects(options?: { tags?: string[]; tagLogic?: "any" | "all
         params.tag_logic = options?.tagLogic ?? "any";
       }
       const resp = await customInstance<Project[] | { items: Project[] }>({
-        url: "/api/v1/projects",
+        url: `${API_V1}/projects`,
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
       });

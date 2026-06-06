@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,7 +19,7 @@ const protocolHooks = createCrudHooks<
   }
 >({
   entityName: "Protocol",
-  baseUrl: "/api/v1/protocols",
+  baseUrl: `${API_V1}/protocols`,
   queryKey: PROTOCOLS_KEY,
 });
 
@@ -49,7 +49,7 @@ export function useProtocols(
         params.tag_logic = options?.tagLogic ?? "any";
       }
       const resp = await customInstance<Protocol[] | { items: Protocol[] }>({
-        url: "/api/v1/protocols",
+        url: `${API_V1}/protocols`,
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
       });
@@ -92,7 +92,7 @@ export function useProtocolSummaries(projectIds?: string[], options?: { includeA
       : [...PROTOCOLS_KEY, "summary"],
     queryFn: () =>
       customInstance<ProtocolSummary[]>({
-        url: "/api/v1/protocols/summary",
+        url: `${API_V1}/protocols/summary`,
         method: "GET",
         ...(scope ? { params: { project_ids: scope } } : {}),
       }),
@@ -132,7 +132,7 @@ export function useAddReadoutDefinition(protocolId: string) {
       dose_response_config?: Record<string, unknown> | null;
     }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/readout-definitions`,
+        url: `${API_V1}/protocols/${protocolId}/readout-definitions`,
         method: "POST",
         data,
       }),
@@ -168,7 +168,7 @@ export function useUpdateReadoutDefinition(protocolId: string) {
       };
     }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/readout-definitions/${definitionId}`,
+        url: `${API_V1}/protocols/${protocolId}/readout-definitions/${definitionId}`,
         method: "PUT",
         data,
       }),
@@ -184,7 +184,7 @@ export function useRemoveReadoutDefinition(protocolId: string) {
   return useMutation({
     mutationFn: (definitionId: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/readout-definitions/${definitionId}`,
+        url: `${API_V1}/protocols/${protocolId}/readout-definitions/${definitionId}`,
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -206,7 +206,7 @@ export function useAddConditionDefinition(protocolId: string) {
       pick_list_values?: string[] | null;
     }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/condition-definitions`,
+        url: `${API_V1}/protocols/${protocolId}/condition-definitions`,
         method: "POST",
         data,
       }),
@@ -233,7 +233,7 @@ export function useUpdateConditionDefinition(protocolId: string) {
       };
     }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/condition-definitions/${definitionId}`,
+        url: `${API_V1}/protocols/${protocolId}/condition-definitions/${definitionId}`,
         method: "PUT",
         data,
       }),
@@ -249,7 +249,7 @@ export function useRemoveConditionDefinition(protocolId: string) {
   return useMutation({
     mutationFn: (definitionId: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/condition-definitions/${definitionId}`,
+        url: `${API_V1}/protocols/${protocolId}/condition-definitions/${definitionId}`,
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -266,7 +266,7 @@ export function useSetControlLayout(protocolId: string) {
   return useMutation({
     mutationFn: (data: { plate_format: string; template_id: string }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/control-layouts`,
+        url: `${API_V1}/protocols/${protocolId}/control-layouts`,
         method: "PUT",
         data,
       }),
@@ -282,7 +282,7 @@ export function useRemoveControlLayout(protocolId: string) {
   return useMutation({
     mutationFn: (plateFormat: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/control-layouts/${plateFormat}`,
+        url: `${API_V1}/protocols/${protocolId}/control-layouts/${plateFormat}`,
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -309,7 +309,7 @@ export function useSetOntologyAnnotation(protocolId: string) {
   return useMutation({
     mutationFn: (data: OntologyAnnotationInput) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/ontology-annotations`,
+        url: `${API_V1}/protocols/${protocolId}/ontology-annotations`,
         method: "PUT",
         data,
       }),
@@ -325,7 +325,7 @@ export function useRemoveOntologyAnnotation(protocolId: string) {
   return useMutation({
     mutationFn: (slotName: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/ontology-annotations`,
+        url: `${API_V1}/protocols/${protocolId}/ontology-annotations`,
         method: "DELETE",
         params: { slot_name: slotName },
       }),

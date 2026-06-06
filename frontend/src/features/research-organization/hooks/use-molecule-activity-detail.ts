@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { MoleculeActivityDetail } from "../types";
 
@@ -9,7 +9,7 @@ export function useMoleculeActivityDetail(moleculeId: string | null) {
     queryKey: ["molecule-activity-detail", moleculeId],
     queryFn: () =>
       customInstance<MoleculeActivityDetail>({
-        url: `/api/v1/molecules/${moleculeId}/activity-detail`,
+        url: `${API_V1}/molecules/${moleculeId}/activity-detail`,
         method: "GET",
       }),
     enabled: !!moleculeId,

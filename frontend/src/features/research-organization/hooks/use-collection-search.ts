@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { ExecuteSearchInput } from "../types";
 import type { EnrichedSearchResponse } from "./use-search";
@@ -35,7 +35,7 @@ export function useCollectionSearch(collectionId: string, opts: UseCollectionSea
         },
       };
       return customInstance<EnrichedSearchResponse>({
-        url: "/api/v1/search/execute",
+        url: `${API_V1}/search/execute`,
         method: "POST",
         data: input,
         params: { limit: String(limit) },

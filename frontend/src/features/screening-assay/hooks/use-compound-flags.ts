@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CompoundFlag } from "../types";
 
@@ -11,7 +11,7 @@ export function useCompoundFlags(protocolId: string | undefined) {
     queryKey: [...FLAGS_KEY, protocolId],
     queryFn: () =>
       customInstance<CompoundFlag[]>({
-        url: `/api/v1/protocols/${protocolId}/flags`,
+        url: `${API_V1}/protocols/${protocolId}/flags`,
         method: "GET",
       }),
     enabled: !!protocolId,
@@ -27,7 +27,7 @@ export function useCreateFlag(protocolId: string) {
       note?: string;
     }) =>
       customInstance<CompoundFlag>({
-        url: `/api/v1/protocols/${protocolId}/flags`,
+        url: `${API_V1}/protocols/${protocolId}/flags`,
         method: "POST",
         data,
       }),
@@ -40,7 +40,7 @@ export function useDeleteFlag(protocolId: string) {
   return useMutation({
     mutationFn: (flagId: string) =>
       customInstance<void>({
-        url: `/api/v1/protocols/${protocolId}/flags/${flagId}`,
+        url: `${API_V1}/protocols/${protocolId}/flags/${flagId}`,
         method: "DELETE",
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...FLAGS_KEY, protocolId] }),
