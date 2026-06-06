@@ -20,6 +20,9 @@ from cellar.application.chemical_registration.bulk_registration_service import (
 )
 from cellar.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
 from cellar.application.chemical_registration.create_relationship import CreateRelationship
+from cellar.application.chemical_registration.decide_merge_candidates import (
+    DecideMergeCandidates,
+)
 from cellar.application.chemical_registration.delete_relationship import DeleteRelationship
 from cellar.application.chemical_registration.depict_molecules import (
     DepictionService,
@@ -456,6 +459,14 @@ def register_chemical_registration(container: Container) -> None:
         )
 
     container.define(RejectDisclosure, _reject_disclosure)
+
+    container.define(
+        DecideMergeCandidates,
+        lambda c: DecideMergeCandidates(
+            confirm_disclosure=c[ConfirmDisclosure],
+            reject_disclosure=c[RejectDisclosure],
+        ),
+    )
 
     container.define(
         MergeImpactReader,

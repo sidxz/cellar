@@ -15,8 +15,9 @@ from pydantic import BaseModel
 from cellar.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationItemResult,
 )
-from cellar.application.chemical_registration.confirm_disclosure import (
-    ConfirmDisclosureCommand,
+from cellar.application.chemical_registration.decide_merge_candidates import (
+    DecideMergeCandidatesCommand,
+    MergeDecision,
 )
 from cellar.application.chemical_registration.get_bulk_registration_runtime_status import (
     GetBulkRegistrationRuntimeStatusQuery,
@@ -27,9 +28,6 @@ from cellar.application.chemical_registration.list_bulk_registration_items impor
 from cellar.application.chemical_registration.preview_bulk_registration_file import (
     PreviewBulkRegistrationFileQuery,
 )
-from cellar.application.chemical_registration.reject_disclosure import (
-    RejectDisclosureCommand,
-)
 from cellar.application.chemical_registration.start_bulk_registration import (
     StartBulkRegistrationFromFileCommand,
 )
@@ -37,14 +35,13 @@ from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
 from cellar.domain.shared.errors import NotFoundError, ValidationError
 from cellar.interface.dependencies import (
     AuthDep,
-    ConfirmDisclosureDep,
+    DecideMergeCandidatesDep,
     GetBulkRegistrationRuntimeStatusDep,
     ListBulkRegistrationItemsDep,
     PreviewBulkRegistrationFileDep,
-    RejectDisclosureDep,
     StartBulkRegistrationDep,
 )
-from cellar.interface.error_handlers import result_to_response, result_value_or_error
+from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/bulk-registrations", tags=["bulk-registration"])
 
@@ -239,98 +236,39 @@ async def confirm_merges(
     auth: AuthDep,
     workflow_id: str,
     body: ConfirmMergesBody,
-    confirm_uc: ConfirmDisclosureDep,
-    reject_uc: RejectDisclosureDep,
+    use_case: DecideMergeCandidatesDep,
 ) -> ConfirmMergesResponse:
     """Batch confirm or reject merge candidates from a bulk registration workflow."""
     _verify_workspace_prefix(workflow_id, auth.workspace_id)
 
-    results: list[MergeDecisionResult] = []
-    confirmed_count = 0
-    rejected_count = 0
-    error_count = 0
-
-    for decision in body.decisions:
-        if decision.action == "confirm":
-            outcome, error_message = result_value_or_error(
-                await confirm_uc(
-                    ConfirmDisclosureCommand(
-                        workspace_id=auth.workspace_id,
-                        disclosure_id=decision.disclosure_id,
-                        confirmed_by=auth.user_id,
-                    ),
-                    auth=auth,
-                )
+    command = DecideMergeCandidatesCommand(
+        workspace_id=auth.workspace_id,
+        decided_by=auth.user_id,
+        decisions=[
+            MergeDecision(
+                disclosure_id=d.disclosure_id,
+                action=d.action,
+                reason=d.reason,
             )
-            if error_message is not None:
-                results.append(
-                    MergeDecisionResult(
-                        disclosure_id=decision.disclosure_id,
-                        action=decision.action,
-                        success=False,
-                        error=error_message,
-                    )
-                )
-                error_count += 1
-            else:
-                results.append(
-                    MergeDecisionResult(
-                        disclosure_id=decision.disclosure_id,
-                        action=decision.action,
-                        success=True,
-                        merged_into_molecule_id=outcome.merged_into_molecule_id,
-                    )
-                )
-                confirmed_count += 1
-
-        elif decision.action == "reject":
-            _, error_message = result_value_or_error(
-                await reject_uc(
-                    RejectDisclosureCommand(
-                        workspace_id=auth.workspace_id,
-                        disclosure_id=decision.disclosure_id,
-                        reason=decision.reason,
-                        rejected_by=auth.user_id,
-                    ),
-                    auth=auth,
-                )
-            )
-            if error_message is not None:
-                results.append(
-                    MergeDecisionResult(
-                        disclosure_id=decision.disclosure_id,
-                        action=decision.action,
-                        success=False,
-                        error=error_message,
-                    )
-                )
-                error_count += 1
-            else:
-                results.append(
-                    MergeDecisionResult(
-                        disclosure_id=decision.disclosure_id,
-                        action=decision.action,
-                        success=True,
-                    )
-                )
-                rejected_count += 1
-
-        else:
-            results.append(
-                MergeDecisionResult(
-                    disclosure_id=decision.disclosure_id,
-                    action=decision.action,
-                    success=False,
-                    error=f"Unknown action '{decision.action}'. Must be 'confirm' or 'reject'.",
-                )
-            )
-            error_count += 1
+            for d in body.decisions
+        ],
+    )
+    data = result_to_response(await use_case(command, auth=auth))
 
     return ConfirmMergesResponse(
-        results=results,
-        confirmed_count=confirmed_count,
-        rejected_count=rejected_count,
-        error_count=error_count,
+        results=[
+            MergeDecisionResult(
+                disclosure_id=o.disclosure_id,
+                action=o.action,
+                success=o.success,
+                error=o.error,
+                merged_into_molecule_id=o.merged_into_molecule_id,
+            )
+            for o in data.outcomes
+        ],
+        confirmed_count=data.confirmed_count,
+        rejected_count=data.rejected_count,
+        error_count=data.error_count,
     )
 
 

@@ -11,6 +11,9 @@ from cellar.application.chemical_registration.bulk_registration_service import (
 )
 from cellar.application.chemical_registration.confirm_disclosure import ConfirmDisclosure
 from cellar.application.chemical_registration.create_relationship import CreateRelationship
+from cellar.application.chemical_registration.decide_merge_candidates import (
+    DecideMergeCandidates,
+)
 from cellar.application.chemical_registration.delete_relationship import DeleteRelationship
 from cellar.application.chemical_registration.depict_molecules import DepictMolecules
 from cellar.application.chemical_registration.disclosure_service import DisclosureService
@@ -61,6 +64,7 @@ __all__ = [
     "BulkRegistrationServiceDep",
     "ConfirmDisclosureDep",
     "CreateRelationshipDep",
+    "DecideMergeCandidatesDep",
     "DeleteRelationshipDep",
     "DepictMoleculesDep",
     # Disclosure + merge
@@ -124,6 +128,9 @@ ResolveDisclosureConflictDep = Annotated[
 GetMergeHistoryDep = Annotated[GetMergeHistory, Depends(_get_use_case(GetMergeHistory))]
 ConfirmDisclosureDep = Annotated[ConfirmDisclosure, Depends(_get_use_case(ConfirmDisclosure))]
 RejectDisclosureDep = Annotated[RejectDisclosure, Depends(_get_use_case(RejectDisclosure))]
+DecideMergeCandidatesDep = Annotated[
+    DecideMergeCandidates, Depends(_get_use_case(DecideMergeCandidates))
+]
 GetMergeImpactDep = Annotated[GetMergeImpact, Depends(_get_use_case(GetMergeImpact))]
 BulkRegistrationServiceDep = Annotated[
     BulkRegistrationService, Depends(_get_use_case(BulkRegistrationService))
