@@ -10,6 +10,7 @@ import type {
   RowOutcomeResponse,
 } from "@/shared/lib/api/model";
 import { useQueryClient } from "@tanstack/react-query";
+import { BATCHES_KEY } from "./query-keys";
 
 /**
  * Dry-run preview of a bulk batch-identifier import.
@@ -30,7 +31,7 @@ export function useCommitBulkIdentifiers() {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["batch-identifiers"] });
         qc.invalidateQueries({ queryKey: ["batch"] });
-        qc.invalidateQueries({ queryKey: ["batches"] });
+        qc.invalidateQueries({ queryKey: BATCHES_KEY });
       },
     },
   });

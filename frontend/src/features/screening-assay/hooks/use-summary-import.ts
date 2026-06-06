@@ -2,6 +2,8 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { DOSE_RESPONSE_KEY, READOUT_DATA_KEY, RUNS_KEY, RUN_KEY } from "./query-keys";
+
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
   SummaryHeaderSuggestionModel,
@@ -102,10 +104,10 @@ export function useImportSummaryFile(runId: string) {
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["readout-data"] });
-      qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
-      qc.invalidateQueries({ queryKey: ["runs"] });
-      qc.invalidateQueries({ queryKey: ["run", runId] });
+      qc.invalidateQueries({ queryKey: READOUT_DATA_KEY });
+      qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      qc.invalidateQueries({ queryKey: [...RUN_KEY, runId] });
     },
   });
 }

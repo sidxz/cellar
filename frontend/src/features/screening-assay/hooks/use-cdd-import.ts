@@ -11,6 +11,7 @@ import type {
 import { STALE_TIME } from "@/shared/lib/query-defaults";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PROTOCOLS_KEY } from "./query-keys";
 
 // ─── API DTOs (orval-generated; aliased per project rule) ────────────────────
 // The CDD protocol-mapping preview shapes are generated from the live backend
@@ -65,7 +66,7 @@ export function useImportCddProtocol() {
         data: nameOverride ? { name_override: nameOverride } : undefined,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["protocols"] });
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       showSuccess("Protocol imported from CDD Vault");
     },
   });

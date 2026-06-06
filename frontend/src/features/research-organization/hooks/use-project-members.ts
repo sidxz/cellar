@@ -4,12 +4,11 @@ import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AddMemberInput, ProjectMember } from "../types";
-
-const membersKey = (projectId: string) => ["projects", projectId, "members"];
+import { projectMembersKey } from "./query-keys";
 
 export function useProjectMembers(projectId: string | undefined) {
   return useQuery({
-    queryKey: membersKey(projectId!),
+    queryKey: projectMembersKey(projectId!),
     queryFn: () =>
       customInstance<ProjectMember[]>({
         url: `${API_V1}/projects/${projectId}/members`,
@@ -29,7 +28,7 @@ export function useAddProjectMember(projectId: string) {
         data,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: membersKey(projectId) });
+      qc.invalidateQueries({ queryKey: projectMembersKey(projectId) });
       showSuccess("Member added");
     },
   });
@@ -45,7 +44,7 @@ export function useUpdateMemberRole(projectId: string) {
         data: { role },
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: membersKey(projectId) });
+      qc.invalidateQueries({ queryKey: projectMembersKey(projectId) });
       showSuccess("Role updated");
     },
   });
@@ -60,7 +59,7 @@ export function useRemoveProjectMember(projectId: string) {
         method: "DELETE",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: membersKey(projectId) });
+      qc.invalidateQueries({ queryKey: projectMembersKey(projectId) });
       showSuccess("Member removed");
     },
   });

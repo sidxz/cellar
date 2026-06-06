@@ -25,6 +25,7 @@ import {
 } from "@/shared/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { formatDateTime } from "@/shared/lib/format-date";
+import { isTerminalImportStatus } from "@/shared/lib/job-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, Square, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -43,8 +44,6 @@ import {
   usePlateImportHistory,
   useStartCddPlateImport,
 } from "../hooks/use-cdd-plate-import";
-
-const TERMINAL_STATUSES = ["completed", "completed_with_errors", "failed"];
 
 export function DataImportPage() {
   const qc = useQueryClient();
@@ -68,7 +67,7 @@ export function DataImportPage() {
   const cancelMutation = useCancelCddMoleculeImport();
 
   // Find active import from history (survives page reload)
-  const activeImport = history?.find((imp) => !TERMINAL_STATUSES.includes(imp.status));
+  const activeImport = history?.find((imp) => !isTerminalImportStatus(imp.status));
 
   // Auto-resume polling for active imports
   useEffect(() => {
@@ -81,7 +80,7 @@ export function DataImportPage() {
 
   // When complete, clear polling and show result message
   useEffect(() => {
-    if (liveStatus && TERMINAL_STATUSES.includes(liveStatus.status)) {
+    if (liveStatus && isTerminalImportStatus(liveStatus.status)) {
       setWorkflowId(null);
       qc.invalidateQueries({ queryKey: ["cdd-molecule-import", "history"] });
       qc.invalidateQueries({ queryKey: MOLECULES_KEY });
@@ -289,7 +288,7 @@ export function DataImportPage() {
                 <div className="max-w-lg space-y-4">
                   {/* Phase indicator */}
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    {TERMINAL_STATUSES.includes(liveStatus.status) ? (
+                    {isTerminalImportStatus(liveStatus.status) ? (
                       statusIcon(liveStatus.status)
                     ) : (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -340,7 +339,7 @@ export function DataImportPage() {
                     />
                   </div>
 
-                  {!TERMINAL_STATUSES.includes(liveStatus.status) && (
+                  {!isTerminalImportStatus(liveStatus.status) && (
                     <Button
                       variant="destructive"
                       size="sm"
@@ -414,7 +413,7 @@ export function DataImportPage() {
                           {imp.total_count.toLocaleString()}
                         </TableCell>
                         <TableCell>
-                          {!TERMINAL_STATUSES.includes(imp.status) && (
+                          {!isTerminalImportStatus(imp.status) && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -457,7 +456,7 @@ function PlateImportTab() {
   const cancelPlate = useCancelCddPlateImport();
   const forceFailPlate = useForceFailPlateImport();
 
-  const activePlateImport = plateHistory?.find((imp) => !TERMINAL_STATUSES.includes(imp.status));
+  const activePlateImport = plateHistory?.find((imp) => !isTerminalImportStatus(imp.status));
 
   useEffect(() => {
     if (activePlateImport?.workflow_id && !plateWorkflowId) {
@@ -468,7 +467,7 @@ function PlateImportTab() {
   const { data: plateLive } = useCddPlateImportStatus(plateWorkflowId);
 
   useEffect(() => {
-    if (plateLive && TERMINAL_STATUSES.includes(plateLive.status)) {
+    if (plateLive && isTerminalImportStatus(plateLive.status)) {
       setPlateWorkflowId(null);
       qc.invalidateQueries({ queryKey: ["cdd-plate-import", "history"] });
       qc.invalidateQueries({ queryKey: ["plates"] });
@@ -552,7 +551,7 @@ function PlateImportTab() {
         {isPlateActive && plateLive && (
           <div className="max-w-lg space-y-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {TERMINAL_STATUSES.includes(plateLive.status) ? (
+              {isTerminalImportStatus(plateLive.status) ? (
                 statusIcon(plateLive.status)
               ) : (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -598,7 +597,7 @@ function PlateImportTab() {
               <CounterCard label="Errors" value={plateLive.plates_error} color="text-destructive" />
             </div>
 
-            {!TERMINAL_STATUSES.includes(plateLive.status) && (
+            {!isTerminalImportStatus(plateLive.status) && (
               <Button
                 variant="destructive"
                 size="sm"
@@ -664,7 +663,7 @@ function PlateImportTab() {
                     {imp.total_count.toLocaleString()}
                   </TableCell>
                   <TableCell>
-                    {!TERMINAL_STATUSES.includes(imp.status) && (
+                    {!isTerminalImportStatus(imp.status) && (
                       <Button
                         variant="ghost"
                         size="sm"

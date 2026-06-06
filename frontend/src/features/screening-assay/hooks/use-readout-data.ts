@@ -3,8 +3,7 @@
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { ReadoutData } from "../types";
-
-const READOUT_DATA_KEY = ["readout-data"];
+import { READOUT_DATA_KEY } from "./query-keys";
 
 export function useReadoutDataByRun(runId: string | undefined) {
   return useQuery({

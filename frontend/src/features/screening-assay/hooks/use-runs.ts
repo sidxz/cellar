@@ -5,7 +5,14 @@ import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess, showWarning } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateRunInput, Run } from "../types";
-import { DOSE_RESPONSE_KEY, RUNS_KEY } from "./query-keys";
+import {
+  COMPOUND_CURVES_KEY,
+  DOSE_RESPONSE_KEY,
+  PLATE_MAP_KEY,
+  PROTOCOL_ACTIVITY_KEY,
+  READOUT_DATA_KEY,
+  RUNS_KEY,
+} from "./query-keys";
 
 const runHooks = createCrudHooks<Run, CreateRunInput, Record<string, unknown>>({
   entityName: "Run",
@@ -232,11 +239,11 @@ export function useRecomputeRun() {
       }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: RUNS_KEY });
-      qc.invalidateQueries({ queryKey: ["readout-data"] });
-      qc.invalidateQueries({ queryKey: ["plate-map"] });
+      qc.invalidateQueries({ queryKey: READOUT_DATA_KEY });
+      qc.invalidateQueries({ queryKey: PLATE_MAP_KEY });
       qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
-      qc.invalidateQueries({ queryKey: ["compound-curves"] });
-      qc.invalidateQueries({ queryKey: ["protocol-activity"] });
+      qc.invalidateQueries({ queryKey: COMPOUND_CURVES_KEY });
+      qc.invalidateQueries({ queryKey: PROTOCOL_ACTIVITY_KEY });
       showSuccess(`Recomputed ${data.computed_readouts} readouts and refit curves`);
       const warnings = data.fit_warnings ?? [];
       if (warnings.length > 0) {

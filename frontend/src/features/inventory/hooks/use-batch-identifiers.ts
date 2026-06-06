@@ -8,8 +8,7 @@ import {
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { BatchIdentifierResponse } from "@/shared/lib/api/model";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-
-const BATCHES_KEY = ["batches"];
+import { BATCHES_KEY } from "./query-keys";
 
 export function useBatchIdentifiers(batchId: string) {
   return useQuery({

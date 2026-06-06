@@ -3,11 +3,10 @@
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { ProjectScopeStatsResponse } from "@/shared/lib/api/model";
 import { useQuery } from "@tanstack/react-query";
+import { PROJECT_SCOPE_STATS_KEY } from "./query-keys";
 
 // Alias the orval-generated DTO (CLAUDE.md: alias, never mirror).
 export type ProjectScopeStats = ProjectScopeStatsResponse;
-
-const STATS_KEY = ["projects", "scope-stats"];
 
 /**
  * Fetches molecule / protocol / run counts for each given project so the
@@ -24,7 +23,7 @@ export function useProjectScopeStats(projectIds: string[]) {
   const sortedIds = [...projectIds].sort();
   const enabled = sortedIds.length > 0;
   return useQuery({
-    queryKey: [...STATS_KEY, { projectIds: sortedIds }],
+    queryKey: [...PROJECT_SCOPE_STATS_KEY, { projectIds: sortedIds }],
     queryFn: () =>
       customInstance<Record<string, ProjectScopeStats>>({
         url: `${API_V1}/projects/stats`,

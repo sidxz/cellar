@@ -6,6 +6,8 @@ import type {
   CddMoleculeImportStatusResponse,
   CddMoleculeImportSummary as CddMoleculeImportSummaryResponse,
 } from "@/shared/lib/api/model";
+import { isTerminalImportStatus } from "@/shared/lib/job-status";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
 import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MOLECULES_KEY } from "./query-keys";
@@ -54,19 +56,14 @@ export function useCddMoleculeImportStatus(workflowId: string | null) {
         method: "GET",
       });
       // When complete, invalidate the molecule list
-      if (
-        result.status === "completed" ||
-        result.status === "completed_with_errors" ||
-        result.status === "failed"
-      ) {
+      if (isTerminalImportStatus(result.status)) {
         qc.invalidateQueries({ queryKey: MOLECULES_KEY });
       }
       return result;
     },
     enabled: !!workflowId,
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      if (status === "completed" || status === "completed_with_errors" || status === "failed") {
+      if (isTerminalImportStatus(query.state.data?.status)) {
         return false;
       }
       return JOB_POLL_INTERVAL_MS;
@@ -106,6 +103,6 @@ export function useImportHistory() {
         url: `${API_V1}/cdd-import/molecules`,
         method: "GET",
       }),
-    staleTime: 30_000,
+    staleTime: STALE_TIME.SHORT,
   });
 }

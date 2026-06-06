@@ -3,9 +3,7 @@
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { DoseResponseCurve } from "../types";
-
-const COMPOUND_CURVES_KEY = ["compound-curves"];
-const MULTI_COMPOUND_CURVES_KEY = ["multi-compound-curves"];
+import { COMPOUND_CURVES_KEY, MULTI_COMPOUND_CURVES_KEY } from "./query-keys";
 
 export function useCompoundCurves(protocolId: string, moleculeId: string | null) {
   return useQuery({

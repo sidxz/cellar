@@ -4,8 +4,7 @@ import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { CreateSavedSearchInput, SavedSearch, UpdateSavedSearchInput } from "../types";
-
-const SAVED_SEARCHES_KEY = ["saved-searches"];
+import { SAVED_SEARCHES_KEY } from "./query-keys";
 
 const savedSearchHooks = createCrudHooks<
   SavedSearch,

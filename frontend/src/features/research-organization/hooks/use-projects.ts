@@ -5,8 +5,7 @@ import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { unwrapList } from "@/shared/types/pagination";
 import { useQuery } from "@tanstack/react-query";
 import type { CreateProjectInput, Project, UpdateProjectInput } from "../types";
-
-const PROJECTS_KEY = ["projects"];
+import { PROJECTS_KEY } from "./query-keys";
 
 const projectHooks = createCrudHooks<Project, CreateProjectInput, UpdateProjectInput>({
   entityName: "Project",

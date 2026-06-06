@@ -22,6 +22,14 @@ import type {
   WellConflictModel,
 } from "@/shared/lib/api/model";
 import { showWarning } from "@/shared/lib/toast";
+import {
+  DOSE_RESPONSE_KEY,
+  PLATE_MAP_KEY,
+  READOUT_DATA_KEY,
+  RUNS_KEY,
+  RUN_IMPORT_TEMPLATES_KEY,
+  RUN_KEY,
+} from "./query-keys";
 
 /** Compose a non-blocking warning toast body from a fit_warnings array.
  *  Up to 3 lines are shown verbatim; anything beyond is collapsed into a
@@ -151,10 +159,10 @@ export function useImportRunFile(runId: string) {
         data: payload,
       }),
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["plate-map", runId] });
-      qc.invalidateQueries({ queryKey: ["readout-data"] });
-      qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
-      qc.invalidateQueries({ queryKey: ["runs"] });
+      qc.invalidateQueries({ queryKey: [...PLATE_MAP_KEY, runId] });
+      qc.invalidateQueries({ queryKey: READOUT_DATA_KEY });
+      qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
       qc.invalidateQueries({ queryKey: ["attachments", "run", runId] });
       const warnings = data.fit_warnings ?? [];
       if (warnings.length > 0) {
@@ -177,18 +185,18 @@ export function useResetRunData(runId: string) {
         method: "POST",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["plate-map", runId] });
-      qc.invalidateQueries({ queryKey: ["readout-data"] });
-      qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
-      qc.invalidateQueries({ queryKey: ["runs"] });
-      qc.invalidateQueries({ queryKey: ["run", runId] });
+      qc.invalidateQueries({ queryKey: [...PLATE_MAP_KEY, runId] });
+      qc.invalidateQueries({ queryKey: READOUT_DATA_KEY });
+      qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      qc.invalidateQueries({ queryKey: [...RUN_KEY, runId] });
     },
   });
 }
 
 export function useRunImportTemplates() {
   return useQuery({
-    queryKey: ["run-import-templates"],
+    queryKey: RUN_IMPORT_TEMPLATES_KEY,
     queryFn: () =>
       customInstance<RunImportTemplate[]>({
         url: `${API_V1}/run-import-templates`,

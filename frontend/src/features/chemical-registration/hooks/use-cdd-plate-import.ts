@@ -6,6 +6,8 @@ import type {
   CddPlateImportStatusResponse,
   CddPlateImportSummary as CddPlateImportSummaryResponse,
 } from "@/shared/lib/api/model";
+import { isTerminalImportStatus } from "@/shared/lib/job-status";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
 import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -36,19 +38,14 @@ export function useCddPlateImportStatus(workflowId: string | null) {
         url: `${API_V1}/cdd-import/plates/${workflowId}/status`,
         method: "GET",
       });
-      if (
-        result.status === "completed" ||
-        result.status === "completed_with_errors" ||
-        result.status === "failed"
-      ) {
+      if (isTerminalImportStatus(result.status)) {
         qc.invalidateQueries({ queryKey: ["plates"] });
       }
       return result;
     },
     enabled: !!workflowId,
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      if (status === "completed" || status === "completed_with_errors" || status === "failed") {
+      if (isTerminalImportStatus(query.state.data?.status)) {
         return false;
       }
       return JOB_POLL_INTERVAL_MS;
@@ -88,6 +85,6 @@ export function usePlateImportHistory() {
         url: `${API_V1}/cdd-import/plates`,
         method: "GET",
       }),
-    staleTime: 30_000,
+    staleTime: STALE_TIME.SHORT,
   });
 }
