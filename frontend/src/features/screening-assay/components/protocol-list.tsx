@@ -71,6 +71,9 @@ export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
         flex: 1,
         minWidth: 140,
         sortable: false,
+        // Without this the quick filter indexes the object array as
+        // "[object Object]" and target names are unsearchable.
+        getQuickFilterText: (p) => (p.value ?? []).map((t: { name: string }) => t.name).join(" "),
         cellRenderer: (params: ICellRendererParams<Protocol>) => (
           <TargetChips targets={params.data?.targets} />
         ),

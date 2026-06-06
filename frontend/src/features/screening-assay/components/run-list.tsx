@@ -47,6 +47,9 @@ export function RunList({ protocolId, onSelect }: RunListProps) {
         flex: 1,
         minWidth: 140,
         sortable: false,
+        // Without this a quick filter indexes the object array as
+        // "[object Object]" and target names are unsearchable.
+        getQuickFilterText: (p) => (p.value ?? []).map((t: { name: string }) => t.name).join(" "),
         cellRenderer: (params: ICellRendererParams<Run>) => (
           <TargetChips targets={params.data?.targets} />
         ),
