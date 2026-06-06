@@ -17,7 +17,8 @@ from cellar.application.auth import AuthContext, require_editor
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.screening_assay.repository import RunRepository
+from cellar.domain.screening_assay.events import RunTargetAdded, RunTargetRemoved
+from cellar.domain.screening_assay.repository import RunRepository, TargetLinkResult
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 
 
@@ -36,7 +37,13 @@ class RemoveRunTargetCommand(Command):
 
 
 class AddRunTarget:
-    """Attach a target to a run (idempotent). Blocked when the run is locked."""
+    """Attach a target to a run (idempotent). Blocked when the run is locked.
+
+    Targets are an M2M association (not aggregate state), so the lock guard
+    uses a column-only query and the audit event is constructed here rather
+    than registered on the aggregate. No version bump: idempotent association
+    edits must not trigger optimistic-concurrency conflicts.
+    """
 
     def __init__(
         self,
@@ -53,20 +60,37 @@ class AddRunTarget:
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
-            if run is None:
+            is_locked = await self._repo.find_lock_state(input.workspace_id, input.run_id)
+            if is_locked is None:
                 return Failure(NotFoundError("Run", str(input.run_id)))
-            if run.is_locked:
+            if is_locked:
                 return Failure(ConflictError("Cannot modify a locked run — unlock it first"))
-            await self._repo.add_target(input.workspace_id, input.run_id, input.target_id)
+            link = await self._repo.add_target(input.workspace_id, input.run_id, input.target_id)
+            if link is TargetLinkResult.TARGET_NOT_FOUND:
+                return Failure(NotFoundError("Target", str(input.target_id)))
+            if link is TargetLinkResult.OWNER_NOT_FOUND:
+                return Failure(NotFoundError("Run", str(input.run_id)))
             events = await self._uow.commit()
 
+        if link is TargetLinkResult.ADDED:
+            events.append(
+                RunTargetAdded(
+                    aggregate_id=input.run_id,
+                    aggregate_type="Run",
+                    workspace_id=input.workspace_id,
+                    target_id=input.target_id,
+                    user_id=auth.user_id if auth else None,
+                )
+            )
         await self._dispatcher.dispatch_all(events)
         return Success(None)
 
 
 class RemoveRunTarget:
-    """Remove a target from a run. Blocked when the run is locked."""
+    """Remove a target from a run. Blocked when the run is locked.
+
+    See ``AddRunTarget`` for the guard/event conventions.
+    """
 
     def __init__(
         self,
@@ -83,13 +107,25 @@ class RemoveRunTarget:
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
-            if run is None:
+            is_locked = await self._repo.find_lock_state(input.workspace_id, input.run_id)
+            if is_locked is None:
                 return Failure(NotFoundError("Run", str(input.run_id)))
-            if run.is_locked:
+            if is_locked:
                 return Failure(ConflictError("Cannot modify a locked run — unlock it first"))
-            await self._repo.remove_target(input.workspace_id, input.run_id, input.target_id)
+            removed = await self._repo.remove_target(
+                input.workspace_id, input.run_id, input.target_id
+            )
             events = await self._uow.commit()
 
+        if removed:
+            events.append(
+                RunTargetRemoved(
+                    aggregate_id=input.run_id,
+                    aggregate_type="Run",
+                    workspace_id=input.workspace_id,
+                    target_id=input.target_id,
+                    user_id=auth.user_id if auth else None,
+                )
+            )
         await self._dispatcher.dispatch_all(events)
         return Success(None)

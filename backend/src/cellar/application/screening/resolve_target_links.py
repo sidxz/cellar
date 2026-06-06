@@ -13,14 +13,14 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from returns.result import Result, Success
+from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
-from cellar.domain.shared.errors import DomainError
+from cellar.domain.shared.errors import DomainError, NotFoundError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -53,6 +53,13 @@ class GetProtocolTargets:
     ) -> Result[list[EffectiveTarget], DomainError]:
         require_workspace_role(auth, "viewer")
         async with self._uow:
+            # Ownership check first: a foreign/missing protocol must 404 like
+            # every sibling GET-by-id, not return 200 [].
+            state = await self._protocol_repo.find_lock_state(
+                input.workspace_id, input.protocol_id
+            )
+            if state is None:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             targets = await self._protocol_repo.find_effective_targets(
                 input.workspace_id, input.protocol_id
             )

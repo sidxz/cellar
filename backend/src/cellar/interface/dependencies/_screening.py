@@ -216,21 +216,15 @@ AddProtocolToProjectDep = Annotated[
 RemoveProtocolFromProjectDep = Annotated[
     RemoveProtocolFromProject, Depends(_get_use_case(RemoveProtocolFromProject))
 ]
-AddProtocolTargetDep = Annotated[
-    AddProtocolTarget, Depends(_get_use_case(AddProtocolTarget))
-]
+AddProtocolTargetDep = Annotated[AddProtocolTarget, Depends(_get_use_case(AddProtocolTarget))]
 RemoveProtocolTargetDep = Annotated[
     RemoveProtocolTarget, Depends(_get_use_case(RemoveProtocolTarget))
 ]
-GetProtocolTargetsDep = Annotated[
-    GetProtocolTargets, Depends(_get_use_case(GetProtocolTargets))
-]
+GetProtocolTargetsDep = Annotated[GetProtocolTargets, Depends(_get_use_case(GetProtocolTargets))]
 ResolveProtocolTargetsDep = Annotated[
     ResolveProtocolTargets, Depends(_get_use_case(ResolveProtocolTargets))
 ]
-ResolveRunTargetsDep = Annotated[
-    ResolveRunTargets, Depends(_get_use_case(ResolveRunTargets))
-]
+ResolveRunTargetsDep = Annotated[ResolveRunTargets, Depends(_get_use_case(ResolveRunTargets))]
 AddRunTargetDep = Annotated[AddRunTarget, Depends(_get_use_case(AddRunTarget))]
 RemoveRunTargetDep = Annotated[RemoveRunTarget, Depends(_get_use_case(RemoveRunTarget))]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]

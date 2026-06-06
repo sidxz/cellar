@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.screening_assay.activity_types import AggregatedReadout
@@ -15,6 +16,20 @@ from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_import_template import RunImportTemplate
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.screening_assay.target import EffectiveTarget, Target, TargetRef
+
+
+class TargetLinkResult(Enum):
+    """Outcome of an add-target link operation.
+
+    Lets use cases distinguish a real insert (audit-worthy) from an
+    idempotent no-op, and surface unknown/cross-workspace targets as
+    NotFound instead of silently succeeding.
+    """
+
+    ADDED = "added"
+    ALREADY_LINKED = "already_linked"
+    OWNER_NOT_FOUND = "owner_not_found"  # protocol/run missing or cross-workspace
+    TARGET_NOT_FOUND = "target_not_found"
 
 
 @runtime_checkable
@@ -67,15 +82,25 @@ class ProtocolRepository(Protocol):
     ) -> list[uuid.UUID]: ...
 
     # --- Target associations -------------------------------------------
+    async def find_lock_state(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> tuple[bool, str] | None:
+        """Column-only guard query: ``(is_locked, status)``, or None if the
+        protocol is missing / cross-workspace. Avoids hydrating the full
+        aggregate (readout + condition definitions) for a lock check."""
+        ...
+
     async def add_direct_target(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
+    ) -> TargetLinkResult:
         """Attach a direct target to a protocol (idempotent, workspace-checked)."""
         ...
 
     async def remove_direct_target(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None: ...
+    ) -> bool:
+        """Unlink a direct target. Returns True if a link row was removed."""
+        ...
 
     async def find_direct_target_ids(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
@@ -113,6 +138,16 @@ class TargetRepository(Protocol):
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
     ) -> list[Target]: ...
+    async def count_references(
+        self, workspace_id: uuid.UUID, target_id: uuid.UUID
+    ) -> tuple[int, int]:
+        """``(protocol_count, run_count)`` of link rows referencing the target.
+
+        Used by DeleteTarget to refuse (409) deleting an in-use target instead
+        of letting the RESTRICT FK raise.
+        """
+        ...
+
     async def save(self, entity: Target) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
@@ -167,19 +202,23 @@ class RunRepository(Protocol):
     ) -> list[Run]: ...
 
     # --- Target associations -------------------------------------------
+    async def find_lock_state(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool | None:
+        """Column-only guard query: ``is_locked``, or None if the run is
+        missing / cross-workspace. Unlike ``is_locked()`` this distinguishes
+        not-found from unlocked, without hydrating plates and wells."""
+        ...
+
     async def add_target(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
+    ) -> TargetLinkResult:
         """Attach a target to a run (idempotent, workspace-checked)."""
         ...
 
     async def remove_target(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None: ...
-
-    async def find_target_refs(
-        self, workspace_id: uuid.UUID, run_id: uuid.UUID
-    ) -> list[TargetRef]: ...
+    ) -> bool:
+        """Unlink a run target. Returns True if a link row was removed."""
+        ...
 
     async def find_target_refs_for_runs(
         self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]

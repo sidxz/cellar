@@ -6,13 +6,21 @@ workspace-scoped read/save/delete surface from ``EntityRepository``.
 
 from __future__ import annotations
 
+import uuid
+
+from sqlalchemy import func, select
+
 from cellar.domain.screening_assay.enums import TargetType
 from cellar.domain.screening_assay.target import Target
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     EntityRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    ProtocolModel,
+    RunModel,
     TargetModel,
+    protocol_targets,
+    run_targets,
 )
 
 
@@ -20,6 +28,32 @@ class SQLAlchemyTargetRepository(EntityRepository[Target, TargetModel]):
     """Persists Target entities to PostgreSQL."""
 
     model_class = TargetModel
+
+    async def count_references(
+        self, workspace_id: uuid.UUID, target_id: uuid.UUID
+    ) -> tuple[int, int]:
+        """``(protocol_count, run_count)`` of link rows referencing the target."""
+        protocol_count = await self._session.scalar(
+            select(func.count())
+            .select_from(
+                protocol_targets.join(
+                    ProtocolModel, protocol_targets.c.protocol_id == ProtocolModel.id
+                )
+            )
+            .where(
+                protocol_targets.c.target_id == target_id,
+                ProtocolModel.workspace_id == workspace_id,
+            )
+        )
+        run_count = await self._session.scalar(
+            select(func.count())
+            .select_from(run_targets.join(RunModel, run_targets.c.run_id == RunModel.id))
+            .where(
+                run_targets.c.target_id == target_id,
+                RunModel.workspace_id == workspace_id,
+            )
+        )
+        return int(protocol_count or 0), int(run_count or 0)
 
     def _to_domain(self, model: TargetModel) -> Target:
         return Target(

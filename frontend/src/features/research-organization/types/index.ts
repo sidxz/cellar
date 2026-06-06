@@ -31,14 +31,12 @@ export const COLLECTION_TYPE_LABELS: Record<CollectionType, string> = {
   distribution_set: "Distribution Set",
 };
 
-export const COLLECTION_TYPE_OPTIONS: { value: CollectionType; label: string }[] = [
-  { value: "generic", label: "Generic" },
-  { value: "reference_set", label: "Reference Set" },
-  { value: "library", label: "Library" },
-  { value: "hit_list", label: "Hit List" },
-  { value: "series", label: "Series" },
-  { value: "distribution_set", label: "Distribution Set" },
-];
+/** Derived from the labels map (the codebase convention — see ORG_TYPES in
+ *  organization-dialog.tsx): adding a CollectionType to the labels makes it
+ *  pickable everywhere; no second hand-maintained list to forget. */
+export const COLLECTION_TYPE_OPTIONS: { value: CollectionType; label: string }[] = (
+  Object.entries(COLLECTION_TYPE_LABELS) as [CollectionType, string][]
+).map(([value, label]) => ({ value, label }));
 
 export type RefType =
   | "uuid"

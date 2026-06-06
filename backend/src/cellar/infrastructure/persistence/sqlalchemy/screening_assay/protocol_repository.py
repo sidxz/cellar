@@ -26,6 +26,7 @@ from cellar.domain.screening_assay.protocol import (
     Protocol,
     ReadoutDefinition,
 )
+from cellar.domain.screening_assay.repository import TargetLinkResult
 from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.hit_criterion import HitCriterion
@@ -255,40 +256,54 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         return list(result.scalars().all())
 
     # ------------------------------------------------------------------
-    # Target association methods
+    # Target association methods (_owns lives on the shared base repository)
     # ------------------------------------------------------------------
 
-    async def _owns(
-        self, model: type, id_: uuid.UUID, workspace_id: uuid.UUID
-    ) -> bool:
+    async def find_lock_state(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> tuple[bool, str] | None:
+        """Column-only guard query — avoids hydrating the full aggregate."""
         result = await self._session.execute(
-            select(model.id).where(model.id == id_, model.workspace_id == workspace_id)
+            select(ProtocolModel.is_locked, ProtocolModel.status).where(
+                ProtocolModel.id == protocol_id,
+                ProtocolModel.workspace_id == workspace_id,
+            )
         )
-        return result.scalar_one_or_none() is not None
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return bool(row.is_locked), row.status
 
     async def add_direct_target(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
+    ) -> TargetLinkResult:
         """Link a direct target to a protocol (idempotent via ON CONFLICT DO NOTHING).
 
         Defense-in-depth: only inserts if BOTH the protocol AND the target
-        belong to the workspace.
+        belong to the workspace; the distinct not-found outcomes let callers
+        surface a 404 instead of a silent success.
         """
         if not await self._owns(ProtocolModel, protocol_id, workspace_id):
-            return
+            return TargetLinkResult.OWNER_NOT_FOUND
         if not await self._owns(TargetModel, target_id, workspace_id):
-            return
-        await self._session.execute(
+            return TargetLinkResult.TARGET_NOT_FOUND
+        result = await self._session.execute(
             pg_insert(protocol_targets)
             .values(protocol_id=protocol_id, target_id=target_id)
             .on_conflict_do_nothing()
         )
+        if result.rowcount:
+            return TargetLinkResult.ADDED
+        return TargetLinkResult.ALREADY_LINKED
 
     async def remove_direct_target(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
-        """Unlink a direct target. Defense-in-depth: workspace-scoped."""
-        await self._session.execute(
+    ) -> bool:
+        """Unlink a direct target. Defense-in-depth: workspace-scoped.
+
+        Returns True if a link row was actually removed.
+        """
+        result = await self._session.execute(
             protocol_targets.delete().where(
                 protocol_targets.c.protocol_id == protocol_id,
                 protocol_targets.c.target_id == target_id,
@@ -297,6 +312,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 ),
             )
         )
+        return bool(result.rowcount)
 
     async def find_direct_target_ids(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
@@ -311,10 +327,15 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         )
         return list(result.scalars().all())
 
-    async def _direct_ids(self, protocol_id: uuid.UUID) -> set[uuid.UUID]:
+    async def _direct_ids(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> set[uuid.UUID]:
+        # Workspace-scoped via the owner join: tenant isolation must not rest
+        # solely on the trailing TargetModel filter in the callers.
         result = await self._session.execute(
-            select(protocol_targets.c.target_id).where(
-                protocol_targets.c.protocol_id == protocol_id
+            select(protocol_targets.c.target_id)
+            .join(ProtocolModel, protocol_targets.c.protocol_id == ProtocolModel.id)
+            .where(
+                protocol_targets.c.protocol_id == protocol_id,
+                ProtocolModel.workspace_id == workspace_id,
             )
         )
         return set(result.scalars().all())
@@ -322,12 +343,15 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     async def find_effective_targets(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[EffectiveTarget]:
-        direct_ids = await self._direct_ids(protocol_id)
+        direct_ids = await self._direct_ids(workspace_id, protocol_id)
 
         run_count_rows = await self._session.execute(
             select(run_targets.c.target_id, func.count(run_targets.c.run_id))
             .select_from(run_targets.join(RunModel, run_targets.c.run_id == RunModel.id))
-            .where(RunModel.protocol_id == protocol_id)
+            .where(
+                RunModel.protocol_id == protocol_id,
+                RunModel.workspace_id == workspace_id,
+            )
             .group_by(run_targets.c.target_id)
         )
         run_counts = {tid: count for tid, count in run_count_rows.all()}
@@ -361,10 +385,15 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         if not protocol_ids:
             return {}
 
-        # protocol_id -> set(target_id): direct
+        # protocol_id -> set(target_id): direct. Workspace-scoped via the
+        # owner join — tenant isolation must not rest solely on the trailing
+        # TargetModel filter below.
         direct_rows = await self._session.execute(
-            select(protocol_targets.c.protocol_id, protocol_targets.c.target_id).where(
-                protocol_targets.c.protocol_id.in_(protocol_ids)
+            select(protocol_targets.c.protocol_id, protocol_targets.c.target_id)
+            .join(ProtocolModel, protocol_targets.c.protocol_id == ProtocolModel.id)
+            .where(
+                protocol_targets.c.protocol_id.in_(protocol_ids),
+                ProtocolModel.workspace_id == workspace_id,
             )
         )
         by_protocol: dict[uuid.UUID, set[uuid.UUID]] = {pid: set() for pid in protocol_ids}
@@ -375,7 +404,10 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         inherited_rows = await self._session.execute(
             select(RunModel.protocol_id, run_targets.c.target_id)
             .select_from(run_targets.join(RunModel, run_targets.c.run_id == RunModel.id))
-            .where(RunModel.protocol_id.in_(protocol_ids))
+            .where(
+                RunModel.protocol_id.in_(protocol_ids),
+                RunModel.workspace_id == workspace_id,
+            )
         )
         for pid, tid in inherited_rows.all():
             by_protocol.setdefault(pid, set()).add(tid)

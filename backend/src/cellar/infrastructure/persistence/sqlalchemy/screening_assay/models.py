@@ -74,7 +74,9 @@ protocol_targets = Table(
     Column(
         "target_id",
         Uuid(as_uuid=True),
-        ForeignKey("targets.id", ondelete="CASCADE"),
+        # RESTRICT: a referenced target must not be silently stripped from its
+        # protocols by a delete — DeleteTarget 409s first (migration 053).
+        ForeignKey("targets.id", ondelete="RESTRICT"),
         primary_key=True,
     ),
     Index("ix_protocol_targets_target", "target_id"),
@@ -95,7 +97,8 @@ run_targets = Table(
     Column(
         "target_id",
         Uuid(as_uuid=True),
-        ForeignKey("targets.id", ondelete="CASCADE"),
+        # RESTRICT: see protocol_targets above (migration 053).
+        ForeignKey("targets.id", ondelete="RESTRICT"),
         primary_key=True,
     ),
     Index("ix_run_targets_target", "target_id"),

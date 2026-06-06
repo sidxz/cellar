@@ -325,8 +325,10 @@ export interface Protocol {
   description: string | null;
   protocol_type: ProtocolType;
   /** Effective targets = direct additions ∪ the union of this protocol's
-   *  runs' targets. Computed read-time by the backend. */
-  targets: ProtocolTargetRef[];
+   *  runs' targets. Computed read-time by the backend. Lightweight refs only —
+   *  provenance (`is_direct`/`run_count`) is NOT on this payload; fetch it
+   *  via `useProtocolTargets` (GET /protocols/{id}/targets). */
+  targets: TargetRef[];
   category: string | null;
   protocol_version: number;
   parent_protocol_id: string | null;

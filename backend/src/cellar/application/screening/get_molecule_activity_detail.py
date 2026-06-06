@@ -213,10 +213,8 @@ class GetMoleculeActivityDetail:
                 input.workspace_id, list(by_protocol.keys())
             )
             proto_map = {p.id: p for p in protocols}
-            targets_by_protocol = (
-                await self._protocol_repo.find_effective_targets_for_protocols(
-                    input.workspace_id, list(by_protocol.keys())
-                )
+            targets_by_protocol = await self._protocol_repo.find_effective_targets_for_protocols(
+                input.workspace_id, list(by_protocol.keys())
             )
 
             # 5. Build response, sorting curves within each group by r_squared DESC

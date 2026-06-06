@@ -1,4 +1,4 @@
-"""Integration tests: protocol/run target M2M — roll-up, auto-prune, cascade.
+"""Integration tests: protocol/run target M2M — roll-up, auto-prune, delete protection.
 
 Exercises the effective-target union (direct union run-derived) and the auto-prune
 of inherited-only targets, against a real PostgreSQL schema.
@@ -11,6 +11,7 @@ from datetime import date
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.exc import IntegrityError
 
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
@@ -136,10 +137,12 @@ class TestTargetLinks:
             await rrepo.add_target(workspace_id, r, t)  # no-op, no duplicate-PK error
             await uow.commit()
         async with uow:
-            refs = await rrepo.find_target_refs(workspace_id, r)
+            refs = (await rrepo.find_target_refs_for_runs(workspace_id, [r])).get(r, [])
         assert [x.id for x in refs] == [t]
 
-    async def test_delete_target_cascades_links(self, uow, workspace_id):
+    async def test_delete_referenced_target_is_blocked(self, uow, workspace_id):
+        """RESTRICT FK (migration 053): an in-use target cannot be deleted —
+        its links must never be silently stripped. Unlinking first unblocks."""
         p = uuid.uuid4()
         r = uuid.uuid4()
         t = uuid.uuid4()
@@ -154,15 +157,26 @@ class TestTargetLinks:
             await rrepo.add_target(workspace_id, r, t)
             await uow.commit()
 
+        with pytest.raises(IntegrityError):
+            async with uow:
+                await uow.session.execute(
+                    sa.text("DELETE FROM targets WHERE id = :id"), {"id": t}
+                )
+                await uow.commit()
+
+        # Still linked; after unlinking, the delete goes through.
+        async with uow:
+            refs = (await rrepo.find_target_refs_for_runs(workspace_id, [r])).get(r, [])
+        assert [x.id for x in refs] == [t]
+
+        async with uow:
+            await rrepo.remove_target(workspace_id, r, t)
+            await uow.commit()
         async with uow:
             await uow.session.execute(
                 sa.text("DELETE FROM targets WHERE id = :id"), {"id": t}
             )
             await uow.commit()
-
-        async with uow:
-            refs = await rrepo.find_target_refs(workspace_id, r)
-        assert refs == []
 
     async def test_workspace_scoping_blocks_cross_ws_link(self, uow, workspace_id):
         other_ws = uuid.uuid4()
@@ -181,7 +195,7 @@ class TestTargetLinks:
             await rrepo.add_target(workspace_id, r, t_other)
             await uow.commit()
         async with uow:
-            refs = await rrepo.find_target_refs(workspace_id, r)
+            refs = (await rrepo.find_target_refs_for_runs(workspace_id, [r])).get(r, [])
         assert refs == []
 
     async def test_batched_effective_targets(self, uow, workspace_id):

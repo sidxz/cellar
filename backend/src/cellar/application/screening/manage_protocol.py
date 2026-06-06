@@ -14,6 +14,7 @@ from cellar.application.auth import (
     require_editor,
     require_same_workspace,
 )
+from cellar.application.screening.get_protocol import ProtocolWithTargets
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.pagination import PageResult
@@ -21,9 +22,10 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import PosControlSignal, ProtocolStatus
+from cellar.domain.screening_assay.events import ProtocolTargetAdded, ProtocolTargetRemoved
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.protocol_versioning_service import ProtocolVersioningService
-from cellar.domain.screening_assay.repository import ProtocolRepository
+from cellar.domain.screening_assay.repository import ProtocolRepository, TargetLinkResult
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from cellar.domain.shared.hit_criterion import HitCriterion
 
@@ -146,13 +148,9 @@ class VersionProtocol:
             await self._repo.save(new_protocol)
             # Carry forward the parent's DIRECT targets. Inherited targets are
             # not copied — they re-derive from the new version's own runs.
-            direct_ids = await self._repo.find_direct_target_ids(
-                input.workspace_id, protocol.id
-            )
+            direct_ids = await self._repo.find_direct_target_ids(input.workspace_id, protocol.id)
             for target_id in direct_ids:
-                await self._repo.add_direct_target(
-                    input.workspace_id, new_protocol.id, target_id
-                )
+                await self._repo.add_direct_target(input.workspace_id, new_protocol.id, target_id)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
@@ -307,7 +305,7 @@ class DeleteProtocol:
 
 
 class ListProtocolsByProject:
-    """List protocols linked to a project."""
+    """List protocols linked to a project (targets resolved in the same UoW)."""
 
     def __init__(self, uow: UnitOfWork, repo: ProtocolRepository) -> None:
         self._uow = uow
@@ -317,7 +315,7 @@ class ListProtocolsByProject:
         self,
         input: ListProtocolsByProjectQuery,
         auth: AuthContext | None = None,
-    ) -> Result[PageResult[Protocol], DomainError]:
+    ) -> Result[PageResult[ProtocolWithTargets], DomainError]:
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             effective_limit = input.limit
@@ -336,7 +334,18 @@ class ListProtocolsByProject:
                 protocols = protocols[:effective_limit]
                 next_cursor = str(protocols[-1].id)
 
-            return Success(PageResult(items=protocols, next_cursor=next_cursor))
+            targets = await self._repo.find_effective_targets_for_protocols(
+                input.workspace_id, [p.id for p in protocols]
+            )
+            return Success(
+                PageResult(
+                    items=[
+                        ProtocolWithTargets(protocol=p, targets=targets.get(p.id, []))
+                        for p in protocols
+                    ],
+                    next_cursor=next_cursor,
+                )
+            )
 
 
 class AddProtocolToProject:
@@ -408,7 +417,13 @@ class RemoveProtocolFromProject:
 
 
 class AddProtocolTarget:
-    """Attach a direct target to a protocol (idempotent)."""
+    """Attach a direct target to a protocol (idempotent).
+
+    Targets are an M2M association (not aggregate state), so the lock/status
+    guard uses a column-only query and the audit event is constructed here
+    rather than registered on the aggregate. No version bump: idempotent
+    association edits must not trigger optimistic-concurrency conflicts.
+    """
 
     def __init__(
         self,
@@ -425,30 +440,40 @@ class AddProtocolTarget:
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            protocol = await self._repo.find_by_id_in_workspace(
-                input.workspace_id, input.protocol_id
-            )
-            if protocol is None:
+            state = await self._repo.find_lock_state(input.workspace_id, input.protocol_id)
+            if state is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
-            if protocol.is_locked:
-                return Failure(
-                    ConflictError("Protocol is locked — unlock to change targets")
-                )
-            if protocol.status == ProtocolStatus.RETIRED:
-                return Failure(
-                    ConflictError("Cannot change targets on a retired protocol")
-                )
-            await self._repo.add_direct_target(
+            is_locked, status = state
+            if is_locked:
+                return Failure(ConflictError("Protocol is locked — unlock to change targets"))
+            if status == ProtocolStatus.RETIRED.value:
+                return Failure(ConflictError("Cannot change targets on a retired protocol"))
+            link = await self._repo.add_direct_target(
                 input.workspace_id, input.protocol_id, input.target_id
             )
+            if link is TargetLinkResult.TARGET_NOT_FOUND:
+                return Failure(NotFoundError("Target", str(input.target_id)))
+            if link is TargetLinkResult.OWNER_NOT_FOUND:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
             events = await self._uow.commit()
 
+        if link is TargetLinkResult.ADDED:
+            events.append(
+                ProtocolTargetAdded(
+                    aggregate_id=input.protocol_id,
+                    aggregate_type="Protocol",
+                    workspace_id=input.workspace_id,
+                    target_id=input.target_id,
+                    user_id=auth.user_id if auth else None,
+                )
+            )
         await self._dispatcher.dispatch_all(events)
         return Success(None)
 
 
 class RemoveProtocolTarget:
-    """Remove a direct target from a protocol."""
+    """Remove a direct target from a protocol. See ``AddProtocolTarget`` for
+    the guard/event conventions."""
 
     def __init__(
         self,
@@ -465,23 +490,28 @@ class RemoveProtocolTarget:
     ) -> Result[None, DomainError]:
         require_editor(auth)
         async with self._uow:
-            protocol = await self._repo.find_by_id_in_workspace(
-                input.workspace_id, input.protocol_id
-            )
-            if protocol is None:
+            state = await self._repo.find_lock_state(input.workspace_id, input.protocol_id)
+            if state is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
-            if protocol.is_locked:
-                return Failure(
-                    ConflictError("Protocol is locked — unlock to change targets")
-                )
-            if protocol.status == ProtocolStatus.RETIRED:
-                return Failure(
-                    ConflictError("Cannot change targets on a retired protocol")
-                )
-            await self._repo.remove_direct_target(
+            is_locked, status = state
+            if is_locked:
+                return Failure(ConflictError("Protocol is locked — unlock to change targets"))
+            if status == ProtocolStatus.RETIRED.value:
+                return Failure(ConflictError("Cannot change targets on a retired protocol"))
+            removed = await self._repo.remove_direct_target(
                 input.workspace_id, input.protocol_id, input.target_id
             )
             events = await self._uow.commit()
 
+        if removed:
+            events.append(
+                ProtocolTargetRemoved(
+                    aggregate_id=input.protocol_id,
+                    aggregate_type="Protocol",
+                    workspace_id=input.workspace_id,
+                    target_id=input.target_id,
+                    user_id=auth.user_id if auth else None,
+                )
+            )
         await self._dispatcher.dispatch_all(events)
         return Success(None)

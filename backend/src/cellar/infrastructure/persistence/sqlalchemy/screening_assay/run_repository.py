@@ -14,6 +14,7 @@ from cellar.domain.screening_assay.enums import (
     RunStatus,
     WellType,
 )
+from cellar.domain.screening_assay.repository import TargetLinkResult
 from cellar.domain.screening_assay.run import Plate, Run, Well
 from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.value_objects import Barcode
@@ -137,35 +138,52 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         return bool(row)
 
     # ------------------------------------------------------------------
-    # Target association methods
+    # Target association methods (_owns lives on the shared base repository)
     # ------------------------------------------------------------------
 
-    async def _owns(
-        self, model: type, id_: uuid.UUID, workspace_id: uuid.UUID
-    ) -> bool:
+    async def find_lock_state(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool | None:
+        """Column-only guard query. None = run missing / cross-workspace.
+
+        Unlike ``is_locked()`` this distinguishes not-found from unlocked,
+        and avoids hydrating the plates -> wells selectin chain.
+        """
         result = await self._session.execute(
-            select(model.id).where(model.id == id_, model.workspace_id == workspace_id)
+            select(RunModel.is_locked).where(
+                RunModel.id == run_id,
+                RunModel.workspace_id == workspace_id,
+            )
         )
-        return result.scalar_one_or_none() is not None
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return bool(row)
 
     async def add_target(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
-        """Link a target to a run (idempotent). Workspace-checked on both sides."""
+    ) -> TargetLinkResult:
+        """Link a target to a run (idempotent). Workspace-checked on both sides.
+
+        The distinct not-found outcomes let callers surface a 404 instead of
+        a silent success.
+        """
         if not await self._owns(RunModel, run_id, workspace_id):
-            return
+            return TargetLinkResult.OWNER_NOT_FOUND
         if not await self._owns(TargetModel, target_id, workspace_id):
-            return
-        await self._session.execute(
+            return TargetLinkResult.TARGET_NOT_FOUND
+        result = await self._session.execute(
             pg_insert(run_targets)
             .values(run_id=run_id, target_id=target_id)
             .on_conflict_do_nothing()
         )
+        if result.rowcount:
+            return TargetLinkResult.ADDED
+        return TargetLinkResult.ALREADY_LINKED
 
     async def remove_target(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID, target_id: uuid.UUID
-    ) -> None:
-        await self._session.execute(
+    ) -> bool:
+        """Unlink a run target. Returns True if a link row was removed."""
+        result = await self._session.execute(
             run_targets.delete().where(
                 run_targets.c.run_id == run_id,
                 run_targets.c.target_id == target_id,
@@ -174,24 +192,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
                 ),
             )
         )
-
-    async def find_target_refs(
-        self, workspace_id: uuid.UUID, run_id: uuid.UUID
-    ) -> list[TargetRef]:
-        result = await self._session.execute(
-            select(TargetModel.id, TargetModel.name, TargetModel.target_type)
-            .select_from(
-                run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id)
-            )
-            .where(
-                run_targets.c.run_id == run_id,
-                TargetModel.workspace_id == workspace_id,
-            )
-            .order_by(TargetModel.name)
-        )
-        return [
-            TargetRef(id=tid, name=name, target_type=tt) for tid, name, tt in result.all()
-        ]
+        return bool(result.rowcount)
 
     async def find_target_refs_for_runs(
         self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
@@ -207,18 +208,20 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             )
             .select_from(
                 run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id)
+                # Workspace-scoped on the owner side too — tenant isolation
+                # must not rest solely on the TargetModel filter.
+                .join(RunModel, run_targets.c.run_id == RunModel.id)
             )
             .where(
                 run_targets.c.run_id.in_(run_ids),
+                RunModel.workspace_id == workspace_id,
                 TargetModel.workspace_id == workspace_id,
             )
             .order_by(TargetModel.name)
         )
         out: dict[uuid.UUID, list[TargetRef]] = {rid: [] for rid in run_ids}
         for run_id, tid, name, tt in result.all():
-            out.setdefault(run_id, []).append(
-                TargetRef(id=tid, name=name, target_type=tt)
-            )
+            out.setdefault(run_id, []).append(TargetRef(id=tid, name=name, target_type=tt))
         return out
 
     # ------------------------------------------------------------------

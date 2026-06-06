@@ -244,13 +244,15 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     ("batch_identifiers", "derived_from_molecule_identifier_id", "molecule_identifiers"),
 
     # -------------------------------------------------------------------------
-    # Target link tables → targets: DB CASCADE clears links on target delete
+    # Target link tables → targets: RESTRICT blocks deleting an in-use target
     # -------------------------------------------------------------------------
-    # protocol_targets / run_targets have ondelete=CASCADE on target_id -> targets.
-    # `targets` is a reference entity (not a Tier-1 admin-deletable aggregate);
-    # deleting a target removes its protocol/run link rows automatically via the
-    # DB engine (verified by test_target_links). The protocol_id/run_id sides
-    # point at Tier-1 parents (protocols/runs) and are covered by Tier-1 RESTRICT.
+    # protocol_targets / run_targets have ondelete=RESTRICT on target_id ->
+    # targets (migration 053): a referenced target cannot be deleted, so links
+    # are never silently stripped — DeleteTarget 409s first with reference
+    # counts (verified by test_target_links). `targets` is a reference entity,
+    # not a Tier-1 admin-deletable aggregate. The protocol_id/run_id owner
+    # sides are ondelete=CASCADE: deleting a protocol/run drops its own link
+    # rows at the DB engine, which is intentional for pure association rows.
     ("protocol_targets", "target_id", "targets"),
     ("run_targets", "target_id", "targets"),
 

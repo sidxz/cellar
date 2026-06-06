@@ -27,6 +27,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Calculator,
   CheckCircle2,
@@ -42,7 +43,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useRecomputeOverrides } from "../hooks/use-recompute-overrides";
-import { useAddRunTarget, useRemoveRunTarget } from "../hooks/use-run-targets";
+import {
+  invalidateRunTargetQueries,
+  useAddRunTarget,
+  useRemoveRunTarget,
+} from "../hooks/use-run-targets";
 import {
   useApproveRun,
   useCompleteRun,
@@ -66,6 +71,7 @@ interface RunDetailProps {
 
 export function RunDetail({ runId }: RunDetailProps) {
   const router = useRouter();
+  const qc = useQueryClient();
   const isAdmin = useAuthzHasRole("admin");
   const canEditTags = useAuthzHasRole("editor");
   const query = useRun(runId);
@@ -552,16 +558,30 @@ export function RunDetail({ runId }: RunDetailProps) {
                 {canEditTags && !run.is_locked ? (
                   <TargetMultiSelect
                     value={run.targets.map((t) => t.id)}
-                    onChange={(ids) => {
+                    onChange={async (ids) => {
+                      // Diff against the current set, dispatch as one awaited
+                      // batch with a single invalidation pass. The select is
+                      // disabled while in flight so a rapid second toggle
+                      // can't diff against a stale list.
                       const current = run.targets.map((t) => t.id);
-                      for (const id of ids) {
-                        if (!current.includes(id)) addRunTarget.mutate(id);
-                      }
-                      for (const id of current) {
-                        if (!ids.includes(id)) removeRunTarget.mutate(id);
+                      const mutations = [
+                        ...ids
+                          .filter((id) => !current.includes(id))
+                          .map((id) => addRunTarget.mutateAsync(id)),
+                        ...current
+                          .filter((id) => !ids.includes(id))
+                          .map((id) => removeRunTarget.mutateAsync(id)),
+                      ];
+                      try {
+                        await Promise.all(mutations);
+                      } catch {
+                        // Failures already surfaced by the mutations' error toasts.
+                      } finally {
+                        await invalidateRunTargetQueries(qc, runId);
                       }
                     }}
                     placeholder="Add a target…"
+                    disabled={addRunTarget.isPending || removeRunTarget.isPending}
                   />
                 ) : (
                   <TargetChips targets={run.targets} max={20} />

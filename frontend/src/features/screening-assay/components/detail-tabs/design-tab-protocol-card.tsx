@@ -18,7 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { useAddProtocolTarget, useRemoveProtocolTarget } from "../../hooks/use-protocol-targets";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  invalidateProtocolTargetQueries,
+  useAddProtocolTarget,
+  useProtocolTargets,
+  useRemoveProtocolTarget,
+} from "../../hooks/use-protocol-targets";
 import {
   useRemoveOntologyAnnotation,
   useSetOntologyAnnotation,
@@ -55,6 +61,7 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   // only by lock or retirement (mirrors the backend add/remove-target guard).
   const canEditTargets = !isLocked && !isRetired;
 
+  const qc = useQueryClient();
   const updateProtocol = useUpdateProtocol(protocolId);
   const setOntologyAnnotation = useSetOntologyAnnotation(protocolId);
   const removeOntologyAnnotation = useRemoveOntologyAnnotation(protocolId);
@@ -63,18 +70,35 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
 
   const { data: ontologySlots } = useOntologySlots();
 
-  const directTargets = protocol.targets.filter((t) => t.is_direct);
-  const inheritedTargets = protocol.targets.filter((t) => !t.is_direct);
+  // Provenance (is_direct / run_count) only exists on the rich
+  // GET /protocols/{id}/targets payload — protocol.targets is the
+  // lightweight effective list without it.
+  const { data: richTargets } = useProtocolTargets(protocolId);
+  const directTargets = (richTargets ?? []).filter((t) => t.is_direct);
+  const inheritedTargets = (richTargets ?? []).filter((t) => !t.is_direct);
   const directTargetIds = directTargets.map((t) => t.id);
+  const targetMutationPending = addProtocolTarget.isPending || removeProtocolTarget.isPending;
 
   // Explicit gesture: each select/deselect persists immediately. Diffing the
-  // new id set against the current direct ids dispatches one add or remove.
-  const handleDirectTargetsChange = (ids: string[]) => {
-    for (const id of ids) {
-      if (!directTargetIds.includes(id)) addProtocolTarget.mutate(id);
-    }
-    for (const id of directTargetIds) {
-      if (!ids.includes(id)) removeProtocolTarget.mutate(id);
+  // new id set against the current direct ids dispatches the adds/removes as
+  // one awaited batch with a single invalidation pass — and the select stays
+  // disabled until the refetch settles, so a rapid second toggle can't diff
+  // against a stale list and get silently swallowed.
+  const handleDirectTargetsChange = async (ids: string[]) => {
+    const mutations = [
+      ...ids
+        .filter((id) => !directTargetIds.includes(id))
+        .map((id) => addProtocolTarget.mutateAsync(id)),
+      ...directTargetIds
+        .filter((id) => !ids.includes(id))
+        .map((id) => removeProtocolTarget.mutateAsync(id)),
+    ];
+    try {
+      await Promise.all(mutations);
+    } catch {
+      // Failures already surfaced by the mutations' error toasts.
+    } finally {
+      await invalidateProtocolTargetQueries(qc, protocolId);
     }
   };
 
@@ -113,6 +137,7 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
                 value={directTargetIds}
                 onChange={handleDirectTargetsChange}
                 placeholder="Add a target…"
+                disabled={targetMutationPending}
               />
             ) : directTargets.length > 0 ? (
               <div className="flex flex-wrap gap-1">
