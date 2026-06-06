@@ -14,6 +14,7 @@ from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.domain.inventory.enums import BatchSource
 from cellar.domain.shared.pagination import PageResult
 from cellar.domain.shared.value_objects import BatchNumber
+from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -116,11 +117,6 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
     # Global list (read-model query — returns flat dicts, not aggregates)
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _escape_like(value: str) -> str:
-        """Escape special LIKE/ILIKE characters."""
-        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
     async def list_global(
         self,
         workspace_id: uuid.UUID,
@@ -181,7 +177,7 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
 
         # --- filters ---
         if search:
-            pattern = f"%{self._escape_like(search)}%"
+            pattern = f"%{escape_like(search)}%"
             stmt = stmt.where(
                 or_(
                     BatchModel.batch_number.ilike(pattern),

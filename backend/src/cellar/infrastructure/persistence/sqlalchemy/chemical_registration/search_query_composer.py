@@ -9,7 +9,7 @@ clause builders live in sibling private modules and are re-exported here to
 preserve their long-standing import paths:
 
 - :mod:`._field_clauses` — text, property, collection, project, keyword_list,
-  run_date, custom_field, plus ``escape_like`` and the field-name maps.
+  run_date, custom_field, plus the field-name maps.
 - :mod:`._structure_query` — exact, substructure, similarity (cartridge SQL).
 - :mod:`._activity_query` — activity filters with run-scope handling.
 - :mod:`._batch_query` — batch-level fields and cross-protocol selectivity.
@@ -47,7 +47,6 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._field_c
     _run_date_clause,
     _tag_clause,
     _text_clause,
-    escape_like,
 )
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._structure_query import (
     _compute_query_bytes,
@@ -93,7 +92,6 @@ __all__ = [
     "_text_clause",
     # Public API
     "compose_criteria",
-    "escape_like",
 ]
 
 

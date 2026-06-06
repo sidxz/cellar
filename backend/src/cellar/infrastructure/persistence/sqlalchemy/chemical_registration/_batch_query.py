@@ -12,9 +12,7 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.sql import ColumnElement
 
-from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._field_clauses import (
-    escape_like,
-)
+from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )

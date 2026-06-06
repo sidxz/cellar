@@ -3,7 +3,7 @@
 Covers the criterion types whose SQL is a single column predicate or a
 direct molecule-id IN-subquery: text, property, collection, project,
 keyword_list, run_date, and custom_field. Also exports the shared
-``escape_like`` helper and the field-name -> SA column mappings.
+field-name -> SA column mappings.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.sql import ColumnElement
 
+from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
@@ -54,11 +55,6 @@ PROPERTY_FIELDS: dict[str, Any] = {
     "ring_count": MoleculeModel.ring_count,
     "ro5_violations": MoleculeModel.ro5_violations,
 }
-
-
-def escape_like(value: str) -> str:
-    """Escape SQL LIKE metacharacters so they match literally."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _text_clause(criterion: dict[str, Any]) -> ColumnElement:

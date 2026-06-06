@@ -20,6 +20,7 @@ from cellar.domain.chemical_registration.mixture_component import MixtureCompone
 from cellar.domain.chemical_registration.molecule import Molecule
 from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from cellar.domain.shared.value_objects import RegistrationNumber
+from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -34,10 +35,6 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
     ProjectModel,
     molecule_projects,
-)
-
-from .search_query_composer import (
-    escape_like,
 )
 
 

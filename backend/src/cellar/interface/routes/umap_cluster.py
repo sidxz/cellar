@@ -37,15 +37,13 @@ from cellar.interface.dependencies._sar_analysis import (
     StartUmapClusterJobDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import COLLECTION_EXPANSION_LIMIT
 
 router = APIRouter(prefix="/api/v1/sar", tags=["sar-analysis"])
 
 # Mol-count guardrails
 MIN_SET_SIZE = 10
 MAX_SET_SIZE = 50_000
-
-# Expansion limit for collection-scoped queries (bypasses search pagination cap)
-COLLECTION_EXPANSION_LIMIT = 100_000
 
 
 # ---------------------------------------------------------------------------
