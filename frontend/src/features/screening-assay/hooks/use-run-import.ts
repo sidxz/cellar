@@ -3,6 +3,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import type {
+  AmbiguousCompoundModel,
+  BatchOptionModel,
+  ColumnMappingRequest,
+  CompoundBatchOverrideRequest,
+  CreateRunImportTemplateRequest,
+  HeaderSuggestionModel,
+  ImportRunFileRequest,
+  ImportRunFileResponse as ImportRunFileResponseModel,
+  PlatePreviewModel,
+  PreviewRunFileResponse as PreviewRunFileResponseModel,
+  ReadoutColumnRequest,
+  ReadoutConflictModel,
+  RepreviewRunFileRequest,
+  ResetRunDataResponse as ResetRunDataResponseModel,
+  RunImportTemplateResponse,
+  WellConflictModel,
+} from "@/shared/lib/api/model";
 import { showWarning } from "@/shared/lib/toast";
 
 /** Compose a non-blocking warning toast body from a fit_warnings array.
@@ -15,6 +33,18 @@ function buildFitWarningDescription(warnings: string[]): string {
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
+//
+// Backend DTOs are aliased from the orval-generated model (the source of truth).
+// Never redefine a backend shape here — that silently drifts the moment the
+// backend changes.
+//
+// ``ImportRole`` / ``ImportConfidence`` are the only genuinely client-only types:
+// the backend serializes role/confidence as plain strings
+// (HeaderSuggestionModelRole = ``string | null``), and these unions narrow that
+// loose string for the wizard's role/confidence selects. ``HeaderSuggestion``
+// keeps every other field generated-derived (so it can't drift) and only
+// narrows those two fields; ``narrowHeaderSuggestions`` does the runtime
+// narrowing at the data boundary.
 
 export type ImportRole =
   | "well"
@@ -26,141 +56,61 @@ export type ImportRole =
 
 export type ImportConfidence = "high" | "medium" | "low";
 
-export interface HeaderSuggestion {
-  header: string;
+/** Client-side narrowed view of the generated {@link HeaderSuggestionModel}:
+ *  identical shape, but ``role``/``confidence`` are tightened from the backend's
+ *  loose ``string`` to the wizard's enums. Use {@link narrowHeaderSuggestions}
+ *  to convert the raw model array at the data boundary. */
+export type HeaderSuggestion = Omit<HeaderSuggestionModel, "role" | "confidence"> & {
   role: ImportRole | null;
   confidence: ImportConfidence;
-  reason: string;
-  /** Set by the backend when the header's normalized name matches a
-   *  protocol-defined readout (numeric or text). The wizard pre-binds
-   *  the readout-def select from this id. */
-  readout_definition_id?: string | null;
+};
+
+const IMPORT_ROLES: readonly ImportRole[] = [
+  "well",
+  "plate_name",
+  "concentration",
+  "batch_ref",
+  "compound_ref",
+  "readout",
+];
+
+const IMPORT_CONFIDENCES: readonly ImportConfidence[] = ["high", "medium", "low"];
+
+function narrowRole(role: HeaderSuggestionModel["role"]): ImportRole | null {
+  return role != null && (IMPORT_ROLES as readonly string[]).includes(role)
+    ? (role as ImportRole)
+    : null;
 }
 
-export interface PlatePreview {
-  plate_name: string;
-  plate_format: string;
-  well_count: number;
-  sample_count: number;
-  blank_count: number;
+function narrowConfidence(confidence: string): ImportConfidence {
+  return (IMPORT_CONFIDENCES as readonly string[]).includes(confidence)
+    ? (confidence as ImportConfidence)
+    : "low";
 }
 
-export interface WellConflict {
-  plate_name: string;
-  well_position: string;
-  reason: string;
+/** Tighten the backend's loose role/confidence strings on each suggestion into
+ *  the wizard's enums. Unknown roles collapse to ``null`` (ignored column);
+ *  unknown confidences collapse to ``"low"`` so they surface for review. */
+export function narrowHeaderSuggestions(suggestions: HeaderSuggestionModel[]): HeaderSuggestion[] {
+  return suggestions.map((s) => ({
+    ...s,
+    role: narrowRole(s.role),
+    confidence: narrowConfidence(s.confidence),
+  }));
 }
 
-export interface ReadoutConflict {
-  plate_name: string;
-  well_position: string;
-  readout_definition_id: string;
-  readout_name: string;
-}
-
-export interface BatchOption {
-  batch_id: string;
-  batch_number: string;
-  salt_form: string | null;
-  purity: number | null;
-  /** ISO-8601 timestamp from the BE serializer. */
-  created_at: string;
-}
-
-export interface AmbiguousCompound {
-  compound_ref: string;
-  molecule_id: string;
-  molecule_name: string;
-  batch_options: BatchOption[];
-  affected_row_count: number;
-}
-
-export interface PreviewRunFileResponse {
-  preview_id: string;
-  headers: string[];
-  suggestions: HeaderSuggestion[];
-  sample_rows: Array<Record<string, string>>;
-  plates: PlatePreview[];
-  matched_batches: number;
-  unmatched_batches: string[];
-  total_rows: number;
-  expires_in_seconds: number;
-  validation_errors: string[];
-  will_create_plates: number;
-  will_create_wells: number;
-  will_create_readouts: number;
-  will_skip_wells: WellConflict[];
-  will_skip_readouts: ReadoutConflict[];
-  matched_compounds: number;
-  unmatched_compound_refs: string[];
-  ambiguous_compounds: AmbiguousCompound[];
-  /** Pre-formatted "Plate-1 A12: <reason>" strings for direct render. */
-  row_conflicts: string[];
-}
-
-export interface ReadoutColumnPayload {
-  header: string;
-  readout_definition_id: string;
-}
-
-export interface ColumnMappingPayload {
-  well: string;
-  plate_name: string | null;
-  concentration: string | null;
-  batch_ref: string | null;
-  compound_ref: string | null;
-  readout_columns: ReadoutColumnPayload[];
-}
-
-export interface CompoundBatchOverride {
-  molecule_id: string;
-  batch_id: string;
-}
-
-export interface ImportRunFilePayload {
-  preview_id: string;
-  mapping: ColumnMappingPayload;
-  compound_batch_overrides: CompoundBatchOverride[];
-  /** When true, auto-create placeholder batches for unmatched batch refs
-   *  whose compound resolves to a known molecule. Default false. */
-  auto_create_unmatched_batches?: boolean;
-}
-
-export interface ImportRunFileResponse {
-  rows_total: number;
-  plates_created: number;
-  wells_created: number;
-  readouts_created: number;
-  unmatched_batches: string[];
-  unmatched_compound_refs: string[];
-  controls_from_template: number;
-  controls_unclassified: number;
-  skipped_rows: number;
-  conflicts_well_metadata: WellConflict[];
-  conflicts_readout: ReadoutConflict[];
-  attachment_id: string | null;
-  /** Non-fatal warning when post-import normalization fails (missing controls etc). */
-  compute_warning: string | null;
-  attachment_warning: string | null;
-  /** Per-compound fit failure messages from the post-import curve fit. Optional
-   *  for back-compat with deployments that haven't been upgraded. */
-  fit_warnings?: string[];
-  /** Number of placeholder batches auto-created during this import.
-   *  Always 0 (or absent on older deployments) when
-   *  auto_create_unmatched_batches was false on the request. */
-  auto_created_batches?: number;
-}
-
-export interface RunImportTemplate {
-  id: string;
-  workspace_id: string;
-  name: string;
-  description: string | null;
-  column_mapping: Record<string, unknown>;
-  created_by: string;
-  created_at: string;
-  updated_at: string | null;
-}
+export type PlatePreview = PlatePreviewModel;
+export type WellConflict = WellConflictModel;
+export type ReadoutConflict = ReadoutConflictModel;
+export type BatchOption = BatchOptionModel;
+export type AmbiguousCompound = AmbiguousCompoundModel;
+export type PreviewRunFileResponse = PreviewRunFileResponseModel;
+export type ReadoutColumnPayload = ReadoutColumnRequest;
+export type ColumnMappingPayload = ColumnMappingRequest;
+export type CompoundBatchOverride = CompoundBatchOverrideRequest;
+export type ImportRunFilePayload = ImportRunFileRequest;
+export type ImportRunFileResponse = ImportRunFileResponseModel;
+export type RunImportTemplate = RunImportTemplateResponse;
 
 // ─── Hooks ─────────────────────────────────────────────────────────────────────
 
@@ -178,10 +128,7 @@ export function usePreviewRunFile(runId: string) {
   });
 }
 
-export interface RepreviewRunFilePayload {
-  preview_id: string;
-  mapping: ColumnMappingPayload;
-}
+export type RepreviewRunFilePayload = RepreviewRunFileRequest;
 
 export function useRepreviewRunFile(runId: string) {
   return useMutation({
@@ -219,12 +166,7 @@ export function useImportRunFile(runId: string) {
   });
 }
 
-export interface ResetRunDataResponse {
-  plates_deleted: number;
-  wells_deleted: number;
-  readouts_deleted: number;
-  curves_deleted: number;
-}
+export type ResetRunDataResponse = ResetRunDataResponseModel;
 
 export function useResetRunData(runId: string) {
   const qc = useQueryClient();
@@ -258,11 +200,7 @@ export function useRunImportTemplates() {
 export function useCreateRunImportTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: {
-      name: string;
-      description?: string;
-      column_mapping: Record<string, unknown>;
-    }) =>
+    mutationFn: async (input: CreateRunImportTemplateRequest) =>
       customInstance<RunImportTemplate>({
         url: "/api/v1/run-import-templates",
         method: "POST",

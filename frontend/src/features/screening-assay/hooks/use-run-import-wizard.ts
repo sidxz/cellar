@@ -15,6 +15,7 @@ import {
   type PreviewRunFileResponse,
   type ReadoutColumnPayload,
   type RunImportTemplate,
+  narrowHeaderSuggestions,
   useCreateRunImportTemplate,
   useImportRunFile,
   usePreviewRunFile,
@@ -153,7 +154,7 @@ export function useRunImportWizard({
         {
           onSuccess: (data) => {
             setPreview(data);
-            setDraft(suggestionToInitialDraft(data.suggestions));
+            setDraft(suggestionToInitialDraft(narrowHeaderSuggestions(data.suggestions)));
             setCompoundPicks({});
             // Auto-suggest a matching template if any header set lines up.
             const match = pickBestTemplate(templates, data.headers);
@@ -322,7 +323,7 @@ export function useRunImportWizard({
               concentration: mapping.concentration,
               batch_ref: mapping.batch_ref,
               compound_ref: mapping.compound_ref,
-              readout_headers: mapping.readout_columns.map((rc) => rc.header),
+              readout_headers: (mapping.readout_columns ?? []).map((rc) => rc.header),
             };
             createTemplate.mutate({
               name: templateName.trim(),

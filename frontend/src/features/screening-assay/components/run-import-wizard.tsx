@@ -24,7 +24,6 @@ import {
 import { formatDate } from "@/shared/lib/format-date";
 import { cn } from "@/shared/lib/utils";
 import type {
-  ImportConfidence,
   ImportRole,
   PreviewRunFileResponse,
   RunImportTemplate,
@@ -49,18 +48,21 @@ interface RunImportWizardProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function confidenceBadgeClass(c: ImportConfidence): string {
+// The backend serializes confidence as a loose string (HeaderSuggestionModel.
+// confidence: string); narrow it at this presentation edge, defaulting any
+// unrecognized value to the most conservative "low" styling/label.
+function confidenceBadgeClass(c: string): string {
   switch (c) {
     case "high":
       return "bg-green-500/10 text-green-400 border-green-500/30";
     case "medium":
       return "bg-amber-500/10 text-amber-400 border-amber-500/30";
-    case "low":
+    default:
       return "bg-red-500/10 text-red-400 border-red-500/30";
   }
 }
 
-function confidenceLabel(c: ImportConfidence): string {
+function confidenceLabel(c: string): string {
   return c === "high" ? "High" : c === "medium" ? "Medium" : "Low";
 }
 
@@ -201,8 +203,8 @@ export function RunImportWizard({ runId, protocolId, open, onOpenChange }: RunIm
               onClick={handleSubmit}
               disabled={
                 importMutation.isPending ||
-                (preview?.validation_errors.length ?? 0) > 0 ||
-                (preview?.row_conflicts.length ?? 0) > 0 ||
+                (preview?.validation_errors?.length ?? 0) > 0 ||
+                (preview?.row_conflicts?.length ?? 0) > 0 ||
                 (preview?.ambiguous_compounds ?? []).some((a) => !compoundPicks[a.molecule_id])
               }
             >
@@ -461,9 +463,20 @@ function PreviewStep({
   autoCreateUnmatchedBatches: boolean;
   onAutoCreateUnmatchedBatches: (v: boolean) => void;
 }) {
-  const willCreateTotal =
-    preview.will_create_plates + preview.will_create_wells + preview.will_create_readouts;
-  const willSkipTotal = preview.will_skip_wells.length + preview.will_skip_readouts.length;
+  // The backend marks these count/list fields optional (omitted on no-op
+  // previews); normalize to zeros/empties once so the render below stays flat.
+  const willCreatePlates = preview.will_create_plates ?? 0;
+  const willCreateWells = preview.will_create_wells ?? 0;
+  const willCreateReadouts = preview.will_create_readouts ?? 0;
+  const willSkipWells = preview.will_skip_wells ?? [];
+  const willSkipReadouts = preview.will_skip_readouts ?? [];
+  const validationErrors = preview.validation_errors ?? [];
+  const unmatchedCompoundRefs = preview.unmatched_compound_refs ?? [];
+  const ambiguousCompounds = preview.ambiguous_compounds ?? [];
+  const rowConflicts = preview.row_conflicts ?? [];
+
+  const willCreateTotal = willCreatePlates + willCreateWells + willCreateReadouts;
+  const willSkipTotal = willSkipWells.length + willSkipReadouts.length;
 
   return (
     <div className="space-y-4 py-2">
@@ -480,26 +493,26 @@ function PreviewStep({
         />
         <SummaryCard
           label="Will fail"
-          value={preview.validation_errors.length}
-          accent={preview.validation_errors.length > 0 ? "fail" : undefined}
+          value={validationErrors.length}
+          accent={validationErrors.length > 0 ? "fail" : undefined}
         />
       </div>
 
       {willCreateTotal > 0 && (
         <div className="rounded-md border border-green-500/30 bg-green-500/5 p-3 text-xs text-muted-foreground">
           <span className="font-medium text-green-300">Will create: </span>
-          {preview.will_create_plates > 0 && (
+          {willCreatePlates > 0 && (
             <>
-              {preview.will_create_plates} plate{preview.will_create_plates === 1 ? "" : "s"},{" "}
+              {willCreatePlates} plate{willCreatePlates === 1 ? "" : "s"},{" "}
             </>
           )}
-          {preview.will_create_wells} well{preview.will_create_wells === 1 ? "" : "s"},{" "}
-          {preview.will_create_readouts} readout cell
-          {preview.will_create_readouts === 1 ? "" : "s"}
+          {willCreateWells} well{willCreateWells === 1 ? "" : "s"}, {willCreateReadouts} readout
+          cell
+          {willCreateReadouts === 1 ? "" : "s"}
         </div>
       )}
 
-      {willCreateTotal === 0 && preview.validation_errors.length === 0 && (
+      {willCreateTotal === 0 && validationErrors.length === 0 && (
         <div className="rounded-md border border-muted bg-muted/30 p-3 text-sm text-muted-foreground">
           Nothing new to import — this file is fully redundant with what&apos;s already on the run.
           The file will still be saved to the Files tab as an audit artifact. Use{" "}
@@ -508,9 +521,7 @@ function PreviewStep({
         </div>
       )}
 
-      {willSkipTotal > 0 && (
-        <ConflictPanel wells={preview.will_skip_wells} readouts={preview.will_skip_readouts} />
-      )}
+      {willSkipTotal > 0 && <ConflictPanel wells={willSkipWells} readouts={willSkipReadouts} />}
 
       <div>
         <p className="mb-2 text-xs font-medium text-muted-foreground">Per-plate summary</p>
@@ -540,14 +551,14 @@ function PreviewStep({
         </div>
       </div>
 
-      {preview.validation_errors.length > 0 && (
+      {validationErrors.length > 0 && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
           <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
             <AlertCircle className="h-4 w-4" />
             Cannot import — protocol setup needed
           </div>
           <ul className="ml-5 list-disc space-y-1 text-xs text-muted-foreground">
-            {preview.validation_errors.map((err, i) => (
+            {validationErrors.map((err, i) => (
               <li key={i}>{err}</li>
             ))}
           </ul>
@@ -591,49 +602,47 @@ function PreviewStep({
         </div>
       </label>
 
-      {preview.unmatched_compound_refs.length > 0 && (
+      {unmatchedCompoundRefs.length > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
           <div className="mb-1 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
             <AlertCircle className="h-4 w-4" />
-            {preview.unmatched_compound_refs.length} unmatched compound ref(s)
+            {unmatchedCompoundRefs.length} unmatched compound ref(s)
           </div>
           <p className="text-xs text-muted-foreground">
             No molecule matches these identifiers (or the molecule has no registered batches). Wells
             will be skipped.
           </p>
           <p className="mt-2 break-words font-mono text-xs">
-            {preview.unmatched_compound_refs.slice(0, 20).join(", ")}
-            {preview.unmatched_compound_refs.length > 20 && "…"}
+            {unmatchedCompoundRefs.slice(0, 20).join(", ")}
+            {unmatchedCompoundRefs.length > 20 && "…"}
           </p>
         </div>
       )}
 
-      {preview.ambiguous_compounds.length > 0 && (
+      {ambiguousCompounds.length > 0 && (
         <DisambiguatePanel
-          ambiguous={preview.ambiguous_compounds}
+          ambiguous={ambiguousCompounds}
           picks={compoundPicks}
           onPick={onCompoundPick}
         />
       )}
 
-      {preview.row_conflicts.length > 0 && (
+      {rowConflicts.length > 0 && (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
           <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
             <AlertCircle className="h-4 w-4" />
-            Batch Ref / Compound Ref disagree on {preview.row_conflicts.length} row(s)
+            Batch Ref / Compound Ref disagree on {rowConflicts.length} row(s)
           </div>
           <p className="text-xs text-muted-foreground">
             Each row's Batch Ref and Compound Ref point to different molecules. Fix the file (drop
             one column or correct the values) and re-upload.
           </p>
           <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
-            {preview.row_conflicts.slice(0, 10).map((line, i) => (
+            {rowConflicts.slice(0, 10).map((line, i) => (
               <li key={i}>{line}</li>
             ))}
-            {preview.row_conflicts.length > 10 && (
-              <li className="text-muted-foreground">
-                …and {preview.row_conflicts.length - 10} more
-              </li>
+            {rowConflicts.length > 10 && (
+              <li className="text-muted-foreground">…and {rowConflicts.length - 10} more</li>
             )}
           </ul>
         </div>
@@ -661,10 +670,9 @@ function DisambiguatePanel({
   const handleAutoPickLatest = () => {
     for (const a of ambiguous) {
       if (picks[a.molecule_id]) continue;
-      if (a.batch_options.length === 0) continue;
-      const latest = [...a.batch_options].sort((x, y) =>
-        y.created_at.localeCompare(x.created_at),
-      )[0];
+      const options = a.batch_options ?? [];
+      if (options.length === 0) continue;
+      const latest = [...options].sort((x, y) => y.created_at.localeCompare(x.created_at))[0];
       onPick(a.molecule_id, latest.batch_id);
     }
   };
@@ -710,7 +718,7 @@ function DisambiguatePanel({
                   <SelectValue placeholder="Pick a batch…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {a.batch_options.map((b) => (
+                  {(a.batch_options ?? []).map((b) => (
                     <SelectItem key={b.batch_id} value={b.batch_id}>
                       <span className="font-mono">{b.batch_number}</span>
                       {b.salt_form && (
@@ -839,6 +847,10 @@ function ConfirmStep({
   onTemplateName: (v: string) => void;
   templateAlreadySaved: boolean;
 }) {
+  // The backend marks these conflict lists optional (omitted when empty).
+  const conflictsWellMetadata = result.conflicts_well_metadata ?? [];
+  const conflictsReadout = result.conflicts_readout ?? [];
+
   return (
     <div className="space-y-4 py-2">
       <div className="flex items-start gap-2 rounded-md border border-green-500/30 bg-green-500/5 p-3 text-sm">
@@ -852,18 +864,18 @@ function ConfirmStep({
             {result.controls_unclassified > 0 && (
               <> · {result.controls_unclassified} blank wells unclassified</>
             )}
-            {result.conflicts_well_metadata.length > 0 && (
+            {conflictsWellMetadata.length > 0 && (
               <>
                 {" "}
-                · {result.conflicts_well_metadata.length} well metadata conflict
-                {result.conflicts_well_metadata.length === 1 ? "" : "s"} skipped
+                · {conflictsWellMetadata.length} well metadata conflict
+                {conflictsWellMetadata.length === 1 ? "" : "s"} skipped
               </>
             )}
-            {result.conflicts_readout.length > 0 && (
+            {conflictsReadout.length > 0 && (
               <>
                 {" "}
-                · {result.conflicts_readout.length} readout cell
-                {result.conflicts_readout.length === 1 ? "" : "s"} skipped (already present)
+                · {conflictsReadout.length} readout cell
+                {conflictsReadout.length === 1 ? "" : "s"} skipped (already present)
               </>
             )}
             {result.unmatched_batches.length > 0 && (
