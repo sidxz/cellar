@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { saveText } from "@/shared/lib/api/download";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { CheckCircle2, Download, FileUp, Loader2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -190,15 +191,12 @@ export function ImportWizard() {
     const example = [...baseExample, ...readoutExample];
 
     const csv = [headers.join(","), example.join(",")].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = selectedProtocol
-      ? `plate_import_template_${selectedProtocol.name.replace(/\s+/g, "_")}.csv`
-      : "plate_import_template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    saveText(
+      csv,
+      selectedProtocol
+        ? `plate_import_template_${selectedProtocol.name.replace(/\s+/g, "_")}.csv`
+        : "plate_import_template.csv",
+    );
   }
 
   // ── Step 2: Validate ─────────────────────────────────────────────────────────

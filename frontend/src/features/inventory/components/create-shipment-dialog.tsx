@@ -21,6 +21,8 @@ import {
 } from "@/shared/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { saveText } from "@/shared/lib/api/download";
+import { parseCsv } from "@/shared/lib/parse-csv";
 import { AlertTriangle, CheckCircle2, Download, Plus, Trash2, Upload, XCircle } from "lucide-react";
 import { useRef, useState } from "react";
 import { useBatchesByMolecule } from "../hooks/use-batches";
@@ -63,36 +65,25 @@ function downloadTemplate() {
   const header = "compound,batch,sample,amount";
   const row1 = "CC-000001,B-001,SMP-001,5mg";
   const row2 = "Aspirin,B-002,SMP-005,2.5 g";
-  const csv = [header, row1, row2].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "shipment-template.csv";
-  a.click();
-  URL.revokeObjectURL(url);
+  saveText([header, row1, row2].join("\n"), "shipment-template.csv");
 }
 
-function parseCSV(
+/**
+ * Parse shipment CSV (header: `compound,batch,sample,amount`) into rows. Uses
+ * the shared PapaParse-based parser so quoted/comma-containing fields (e.g. a
+ * compound name with a comma) round-trip correctly.
+ */
+async function parseCSV(
   text: string,
-): Array<{ compound: string; batch: string; sample: string; amount: string }> {
-  const lines = text
-    .trim()
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  if (lines.length < 2) return []; // Need header + at least 1 row
-
-  // Skip header row
-  return lines.slice(1).map((line) => {
-    const cols = line.split(",").map((c) => c.trim());
-    return {
-      compound: cols[0] || "",
-      batch: cols[1] || "",
-      sample: cols[2] || "",
-      amount: cols[3] || "",
-    };
-  });
+): Promise<Array<{ compound: string; batch: string; sample: string; amount: string }>> {
+  const parsed = await parseCsv(text);
+  if (parsed.kind !== "ok") return [];
+  return parsed.rows.map((row) => ({
+    compound: row.compound ?? "",
+    batch: row.batch ?? "",
+    sample: row.sample ?? "",
+    amount: row.amount ?? "",
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -410,8 +401,8 @@ export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialo
     e.target.value = "";
   }
 
-  function handleValidate() {
-    const parsed = parseCSV(csvText);
+  async function handleValidate() {
+    const parsed = await parseCSV(csvText);
     if (parsed.length === 0) return;
 
     previewMutation.mutate(parsed, {
@@ -617,7 +608,7 @@ export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialo
                   variant="secondary"
                   size="sm"
                   disabled={csvText.trim().length === 0 || previewMutation.isPending}
-                  onClick={handleValidate}
+                  onClick={() => void handleValidate()}
                 >
                   {previewMutation.isPending ? "Validating..." : "Validate & Preview"}
                 </Button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { JOB_POLL_SLOW_INTERVAL_MS } from "@/shared/lib/timing";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RegisterMoleculeInput, RegistrationResponse } from "../types";
@@ -127,7 +128,7 @@ export function useStartBulkRegistration() {
   });
 }
 
-/** GET /api/v1/bulk-registrations/{workflowId} — polls every 3 s while job is active. */
+/** GET /api/v1/bulk-registrations/{workflowId} — polls while the job is active. */
 export function useBulkRegistrationStatus(workflowId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: [...BULK_REG_KEY, workflowId],
@@ -140,7 +141,7 @@ export function useBulkRegistrationStatus(workflowId: string | null, enabled: bo
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (status === "completed" || status === "failed") return false;
-      return 3_000;
+      return JOB_POLL_SLOW_INTERVAL_MS;
     },
   });
 }

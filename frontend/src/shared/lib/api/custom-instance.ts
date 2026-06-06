@@ -16,6 +16,17 @@ export function getApiBaseUrl() {
   return _baseUrl;
 }
 
+/**
+ * Sentinel auth headers for direct `fetch` calls that bypass `customInstance`
+ * (file uploads, binary downloads). Returns `{}` on the server or when the
+ * client isn't authenticated. Centralized so the same `isAuthenticated` guard
+ * is applied everywhere instead of being re-derived per call site.
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const client = typeof window !== "undefined" ? getSentinelClient() : null;
+  return client?.isAuthenticated ? client.getHeaders() : {};
+}
+
 export const customInstance = async <T>({
   url,
   method,
@@ -52,8 +63,7 @@ export const customInstance = async <T>({
   }
   const queryString = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
-  const client = typeof window !== "undefined" ? getSentinelClient() : null;
-  const authHeaders = client?.isAuthenticated ? client.getHeaders() : {};
+  const authHeaders = getAuthHeaders();
 
   const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
 

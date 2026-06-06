@@ -1,6 +1,7 @@
 "use client";
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
+import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export interface CddPlateImportAccepted {
@@ -72,7 +73,7 @@ export function useCddPlateImportStatus(workflowId: string | null) {
       if (status === "completed" || status === "completed_with_errors" || status === "failed") {
         return false;
       }
-      return 2000;
+      return JOB_POLL_INTERVAL_MS;
     },
   });
 }

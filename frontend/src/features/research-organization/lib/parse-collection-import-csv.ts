@@ -1,8 +1,6 @@
-import Papa from "papaparse";
+import { type ParsedCsv, parseCsv } from "@/shared/lib/parse-csv";
 
-export type ParsedCsv =
-  | { kind: "ok"; headers: string[]; rows: Record<string, string>[] }
-  | { kind: "error"; message: string };
+export type { ParsedCsv } from "@/shared/lib/parse-csv";
 
 export async function parseCollectionImportFile(input: File): Promise<ParsedCsv> {
   const ext = input.name.toLowerCase().split(".").pop();
@@ -14,39 +12,14 @@ export async function parseCollectionImportFile(input: File): Promise<ParsedCsv>
 
 /**
  * Backward-compatible alias. Accepts both `File` (production) and `string`
- * (tests + the original API). Delegates to `parseCsv` for the string path.
+ * (tests + the original API). Delegates to the shared `parseCsv` for the
+ * string path.
  */
 export async function parseCollectionImportCsv(input: string | File): Promise<ParsedCsv> {
   if (typeof input !== "string" && (input as File).name) {
     return parseCollectionImportFile(input as File);
   }
   return parseCsv(input);
-}
-
-async function parseCsv(input: string | File): Promise<ParsedCsv> {
-  return new Promise((resolve) => {
-    Papa.parse(input as unknown as File, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.errors.length > 0) {
-          resolve({ kind: "error", message: results.errors[0].message });
-          return;
-        }
-        const headers = results.meta.fields ?? [];
-        if (headers.length === 0) {
-          resolve({ kind: "error", message: "no headers detected" });
-          return;
-        }
-        const rows = (results.data as Record<string, string>[]).map((r) => {
-          const norm: Record<string, string> = {};
-          for (const h of headers) norm[h] = (r[h] ?? "").trim();
-          return norm;
-        });
-        resolve({ kind: "ok", headers, rows });
-      },
-    });
-  });
 }
 
 async function parseExcel(file: File): Promise<ParsedCsv> {

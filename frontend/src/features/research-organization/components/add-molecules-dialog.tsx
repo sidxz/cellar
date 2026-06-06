@@ -22,6 +22,8 @@ import {
 } from "@/shared/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { saveText } from "@/shared/lib/api/download";
+import { parseCsv } from "@/shared/lib/parse-csv";
 import type { ColDef, GridApi } from "ag-grid-community";
 import { ChevronDown, ChevronRight, Download, Upload } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -107,30 +109,21 @@ function downloadTemplate() {
   const header = "identifier,type";
   const row1 = "CC-000001,registration_number";
   const row2 = "aspirin,name";
-  const csv = [header, row1, row2].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "add-molecules-template.csv";
-  a.click();
-  URL.revokeObjectURL(url);
+  saveText([header, row1, row2].join("\n"), "add-molecules-template.csv");
 }
 
-function parseCSV(text: string): Array<{ identifier: string; type: string }> {
-  const lines = text
-    .trim()
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  if (lines.length < 2) return [];
-  return lines.slice(1).map((line) => {
-    const cols = line.split(",").map((c) => c.trim());
-    return {
-      identifier: cols[0] || "",
-      type: cols[1] || "name",
-    };
-  });
+/**
+ * Parse an uploaded CSV (header row: `identifier,type`) into add-molecule rows.
+ * Uses the shared PapaParse-based parser so quoted/comma-containing identifiers
+ * round-trip correctly. Unknown/missing type defaults to "name".
+ */
+async function parseCSV(file: File): Promise<Array<{ identifier: string; type: string }>> {
+  const parsed = await parseCsv(file);
+  if (parsed.kind !== "ok") return [];
+  return parsed.rows.map((row) => ({
+    identifier: row.identifier ?? "",
+    type: row.type || "name",
+  }));
 }
 
 // Map friendly labels to RefType values
@@ -329,13 +322,7 @@ function CsvTab({
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const rows = parseCSV(text);
-      setParsedRows(rows);
-    };
-    reader.readAsText(file);
+    void parseCSV(file).then(setParsedRows);
     e.target.value = "";
   };
 

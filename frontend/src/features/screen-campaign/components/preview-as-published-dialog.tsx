@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
+import { saveText } from "@/shared/lib/api/download";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 
 import { usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet } from "@/shared/lib/api/campaigns/campaigns";
@@ -69,15 +70,11 @@ export function PreviewAsPublishedDialog({
 
   function handleDownload() {
     if (!doc) return;
-    const blob = new Blob([JSON.stringify(doc, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `campaign-${campaignName.replace(/\s+/g, "-")}-preview.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    saveText(
+      JSON.stringify(doc, null, 2),
+      `campaign-${campaignName.replace(/\s+/g, "-")}-preview.json`,
+      "application/json",
+    );
   }
 
   return (

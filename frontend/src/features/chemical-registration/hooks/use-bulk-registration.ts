@@ -1,13 +1,13 @@
 "use client";
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
-import { getApiBaseUrl } from "@/shared/lib/api/custom-instance";
+import { getApiBaseUrl, getAuthHeaders } from "@/shared/lib/api/custom-instance";
 import type {
   BulkRegistrationAcceptedResponse,
   BulkRegistrationStatusResponse,
   BulkRegistrationResponse as GeneratedBulkRegistrationResponse,
 } from "@/shared/lib/api/model";
-import { getSentinelClient } from "@/shared/lib/auth/config";
+import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MOLECULES_KEY } from "./query-keys";
 
@@ -33,8 +33,7 @@ export function useBulkRegistration() {
       fileFormat: string;
       originatingOrgId: string;
     }): Promise<BulkRegistrationResult> => {
-      const client = getSentinelClient();
-      const authHeaders = client?.isAuthenticated ? client.getHeaders() : {};
+      const authHeaders = getAuthHeaders();
 
       const formData = new FormData();
       formData.append("file", file);
@@ -89,7 +88,7 @@ export function useBulkRegistrationStatus(workflowId: string | null) {
       if (status === "completed" || status === "completed_with_errors") {
         return false;
       }
-      return 2000;
+      return JOB_POLL_INTERVAL_MS;
     },
   });
 }

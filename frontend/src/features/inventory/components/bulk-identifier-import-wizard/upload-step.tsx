@@ -2,6 +2,7 @@
 
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
+import { saveText } from "@/shared/lib/api/download";
 import { Download, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { generateCsvTemplate, parseBulkIdentifierCsv } from "../../lib/parse-bulk-identifier-csv";
@@ -25,14 +26,7 @@ export function UploadStep({ onParsed }: UploadStepProps) {
   };
 
   const handleDownloadTemplate = () => {
-    const csv = generateCsvTemplate();
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "batch-identifiers-template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    saveText(generateCsvTemplate(), "batch-identifiers-template.csv");
   };
 
   return (

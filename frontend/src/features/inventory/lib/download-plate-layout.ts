@@ -1,33 +1,17 @@
-import { getApiBaseUrl } from "@/shared/lib/api/custom-instance";
-import { getSentinelClient } from "@/shared/lib/auth/config";
+import { downloadFile } from "@/shared/lib/api/download";
 
 /**
  * Download a registered plate's well-map as a round-trippable CSV/XLSX file.
  *
- * The export endpoint streams a binary file, so we can't use the JSON
- * `customInstance` — we do a direct authenticated fetch (reusing the Sentinel
- * auth headers) and trigger a browser download from the blob.
+ * Delegates to the shared {@link downloadFile} helper, which performs the
+ * authenticated fetch, honors the server's `Content-Disposition` filename, and
+ * triggers the browser download. Falls back to `plate_well_map.<format>` when
+ * the server omits a filename.
  */
 export async function downloadPlateLayout(plateId: string, format: "csv" | "xlsx"): Promise<void> {
-  const client = typeof window !== "undefined" ? getSentinelClient() : null;
-  const authHeaders = client?.isAuthenticated ? client.getHeaders() : {};
-
-  const res = await fetch(`${getApiBaseUrl()}/api/v1/plates/${plateId}/export?format=${format}`, {
-    headers: authHeaders,
+  await downloadFile({
+    url: `/api/v1/plates/${plateId}/export?format=${format}`,
+    method: "GET",
+    fallbackFilename: `plate_well_map.${format}`,
   });
-  if (!res.ok) {
-    throw new Error(`Export failed (${res.status})`);
-  }
-
-  const blob = await res.blob();
-  const disposition = res.headers.get("content-disposition") ?? "";
-  const match = disposition.match(/filename="?([^"]+)"?/);
-  const filename = match?.[1] ?? `plate_well_map.${format}`;
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }

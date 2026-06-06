@@ -28,6 +28,7 @@ import {
 import { Separator } from "@/shared/components/ui/separator";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { saveText } from "@/shared/lib/api/download";
 import { formatFileSize } from "@/shared/lib/format-number";
 import {
   CloudDownload,
@@ -102,13 +103,7 @@ function downloadCsvTemplate() {
       row.map((cell) => (cell.includes(",") ? `"${cell}"` : cell)).join(","),
     ),
   ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "compound_registration_template.csv";
-  a.click();
-  URL.revokeObjectURL(url);
+  saveText(lines.join("\n"), "compound_registration_template.csv");
 }
 
 // ─── Identifier type options ────────────────────────────────────────────────
