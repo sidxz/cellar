@@ -37,7 +37,6 @@ const baseMol: Molecule = {
   synthesis_status: "available",
   lifecycle_stage: "registered",
   stereochemistry: null,
-  tags: [],
   invention_date: null,
   disclosed_at: null,
   merged_into_id: null,

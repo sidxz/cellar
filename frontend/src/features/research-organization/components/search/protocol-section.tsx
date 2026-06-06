@@ -119,12 +119,8 @@ interface ProtocolRowProps {
 function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
   const isArchived = protocol.status === "retired" || protocol.status === "archived";
   // Build a haystack so Command's filter can hit name + all targets + status.
-  const value = [
-    protocol.id,
-    protocol.name,
-    protocol.targets.map((t) => t.name).join(" "),
-    protocol.status,
-  ]
+  const targets = protocol.targets ?? [];
+  const value = [protocol.id, protocol.name, targets.map((t) => t.name).join(" "), protocol.status]
     .join(" ")
     .toLowerCase();
 
@@ -153,12 +149,12 @@ function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
             )}
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {protocol.targets.length > 0 && <TargetChips targets={protocol.targets} />}
+            {targets.length > 0 && <TargetChips targets={targets} />}
             <span className="tabular-nums">
               {protocol.run_count} run{protocol.run_count === 1 ? "" : "s"}
             </span>
             <span aria-hidden>·</span>
-            <span>last {formatLastRun(protocol.last_run_date)}</span>
+            <span>last {formatLastRun(protocol.last_run_date ?? null)}</span>
           </div>
         </div>
       </div>

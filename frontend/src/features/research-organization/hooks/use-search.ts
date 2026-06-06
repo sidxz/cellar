@@ -2,15 +2,25 @@
 
 import type { Molecule } from "@/features/chemical-registration/types";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { ExecuteSearchResponse } from "@/shared/lib/api/model";
 import { useMutation } from "@tanstack/react-query";
 import type { ActivityValue, ExecuteSearchInput, SortDir, SortField } from "../types";
 
-export interface EnrichedSearchResponse {
+/**
+ * FE view of the `/search/execute` response. Derived from the generated
+ * `ExecuteSearchResponse` for the structural fields, but two fields are
+ * re-narrowed because the BE types them loosely:
+ *  - `items`: generated as `MoleculeResponse[]`; the FE uses the
+ *    chemical-registration `Molecule` domain alias (narrowed enums).
+ *  - `activity_data`: the BE types this `dict[str, dict[str, Any]]`
+ *    (search.py:165) so orval emits `unknown` values; the FE knows the blob
+ *    is `Record<molId, Record<columnId, ActivityValue>>` (see ActivityValue
+ *    in ../types). Residual: backend schema gap (untyped activity payload).
+ */
+export type EnrichedSearchResponse = Omit<ExecuteSearchResponse, "items" | "activity_data"> & {
   items: Molecule[];
-  next_cursor: string | null;
-  total_count: number | null;
   activity_data?: Record<string, Record<string, ActivityValue>>;
-}
+};
 
 export function useExecuteSearch() {
   return useMutation({

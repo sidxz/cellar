@@ -3,19 +3,29 @@ import type {
   AggregateMarker,
 } from "@/features/screening-assay/components/dose-response-figure";
 import type { TargetRef } from "@/features/screening-assay/types";
-import type { CollectionType, SelectionRule } from "@/shared/lib/api/model";
-export type { CollectionType };
+import type {
+  CollectionResponse,
+  CollectionType,
+  MembershipResultResponse,
+  MoleculeReferenceBody,
+  ProjectMemberResponse,
+  ProjectResponse,
+  ProjectStatus,
+  SavedSearchResponse,
+  SearchVisibility,
+  SelectionRule,
+  UnresolvedMoleculeResponse,
+} from "@/shared/lib/api/model";
+// Re-export the generated enums under their domain names so call sites import
+// the single orval-generated source of truth (CLAUDE.md: alias, never mirror).
+export type { CollectionType, ProjectStatus, SearchVisibility };
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
-
-export type ProjectStatus = "active" | "archived";
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   active: "Active",
   archived: "Archived",
 };
-
-export type SearchVisibility = "private" | "project";
 
 export const SEARCH_VISIBILITY_LABELS: Record<SearchVisibility, string> = {
   private: "Private",
@@ -55,65 +65,38 @@ export const REF_TYPE_LABELS: Record<Exclude<RefType, "uuid">, string> = {
   name: "Name",
 };
 
-// ─── Interfaces ──────────────────────────────────────────────────────────────
+// ─── Interfaces (aliased to orval-generated DTOs) ────────────────────────────
+// Per CLAUDE.md these alias the generated response/request types rather than
+// hand-rolling mirrors. Where the backend serializes a domain enum as a bare
+// `str` (CollectionResponse.visibility/type, ProjectMemberResponse.role,
+// *MoleculeReference.ref_type), we DERIVE a re-narrowed variant — the FE knows
+// the value set even though the OpenAPI schema widened it (see residual notes).
 
-export interface Project {
-  id: string;
-  workspace_id: string;
-  name: string;
-  description: string | null;
-  status: ProjectStatus;
-  created_by: string;
-  version: number;
-}
+export type Project = ProjectResponse;
 
-export interface Collection {
-  id: string;
-  workspace_id: string;
-  name: string;
-  description: string | null;
-  project_id: string | null;
-  owned_by_org_id: string | null;
-  created_by: string;
-  molecule_count: number;
+/** `CollectionResponse` widens `visibility`/`type` to `string`; the BE only
+ *  ever emits the known enum values, so we re-narrow them here. */
+export type Collection = Omit<CollectionResponse, "visibility" | "type"> & {
   visibility: "private" | "shared";
   type: CollectionType;
-  is_frozen: boolean;
-  derived_from_campaign_id: string | null;
-  version: number;
-}
+};
 
-export interface MoleculeReference {
-  value: string;
+/** Request body for collection-membership add. `MoleculeReferenceBody` widens
+ *  `ref_type` to `string`; the FE always constructs a known `RefType`. */
+export type MoleculeReference = Omit<MoleculeReferenceBody, "ref_type"> & {
   ref_type: RefType;
-}
+};
 
-export interface UnresolvedMolecule {
-  value: string;
+/** `UnresolvedMoleculeResponse` widens `ref_type` to `string` — re-narrow. */
+export type UnresolvedMolecule = Omit<UnresolvedMoleculeResponse, "ref_type"> & {
   ref_type: RefType;
-  reason: string;
-}
+};
 
-export interface MembershipResult {
-  added_count: number;
-  already_present: number;
+export type MembershipResult = Omit<MembershipResultResponse, "unresolved"> & {
   unresolved: UnresolvedMolecule[];
-}
+};
 
-export interface SavedSearch {
-  id: string;
-  workspace_id: string;
-  name: string;
-  description: string | null;
-  project_id: string | null;
-  query: Record<string, unknown>;
-  columns: Record<string, unknown> | null;
-  visibility: SearchVisibility;
-  created_by: string;
-  last_run_at: string | null;
-  result_count: number | null;
-  version: number;
-}
+export type SavedSearch = SavedSearchResponse;
 
 // ─── Create / Update Input Types ─────────────────────────────────────────────
 
@@ -137,11 +120,11 @@ export const PROJECT_ROLE_LABELS: Record<ProjectRole, string> = {
   manager: "Manager",
 };
 
-export interface ProjectMember {
-  project_id: string;
-  user_id: string;
+/** `ProjectMemberResponse` widens `role` to `string`; the BE only emits the
+ *  known `ProjectRole` values, so we re-narrow here. */
+export type ProjectMember = Omit<ProjectMemberResponse, "role"> & {
   role: ProjectRole;
-}
+};
 
 export interface AddMemberInput {
   user_id: string;
@@ -491,6 +474,16 @@ export interface InterceptAggregate {
   disagreement_flag: boolean;
 }
 
+// ─── ActivityValue — CLIENT-SIDE narrowing, NOT a DTO alias ────────────────
+// The search `/execute` endpoint types `activity_data` as
+// `dict[str, dict[str, Any]]` (search.py:165), so orval emits its values as
+// `unknown` (ExecuteSearchResponseActivityData). The thin generated
+// `ActivityValueResponse` (molecules.py:240) belongs to a DIFFERENT endpoint
+// and lacks every rich field the search grid/drawer read (raw_data,
+// curve_params, intercept_values, the multi-run aggregation block). This is
+// the FE's authoritative knowledge of what the `Any` blob contains at runtime
+// (produced by MoleculeActivityService.enrich_molecules). It stays hand-written
+// until the BE models the search activity payload (residual: backend schema gap).
 export interface ActivityValue {
   value: number | null;
   qualifier: string | null;
@@ -572,6 +565,14 @@ export interface CurveParams {
 }
 
 // ─── Molecule Activity Detail (side panel) ──────────────────────────────────
+// These mirror the /molecules/{id}/activity-detail response, but the generated
+// CurveDetailResponse / InterceptSpecResponse widen the chemistry-load-bearing
+// fields the FE depends on: the BE types `raw_data`/`excluded_points` as
+// `list[dict[str, Any]]` (orval → `{[k]: unknown}[]`) and intercept `kind`/
+// `basis` as bare `str` (molecule_activity.py). The chart adapter + drawer
+// selection logic need `raw_data: {x,y}[]` and narrow `kind: "ic"|"ec"`, so
+// aliasing would force re-widening + casts (forbidden). Kept hand-written as a
+// client-side narrowing; see residual: backend schema gap.
 
 /** Mirrors `screening-assay`'s InterceptValue/InterceptSpec wire shape — kept
  *  inline here to avoid a feature-cross-import for plain DTO fields. */

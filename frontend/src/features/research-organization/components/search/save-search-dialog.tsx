@@ -69,7 +69,7 @@ export function SaveSearchDialog({
       setName(existingSearch.name);
       setDescription(existingSearch.description ?? "");
       setVisibility(existingSearch.visibility);
-      setProjectId(existingSearch.project_id);
+      setProjectId(existingSearch.project_id ?? null);
     } else if (open) {
       setName("");
       setDescription("");

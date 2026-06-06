@@ -2,14 +2,14 @@
 
 import { useDebounce } from "@/shared/hooks/use-debounce";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { CountSearchResponse } from "@/shared/lib/api/model";
 import { STALE_TIME } from "@/shared/lib/query-defaults";
 import { SEARCH_DEBOUNCE_MS } from "@/shared/lib/timing";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { SearchQuery } from "../types";
 
-interface CountResponse {
-  total_count: number;
-}
+// Alias the orval-generated DTO (CLAUDE.md: alias, never mirror).
+type CountResponse = CountSearchResponse;
 
 const COUNT_KEY = ["search", "count"];
 

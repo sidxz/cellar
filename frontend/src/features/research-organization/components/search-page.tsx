@@ -244,8 +244,8 @@ function SearchPageInner() {
             dispatch({
               type: "searchComplete",
               results: enrichItems(data),
-              nextCursor: data.next_cursor,
-              totalCount: data.total_count,
+              nextCursor: data.next_cursor ?? null,
+              totalCount: data.total_count ?? null,
             });
           },
           onError: (err) => {
@@ -275,8 +275,8 @@ function SearchPageInner() {
           dispatch({
             type: "loadMoreComplete",
             results: enrichItems(data),
-            nextCursor: data.next_cursor,
-            totalCount: data.total_count,
+            nextCursor: data.next_cursor ?? null,
+            totalCount: data.total_count ?? null,
           });
         },
       },
@@ -309,8 +309,8 @@ function SearchPageInner() {
           dispatch({
             type: "searchComplete",
             results: enrichItems(data),
-            nextCursor: data.next_cursor,
-            totalCount: data.total_count,
+            nextCursor: data.next_cursor ?? null,
+            totalCount: data.total_count ?? null,
           });
         },
       },
@@ -354,8 +354,8 @@ function SearchPageInner() {
           dispatch({
             type: "searchComplete",
             results: enrichItems(data),
-            nextCursor: data.next_cursor,
-            totalCount: data.total_count,
+            nextCursor: data.next_cursor ?? null,
+            totalCount: data.total_count ?? null,
           });
         },
       },
@@ -472,8 +472,8 @@ function SearchPageInner() {
           dispatch({
             type: "searchComplete",
             results: enrichItems(data),
-            nextCursor: data.next_cursor,
-            totalCount: data.total_count,
+            nextCursor: data.next_cursor ?? null,
+            totalCount: data.total_count ?? null,
           });
         },
         onError: (err) => {
