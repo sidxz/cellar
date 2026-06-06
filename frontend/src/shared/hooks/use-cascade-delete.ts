@@ -1,8 +1,8 @@
 "use client";
 
 import { cascadeDeleteApiV1AdminEntityTypeEntityIdCascadeDelete as cascadeDelete } from "@/shared/lib/api/admin/admin";
+import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 
 export interface CascadeDeleteOptions {
   entityType: string;
@@ -22,11 +22,11 @@ export function useCascadeDelete(opts?: { onSuccess?: () => void }) {
     },
     onSuccess: () => {
       qc.invalidateQueries();
-      toast.success("Deleted");
+      showSuccess("Deleted");
       opts?.onSuccess?.();
     },
     onError: (err: unknown) => {
-      toast.error((err as any)?.message ?? "Failed");
+      showError(err instanceof Error ? err.message : "Failed");
     },
   });
 }

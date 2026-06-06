@@ -13,7 +13,11 @@ import {
 } from "@/shared/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/shared/components/ui/button";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { type AdminDeleteBlocker, useAdminDelete } from "@/shared/hooks/use-admin-delete";
+import {
+  type AdminDeleteBlocker,
+  getDeleteBlockedError,
+  useAdminDelete,
+} from "@/shared/hooks/use-admin-delete";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -55,9 +59,9 @@ export function AdminDeleteButton({
     try {
       await m.mutateAsync({ entityType, entityId, reason });
     } catch (err: unknown) {
-      const data = (err as any)?.response?.data;
-      if (data?.error === "delete_blocked_by_dependencies") {
-        setBlockers(data.blockers as AdminDeleteBlocker[]);
+      const blocked = getDeleteBlockedError(err);
+      if (blocked) {
+        setBlockers(blocked.blockers);
       }
     }
   }
