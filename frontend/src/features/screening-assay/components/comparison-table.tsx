@@ -162,7 +162,7 @@ export function buildComparisonRows(
       fitted_unit: curve.fitted_unit,
       hill_slope: curve.hill_slope,
       r_squared: curve.r_squared,
-      curve_class: curve.curve_class,
+      curve_class: (curve.curve_class as CurveClass | null) ?? null,
       top: curve.top,
       bottom: curve.bottom,
     });

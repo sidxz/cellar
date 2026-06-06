@@ -16,7 +16,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { Fragment, useMemo } from "react";
 import { plateCellSizePx, plateDimensionsTuple, rowLabel } from "../lib/plate-dimensions";
-import type { DoseUnit, PlateData, PlateMapWell } from "../types";
+import type { PlateData, PlateMapWell } from "../types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -56,7 +56,8 @@ function WellTooltipContent({
   doseUnit,
 }: {
   well: PlateMapWell;
-  doseUnit: DoseUnit;
+  // Display-only label from PlateMapResponse.dose_unit (a backend string).
+  doseUnit: string;
 }) {
   const aliases: string[] = [];
   if (well.molecule_name && !aliases.includes(well.molecule_name)) {
@@ -95,7 +96,8 @@ function WellTooltipContent({
 
 interface PlateMapViewerProps {
   plate: PlateData;
-  doseUnit: DoseUnit;
+  // Display-only label from PlateMapResponse.dose_unit (a backend string).
+  doseUnit: string;
   className?: string;
 }
 

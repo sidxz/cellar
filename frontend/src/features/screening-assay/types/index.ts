@@ -1,6 +1,17 @@
 import type {
+  ConditionGroupReadoutResponse,
+  ConditionGroupResponse as ConditionGroupResponseModel,
+  ConditionGroupsResponse as ConditionGroupsResponseModel,
+  DoseResponseCurveResponse,
+  InterceptValueResponse,
+  LatestRunResponse as LatestRunResponseModel,
+  PlateData as PlateDataModel,
+  PlateMapResponse as PlateMapResponseModel,
+  PlateMapSummaryModel,
+  PlateMapWellModel,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
+  RunCountsResponse as RunCountsResponseModel,
   TargetRefResponse,
 } from "@/shared/lib/api/model";
 
@@ -192,6 +203,32 @@ export interface InterceptValue {
   confidence_interval_low: number | null;
   confidence_interval_high: number | null;
   at_bound: boolean;
+}
+
+/**
+ * Narrow the generated `InterceptValueResponse[]` wire shape — whose
+ * `spec.kind` / `spec.basis` are typed `string` — to the local `InterceptValue`
+ * enum types. The backend emits exactly the `InterceptKind` / `InterceptBasis`
+ * values, so this asserts that narrowing at the consumption edge (rather than
+ * re-typing the generated `DoseResponseCurveResponse.intercept_values`). Used
+ * wherever a DR-curve's intercepts feed the local activity-grid helpers.
+ */
+export function narrowInterceptValues(
+  values: InterceptValueResponse[] | null | undefined,
+): InterceptValue[] {
+  if (!values) return [];
+  return values.map((iv) => ({
+    spec: {
+      kind: iv.spec.kind as InterceptKind,
+      level: iv.spec.level,
+      basis: iv.spec.basis as InterceptBasis,
+      label: iv.spec.label,
+    },
+    value: iv.value,
+    confidence_interval_low: iv.confidence_interval_low ?? null,
+    confidence_interval_high: iv.confidence_interval_high ?? null,
+    at_bound: iv.at_bound ?? false,
+  }));
 }
 
 export interface DoseResponseConfig {
@@ -397,55 +434,37 @@ export interface Run {
  * `is_computed?`, …), so consumers must treat them as `T | null | undefined`. */
 export type ReadoutData = ReadoutDataResponse;
 
-export interface DoseResponseCurve {
-  id: string;
-  workspace_id: string;
-  molecule_id: string;
-  /** Canonical reg ID (e.g. "CC-000602") — primary label in DR table. */
-  registration_number: string | null;
-  molecule_name: string | null;
-  /** Vendor / external aliases — shown next to the reg id. */
-  synonyms: string[];
-  smiles: string | null;
-  batch_id: string;
-  batch_number: string | null;
-  protocol_id: string;
-  run_id: string;
-  /** The DR readout-def the curve was fitted from — identity-bearing on
-   *  multi-DR protocols where two DRs may share a curve_type. */
-  readout_definition_id: string;
-  curve_type: CurveType;
-  fitted_value: number;
-  fitted_unit: string;
-  hill_slope: number;
-  top: number;
-  bottom: number;
-  r_squared: number;
-  confidence_interval_low: number | null;
-  confidence_interval_high: number | null;
-  num_points: number;
-  curve_class: CurveClass | null;
-  raw_data: Array<Record<string, unknown>> | null;
-  excluded_points: Array<Record<string, unknown>> | null;
-  /** Machine-readable fit-quality codes; rendered as amber badges.
-   *  Known values: "ec50_at_bound", "ec50_outside_dose_range", "low_r_squared". */
-  fit_quality_warnings?: string[];
-  /** Per-spec intercepts derived from the same Hill fit (e.g. IC50, IC90).
-   *  Legacy single-intercept curves omit this; consumers fall back to
-   *  `fitted_value` for the headline number. */
-  intercept_values?: InterceptValue[];
+/**
+ * Backend dose-response curve DTO (`DoseResponseCurveResponse`, the generated
+ * orval type) plus two CLIENT-SIDE enrichments the backend does NOT return.
+ * The backend payload is defined at
+ * `backend/src/cellar/interface/routes/readout_data.py` — it has no
+ * `additional_curves` / `aggregate` fields. Those are attached frontend-side
+ * by the campaign curve-snapshot adapter (`snapshotToDoseResponseCurve` in
+ * `screen-campaign/lib/snapshot-adapter.ts`) so the campaign expand dialog can
+ * draw aggregate-mode overlays through the same `<DoseResponseChart>`.
+ *
+ * The backend-owned shape MUST come from the generated type so it can't
+ * silently drift; only the two client extensions are hand-written. Note the
+ * generated type marks DTO-nullable fields as optional AnyOf wrappers
+ * (`registration_number?`, `confidence_interval_low?`, …) and types
+ * `curve_type` / `curve_class` as plain `string` — narrow to the local
+ * `CurveType` / `CurveClass` enums at the consumption edge, not here.
+ */
+export type DoseResponseCurve = DoseResponseCurveResponse & {
   /** Non-representative contributing curves on aggregate-mode cells
    *  (MEAN_ACROSS_RUNS / GEOMETRIC_MEAN). The chart overlays them muted
    *  underneath the primary. Absent on LATEST / BEST_R_SQUARED.
    *  Loose record shape because the chart re-types via AdditionalCurve at
-   *  the binding edge. */
+   *  the binding edge. Client-side enrichment — not on the backend DTO. */
   additional_curves?: Array<Record<string, unknown>> | null;
   /** Aggregate marker — present only on aggregate-mode cells. Carries
    *  marker_x / marker_label / unit so the chart can draw a single
    *  vertical line at the cell value and suppress the per-curve
-   *  intercept dashed lines (rep's intercept ≠ aggregate value). */
+   *  intercept dashed lines (rep's intercept ≠ aggregate value).
+   *  Client-side enrichment — not on the backend DTO. */
   aggregate?: { marker_x: number; marker_label: string; unit: string } | null;
-}
+};
 
 // ─── Plate Template ─────────────────────────────────────────────────────────
 
@@ -579,25 +598,16 @@ export interface CreateReadoutDataInput {
 
 // ─── Condition Grouping ──────────────────────────────────────────────────────
 
-export interface AggregatedReadoutResponse {
-  readout_definition_id: string;
-  name: string;
-  value: number;
-  unit: string | null;
-  aggregation: string;
-  count: number;
-}
+/** One aggregated readout within a condition group. Aliases the generated
+ *  type — the backend names it `ConditionGroupReadoutResponse`; we keep the
+ *  `AggregatedReadoutResponse` local name used by call sites. */
+export type AggregatedReadoutResponse = ConditionGroupReadoutResponse;
 
-export interface ConditionGroupResponse {
-  condition_value: string;
-  run_count: number;
-  aggregated_readouts: AggregatedReadoutResponse[];
-}
+/** Aliases the generated orval types so these shapes can't silently drift
+ *  from the backend DTOs (see `ReadoutData` / `TargetRef` above). */
+export type ConditionGroupResponse = ConditionGroupResponseModel;
 
-export interface ConditionGroupsResponse {
-  condition_name: string;
-  groups: ConditionGroupResponse[];
-}
+export type ConditionGroupsResponse = ConditionGroupsResponseModel;
 
 // ─── Refit / Classify Input Types ────────────────────────────────────────────
 
@@ -626,45 +636,18 @@ export interface ClassifyDoseResponseInput {
 
 // ─── Plate Setup ─────────────────────────────────────────────────────────────
 
-export interface PlateMapWell {
-  well_id: string;
-  position: string;
-  row: string;
-  column: number;
-  well_type: string;
-  molecule_id: string | null;
-  molecule_name: string | null;
-  synonyms: string[];
-  smiles: string | null;
-  batch_id: string | null;
-  batch_number: string | null;
-  /** Dose value in the protocol's dose_unit (carried at the response root). */
-  dose: number | null;
-}
+/** Aliases the generated orval types so the plate-map graph can't drift from
+ *  the backend DTOs. The generated `PlateMapWellModel` marks DTO-nullable
+ *  fields optional (`molecule_id?`, `synonyms?`, `dose?`, …) — narrow at the
+ *  consumption edge. `dose` is in the protocol's dose_unit (carried at the
+ *  response root as `PlateMapResponse.dose_unit`). */
+export type PlateMapWell = PlateMapWellModel;
 
-export interface PlateMapSummary {
-  total_wells: number;
-  sample_wells: number;
-  control_wells: number;
-  compounds: number;
-  concentrations_per_compound: number;
-  replicates: number;
-}
+export type PlateMapSummary = PlateMapSummaryModel;
 
-export interface PlateData {
-  plate_id: string;
-  plate_number: number;
-  format: string;
-  wells: PlateMapWell[];
-  summary: PlateMapSummary;
-}
+export type PlateData = PlateDataModel;
 
-export interface PlateMapResponse {
-  run_id: string;
-  /** Protocol's dose_unit. All `wells[].dose` values are in this unit. */
-  dose_unit: DoseUnit;
-  plates: PlateData[];
-}
+export type PlateMapResponse = PlateMapResponseModel;
 
 // ─── Hit Criteria + Protocol Stats + Activity ───────────────────────────────
 
@@ -680,24 +663,14 @@ export interface HitCriterion {
   intercept_key?: InterceptKey | null;
 }
 
-export interface RunCountsResponse {
-  total: number;
-  draft: number;
-  in_progress: number;
-  completed: number;
-  approved: number;
-  rejected: number;
-}
+/** Aliases the generated orval types. `ProtocolStats` below is a local
+ *  composite (no backend DTO), so it references these aliases directly. */
+export type RunCountsResponse = RunCountsResponseModel;
 
-export interface LatestRunResponse {
-  id: string;
-  run_date: string;
-  status: RunStatus;
-  plate_format: PlateFormat | null;
-  plate_count: number;
-  compound_count: number;
-  z_prime: number | null;
-}
+/** Aliases the generated type. Note `status`/`plate_format`/`z_prime` are
+ *  typed loosely (`string` / optional AnyOf wrappers) on the wire — narrow to
+ *  `RunStatus` / `PlateFormat` at the render edge where actually needed. */
+export type LatestRunResponse = LatestRunResponseModel;
 
 export interface ProtocolStats {
   run_counts: RunCountsResponse;

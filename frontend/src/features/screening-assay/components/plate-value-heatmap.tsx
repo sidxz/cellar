@@ -11,7 +11,7 @@ import { WELL_EMPTY_COLOR, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { cn } from "@/shared/lib/utils";
 import { Fragment, useMemo } from "react";
 import { plateCellSizePx, plateDimensionsTuple, rowLabel } from "../lib/plate-dimensions";
-import type { DoseUnit, PlateData, PlateMapWell } from "../types";
+import type { PlateData, PlateMapWell } from "../types";
 
 // ─── Color palettes ──────────────────────────────────────────────────────────
 
@@ -127,7 +127,8 @@ function WellTooltipContent({
   computedValue: number | undefined;
   rawUnit: string | null;
   computedUnit: string;
-  doseUnit: DoseUnit;
+  // Display-only label from PlateMapResponse.dose_unit (a backend string).
+  doseUnit: string;
 }) {
   const aliases: string[] = [];
   if (well.molecule_name && !aliases.includes(well.molecule_name)) {
@@ -193,7 +194,8 @@ interface PlateValueHeatmapProps {
   rawUnit: string | null;
   /** Label for the computed/normalized value (e.g. "% Inhibition"). */
   computedUnit: string;
-  doseUnit: DoseUnit;
+  // Display-only label from PlateMapResponse.dose_unit (a backend string).
+  doseUnit: string;
   className?: string;
 }
 

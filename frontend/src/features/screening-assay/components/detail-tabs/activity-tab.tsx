@@ -449,7 +449,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                                     </td>
                                     <td className="px-3 py-2">
                                       {curve.curve_class
-                                        ? curveClassBadge(curve.curve_class)
+                                        ? curveClassBadge(curve.curve_class as CurveClass)
                                         : "--"}
                                     </td>
                                     <td className="px-3 py-2 font-mono">

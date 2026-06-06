@@ -27,6 +27,7 @@ import {
   type ReadoutData,
   type ReadoutDefinition,
   type ReadoutNormalization,
+  narrowInterceptValues,
 } from "../types";
 
 interface ReadoutDataTableProps {
@@ -219,7 +220,7 @@ export function ReadoutDataTable({
               valueGetter: (p) => {
                 const curve = p.data?.curves.get(rd.id);
                 if (!curve) return null;
-                const iv = findInterceptValue(curve.intercept_values, spec);
+                const iv = findInterceptValue(narrowInterceptValues(curve.intercept_values), spec);
                 const value = iv?.value ?? (isPrimary ? curve.fitted_value : null);
                 return formatInterceptDisplay({
                   value,
@@ -235,7 +236,7 @@ export function ReadoutDataTable({
                 if (!curve) {
                   return <span className="text-muted-foreground">{"—"}</span>;
                 }
-                const iv = findInterceptValue(curve.intercept_values, spec);
+                const iv = findInterceptValue(narrowInterceptValues(curve.intercept_values), spec);
                 const value = iv?.value ?? (isPrimary ? curve.fitted_value : null);
                 const display = formatInterceptDisplay({
                   value,
