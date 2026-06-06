@@ -1,42 +1,21 @@
 "use client";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type {
+  CddMoleculeImportAcceptedResponse,
+  CddMoleculeImportStatusResponse,
+  CddMoleculeImportSummary as CddMoleculeImportSummaryResponse,
+} from "@/shared/lib/api/model";
 import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MOLECULES_KEY } from "./query-keys";
 
-export interface CddMoleculeImportAccepted {
-  import_id: string | null;
-  workflow_id: string;
-  status: string;
-}
-
-export interface CddMoleculeImportStatus {
-  import_id: string;
-  status: string;
-  total_count: number;
-  registered_count: number;
-  duplicate_count: number;
-  error_count: number;
-  skipped_count: number;
-  current_offset: number;
-  pages_processed: number;
-}
-
-export interface CddMoleculeImportSummary {
-  id: string;
-  cdd_vault_id: string;
-  import_mode: string;
-  status: string;
-  workflow_id: string | null;
-  total_count: number;
-  registered_count: number;
-  duplicate_count: number;
-  error_count: number;
-  skipped_count: number;
-  submitted_at: string;
-  completed_at: string | null;
-}
+// ─── API DTOs (orval-generated; aliased per project rule) ────────────────────
+// CDD molecule-import response shapes are generated from the live backend
+// OpenAPI — aliased to domain-friendly names so call sites don't churn.
+export type CddMoleculeImportAccepted = CddMoleculeImportAcceptedResponse;
+export type CddMoleculeImportStatus = CddMoleculeImportStatusResponse;
+export type CddMoleculeImportSummary = CddMoleculeImportSummaryResponse;
 
 export function useStartCddMoleculeImport() {
   return useMutation({

@@ -1,53 +1,25 @@
 "use client";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type {
+  CddProtocolMappingResultResponse,
+  CddProtocolSummaryResponse,
+  MappedConditionResponse,
+  MappedReadoutResponse,
+  MappingWarningResponse,
+} from "@/shared/lib/api/model";
 import { STALE_TIME } from "@/shared/lib/query-defaults";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-export interface CddProtocolSummary {
-  external_id: number;
-  name: string;
-  readout_count: number;
-}
-
-export interface MappedReadout {
-  name: string;
-  data_type: string;
-  unit: string | null;
-  aggregation: string;
-  normalizations: string[];
-  precision: number | null;
-  pick_list_values: string[] | null;
-  has_dose_response_config: boolean;
-  /** Same shape as ReadoutDefinition.dose_response_config — surfaced so the
-   *  import wizard can preview intercepts, range constraints, etc. */
-  dose_response_config: Record<string, unknown> | null;
-  display_order: number;
-}
-
-export interface MappedCondition {
-  name: string;
-  data_type: string;
-  unit: string | null;
-  pick_list_values: string[] | null;
-}
-
-export interface MappingWarning {
-  field_name: string;
-  source_type: string;
-  reason: string;
-}
-
-export interface CddProtocolMappingResult {
-  name: string;
-  description: string | null;
-  category: string | null;
-  readouts: MappedReadout[];
-  conditions: MappedCondition[];
-  warnings: MappingWarning[];
-  external_source_id: number;
-}
+// ─── API DTOs (orval-generated; aliased per project rule) ────────────────────
+// The CDD protocol-mapping preview shapes are generated from the live backend
+// OpenAPI — aliased to domain-friendly names so call sites don't churn.
+export type CddProtocolSummary = CddProtocolSummaryResponse;
+export type MappedReadout = MappedReadoutResponse;
+export type MappedCondition = MappedConditionResponse;
+export type MappingWarning = MappingWarningResponse;
+export type CddProtocolMappingResult = CddProtocolMappingResultResponse;
 
 const CDD_PROTOCOLS_KEY = ["cdd-import", "protocols"];
 

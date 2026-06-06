@@ -2,10 +2,11 @@
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { ProtocolSummaryResponse } from "@/shared/lib/api/model";
 import { showSuccess } from "@/shared/lib/toast";
 import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateProtocolInput, Protocol, TargetRef } from "../types";
+import type { CreateProtocolInput, Protocol } from "../types";
 import { PROTOCOLS_KEY } from "./query-keys";
 
 const protocolHooks = createCrudHooks<
@@ -58,20 +59,17 @@ export function useProtocols(
   });
 }
 
-/** Lightweight protocol rows for the picker — name + status + run stats.
- *  Sorted server-side: most-recently-run first; never-run sink to bottom. */
-export interface ProtocolSummary {
-  id: string;
-  name: string;
-  status: string;
-  protocol_type: string;
-  description: string | null;
-  /** Effective target refs (direct ∪ run-union), name-only for the picker. */
-  targets: TargetRef[];
-  run_count: number;
-  /** ISO date (YYYY-MM-DD) or null when no runs yet. */
-  last_run_date: string | null;
-}
+/**
+ * Lightweight protocol rows for the picker — name + status + run stats
+ * (sorted server-side: most-recently-run first; never-run sink to bottom).
+ *
+ * Aliased from the orval-generated DTO (source of truth). Note the backend
+ * Pydantic schema gives `targets` / `run_count` / `last_run_date` / `description`
+ * field defaults, so OpenAPI marks them non-required and the generated type
+ * makes them optional — consumers must null-handle them even though the route
+ * always populates them.
+ */
+export type ProtocolSummary = ProtocolSummaryResponse;
 
 /**
  * Protocol picker rows (name + status + run stats).
