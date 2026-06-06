@@ -193,3 +193,40 @@ class TestUnknownTarget404:
         t1 = await _make_target(client, "NadD")
         resp = await client.delete(f"/api/v1/protocols/{pid}/targets/{t1}")
         assert resp.status_code == 204, resp.text
+
+
+class TestDeleteTargetGuard:
+    """Deleting an in-use target must 409 — never silently strip links."""
+
+    async def test_delete_in_use_target_409(self, client: AsyncClient) -> None:
+        t1 = await _make_target(client, "InUseTarget")
+        pid = await _make_protocol(client, target_ids=[t1])
+
+        resp = await client.delete(f"/api/v1/targets/{t1}")
+        assert resp.status_code == 409, resp.text
+        assert "in use" in resp.json()["message"]
+
+        # Link survives.
+        rich = await client.get(f"/api/v1/protocols/{pid}/targets")
+        assert [t["id"] for t in rich.json()] == [t1]
+
+        # Unlink, then the delete goes through.
+        rm = await client.delete(f"/api/v1/protocols/{pid}/targets/{t1}")
+        assert rm.status_code == 204, rm.text
+        resp = await client.delete(f"/api/v1/targets/{t1}")
+        assert resp.status_code in (200, 204), resp.text
+
+    async def test_delete_run_referenced_target_409(self, client: AsyncClient) -> None:
+        t1 = await _make_target(client, "RunRefTarget")
+        pid = await _make_protocol(client)
+        await _publish(client, pid)
+        rid = await _make_run(client, pid, target_ids=[t1])
+
+        resp = await client.delete(f"/api/v1/targets/{t1}")
+        assert resp.status_code == 409, resp.text
+
+        assert (
+            await client.delete(f"/api/v1/runs/{rid}/targets/{t1}")
+        ).status_code == 204
+        resp = await client.delete(f"/api/v1/targets/{t1}")
+        assert resp.status_code in (200, 204), resp.text

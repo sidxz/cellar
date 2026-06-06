@@ -138,6 +138,16 @@ class TargetRepository(Protocol):
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
     ) -> list[Target]: ...
+    async def count_references(
+        self, workspace_id: uuid.UUID, target_id: uuid.UUID
+    ) -> tuple[int, int]:
+        """``(protocol_count, run_count)`` of link rows referencing the target.
+
+        Used by DeleteTarget to refuse (409) deleting an in-use target instead
+        of letting the RESTRICT FK raise.
+        """
+        ...
+
     async def save(self, entity: Target) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
