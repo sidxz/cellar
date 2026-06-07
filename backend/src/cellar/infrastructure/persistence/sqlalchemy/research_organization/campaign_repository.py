@@ -22,8 +22,8 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import SourceRef
-from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.shared.target_ref import TargetRef
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -34,6 +34,7 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CampaignResultModel,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    RunModel,
     TargetModel,
     run_targets,
 )
@@ -433,29 +434,42 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         if not all_run_ids:
             return {}
 
-        # One batched query: run_id -> target rows (workspace-scoped).
+        # One batched query: run_id -> TargetRef columns. Mirrors
+        # find_target_refs_for_runs — select only the 3 fields TargetRef needs
+        # and join through RunModel so tenant isolation is enforced on the owner
+        # side too, not just the TargetModel filter.
         rows = (
             await self._session.execute(
-                select(run_targets.c.run_id, TargetModel)
+                select(
+                    run_targets.c.run_id,
+                    TargetModel.id,
+                    TargetModel.name,
+                    TargetModel.target_type,
+                )
                 .select_from(
-                    run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id)
+                    run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id).join(
+                        RunModel, run_targets.c.run_id == RunModel.id
+                    )
                 )
                 .where(
-                    TargetModel.workspace_id == workspace_id,
                     run_targets.c.run_id.in_(all_run_ids),
+                    RunModel.workspace_id == workspace_id,
+                    TargetModel.workspace_id == workspace_id,
                 )
             )
         ).all()
-        targets_by_run: dict[uuid.UUID, list[TargetModel]] = {}
-        for run_id, target in rows:
-            targets_by_run.setdefault(run_id, []).append(target)
+        targets_by_run: dict[uuid.UUID, list[TargetRef]] = {}
+        for run_id, tid, name, tt in rows:
+            targets_by_run.setdefault(run_id, []).append(
+                TargetRef(id=tid, name=name, target_type=tt)
+            )
 
         out: dict[uuid.UUID, list[TargetRef]] = {}
         for campaign_id, run_ids in run_ids_by_campaign.items():
             seen: dict[uuid.UUID, TargetRef] = {}
             for rid in run_ids:
                 for t in targets_by_run.get(rid, ()):
-                    seen[t.id] = TargetRef(id=t.id, name=t.name, target_type=t.target_type)
+                    seen[t.id] = t
             if seen:
                 out[campaign_id] = sorted(seen.values(), key=lambda r: r.name.lower())
         return out
