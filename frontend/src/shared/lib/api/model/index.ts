@@ -660,6 +660,7 @@ export * from './listBulkRegItemsResponse';
 export * from './listBulkRegistrationItemsApiV1BulkRegistrationsWorkflowIdItemsGetParams';
 export * from './listCampaignsApiV1CampaignsGetParams';
 export * from './listCampaignsApiV1CampaignsGetTagLogic';
+export * from './listCampaignsApiV1CampaignsGetTargetLogic';
 export * from './listCollectionImportTemplatesApiV1CollectionImportTemplatesGetParams';
 export * from './listCollectionMoleculesApiV1CollectionsCollectionIdMoleculesGetParams';
 export * from './listCollectionsApiV1CollectionsGetParams';

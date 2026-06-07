@@ -15,6 +15,7 @@ import type { CampaignResponseSignatureId } from './campaignResponseSignatureId'
 import type { CampaignResponseSourceProtocolsItem } from './campaignResponseSourceProtocolsItem';
 import type { CampaignChannelResponse } from './campaignChannelResponse';
 import type { CampaignResultResponse } from './campaignResultResponse';
+import type { TargetRefResponse } from './targetRefResponse';
 
 export interface CampaignResponse {
   id: string;
@@ -38,4 +39,5 @@ export interface CampaignResponse {
   version: number;
   channels: CampaignChannelResponse[];
   results: CampaignResultResponse[];
+  targets?: TargetRefResponse[];
 }
