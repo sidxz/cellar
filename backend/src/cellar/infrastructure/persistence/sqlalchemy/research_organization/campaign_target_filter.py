@@ -5,6 +5,10 @@ the given targets (``match_all=False`` = any; ``match_all=True`` = all).
 A campaign "has" target T if any of its measurements references a run
 (``source_run_id`` or a member of ``contributing_run_ids``) that has T in
 ``run_targets``.
+
+Note: ``match_all=True`` with a single target id is equivalent to
+``match_all=False`` — the ``HAVING count == 1`` matches any campaign that
+touches that one target.
 """
 
 from __future__ import annotations
@@ -29,12 +33,12 @@ def campaign_target_filter_subquery(target_ids: list[uuid.UUID], *, match_all: b
     )
     stmt = (
         select(CampaignResultModel.campaign_id)
-        .select_from(
-            CampaignResultModel.__table__.join(
-                CampaignMeasurementModel,
-                CampaignMeasurementModel.result_id == CampaignResultModel.id,
-            ).join(run_targets, run_match)
+        .select_from(CampaignResultModel)
+        .join(
+            CampaignMeasurementModel,
+            CampaignMeasurementModel.result_id == CampaignResultModel.id,
         )
+        .join(run_targets, run_match)
         .where(run_targets.c.target_id.in_(unique_ids))
     )
     if match_all:
