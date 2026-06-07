@@ -22,6 +22,7 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import SourceRef
+from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -31,6 +32,10 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CampaignMeasurementModel,
     CampaignModel,
     CampaignResultModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    TargetModel,
+    run_targets,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
     CampaignTagLinkModel,
@@ -405,6 +410,55 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             CampaignStatus.CLOSED.value,
             CampaignStatus.SUPERSEDED.value,
         }
+
+    async def project_targets(
+        self, workspace_id: uuid.UUID, campaigns: list[Campaign]
+    ) -> dict[uuid.UUID, list[TargetRef]]:
+        # Collect every run id referenced by each campaign's measurements
+        # (source_run_id union contributing_run_ids) — aggregate already loaded.
+        run_ids_by_campaign: dict[uuid.UUID, set[uuid.UUID]] = {}
+        all_run_ids: set[uuid.UUID] = set()
+        for c in campaigns:
+            run_ids: set[uuid.UUID] = set()
+            for result in c.results:
+                for m in result.measurements:
+                    if m.source_run_id is not None:
+                        run_ids.add(m.source_run_id)
+                    for rid in m.contributing_run_ids or ():
+                        run_ids.add(rid)
+            if run_ids:
+                run_ids_by_campaign[c.id] = run_ids
+                all_run_ids |= run_ids
+
+        if not all_run_ids:
+            return {}
+
+        # One batched query: run_id -> target rows (workspace-scoped).
+        rows = (
+            await self._session.execute(
+                select(run_targets.c.run_id, TargetModel)
+                .select_from(
+                    run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id)
+                )
+                .where(
+                    TargetModel.workspace_id == workspace_id,
+                    run_targets.c.run_id.in_(all_run_ids),
+                )
+            )
+        ).all()
+        targets_by_run: dict[uuid.UUID, list[TargetModel]] = {}
+        for run_id, target in rows:
+            targets_by_run.setdefault(run_id, []).append(target)
+
+        out: dict[uuid.UUID, list[TargetRef]] = {}
+        for campaign_id, run_ids in run_ids_by_campaign.items():
+            seen: dict[uuid.UUID, TargetRef] = {}
+            for rid in run_ids:
+                for t in targets_by_run.get(rid, ()):
+                    seen[t.id] = TargetRef(id=t.id, name=t.name, target_type=t.target_type)
+            if seen:
+                out[campaign_id] = sorted(seen.values(), key=lambda r: r.name.lower())
+        return out
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         """Delete a campaign (cascades to channels/results/measurements via FK)."""

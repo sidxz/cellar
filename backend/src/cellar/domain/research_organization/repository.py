@@ -18,6 +18,7 @@ from cellar.domain.research_organization.project_membership import (
 )
 from cellar.domain.research_organization.project_scope_stats import ProjectScopeStats
 from cellar.domain.research_organization.saved_search import SavedSearch
+from cellar.domain.shared.target_ref import TargetRef
 
 
 @runtime_checkable
@@ -208,6 +209,16 @@ class CampaignRepository(Protocol):
     ) -> list[Campaign]: ...
 
     async def is_locked(self, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> bool: ...
+
+    async def project_targets(
+        self, workspace_id: uuid.UUID, campaigns: list[Campaign]
+    ) -> dict[uuid.UUID, list[TargetRef]]:
+        """Distinct targets per campaign, unioned from its runs' run_targets.
+
+        Read-time projection (never stored). Returns {} entries omitted for
+        campaigns with no measured targets.
+        """
+        ...
 
 
 @runtime_checkable
