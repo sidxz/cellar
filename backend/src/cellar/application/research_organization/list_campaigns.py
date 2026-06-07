@@ -14,6 +14,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import DomainError
+from cellar.domain.shared.target_ref import TargetRef
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -24,6 +25,16 @@ class ListCampaignsQuery(Query):
     limit: int | None = None
     tags: list[uuid.UUID] | None = None
     tag_logic: str = "any"
+    target_ids: list[uuid.UUID] | None = None
+    target_logic: str = "any"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ListCampaignsResult:
+    page: PageResult[Campaign]
+    #: Read-time projection of each listed campaign's distinct targets,
+    #: unioned from the runs its measurements reference (empty entries omitted).
+    targets_by_campaign: dict[uuid.UUID, list[TargetRef]]
 
 
 class ListCampaigns:
@@ -33,7 +44,7 @@ class ListCampaigns:
 
     async def __call__(
         self, input: ListCampaignsQuery, auth: AuthContext | None = None
-    ) -> Result[PageResult[Campaign], DomainError]:
+    ) -> Result[ListCampaignsResult, DomainError]:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
@@ -48,6 +59,8 @@ class ListCampaigns:
                     limit=fetch_limit,
                     tags=input.tags,
                     tag_logic=input.tag_logic,
+                    target_ids=input.target_ids,
+                    target_logic=input.target_logic,
                 )
             else:
                 campaigns = await self._campaign_repo.find_by_workspace(
@@ -56,6 +69,8 @@ class ListCampaigns:
                     limit=fetch_limit,
                     tags=input.tags,
                     tag_logic=input.tag_logic,
+                    target_ids=input.target_ids,
+                    target_logic=input.target_logic,
                 )
 
             next_cursor: str | None = None
@@ -63,4 +78,12 @@ class ListCampaigns:
                 campaigns = campaigns[:effective_limit]
                 next_cursor = str(campaigns[-1].id)
 
-            return Success(PageResult(items=campaigns, next_cursor=next_cursor))
+            targets_by_campaign = await self._campaign_repo.project_targets(
+                input.workspace_id, campaigns
+            )
+            return Success(
+                ListCampaignsResult(
+                    page=PageResult(items=campaigns, next_cursor=next_cursor),
+                    targets_by_campaign=targets_by_campaign,
+                )
+            )
