@@ -7,7 +7,12 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
+from cellar.application.auth import (
+    AuthContext,
+    require_same_user,
+    require_same_workspace,
+    require_workspace_role,
+)
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.personalization.enums import FavoriteEntityType
@@ -33,6 +38,7 @@ class ListFavorites:
     ) -> Result[list[Favorite], DomainError]:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
+        require_same_user(auth, input.user_id)
         async with self._uow:
             favorites = await self._repo.list_for_user(
                 input.workspace_id, input.user_id, input.entity_type

@@ -7,7 +7,12 @@ from dataclasses import dataclass
 
 from returns.result import Result, Success
 
-from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
+from cellar.application.auth import (
+    AuthContext,
+    require_same_user,
+    require_same_workspace,
+    require_workspace_role,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -41,6 +46,7 @@ class AddFavorite:
     ) -> Result[Favorite, DomainError]:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
+        require_same_user(auth, input.user_id)
 
         async with self._uow:
             existing = await self._repo.find_by_entity(

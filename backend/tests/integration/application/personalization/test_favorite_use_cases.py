@@ -15,6 +15,7 @@ from cellar.application.personalization.remove_favorite import (
     RemoveFavoriteCommand,
 )
 from cellar.domain.personalization.enums import FavoriteEntityType
+from cellar.domain.shared.errors import AuthorizationError
 from cellar.infrastructure.persistence.sqlalchemy.personalization.favorite_repository import (
     SQLAlchemyFavoriteRepository,
 )
@@ -77,3 +78,38 @@ async def test_remove_absent_is_noop(session_factory, workspace_id, user_id) -> 
     )
     result = await _remove(session_factory)(cmd, auth=auth)
     assert isinstance(result, Success)
+
+
+async def test_add_for_another_user_is_rejected(session_factory, workspace_id, user_id) -> None:
+    auth = FakeAuth(role="viewer", workspace_id=workspace_id, user_id=user_id)
+    cmd = AddFavoriteCommand(
+        workspace_id=workspace_id,
+        user_id=uuid.uuid4(),  # someone else's id
+        entity_type=FavoriteEntityType.PROJECT,
+        entity_id=uuid.uuid4(),
+    )
+    with pytest.raises(AuthorizationError):
+        await _add(session_factory)(cmd, auth=auth)
+
+
+async def test_remove_for_another_user_is_rejected(session_factory, workspace_id, user_id) -> None:
+    auth = FakeAuth(role="viewer", workspace_id=workspace_id, user_id=user_id)
+    cmd = RemoveFavoriteCommand(
+        workspace_id=workspace_id,
+        user_id=uuid.uuid4(),  # someone else's id
+        entity_type=FavoriteEntityType.PROJECT,
+        entity_id=uuid.uuid4(),
+    )
+    with pytest.raises(AuthorizationError):
+        await _remove(session_factory)(cmd, auth=auth)
+
+
+async def test_list_for_another_user_is_rejected(session_factory, workspace_id, user_id) -> None:
+    auth = FakeAuth(role="viewer", workspace_id=workspace_id, user_id=user_id)
+    query = ListFavoritesQuery(
+        workspace_id=workspace_id,
+        user_id=uuid.uuid4(),  # someone else's id
+        entity_type=FavoriteEntityType.PROJECT,
+    )
+    with pytest.raises(AuthorizationError):
+        await _list(session_factory)(query, auth=auth)

@@ -10,6 +10,7 @@ from cellar.application.auth import (
     AuthContext,
     require_admin,
     require_editor,
+    require_same_user,
     require_same_workspace,
     require_workspace_role,
 )
@@ -97,3 +98,18 @@ class TestRequireSameWorkspace:
         other_wid = uuid.uuid4()
         with pytest.raises(NotFoundError):
             require_same_workspace(FakeAuth(workspace_id=wid), other_wid)
+
+
+class TestRequireSameUser:
+    def test_none_auth_passes(self) -> None:
+        require_same_user(None, uuid.uuid4())
+
+    def test_matching_user_passes(self) -> None:
+        uid = uuid.uuid4()
+        require_same_user(FakeAuth(user_id=uid), uid)
+
+    def test_different_user_raises(self) -> None:
+        uid = uuid.uuid4()
+        other_uid = uuid.uuid4()
+        with pytest.raises(AuthorizationError):
+            require_same_user(FakeAuth(user_id=uid), other_uid)
