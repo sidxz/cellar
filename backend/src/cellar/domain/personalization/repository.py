@@ -20,7 +20,16 @@ class FavoriteRepository(Protocol):
     non-breaking change deferred until a second FavoriteEntityType exists.
     """
 
-    async def save(self, aggregate: Favorite) -> None: ...
+    async def save(self, aggregate: Favorite) -> None:
+        """Idempotently persist a favorite — insert on natural key, no-op on conflict.
+
+        Favorites are immutable (add/remove only), so ``save`` is a pure
+        idempotent insert, not an INSERT-or-UPDATE. A second save of the same
+        natural key (e.g. a lost concurrent-add race) silently no-ops; the
+        unique index on (workspace_id, user_id, entity_type, entity_id) is the
+        DB backstop. Never raises on duplicate.
+        """
+        ...
 
     async def find_by_entity(
         self,

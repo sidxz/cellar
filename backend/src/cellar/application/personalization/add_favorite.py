@@ -14,7 +14,6 @@ from cellar.application.auth import (
     require_workspace_role,
 )
 from cellar.application.shared.command import Command
-from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.personalization.enums import FavoriteEntityType
 from cellar.domain.personalization.favorite import Favorite
@@ -31,15 +30,19 @@ class AddFavoriteCommand(Command):
 
 
 class AddFavorite:
+    """Idempotently favorite an entity for the current user.
+
+    No domain events — see Favorite aggregate. ``uow.commit()`` always returns
+    an empty list, so no EventDispatcher is wired.
+    """
+
     def __init__(
         self,
         uow: UnitOfWork,
         repo: FavoriteRepository,
-        dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
-        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: AddFavoriteCommand, auth: AuthContext | None = None
@@ -62,7 +65,7 @@ class AddFavorite:
                 entity_id=input.entity_id,
             )
             await self._repo.save(favorite)
-            events = await self._uow.commit()
+            # No domain events to dispatch — see Favorite aggregate.
+            await self._uow.commit()
 
-        await self._dispatcher.dispatch_all(events)
         return Success(favorite)

@@ -14,7 +14,6 @@ from cellar.application.auth import (
     require_workspace_role,
 )
 from cellar.application.shared.command import Command
-from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.personalization.enums import FavoriteEntityType
 from cellar.domain.personalization.repository import FavoriteRepository
@@ -30,15 +29,19 @@ class RemoveFavoriteCommand(Command):
 
 
 class RemoveFavorite:
+    """Un-favorite an entity for the current user (no-op if absent).
+
+    No domain events — see Favorite aggregate. ``uow.commit()`` always returns
+    an empty list, so no EventDispatcher is wired.
+    """
+
     def __init__(
         self,
         uow: UnitOfWork,
         repo: FavoriteRepository,
-        dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
-        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: RemoveFavoriteCommand, auth: AuthContext | None = None
@@ -51,7 +54,7 @@ class RemoveFavorite:
             await self._repo.remove(
                 input.workspace_id, input.user_id, input.entity_type, input.entity_id
             )
-            events = await self._uow.commit()
+            # No domain events to dispatch — see Favorite aggregate.
+            await self._uow.commit()
 
-        await self._dispatcher.dispatch_all(events)
         return Success(None)

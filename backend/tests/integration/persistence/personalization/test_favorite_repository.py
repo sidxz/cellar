@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 from cellar.domain.personalization.enums import FavoriteEntityType
 from cellar.domain.personalization.favorite import Favorite
@@ -76,16 +75,28 @@ async def test_remove_deletes_the_row(uow) -> None:
     assert found is None
 
 
-async def test_duplicate_natural_key_rejected_by_db(uow) -> None:
-    """The unique index is the DB backstop for use-case idempotency."""
+async def test_duplicate_save_is_idempotent_noop(uow) -> None:
+    """save() is ON CONFLICT DO NOTHING on the natural key — never raises.
+
+    A second save of the same (workspace, user, entity_type, entity_id) — the
+    lost side of a concurrent-add race — must not raise and must leave exactly
+    one row. The unique index ``uq_favorites_ws_user_entity`` is the backstop.
+    """
     ws, user, entity = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     async with uow:
         repo = SQLAlchemyFavoriteRepository(uow)
         await repo.save(_fav(ws, user, entity))
         await uow.commit()
 
-    with pytest.raises(IntegrityError):
-        async with uow:
-            repo = SQLAlchemyFavoriteRepository(uow)
-            await repo.save(_fav(ws, user, entity))
-            await uow.commit()
+    # Second save with a *different* PK but the same natural key — no error.
+    async with uow:
+        repo = SQLAlchemyFavoriteRepository(uow)
+        await repo.save(_fav(ws, user, entity))
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyFavoriteRepository(uow)
+        rows = await repo.list_for_user(ws, user, FavoriteEntityType.PROJECT)
+
+    assert len(rows) == 1
+    assert rows[0].entity_id == entity

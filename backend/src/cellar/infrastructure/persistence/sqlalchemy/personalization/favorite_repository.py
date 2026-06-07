@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.personalization.enums import FavoriteEntityType
 from cellar.domain.personalization.favorite import Favorite
@@ -40,6 +41,33 @@ class SQLAlchemyFavoriteRepository(SQLAlchemyRepository[Favorite, FavoriteModel]
     def _update_model(self, model: FavoriteModel, aggregate: Favorite) -> None:
         # Favorites are immutable (add/remove only); nothing to update.
         return
+
+    async def save(self, aggregate: Favorite) -> None:
+        """Idempotently insert a favorite — ON CONFLICT DO NOTHING on the natural key.
+
+        Favorites are immutable (add/remove only), so ``save`` is an honest
+        idempotent insert rather than the generic INSERT-or-UPDATE. Two
+        concurrent adds of the same (workspace, user, entity_type, entity_id)
+        both pass the use-case find-first fast path; the loser's INSERT
+        conflicts on ``uq_favorites_ws_user_entity`` and simply no-ops here
+        instead of surfacing a raw IntegrityError (500). Mirrors the
+        ``on_conflict_do_nothing`` pattern in ``SQLAlchemyTagRepository``.
+        """
+        stmt = (
+            pg_insert(FavoriteModel)
+            .values(
+                id=aggregate.id,
+                workspace_id=aggregate.workspace_id,
+                user_id=aggregate.user_id,
+                entity_type=aggregate.entity_type.value,
+                entity_id=aggregate.entity_id,
+                version=aggregate.version,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["workspace_id", "user_id", "entity_type", "entity_id"]
+            )
+        )
+        await self._session.execute(stmt)
 
     async def find_by_entity(
         self,
