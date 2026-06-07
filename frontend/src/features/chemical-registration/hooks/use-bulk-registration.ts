@@ -1,48 +1,24 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
-import { getApiBaseUrl } from "@/shared/lib/api/custom-instance";
-import { getSentinelClient } from "@/shared/lib/auth/config";
+import {
+  API_V1,
+  customInstance,
+  getApiBaseUrl,
+  getAuthHeaders,
+} from "@/shared/lib/api/custom-instance";
+import type {
+  BulkRegistrationAcceptedResponse,
+  BulkRegistrationStatusResponse,
+  BulkRegistrationResponse as GeneratedBulkRegistrationResponse,
+} from "@/shared/lib/api/model";
+import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MOLECULES_KEY } from "./query-keys";
 
-export interface BulkRegistrationItemResult {
-  row_index: number;
-  success: boolean;
-  is_new: boolean;
-  molecule_id: string | null;
-  batch_id: string | null;
-  batch_number: string | null;
-  salt_matched: boolean;
-  error: string | null;
-}
-
-export interface BulkRegistrationResponse {
-  id: string;
-  status: string;
-  total_count: number;
-  registered_count: number;
-  duplicate_count: number;
-  error_count: number;
-  items: BulkRegistrationItemResult[];
-}
-
-export interface BulkRegistrationAccepted {
-  workflow_id: string;
-  status: string;
-  message: string;
-}
-
-export interface BulkRegistrationStatus {
-  bulk_reg_id: string;
-  status: string;
-  total_count: number;
-  registered_count: number;
-  duplicate_count: number;
-  error_count: number;
-  chunks_processed: number;
-  chunks_total: number;
-}
+// Backend DTOs — aliased from the orval-generated model (source of truth).
+export type BulkRegistrationResponse = GeneratedBulkRegistrationResponse;
+export type BulkRegistrationAccepted = BulkRegistrationAcceptedResponse;
+export type BulkRegistrationStatus = BulkRegistrationStatusResponse;
 
 /** Result type: either sync (201 with full results) or async (202 with workflow_id). */
 export type BulkRegistrationResult =
@@ -61,15 +37,14 @@ export function useBulkRegistration() {
       fileFormat: string;
       originatingOrgId: string;
     }): Promise<BulkRegistrationResult> => {
-      const client = getSentinelClient();
-      const authHeaders = client?.isAuthenticated ? client.getHeaders() : {};
+      const authHeaders = getAuthHeaders();
 
       const formData = new FormData();
       formData.append("file", file);
       formData.append("file_format", fileFormat);
       formData.append("originating_org_id", originatingOrgId);
 
-      const res = await fetch(`${getApiBaseUrl()}/api/v1/bulk-registrations`, {
+      const res = await fetch(`${getApiBaseUrl()}${API_V1}/bulk-registrations`, {
         method: "POST",
         headers: { ...authHeaders },
         body: formData,
@@ -103,7 +78,7 @@ export function useBulkRegistrationStatus(workflowId: string | null) {
     queryKey: ["bulk-registration", "status", workflowId],
     queryFn: async () => {
       const result = await customInstance<BulkRegistrationStatus>({
-        url: `/api/v1/bulk-registrations/${workflowId}/status`,
+        url: `${API_V1}/bulk-registrations/${workflowId}/status`,
         method: "GET",
       });
       if (result.status === "completed" || result.status === "completed_with_errors") {
@@ -117,7 +92,7 @@ export function useBulkRegistrationStatus(workflowId: string | null) {
       if (status === "completed" || status === "completed_with_errors") {
         return false;
       }
-      return 2000;
+      return JOB_POLL_INTERVAL_MS;
     },
   });
 }

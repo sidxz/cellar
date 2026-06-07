@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/shared/components/ui/input";
+import { useClickOutside } from "@/shared/hooks/use-click-outside";
 import { cn } from "@/shared/lib/utils";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -75,16 +76,8 @@ export function FormulaInput({
   }, [suggestions]);
 
   // Click-outside dismisses the popover.
-  useEffect(() => {
-    if (!showPopover) return;
-    function onDoc(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setDismissed(true);
-      }
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [showPopover]);
+  const dismiss = useCallback(() => setDismissed(true), []);
+  useClickOutside(containerRef, dismiss, showPopover);
 
   /** Replace the token under the cursor with `text` and move cursor
    *  past the inserted text. In bracket mode, also consume an

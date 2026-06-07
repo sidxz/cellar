@@ -1,13 +1,13 @@
 "use client";
 
+import { StatusBadge } from "@/shared/components/status-badge";
+import { Button } from "@/shared/components/ui/button";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   type BreadcrumbCrumb,
   useBreadcrumbOverride,
   useBreadcrumbTrail,
-} from "@/shared/components/layout/breadcrumb-context";
-import { StatusBadge } from "@/shared/components/status-badge";
-import { Button } from "@/shared/components/ui/button";
-import { Skeleton } from "@/shared/components/ui/skeleton";
+} from "@/shared/lib/stores/breadcrumb-store";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";

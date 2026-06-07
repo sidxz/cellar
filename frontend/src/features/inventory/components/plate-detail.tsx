@@ -6,6 +6,7 @@ import { usePlateTemplate } from "@/features/screening-assay/hooks/use-plate-tem
 import { WELL_TYPE_LABELS, type WellType } from "@/features/screening-assay/types";
 import { TagTable } from "@/features/tagging/components/tag-table";
 import { DetailShell } from "@/shared/components/detail-shell";
+import { EmptyState } from "@/shared/components/empty-state";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -35,6 +36,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { showError } from "@/shared/lib/toast";
+import { cn } from "@/shared/lib/utils";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { Copy, Download, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
 import Link from "next/link";
@@ -156,7 +158,11 @@ function WellMapVisualization({ wellMap, format }: WellMapProps) {
                     ? `${pos} · ${WELL_TYPE_LABELS[(well.well_type ?? "sample") as WellType]}${well.concentration_value != null ? ` · ${well.concentration_value} ${well.concentration_unit ?? ""}` : ""}`
                     : pos
                 }
-                className={`${cellSize} rounded-sm ${well ? wellTypeColor(well) : "bg-muted/40 border border-muted"}`}
+                className={cn(
+                  cellSize,
+                  "rounded-sm",
+                  well ? wellTypeColor(well) : "bg-muted/40 border border-muted",
+                )}
               />
             );
           })}
@@ -369,10 +375,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                       </p>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-                      <FlaskConical className="h-8 w-8 text-muted-foreground/40" />
-                      <p className="mt-2 text-sm text-muted-foreground">No wells mapped yet.</p>
-                    </div>
+                    <EmptyState icon={FlaskConical} title="No wells mapped yet." />
                   )}
                 </CardContent>
               </Card>

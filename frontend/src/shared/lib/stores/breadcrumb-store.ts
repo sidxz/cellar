@@ -3,6 +3,11 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 
+// Store placement convention: global (app-wide) Zustand stores live here in
+// `shared/lib/stores`; feature-local stores live in that feature's `hooks/`
+// dir (named `use-*.ts`, consumed as hooks). This is a global store — page
+// chrome (breadcrumbs) reads it from anywhere — so it belongs here.
+
 export interface BreadcrumbCrumb {
   label: string;
   href?: string;

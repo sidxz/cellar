@@ -1,47 +1,28 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type {
+  CddPlateImportAcceptedResponse,
+  CddPlateImportStatusResponse,
+  CddPlateImportSummary as CddPlateImportSummaryResponse,
+} from "@/shared/lib/api/model";
+import { isTerminalImportStatus } from "@/shared/lib/job-status";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
+import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-export interface CddPlateImportAccepted {
-  import_id: string | null;
-  workflow_id: string;
-  status: string;
-}
-
-export interface CddPlateImportStatus {
-  import_id: string;
-  status: string;
-  total_count: number;
-  plates_registered: number;
-  plates_duplicate: number;
-  plates_error: number;
-  wells_mapped: number;
-  wells_unresolved: number;
-  current_offset: number;
-  pages_processed: number;
-}
-
-export interface CddPlateImportSummary {
-  id: string;
-  cdd_vault_id: string;
-  status: string;
-  workflow_id: string | null;
-  total_count: number;
-  plates_registered: number;
-  plates_duplicate: number;
-  plates_error: number;
-  wells_mapped: number;
-  wells_unresolved: number;
-  submitted_at: string;
-  completed_at: string | null;
-}
+// ─── API DTOs (orval-generated; aliased per project rule) ────────────────────
+// CDD plate-import response shapes are generated from the live backend OpenAPI
+// — aliased to domain-friendly names so call sites don't churn.
+export type CddPlateImportAccepted = CddPlateImportAcceptedResponse;
+export type CddPlateImportStatus = CddPlateImportStatusResponse;
+export type CddPlateImportSummary = CddPlateImportSummaryResponse;
 
 export function useStartCddPlateImport() {
   return useMutation({
     mutationFn: () =>
       customInstance<CddPlateImportAccepted>({
-        url: "/api/v1/cdd-import/plates",
+        url: `${API_V1}/cdd-import/plates`,
         method: "POST",
       }),
   });
@@ -54,25 +35,20 @@ export function useCddPlateImportStatus(workflowId: string | null) {
     queryKey: ["cdd-plate-import", "status", workflowId],
     queryFn: async () => {
       const result = await customInstance<CddPlateImportStatus>({
-        url: `/api/v1/cdd-import/plates/${workflowId}/status`,
+        url: `${API_V1}/cdd-import/plates/${workflowId}/status`,
         method: "GET",
       });
-      if (
-        result.status === "completed" ||
-        result.status === "completed_with_errors" ||
-        result.status === "failed"
-      ) {
+      if (isTerminalImportStatus(result.status)) {
         qc.invalidateQueries({ queryKey: ["plates"] });
       }
       return result;
     },
     enabled: !!workflowId,
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      if (status === "completed" || status === "completed_with_errors" || status === "failed") {
+      if (isTerminalImportStatus(query.state.data?.status)) {
         return false;
       }
-      return 2000;
+      return JOB_POLL_INTERVAL_MS;
     },
   });
 }
@@ -81,7 +57,7 @@ export function useCancelCddPlateImport() {
   return useMutation({
     mutationFn: (workflowId: string) =>
       customInstance({
-        url: `/api/v1/cdd-import/plates/${workflowId}/cancel`,
+        url: `${API_V1}/cdd-import/plates/${workflowId}/cancel`,
         method: "POST",
       }),
   });
@@ -92,7 +68,7 @@ export function useForceFailPlateImport() {
   return useMutation({
     mutationFn: (importId: string) =>
       customInstance({
-        url: `/api/v1/cdd-import/plates/${importId}/force-fail`,
+        url: `${API_V1}/cdd-import/plates/${importId}/force-fail`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -106,9 +82,9 @@ export function usePlateImportHistory() {
     queryKey: ["cdd-plate-import", "history"],
     queryFn: () =>
       customInstance<CddPlateImportSummary[]>({
-        url: "/api/v1/cdd-import/plates",
+        url: `${API_V1}/cdd-import/plates`,
         method: "GET",
       }),
-    staleTime: 30_000,
+    staleTime: STALE_TIME.SHORT,
   });
 }

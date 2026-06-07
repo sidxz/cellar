@@ -1,4 +1,3 @@
-import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Badge } from "@/shared/components/ui/badge";
 import { formatDate } from "@/shared/lib/format-date";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
@@ -18,6 +17,7 @@ import type {
 } from "../../types";
 import { CurveClassBadge } from "../curve-class-badge";
 import { DoseResponseSparkline } from "../dose-response-sparkline";
+import { structureColumn } from "../grid-columns";
 
 // ---------------------------------------------------------------------------
 // Curve class badge helper
@@ -91,20 +91,7 @@ export function buildColumnDefs(
   });
 
   // Structure column
-  cols.push({
-    headerName: "Structure",
-    colId: "structure",
-    width: 130,
-    sortable: false,
-    cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
-      if (!params.data?.smiles) return <span className="text-muted-foreground">--</span>;
-      return (
-        <div className="flex h-full items-center justify-center py-1">
-          <StructureThumbnail smiles={params.data.smiles} size={104} />
-        </div>
-      );
-    },
-  });
+  cols.push(structureColumn<CompoundActivity>((row) => row.smiles));
 
   // Per readout definition
   let isFirstReadout = true;

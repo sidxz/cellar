@@ -1,6 +1,8 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
+import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -19,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Switch } from "@/shared/components/ui/switch";
 import {
   Table,
@@ -294,20 +295,20 @@ function ApiKeyDialog({ open, onOpenChange, editing }: ApiKeyDialogProps) {
 
 interface DeleteDialogProps {
   apiKey: ExternalApiKey | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ apiKey, onClose }: DeleteDialogProps) {
+function DeleteDialog({ apiKey, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteApiKey();
 
   const handleConfirm = async () => {
     if (!apiKey) return;
     await deleteMutation.mutateAsync(apiKey.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={apiKey !== null} onOpenChange={onClose}>
+    <Dialog open={apiKey !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete API Key?</DialogTitle>
@@ -320,7 +321,7 @@ function DeleteDialog({ apiKey, onClose }: DeleteDialogProps) {
           ? This action cannot be undone.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -360,12 +361,7 @@ interface ApiKeyTableProps {
 
 function ApiKeyTable({ entries, onEdit, onDelete }: ApiKeyTableProps) {
   if (entries.length === 0) {
-    return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <KeyRound className="h-10 w-10" />
-        <p>No API keys configured yet.</p>
-      </div>
-    );
+    return <EmptyState variant="inline" icon={KeyRound} title="No API keys configured yet." />;
   }
 
   return (
@@ -463,11 +459,7 @@ export function ApiKeyAdmin() {
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
+          <SkeletonList />
         ) : (
           <ApiKeyTable entries={entries ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}
@@ -475,7 +467,7 @@ export function ApiKeyAdmin() {
 
       <ApiKeyDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog apiKey={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog apiKey={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { cn } from "@/shared/lib/utils";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -726,7 +727,10 @@ function RecomputeModeToggle({
           role="radio"
           aria-checked={mode === opt}
           onClick={() => onChange(opt)}
-          className={`px-2 py-0.5 text-[10px] capitalize first:rounded-l-md last:rounded-r-md ${mode === opt ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+          className={cn(
+            "px-2 py-0.5 text-[10px] capitalize first:rounded-l-md last:rounded-r-md",
+            mode === opt ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
+          )}
         >
           {opt}
         </button>

@@ -172,7 +172,7 @@ export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabPr
                         {stats.latest_run.compound_count !== 1 ? "s" : ""}
                       </span>
                     )}
-                    {zPrimeBadge(stats.latest_run.z_prime)}
+                    {zPrimeBadge(stats.latest_run.z_prime ?? null)}
                   </div>
                 </div>
               </div>

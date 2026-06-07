@@ -1,6 +1,7 @@
 "use client";
 
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import { CsvDropzone } from "@/shared/components/csv-dropzone";
 import { PageHeader } from "@/shared/components/page-header";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -26,11 +27,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { saveText } from "@/shared/lib/api/download";
+import type {
+  CellarInterfaceRoutesPlateImportImportPreviewResponse,
+  ExecuteImportResponse,
+  ValidationResultResponse,
+} from "@/shared/lib/api/model";
 import { showError, showSuccess } from "@/shared/lib/toast";
-import { CheckCircle2, Download, FileUp, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   useCreateImportTemplate,
   useDeleteImportTemplate,
@@ -39,76 +47,16 @@ import {
 import { ColumnMappingStep } from "./column-mapping-step";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+// Aliased to orval-generated DTOs (source of truth) — see plate-import routes.
 
-interface PreviewResponse {
-  headers: string[];
-  preview_rows: string[][];
-  total_rows: number;
-  file_id: string;
-}
-
-interface ValidationDetail {
-  row: number;
-  issue: string;
-  severity: string;
-}
-
-interface ValidationResponse {
-  total_rows: number;
-  matched: number;
-  unresolved: number;
-  errors: number;
-  details: ValidationDetail[];
-}
-
-interface ImportResult {
-  imported_count: number;
-  skipped_count: number;
-  readout_count: number;
-  errors: string[];
-}
-
-// ── Step indicator ─────────────────────────────────────────────────────────────
-
-function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
-  const steps = [
-    { n: 1, label: "Upload" },
-    { n: 2, label: "Map Columns" },
-    { n: 3, label: "Confirm" },
-  ] as const;
-
-  return (
-    <div className="flex items-center gap-2 mb-6">
-      {steps.map(({ n, label }, idx) => (
-        <div key={n} className="flex items-center gap-2">
-          {idx > 0 && <div className={`h-px w-8 ${current > idx ? "bg-primary" : "bg-border"}`} />}
-          <div className="flex items-center gap-1.5">
-            <div
-              className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold ${
-                current === n
-                  ? "bg-primary text-primary-foreground"
-                  : current > n
-                    ? "bg-primary/20 text-primary"
-                    : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {n}
-            </div>
-            <span className={`text-sm ${current === n ? "font-medium" : "text-muted-foreground"}`}>
-              {label}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+type PreviewResponse = CellarInterfaceRoutesPlateImportImportPreviewResponse;
+type ValidationResponse = ValidationResultResponse;
+type ImportResult = ExecuteImportResponse;
 
 // ── Main wizard ────────────────────────────────────────────────────────────────
 
 export function ImportWizard() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -139,7 +87,7 @@ export function ImportWizard() {
       const formData = new FormData();
       formData.append("file", file);
       const response = await customInstance<PreviewResponse>({
-        url: "/api/v1/plates/import/preview",
+        url: `${API_V1}/plates/import/preview`,
         method: "POST",
         data: formData,
       });
@@ -172,7 +120,9 @@ export function ImportWizard() {
   function handleTemplateLoad(templateId: string) {
     const tpl = importTemplates?.find((t) => t.id === templateId);
     if (!tpl) return;
-    setColumnMappings(tpl.column_mappings);
+    // column_mappings is an untyped dict in the backend schema (orval emits
+    // `{ [key: string]: unknown }`); the stored values are always string→string.
+    setColumnMappings(tpl.column_mappings as Record<string, string>);
     if (tpl.default_protocol_id) setProtocolId(tpl.default_protocol_id);
   }
 
@@ -190,15 +140,12 @@ export function ImportWizard() {
     const example = [...baseExample, ...readoutExample];
 
     const csv = [headers.join(","), example.join(",")].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = selectedProtocol
-      ? `plate_import_template_${selectedProtocol.name.replace(/\s+/g, "_")}.csv`
-      : "plate_import_template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    saveText(
+      csv,
+      selectedProtocol
+        ? `plate_import_template_${selectedProtocol.name.replace(/\s+/g, "_")}.csv`
+        : "plate_import_template.csv",
+    );
   }
 
   // ── Step 2: Validate ─────────────────────────────────────────────────────────
@@ -208,7 +155,7 @@ export function ImportWizard() {
     setValidating(true);
     try {
       const response = await customInstance<ValidationResponse>({
-        url: "/api/v1/plates/import/validate",
+        url: `${API_V1}/plates/import/validate`,
         method: "POST",
         data: {
           file_id: preview.file_id,
@@ -248,7 +195,7 @@ export function ImportWizard() {
     setImporting(true);
     try {
       const response = await customInstance<ImportResult>({
-        url: "/api/v1/plates/import/execute",
+        url: `${API_V1}/plates/import/execute`,
         method: "POST",
         data: {
           file_id: preview.file_id,
@@ -275,7 +222,11 @@ export function ImportWizard() {
         subtitle='Import screening results (readout values) from plate reader exports. To map compounds to wells, use the "Map Wells" button on a plate&apos;s detail page instead.'
       />
 
-      <StepIndicator current={step} />
+      <WizardStepIndicator
+        steps={["Upload", "Map Columns", "Confirm"]}
+        current={step}
+        className="mb-6"
+      />
 
       {/* Saved templates management */}
       {importTemplates && importTemplates.length > 0 && (
@@ -360,36 +311,18 @@ export function ImportWizard() {
             </div>
 
             {/* Drop zone */}
-            <div
-              className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/30 p-10 text-center cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const dropped = e.dataTransfer.files[0];
-                if (dropped) setFile(dropped);
+            <CsvDropzone
+              file={file}
+              onFile={setFile}
+              accept={{
+                "text/csv": [".csv"],
+                "text/tab-separated-values": [".tsv"],
+                "text/plain": [".txt"],
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
               }}
-            >
-              <FileUp className="h-10 w-10 text-muted-foreground/40 mb-3" />
-              {file ? (
-                <p className="text-sm font-medium">{file.name}</p>
-              ) : (
-                <>
-                  <p className="text-sm font-medium">Drop a file here or click to browse</p>
-                  <p className="mt-1 text-xs text-muted-foreground">CSV, TSV, TXT, XLSX</p>
-                </>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.tsv,.txt,.xlsx"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) setFile(f);
-                }}
-              />
-            </div>
+              prompt="Drop a file here or click to browse"
+              hint="CSV, TSV, TXT, XLSX"
+            />
 
             <div className="flex justify-end">
               <Button onClick={handleUpload} disabled={!file || uploading}>
@@ -403,7 +336,7 @@ export function ImportWizard() {
               <PreviewTable
                 headers={preview.headers}
                 rows={preview.preview_rows.slice(0, 10)}
-                totalRows={preview.total_rows}
+                totalRows={preview.row_count}
               />
             )}
           </CardContent>
@@ -417,7 +350,7 @@ export function ImportWizard() {
             <CardHeader>
               <CardTitle>Map Columns</CardTitle>
               <CardDescription>
-                {preview.total_rows} data rows detected. Assign each file column to a plate field.
+                {preview.row_count} data rows detected. Assign each file column to a plate field.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -674,7 +607,7 @@ function ImportResultCard({
       <CardContent className="space-y-4">
         <div className="grid grid-cols-4 gap-4">
           <Stat label="Rows Resolved" value={result.imported_count} variant="success" />
-          <Stat label="Readouts Created" value={result.readout_count} variant="success" />
+          <Stat label="Readouts Created" value={result.readout_count ?? 0} variant="success" />
           <Stat label="Skipped" value={result.skipped_count} variant="warn" />
           <Stat label="Errors" value={result.errors.length} variant="error" />
         </div>

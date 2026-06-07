@@ -1,9 +1,10 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
+import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -24,13 +25,7 @@ export function OrganizationList() {
   const [editing, setEditing] = useState<Organization | null>(null);
 
   if (isLoading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
+    return <SkeletonList />;
   }
 
   return (
@@ -95,10 +90,7 @@ export function OrganizationList() {
           </Table>
         </div>
       ) : (
-        <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-          <Building2 className="h-10 w-10" />
-          <p>No organizations yet.</p>
-        </div>
+        <EmptyState variant="inline" icon={Building2} title="No organizations yet." />
       )}
 
       <OrganizationDialog open={dialogOpen} onOpenChange={setDialogOpen} organization={editing} />

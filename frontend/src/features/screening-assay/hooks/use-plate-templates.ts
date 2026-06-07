@@ -1,11 +1,12 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { API_V1 } from "@/shared/lib/api/custom-instance";
 import type { CreatePlateTemplateInput, PlateTemplate, UpdatePlateTemplateInput } from "../types";
 
 const ptHooks = createCrudHooks<PlateTemplate, CreatePlateTemplateInput, UpdatePlateTemplateInput>({
   entityName: "Plate template",
-  baseUrl: "/api/v1/plate-templates",
+  baseUrl: `${API_V1}/plate-templates`,
   queryKey: ["plate-templates"],
 });
 

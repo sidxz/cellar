@@ -1,11 +1,10 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MembershipResult, MoleculeReference } from "../types";
-
-const COLLECTIONS_KEY = ["collections"];
+import { COLLECTIONS_KEY } from "./query-keys";
 
 function moleculesKey(collectionId: string) {
   return [...COLLECTIONS_KEY, collectionId, "molecules"];
@@ -20,7 +19,7 @@ export function useCollectionMolecules(
     queryKey: [...moleculesKey(collectionId ?? ""), { offset, limit }],
     queryFn: () =>
       customInstance<string[]>({
-        url: `/api/v1/collections/${collectionId}/molecules`,
+        url: `${API_V1}/collections/${collectionId}/molecules`,
         method: "GET",
         params: {
           ...(offset != null ? { offset: String(offset) } : {}),
@@ -36,7 +35,7 @@ export function useAddMolecules(collectionId: string) {
   return useMutation({
     mutationFn: (data: { references: MoleculeReference[] }) =>
       customInstance<MembershipResult>({
-        url: `/api/v1/collections/${collectionId}/molecules`,
+        url: `${API_V1}/collections/${collectionId}/molecules`,
         method: "POST",
         data,
       }),
@@ -53,7 +52,7 @@ export function useRemoveMolecules(collectionId: string) {
   return useMutation({
     mutationFn: (data: { molecule_ids: string[] }) =>
       customInstance<{ removed: number }>({
-        url: `/api/v1/collections/${collectionId}/molecules`,
+        url: `${API_V1}/collections/${collectionId}/molecules`,
         method: "DELETE",
         data,
       }),

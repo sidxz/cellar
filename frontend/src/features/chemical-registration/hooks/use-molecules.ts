@@ -2,8 +2,10 @@
 
 import { renderToast } from "@/features/inventory/components/mirror-summary-toast";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { MoleculeResponse, StructureSearchResponse } from "@/shared/lib/api/model";
 import type { AddIdentifierResponse } from "@/shared/lib/api/model/addIdentifierResponse";
+import { PICKER_RESULT_LIMIT, SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import { showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,7 +19,7 @@ import { MOLECULES_KEY } from "./query-keys";
 
 const moleculeHooks = createCrudHooks<Molecule, RegisterMoleculeInput, UpdateMoleculeInput>({
   entityName: "Compound",
-  baseUrl: "/api/v1/molecules",
+  baseUrl: `${API_V1}/molecules`,
   queryKey: MOLECULES_KEY,
 });
 
@@ -34,7 +36,7 @@ export function useMolecules(filters?: {
     queryKey: [...MOLECULES_KEY, filters],
     queryFn: async () => {
       const page = await customInstance<PaginatedResponse<Molecule>>({
-        url: "/api/v1/molecules",
+        url: `${API_V1}/molecules`,
         method: "GET",
         params: filters,
       });
@@ -49,7 +51,7 @@ export function useRegisterMolecule() {
   return useMutation({
     mutationFn: (data: RegisterMoleculeInput) =>
       customInstance<RegistrationResponse>({
-        url: "/api/v1/molecules",
+        url: `${API_V1}/molecules`,
         method: "POST",
         data,
       }),
@@ -67,32 +69,26 @@ export function useMoleculeSearch(q: string) {
     queryKey: [...MOLECULES_KEY, "search-text", q],
     queryFn: async () => {
       const page = await customInstance<PaginatedResponse<Molecule>>({
-        url: "/api/v1/molecules",
+        url: `${API_V1}/molecules`,
         method: "GET",
-        params: { q, limit: "20" },
+        params: { q, limit: String(PICKER_RESULT_LIMIT) },
       });
       return page.items;
     },
-    enabled: q.length >= 2,
+    enabled: q.length >= SEARCH_MIN_QUERY_LEN,
   });
 }
 
-export interface SimilaritySearchResult {
-  molecule: Molecule;
-  similarity: number;
-}
-
+/**
+ * Client-side search row: a molecule plus an optional similarity score. There
+ * is no backend counterpart (the API splits results into `molecules` and
+ * `similarity_results`); we normalise both shapes into this for the UI. The
+ * molecule field carries the generated `MoleculeResponse` shape.
+ */
 export type SearchResult = {
-  molecule: Molecule;
+  molecule: MoleculeResponse;
   similarity: number | null;
 };
-
-interface StructureSearchResponse {
-  search_type: string;
-  molecules: Molecule[] | null;
-  similarity_results: SimilaritySearchResult[] | null;
-  count: number;
-}
 
 export function useSearchMolecules(
   params:
@@ -119,7 +115,7 @@ export function useSearchMolecules(
     queryKey: [...MOLECULES_KEY, "search", params],
     queryFn: async () => {
       const data = await customInstance<StructureSearchResponse>({
-        url: "/api/v1/molecules/search",
+        url: `${API_V1}/molecules/search`,
         method: "GET",
         params: queryParams,
       });
@@ -143,7 +139,7 @@ export function useMoleculeByIdentifier(identifier: string | undefined) {
     queryKey: [...MOLECULES_KEY, "by-identifier", identifier],
     queryFn: () =>
       customInstance<Molecule>({
-        url: `/api/v1/molecules/by-identifier/${identifier}`,
+        url: `${API_V1}/molecules/by-identifier/${identifier}`,
         method: "GET",
       }),
     enabled: !!identifier,
@@ -161,7 +157,7 @@ export function useAddIdentifier(moleculeId: string) {
       source: string;
     }) =>
       customInstance<AddIdentifierResponse>({
-        url: `/api/v1/molecules/${moleculeId}/identifiers`,
+        url: `${API_V1}/molecules/${moleculeId}/identifiers`,
         method: "POST",
         data,
       }),
@@ -177,7 +173,7 @@ export function useRemoveIdentifier(moleculeId: string) {
   return useMutation({
     mutationFn: (identifierId: string) =>
       customInstance<void>({
-        url: `/api/v1/molecules/${moleculeId}/identifiers/${identifierId}`,
+        url: `${API_V1}/molecules/${moleculeId}/identifiers/${identifierId}`,
         method: "DELETE",
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: MOLECULES_KEY }),
@@ -201,7 +197,7 @@ export function useRelationships(moleculeId: string | undefined) {
           created_at: string;
         }>
       >({
-        url: `/api/v1/molecules/${moleculeId}/relationships`,
+        url: `${API_V1}/molecules/${moleculeId}/relationships`,
         method: "GET",
       }),
     enabled: !!moleculeId,
@@ -217,7 +213,7 @@ export function useCreateRelationship(moleculeId: string) {
       notes?: string;
     }) =>
       customInstance<unknown>({
-        url: `/api/v1/molecules/${moleculeId}/relationships`,
+        url: `${API_V1}/molecules/${moleculeId}/relationships`,
         method: "POST",
         data,
       }),
@@ -230,7 +226,7 @@ export function useDeleteRelationship(moleculeId: string) {
   return useMutation({
     mutationFn: (relationshipId: string) =>
       customInstance<void>({
-        url: `/api/v1/molecules/${moleculeId}/relationships/${relationshipId}`,
+        url: `${API_V1}/molecules/${moleculeId}/relationships/${relationshipId}`,
         method: "DELETE",
       }),
     onSuccess: () => {

@@ -74,19 +74,19 @@ export function AddCompoundsPills({ campaign, projectId, disabled }: AddCompound
         campaignId={campaign.id}
         projectId={projectId}
         open={open === "run"}
-        onClose={() => setOpen(null)}
+        onOpenChange={(v) => !v && setOpen(null)}
       />
       <AddFromCollectionDialog
         campaignId={campaign.id}
         projectId={projectId}
         open={open === "collection"}
-        onClose={() => setOpen(null)}
+        onOpenChange={(v) => !v && setOpen(null)}
       />
       <AddFromCampaignDialog
         campaignId={campaign.id}
         projectId={projectId}
         open={open === "campaign"}
-        onClose={() => setOpen(null)}
+        onOpenChange={(v) => !v && setOpen(null)}
       />
       <ManualAddDialog
         campaignId={campaign.id}

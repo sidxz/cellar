@@ -252,7 +252,7 @@ export function ClusterScatter({
       }}
       style={{ width: "100%", height: "100%" }}
       useResizeHandler
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: react-plotly's prop types omit several plotly_* event handlers we attach here
       {...(extraHandlers as any)}
     />
   );

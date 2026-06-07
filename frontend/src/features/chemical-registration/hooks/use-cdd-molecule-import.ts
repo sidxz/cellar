@@ -1,41 +1,23 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type {
+  CddMoleculeImportAcceptedResponse,
+  CddMoleculeImportStatusResponse,
+  CddMoleculeImportSummary as CddMoleculeImportSummaryResponse,
+} from "@/shared/lib/api/model";
+import { isTerminalImportStatus } from "@/shared/lib/job-status";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
+import { JOB_POLL_INTERVAL_MS } from "@/shared/lib/timing";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MOLECULES_KEY } from "./query-keys";
 
-export interface CddMoleculeImportAccepted {
-  import_id: string | null;
-  workflow_id: string;
-  status: string;
-}
-
-export interface CddMoleculeImportStatus {
-  import_id: string;
-  status: string;
-  total_count: number;
-  registered_count: number;
-  duplicate_count: number;
-  error_count: number;
-  skipped_count: number;
-  current_offset: number;
-  pages_processed: number;
-}
-
-export interface CddMoleculeImportSummary {
-  id: string;
-  cdd_vault_id: string;
-  import_mode: string;
-  status: string;
-  workflow_id: string | null;
-  total_count: number;
-  registered_count: number;
-  duplicate_count: number;
-  error_count: number;
-  skipped_count: number;
-  submitted_at: string;
-  completed_at: string | null;
-}
+// ─── API DTOs (orval-generated; aliased per project rule) ────────────────────
+// CDD molecule-import response shapes are generated from the live backend
+// OpenAPI — aliased to domain-friendly names so call sites don't churn.
+export type CddMoleculeImportAccepted = CddMoleculeImportAcceptedResponse;
+export type CddMoleculeImportStatus = CddMoleculeImportStatusResponse;
+export type CddMoleculeImportSummary = CddMoleculeImportSummaryResponse;
 
 export function useStartCddMoleculeImport() {
   return useMutation({
@@ -51,7 +33,7 @@ export function useStartCddMoleculeImport() {
       maxMolecules?: number;
     }) =>
       customInstance<CddMoleculeImportAccepted>({
-        url: "/api/v1/cdd-import/molecules",
+        url: `${API_V1}/cdd-import/molecules`,
         method: "POST",
         data: {
           originating_org_id: originatingOrgId,
@@ -70,26 +52,21 @@ export function useCddMoleculeImportStatus(workflowId: string | null) {
     queryKey: ["cdd-molecule-import", "status", workflowId],
     queryFn: async () => {
       const result = await customInstance<CddMoleculeImportStatus>({
-        url: `/api/v1/cdd-import/molecules/${workflowId}/status`,
+        url: `${API_V1}/cdd-import/molecules/${workflowId}/status`,
         method: "GET",
       });
       // When complete, invalidate the molecule list
-      if (
-        result.status === "completed" ||
-        result.status === "completed_with_errors" ||
-        result.status === "failed"
-      ) {
+      if (isTerminalImportStatus(result.status)) {
         qc.invalidateQueries({ queryKey: MOLECULES_KEY });
       }
       return result;
     },
     enabled: !!workflowId,
     refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      if (status === "completed" || status === "completed_with_errors" || status === "failed") {
+      if (isTerminalImportStatus(query.state.data?.status)) {
         return false;
       }
-      return 2000;
+      return JOB_POLL_INTERVAL_MS;
     },
   });
 }
@@ -98,7 +75,7 @@ export function useCancelCddMoleculeImport() {
   return useMutation({
     mutationFn: (workflowId: string) =>
       customInstance({
-        url: `/api/v1/cdd-import/molecules/${workflowId}/cancel`,
+        url: `${API_V1}/cdd-import/molecules/${workflowId}/cancel`,
         method: "POST",
       }),
   });
@@ -109,7 +86,7 @@ export function useForceFailImport() {
   return useMutation({
     mutationFn: (importId: string) =>
       customInstance({
-        url: `/api/v1/cdd-import/molecules/${importId}/force-fail`,
+        url: `${API_V1}/cdd-import/molecules/${importId}/force-fail`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -123,9 +100,9 @@ export function useImportHistory() {
     queryKey: ["cdd-molecule-import", "history"],
     queryFn: () =>
       customInstance<CddMoleculeImportSummary[]>({
-        url: "/api/v1/cdd-import/molecules",
+        url: `${API_V1}/cdd-import/molecules`,
         method: "GET",
       }),
-    staleTime: 30_000,
+    staleTime: STALE_TIME.SHORT,
   });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -18,7 +18,7 @@ const synthHooks = createCrudHooks<
   Record<string, unknown>
 >({
   entityName: "Synthesis request",
-  baseUrl: "/api/v1/synthesis-requests",
+  baseUrl: `${API_V1}/synthesis-requests`,
   queryKey: SYNTHESIS_REQUESTS_KEY,
 });
 
@@ -31,7 +31,7 @@ export function useSynthesisRequests(params?: {
     queryKey: [...SYNTHESIS_REQUESTS_KEY, params],
     queryFn: () =>
       customInstance<SynthesisRequestSummary[]>({
-        url: "/api/v1/synthesis-requests",
+        url: `${API_V1}/synthesis-requests`,
         method: "GET",
         params,
       }),
@@ -49,7 +49,7 @@ export function useSubmitSynthesisRequest() {
   return useMutation({
     mutationFn: (id: string) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/submit`,
+        url: `${API_V1}/synthesis-requests/${id}/submit`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -64,7 +64,7 @@ export function useApproveSynthesisRequest() {
   return useMutation({
     mutationFn: (id: string) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/approve`,
+        url: `${API_V1}/synthesis-requests/${id}/approve`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -79,7 +79,7 @@ export function useCancelSynthesisRequest() {
   return useMutation({
     mutationFn: (id: string) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/cancel`,
+        url: `${API_V1}/synthesis-requests/${id}/cancel`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -96,7 +96,7 @@ export function useRejectSynthesisRequest() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/reject`,
+        url: `${API_V1}/synthesis-requests/${id}/reject`,
         method: "POST",
         data: { reason },
       }),
@@ -122,7 +122,7 @@ export function useAssignSynthesisRequest() {
       assigned_org_id?: string | null;
     }) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/assign`,
+        url: `${API_V1}/synthesis-requests/${id}/assign`,
         method: "POST",
         data: { assignment_type, assigned_to, assigned_org_id },
       }),
@@ -144,7 +144,7 @@ export function useStartSynthesis() {
       proposed_route_id?: string | null;
     }) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/start`,
+        url: `${API_V1}/synthesis-requests/${id}/start`,
         method: "POST",
         data: { proposed_route_id },
       }),
@@ -168,7 +168,7 @@ export function useFlagInfeasible() {
       feasibility_notes?: string | null;
     }) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/flag-infeasible`,
+        url: `${API_V1}/synthesis-requests/${id}/flag-infeasible`,
         method: "POST",
         data: { feasibility_status, feasibility_notes },
       }),
@@ -192,7 +192,7 @@ export function useCompleteSynthesis() {
       actual_cost_unit?: string | null;
     }) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/complete`,
+        url: `${API_V1}/synthesis-requests/${id}/complete`,
         method: "POST",
         data: { actual_cost_value, actual_cost_unit },
       }),
@@ -208,7 +208,7 @@ export function useFulfillSynthesisRequest() {
   return useMutation({
     mutationFn: ({ id, batch_id }: { id: string; batch_id: string }) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/fulfill`,
+        url: `${API_V1}/synthesis-requests/${id}/fulfill`,
         method: "POST",
         data: { batch_id },
       }),
@@ -224,7 +224,7 @@ export function useFailSynthesis() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}/fail`,
+        url: `${API_V1}/synthesis-requests/${id}/fail`,
         method: "POST",
         data: { reason },
       }),
@@ -250,7 +250,7 @@ export function useUpdateSynthesisRequest() {
       target_purity?: number | null;
     }) =>
       customInstance<SynthesisRequest>({
-        url: `/api/v1/synthesis-requests/${id}`,
+        url: `${API_V1}/synthesis-requests/${id}`,
         method: "PATCH",
         data,
       }),

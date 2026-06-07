@@ -2,7 +2,7 @@
 
 import { MOLECULES_KEY } from "@/features/chemical-registration";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -18,7 +18,7 @@ const PLATES_KEY = ["plates"];
 
 const plateHooks = createCrudHooks<RegisteredPlate, RegisterPlateInput, UpdatePlateInput>({
   entityName: "Plate",
-  baseUrl: "/api/v1/plates",
+  baseUrl: `${API_V1}/plates`,
   queryKey: PLATES_KEY,
 });
 
@@ -46,7 +46,7 @@ export function usePlates(params?: {
     queryKey: [...PLATES_KEY, params],
     queryFn: () =>
       customInstance<RegisteredPlate[]>({
-        url: "/api/v1/plates",
+        url: `${API_V1}/plates`,
         method: "GET",
         params: Object.keys(cleanParams).length > 0 ? cleanParams : undefined,
       }),
@@ -65,7 +65,7 @@ export function useMapWells(id: string) {
   return useMutation({
     mutationFn: (well_map: Record<string, WellMapping>) =>
       customInstance<RegisteredPlate>({
-        url: `/api/v1/plates/${id}/wells`,
+        url: `${API_V1}/plates/${id}/wells`,
         method: "PUT",
         data: { well_map },
       }),
@@ -81,7 +81,7 @@ export function useChangeStatus(id: string) {
   return useMutation({
     mutationFn: (new_status: string) =>
       customInstance<RegisteredPlate>({
-        url: `/api/v1/plates/${id}/status`,
+        url: `${API_V1}/plates/${id}/status`,
         method: "PATCH",
         data: { new_status },
       }),
@@ -97,7 +97,7 @@ export function useDerivePlate(parentId: string) {
   return useMutation({
     mutationFn: (data: DerivePlateInput) =>
       customInstance<RegisteredPlate>({
-        url: `/api/v1/plates/${parentId}/derive`,
+        url: `${API_V1}/plates/${parentId}/derive`,
         method: "POST",
         data,
       }),
@@ -113,7 +113,7 @@ export function usePlateChildren(parentId: string | undefined) {
     queryKey: [...PLATES_KEY, parentId, "children"],
     queryFn: () =>
       customInstance<RegisteredPlate[]>({
-        url: `/api/v1/plates/${parentId}/children`,
+        url: `${API_V1}/plates/${parentId}/children`,
         method: "GET",
       }),
     enabled: !!parentId,
@@ -125,7 +125,7 @@ export function useMoleculePlates(moleculeId: string | undefined) {
     queryKey: [...MOLECULES_KEY, moleculeId, "plates"],
     queryFn: () =>
       customInstance<MoleculePlateEntry[]>({
-        url: `/api/v1/molecules/${moleculeId}/plates`,
+        url: `${API_V1}/molecules/${moleculeId}/plates`,
         method: "GET",
       }),
     enabled: !!moleculeId,

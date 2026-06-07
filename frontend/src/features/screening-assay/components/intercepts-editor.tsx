@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
+import { useRef } from "react";
 import type { CurveType, InterceptBasis, InterceptKind, InterceptSpec } from "../types";
 
 const KIND_OPTIONS: { value: InterceptKind; label: string }[] = [
@@ -68,6 +69,20 @@ export function InterceptsEditor({
         },
       ];
 
+  // Stable client ids parallel to `rows`, mutated in lockstep with the
+  // structural ops below so React keys each editable row by identity (not
+  // array index) — focus / uncommitted text stay attached to the right row
+  // across add / middle-remove. `InterceptSpec` is the payload type, so the
+  // key lives outside it. A render-time sync keeps the ref length matched to
+  // the (possibly parent-reseeded) row count, reusing existing keys
+  // positionally and minting fresh ones for new positions.
+  const keysRef = useRef<string[]>([]);
+  if (keysRef.current.length !== rows.length) {
+    const next = rows.map((_, i) => keysRef.current[i] ?? crypto.randomUUID());
+    keysRef.current = next;
+  }
+  const keys = keysRef.current;
+
   const update = (next: InterceptSpec[]) => {
     if (!onChange) return;
     onChange(next);
@@ -86,19 +101,21 @@ export function InterceptsEditor({
       level: 90,
       basis: "relative_percent",
     });
+    keysRef.current = [...keys, crypto.randomUUID()];
     update(materialized);
   };
 
   const removeRow = (index: number) => {
     const materialized = value.length ? [...value] : [...rows];
     materialized.splice(index, 1);
+    keysRef.current = keys.filter((_, i) => i !== index);
     update(materialized);
   };
 
   return (
     <div className="space-y-2">
       {rows.map((spec, i) => (
-        <div key={i} className="flex items-end gap-2 rounded-md border bg-background p-2">
+        <div key={keys[i]} className="flex items-end gap-2 rounded-md border bg-background p-2">
           <div className="grid gap-1 w-20">
             <Label className="text-xs">Kind</Label>
             <Select

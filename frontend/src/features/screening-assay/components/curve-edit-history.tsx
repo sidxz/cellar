@@ -6,6 +6,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import type { CurveEditHistoryEventBody } from "@/shared/lib/api/model";
 import { formatRelativeDate } from "@/shared/lib/format-date";
+import { shortId } from "@/shared/lib/utils";
 
 interface CurveEditHistoryProps {
   /** Newest-first audit events for the curve. Comes straight from
@@ -41,7 +42,7 @@ export function CurveEditHistory({ events, isLoading }: CurveEditHistoryProps) {
                 <div className="font-medium">{e.reason ?? "Edit"}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   {formatRelativeDate(e.timestamp)}
-                  {e.user_id ? ` · by ${e.user_id.slice(0, 8)}…` : ""}
+                  {e.user_id ? ` · by ${shortId(e.user_id)}…` : ""}
                 </div>
               </li>
             ))}

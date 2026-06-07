@@ -21,6 +21,8 @@ import {
 } from "@/shared/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { saveText } from "@/shared/lib/api/download";
+import { parseCsvRows } from "@/shared/lib/parse-csv";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { FileUp } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
@@ -58,9 +60,10 @@ function rowLabels(count: number): string[] {
 function parseCsvWellMap(text: string): Record<string, WellMapping> {
   const map: Record<string, WellMapping> = {};
   const validRoles = Object.keys(WELL_TYPE_LABELS);
-  const lines = text.trim().split("\n");
-  for (const line of lines) {
-    const parts = line.split(/[,\t]/).map((s) => s.trim());
+  // Positional/headerless format with comma- or tab-separated columns. Parsed
+  // via the shared PapaParse helper so quoted/comma-containing fields don't
+  // mis-split; header detection + validation stays here.
+  for (const parts of parseCsvRows(text)) {
     if (parts.length < 2) continue;
     const [well, batchId, concStr, unit, roleStr] = parts;
     // Skip header rows
@@ -305,14 +308,7 @@ export function WellMappingDialog({
       "A2,CC-000002-001,10,mM,sample",
       "H12,,,,positive_control",
     ];
-    const csv = [header, ...examples].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "well_mapping_template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    saveText([header, ...examples].join("\n"), "well_mapping_template.csv");
   };
 
   const mappedCount = Object.keys(wellMap).length;

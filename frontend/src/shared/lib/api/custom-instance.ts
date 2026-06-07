@@ -6,6 +6,41 @@ import { getSentinelClient } from "@/shared/lib/auth/config";
 
 let _baseUrl = "http://localhost:8000";
 
+/**
+ * Versioned API path prefix shared by every hand-written hook/component that
+ * builds a request URL by hand. Compose URLs as `` `${API_V1}/...` `` instead
+ * of hard-coding the `/api/v1` literal at each call site, so a future version
+ * bump is a single edit. (orval-generated clients embed the prefix themselves.)
+ */
+export const API_V1 = "/api/v1";
+
+/**
+ * Error thrown by {@link customInstance} for any non-2xx response.
+ *
+ * Extends the native `Error` so existing callers that only read `.message`
+ * (or check `instanceof Error`) keep working unchanged — the human-readable
+ * `API error: <status> — <detail>` message is preserved. Callers that need to
+ * branch on the server's structured payload (e.g. the admin/cascade delete
+ * blocker contract `{error, message, blockers}`) can narrow via
+ * `instanceof ApiError` and inspect `status` + the parsed `body`.
+ */
+export class ApiError extends Error {
+  /** HTTP status code of the failed response. */
+  readonly status: number;
+  /**
+   * Parsed JSON response body, or `undefined` when the body was empty or not
+   * JSON. The shape is server-defined; narrow it before use.
+   */
+  readonly body: unknown;
+
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 /** Called by AuthProvider after fetching runtime AppConfig. */
 export function setApiBaseUrl(url: string) {
   _baseUrl = url;
@@ -14,6 +49,17 @@ export function setApiBaseUrl(url: string) {
 /** Get the current base URL for direct fetch calls (e.g., file upload). */
 export function getApiBaseUrl() {
   return _baseUrl;
+}
+
+/**
+ * Sentinel auth headers for direct `fetch` calls that bypass `customInstance`
+ * (file uploads, binary downloads). Returns `{}` on the server or when the
+ * client isn't authenticated. Centralized so the same `isAuthenticated` guard
+ * is applied everywhere instead of being re-derived per call site.
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const client = typeof window !== "undefined" ? getSentinelClient() : null;
+  return client?.isAuthenticated ? client.getHeaders() : {};
 }
 
 export const customInstance = async <T>({
@@ -52,8 +98,7 @@ export const customInstance = async <T>({
   }
   const queryString = searchParams.toString() ? `?${searchParams.toString()}` : "";
 
-  const client = typeof window !== "undefined" ? getSentinelClient() : null;
-  const authHeaders = client?.isAuthenticated ? client.getHeaders() : {};
+  const authHeaders = getAuthHeaders();
 
   const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
 
@@ -77,13 +122,19 @@ export const customInstance = async <T>({
     // server actually rejected, not just a status code. FastAPI emits
     // two shapes: custom 422s from result_to_response (`{detail: "..."}`)
     // and Pydantic request-validation 422s (`{detail: [{loc, msg, ...}]}`).
+    // The parsed body is retained on the thrown ApiError so callers that need
+    // the structured domain payload (e.g. the delete-blocker `{error,
+    // message, blockers}` contract, which lives at the top level — not under
+    // `detail`) can read it without re-fetching.
+    let body: unknown;
     let detail: string | undefined;
     try {
-      const body = await response.json();
-      if (typeof body?.detail === "string") {
-        detail = body.detail;
-      } else if (Array.isArray(body?.detail)) {
-        detail = body.detail
+      body = await response.json();
+      const parsed = body as { detail?: unknown } | null;
+      if (typeof parsed?.detail === "string") {
+        detail = parsed.detail;
+      } else if (Array.isArray(parsed?.detail)) {
+        detail = parsed.detail
           .map((d: { loc?: unknown; msg?: unknown }) => {
             const loc = Array.isArray(d.loc) ? d.loc.join(".") : "";
             const msg = typeof d.msg === "string" ? d.msg : JSON.stringify(d);
@@ -94,8 +145,10 @@ export const customInstance = async <T>({
     } catch {
       // body not JSON or already consumed — fall through with no detail
     }
-    throw new Error(
+    throw new ApiError(
       detail ? `API error: ${response.status} — ${detail}` : `API error: ${response.status}`,
+      response.status,
+      body,
     );
   }
 

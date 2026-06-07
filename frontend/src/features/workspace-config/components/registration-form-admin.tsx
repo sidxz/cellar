@@ -1,6 +1,8 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
+import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -19,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Switch } from "@/shared/components/ui/switch";
 import {
   Table,
@@ -60,13 +61,7 @@ function FieldOverridesEditor({ appliesTo, overrides, onChange }: FieldOverrides
   const { data: fields, isLoading } = useCustomFields(appliesTo, true);
 
   if (isLoading) {
-    return (
-      <div className="space-y-2">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-full" />
-        ))}
-      </div>
-    );
+    return <SkeletonList rowClassName="h-10 w-full" className="space-y-2" />;
   }
 
   if (!fields || fields.length === 0) {
@@ -187,9 +182,12 @@ const defaultValues: FormValues = {
 function toFormValues(editing: RegistrationForm): FormValues {
   return {
     name: editing.name,
-    applies_to: editing.applies_to,
+    // Backend types `applies_to` as bare `str`; narrow to the form's values.
+    applies_to: editing.applies_to as "molecule" | "batch",
     is_default: editing.is_default,
-    field_overrides: editing.field_overrides ?? [],
+    // `field_overrides` is an opaque `{ [key: string]: unknown }[]` from the
+    // backend (typed `list[dict]`); read it as the FE's structured override view.
+    field_overrides: (editing.field_overrides ?? []) as unknown as FieldOverride[],
   };
 }
 
@@ -216,11 +214,14 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
   }, [open, editing, form]);
 
   const onSubmit = async (values: FormValues) => {
+    // The backend `field_overrides` body field is an opaque `list[dict]`; widen
+    // the FE's structured overrides back to that generated record-array shape.
+    const fieldOverrides = values.field_overrides as unknown as Array<Record<string, unknown>>;
     if (isEdit) {
       const data: UpdateRegistrationFormInput = {
         name: values.name.trim(),
         is_default: values.is_default,
-        field_overrides: values.field_overrides,
+        field_overrides: fieldOverrides,
       };
       await update.mutateAsync(data);
     } else {
@@ -228,7 +229,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
         name: values.name.trim(),
         applies_to: values.applies_to,
         is_default: values.is_default,
-        field_overrides: values.field_overrides,
+        field_overrides: fieldOverrides,
       };
       await create.mutateAsync(data);
     }
@@ -316,7 +317,9 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                 control={form.control}
                 render={({ field }) => (
                   <FieldOverridesEditor
-                    appliesTo={isEdit ? editing!.applies_to : watchedAppliesTo}
+                    appliesTo={
+                      isEdit ? (editing!.applies_to as "molecule" | "batch") : watchedAppliesTo
+                    }
                     overrides={field.value}
                     onChange={field.onChange}
                   />
@@ -345,20 +348,20 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
 
 interface DeleteDialogProps {
   form: RegistrationForm | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ form, onClose }: DeleteDialogProps) {
+function DeleteDialog({ form, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteRegistrationForm();
 
   const handleConfirm = async () => {
     if (!form) return;
     await deleteMutation.mutateAsync(form.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={form !== null} onOpenChange={onClose}>
+    <Dialog open={form !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete Registration Form?</DialogTitle>
@@ -368,7 +371,7 @@ function DeleteDialog({ form, onClose }: DeleteDialogProps) {
           action cannot be undone.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -393,10 +396,11 @@ interface FormsTableProps {
 function FormsTable({ forms, onEdit, onDelete }: FormsTableProps) {
   if (forms.length === 0) {
     return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <ClipboardList className="h-10 w-10" />
-        <p>No registration forms defined yet.</p>
-      </div>
+      <EmptyState
+        variant="inline"
+        icon={ClipboardList}
+        title="No registration forms defined yet."
+      />
     );
   }
 
@@ -490,11 +494,7 @@ export function RegistrationFormAdmin() {
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
+          <SkeletonList rows={4} />
         ) : (
           <FormsTable forms={forms ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}
@@ -502,7 +502,7 @@ export function RegistrationFormAdmin() {
 
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog form={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog form={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

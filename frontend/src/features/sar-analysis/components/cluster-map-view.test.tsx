@@ -38,10 +38,10 @@ vi.mock("./cluster-selection-pane", () => ({
 }));
 
 vi.mock("./save-selection-dialog", () => ({
-  SaveSelectionDialog: ({ open, onClose }: any) =>
+  SaveSelectionDialog: ({ open, onOpenChange }: any) =>
     open ? (
       <div data-testid="save-dialog">
-        <button onClick={onClose}>Close</button>
+        <button onClick={() => onOpenChange(false)}>Close</button>
       </div>
     ) : null,
 }));

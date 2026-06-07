@@ -31,6 +31,7 @@ import { HeaderStrip } from "../sections/header-strip";
 import { SourcesSection } from "../sections/sources-section";
 
 import { useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet } from "@/shared/lib/api/campaigns/campaigns";
+import { saveText } from "@/shared/lib/api/download";
 
 import type { CampaignResponse } from "../../types";
 
@@ -56,15 +57,11 @@ export function CampaignView({ campaign }: CampaignViewProps) {
   const handleDownload = async () => {
     const result = await fetchPublished();
     if (!result.data) return;
-    const blob = new Blob([JSON.stringify(result.data, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `campaign-${campaign.id}-published.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    saveText(
+      JSON.stringify(result.data, null, 2),
+      `campaign-${campaign.id}-published.json`,
+      "application/json",
+    );
   };
 
   const supersededBy = campaign.superseded_by_campaign_id as string | undefined | null;

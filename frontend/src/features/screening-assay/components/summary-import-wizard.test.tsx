@@ -40,8 +40,6 @@ function baseHook(
     draft: { roles: {}, readoutDefByHeader: {} },
     resolvePreview: null,
     result: null,
-    isDragging: false,
-    fileInputRef: { current: null },
     // mutations are only read for pending/data in the hook itself; the
     // component reads the derived flags below, so a cast is fine here.
     previewMutation: {} as UseSummaryImportWizardResult["previewMutation"],
@@ -54,11 +52,9 @@ function baseHook(
     isResolving: false,
     isImporting: false,
     setStep: vi.fn(),
-    setIsDragging: vi.fn(),
     reset: vi.fn(),
     handleOpenChange: vi.fn(),
     handleFile: vi.fn(),
-    handleDrop: vi.fn(),
     setRole: vi.fn(),
     setReadoutDef: vi.fn(),
     handleContinueToPreview: vi.fn(),

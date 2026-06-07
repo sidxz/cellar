@@ -17,7 +17,7 @@ import {
 import { formatDate } from "@/shared/lib/format-date";
 
 import { useProject } from "@/features/research-organization/hooks/use-projects";
-import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
+import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
 import { useCampaigns } from "../hooks/use-campaigns";
 import { CampaignStatusChip } from "./campaign-status-chip";
 import { CreateCampaignDialog } from "./create-campaign-dialog";

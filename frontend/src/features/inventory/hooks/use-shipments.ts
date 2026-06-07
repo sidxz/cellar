@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -15,7 +15,7 @@ const SHIPMENTS_KEY = ["shipments"];
 
 const shipmentHooks = createCrudHooks<Shipment, CreateShipmentInput, Record<string, unknown>>({
   entityName: "Shipment",
-  baseUrl: "/api/v1/shipments",
+  baseUrl: `${API_V1}/shipments`,
   queryKey: SHIPMENTS_KEY,
 });
 
@@ -25,7 +25,7 @@ export function useShipments(status?: string) {
     queryKey: [...SHIPMENTS_KEY, { status }],
     queryFn: () =>
       customInstance<ShipmentSummary[]>({
-        url: "/api/v1/shipments",
+        url: `${API_V1}/shipments`,
         method: "GET",
         params: status ? { status } : undefined,
       }),
@@ -51,7 +51,7 @@ export function useShipShipment() {
       shipping_date?: string | null;
     }) =>
       customInstance<Shipment>({
-        url: `/api/v1/shipments/${id}/ship`,
+        url: `${API_V1}/shipments/${id}/ship`,
         method: "POST",
         data: { tracking_number, shipping_date },
       }),
@@ -67,7 +67,7 @@ export function useMarkInTransit() {
   return useMutation({
     mutationFn: ({ id }: { id: string }) =>
       customInstance<Shipment>({
-        url: `/api/v1/shipments/${id}/in-transit`,
+        url: `${API_V1}/shipments/${id}/in-transit`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -88,7 +88,7 @@ export function useDeliverShipment() {
       received_date?: string | null;
     }) =>
       customInstance<Shipment>({
-        url: `/api/v1/shipments/${id}/deliver`,
+        url: `${API_V1}/shipments/${id}/deliver`,
         method: "POST",
         data: { received_date },
       }),
@@ -104,7 +104,7 @@ export function useReturnShipment() {
   return useMutation({
     mutationFn: ({ id }: { id: string }) =>
       customInstance<Shipment>({
-        url: `/api/v1/shipments/${id}/return`,
+        url: `${API_V1}/shipments/${id}/return`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -129,7 +129,7 @@ export function useAddShipmentItem() {
       amount_unit: string;
     }) =>
       customInstance<Shipment>({
-        url: `/api/v1/shipments/${id}/items`,
+        url: `${API_V1}/shipments/${id}/items`,
         method: "POST",
         data: { sample_id, amount_value, amount_unit },
       }),
@@ -154,7 +154,7 @@ export function useUpdateShipment() {
       notes?: string | null;
     }) =>
       customInstance<Shipment>({
-        url: `/api/v1/shipments/${id}`,
+        url: `${API_V1}/shipments/${id}`,
         method: "PATCH",
         data,
       }),
@@ -176,7 +176,7 @@ export function usePreviewShipmentImport() {
       }>,
     ) =>
       customInstance<ImportPreviewResponse>({
-        url: "/api/v1/shipments/import/preview",
+        url: `${API_V1}/shipments/import/preview`,
         method: "POST",
         data: { rows },
       }),

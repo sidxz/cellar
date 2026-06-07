@@ -1,28 +1,19 @@
-// ─── Interfaces ───────────────────────────────────────────────────────────────
+// ─── API DTOs (orval-generated; aliased per project rule) ────────────────────
+//
+// These are the project-mandated source of truth, regenerated from the live
+// backend OpenAPI. We alias the generated types to domain-friendly names so
+// call sites don't churn. Never hand-roll a mirror of a backend DTO.
+//
+// The orval nullable-wrapper inner types (AuditOperationResponseReason, etc.)
+// all resolve to `string | null` / `ElectronicSignatureResponse | null`, so the
+// aliases below are field-for-field equivalent to the previous hand types.
 
-export interface AuditEntry {
-  id: string;
-  field_name: string;
-  old_value: string | null;
-  new_value: string | null;
-  entry_type: string;
-}
+import type {
+  AuditEntryResponse,
+  AuditOperationResponse,
+  ElectronicSignatureResponse,
+} from "@/shared/lib/api/model";
 
-export interface ElectronicSignature {
-  signer_id: string;
-  reason: string;
-  signed_at: string;
-}
-
-export interface AuditOperation {
-  id: string;
-  workspace_id: string;
-  entity_type: string;
-  entity_id: string;
-  operation_type: string;
-  performed_by: string;
-  performed_at: string;
-  reason: string | null;
-  entries: AuditEntry[];
-  signature: ElectronicSignature | null;
-}
+export type AuditEntry = AuditEntryResponse;
+export type ElectronicSignature = ElectronicSignatureResponse;
+export type AuditOperation = AuditOperationResponse;

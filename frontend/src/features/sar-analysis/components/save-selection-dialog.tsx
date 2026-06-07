@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { shortId } from "@/shared/lib/utils";
 import { useEffect, useState } from "react";
 
 interface MoleculeLite {
@@ -32,7 +33,7 @@ interface ProjectOption {
 
 interface SaveSelectionDialogProps {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   onSave: (args: {
     name: string;
     projectId: string | null;
@@ -46,7 +47,7 @@ interface SaveSelectionDialogProps {
 
 export function SaveSelectionDialog({
   open,
-  onClose,
+  onOpenChange,
   onSave,
   selectedMolecules,
   defaultName,
@@ -65,7 +66,7 @@ export function SaveSelectionDialog({
   }, [open, defaultName, defaultProjectId]);
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Save {selectedMolecules.length} compounds as a new collection</DialogTitle>
@@ -99,7 +100,7 @@ export function SaveSelectionDialog({
             <ul className="grid grid-cols-3 gap-2 text-xs">
               {selectedMolecules.map((m) => (
                 <li key={m.id} className="rounded border px-2 py-1">
-                  <div className="font-mono">{m.reg_number ?? m.id.slice(0, 8)}</div>
+                  <div className="font-mono">{m.reg_number ?? shortId(m.id)}</div>
                   {m.name && <div className="text-muted-foreground truncate">{m.name}</div>}
                 </li>
               ))}
@@ -108,7 +109,7 @@ export function SaveSelectionDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button

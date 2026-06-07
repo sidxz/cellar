@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
+import { saveText } from "@/shared/lib/api/download";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 
 import { usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet } from "@/shared/lib/api/campaigns/campaigns";
@@ -29,7 +30,7 @@ interface PreviewAsPublishedDialogProps {
   campaignId: string;
   campaignName: string;
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
 interface PublishedShape {
@@ -58,7 +59,7 @@ export function PreviewAsPublishedDialog({
   campaignId,
   campaignName,
   open,
-  onClose,
+  onOpenChange,
 }: PreviewAsPublishedDialogProps) {
   const { data, isLoading } =
     usePreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet(campaignId, undefined, {
@@ -69,19 +70,15 @@ export function PreviewAsPublishedDialog({
 
   function handleDownload() {
     if (!doc) return;
-    const blob = new Blob([JSON.stringify(doc, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `campaign-${campaignName.replace(/\s+/g, "-")}-preview.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    saveText(
+      JSON.stringify(doc, null, 2),
+      `campaign-${campaignName.replace(/\s+/g, "-")}-preview.json`,
+      "application/json",
+    );
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-4xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -232,7 +229,7 @@ export function PreviewAsPublishedDialog({
         )}
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
           <Button onClick={handleDownload} disabled={!doc}>

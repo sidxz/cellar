@@ -358,8 +358,10 @@ export function DataSourceDetail({ dataSourceId }: DataSourceDetailProps) {
       reset({
         name: ds.name,
         isActive: ds.is_active,
-        createBatchOnDup: ds.create_batch_on_duplicate,
-        mappings: structuredClone(ds.entity_mappings),
+        createBatchOnDup: ds.create_batch_on_duplicate ?? false,
+        // Backend types `target_type` / `storage_type` as bare `str`; the editor
+        // narrows them to its allowed values (enforced by the form's zod schema).
+        mappings: structuredClone(ds.entity_mappings) as EntityMapping[],
       });
     }
   }, [ds, reset]);
@@ -373,7 +375,9 @@ export function DataSourceDetail({ dataSourceId }: DataSourceDetailProps) {
 
   const handleReset = () => {
     if (template) {
-      replaceMappings(structuredClone(template));
+      // Same narrowing as the seed effect: the template endpoint returns the
+      // widened EntityMappingResponse; the form constrains the union values.
+      replaceMappings(structuredClone(template) as EntityMapping[]);
     }
   };
 

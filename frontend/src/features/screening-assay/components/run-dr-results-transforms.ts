@@ -1,6 +1,13 @@
 import { groupBy } from "@/shared/lib/group-by";
+import { shortId } from "@/shared/lib/utils";
 import { findInterceptValue } from "../lib/intercept-label";
-import type { CurveClass, DoseResponseCurve, HitCriterion, InterceptValue } from "../types";
+import {
+  type CurveClass,
+  type DoseResponseCurve,
+  type HitCriterion,
+  type InterceptValue,
+  narrowInterceptValues,
+} from "../types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,10 +78,10 @@ export function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow
     rows.push({
       molecule_id: best.molecule_id,
       molecule_name: best.molecule_name ?? "",
-      registration_number: best.registration_number ?? best.molecule_id.slice(0, 8),
+      registration_number: best.registration_number ?? shortId(best.molecule_id),
       synonyms: best.synonyms ?? [],
-      smiles: best.smiles,
-      batch_number: best.batch_number,
+      smiles: best.smiles ?? null,
+      batch_number: best.batch_number ?? null,
       curve_type: best.curve_type,
       fitted_value: best.fitted_value,
       fitted_unit: best.fitted_unit,
@@ -83,9 +90,9 @@ export function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow
       bottom: best.bottom,
       r_squared: best.r_squared,
       num_points: best.num_points,
-      curve_class: best.curve_class as CurveClass | null,
+      curve_class: (best.curve_class as CurveClass | null) ?? null,
       data_points: dataPoints,
-      intercept_values: best.intercept_values ?? null,
+      intercept_values: narrowInterceptValues(best.intercept_values),
       all_curves: molCurves,
     });
   }

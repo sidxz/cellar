@@ -1,5 +1,6 @@
 "use client";
 
+import { API_V1 } from "@/shared/lib/api/custom-instance";
 import { downloadFile } from "@/shared/lib/api/download";
 import { showSuccess } from "@/shared/lib/toast";
 import { useCallback, useState } from "react";
@@ -16,7 +17,7 @@ export function useSdfExport() {
     setIsPending(true);
     try {
       await downloadFile({
-        url: "/api/v1/molecules/export/sdf",
+        url: `${API_V1}/molecules/export/sdf`,
         data: { molecule_ids: moleculeIds },
         filename,
       });

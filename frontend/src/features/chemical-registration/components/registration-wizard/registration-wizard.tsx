@@ -1,7 +1,7 @@
 "use client";
 
-import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
 import { ArrowLeft } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -27,43 +27,6 @@ function getSteps(mode: WizardMode | null): string[] {
   return [];
 }
 
-// ─── Step indicator ─────────────────────────────────────────────────────────
-
-function StepIndicator({
-  steps,
-  currentStep,
-}: {
-  steps: string[];
-  currentStep: number;
-}) {
-  if (steps.length === 0) return null;
-
-  return (
-    <div className="flex items-center gap-2" role="navigation" aria-label="Wizard steps">
-      {steps.map((name, index) => {
-        const isActive = index === currentStep;
-        const isCompleted = index < currentStep;
-
-        return (
-          <div key={name} className="flex items-center gap-2">
-            {index > 0 && (
-              <div className={`h-px w-6 ${isCompleted ? "bg-primary" : "bg-border"}`} />
-            )}
-            <Badge
-              variant={isActive ? "default" : isCompleted ? "secondary" : "outline"}
-              className={`text-xs font-medium ${
-                isActive ? "" : isCompleted ? "opacity-80" : "opacity-50"
-              }`}
-            >
-              {index + 1}. {name}
-            </Badge>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── Wizard shell ───────────────────────────────────────────────────────────
 
 export function RegistrationWizard() {
@@ -86,6 +49,7 @@ export function RegistrationWizard() {
   useCollectionImportHandoff();
 
   // ─── URL param initialization ───────────────────────────────────────────
+  // biome-ignore lint/correctness/useExhaustiveDependencies: read the initial mode/disclose URL params once on mount; later searchParams changes should not re-seed the wizard.
   useEffect(() => {
     const modeParam = searchParams.get("mode");
     if (modeParam === "bulk") {
@@ -100,8 +64,6 @@ export function RegistrationWizard() {
         moleculeId: discloseId,
       });
     }
-    // Only run on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ─── Unsaved changes warning ────────────────────────────────────────────
@@ -118,11 +80,11 @@ export function RegistrationWizard() {
   }, [mode]);
 
   // ─── Cleanup on unmount ─────────────────────────────────────────────────
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run the wizard reset only on unmount; `reset` is a stable store action and must not re-run the cleanup mid-session.
   useEffect(() => {
     return () => {
       reset();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ─── Render step content ────────────────────────────────────────────────
@@ -195,7 +157,7 @@ export function RegistrationWizard() {
       </div>
 
       {/* Step indicator */}
-      {mode !== null && <StepIndicator steps={steps} currentStep={currentStep} />}
+      {mode !== null && <WizardStepIndicator steps={steps} current={currentStep + 1} />}
 
       {/* Step content */}
       {renderStep()}

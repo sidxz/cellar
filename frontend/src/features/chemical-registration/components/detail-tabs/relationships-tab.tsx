@@ -22,6 +22,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { shortId } from "@/shared/lib/utils";
 import { Link2, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -142,7 +143,7 @@ function RelationshipRow({
         href={`/compounds/${otherId}`}
         className="text-sm font-mono text-primary hover:underline"
       >
-        {other?.registration_number ?? otherId.slice(0, 8)}
+        {other?.registration_number ?? shortId(otherId)}
       </Link>
       {other?.name && <span className="text-sm text-muted-foreground truncate">{other.name}</span>}
       {rel.notes && (

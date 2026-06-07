@@ -89,7 +89,7 @@ const PROTOCOL_FIELDS = [
 
 interface ReportCustomizerProps {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   onUpdate: () => void;
   protocols: Protocol[];
   activeProtocolIds: string[];
@@ -106,7 +106,7 @@ interface ReportCustomizerProps {
 
 export function ReportCustomizer({
   open,
-  onClose,
+  onOpenChange,
   onUpdate,
   protocols,
   activeProtocolIds,
@@ -117,7 +117,7 @@ export function ReportCustomizer({
   const { visibleFields } = config;
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-[420px] sm:max-w-[420px] p-0 flex flex-col">
         <SheetHeader className="px-4 pt-4 pb-2 shrink-0">
           <SheetTitle>Customize Report</SheetTitle>

@@ -3,6 +3,7 @@
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { cn } from "@/shared/lib/utils";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
@@ -23,6 +24,7 @@ export function StepPreview() {
   const hasRequested = useRef(false);
 
   // Kick off preview on mount when no data yet
+  // biome-ignore lint/correctness/useExhaustiveDependencies: kick off the preview once on mount (guarded by hasRequested ref); the captured bulkInput/previewMutation are intentionally not re-subscribed.
   useEffect(() => {
     if (hasRequested.current || bulkPreview || !bulkInput.file) return;
     hasRequested.current = true;
@@ -32,7 +34,6 @@ export function StepPreview() {
       .catch(() => {
         // Error surfaced via mutation state below.
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!bulkInput.file) {
@@ -139,7 +140,7 @@ export function StepPreview() {
                 {bulkPreview.items.map((item) => (
                   <tr
                     key={item.row_index}
-                    className={`border-b last:border-b-0 ${item.error ? "bg-destructive/5" : ""}`}
+                    className={cn("border-b last:border-b-0", item.error && "bg-destructive/5")}
                   >
                     <td className="px-3 py-1.5 text-muted-foreground">{item.row_index + 1}</td>
                     <td className="px-3 py-1.5">{item.name ?? "\u2014"}</td>
@@ -147,14 +148,14 @@ export function StepPreview() {
                       {item.smiles ? truncate(item.smiles, 40) : "\u2014"}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.external_ids.length > 0
+                      {item.external_ids && item.external_ids.length > 0
                         ? item.external_ids
                             .map((e) => `${e.identifier_type}:${e.identifier}`)
                             .join(", ")
                         : "\u2014"}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.amount_value !== null
+                      {item.amount_value != null
                         ? `${item.amount_value} ${item.amount_unit}`
                         : "\u2014"}
                     </td>
@@ -162,7 +163,7 @@ export function StepPreview() {
                       {item.salt_code ?? "\u2014"}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.purity !== null ? `${item.purity}%` : "\u2014"}
+                      {item.purity != null ? `${item.purity}%` : "\u2014"}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
                       {item.batch_source ?? "\u2014"}

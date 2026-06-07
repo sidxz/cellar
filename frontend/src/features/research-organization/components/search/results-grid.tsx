@@ -22,6 +22,7 @@ import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { Badge } from "@/shared/components/ui/badge";
 import { groupBy } from "@/shared/lib/group-by";
+import { cn } from "@/shared/lib/utils";
 import {
   type ResolvedColumn,
   drcColId,
@@ -216,7 +217,10 @@ function renderInterceptCell(
   const isScalar = display.kind === "scalar";
   return (
     <span
-      className={`inline-flex items-center font-mono text-xs${isScalar ? "" : " text-muted-foreground"}`}
+      className={cn(
+        "inline-flex items-center font-mono text-xs",
+        !isScalar && "text-muted-foreground",
+      )}
       title={display.tooltip || undefined}
     >
       {q}
@@ -339,7 +343,10 @@ export function buildDrcColumns(
         const isScalar = display.kind === "scalar";
         return (
           <span
-            className={`inline-flex items-center font-mono text-xs${isScalar ? "" : " text-muted-foreground"}`}
+            className={cn(
+              "inline-flex items-center font-mono text-xs",
+              !isScalar && "text-muted-foreground",
+            )}
             title={display.tooltip || undefined}
           >
             {display.text}

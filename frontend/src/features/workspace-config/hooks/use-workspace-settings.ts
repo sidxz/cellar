@@ -1,6 +1,7 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { UpdateWorkspaceSettingsBody } from "@/shared/lib/api/model";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { WorkspaceSettings } from "../types";
@@ -12,7 +13,7 @@ export function useWorkspaceSettings() {
     queryKey: SETTINGS_KEY,
     queryFn: () =>
       customInstance<WorkspaceSettings>({
-        url: "/api/v1/settings",
+        url: `${API_V1}/settings`,
         method: "GET",
       }),
   });
@@ -21,9 +22,9 @@ export function useWorkspaceSettings() {
 export function useUpdateWorkspaceSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<WorkspaceSettings>) =>
+    mutationFn: (data: UpdateWorkspaceSettingsBody) =>
       customInstance<WorkspaceSettings>({
-        url: "/api/v1/settings",
+        url: `${API_V1}/settings`,
         method: "PATCH",
         data,
       }),

@@ -1,6 +1,7 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { JOB_POLL_SLOW_INTERVAL_MS } from "@/shared/lib/timing";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RegisterMoleculeInput, RegistrationResponse } from "../types";
@@ -24,7 +25,7 @@ export function useSubmitRegistration() {
   return useMutation({
     mutationFn: (data: RegisterMoleculeInput) =>
       customInstance<RegistrationResponse>({
-        url: "/api/v1/molecules",
+        url: `${API_V1}/molecules`,
         method: "POST",
         data,
       }),
@@ -46,7 +47,7 @@ export function usePreviewBulkRegistration() {
       const formData = new FormData();
       formData.append("file", file);
       return customInstance<PreviewBulkRegistrationResponse>({
-        url: "/api/v1/bulk-registrations/preview",
+        url: `${API_V1}/bulk-registrations/preview`,
         method: "POST",
         data: formData,
       });
@@ -71,7 +72,7 @@ export function useBulkRegistrationItems(
     queryKey: [...BULK_REG_KEY, workflowId, "items", action, limit, offset],
     queryFn: () =>
       customInstance<ListBulkRegItemsResponse>({
-        url: `/api/v1/bulk-registrations/${workflowId}/items`,
+        url: `${API_V1}/bulk-registrations/${workflowId}/items`,
         method: "GET",
         params: {
           ...(action ? { action } : {}),
@@ -112,7 +113,7 @@ export function useStartBulkRegistration() {
         formData.append("create_batch_on_duplicate", String(create_batch_on_duplicate));
       }
       return customInstance<{ workflow_id: string; status: string }>({
-        url: "/api/v1/bulk-registrations",
+        url: `${API_V1}/bulk-registrations`,
         method: "POST",
         data: formData,
       });
@@ -127,20 +128,20 @@ export function useStartBulkRegistration() {
   });
 }
 
-/** GET /api/v1/bulk-registrations/{workflowId} — polls every 3 s while job is active. */
+/** GET /api/v1/bulk-registrations/{workflowId} — polls while the job is active. */
 export function useBulkRegistrationStatus(workflowId: string | null, enabled: boolean) {
   return useQuery({
     queryKey: [...BULK_REG_KEY, workflowId],
     queryFn: () =>
       customInstance<BulkProgress>({
-        url: `/api/v1/bulk-registrations/${workflowId}/status`,
+        url: `${API_V1}/bulk-registrations/${workflowId}/status`,
         method: "GET",
       }),
     enabled: enabled && !!workflowId,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (status === "completed" || status === "failed") return false;
-      return 3_000;
+      return JOB_POLL_SLOW_INTERVAL_MS;
     },
   });
 }
@@ -157,7 +158,7 @@ export function useConfirmMerges(workflowId: string | null) {
   return useMutation({
     mutationFn: (input: ConfirmMergesInput) =>
       customInstance<ConfirmMergesResponse>({
-        url: `/api/v1/bulk-registrations/${workflowId}/confirm-merges`,
+        url: `${API_V1}/bulk-registrations/${workflowId}/confirm-merges`,
         method: "POST",
         data: input,
       }),

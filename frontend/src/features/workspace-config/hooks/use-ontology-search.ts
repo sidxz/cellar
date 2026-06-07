@@ -1,26 +1,25 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { OntologyTermResponse } from "@/shared/lib/api/model";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
+import { SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import { useQuery } from "@tanstack/react-query";
 
-export interface OntologyTerm {
-  term_id: string;
-  label: string;
-  ontology_source: string;
-  uri: string | null;
-}
+// Alias of the orval-generated DTO (source of truth).
+export type OntologyTerm = OntologyTermResponse;
 
 export function useOntologyDescendants(ontology: string, rootConceptId: string, enabled?: boolean) {
   return useQuery({
     queryKey: ["ontology-descendants", ontology, rootConceptId],
     queryFn: () =>
       customInstance<OntologyTerm[]>({
-        url: "/api/v1/ontology/descendants",
+        url: `${API_V1}/ontology/descendants`,
         method: "GET",
         params: { ontology, root_concept_id: rootConceptId },
       }),
     enabled: enabled !== false && !!ontology && !!rootConceptId,
-    staleTime: 30 * 60 * 1000, // 30 min — ontology trees don't change
+    staleTime: STALE_TIME.LONG, // ontology trees don't change
   });
 }
 
@@ -34,7 +33,7 @@ export function useOntologySearch(
     queryKey: ["ontology-search", query, ontologies, subtreeRootId],
     queryFn: () =>
       customInstance<OntologyTerm[]>({
-        url: "/api/v1/ontology/search",
+        url: `${API_V1}/ontology/search`,
         method: "GET",
         params: {
           q: query,
@@ -42,6 +41,6 @@ export function useOntologySearch(
           ...(subtreeRootId ? { subtree_root_id: subtreeRootId } : {}),
         },
       }),
-    enabled: enabled !== false && query.length >= 2,
+    enabled: enabled !== false && query.length >= SEARCH_MIN_QUERY_LEN,
   });
 }

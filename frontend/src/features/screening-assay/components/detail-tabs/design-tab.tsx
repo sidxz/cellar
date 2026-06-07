@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { resolveCategoryColor } from "@/shared/lib/category-colors";
 import { cn } from "@/shared/lib/utils";
 import { ExternalLink, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -41,7 +42,6 @@ import {
   useUpdateConditionDefinition,
   useUpdateReadoutDefinition,
 } from "../../hooks/use-protocols";
-import { resolvePickListColor } from "../../lib/pick-list-colors";
 import { PLATE_FORMAT_LABELS } from "../../types";
 import {
   CURVE_TYPE_LABELS,
@@ -222,7 +222,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                       {rd.pick_list_values && rd.pick_list_values.length > 0 && (
                         <div className="mt-0.5 flex flex-wrap gap-1">
                           {rd.pick_list_values.map((v) => {
-                            const c = resolvePickListColor(v.label, v.color);
+                            const c = resolveCategoryColor(v.label, v.color);
                             return (
                               <Badge
                                 key={v.label}

@@ -14,6 +14,7 @@ import {
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { cn } from "@/shared/lib/utils";
 import {
   Building2,
   ChevronRight,
@@ -68,7 +69,7 @@ function LocationNode({
   const deleteMutation = useDeleteStorageLocation();
   const children = getChildren(allLocations, location.id);
   const hasChildren = children.length > 0;
-  const icon = TYPE_ICONS[location.type] ?? <MapPin className="h-4 w-4" />;
+  const icon = TYPE_ICONS[location.type as StorageLocationType] ?? <MapPin className="h-4 w-4" />;
 
   return (
     <div>
@@ -83,9 +84,7 @@ function LocationNode({
             className="h-5 w-5"
             onClick={() => setExpanded(!expanded)}
           >
-            <ChevronRight
-              className={`h-3 w-3 transition-transform ${expanded ? "rotate-90" : ""}`}
-            />
+            <ChevronRight className={cn("h-3 w-3 transition-transform", expanded && "rotate-90")} />
           </Button>
         ) : (
           <div className="h-5 w-5" />
@@ -103,7 +102,7 @@ function LocationNode({
             {location.sample_count}/{location.rows * location.columns}
           </span>
         ) : (
-          location.sample_count > 0 && (
+          (location.sample_count ?? 0) > 0 && (
             <span className="text-xs text-muted-foreground">{location.sample_count} samples</span>
           )
         )}

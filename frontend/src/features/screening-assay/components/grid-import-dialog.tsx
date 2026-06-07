@@ -18,10 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { ImportReadoutsResponse } from "@/shared/lib/api/model";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { DOSE_RESPONSE_KEY, PLATE_MAP_KEY, READOUT_DATA_KEY, RUNS_KEY } from "../hooks/query-keys";
 import { useProtocol } from "../hooks/use-protocols";
 
 interface GridImportDialogProps {
@@ -31,11 +33,8 @@ interface GridImportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface ImportReadoutsResult {
-  matched: number;
-  unmatched: number;
-  readouts_created: number;
-}
+// Alias of the orval-generated response DTO (was a hand-written subset mirror).
+type ImportReadoutsResult = ImportReadoutsResponse;
 
 /**
  * Import a plate-reader GRID (a value matrix) into one of a run's readouts.
@@ -64,12 +63,12 @@ export function GridImportDialog({ runId, protocolId, open, onOpenChange }: Grid
       const form = new FormData();
       form.append("file", file);
       const res = await customInstance<ImportReadoutsResult>({
-        url: `/api/v1/runs/${runId}/import-readouts`,
+        url: `${API_V1}/runs/${runId}/import-readouts`,
         method: "POST",
         params: { readout_definition_id: readoutId, layout: "grid" },
         data: form,
       });
-      for (const key of [["readout-data"], ["dose-response-curves"], ["plate-map"], ["runs"]]) {
+      for (const key of [READOUT_DATA_KEY, DOSE_RESPONSE_KEY, PLATE_MAP_KEY, RUNS_KEY]) {
         qc.invalidateQueries({ queryKey: key });
       }
       showSuccess(`Imported ${res.readouts_created} readouts from the plate grid.`);

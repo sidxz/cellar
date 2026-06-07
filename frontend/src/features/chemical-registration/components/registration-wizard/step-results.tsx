@@ -5,6 +5,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { AlertTriangle, Check, Copy, ExternalLink, Eye, GitMerge, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { useConfirmMerges } from "../../hooks/use-registration-wizard-api";
 import type { MergeDecision } from "../../types/registration-wizard";
@@ -32,7 +33,7 @@ function SingleSuccessCard() {
 
   if (!singleResult) return null;
 
-  const action = singleResult.action;
+  const action = singleResult.action ?? "";
   const regNumber = singleResult.molecule.registration_number;
 
   const { icon, message } = getActionDisplay(action, regNumber);
@@ -323,10 +324,10 @@ function BulkResults() {
                   registration. Resolve them on individual compound detail pages.
                 </p>
                 <Button variant="outline" size="sm" asChild>
-                  <a href="/compounds?disclosure_status=conflict">
+                  <Link href="/compounds?disclosure_status=conflict">
                     <ExternalLink className="mr-2 h-4 w-4" />
                     Review Conflicts
-                  </a>
+                  </Link>
                 </Button>
               </CardContent>
             </Card>

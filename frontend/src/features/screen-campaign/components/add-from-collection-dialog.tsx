@@ -36,14 +36,14 @@ interface AddFromCollectionDialogProps {
   campaignId: string;
   projectId: string;
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
 export function AddFromCollectionDialog({
   campaignId,
   projectId,
   open,
-  onClose,
+  onOpenChange,
 }: AddFromCollectionDialogProps) {
   const qc = useQueryClient();
   const [collectionId, setCollectionId] = useState("");
@@ -72,7 +72,7 @@ export function AddFromCollectionDialog({
   const handleClose = () => {
     setCollectionId("");
     setDescription("");
-    onClose();
+    onOpenChange(false);
   };
 
   const handleSubmit = () => {

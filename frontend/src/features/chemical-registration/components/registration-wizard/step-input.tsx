@@ -4,9 +4,14 @@ import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled"
 import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
 import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
-import { useRegistrationForms } from "@/features/workspace-config/hooks/use-registration-forms";
+import {
+  type FieldOverride,
+  useRegistrationForms,
+} from "@/features/workspace-config/hooks/use-registration-forms";
 import { useWorkspaceSettings } from "@/features/workspace-config/hooks/use-workspace-settings";
+import type { RegistrationRules } from "@/features/workspace-config/types";
 import { StructureEditorDialog } from "@/shared/components/chemistry";
+import { CsvDropzone } from "@/shared/components/csv-dropzone";
 import { Button } from "@/shared/components/ui/button";
 import {
   Card,
@@ -28,6 +33,7 @@ import {
 import { Separator } from "@/shared/components/ui/separator";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { saveText } from "@/shared/lib/api/download";
 import { formatFileSize } from "@/shared/lib/format-number";
 import {
   CloudDownload,
@@ -43,7 +49,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useDropzone } from "react-dropzone";
 import { useMolecule } from "../../hooks/use-molecules";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { MOLECULE_TYPE_LABELS } from "../../types";
@@ -102,13 +107,7 @@ function downloadCsvTemplate() {
       row.map((cell) => (cell.includes(",") ? `"${cell}"` : cell)).join(","),
     ),
   ];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "compound_registration_template.csv";
-  a.click();
-  URL.revokeObjectURL(url);
+  saveText(lines.join("\n"), "compound_registration_template.csv");
 }
 
 // ─── Identifier type options ────────────────────────────────────────────────
@@ -207,10 +206,13 @@ function SingleInputForm() {
   );
 
   const defaultFormId = registrationForms?.find((f) => f.is_default)?.id ?? "";
+  // Backend types `field_overrides` entries as opaque dicts; read them as the
+  // FE's structured view at this consumption edge (same double-cast convention
+  // as registration-form-admin — see FieldOverride in use-registration-forms).
   const activeFormOverrides = useMemo(
     () =>
-      registrationForms?.find((f) => f.id === (selectedFormId || defaultFormId))?.field_overrides ??
-      [],
+      (registrationForms?.find((f) => f.id === (selectedFormId || defaultFormId))
+        ?.field_overrides ?? []) as unknown as FieldOverride[],
     [registrationForms, selectedFormId, defaultFormId],
   );
 
@@ -571,20 +573,20 @@ function BulkInputForm() {
   const [error, setError] = useState<string | null>(null);
 
   // Hydrate createBatchOnDuplicate from workspace default on first load (before any file is selected)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: hydrate the duplicate-batch default only when workspace settings arrive; `bulkInput.file`/`updateBulkInput` are omitted so a later file selection doesn't re-hydrate.
   useEffect(() => {
     if (settings && !bulkInput.file) {
+      // Backend types `registration_rules` as an opaque dict; read it as the
+      // FE's structured view (same convention as workspace-settings-form).
+      const rules = (settings.registration_rules ?? {}) as RegistrationRules;
       updateBulkInput({
-        createBatchOnDuplicate: settings.registration_rules?.create_batch_on_duplicate ?? false,
+        createBatchOnDuplicate: rules.create_batch_on_duplicate ?? false,
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
-  const onDrop = useCallback(
-    (accepted: File[]) => {
-      const file = accepted[0];
-      if (!file) return;
-
+  const handleFile = useCallback(
+    (file: File) => {
       const fmt = detectFileFormat(file.name);
       if (!fmt) {
         setError(`Unsupported file type. Use .csv, .xlsx, .sdf or .sd — got "${file.name}".`);
@@ -595,17 +597,6 @@ function BulkInputForm() {
     },
     [updateBulkInput],
   );
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      "text/csv": [".csv"],
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-      "chemical/x-mdl-sdfile": [".sdf", ".sd"],
-    },
-    maxFiles: 1,
-    multiple: false,
-  });
 
   const handleNext = () => {
     setError(null);
@@ -677,30 +668,20 @@ function BulkInputForm() {
         </div>
       </div>
 
-      {/* Drop zone */}
-      <div
-        {...getRootProps()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
-          isDragActive
-            ? "border-primary bg-primary/5"
-            : "border-muted-foreground/25 hover:border-muted-foreground/50"
-        }`}
-      >
-        <input {...getInputProps()} />
-        <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
-        {isDragActive ? (
-          <p className="text-sm text-muted-foreground">Drop file here</p>
-        ) : (
-          <>
-            <p className="text-sm text-muted-foreground">
-              Drag &amp; drop a file here, or click to browse
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground/60">
-              Accepts .csv, .xlsx, .sdf, .sd — format detected automatically
-            </p>
-          </>
-        )}
-      </div>
+      {/* Drop zone. The "Selected file info" card below is owned by this parent
+          (CsvDropzone shows only the name); the format-detection + unsupported-type
+          error lives in handleFile. */}
+      <CsvDropzone
+        file={bulkInput.file}
+        onFile={handleFile}
+        accept={{
+          "text/csv": [".csv"],
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+          "chemical/x-mdl-sdfile": [".sdf", ".sd"],
+        }}
+        prompt="Drag & drop a file here, or click to browse"
+        hint="Accepts .csv, .xlsx, .sdf, .sd — format detected automatically"
+      />
 
       {/* Selected file info */}
       {bulkInput.file && (

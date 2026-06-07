@@ -8,6 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/shared/components/ui/collapsible";
+import { cn } from "@/shared/lib/utils";
 import { ArrowRight, ChevronDown, Loader2, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { useMergeImpact } from "../../hooks/use-disclosures";
@@ -94,7 +95,7 @@ export function MergeCandidateCard({
         <Collapsible open={showImpact} onOpenChange={setShowImpact}>
           <CollapsibleTrigger className="mt-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <ChevronDown
-              className={`h-3 w-3 transition-transform ${showImpact ? "rotate-180" : ""}`}
+              className={cn("h-3 w-3 transition-transform", showImpact && "rotate-180")}
             />
             {showImpact ? "Hide impact details" : "Show impact details"}
           </CollapsibleTrigger>

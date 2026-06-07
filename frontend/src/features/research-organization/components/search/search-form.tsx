@@ -519,20 +519,18 @@ export function SearchForm({
   // count preview key off the same composed query so they never drift.
   const composedCriteria = composeCriteria();
   const criteriaCount = composedCriteria.length;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: composedCriteria is rebuilt every render but its serialization is stable across no-op renders, so we key on JSON.stringify so consumers (useSearchCount) can debounce.
   const composedQuery: SearchQuery = useMemo(
     () => ({ criteria: composedCriteria, logic: "and" }),
-    // The composedCriteria array is rebuilt every render but its serialization
-    // is stable across no-op renders, so consumers (useSearchCount) can debounce.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(composedCriteria)],
   );
 
   // Similarity searches return everything above the threshold; the panel only
   // shows the top-K ranked. Surface that distinction so the chemist knows the
   // raw count is bigger than what they see in the result list.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the stable serialization of composedCriteria (rebuilt each render); see composedQuery above.
   const isSimilarityQuery = useMemo(
     () => containsSimilarity(composedCriteria),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [JSON.stringify(composedCriteria)],
   );
 

@@ -1,46 +1,24 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type {
+  CreateCustomFieldBody,
+  CustomFieldResponse,
+  UpdateCustomFieldBody,
+} from "@/shared/lib/api/model";
 import { useQuery } from "@tanstack/react-query";
 
-export interface CustomFieldDefinition {
-  id: string;
-  workspace_id: string;
-  name: string;
-  label: string;
-  data_type: "text" | "number" | "date" | "picklist" | "file" | "batch_link";
-  applies_to: "molecule" | "batch" | "sample";
-  is_required: boolean;
-  default_value: unknown;
-  display_order: number;
-  pick_list_values: string[] | null;
-  vocabulary_id: string | null;
-  is_active: boolean;
-  version: number;
-}
+// Aliases of the orval-generated DTOs (source of truth). The backend types
+// `data_type` / `applies_to` as bare `str`, so the generated shapes widen them
+// to `string`; the custom-field editor narrows them via its zod enums at the
+// consumption edge. The allowed values are documented by these client-side unions.
+export type CustomFieldDataType = "text" | "number" | "date" | "picklist" | "file" | "batch_link";
+export type CustomFieldAppliesTo = "molecule" | "batch" | "sample";
 
-export interface CreateCustomFieldInput {
-  name: string;
-  label: string;
-  data_type: CustomFieldDefinition["data_type"];
-  applies_to: CustomFieldDefinition["applies_to"];
-  is_required?: boolean;
-  default_value?: unknown;
-  display_order?: number;
-  pick_list_values?: string[] | null;
-  vocabulary_id?: string | null;
-}
-
-export interface UpdateCustomFieldInput {
-  label?: string;
-  is_required?: boolean;
-  default_value?: unknown;
-  display_order?: number;
-  pick_list_values?: string[] | null;
-  vocabulary_id?: string | null;
-  is_active?: boolean;
-}
+export type CustomFieldDefinition = CustomFieldResponse;
+export type CreateCustomFieldInput = CreateCustomFieldBody;
+export type UpdateCustomFieldInput = UpdateCustomFieldBody;
 
 const CUSTOM_FIELDS_KEY = ["custom-fields"];
 
@@ -50,7 +28,7 @@ const cfHooks = createCrudHooks<
   UpdateCustomFieldInput
 >({
   entityName: "Custom field",
-  baseUrl: "/api/v1/custom-fields",
+  baseUrl: `${API_V1}/custom-fields`,
   queryKey: CUSTOM_FIELDS_KEY,
 });
 
@@ -63,7 +41,7 @@ export function useCustomFields(appliesTo?: string, activeOnly?: boolean) {
       if (appliesTo) params.applies_to = appliesTo;
       if (activeOnly !== undefined) params.active_only = String(activeOnly);
       return customInstance<CustomFieldDefinition[]>({
-        url: "/api/v1/custom-fields",
+        url: `${API_V1}/custom-fields`,
         method: "GET",
         params,
       });

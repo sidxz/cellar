@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { formatRelativeDay } from "@/shared/lib/format-date";
 import { cn } from "@/shared/lib/utils";
 import { Check, ChevronsUpDown, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -65,27 +66,14 @@ function protocolStatusColor(status: string): string {
   return "bg-muted-foreground/40";
 }
 
-// inline: custom date logic — "today"/"yesterday" with date-only input; shared
-// formatRelativeDate works from timestamps and would not produce the same output.
-/** Format ISO date as a relative-ish suffix ("today", "3d ago", "Apr 20").
- *  Keeps the picker scannable without taking too much horizontal space. */
+/** Format a date-only "last run on" value as a relative-ish suffix ("today",
+ *  "3d ago", "Apr 20"), keeping the picker scannable. `null` → "no runs".
+ *  Delegates the day-granular relative formatting to the shared helper. */
 function formatLastRun(iso: string | null): string {
   if (!iso) return "no runs";
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return iso;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
-  if (diffDays <= 0) return "today";
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 14) return `${diffDays}d ago`;
-  if (diffDays < 60) return `${Math.floor(diffDays / 7)}w ago`;
-  // Older — show calendar date.
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: today.getFullYear() === d.getFullYear() ? undefined : "numeric",
-  });
+  // formatRelativeDay returns "" for an unparseable value — fall back to the raw
+  // string so a malformed date is still shown rather than blanked.
+  return formatRelativeDay(iso) || iso;
 }
 
 /** How many recently-used protocols to pin at the top of the list. */
@@ -131,12 +119,8 @@ interface ProtocolRowProps {
 function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
   const isArchived = protocol.status === "retired" || protocol.status === "archived";
   // Build a haystack so Command's filter can hit name + all targets + status.
-  const value = [
-    protocol.id,
-    protocol.name,
-    protocol.targets.map((t) => t.name).join(" "),
-    protocol.status,
-  ]
+  const targets = protocol.targets ?? [];
+  const value = [protocol.id, protocol.name, targets.map((t) => t.name).join(" "), protocol.status]
     .join(" ")
     .toLowerCase();
 
@@ -165,12 +149,12 @@ function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
             )}
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {protocol.targets.length > 0 && <TargetChips targets={protocol.targets} />}
+            {targets.length > 0 && <TargetChips targets={targets} />}
             <span className="tabular-nums">
               {protocol.run_count} run{protocol.run_count === 1 ? "" : "s"}
             </span>
             <span aria-hidden>·</span>
-            <span>last {formatLastRun(protocol.last_run_date)}</span>
+            <span>last {formatLastRun(protocol.last_run_date ?? null)}</span>
           </div>
         </div>
       </div>

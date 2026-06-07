@@ -2,6 +2,7 @@
 
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import { showError, showSuccess } from "@/shared/lib/toast";
+import { unwrapList } from "@/shared/types/pagination";
 import {
   type QueryClient,
   type UseQueryOptions,
@@ -48,15 +49,12 @@ export function createCrudHooks<
     return useQuery({
       queryKey: params ? [...queryKey, params] : queryKey,
       queryFn: async () => {
-        // Endpoints migrated to cursor pagination return PaginatedResponse;
-        // older ones still return a bare list. Accept both at runtime so
-        // call sites don't need to know which shape they get.
         const resp = await customInstance<TEntity[] | { items: TEntity[] }>({
           url: baseUrl,
           method: "GET",
           params,
         });
-        return Array.isArray(resp) ? resp : resp.items;
+        return unwrapList(resp);
       },
       ...options,
     });

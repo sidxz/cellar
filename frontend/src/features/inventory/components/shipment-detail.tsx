@@ -30,7 +30,7 @@ import {
   useShipment,
   useUpdateShipment,
 } from "../hooks/use-shipments";
-import { SHIPMENT_STATUS_LABELS, type Shipment } from "../types/shipment";
+import { SHIPMENT_STATUS_LABELS, type Shipment, type ShipmentStatus } from "../types/shipment";
 
 interface ShipmentDetailProps {
   shipmentId: string;
@@ -58,7 +58,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
         title={(s) => s.tracking_number || "Shipment"}
         badge={(s) => ({
           status: s.status,
-          label: SHIPMENT_STATUS_LABELS[s.status],
+          label: SHIPMENT_STATUS_LABELS[s.status as ShipmentStatus] ?? s.status,
         })}
         notFoundMessage="Shipment not found."
         actions={(s) => {

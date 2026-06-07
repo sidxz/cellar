@@ -6,7 +6,9 @@ import {
   READOUT_DATA_TYPE_LABELS,
   READOUT_NORMALIZATION_LABELS,
 } from "@/features/screening-assay/types";
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
+import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -25,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Switch } from "@/shared/components/ui/switch";
 import {
   Table,
@@ -53,6 +54,8 @@ import {
 // ---------------------------------------------------------------------------
 
 interface ReadoutRow {
+  /** Stable client-side key so React reconciles rows across add/remove. Not sent to the API. */
+  _key: string;
   name: string;
   data_type: string;
   unit: string;
@@ -61,17 +64,26 @@ interface ReadoutRow {
 }
 
 interface ConditionRow {
+  /** Stable client-side key so React reconciles rows across add/remove. Not sent to the API. */
+  _key: string;
   name: string;
   data_type: string;
   unit: string;
 }
 
 function emptyReadoutRow(): ReadoutRow {
-  return { name: "", data_type: "numeric", unit: "", aggregation: "none", normalization: "none" };
+  return {
+    _key: crypto.randomUUID(),
+    name: "",
+    data_type: "numeric",
+    unit: "",
+    aggregation: "none",
+    normalization: "none",
+  };
 }
 
 function emptyConditionRow(): ConditionRow {
-  return { name: "", data_type: "text", unit: "" };
+  return { _key: crypto.randomUUID(), name: "", data_type: "text", unit: "" };
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +117,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
       setReadoutRows(
         editing.readout_templates.length > 0
           ? editing.readout_templates.map((t) => ({
+              _key: crypto.randomUUID(),
               name: (t.name as string) ?? "",
               data_type: (t.data_type as string) ?? "numeric",
               unit: (t.unit as string) ?? "",
@@ -116,6 +129,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
       setConditionRows(
         editing.condition_templates
           ? editing.condition_templates.map((t) => ({
+              _key: crypto.randomUUID(),
               name: (t.name as string) ?? "",
               data_type: (t.data_type as string) ?? "text",
               unit: (t.unit as string) ?? "",
@@ -244,7 +258,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
             </div>
             <div className="space-y-2">
               {readoutRows.map((row, idx) => (
-                <div key={idx} className="flex items-end gap-2 rounded-md border p-2">
+                <div key={row._key} className="flex items-end gap-2 rounded-md border p-2">
                   <div className="grid gap-1 flex-1">
                     <Label className="text-[11px]">Name</Label>
                     <Input
@@ -373,7 +387,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
             {conditionRows.length > 0 && (
               <div className="space-y-2">
                 {conditionRows.map((row, idx) => (
-                  <div key={idx} className="flex items-end gap-2">
+                  <div key={row._key} className="flex items-end gap-2">
                     <div className="grid gap-1 flex-1">
                       <Label className="text-[11px]">Name</Label>
                       <Input
@@ -454,20 +468,20 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
 
 interface DeleteDialogProps {
   form: ProtocolForm | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ form, onClose }: DeleteDialogProps) {
+function DeleteDialog({ form, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteProtocolForm();
 
   const handleConfirm = async () => {
     if (!form) return;
     await deleteMutation.mutateAsync(form.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={form !== null} onOpenChange={onClose}>
+    <Dialog open={form !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete Protocol Form?</DialogTitle>
@@ -477,7 +491,7 @@ function DeleteDialog({ form, onClose }: DeleteDialogProps) {
           action cannot be undone.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -501,12 +515,7 @@ interface FormTableProps {
 
 function FormTable({ entries, onEdit, onDelete }: FormTableProps) {
   if (entries.length === 0) {
-    return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <FileText className="h-10 w-10" />
-        <p>No protocol forms defined yet.</p>
-      </div>
-    );
+    return <EmptyState variant="inline" icon={FileText} title="No protocol forms defined yet." />;
   }
 
   return (
@@ -602,11 +611,7 @@ export function ProtocolFormAdmin() {
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
+          <SkeletonList />
         ) : (
           <FormTable entries={entries ?? []} onEdit={openEdit} onDelete={setDeleting} />
         )}
@@ -614,7 +619,7 @@ export function ProtocolFormAdmin() {
 
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog form={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog form={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

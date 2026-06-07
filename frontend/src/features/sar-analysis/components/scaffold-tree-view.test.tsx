@@ -12,6 +12,7 @@ import { SCAFFOLD_TREE_TOAST_ID, ScaffoldTreeView } from "./scaffold-tree-view";
 // ---------------------------------------------------------------------------
 const mockCustomInstance = vi.fn();
 vi.mock("@/shared/lib/api/custom-instance", () => ({
+  API_V1: "/api/v1",
   customInstance: (...args: any[]) => mockCustomInstance(...args),
 }));
 

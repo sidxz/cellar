@@ -2,7 +2,9 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { DOSE_RESPONSE_KEY, READOUT_DATA_KEY, RUNS_KEY, RUN_KEY } from "./query-keys";
+
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
   SummaryHeaderSuggestionModel,
   SummaryImportErrorModel,
@@ -46,7 +48,7 @@ export function usePreviewSummaryFile(runId: string) {
       const formData = new FormData();
       formData.append("file", file);
       return customInstance<SummaryPreviewResponse>({
-        url: `/api/v1/runs/${runId}/preview-summary-file`,
+        url: `${API_V1}/runs/${runId}/preview-summary-file`,
         method: "POST",
         data: formData,
       });
@@ -71,7 +73,7 @@ export function useResolveSummaryFile(runId: string) {
       formData.append("file", file);
       formData.append("mapping", JSON.stringify(mapping));
       return customInstance<SummaryResolveResponse>({
-        url: `/api/v1/runs/${runId}/resolve-summary-file`,
+        url: `${API_V1}/runs/${runId}/resolve-summary-file`,
         method: "POST",
         data: formData,
       });
@@ -96,16 +98,16 @@ export function useImportSummaryFile(runId: string) {
       formData.append("file", file);
       formData.append("mapping", JSON.stringify(mapping));
       return customInstance<SummaryImportResponse>({
-        url: `/api/v1/runs/${runId}/import-summary-file`,
+        url: `${API_V1}/runs/${runId}/import-summary-file`,
         method: "POST",
         data: formData,
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["readout-data"] });
-      qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
-      qc.invalidateQueries({ queryKey: ["runs"] });
-      qc.invalidateQueries({ queryKey: ["run", runId] });
+      qc.invalidateQueries({ queryKey: READOUT_DATA_KEY });
+      qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      qc.invalidateQueries({ queryKey: [...RUN_KEY, runId] });
     },
   });
 }

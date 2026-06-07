@@ -30,6 +30,10 @@ interface EditQcMetricsDialogProps {
 }
 
 interface MetricRow {
+  /** Stable client id so React keys the row by identity, not array index —
+   *  keeps focus / uncommitted text attached to the right row across add /
+   *  remove. Never sent to the server (stripped by `rowsToMetrics`). */
+  _id: string;
   key: string;
   value: string;
 }
@@ -47,6 +51,7 @@ function metricsToRows(qcMetrics: Record<string, unknown> | null): MetricRow[] {
     return [];
   }
   return Object.entries(qcMetrics).map(([key, value]) => ({
+    _id: crypto.randomUUID(),
     key,
     value: String(value ?? ""),
   }));
@@ -73,7 +78,7 @@ export function EditQcMetricsDialog({ run, open, onOpenChange }: EditQcMetricsDi
   }, [run.qc_metrics]);
 
   const handleAddRow = () => {
-    setRows((prev) => [...prev, { key: "", value: "" }]);
+    setRows((prev) => [...prev, { _id: crypto.randomUUID(), key: "", value: "" }]);
   };
 
   const handleRemoveRow = (index: number) => {
@@ -91,7 +96,7 @@ export function EditQcMetricsDialog({ run, open, onOpenChange }: EditQcMetricsDi
   const handleAddPreset = (preset: string) => {
     const exists = rows.some((r) => r.key === preset);
     if (!exists) {
-      setRows((prev) => [...prev, { key: preset, value: "" }]);
+      setRows((prev) => [...prev, { _id: crypto.randomUUID(), key: preset, value: "" }]);
     }
   };
 
@@ -159,7 +164,7 @@ export function EditQcMetricsDialog({ run, open, onOpenChange }: EditQcMetricsDi
               </p>
             )}
             {rows.map((row, index) => (
-              <div key={index} className="flex items-center gap-2">
+              <div key={row._id} className="flex items-center gap-2">
                 <Input
                   placeholder="Key"
                   value={row.key}

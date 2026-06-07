@@ -76,11 +76,19 @@ export function HitCriteriaDialog({
   const [rules, setRules] = useState<HitCriterion[]>(
     () => currentCriteria?.map((r) => ({ ...r })) ?? [],
   );
+  // Stable client ids kept positionally in lockstep with `rules`, so React
+  // keys each editable row by identity (not array index) — focus and
+  // uncommitted text stay attached to the right row across add / remove.
+  // `HitCriterion` is the backend payload, so the key lives outside it.
+  const [rowKeys, setRowKeys] = useState<string[]>(() =>
+    (currentCriteria ?? []).map(() => crypto.randomUUID()),
+  );
 
   // Reset state when dialog opens
   const handleOpenChange = (next: boolean) => {
     if (next) {
       setRules(currentCriteria?.map((r) => ({ ...r })) ?? []);
+      setRowKeys((currentCriteria ?? []).map(() => crypto.randomUUID()));
     }
     onOpenChange(next);
   };
@@ -90,10 +98,12 @@ export function HitCriteriaDialog({
   const addRule = () => {
     if (rules.length >= MAX_RULES) return;
     setRules((prev) => [...prev, emptyRule()]);
+    setRowKeys((prev) => [...prev, crypto.randomUUID()]);
   };
 
   const removeRule = (index: number) => {
     setRules((prev) => prev.filter((_, i) => i !== index));
+    setRowKeys((prev) => prev.filter((_, i) => i !== index));
   };
 
   const updateRule = (index: number, patch: Partial<HitCriterion>) => {
@@ -192,7 +202,7 @@ export function HitCriteriaDialog({
             const operators = isCurveClass ? (["in"] as const) : ALL_OPERATORS;
 
             return (
-              <div key={index} className="flex items-end gap-2 rounded-md border p-3">
+              <div key={rowKeys[index]} className="flex items-end gap-2 rounded-md border p-3">
                 {/* Readout / intercept selector */}
                 <div className="flex-1 space-y-1">
                   <Label className="text-xs">Readout</Label>

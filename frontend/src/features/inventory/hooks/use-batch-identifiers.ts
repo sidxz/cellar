@@ -5,18 +5,17 @@ import {
   getListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGetQueryKey,
   removeBatchIdentifierApiV1BatchesBatchIdIdentifiersIdentifierIdDelete,
 } from "@/shared/lib/api/batches/batches";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { BatchIdentifierResponse } from "@/shared/lib/api/model";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-
-const BATCHES_KEY = ["batches"];
+import { BATCHES_KEY } from "./query-keys";
 
 export function useBatchIdentifiers(batchId: string) {
   return useQuery({
     queryKey: getListBatchIdentifiersApiV1BatchesBatchIdIdentifiersGetQueryKey(batchId),
     queryFn: () =>
       customInstance<BatchIdentifierResponse[]>({
-        url: `/api/v1/batches/${batchId}/identifiers`,
+        url: `${API_V1}/batches/${batchId}/identifiers`,
         method: "GET",
       }),
     enabled: !!batchId,

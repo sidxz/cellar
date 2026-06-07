@@ -20,6 +20,7 @@ import { useAuthz } from "@sentinel-auth/nextjs";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, ImageIcon, Redo2, RotateCcw, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DOSE_RESPONSE_KEY } from "../hooks/query-keys";
 import { type DraftExclusion, useEditSession } from "../hooks/use-edit-session";
 import { useClassifyDoseResponse, useRefitDoseResponse } from "../hooks/use-refit-dose-response";
 import { useRefitPreview } from "../hooks/use-refit-preview";
@@ -51,6 +52,7 @@ import {
   type CurveType,
   type DoseResponseConfig,
   type DoseResponseCurve,
+  narrowInterceptValues,
 } from "../types";
 import { CurveControls } from "./curve-controls";
 import { CurveEditHistory } from "./curve-edit-history";
@@ -282,6 +284,10 @@ function SummaryCard({
   const warnings = curve.fit_quality_warnings ?? [];
   const isExtrapolated = warnings.includes("ec50_at_bound");
   const notFitted = isDegenerateFit(curve);
+  // Narrow the generated wire shape (spec.kind/basis: string) to the local
+  // InterceptValue enums at the consumption edge so interceptLabel keeps its
+  // precise InterceptSpec param.
+  const interceptValues = narrowInterceptValues(curve.intercept_values);
 
   return (
     <Card key={curve.id} className="py-4">
@@ -298,16 +304,16 @@ function SummaryCard({
           {/* Prefer the protocol's intercept label — single source of
               truth (spec: 2026-05-13). curve.curve_type is descriptive
               only post-033 and ignores per-protocol relabels. */}
-          {curve.intercept_values?.[0]?.spec
-            ? interceptLabel(curve.intercept_values[0].spec)
+          {interceptValues[0]?.spec
+            ? interceptLabel(interceptValues[0].spec)
             : (CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type)}
           {" = "}
           {Number(curve.fitted_value.toPrecision(4))} {curve.fitted_unit}
           {isExtrapolated && <span className="ml-1 text-amber-600 text-xs">(extrapolated)</span>}
         </p>
-        {curve.intercept_values && curve.intercept_values.length > 1 && (
+        {interceptValues.length > 1 && (
           <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-muted-foreground pt-0.5">
-            {curve.intercept_values.slice(1).map((iv, idx) => {
+            {interceptValues.slice(1).map((iv, idx) => {
               const label = interceptLabel(iv.spec);
               if (iv.at_bound || !Number.isFinite(iv.value)) {
                 return (
@@ -557,7 +563,7 @@ export function DoseResponseChart({
         save_note: saveNote,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dose-response-curves"] });
+      queryClient.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
       setSaveDialogOpen(false);
       setEditMode(false);
       refitPreview.reset();
@@ -577,12 +583,10 @@ export function DoseResponseChart({
     [editSession.draft.exclusions],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refitPreview.requestPreview is stable across renders (useCallback); depending on editMode + editCurve.id + draftExcludedIndices is enough.
   useEffect(() => {
     if (!editMode || !editCurve) return;
     refitPreview.requestPreview(editCurve.id, draftExcludedIndices);
-    // refitPreview.requestPreview is stable across renders (useCallback);
-    // depending on `editMode + editCurve.id + draftExcludedIndices` is enough.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editMode, editCurve?.id, draftExcludedIndices]);
 
   // The preview-fit overlay: when the hook has data, build a synthetic
@@ -1291,9 +1295,8 @@ export function DoseResponseChart({
   // Pre-fix this code walked raw_data with isHiddenFromIncluded counting,
   // which silently diverged from the BE's domain after any save that
   // shortened raw_data.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handlePlotClick = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: Plotly click event is untyped by the lib; fields read defensively below
     (event: any) => {
       if (!isInteractive || !editMode || !editCurve) return;
       const pt = event?.points?.[0];
@@ -1793,7 +1796,7 @@ export function DoseResponseChart({
       {editCurve && (
         <SaveExclusionsDialog
           open={saveDialogOpen}
-          onClose={() => setSaveDialogOpen(false)}
+          onOpenChange={setSaveDialogOpen}
           onSave={handleSaveSubmit}
           dirtyCount={dirtyCount}
           isSaving={isSaving}

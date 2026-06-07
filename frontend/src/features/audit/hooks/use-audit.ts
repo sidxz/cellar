@@ -1,6 +1,7 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { unwrapList } from "@/shared/types/pagination";
 import { useQuery } from "@tanstack/react-query";
 import type { AuditOperation } from "../types";
 
@@ -16,7 +17,7 @@ export function useAuditOperations(filters?: {
     queryKey: [...AUDIT_KEY, filters],
     queryFn: async () => {
       const resp = await customInstance<AuditOperation[] | { items: AuditOperation[] }>({
-        url: "/api/v1/audit",
+        url: `${API_V1}/audit`,
         method: "GET",
         params: filters
           ? Object.fromEntries(
@@ -26,7 +27,7 @@ export function useAuditOperations(filters?: {
             )
           : undefined,
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
   });
 }
@@ -36,11 +37,11 @@ export function useAuditByEntity(entityType: string, entityId: string | undefine
     queryKey: [...AUDIT_KEY, "entity", entityType, entityId],
     queryFn: async () => {
       const resp = await customInstance<AuditOperation[] | { items: AuditOperation[] }>({
-        url: "/api/v1/audit",
+        url: `${API_V1}/audit`,
         method: "GET",
         params: { entity_type: entityType, entity_id: entityId! },
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
     enabled: !!entityId,
   });

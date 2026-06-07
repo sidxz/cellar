@@ -96,8 +96,11 @@ export function OrganizationDialog({ open, onOpenChange, organization }: Props) 
       contact_email: values.contact_email || null,
       notes: values.notes || null,
     };
+    // NOTE: the backend UpdateOrganizationBody does not accept `is_active`
+    // (model_config extra="forbid") — there is no activate/deactivate field on
+    // this endpoint, so it is intentionally not sent here. See residual issues.
     if (isEdit) {
-      await update.mutateAsync({ ...data, is_active: values.is_active });
+      await update.mutateAsync(data);
     } else {
       await create.mutateAsync(data);
     }

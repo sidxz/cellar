@@ -1,7 +1,7 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -20,7 +20,7 @@ const routeHooks = createCrudHooks<
   Record<string, unknown>
 >({
   entityName: "Synthesis route",
-  baseUrl: "/api/v1/synthesis-routes",
+  baseUrl: `${API_V1}/synthesis-routes`,
   queryKey: SYNTHESIS_ROUTES_KEY,
 });
 
@@ -34,7 +34,7 @@ export function useSynthesisRoutesByMolecule(moleculeId: string | undefined) {
     queryKey: [...SYNTHESIS_ROUTES_KEY, "molecule", moleculeId],
     queryFn: () =>
       customInstance<SynthesisRouteSummary[]>({
-        url: "/api/v1/synthesis-routes",
+        url: `${API_V1}/synthesis-routes`,
         method: "GET",
         params: { molecule_id: moleculeId as string },
       }),
@@ -49,7 +49,7 @@ export function useValidateSynthesisRoute() {
   return useMutation({
     mutationFn: (id: string) =>
       customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${id}/validate`,
+        url: `${API_V1}/synthesis-routes/${id}/validate`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -64,7 +64,7 @@ export function useSetPreferredRoute() {
   return useMutation({
     mutationFn: (id: string) =>
       customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${id}/prefer`,
+        url: `${API_V1}/synthesis-routes/${id}/prefer`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -79,7 +79,7 @@ export function useDeprecateSynthesisRoute() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string | null }) =>
       customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${id}/deprecate`,
+        url: `${API_V1}/synthesis-routes/${id}/deprecate`,
         method: "POST",
         data: { reason },
       }),
@@ -105,7 +105,7 @@ export function useUpdateSynthesisRoute() {
       scale?: string | null;
     }) =>
       customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${id}`,
+        url: `${API_V1}/synthesis-routes/${id}`,
         method: "PATCH",
         data,
       }),
@@ -123,7 +123,7 @@ export function useAddReactionStep(routeId: string) {
   return useMutation({
     mutationFn: (data: AddReactionStepInput) =>
       customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${routeId}/steps`,
+        url: `${API_V1}/synthesis-routes/${routeId}/steps`,
         method: "POST",
         data,
       }),
@@ -139,7 +139,7 @@ export function useRecordStepOutcome(routeId: string, stepId: string) {
   return useMutation({
     mutationFn: (data: RecordStepOutcomeInput) =>
       customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${routeId}/steps/${stepId}/outcome`,
+        url: `${API_V1}/synthesis-routes/${routeId}/steps/${stepId}/outcome`,
         method: "PUT",
         data,
       }),
@@ -155,7 +155,7 @@ export function useRemoveReactionStep(routeId: string) {
   return useMutation({
     mutationFn: (stepId: string) =>
       customInstance<SynthesisRoute>({
-        url: `/api/v1/synthesis-routes/${routeId}/steps/${stepId}`,
+        url: `${API_V1}/synthesis-routes/${routeId}/steps/${stepId}`,
         method: "DELETE",
       }),
     onSuccess: () => {

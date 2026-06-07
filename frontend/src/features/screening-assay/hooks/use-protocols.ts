@@ -1,12 +1,13 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { ProtocolSummaryResponse } from "@/shared/lib/api/model";
 import { showSuccess } from "@/shared/lib/toast";
+import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateProtocolInput, Protocol, TargetRef } from "../types";
-
-const PROTOCOLS_KEY = ["protocols"];
+import type { CreateProtocolInput, Protocol } from "../types";
+import { PROTOCOLS_KEY } from "./query-keys";
 
 const protocolHooks = createCrudHooks<
   Protocol,
@@ -19,7 +20,7 @@ const protocolHooks = createCrudHooks<
   }
 >({
   entityName: "Protocol",
-  baseUrl: "/api/v1/protocols",
+  baseUrl: `${API_V1}/protocols`,
   queryKey: PROTOCOLS_KEY,
 });
 
@@ -49,29 +50,26 @@ export function useProtocols(
         params.tag_logic = options?.tagLogic ?? "any";
       }
       const resp = await customInstance<Protocol[] | { items: Protocol[] }>({
-        url: "/api/v1/protocols",
+        url: `${API_V1}/protocols`,
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
       });
-      return Array.isArray(resp) ? resp : resp.items;
+      return unwrapList(resp);
     },
   });
 }
 
-/** Lightweight protocol rows for the picker — name + status + run stats.
- *  Sorted server-side: most-recently-run first; never-run sink to bottom. */
-export interface ProtocolSummary {
-  id: string;
-  name: string;
-  status: string;
-  protocol_type: string;
-  description: string | null;
-  /** Effective target refs (direct ∪ run-union), name-only for the picker. */
-  targets: TargetRef[];
-  run_count: number;
-  /** ISO date (YYYY-MM-DD) or null when no runs yet. */
-  last_run_date: string | null;
-}
+/**
+ * Lightweight protocol rows for the picker — name + status + run stats
+ * (sorted server-side: most-recently-run first; never-run sink to bottom).
+ *
+ * Aliased from the orval-generated DTO (source of truth). Note the backend
+ * Pydantic schema gives `targets` / `run_count` / `last_run_date` / `description`
+ * field defaults, so OpenAPI marks them non-required and the generated type
+ * makes them optional — consumers must null-handle them even though the route
+ * always populates them.
+ */
+export type ProtocolSummary = ProtocolSummaryResponse;
 
 /**
  * Protocol picker rows (name + status + run stats).
@@ -92,7 +90,7 @@ export function useProtocolSummaries(projectIds?: string[], options?: { includeA
       : [...PROTOCOLS_KEY, "summary"],
     queryFn: () =>
       customInstance<ProtocolSummary[]>({
-        url: "/api/v1/protocols/summary",
+        url: `${API_V1}/protocols/summary`,
         method: "GET",
         ...(scope ? { params: { project_ids: scope } } : {}),
       }),
@@ -132,7 +130,7 @@ export function useAddReadoutDefinition(protocolId: string) {
       dose_response_config?: Record<string, unknown> | null;
     }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/readout-definitions`,
+        url: `${API_V1}/protocols/${protocolId}/readout-definitions`,
         method: "POST",
         data,
       }),
@@ -168,7 +166,7 @@ export function useUpdateReadoutDefinition(protocolId: string) {
       };
     }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/readout-definitions/${definitionId}`,
+        url: `${API_V1}/protocols/${protocolId}/readout-definitions/${definitionId}`,
         method: "PUT",
         data,
       }),
@@ -184,7 +182,7 @@ export function useRemoveReadoutDefinition(protocolId: string) {
   return useMutation({
     mutationFn: (definitionId: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/readout-definitions/${definitionId}`,
+        url: `${API_V1}/protocols/${protocolId}/readout-definitions/${definitionId}`,
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -206,7 +204,7 @@ export function useAddConditionDefinition(protocolId: string) {
       pick_list_values?: string[] | null;
     }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/condition-definitions`,
+        url: `${API_V1}/protocols/${protocolId}/condition-definitions`,
         method: "POST",
         data,
       }),
@@ -233,7 +231,7 @@ export function useUpdateConditionDefinition(protocolId: string) {
       };
     }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/condition-definitions/${definitionId}`,
+        url: `${API_V1}/protocols/${protocolId}/condition-definitions/${definitionId}`,
         method: "PUT",
         data,
       }),
@@ -249,7 +247,7 @@ export function useRemoveConditionDefinition(protocolId: string) {
   return useMutation({
     mutationFn: (definitionId: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/condition-definitions/${definitionId}`,
+        url: `${API_V1}/protocols/${protocolId}/condition-definitions/${definitionId}`,
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -266,7 +264,7 @@ export function useSetControlLayout(protocolId: string) {
   return useMutation({
     mutationFn: (data: { plate_format: string; template_id: string }) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/control-layouts`,
+        url: `${API_V1}/protocols/${protocolId}/control-layouts`,
         method: "PUT",
         data,
       }),
@@ -282,7 +280,7 @@ export function useRemoveControlLayout(protocolId: string) {
   return useMutation({
     mutationFn: (plateFormat: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/control-layouts/${plateFormat}`,
+        url: `${API_V1}/protocols/${protocolId}/control-layouts/${plateFormat}`,
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -309,7 +307,7 @@ export function useSetOntologyAnnotation(protocolId: string) {
   return useMutation({
     mutationFn: (data: OntologyAnnotationInput) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/ontology-annotations`,
+        url: `${API_V1}/protocols/${protocolId}/ontology-annotations`,
         method: "PUT",
         data,
       }),
@@ -325,7 +323,7 @@ export function useRemoveOntologyAnnotation(protocolId: string) {
   return useMutation({
     mutationFn: (slotName: string) =>
       customInstance<Protocol>({
-        url: `/api/v1/protocols/${protocolId}/ontology-annotations`,
+        url: `${API_V1}/protocols/${protocolId}/ontology-annotations`,
         method: "DELETE",
         params: { slot_name: slotName },
       }),

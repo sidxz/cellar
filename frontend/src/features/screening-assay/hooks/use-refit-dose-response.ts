@@ -1,14 +1,13 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   ClassifyDoseResponseInput,
   DoseResponseCurve,
   RefitDoseResponseInput,
 } from "../types";
-
-const DOSE_RESPONSE_KEY = ["dose-response-curves"];
+import { DOSE_RESPONSE_KEY } from "./query-keys";
 
 export function useRefitDoseResponse() {
   const qc = useQueryClient();
@@ -21,7 +20,7 @@ export function useRefitDoseResponse() {
       input: RefitDoseResponseInput;
     }) =>
       customInstance<DoseResponseCurve>({
-        url: `/api/v1/dose-response-curves/${curveId}/refit`,
+        url: `${API_V1}/dose-response-curves/${curveId}/refit`,
         method: "POST",
         data: input,
       }),
@@ -40,7 +39,7 @@ export function useClassifyDoseResponse() {
       input: ClassifyDoseResponseInput;
     }) =>
       customInstance<DoseResponseCurve>({
-        url: `/api/v1/dose-response-curves/${curveId}/classify`,
+        url: `${API_V1}/dose-response-curves/${curveId}/classify`,
         method: "PATCH",
         data: input,
       }),

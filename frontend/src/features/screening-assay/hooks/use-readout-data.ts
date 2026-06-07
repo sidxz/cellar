@@ -1,17 +1,16 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { ReadoutData } from "../types";
-
-const READOUT_DATA_KEY = ["readout-data"];
+import { READOUT_DATA_KEY } from "./query-keys";
 
 export function useReadoutDataByRun(runId: string | undefined) {
   return useQuery({
     queryKey: [...READOUT_DATA_KEY, "run", runId],
     queryFn: () =>
       customInstance<ReadoutData[]>({
-        url: "/api/v1/readout-data",
+        url: `${API_V1}/readout-data`,
         method: "GET",
         params: { run_id: runId! },
       }),

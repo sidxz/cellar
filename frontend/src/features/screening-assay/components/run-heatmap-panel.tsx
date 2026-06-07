@@ -15,7 +15,7 @@ import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
-import { type ZPrimeQuality, classifyZPrime, readPerPlateQc } from "../lib/qc-metrics";
+import { classifyZPrime, readPerPlateQc } from "../lib/qc-metrics";
 import {
   type PlateData,
   READOUT_NORMALIZATION_LABELS,
@@ -30,21 +30,7 @@ import {
   type ScaleKind,
   type ValueScale,
 } from "./plate-value-heatmap";
-
-const Z_PRIME_BADGE: Record<ZPrimeQuality, { label: string; className: string }> = {
-  excellent: {
-    label: "Excellent",
-    className: "bg-green-500/20 text-green-400 border-green-500/30",
-  },
-  marginal: {
-    label: "Marginal",
-    className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-  },
-  poor: {
-    label: "Poor",
-    className: "bg-destructive/20 text-destructive border-destructive/30",
-  },
-};
+import { Z_PRIME_BADGE } from "./z-prime-badge";
 
 type ValueLayer = "raw" | "normalized";
 

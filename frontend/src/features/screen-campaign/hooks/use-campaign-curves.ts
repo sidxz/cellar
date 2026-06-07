@@ -27,7 +27,7 @@ export function useCampaignCurves(campaign: CampaignResponse | undefined) {
       return new Map(resp.curves.map((c) => [c.id, c] as const));
     },
     enabled: !!campaign && curveIds.length > 0,
-    staleTime: 60_000,
+    // staleTime omitted — inherits the global default (STALE_TIME.DEFAULT, 60s).
   });
 }
 

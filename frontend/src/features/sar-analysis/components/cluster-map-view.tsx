@@ -8,6 +8,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/shared/components/ui/resizable";
+import { shortId } from "@/shared/lib/utils";
 
 import { useCherrypickBasket } from "../hooks/use-cherrypick-basket";
 import { useRegionDiversePick } from "../hooks/use-region-diverse-pick";
@@ -69,7 +70,12 @@ function buildActivityPic50(
 function buildScaffoldByMol(molecules: Molecule[]): Record<string, string | null> {
   const out: Record<string, string | null> = {};
   for (const mol of molecules) {
-    const s = (mol as any).bemis_murcko_smiles;
+    // KNOWN-INERT: the backend domain model has bemis_murcko_smiles but no
+    // route serializes it, so this is always undefined and scaffold color
+    // mode never activates. Typed as an optional extension (not `as any`)
+    // pending a decision to either serialize the field or drop the mode —
+    // see docs/backlog/frontend-maintainability-low-findings.md.
+    const s = (mol as Molecule & { bemis_murcko_smiles?: string }).bemis_murcko_smiles;
     out[mol.id] = typeof s === "string" && s.length > 0 ? s : null;
   }
   return out;
@@ -148,7 +154,7 @@ export function ClusterMapView({
       if (reg && name) map[m.id] = `${reg} · ${name}`;
       else if (reg) map[m.id] = reg;
       else if (name) map[m.id] = name;
-      else map[m.id] = m.id.slice(0, 8);
+      else map[m.id] = shortId(m.id);
     }
     return map;
   }, [molecules]);
@@ -351,7 +357,7 @@ export function ClusterMapView({
 
       <SaveSelectionDialog
         open={saveOpen}
-        onClose={() => setSaveOpen(false)}
+        onOpenChange={setSaveOpen}
         onSave={async (args) => {
           await onSaveCollection(args);
           setSaveOpen(false);

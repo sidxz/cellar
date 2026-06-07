@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type React from "react";
 import { describe, expect, it, vi } from "vitest";
+
+import type { StartUmapClusterBody, StartUmapClusterResponse } from "@/shared/lib/api/model";
 import { useRegionDiversePick } from "./use-region-diverse-pick";
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
@@ -9,7 +11,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => {
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 };
 
-const resultDto = {
+const resultDto: NonNullable<StartUmapClusterResponse["result"]> = {
   points: [
     { molecule_id: "a", x: 0, y: 0 },
     { molecule_id: "b", x: 1, y: 1 },
@@ -39,7 +41,7 @@ describe("useRegionDiversePick", () => {
   it("pick() runs MaxMin over the subset and returns representative ids", async () => {
     // Typed param so mock.calls[0][0] is inspectable under strict tsc.
     const startFn = vi.fn(
-      async (_input: { picker: string; molecule_ids?: string[]; n?: number | null }) => ({
+      async (_input: StartUmapClusterBody): Promise<StartUmapClusterResponse> => ({
         result: resultDto,
         job: null,
       }),

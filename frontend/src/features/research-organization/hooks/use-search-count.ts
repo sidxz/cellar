@@ -1,16 +1,17 @@
 "use client";
 
 import { useDebounce } from "@/shared/hooks/use-debounce";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { CountSearchResponse } from "@/shared/lib/api/model";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
+import { SEARCH_DEBOUNCE_MS } from "@/shared/lib/timing";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { SearchQuery } from "../types";
 
-interface CountResponse {
-  total_count: number;
-}
+// Alias the orval-generated DTO (CLAUDE.md: alias, never mirror).
+type CountResponse = CountSearchResponse;
 
 const COUNT_KEY = ["search", "count"];
-const DEBOUNCE_MS = 250;
 
 /**
  * Fetches a live "Search N compounds" preview for the draft query in the
@@ -26,19 +27,19 @@ const DEBOUNCE_MS = 250;
  */
 export function useSearchCount(query: SearchQuery, enabled: boolean) {
   const serialized = JSON.stringify(query);
-  const debouncedKey = useDebounce(serialized, DEBOUNCE_MS);
+  const debouncedKey = useDebounce(serialized, SEARCH_DEBOUNCE_MS);
 
   return useQuery({
     queryKey: [...COUNT_KEY, debouncedKey],
     queryFn: () =>
       customInstance<CountResponse>({
-        url: "/api/v1/search/count",
+        url: `${API_V1}/search/count`,
         method: "POST",
         data: { query: JSON.parse(debouncedKey) as SearchQuery },
       }),
     enabled,
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
+    staleTime: STALE_TIME.SHORT,
     retry: false,
   });
 }

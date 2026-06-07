@@ -18,10 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { COLLECTIONS_KEY } from "../hooks/query-keys";
 import { useCollections } from "../hooks/use-collections";
 import type { Collection } from "../types";
 
@@ -47,12 +48,12 @@ export function BooleanCollectionsDialog({ open, onOpenChange }: BooleanCollecti
   const composeMutation = useMutation({
     mutationFn: (params: { operation: string; collection_ids: string[]; result_name: string }) =>
       customInstance<Collection>({
-        url: "/api/v1/collections/compose",
+        url: `${API_V1}/collections/compose`,
         method: "POST",
         data: params,
       }),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      queryClient.invalidateQueries({ queryKey: COLLECTIONS_KEY });
       showSuccess(`Created "${data.name}" with ${data.molecule_count} molecules`);
       handleClose();
     },

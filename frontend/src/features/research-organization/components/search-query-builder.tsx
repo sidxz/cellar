@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { cn } from "@/shared/lib/utils";
 import { Plus, Search } from "lucide-react";
 import { useState } from "react";
 import {
@@ -168,7 +169,10 @@ export function SearchQueryBuilder({ initialQuery, onSearch, isLoading }: Search
           const wrapWithNegate = (row: React.ReactNode) => (
             <div
               key={key}
-              className={`flex items-start gap-2 ${negate ? "ring-1 ring-destructive/30 rounded-md p-1" : ""}`}
+              className={cn(
+                "flex items-start gap-2",
+                negate && "ring-1 ring-destructive/30 rounded-md p-1",
+              )}
             >
               <NegateToggle negate={negate} onToggle={toggleNegate} />
               <div className="flex-1">{row}</div>

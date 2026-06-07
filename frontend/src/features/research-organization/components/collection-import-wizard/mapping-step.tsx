@@ -258,6 +258,7 @@ export function MappingStep({
     autoAppliedRef.current = true;
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the state setters (setMapping/setSelectedTemplateId/setAppliedTemplate) are stable; auto-apply keys only on templates/headers/currentUserId.
   useEffect(() => {
     if (autoAppliedRef.current) return;
     if (templates.length === 0) return;
@@ -272,8 +273,6 @@ export function MappingStep({
     setSelectedTemplateId(result.template.id);
     setAppliedTemplate({ name: result.template.name, tier: result.tier });
     autoAppliedRef.current = true;
-    // setSelectedTemplateId is stable in this scope (no need to add as dep).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templates, headers, currentUserId]);
 
   function buildOutput() {

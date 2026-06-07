@@ -1,11 +1,12 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
+import { API_V1 } from "@/shared/lib/api/custom-instance";
 import type { CreateVocabularyInput, UpdateVocabularyInput, Vocabulary } from "../types";
 
 const vocabHooks = createCrudHooks<Vocabulary, CreateVocabularyInput, UpdateVocabularyInput>({
   entityName: "Vocabulary",
-  baseUrl: "/api/v1/vocabularies",
+  baseUrl: `${API_V1}/vocabularies`,
   queryKey: ["vocabularies"],
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 
 export interface WorkspaceMember {
@@ -18,7 +18,7 @@ export function useWorkspaceMembers(q?: string) {
     queryKey: [...MEMBERS_KEY, q],
     queryFn: () =>
       customInstance<WorkspaceMember[]>({
-        url: "/api/v1/user/workspace-members",
+        url: `${API_V1}/user/workspace-members`,
         method: "GET",
         params: q ? { q } : undefined,
       }),

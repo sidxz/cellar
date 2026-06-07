@@ -1,10 +1,16 @@
-export type OrganizationType =
-  | "internal"
-  | "pharma_partner"
-  | "cro"
-  | "academic"
-  | "vendor"
-  | "government";
+import type {
+  CreateOrganizationBody,
+  CreateVocabularyBody,
+  OrganizationResponse,
+  OrganizationType as OrganizationTypeModel,
+  UpdateOrganizationBody,
+  UpdateVocabularyBody,
+  VocabularyResponse,
+  WorkspaceSettingsResponse,
+} from "@/shared/lib/api/model";
+
+// Alias of the orval-generated enum (source of truth) so the union can't drift.
+export type OrganizationType = OrganizationTypeModel;
 
 export const ORG_TYPE_LABELS: Record<OrganizationType, string> = {
   internal: "Internal",
@@ -15,26 +21,17 @@ export const ORG_TYPE_LABELS: Record<OrganizationType, string> = {
   government: "Government",
 };
 
-export interface Organization {
-  id: string;
-  workspace_id: string;
-  name: string;
-  org_type: OrganizationType;
-  contact_name: string | null;
-  contact_email: string | null;
-  notes: string | null;
-  is_active: boolean;
-  version: number;
-}
+// Aliases of the orval-generated DTOs (source of truth).
+export type Organization = OrganizationResponse;
+export type CreateOrganizationInput = CreateOrganizationBody;
+export type UpdateOrganizationInput = UpdateOrganizationBody;
 
-export interface CreateOrganizationInput {
-  name: string;
-  org_type: OrganizationType;
-  contact_name?: string | null;
-  contact_email?: string | null;
-  notes?: string | null;
-}
-
+// CLIENT-SIDE working types — NOT backend DTOs. The backend types
+// `audit_reason_policy` as a bare `str`, and `registration_rules` /
+// `custom_field_definitions` as opaque `dict` / `list` on WorkspaceSettingsResponse.
+// These narrowed/structured shapes are the FE's interpretation, used by the
+// settings form; they are narrowed from the generated opaque payload at the
+// consumption edge.
 export type AuditReasonPolicy = "always" | "never" | "configurable";
 
 export interface CustomFieldDefinition {
@@ -52,43 +49,13 @@ export interface RegistrationRules {
   batch_sequence_width?: number;
 }
 
-export interface WorkspaceSettings {
-  registration_rules: RegistrationRules;
-  custom_field_definitions: CustomFieldDefinition[];
-  default_molecule_type: string | null;
-  audit_reason_policy: AuditReasonPolicy;
-  signature_required_for: string[];
-  audit_retention_days: number | null;
-  formulation_number_scheme: string | null;
-  version: number;
-}
+// Alias of the orval-generated DTO (source of truth). `registration_rules` and
+// `custom_field_definitions` resolve to the generated opaque payload types; the
+// settings form narrows them to RegistrationRules / CustomFieldDefinition[] at
+// the consumption edge.
+export type WorkspaceSettings = WorkspaceSettingsResponse;
 
-export interface UpdateOrganizationInput {
-  name?: string;
-  org_type?: OrganizationType;
-  contact_name?: string | null;
-  contact_email?: string | null;
-  notes?: string | null;
-  is_active?: boolean;
-}
-
-export interface Vocabulary {
-  id: string;
-  workspace_id: string;
-  name: string;
-  terms: string[];
-  is_locked: boolean;
-  created_by: string;
-  version: number;
-}
-
-export interface CreateVocabularyInput {
-  name: string;
-  terms?: string[];
-}
-
-export interface UpdateVocabularyInput {
-  name?: string;
-  terms?: string[];
-  is_locked?: boolean;
-}
+// Alias of the orval-generated DTO (source of truth).
+export type Vocabulary = VocabularyResponse;
+export type CreateVocabularyInput = CreateVocabularyBody;
+export type UpdateVocabularyInput = UpdateVocabularyBody;

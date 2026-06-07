@@ -1,16 +1,23 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { RecomputeRunRequest, RecomputeRunResponse } from "@/shared/lib/api/model";
 import { showSuccess, showWarning } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateRunInput, Run } from "../types";
-
-const RUNS_KEY = ["runs"];
+import {
+  COMPOUND_CURVES_KEY,
+  DOSE_RESPONSE_KEY,
+  PLATE_MAP_KEY,
+  PROTOCOL_ACTIVITY_KEY,
+  READOUT_DATA_KEY,
+  RUNS_KEY,
+} from "./query-keys";
 
 const runHooks = createCrudHooks<Run, CreateRunInput, Record<string, unknown>>({
   entityName: "Run",
-  baseUrl: "/api/v1/runs",
+  baseUrl: `${API_V1}/runs`,
   queryKey: RUNS_KEY,
 });
 
@@ -37,7 +44,7 @@ export function useRunsByProtocol(
         params.tag_logic = options?.tagLogic ?? "any";
       }
       return customInstance<Run[]>({
-        url: `/api/v1/protocols/${protocolId}/runs`,
+        url: `${API_V1}/protocols/${protocolId}/runs`,
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
       });
@@ -53,7 +60,7 @@ export function useStartRun() {
   return useMutation({
     mutationFn: (id: string) =>
       customInstance<Run>({
-        url: `/api/v1/runs/${id}/start`,
+        url: `${API_V1}/runs/${id}/start`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -76,7 +83,7 @@ export function useCompleteRun() {
       data_point_count: number;
     }) =>
       customInstance<Run>({
-        url: `/api/v1/runs/${id}/complete`,
+        url: `${API_V1}/runs/${id}/complete`,
         method: "POST",
         data: { plate_count, data_point_count },
       }),
@@ -92,7 +99,7 @@ export function useApproveRun() {
   return useMutation({
     mutationFn: (id: string) =>
       customInstance<Run>({
-        url: `/api/v1/runs/${id}/approve`,
+        url: `${API_V1}/runs/${id}/approve`,
         method: "POST",
       }),
     onSuccess: () => {
@@ -107,7 +114,7 @@ export function useRejectRun() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       customInstance<Run>({
-        url: `/api/v1/runs/${id}/reject`,
+        url: `${API_V1}/runs/${id}/reject`,
         method: "POST",
         data: { reason },
       }),
@@ -123,7 +130,7 @@ export function useLockRun() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       customInstance<Run>({
-        url: `/api/v1/runs/${id}/lock`,
+        url: `${API_V1}/runs/${id}/lock`,
         method: "POST",
         data: { reason },
       }),
@@ -139,7 +146,7 @@ export function useUnlockRun() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       customInstance<Run>({
-        url: `/api/v1/runs/${id}/unlock`,
+        url: `${API_V1}/runs/${id}/unlock`,
         method: "POST",
         data: { reason },
       }),
@@ -164,7 +171,7 @@ export function useUpdateRun() {
       };
     }) =>
       customInstance<Run>({
-        url: `/api/v1/runs/${runId}`,
+        url: `${API_V1}/runs/${runId}`,
         method: "PATCH",
         data,
       }),
@@ -180,7 +187,7 @@ export function useDeleteRun() {
   return useMutation({
     mutationFn: (id: string) =>
       customInstance<void>({
-        url: `/api/v1/runs/${id}`,
+        url: `${API_V1}/runs/${id}`,
         method: "DELETE",
       }),
     onSuccess: () => {
@@ -190,32 +197,10 @@ export function useDeleteRun() {
   });
 }
 
-interface RecomputeResponse {
-  computed_readouts: number;
-  /** Per-compound fit failure messages from the post-recompute curve fit.
-   *  Optional for back-compat with older backend deployments. */
-  fit_warnings?: string[];
-}
-
-export interface RecomputeOverrides {
-  override_top?: boolean;
-  top_constraint?: number | null;
-  top_constraint_min?: number | null;
-  top_constraint_max?: number | null;
-  override_bottom?: boolean;
-  bottom_constraint?: number | null;
-  bottom_constraint_min?: number | null;
-  bottom_constraint_max?: number | null;
-  override_hill?: boolean;
-  hill_slope_constraint?:
-    | "unconstrained"
-    | "negative_only"
-    | "positive_only"
-    | "fixed_at_one"
-    | null;
-  hill_slope_min?: number | null;
-  hill_slope_max?: number | null;
-}
+// Aliases of the orval-generated recompute DTOs (request sent verbatim as the
+// POST body; the generated HillSlopeConstraint enum carries the mode union).
+type RecomputeResponse = RecomputeRunResponse;
+export type RecomputeOverrides = RecomputeRunRequest;
 
 export interface RecomputeRunArgs {
   runId: string;
@@ -227,17 +212,17 @@ export function useRecomputeRun() {
   return useMutation({
     mutationFn: ({ runId, overrides }: RecomputeRunArgs) =>
       customInstance<RecomputeResponse>({
-        url: `/api/v1/runs/${runId}/recompute`,
+        url: `${API_V1}/runs/${runId}/recompute`,
         method: "POST",
         ...(overrides ? { data: overrides } : {}),
       }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: RUNS_KEY });
-      qc.invalidateQueries({ queryKey: ["readout-data"] });
-      qc.invalidateQueries({ queryKey: ["plate-map"] });
-      qc.invalidateQueries({ queryKey: ["dose-response-curves"] });
-      qc.invalidateQueries({ queryKey: ["compound-curves"] });
-      qc.invalidateQueries({ queryKey: ["protocol-activity"] });
+      qc.invalidateQueries({ queryKey: READOUT_DATA_KEY });
+      qc.invalidateQueries({ queryKey: PLATE_MAP_KEY });
+      qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
+      qc.invalidateQueries({ queryKey: COMPOUND_CURVES_KEY });
+      qc.invalidateQueries({ queryKey: PROTOCOL_ACTIVITY_KEY });
       showSuccess(`Recomputed ${data.computed_readouts} readouts and refit curves`);
       const warnings = data.fit_warnings ?? [];
       if (warnings.length > 0) {

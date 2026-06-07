@@ -10,18 +10,15 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import type { CustomFieldDefinition } from "../hooks/use-custom-fields";
+import type { FieldOverride } from "../hooks/use-registration-forms";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface FieldOverride {
-  field_definition_id: string;
-  is_required?: boolean | null;
-  default_value?: unknown;
-  is_locked?: boolean;
-  pick_list_subset?: string[] | null;
-}
+// Re-exported for existing importers; the canonical client-side view of an
+// opaque backend `field_overrides` dict entry lives in use-registration-forms.
+export type { FieldOverride };
 
 interface Props {
   definitions: CustomFieldDefinition[];

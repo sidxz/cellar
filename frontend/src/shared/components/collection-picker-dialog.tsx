@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { AlertCircle, CheckCircle2, Plus } from "lucide-react";
 import { useState } from "react";
 
@@ -85,7 +85,7 @@ export function CollectionPickerDialog({
       ref_type: "uuid",
     }));
     return customInstance<MembershipResult>({
-      url: `/api/v1/collections/${collectionId}/molecules`,
+      url: `${API_V1}/collections/${collectionId}/molecules`,
       method: "POST",
       data: { references: refs },
     });

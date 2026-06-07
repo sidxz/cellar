@@ -12,6 +12,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { groupBy } from "@/shared/lib/group-by";
 import { Plot } from "@/shared/lib/plotly";
+import { shortId } from "@/shared/lib/utils";
 import type { ColDef } from "ag-grid-community";
 import { Eye, Filter, FlaskConical, FolderPlus, Settings2, Star } from "lucide-react";
 import { useMemo } from "react";
@@ -99,7 +100,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     for (const [molId, curves] of byMolecule) {
       const color = TRACE_COLORS[colorIdx % TRACE_COLORS.length];
       const row = selectedRows.find((r) => r.molecule_id === molId);
-      const label = row?.registration_number ?? molId.slice(0, 8);
+      const label = row?.registration_number ?? shortId(molId);
       const bestCurve = curves[0];
 
       const allX = curves.flatMap((c) =>
@@ -436,10 +437,10 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                                 {compoundCurves.map((curve) => (
                                   <tr key={curve.id} className="border-b last:border-0">
                                     <td className="px-3 py-2 font-mono text-xs">
-                                      {curve.run_id.slice(0, 8)}
+                                      {shortId(curve.run_id)}
                                     </td>
                                     <td className="px-3 py-2 text-xs text-muted-foreground">
-                                      {curve.batch_number ?? curve.batch_id.slice(0, 8)}
+                                      {curve.batch_number ?? shortId(curve.batch_id)}
                                     </td>
                                     <td className="px-3 py-2 font-mono">
                                       {curve.fitted_value.toPrecision(4)} {curve.fitted_unit}
@@ -449,7 +450,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                                     </td>
                                     <td className="px-3 py-2">
                                       {curve.curve_class
-                                        ? curveClassBadge(curve.curve_class)
+                                        ? curveClassBadge(curve.curve_class as CurveClass)
                                         : "--"}
                                     </td>
                                     <td className="px-3 py-2 font-mono">

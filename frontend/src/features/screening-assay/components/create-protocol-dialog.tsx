@@ -31,12 +31,12 @@ import {
 import { Separator } from "@/shared/components/ui/separator";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { customInstance } from "@/shared/lib/api/custom-instance";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
+import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
 import {
   VISIBLE_READOUT_DATA_TYPES,
@@ -164,6 +164,7 @@ export function CreateProtocolDialog({
   defaultProjectId,
 }: CreateProtocolDialogProps) {
   const createMutation = useCreateProtocol();
+  const assignToProject = useAssignProtocolToProject();
   const { data: projects } = useProjects();
   const { data: vocabularies } = useVocabularies();
   const { data: protocolForms } = useProtocolForms();
@@ -374,13 +375,13 @@ export function CreateProtocolDialog({
       {
         onSuccess: async (protocol) => {
           if (projectId && protocol?.id) {
+            // Non-blocking: the protocol is already created. A failed assignment
+            // is surfaced by the mutation's onError toast (recovery hint) rather
+            // than vanishing; the catch only prevents an unhandled rejection.
             try {
-              await customInstance({
-                url: `/api/v1/protocols/${protocol.id}/projects/${projectId}`,
-                method: "POST",
-              });
+              await assignToProject.mutateAsync({ protocolId: protocol.id, projectId });
             } catch {
-              // Protocol created but project assignment failed — non-blocking
+              // Error already surfaced by useAssignProtocolToProject.onError.
             }
           }
           onOpenChange(false);

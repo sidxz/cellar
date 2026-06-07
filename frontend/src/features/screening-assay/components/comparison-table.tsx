@@ -2,7 +2,7 @@
 
 import { Badge } from "@/shared/components/ui/badge";
 import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
-import { cn } from "@/shared/lib/utils";
+import { cn, shortId } from "@/shared/lib/utils";
 import { useMemo, useState } from "react";
 import {
   CURVE_CLASS_LABELS,
@@ -154,7 +154,7 @@ export function buildComparisonRows(
   for (const [molId, curve] of byMolecule) {
     const info = labelMap.get(molId);
     rows.push({
-      label: info?.label ?? molId.slice(0, 8),
+      label: info?.label ?? shortId(molId),
       batch: info?.batch,
       color: TRACE_COLORS[idx % TRACE_COLORS.length],
       curve_type: curve.curve_type,
@@ -162,7 +162,7 @@ export function buildComparisonRows(
       fitted_unit: curve.fitted_unit,
       hill_slope: curve.hill_slope,
       r_squared: curve.r_squared,
-      curve_class: curve.curve_class,
+      curve_class: (curve.curve_class as CurveClass | null) ?? null,
       top: curve.top,
       bottom: curve.bottom,
     });

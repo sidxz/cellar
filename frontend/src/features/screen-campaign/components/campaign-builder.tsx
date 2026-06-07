@@ -20,10 +20,10 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useProject } from "@/features/research-organization/hooks/use-projects";
-import { useBreadcrumbTrail } from "@/shared/components/layout/breadcrumb-context";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
+import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
 import { campaignKeys, useCampaign } from "../hooks/use-campaigns";
 import type { CampaignResponse } from "../types";
 import { CampaignFilterBar, type CampaignFilters, emptyFilters } from "./campaign-filter-bar";
@@ -159,7 +159,7 @@ function CampaignBuilderV2({
         campaignId={campaign.id}
         campaignName={campaign.name}
         open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
+        onOpenChange={setPreviewOpen}
       />
       <CloseSignDialog campaign={campaign} open={closeSignOpen} onOpenChange={setCloseSignOpen} />
     </div>

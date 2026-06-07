@@ -1,6 +1,7 @@
 "use client";
 
 import { getRDKit } from "@/shared/lib/rdkit/rdkit-loader";
+import { cn } from "@/shared/lib/utils";
 import { memo, useEffect, useState } from "react";
 
 interface StructureThumbnailProps {
@@ -62,15 +63,11 @@ function StructureThumbnailInner({ smiles, size = 48, className }: StructureThum
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [smiles, size]);
 
   if (!blobUrl) {
     return (
-      <div
-        className={`rounded bg-muted ${className ?? ""}`}
-        style={{ width: size, height: size }}
-      />
+      <div className={cn("rounded bg-muted", className)} style={{ width: size, height: size }} />
     );
   }
 
@@ -80,7 +77,7 @@ function StructureThumbnailInner({ smiles, size = 48, className }: StructureThum
       alt="Structure"
       width={size}
       height={size}
-      className={`dark:invert ${className ?? ""}`}
+      className={cn("dark:invert", className)}
     />
   );
 }

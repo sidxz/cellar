@@ -2,7 +2,7 @@
 
 import { renderToast } from "@/features/inventory/components/mirror-summary-toast";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { CreateBatchResponse } from "@/shared/lib/api/model/createBatchResponse";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,11 +13,12 @@ import type {
   PaginatedResponse,
   UpdateBatchInput,
 } from "../types";
+import { BATCHES_KEY } from "./query-keys";
 
 const batchHooks = createCrudHooks<Batch, CreateBatchInput, UpdateBatchInput>({
   entityName: "Batch",
-  baseUrl: "/api/v1/batches",
-  queryKey: ["batches"],
+  baseUrl: `${API_V1}/batches`,
+  queryKey: BATCHES_KEY,
 });
 
 export const useBatch = batchHooks.useGet;
@@ -33,12 +34,12 @@ export function useCreateBatch() {
   return useMutation<CreateBatchResponse, Error, CreateBatchInput>({
     mutationFn: (data: CreateBatchInput) =>
       customInstance<CreateBatchResponse>({
-        url: "/api/v1/batches",
+        url: `${API_V1}/batches`,
         method: "POST",
         data,
       }),
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["batches"] });
+      qc.invalidateQueries({ queryKey: BATCHES_KEY });
       showSuccess("Batch created");
       if (data?.mirror_summary) {
         renderToast(data.mirror_summary);
@@ -53,10 +54,10 @@ export function useCreateBatch() {
 /** Custom hook — batches are listed under a molecule, not flat. */
 export function useBatchesByMolecule(moleculeId: string | undefined) {
   return useQuery({
-    queryKey: ["batches", "molecule", moleculeId],
+    queryKey: [...BATCHES_KEY, "molecule", moleculeId],
     queryFn: () =>
       customInstance<Batch[]>({
-        url: `/api/v1/molecules/${moleculeId}/batches`,
+        url: `${API_V1}/molecules/${moleculeId}/batches`,
         method: "GET",
       }),
     enabled: !!moleculeId,
@@ -92,10 +93,10 @@ export function useBatchesGlobal(params: BatchGlobalParams = {}) {
   }
 
   return useQuery({
-    queryKey: ["batches", "global", reqParams],
+    queryKey: [...BATCHES_KEY, "global", reqParams],
     queryFn: () =>
       customInstance<PaginatedResponse<BatchListItem>>({
-        url: "/api/v1/batches",
+        url: `${API_V1}/batches`,
         method: "GET",
         params: Object.keys(reqParams).length > 0 ? reqParams : undefined,
       }),

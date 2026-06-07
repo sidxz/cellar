@@ -1,6 +1,8 @@
 "use client";
 
+import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
+import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -19,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Switch } from "@/shared/components/ui/switch";
 import {
   Table,
@@ -37,6 +38,8 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import {
   type CreateCustomFieldInput,
+  type CustomFieldAppliesTo,
+  type CustomFieldDataType,
   type CustomFieldDefinition,
   type UpdateCustomFieldInput,
   useCreateCustomField,
@@ -49,7 +52,7 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const DATA_TYPE_LABELS: Record<CustomFieldDefinition["data_type"], string> = {
+const DATA_TYPE_LABELS: Record<CustomFieldDataType, string> = {
   text: "Text",
   number: "Number",
   date: "Date",
@@ -58,7 +61,7 @@ const DATA_TYPE_LABELS: Record<CustomFieldDefinition["data_type"], string> = {
   batch_link: "Batch Link",
 };
 
-const APPLIES_TO_LABELS: Record<CustomFieldDefinition["applies_to"], string> = {
+const APPLIES_TO_LABELS: Record<CustomFieldAppliesTo, string> = {
   molecule: "Molecule",
   batch: "Batch",
   sample: "Sample",
@@ -102,8 +105,9 @@ function toFormValues(editing: CustomFieldDefinition): FormValues {
   return {
     name: editing.name,
     label: editing.label,
-    data_type: editing.data_type,
-    applies_to: editing.applies_to,
+    // Backend types these as bare `str`; narrow to the form's allowed values.
+    data_type: editing.data_type as CustomFieldDataType,
+    applies_to: editing.applies_to as CustomFieldAppliesTo,
     is_required: editing.is_required,
     default_value: editing.default_value != null ? String(editing.default_value) : "",
     display_order: editing.display_order,
@@ -234,10 +238,7 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
                         </SelectTrigger>
                         <SelectContent>
                           {(
-                            Object.entries(DATA_TYPE_LABELS) as [
-                              CustomFieldDefinition["data_type"],
-                              string,
-                            ][]
+                            Object.entries(DATA_TYPE_LABELS) as [CustomFieldDataType, string][]
                           ).map(([val, lbl]) => (
                             <SelectItem key={val} value={val}>
                               {lbl}
@@ -251,7 +252,10 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
               ) : (
                 <div className="grid gap-2">
                   <Label>Data Type</Label>
-                  <Input value={DATA_TYPE_LABELS[editing!.data_type]} disabled />
+                  <Input
+                    value={DATA_TYPE_LABELS[editing!.data_type as CustomFieldDataType]}
+                    disabled
+                  />
                 </div>
               )}
 
@@ -269,10 +273,7 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
                         </SelectTrigger>
                         <SelectContent>
                           {(
-                            Object.entries(APPLIES_TO_LABELS) as [
-                              CustomFieldDefinition["applies_to"],
-                              string,
-                            ][]
+                            Object.entries(APPLIES_TO_LABELS) as [CustomFieldAppliesTo, string][]
                           ).map(([val, lbl]) => (
                             <SelectItem key={val} value={val}>
                               {lbl}
@@ -286,7 +287,10 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
               ) : (
                 <div className="grid gap-2">
                   <Label>Applies To</Label>
-                  <Input value={APPLIES_TO_LABELS[editing!.applies_to]} disabled />
+                  <Input
+                    value={APPLIES_TO_LABELS[editing!.applies_to as CustomFieldAppliesTo]}
+                    disabled
+                  />
                 </div>
               )}
             </div>
@@ -394,20 +398,20 @@ function FieldDialog({ open, onOpenChange, editing }: FieldDialogProps) {
 
 interface DeleteDialogProps {
   field: CustomFieldDefinition | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
 }
 
-function DeleteDialog({ field, onClose }: DeleteDialogProps) {
+function DeleteDialog({ field, onOpenChange }: DeleteDialogProps) {
   const deleteMutation = useDeleteCustomField();
 
   const handleConfirm = async () => {
     if (!field) return;
     await deleteMutation.mutateAsync(field.id);
-    onClose();
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={field !== null} onOpenChange={onClose}>
+    <Dialog open={field !== null} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Delete Custom Field?</DialogTitle>
@@ -418,7 +422,7 @@ function DeleteDialog({ field, onClose }: DeleteDialogProps) {
           definition.
         </p>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={deleteMutation.isPending}>
@@ -442,12 +446,7 @@ interface FieldsTableProps {
 
 function FieldsTable({ fields, onEdit, onDelete }: FieldsTableProps) {
   if (fields.length === 0) {
-    return (
-      <div className="mt-12 flex flex-col items-center gap-2 text-muted-foreground">
-        <ListFilter className="h-10 w-10" />
-        <p>No custom fields defined yet.</p>
-      </div>
-    );
+    return <EmptyState variant="inline" icon={ListFilter} title="No custom fields defined yet." />;
   }
 
   return (
@@ -470,10 +469,14 @@ function FieldsTable({ fields, onEdit, onDelete }: FieldsTableProps) {
               <TableCell className="font-mono text-sm">{field.name}</TableCell>
               <TableCell className="font-medium">{field.label}</TableCell>
               <TableCell>
-                <Badge variant="outline">{DATA_TYPE_LABELS[field.data_type]}</Badge>
+                <Badge variant="outline">
+                  {DATA_TYPE_LABELS[field.data_type as CustomFieldDataType]}
+                </Badge>
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{APPLIES_TO_LABELS[field.applies_to]}</Badge>
+                <Badge variant="secondary">
+                  {APPLIES_TO_LABELS[field.applies_to as CustomFieldAppliesTo]}
+                </Badge>
               </TableCell>
               <TableCell>
                 {field.is_required ? (
@@ -558,11 +561,7 @@ export function CustomFieldAdmin() {
           </TabsList>
 
           {isLoading ? (
-            <div className="mt-4 space-y-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
+            <SkeletonList rows={4} className="mt-4 space-y-3" />
           ) : (
             <>
               <TabsContent value="all">
@@ -584,7 +583,7 @@ export function CustomFieldAdmin() {
 
       <FieldDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
 
-      <DeleteDialog field={deleting} onClose={() => setDeleting(null)} />
+      <DeleteDialog field={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
   );
 }

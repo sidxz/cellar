@@ -1,15 +1,12 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { ProjectScopeStatsResponse } from "@/shared/lib/api/model";
 import { useQuery } from "@tanstack/react-query";
+import { PROJECT_SCOPE_STATS_KEY } from "./query-keys";
 
-export interface ProjectScopeStats {
-  molecule_count: number;
-  protocol_count: number;
-  run_count: number;
-}
-
-const STATS_KEY = ["projects", "scope-stats"];
+// Alias the orval-generated DTO (CLAUDE.md: alias, never mirror).
+export type ProjectScopeStats = ProjectScopeStatsResponse;
 
 /**
  * Fetches molecule / protocol / run counts for each given project so the
@@ -26,14 +23,14 @@ export function useProjectScopeStats(projectIds: string[]) {
   const sortedIds = [...projectIds].sort();
   const enabled = sortedIds.length > 0;
   return useQuery({
-    queryKey: [...STATS_KEY, { projectIds: sortedIds }],
+    queryKey: [...PROJECT_SCOPE_STATS_KEY, { projectIds: sortedIds }],
     queryFn: () =>
       customInstance<Record<string, ProjectScopeStats>>({
-        url: "/api/v1/projects/stats",
+        url: `${API_V1}/projects/stats`,
         method: "GET",
         params: { project_ids: sortedIds },
       }),
     enabled,
-    staleTime: 60_000,
+    // staleTime omitted — inherits the global default (STALE_TIME.DEFAULT, 60s).
   });
 }

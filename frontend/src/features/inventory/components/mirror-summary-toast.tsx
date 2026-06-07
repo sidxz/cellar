@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { showMessage } from "@/shared/lib/toast";
 
 export type MirrorSummary = {
   created: number;
@@ -26,7 +26,7 @@ export function renderToast(summary: MirrorSummary): void {
     )
     .join("\n");
   const description = `${skipped.length} skipped\n${itemLines}`;
-  toast.message(`${created} created · ${skipped.length} skipped`, {
+  showMessage(`${created} created · ${skipped.length} skipped`, {
     description,
     duration: 8000,
   });

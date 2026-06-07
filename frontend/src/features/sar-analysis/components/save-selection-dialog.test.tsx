@@ -7,7 +7,7 @@ describe("SaveSelectionDialog", () => {
     render(
       <SaveSelectionDialog
         open
-        onClose={() => {}}
+        onOpenChange={() => {}}
         onSave={async () => {}}
         selectedMolecules={[{ id: "a", name: "X", reg_number: "R-1" } as any]}
         defaultName="Diversify-5 from My Set"
@@ -23,7 +23,7 @@ describe("SaveSelectionDialog", () => {
     render(
       <SaveSelectionDialog
         open
-        onClose={() => {}}
+        onOpenChange={() => {}}
         onSave={onSave}
         selectedMolecules={[{ id: "a", name: "X", reg_number: "R-1" } as any, { id: "b" } as any]}
         defaultName="My collection"

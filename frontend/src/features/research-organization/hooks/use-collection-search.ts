@@ -1,8 +1,9 @@
 "use client";
 
-import { customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { ExecuteSearchInput } from "../types";
+import { COLLECTION_SEARCH_KEY } from "./query-keys";
 import type { EnrichedSearchResponse } from "./use-search";
 
 export interface UseCollectionSearchOptions {
@@ -25,7 +26,7 @@ export function useCollectionSearch(collectionId: string, opts: UseCollectionSea
   const { limit = 10000 } = opts;
 
   return useQuery({
-    queryKey: ["collection-search", collectionId, limit],
+    queryKey: [...COLLECTION_SEARCH_KEY, collectionId, limit],
     enabled: Boolean(collectionId),
     queryFn: async () => {
       const input: ExecuteSearchInput = {
@@ -35,7 +36,7 @@ export function useCollectionSearch(collectionId: string, opts: UseCollectionSea
         },
       };
       return customInstance<EnrichedSearchResponse>({
-        url: "/api/v1/search/execute",
+        url: `${API_V1}/search/execute`,
         method: "POST",
         data: input,
         params: { limit: String(limit) },

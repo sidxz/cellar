@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
 import { Button } from "@/shared/components/ui/button";
+import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
@@ -57,7 +58,11 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [addMolOpen, setAddMolOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const {
+    selected: selectedIds,
+    set: onSelectChange,
+    clear: clearSelection,
+  } = useSelectionSet<string>();
 
   const molecules = search.data?.items ?? [];
 
@@ -78,15 +83,6 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
     [allProjects],
   );
 
-  const onSelectChange = useCallback((id: string, selected: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (selected) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }, []);
-
   const onOpen = useCallback((id: string) => router.push(`/compounds/${id}`), [router]);
 
   const { exportSdf } = useSdfExport();
@@ -106,7 +102,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
 
   const handleRemoveSelected = async () => {
     await removeMutation.mutateAsync({ molecule_ids: Array.from(selectedIds) });
-    setSelectedIds(new Set());
+    clearSelection();
     setRemoveOpen(false);
   };
 

@@ -6,6 +6,7 @@ import { useProtocolTestCounts } from "./use-protocol-test-counts";
 
 const mockInstance = vi.fn();
 vi.mock("@/shared/lib/api/custom-instance", () => ({
+  API_V1: "/api/v1",
   customInstance: (cfg: unknown) => mockInstance(cfg),
 }));
 

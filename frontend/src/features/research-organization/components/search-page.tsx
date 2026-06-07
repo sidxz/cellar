@@ -244,8 +244,8 @@ function SearchPageInner() {
             dispatch({
               type: "searchComplete",
               results: enrichItems(data),
-              nextCursor: data.next_cursor,
-              totalCount: data.total_count,
+              nextCursor: data.next_cursor ?? null,
+              totalCount: data.total_count ?? null,
             });
           },
           onError: (err) => {
@@ -275,8 +275,8 @@ function SearchPageInner() {
           dispatch({
             type: "loadMoreComplete",
             results: enrichItems(data),
-            nextCursor: data.next_cursor,
-            totalCount: data.total_count,
+            nextCursor: data.next_cursor ?? null,
+            totalCount: data.total_count ?? null,
           });
         },
       },
@@ -309,8 +309,8 @@ function SearchPageInner() {
           dispatch({
             type: "searchComplete",
             results: enrichItems(data),
-            nextCursor: data.next_cursor,
-            totalCount: data.total_count,
+            nextCursor: data.next_cursor ?? null,
+            totalCount: data.total_count ?? null,
           });
         },
       },
@@ -354,8 +354,8 @@ function SearchPageInner() {
           dispatch({
             type: "searchComplete",
             results: enrichItems(data),
-            nextCursor: data.next_cursor,
-            totalCount: data.total_count,
+            nextCursor: data.next_cursor ?? null,
+            totalCount: data.total_count ?? null,
           });
         },
       },
@@ -472,8 +472,8 @@ function SearchPageInner() {
           dispatch({
             type: "searchComplete",
             results: enrichItems(data),
-            nextCursor: data.next_cursor,
-            totalCount: data.total_count,
+            nextCursor: data.next_cursor ?? null,
+            totalCount: data.total_count ?? null,
           });
         },
         onError: (err) => {
@@ -676,13 +676,13 @@ function SearchPageInner() {
         currentIndex={selectedIndex}
         totalCount={results.length}
         onNavigate={handleDetailNavigate}
-        onClose={() => dispatch({ type: "clearSelection" })}
+        onOpenChange={(open) => !open && dispatch({ type: "clearSelection" })}
         currentQuery={currentQuery}
       />
 
       <ReportCustomizer
         open={reportOpen}
-        onClose={() => setReportOpen(false)}
+        onOpenChange={setReportOpen}
         onUpdate={handleUpdateReport}
         protocols={protocols ?? []}
         activeProtocolIds={visibleProtocolIds}
@@ -693,7 +693,7 @@ function SearchPageInner() {
       {currentQuery && (
         <SaveSearchDialog
           open={saveOpen}
-          onClose={() => setSaveOpen(false)}
+          onOpenChange={setSaveOpen}
           query={currentQuery}
           protocolColumns={protocolColumns}
           reportConfig={reportConfig}
