@@ -8,7 +8,6 @@
  * the current campaign. Shows {added, skipped} in a toast on success.
  */
 
-import { TargetChips } from "@/features/screening-assay/components/target-chips";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
@@ -133,10 +132,9 @@ export function AddFromCampaignDialog({
               <SelectContent>
                 {sourceCampaigns.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    <span className="flex items-center gap-2">
-                      {c.name}
-                      <span className="text-xs text-muted-foreground capitalize">({c.status})</span>
-                      <TargetChips targets={c.targets} max={2} />
+                    {c.name}
+                    <span className="ml-2 text-xs text-muted-foreground capitalize">
+                      ({c.status})
                     </span>
                   </SelectItem>
                 ))}
