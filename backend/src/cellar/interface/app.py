@@ -262,10 +262,12 @@ def create_app() -> FastAPI:
         router as collection_import_templates_router,
     )
     from cellar.interface.routes.collections import router as collection_router
+    from cellar.interface.routes.favorites import router as favorites_router
     from cellar.interface.routes.projects import router as project_router
     from cellar.interface.routes.saved_searches import router as saved_search_router
 
     app.include_router(project_router)
+    app.include_router(favorites_router)
     app.include_router(collection_router)
     app.include_router(collection_import_previews_router)
     app.include_router(collection_import_templates_router)
