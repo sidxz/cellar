@@ -12,6 +12,8 @@ from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
+    CampaignModel,
+    ProjectMemberModel,
     ProjectModel,
     molecule_projects,
 )
@@ -108,16 +110,18 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
 
         # Restrict to project_ids that actually live in this workspace —
         # defense-in-depth so a forged ID can't surface a count from
-        # another workspace.
-        scoped_ids_stmt = select(ProjectModel.id).where(
+        # another workspace. Also grab each project's own updated_at, which
+        # is the baseline for last-activity (campaigns may push it later).
+        scoped_stmt = select(ProjectModel.id, ProjectModel.updated_at).where(
             ProjectModel.workspace_id == workspace_id,
             ProjectModel.id.in_(project_ids),
         )
-        scoped_ids = {row for row in (await self._session.execute(scoped_ids_stmt)).scalars()}
-        if not scoped_ids:
+        scoped_rows = (await self._session.execute(scoped_stmt)).all()
+        if not scoped_rows:
             return {}
 
-        scoped_ids_list = list(scoped_ids)
+        project_updated = {row[0]: row[1] for row in scoped_rows}
+        scoped_ids_list = list(project_updated.keys())
 
         mol_stmt = (
             select(
@@ -144,16 +148,54 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
             .where(protocol_projects.c.project_id.in_(scoped_ids_list))
             .group_by(protocol_projects.c.project_id)
         )
+        camp_stmt = (
+            select(
+                CampaignModel.project_id,
+                func.count(CampaignModel.id),
+                func.max(CampaignModel.updated_at),
+            )
+            .where(
+                CampaignModel.workspace_id == workspace_id,
+                CampaignModel.project_id.in_(scoped_ids_list),
+            )
+            .group_by(CampaignModel.project_id)
+        )
+        member_stmt = (
+            select(ProjectMemberModel.project_id, ProjectMemberModel.user_id)
+            .where(ProjectMemberModel.project_id.in_(scoped_ids_list))
+            .order_by(ProjectMemberModel.created_at)
+        )
 
         mol_counts = dict((await self._session.execute(mol_stmt)).all())
         prot_counts = dict((await self._session.execute(prot_stmt)).all())
         run_counts = dict((await self._session.execute(run_stmt)).all())
 
-        return {
-            pid: ProjectScopeStats(
+        camp_rows = (await self._session.execute(camp_stmt)).all()
+        camp_counts = {r[0]: r[1] for r in camp_rows}
+        camp_last = {r[0]: r[2] for r in camp_rows}
+
+        members_by_project: dict[uuid.UUID, list[uuid.UUID]] = {}
+        for pid, uid in (await self._session.execute(member_stmt)).all():
+            members_by_project.setdefault(pid, []).append(uid)
+
+        result: dict[uuid.UUID, ProjectScopeStats] = {}
+        for pid in scoped_ids_list:
+            last_activity = project_updated[pid]
+            last_campaign = camp_last.get(pid)
+            if last_campaign is not None and (
+                last_activity is None or last_campaign > last_activity
+            ):
+                last_activity = last_campaign
+            member_ids = members_by_project.get(pid, [])
+            result[pid] = ProjectScopeStats(
                 molecule_count=mol_counts.get(pid, 0),
                 protocol_count=prot_counts.get(pid, 0),
                 run_count=run_counts.get(pid, 0),
+                campaign_count=camp_counts.get(pid, 0),
+                last_activity_at=last_activity,
+                # member_count is the FULL count; member_ids capped at 5 for
+                # the avatar stack on the project card.
+                member_count=len(member_ids),
+                member_ids=tuple(member_ids[:5]),
             )
-            for pid in scoped_ids
-        }
+        return result
