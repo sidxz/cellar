@@ -263,11 +263,16 @@ class TestProjectScopeStats:
         assert resp.status_code == 200
         body = resp.json()
         assert project_id in body
-        assert body[project_id] == {
-            "molecule_count": 0,
-            "protocol_count": 0,
-            "run_count": 0,
-        }
+        stats = body[project_id]
+        # No linked scope entities yet.
+        assert stats["molecule_count"] == 0
+        assert stats["protocol_count"] == 0
+        assert stats["run_count"] == 0
+        assert stats["campaign_count"] == 0
+        # Creator is auto-added as a member on project creation.
+        assert stats["member_count"] == 1
+        assert isinstance(stats["member_ids"], list)
+        assert len(stats["member_ids"]) == 1
 
     async def test_counts_real_links(
         self,
@@ -291,3 +296,18 @@ class TestProjectScopeStats:
         assert body["molecule_count"] == 1
         assert body["protocol_count"] == 1
         assert body["run_count"] == 1
+
+    async def test_stats_response_includes_new_fields(
+        self, client: AsyncClient
+    ) -> None:
+        create = await client.post("/api/v1/projects", json={"name": "Stats v2"})
+        pid = create.json()["id"]
+        resp = await client.get(
+            "/api/v1/projects/stats", params={"project_ids": pid}
+        )
+        assert resp.status_code == 200
+        body = resp.json()[pid]
+        assert body["campaign_count"] == 0
+        assert "last_activity_at" in body
+        assert "member_count" in body
+        assert isinstance(body["member_ids"], list)

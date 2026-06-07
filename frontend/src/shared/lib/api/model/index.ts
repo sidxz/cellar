@@ -854,6 +854,7 @@ export * from './projectMemberResponse';
 export * from './projectResponse';
 export * from './projectResponseDescription';
 export * from './projectScopeStatsResponse';
+export * from './projectScopeStatsResponseLastActivityAt';
 export * from './projectStatus';
 export * from './protocolActivityResponse';
 export * from './protocolActivityResponseBestCurvesItem';
