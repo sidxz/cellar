@@ -134,3 +134,34 @@ async def test_filter_any_and_all(session_factory) -> None:
     assert any_inha == {c_both, c_inha}  # c_none excluded; counter-screen-style EXISTS
     assert all_both == {c_both}  # only the campaign covering BOTH
     assert c_none not in any_inha
+
+
+async def test_filter_scopes_run_owner_workspace(session_factory) -> None:
+    """The filter subquery joins RunModel and scopes RunModel.workspace_id so a
+    campaign whose run lives in another workspace never matches — mirrors the
+    owner-side isolation of the project_targets chips projection.
+    """
+    ws_a, ws_b = uuid.uuid4(), uuid.uuid4()
+    project_id = uuid.uuid4()
+    inha = uuid.uuid4()
+    async with session_factory() as s:
+        # Target lives in workspace A; campaign + run are seeded in workspace A.
+        s.add(TargetModel(id=inha, workspace_id=ws_a, name="InhA", target_type="protein"))
+        c_a = await _campaign_with_run_targets(s, ws_a, project_id, "WS-A campaign", [inha])
+        await s.commit()
+
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        # Querying workspace B with the same target id must not leak WS-A's run.
+        leaked = {
+            c.id for c in await repo.find_by_workspace(ws_b, target_ids=[inha], target_logic="any")
+        }
+        # Sanity: workspace A still sees its own campaign.
+        own = {
+            c.id for c in await repo.find_by_workspace(ws_a, target_ids=[inha], target_logic="any")
+        }
+
+    assert c_a not in leaked  # owner-side workspace guard blocks cross-tenant match
+    assert leaked == set()
+    assert own == {c_a}

@@ -375,7 +375,11 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         if target_ids:
             stmt = stmt.where(
                 CampaignModel.id.in_(
-                    campaign_target_filter_subquery(target_ids, match_all=target_logic == "all")
+                    campaign_target_filter_subquery(
+                        target_ids,
+                        match_all=target_logic == "all",
+                        workspace_id=workspace_id,
+                    )
                 )
             )
         stmt = stmt.order_by(CampaignModel.id)
@@ -409,7 +413,11 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         if target_ids:
             stmt = stmt.where(
                 CampaignModel.id.in_(
-                    campaign_target_filter_subquery(target_ids, match_all=target_logic == "all")
+                    campaign_target_filter_subquery(
+                        target_ids,
+                        match_all=target_logic == "all",
+                        workspace_id=workspace_id,
+                    )
                 )
             )
         stmt = stmt.order_by(CampaignModel.id)
