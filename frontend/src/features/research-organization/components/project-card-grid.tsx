@@ -96,14 +96,16 @@ export function ProjectCardGrid({
           {grid(pinned)}
         </section>
       )}
-      <section className="flex flex-col gap-2">
-        {pinned.length > 0 && (
-          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            All projects
-          </h2>
-        )}
-        {grid(rest)}
-      </section>
+      {rest.length > 0 && (
+        <section className="flex flex-col gap-2">
+          {pinned.length > 0 && (
+            <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              All projects
+            </h2>
+          )}
+          {grid(rest)}
+        </section>
+      )}
     </div>
   );
 }

@@ -34,6 +34,22 @@ describe("ProjectCardGrid", () => {
     expect(screen.getByText("All projects")).toBeInTheDocument();
   });
 
+  it("omits the All projects header when every project is pinned", () => {
+    render(
+      <ProjectCardGrid
+        projects={[mk("a", "Alpha")]}
+        statsById={{}}
+        favorites={new Set(["a"])}
+        sort="name"
+        onToggleFavorite={vi.fn()}
+        onOpen={vi.fn()}
+        onCreate={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    expect(screen.queryByText("All projects")).toBeNull();
+  });
+
   it("shows the empty state when there are no projects", () => {
     render(
       <ProjectCardGrid
