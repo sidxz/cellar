@@ -10,8 +10,6 @@ import {
   CommandList,
 } from "@/shared/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
-import { useDebounce } from "@/shared/hooks/use-debounce";
-import { SEARCH_DEBOUNCE_MS } from "@/shared/lib/timing";
 import { cn } from "@/shared/lib/utils";
 import { Check, Target as TargetIcon } from "lucide-react";
 import { useState } from "react";
@@ -30,10 +28,9 @@ interface TargetFilterProps {
 export function TargetFilter({ value, onChange }: TargetFilterProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const debouncedQ = useDebounce(q, SEARCH_DEBOUNCE_MS);
-  const params: Record<string, string> = { limit: "50" };
-  if (debouncedQ) params.q = debouncedQ;
-  const { data: targets } = useTargets(params);
+  // Targets are a small bounded reference set; load once and let cmdk filter
+  // the rendered list client-side (the /targets route has no `q` param).
+  const { data: targets } = useTargets({ limit: "100" });
 
   const toggle = (id: string) =>
     onChange({
@@ -52,7 +49,7 @@ export function TargetFilter({ value, onChange }: TargetFilterProps) {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">
-        <Command shouldFilter={false}>
+        <Command>
           <CommandInput
             value={q}
             onValueChange={setQ}
