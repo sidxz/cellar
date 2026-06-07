@@ -28,6 +28,10 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
     tag_filter_subquery,
 )
 
+# Number of member ids surfaced per project for the avatar stack on the
+# project card. The full membership is reported separately via member_count.
+MEMBER_AVATAR_CAP = 5
+
 
 class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
     model_class = ProjectModel
@@ -160,22 +164,46 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
             )
             .group_by(CampaignModel.project_id)
         )
-        member_stmt = (
-            select(ProjectMemberModel.project_id, ProjectMemberModel.user_id)
+        # Full membership count per project (drives member_count).
+        member_count_stmt = (
+            select(ProjectMemberModel.project_id, func.count())
             .where(ProjectMemberModel.project_id.in_(scoped_ids_list))
-            .order_by(ProjectMemberModel.created_at)
+            .group_by(ProjectMemberModel.project_id)
+        )
+        # Cap the avatar-stack ids in SQL with a per-project window so a large
+        # team can't starve other projects (a global LIMIT would). user_id is
+        # the deterministic tiebreaker: same-transaction inserts share a
+        # created_at server_default, so created_at alone is non-deterministic.
+        rn = (
+            func.row_number()
+            .over(
+                partition_by=ProjectMemberModel.project_id,
+                order_by=(ProjectMemberModel.created_at, ProjectMemberModel.user_id),
+            )
+            .label("rn")
+        )
+        ranked = (
+            select(ProjectMemberModel.project_id, ProjectMemberModel.user_id, rn)
+            .where(ProjectMemberModel.project_id.in_(scoped_ids_list))
+            .subquery()
+        )
+        member_ids_stmt = (
+            select(ranked.c.project_id, ranked.c.user_id)
+            .where(ranked.c.rn <= MEMBER_AVATAR_CAP)
+            .order_by(ranked.c.project_id, ranked.c.rn)
         )
 
         mol_counts = dict((await self._session.execute(mol_stmt)).all())
         prot_counts = dict((await self._session.execute(prot_stmt)).all())
         run_counts = dict((await self._session.execute(run_stmt)).all())
+        member_counts = dict((await self._session.execute(member_count_stmt)).all())
 
         camp_rows = (await self._session.execute(camp_stmt)).all()
         camp_counts = {r[0]: r[1] for r in camp_rows}
         camp_last = {r[0]: r[2] for r in camp_rows}
 
         members_by_project: dict[uuid.UUID, list[uuid.UUID]] = {}
-        for pid, uid in (await self._session.execute(member_stmt)).all():
+        for pid, uid in (await self._session.execute(member_ids_stmt)).all():
             members_by_project.setdefault(pid, []).append(uid)
 
         result: dict[uuid.UUID, ProjectScopeStats] = {}
@@ -186,16 +214,15 @@ class SQLAlchemyProjectRepository(SQLAlchemyRepository[Project, ProjectModel]):
                 last_activity is None or last_campaign > last_activity
             ):
                 last_activity = last_campaign
-            member_ids = members_by_project.get(pid, [])
             result[pid] = ProjectScopeStats(
                 molecule_count=mol_counts.get(pid, 0),
                 protocol_count=prot_counts.get(pid, 0),
                 run_count=run_counts.get(pid, 0),
                 campaign_count=camp_counts.get(pid, 0),
                 last_activity_at=last_activity,
-                # member_count is the FULL count; member_ids capped at 5 for
-                # the avatar stack on the project card.
-                member_count=len(member_ids),
-                member_ids=tuple(member_ids[:5]),
+                # member_count is the FULL count; member_ids is the SQL-capped
+                # oldest MEMBER_AVATAR_CAP for the avatar stack on the card.
+                member_count=member_counts.get(pid, 0),
+                member_ids=tuple(members_by_project.get(pid, [])),
             )
         return result
