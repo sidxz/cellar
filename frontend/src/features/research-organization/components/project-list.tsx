@@ -180,6 +180,7 @@ export function ProjectListPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: static, fixed-length skeleton placeholders never reorder
                 key={`skeleton-${i}`}
                 className="h-40 animate-pulse rounded-lg border bg-muted/30"
               />
@@ -191,7 +192,9 @@ export function ProjectListPage() {
             statsById={statsById}
             favorites={favorites}
             sort={sort}
-            onToggleFavorite={(p, favorited) => toggleFavorite.mutate({ entityId: p.id, favorited })}
+            onToggleFavorite={(p, favorited) =>
+              toggleFavorite.mutate({ entityId: p.id, favorited })
+            }
             onOpen={(p) => router.push(`/projects/${p.id}`)}
             onCreate={() => setCreateOpen(true)}
           />
