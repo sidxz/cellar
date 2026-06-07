@@ -26,12 +26,11 @@ class FavoriteModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
 
     __table_args__ = (
         Index(
-            "uq_favorites_user_entity",
-            "user_id",
+            "uq_favorites_ws_user_entity",
             "workspace_id",
+            "user_id",
             "entity_type",
             "entity_id",
             unique=True,
         ),
-        Index("ix_favorites_user_type", "user_id", "workspace_id", "entity_type"),
     )

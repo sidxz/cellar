@@ -35,19 +35,15 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "uq_favorites_user_entity",
+        "uq_favorites_ws_user_entity",
         "favorites",
-        ["user_id", "workspace_id", "entity_type", "entity_id"],
+        ["workspace_id", "user_id", "entity_type", "entity_id"],
         unique=True,
-    )
-    op.create_index(
-        "ix_favorites_user_type", "favorites", ["user_id", "workspace_id", "entity_type"]
     )
     op.create_index("ix_favorites_workspace_id", "favorites", ["workspace_id"])
 
 
 def downgrade() -> None:
     op.drop_index("ix_favorites_workspace_id", table_name="favorites")
-    op.drop_index("ix_favorites_user_type", table_name="favorites")
-    op.drop_index("uq_favorites_user_entity", table_name="favorites")
+    op.drop_index("uq_favorites_ws_user_entity", table_name="favorites")
     op.drop_table("favorites")

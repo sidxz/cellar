@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from cellar.domain.personalization.enums import FavoriteEntityType
 from cellar.domain.personalization.favorite import Favorite
@@ -73,3 +74,18 @@ async def test_remove_deletes_the_row(uow) -> None:
         found = await repo.find_by_entity(ws, user, FavoriteEntityType.PROJECT, entity)
 
     assert found is None
+
+
+async def test_duplicate_natural_key_rejected_by_db(uow) -> None:
+    """The unique index is the DB backstop for use-case idempotency."""
+    ws, user, entity = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    async with uow:
+        repo = SQLAlchemyFavoriteRepository(uow)
+        await repo.save(_fav(ws, user, entity))
+        await uow.commit()
+
+    with pytest.raises(IntegrityError):
+        async with uow:
+            repo = SQLAlchemyFavoriteRepository(uow)
+            await repo.save(_fav(ws, user, entity))
+            await uow.commit()
