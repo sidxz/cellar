@@ -170,7 +170,6 @@ async def _make_run_with_target(client: AsyncClient, protocol_id: str, target_id
 async def _seed_campaign_with_target(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
-    workspace_id: uuid.UUID,
 ) -> tuple[str, str, str]:
     """Seed a campaign whose single measurement references a run carrying a target.
 
@@ -337,7 +336,9 @@ class TestListGetCampaign:
 
 
 class TestCampaignChannels:
-    async def test_add_channel_returns_200_with_channel(self, client: AsyncClient) -> None:
+    async def test_add_channel_returns_200_with_channel(
+        self, client: AsyncClient
+    ) -> None:
         """Adding a channel to a campaign with results resolves measurements.
 
         This is a shallow test — no real protocol exists so no screening data
@@ -377,7 +378,9 @@ class TestCampaignChannels:
         campaign = await _create_draft_campaign(client, project_id, [mol_id])
         campaign_id = campaign["id"]
 
-        resp = await client.delete(f"/api/v1/campaigns/{campaign_id}/channels/{uuid.uuid4()}")
+        resp = await client.delete(
+            f"/api/v1/campaigns/{campaign_id}/channels/{uuid.uuid4()}"
+        )
         assert resp.status_code == 404
 
 
@@ -410,9 +413,13 @@ class TestCampaignResults:
         campaign_id = campaign["id"]
 
         # Find result_id for mol2
-        result_id = next(r["id"] for r in campaign["results"] if r["molecule_id"] == mol2)
+        result_id = next(
+            r["id"] for r in campaign["results"] if r["molecule_id"] == mol2
+        )
 
-        resp = await client.delete(f"/api/v1/campaigns/{campaign_id}/results/{result_id}")
+        resp = await client.delete(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
+        )
         assert resp.status_code == 200, resp.text
         remaining = {r["molecule_id"] for r in resp.json()["results"]}
         assert mol2 not in remaining
@@ -429,7 +436,9 @@ class TestCampaignResults:
             json={"decision": "selected", "reason": "Great potency"},
         )
         assert resp.status_code == 200, resp.text
-        updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
+        updated_result = next(
+            r for r in resp.json()["results"] if r["id"] == result_id
+        )
         assert updated_result["decision"] == "selected"
         assert updated_result["decision_reason"] == "Great potency"
 
@@ -446,7 +455,9 @@ class TestCampaignResults:
             json={"decision": "selected", "reason": "Strong hit", "notes": "Watch hERG"},
         )
         assert resp.status_code == 200, resp.text
-        updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
+        updated_result = next(
+            r for r in resp.json()["results"] if r["id"] == result_id
+        )
         assert updated_result["notes"] == "Watch hERG"
 
     async def test_set_result_decision_omit_notes_preserves_existing(
@@ -471,7 +482,9 @@ class TestCampaignResults:
             json={"decision": "deferred"},
         )
         assert resp.status_code == 200, resp.text
-        updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
+        updated_result = next(
+            r for r in resp.json()["results"] if r["id"] == result_id
+        )
         assert updated_result["notes"] == "keep me"
 
 
@@ -524,8 +537,12 @@ class TestCloseCampaign:
         """Superseding a DRAFT campaign (not CLOSED) returns 422."""
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-sup2")
-        old_campaign = await _create_draft_campaign(client, project_id, [mol_id], name="OldDraft")
-        new_campaign = await _create_draft_campaign(client, project_id, [mol_id], name="NewDraft")
+        old_campaign = await _create_draft_campaign(
+            client, project_id, [mol_id], name="OldDraft"
+        )
+        new_campaign = await _create_draft_campaign(
+            client, project_id, [mol_id], name="NewDraft"
+        )
 
         # new_campaign doesn't have supersedes_campaign_id set to old_campaign.id
         resp = await client.post(
@@ -539,7 +556,9 @@ class TestCloseCampaign:
         """PATCH name on a DRAFT campaign succeeds."""
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-upd")
-        campaign = await _create_draft_campaign(client, project_id, [mol_id], name="Original")
+        campaign = await _create_draft_campaign(
+            client, project_id, [mol_id], name="Original"
+        )
         campaign_id = campaign["id"]
 
         resp = await client.patch(
@@ -605,7 +624,9 @@ class TestGetPublishedCampaign:
 
 
 class TestRunImport:
-    async def test_preview_run_import_empty_runs_returns_422(self, client: AsyncClient) -> None:
+    async def test_preview_run_import_empty_runs_returns_422(
+        self, client: AsyncClient
+    ) -> None:
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-runprev")
         campaign = await _create_draft_campaign(client, project_id, [mol_id])
@@ -617,7 +638,9 @@ class TestRunImport:
         )
         assert resp.status_code == 422, resp.text
 
-    async def test_add_from_runs_empty_runs_returns_422(self, client: AsyncClient) -> None:
+    async def test_add_from_runs_empty_runs_returns_422(
+        self, client: AsyncClient
+    ) -> None:
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-runadd")
         campaign = await _create_draft_campaign(client, project_id, [mol_id])
@@ -629,7 +652,9 @@ class TestRunImport:
         )
         assert resp.status_code == 422, resp.text
 
-    async def test_old_add_from_run_route_returns_404(self, client: AsyncClient) -> None:
+    async def test_old_add_from_run_route_returns_404(
+        self, client: AsyncClient
+    ) -> None:
         """The deprecated single-run /add-from-run is removed."""
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-old")
@@ -653,10 +678,9 @@ class TestCampaignTargets:
         self,
         client: AsyncClient,
         session_factory: async_sessionmaker[AsyncSession],
-        workspace_id: uuid.UUID,
     ) -> None:
         project_id, campaign_id, target_name = await _seed_campaign_with_target(
-            client, session_factory, workspace_id
+            client, session_factory
         )
         resp = await client.get("/api/v1/campaigns", params={"project_id": project_id})
         assert resp.status_code == 200, resp.text
@@ -667,10 +691,9 @@ class TestCampaignTargets:
         self,
         client: AsyncClient,
         session_factory: async_sessionmaker[AsyncSession],
-        workspace_id: uuid.UUID,
     ) -> None:
         _project_id, campaign_id, target_name = await _seed_campaign_with_target(
-            client, session_factory, workspace_id
+            client, session_factory
         )
         resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
         assert resp.status_code == 200, resp.text
@@ -680,10 +703,9 @@ class TestCampaignTargets:
         self,
         client: AsyncClient,
         session_factory: async_sessionmaker[AsyncSession],
-        workspace_id: uuid.UUID,
     ) -> None:
         project_id, campaign_id, _ = await _seed_campaign_with_target(
-            client, session_factory, workspace_id
+            client, session_factory
         )
         listed = (await client.get("/api/v1/campaigns", params={"project_id": project_id})).json()[
             "items"
