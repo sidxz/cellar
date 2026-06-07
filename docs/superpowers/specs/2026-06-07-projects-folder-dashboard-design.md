@@ -193,12 +193,13 @@ from server-side favorites.
 └────────────────────────────┘
 ```
 
-- **Identity color** — deterministic, same every visit → recognition. Rule: if
-  the project has exactly one tag and that tag carries a color, use it; otherwise
-  derive a **stable hash of the name** via `resolveCategoryColor` in
-  `shared/lib/category-colors.ts`. (Multiple tags are ambiguous, so they fall
-  back to the name hash rather than guessing a "primary" — a manual override can
-  resolve those later.) The
+- **Identity color** — deterministic, same every visit → recognition. **v1:** a
+  **stable hash of the project name** via `resolveCategoryColor` in
+  `shared/lib/category-colors.ts`. Tag-based coloring (single colored tag → use
+  it) is deferred: project tags aren't in the projects-list payload, so doing it
+  now would force an N+1 (a tag fetch per card). It slots into the same
+  `projectIdentityColor` helper once tags ship in the list response — a clean
+  follow-up, not a hack. The
   glyph is the shared project mark (`FolderKanban`); color does the
   distinguishing. Helper: `projectIdentityColor(project, tags)`.
 - Whole card → `/projects/{id}` (a link; keyboard-focusable). The **pin star** is
