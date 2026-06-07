@@ -196,6 +196,8 @@ class CampaignRepository(Protocol):
         limit: int | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
+        target_ids: list[uuid.UUID] | None = None,
+        target_logic: str = "any",
     ) -> list[Campaign]: ...
 
     async def find_by_workspace(
@@ -206,6 +208,8 @@ class CampaignRepository(Protocol):
         limit: int | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
+        target_ids: list[uuid.UUID] | None = None,
+        target_logic: str = "any",
     ) -> list[Campaign]: ...
 
     async def is_locked(self, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> bool: ...

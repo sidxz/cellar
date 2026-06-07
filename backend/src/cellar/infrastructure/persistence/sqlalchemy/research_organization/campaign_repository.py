@@ -27,6 +27,9 @@ from cellar.domain.shared.target_ref import TargetRef
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_target_filter import (  # noqa: E501
+    campaign_target_filter_subquery,
+)
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
     CampaignChannelModel,
     CampaignMeasurementModel,
@@ -354,6 +357,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         limit: int | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
+        target_ids: list[uuid.UUID] | None = None,
+        target_logic: str = "any",
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(
             CampaignModel.workspace_id == workspace_id,
@@ -365,6 +370,12 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                     tag_filter_subquery(
                         CampaignTagLinkModel, "campaign_id", tags, match_all=tag_logic == "all"
                     )
+                )
+            )
+        if target_ids:
+            stmt = stmt.where(
+                CampaignModel.id.in_(
+                    campaign_target_filter_subquery(target_ids, match_all=target_logic == "all")
                 )
             )
         stmt = stmt.order_by(CampaignModel.id)
@@ -383,6 +394,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         limit: int | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
+        target_ids: list[uuid.UUID] | None = None,
+        target_logic: str = "any",
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(CampaignModel.workspace_id == workspace_id)
         if tags:
@@ -391,6 +404,12 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                     tag_filter_subquery(
                         CampaignTagLinkModel, "campaign_id", tags, match_all=tag_logic == "all"
                     )
+                )
+            )
+        if target_ids:
+            stmt = stmt.where(
+                CampaignModel.id.in_(
+                    campaign_target_filter_subquery(target_ids, match_all=target_logic == "all")
                 )
             )
         stmt = stmt.order_by(CampaignModel.id)
