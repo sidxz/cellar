@@ -45,7 +45,7 @@ export function ProjectCard({
   const resolved = memberIds
     .map((id) => members?.find((m) => m.user_id === id))
     .filter((m): m is NonNullable<typeof m> => Boolean(m));
-  const overflow = (stats?.member_count ?? memberIds.length) - Math.min(resolved.length, 3);
+  const overflow = (stats?.member_count ?? 0) - Math.min(resolved.length, 3);
 
   return (
     <div

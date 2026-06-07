@@ -75,4 +75,34 @@ describe("ProjectCard", () => {
     fireEvent.click(screen.getByText("Intramacrophage"));
     expect(onOpen).toHaveBeenCalledWith(project);
   });
+
+  it("shows em-dash counts when stats are undefined", () => {
+    render(
+      <ProjectCard
+        project={project}
+        favorited={false}
+        onToggleFavorite={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
+    // Both count cells (compounds + campaigns) fall back to an em-dash;
+    // the last-activity slot also renders "—" via timeAgo(undefined).
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders the Archived badge and hides the pin button for archived projects", () => {
+    render(
+      <ProjectCard
+        project={{ ...project, status: "archived" }}
+        stats={stats}
+        favorited={false}
+        onToggleFavorite={vi.fn()}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Archived")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Pin project")).toBeNull();
+    expect(screen.queryByLabelText("Unpin project")).toBeNull();
+  });
 });
