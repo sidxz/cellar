@@ -123,6 +123,21 @@ class RunTargetRemoved(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class RunCollectionAdded(DomainEvent):
+    """A collection was attached to a run. Use-case-constructed, emitted only
+    when a link row was actually inserted (idempotent re-adds stay silent)."""
+
+    collection_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunCollectionRemoved(DomainEvent):
+    collection_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
 class RunDataReset(DomainEvent):
     """Emitted when a run's plates/wells/readouts/curves/QC are wiped.
 
