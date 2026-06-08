@@ -23,4 +23,5 @@ export interface CreateRunRequest {
   conditions?: CreateRunRequestConditions;
   notes?: CreateRunRequestNotes;
   target_ids?: string[];
+  collection_ids?: string[];
 }

@@ -31,6 +31,7 @@ import type {
   LockRequest,
   RejectRequest,
   ResetRunDataResponse,
+  RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetParams,
   RunResponse,
   UnlockRequest,
   UpdateRunRequest
@@ -1000,4 +1001,238 @@ export const useRemoveRunTargetApiV1RunsRunIdTargetsTargetIdDelete = <TError = H
 
       return useMutation(mutationOptions, queryClient);
     }
+    /**
+ * Attach a collection to a run (idempotent).
+ * @summary Add Run Collection
+ */
+export const addRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost = (
+    runId: string,
+    collectionId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/runs/${runId}/collections/${collectionId}`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getAddRunCollectionApiV1RunsRunIdCollectionsCollectionIdPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost>>, TError,{runId: string;collectionId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost>>, TError,{runId: string;collectionId: string}, TContext> => {
+
+const mutationKey = ['addRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost>>, {runId: string;collectionId: string}> = (props) => {
+          const {runId,collectionId} = props ?? {};
+
+          return  addRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost(runId,collectionId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddRunCollectionApiV1RunsRunIdCollectionsCollectionIdPostMutationResult = NonNullable<Awaited<ReturnType<typeof addRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost>>>
     
+    export type AddRunCollectionApiV1RunsRunIdCollectionsCollectionIdPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Add Run Collection
+ */
+export const useAddRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost>>, TError,{runId: string;collectionId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addRunCollectionApiV1RunsRunIdCollectionsCollectionIdPost>>,
+        TError,
+        {runId: string;collectionId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getAddRunCollectionApiV1RunsRunIdCollectionsCollectionIdPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Detach a collection from a run.
+ * @summary Remove Run Collection
+ */
+export const removeRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete = (
+    runId: string,
+    collectionId: string,
+ ) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/runs/${runId}/collections/${collectionId}`, method: 'DELETE'
+    },
+      );
+    }
+  
+
+
+export const getRemoveRunCollectionApiV1RunsRunIdCollectionsCollectionIdDeleteMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete>>, TError,{runId: string;collectionId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof removeRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete>>, TError,{runId: string;collectionId: string}, TContext> => {
+
+const mutationKey = ['removeRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete>>, {runId: string;collectionId: string}> = (props) => {
+          const {runId,collectionId} = props ?? {};
+
+          return  removeRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete(runId,collectionId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveRunCollectionApiV1RunsRunIdCollectionsCollectionIdDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof removeRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete>>>
+    
+    export type RemoveRunCollectionApiV1RunsRunIdCollectionsCollectionIdDeleteMutationError = HTTPValidationError
+
+    /**
+ * @summary Remove Run Collection
+ */
+export const useRemoveRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete>>, TError,{runId: string;collectionId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeRunCollectionApiV1RunsRunIdCollectionsCollectionIdDelete>>,
+        TError,
+        {runId: string;collectionId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getRemoveRunCollectionApiV1RunsRunIdCollectionsCollectionIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Collection members not yet screened in this run (paginated).
+ * @summary Run Collection Gap
+ */
+export const runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet = (
+    runId: string,
+    collectionId: string,
+    params?: RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<string[]>(
+      {url: `/api/v1/runs/${runId}/collections/${collectionId}/gap`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getRunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetQueryKey = (runId?: string,
+    collectionId?: string,
+    params?: RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetParams,) => {
+    return [
+    `/api/v1/runs/${runId}/collections/${collectionId}/gap`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getRunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetQueryOptions = <TData = Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(runId: string,
+    collectionId: string,
+    params?: RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getRunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetQueryKey(runId,collectionId,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>> = ({ signal }) => runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet(runId,collectionId,params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(runId && collectionId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetQueryResult = NonNullable<Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>>
+export type RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetQueryError = HTTPValidationError
+
+
+export function useRunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ runId: string,
+    collectionId: string,
+    params: undefined |  RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>,
+          TError,
+          Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useRunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ runId: string,
+    collectionId: string,
+    params?: RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>,
+          TError,
+          Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useRunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ runId: string,
+    collectionId: string,
+    params?: RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Run Collection Gap
+ */
+
+export function useRunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ runId: string,
+    collectionId: string,
+    params?: RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof runCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getRunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetQueryOptions(runId,collectionId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+

@@ -28,12 +28,14 @@ import type {
   AddReadoutDefinitionRequest,
   ConditionGroupsResponse,
   CreateProtocolRequest,
+  EffectiveCollectionCoverageResponse,
   GetConditionGroupsApiV1ProtocolsProtocolIdConditionGroupsGetParams,
   HTTPValidationError,
   ListProtocolSummariesApiV1ProtocolsSummaryGetParams,
   ListProtocolsApiV1ProtocolsGetParams,
   LockProtocolRequest,
   PaginatedResponseProtocolResponse,
+  ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams,
   ProtocolResponse,
   ProtocolSummaryResponse,
   ProtocolTargetRefResponse,
@@ -1840,6 +1842,207 @@ export const useRemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelet
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * Cumulative coverage per attached collection across the protocol's runs.
+ * @summary List Protocol Collection Coverage
+ */
+export const listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet = (
+    protocolId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<EffectiveCollectionCoverageResponse[]>(
+      {url: `/api/v1/protocols/${protocolId}/collection-coverage`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGetQueryKey = (protocolId?: string,) => {
+    return [
+    `/api/v1/protocols/${protocolId}/collection-coverage`
+    ] as const;
+    }
+
+    
+export const getListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGetQueryOptions = <TData = Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError = HTTPValidationError>(protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGetQueryKey(protocolId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>> = ({ signal }) => listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet(protocolId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(protocolId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGetQueryResult = NonNullable<Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>>
+export type ListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGetQueryError = HTTPValidationError
+
+
+export function useListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet<TData = Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError = HTTPValidationError>(
+ protocolId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet<TData = Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet<TData = Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Protocol Collection Coverage
+ */
+
+export function useListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet<TData = Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListProtocolCollectionCoverageApiV1ProtocolsProtocolIdCollectionCoverageGetQueryOptions(protocolId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Collection members not yet screened by any attaching run (paginated).
+ * @summary Protocol Collection Gap
+ */
+export const protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet = (
+    protocolId: string,
+    collectionId: string,
+    params?: ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<string[]>(
+      {url: `/api/v1/protocols/${protocolId}/collections/${collectionId}/gap`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetQueryKey = (protocolId?: string,
+    collectionId?: string,
+    params?: ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams,) => {
+    return [
+    `/api/v1/protocols/${protocolId}/collections/${collectionId}/gap`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetQueryOptions = <TData = Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(protocolId: string,
+    collectionId: string,
+    params?: ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetQueryKey(protocolId,collectionId,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>> = ({ signal }) => protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet(protocolId,collectionId,params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(protocolId && collectionId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetQueryResult = NonNullable<Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>>
+export type ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetQueryError = HTTPValidationError
+
+
+export function useProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ protocolId: string,
+    collectionId: string,
+    params: undefined |  ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>,
+          TError,
+          Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ protocolId: string,
+    collectionId: string,
+    params?: ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>,
+          TError,
+          Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ protocolId: string,
+    collectionId: string,
+    params?: ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Protocol Collection Gap
+ */
+
+export function useProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ protocolId: string,
+    collectionId: string,
+    params?: ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof protocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetQueryOptions(protocolId,collectionId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
  * Aggregate readout data grouped by a condition value.
  * @summary Get Condition Groups
  */

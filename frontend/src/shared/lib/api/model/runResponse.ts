@@ -15,6 +15,7 @@ import type { RunResponsePlateFormat } from './runResponsePlateFormat';
 import type { RunResponsePlateTemplateId } from './runResponsePlateTemplateId';
 import type { RunResponseConditions } from './runResponseConditions';
 import type { TargetRefResponse } from './targetRefResponse';
+import type { CollectionCoverageResponse } from './collectionCoverageResponse';
 
 export interface RunResponse {
   id: string;
@@ -39,4 +40,5 @@ export interface RunResponse {
   plate_template_id?: RunResponsePlateTemplateId;
   conditions?: RunResponseConditions;
   targets?: TargetRefResponse[];
+  collections?: CollectionCoverageResponse[];
 }
