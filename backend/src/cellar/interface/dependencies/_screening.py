@@ -19,6 +19,10 @@ from cellar.application.screening.delete_compound_flag import DeleteCompoundFlag
 from cellar.application.screening.delete_run import DeleteRun
 from cellar.application.screening.delete_target import DeleteTarget
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
+from cellar.application.screening.get_collection_gap import (
+    GetProtocolCollectionGap,
+    GetRunCollectionGap,
+)
 from cellar.application.screening.get_compound_curves import GetCompoundCurves
 from cellar.application.screening.get_curve_edit_history import GetCurveEditHistory
 from cellar.application.screening.get_dose_response import ListDoseResponseByRun
@@ -72,6 +76,10 @@ from cellar.application.screening.manage_run import (
     RejectRun,
     StartRun,
 )
+from cellar.application.screening.manage_run_collections import (
+    AddRunCollection,
+    RemoveRunCollection,
+)
 from cellar.application.screening.manage_run_targets import (
     AddRunTarget,
     RemoveRunTarget,
@@ -93,6 +101,10 @@ from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
 from cellar.application.screening.reset_run_data import ResetRunData
+from cellar.application.screening.resolve_collection_coverage import (
+    GetProtocolCollectionCoverage,
+    ResolveRunCollections,
+)
 from cellar.application.screening.resolve_target_links import (
     GetProtocolTargets,
     ResolveProtocolTargets,
@@ -108,6 +120,7 @@ __all__ = [
     "AddProtocolTargetDep",
     "AddProtocolToProjectDep",
     "AddReadoutDefinitionDep",
+    "AddRunCollectionDep",
     "AddRunTargetDep",
     "ApproveRunDep",
     "BulkCreateReadoutDataDep",
@@ -139,9 +152,12 @@ __all__ = [
     "GetPlateMapDep",
     "GetPlateTemplateDep",
     "GetProtocolActivitySummaryDep",
+    "GetProtocolCollectionCoverageDep",
+    "GetProtocolCollectionGapDep",
     "GetProtocolDep",
     "GetProtocolStatsDep",
     "GetProtocolTargetsDep",
+    "GetRunCollectionGapDep",
     "GetRunDep",
     "GetTargetDep",
     "ImportRunReadoutsDep",
@@ -176,9 +192,11 @@ __all__ = [
     "RemoveProtocolFromProjectDep",
     "RemoveProtocolTargetDep",
     "RemoveReadoutDefinitionDep",
+    "RemoveRunCollectionDep",
     "RemoveRunTargetDep",
     "ResetRunDataDep",
     "ResolveProtocolTargetsDep",
+    "ResolveRunCollectionsDep",
     "ResolveRunTargetsDep",
     "RetireProtocolDep",
     "SetControlLayoutDep",
@@ -227,6 +245,22 @@ ResolveProtocolTargetsDep = Annotated[
 ResolveRunTargetsDep = Annotated[ResolveRunTargets, Depends(_get_use_case(ResolveRunTargets))]
 AddRunTargetDep = Annotated[AddRunTarget, Depends(_get_use_case(AddRunTarget))]
 RemoveRunTargetDep = Annotated[RemoveRunTarget, Depends(_get_use_case(RemoveRunTarget))]
+AddRunCollectionDep = Annotated[AddRunCollection, Depends(_get_use_case(AddRunCollection))]
+RemoveRunCollectionDep = Annotated[
+    RemoveRunCollection, Depends(_get_use_case(RemoveRunCollection))
+]
+ResolveRunCollectionsDep = Annotated[
+    ResolveRunCollections, Depends(_get_use_case(ResolveRunCollections))
+]
+GetProtocolCollectionCoverageDep = Annotated[
+    GetProtocolCollectionCoverage, Depends(_get_use_case(GetProtocolCollectionCoverage))
+]
+GetRunCollectionGapDep = Annotated[
+    GetRunCollectionGap, Depends(_get_use_case(GetRunCollectionGap))
+]
+GetProtocolCollectionGapDep = Annotated[
+    GetProtocolCollectionGap, Depends(_get_use_case(GetProtocolCollectionGap))
+]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
 DeleteProtocolDep = Annotated[DeleteProtocol, Depends(_get_use_case(DeleteProtocol))]
 AddReadoutDefinitionDep = Annotated[
