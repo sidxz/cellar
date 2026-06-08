@@ -8,6 +8,10 @@ from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.screening_assay.activity_types import AggregatedReadout
+from cellar.domain.screening_assay.collection_coverage import (
+    CollectionCoverage,
+    EffectiveCollectionCoverage,
+)
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.plate_template import PlateTemplate
 from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
@@ -30,6 +34,20 @@ class TargetLinkResult(Enum):
     ALREADY_LINKED = "already_linked"
     OWNER_NOT_FOUND = "owner_not_found"  # protocol/run missing or cross-workspace
     TARGET_NOT_FOUND = "target_not_found"
+
+
+class CollectionLinkResult(Enum):
+    """Outcome of an add-collection link operation.
+
+    Mirrors ``TargetLinkResult``: lets use cases distinguish a real insert
+    (audit-worthy) from an idempotent no-op, and surface unknown/cross-workspace
+    runs or collections as NotFound instead of silently succeeding.
+    """
+
+    ADDED = "added"
+    ALREADY_LINKED = "already_linked"
+    OWNER_NOT_FOUND = "owner_not_found"  # run missing or cross-workspace
+    COLLECTION_NOT_FOUND = "collection_not_found"
 
 
 @runtime_checkable
@@ -226,6 +244,19 @@ class RunRepository(Protocol):
         """Batched target-ref lookup for the run list grid (avoids N+1)."""
         ...
 
+    # --- Collection associations ---------------------------------------
+    async def add_collection(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> CollectionLinkResult:
+        """Attach a collection to a run (idempotent, workspace-checked)."""
+        ...
+
+    async def remove_collection(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> bool:
+        """Detach a collection from a run. Returns True if a link was removed."""
+        ...
+
     async def save(self, aggregate: Run) -> None: ...
     async def is_locked(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool: ...
     async def delete(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> None: ...
@@ -279,6 +310,52 @@ class ReadoutDataRepository(Protocol):
     async def save(self, entity: ReadoutData) -> None: ...
     async def save_bulk(self, entities: list[ReadoutData]) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class CollectionCoverageReader(Protocol):
+    """Read-model port for derived run/protocol collection coverage.
+
+    Coverage (how many of a collection's molecules a run — or a protocol's
+    attaching runs cumulatively — has screened) is computed, never stored.
+    The ``*_gap`` methods page the un-screened molecule ids for a given link.
+    """
+
+    async def run_coverage(
+        self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, list[CollectionCoverage]]:
+        """Per-run coverage of each attached collection (batched; avoids N+1)."""
+        ...
+
+    async def protocol_coverage(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> list[EffectiveCollectionCoverage]:
+        """Cumulative coverage of each collection across the protocol's runs."""
+        ...
+
+    async def run_gap(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        collection_id: uuid.UUID,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[uuid.UUID]:
+        """Page the collection molecules a single run has NOT screened."""
+        ...
+
+    async def protocol_gap(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        collection_id: uuid.UUID,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[uuid.UUID]:
+        """Page the collection molecules no run of the protocol has screened."""
+        ...
 
 
 @runtime_checkable
