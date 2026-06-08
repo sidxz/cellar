@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from cellar.application.screening.create_run import CreateRunCommand
 from cellar.application.screening.delete_run import DeleteRunCommand
+from cellar.application.screening.get_collection_gap import GetRunCollectionGapQuery
 from cellar.application.screening.get_run import GetRunQuery
 from cellar.application.screening.list_runs_with_counts import (
     ListRunsWithCountsQuery,
@@ -25,6 +26,10 @@ from cellar.application.screening.manage_run import (
     RejectRunCommand,
     StartRunCommand,
 )
+from cellar.application.screening.manage_run_collections import (
+    AddRunCollectionCommand,
+    RemoveRunCollectionCommand,
+)
 from cellar.application.screening.manage_run_targets import (
     AddRunTargetCommand,
     RemoveRunTargetCommand,
@@ -32,29 +37,35 @@ from cellar.application.screening.manage_run_targets import (
 from cellar.application.screening.reset_run_data import (
     ResetRunDataCommand,
 )
+from cellar.application.screening.resolve_collection_coverage import ResolveRunCollectionsQuery
 from cellar.application.screening.resolve_target_links import ResolveRunTargetsQuery
 from cellar.application.screening.update_run import UpdateRunCommand
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.run import Run
 from cellar.interface.dependencies import (
+    AddRunCollectionDep,
     AddRunTargetDep,
     ApproveRunDep,
     AuthDep,
     CompleteRunDep,
     CreateRunDep,
     DeleteRunDep,
+    GetRunCollectionGapDep,
     GetRunDep,
     ListRunsWithCountsDep,
     LockRunDep,
     RejectRunDep,
+    RemoveRunCollectionDep,
     RemoveRunTargetDep,
     ResetRunDataDep,
+    ResolveRunCollectionsDep,
     ResolveRunTargetsDep,
     StartRunDep,
     UnlockRunDep,
     UpdateRunDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes._collection_coverage import CollectionCoverageResponse
 from cellar.interface.routes._target_refs import TargetRefResponse
 
 router = APIRouter(prefix="/api/v1", tags=["runs"])
@@ -68,6 +79,18 @@ async def _run_targets(targets_uc: Any, auth: Any, run_id: uuid.UUID) -> list[Ta
     )
     refs = result_to_response(result).get(run_id, [])
     return [TargetRefResponse.from_ref(t) for t in refs]
+
+
+async def _run_collections(
+    coverage_uc: Any, auth: Any, run_id: uuid.UUID
+) -> list[CollectionCoverageResponse]:
+    """Resolve a single run's collection coverage for a response."""
+    result = await coverage_uc(
+        ResolveRunCollectionsQuery(workspace_id=auth.workspace_id, run_ids=(run_id,)),
+        auth=auth,
+    )
+    covs = result_to_response(result).get(run_id, [])
+    return [CollectionCoverageResponse.from_coverage(c) for c in covs]
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +121,7 @@ class RunResponse(BaseModel):
     plate_template_id: uuid.UUID | None = None
     conditions: dict[str, Any] | None = None
     targets: list[TargetRefResponse] = []
+    collections: list[CollectionCoverageResponse] = []
 
     @classmethod
     def from_domain(
@@ -106,6 +130,7 @@ class RunResponse(BaseModel):
         *,
         molecule_count: int = 0,
         targets: list[TargetRefResponse] | None = None,
+        collections: list[CollectionCoverageResponse] | None = None,
     ) -> RunResponse:
         plate_barcodes = [p.barcode.value for p in r.plates if getattr(p, "barcode", None)]
         return cls(
@@ -133,6 +158,7 @@ class RunResponse(BaseModel):
             plate_template_id=r.plate_template_id,
             conditions=r.conditions,
             targets=targets or [],
+            collections=collections or [],
         )
 
 
@@ -225,12 +251,14 @@ async def list_runs_by_protocol(
         ),
         auth=auth,
     )
-    # Targets ride along from the use case — same transaction as the rows.
+    # Targets + collection coverage ride along from the use case — same
+    # transaction as the rows.
     return [
         RunResponse.from_domain(
             item.run,
             molecule_count=item.molecule_count,
             targets=[TargetRefResponse.from_ref(t) for t in item.targets],
+            collections=[CollectionCoverageResponse.from_coverage(c) for c in item.collections],
         )
         for item in result_to_response(result)
     ]
@@ -241,6 +269,7 @@ async def get_run(
     run_id: uuid.UUID,
     auth: AuthDep,
     uc: GetRunDep,
+    coverage_uc: ResolveRunCollectionsDep,
 ) -> RunResponse:
     result = await uc(
         GetRunQuery(workspace_id=auth.workspace_id, run_id=run_id),
@@ -250,6 +279,7 @@ async def get_run(
     return RunResponse.from_domain(
         item.run,
         targets=[TargetRefResponse.from_ref(t) for t in item.targets],
+        collections=await _run_collections(coverage_uc, auth, run_id),
     )
 
 
@@ -456,3 +486,70 @@ async def remove_run_target(
     )
     result_to_response(result)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Run-Collection association + coverage routes
+# ---------------------------------------------------------------------------
+
+
+@router.post("/runs/{run_id}/collections/{collection_id}", status_code=204)
+async def add_run_collection(
+    run_id: uuid.UUID,
+    collection_id: uuid.UUID,
+    auth: AuthDep,
+    uc: AddRunCollectionDep,
+) -> Response:
+    """Attach a collection to a run (idempotent)."""
+    result = await uc(
+        AddRunCollectionCommand(
+            workspace_id=auth.workspace_id, run_id=run_id, collection_id=collection_id
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
+    return Response(status_code=204)
+
+
+@router.delete("/runs/{run_id}/collections/{collection_id}", status_code=204)
+async def remove_run_collection(
+    run_id: uuid.UUID,
+    collection_id: uuid.UUID,
+    auth: AuthDep,
+    uc: RemoveRunCollectionDep,
+) -> Response:
+    """Detach a collection from a run."""
+    result = await uc(
+        RemoveRunCollectionCommand(
+            workspace_id=auth.workspace_id, run_id=run_id, collection_id=collection_id
+        ),
+        auth=auth,
+    )
+    result_to_response(result)
+    return Response(status_code=204)
+
+
+@router.get(
+    "/runs/{run_id}/collections/{collection_id}/gap",
+    response_model=list[uuid.UUID],
+)
+async def run_collection_gap(
+    run_id: uuid.UUID,
+    collection_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetRunCollectionGapDep,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+) -> list[uuid.UUID]:
+    """Collection members not yet screened in this run (paginated)."""
+    result = await uc(
+        GetRunCollectionGapQuery(
+            workspace_id=auth.workspace_id,
+            run_id=run_id,
+            collection_id=collection_id,
+            offset=offset,
+            limit=limit,
+        ),
+        auth=auth,
+    )
+    return result_to_response(result)
