@@ -152,6 +152,7 @@ class CreateRunRequest(BaseModel):
     conditions: dict[str, Any] | None = None
     notes: str | None = None
     target_ids: list[uuid.UUID] = []
+    collection_ids: list[uuid.UUID] = []
 
 
 class CompleteRunRequest(BaseModel):
@@ -200,6 +201,7 @@ async def create_run(
         conditions=body.conditions,
         notes=body.notes,
         target_ids=body.target_ids,
+        collection_ids=body.collection_ids,
     )
     result = await uc(cmd, auth=auth)
     run = result_to_response(result)

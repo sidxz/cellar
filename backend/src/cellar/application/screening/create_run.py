@@ -20,6 +20,7 @@ from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import PlateFormat, ProtocolStatus, RunRelationshipType
 from cellar.domain.screening_assay.repository import (
+    CollectionLinkResult,
     PlateTemplateRepository,
     ProtocolRepository,
     RunRepository,
@@ -46,6 +47,7 @@ class CreateRunCommand(Command):
     conditions: dict[str, Any] | None = None
     notes: str | None = None
     target_ids: list[uuid.UUID] = field(default_factory=list)
+    collection_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 class CreateRun:
@@ -118,6 +120,13 @@ class CreateRun:
                 link = await self._repo.add_target(input.workspace_id, run.id, target_id)
                 if link is TargetLinkResult.TARGET_NOT_FOUND:
                     return Failure(NotFoundError("Target", str(target_id)))
+            # Initial run collections — same idempotent, workspace-checked path
+            # as targets. An unknown/cross-workspace collection aborts the create
+            # (404) instead of being silently dropped from the new run.
+            for collection_id in dict.fromkeys(input.collection_ids):
+                clink = await self._repo.add_collection(input.workspace_id, run.id, collection_id)
+                if clink is CollectionLinkResult.COLLECTION_NOT_FOUND:
+                    return Failure(NotFoundError("Collection", str(collection_id)))
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)

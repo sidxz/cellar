@@ -184,6 +184,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_curve
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (
     SQLAlchemyCompoundFlagRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.coverage_query import (
+    SQLAlchemyCollectionCoverageQuery,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
     SQLAlchemyDoseResponseCurveRepository,
 )
@@ -421,6 +424,7 @@ def register_screening(container: Container) -> None:
             uow=uow,
             run_repo=SQLAlchemyRunRepository(uow),
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+            coverage_reader=SQLAlchemyCollectionCoverageQuery(uow),
         )
 
     container.define(ListRunsWithCounts, _list_runs_with_counts)
