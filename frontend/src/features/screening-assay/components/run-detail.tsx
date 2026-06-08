@@ -45,6 +45,11 @@ import { useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useRecomputeOverrides } from "../hooks/use-recompute-overrides";
 import {
+  invalidateRunCollectionQueries,
+  useAddRunCollection,
+  useRemoveRunCollection,
+} from "../hooks/use-run-collections";
+import {
   invalidateRunTargetQueries,
   useAddRunTarget,
   useRemoveRunTarget,
@@ -61,6 +66,9 @@ import {
   useUnlockRun,
 } from "../hooks/use-runs";
 import { PLATE_FORMAT_LABELS, type PlateFormat, type RunStatus } from "../types";
+import { CollectionMultiSelect } from "./collection-multi-select";
+import { CoverageBar } from "./coverage-bar";
+import { CoverageGapDialog } from "./coverage-gap-dialog";
 import { ResetRunDataDialog } from "./reset-run-data-dialog";
 import { RunDataPanel } from "./run-data-panel";
 import { TargetChips } from "./target-chips";
@@ -79,6 +87,8 @@ export function RunDetail({ runId }: RunDetailProps) {
   const { data: protocol } = useProtocol(query.data?.protocol_id ?? "");
   const addRunTarget = useAddRunTarget(runId);
   const removeRunTarget = useRemoveRunTarget(runId);
+  const addRunCollection = useAddRunCollection(runId);
+  const removeRunCollection = useRemoveRunCollection(runId);
   const startMutation = useStartRun();
   const completeMutation = useCompleteRun();
   const approveMutation = useApproveRun();
@@ -96,6 +106,7 @@ export function RunDetail({ runId }: RunDetailProps) {
   const [unlockReason, setUnlockReason] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [gap, setGap] = useState<{ path: string; name: string } | null>(null);
 
   // Per-run fit constraint overrides for Recompute. Mirrors the protocol's
   // Free/Range/Lock vocabulary so the popover matches the protocol-design
@@ -590,6 +601,53 @@ export function RunDetail({ runId }: RunDetailProps) {
               </CardContent>
             </Card>
 
+            {/* Collections (library coverage) */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Collections</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {canEditTags && !run.is_locked && (
+                  <CollectionMultiSelect
+                    value={(run.collections ?? []).map((c) => c.id)}
+                    projectIds={protocol?.project_ids?.length ? protocol.project_ids : undefined}
+                    onChange={async (ids) => {
+                      const current = (run.collections ?? []).map((c) => c.id);
+                      const mutations = [
+                        ...ids
+                          .filter((id) => !current.includes(id))
+                          .map((id) => addRunCollection.mutateAsync(id)),
+                        ...current
+                          .filter((id) => !ids.includes(id))
+                          .map((id) => removeRunCollection.mutateAsync(id)),
+                      ];
+                      try {
+                        await Promise.all(mutations);
+                      } catch {
+                        // surfaced by mutation error toasts
+                      } finally {
+                        await invalidateRunCollectionQueries(qc, runId);
+                      }
+                    }}
+                    disabled={addRunCollection.isPending || removeRunCollection.isPending}
+                  />
+                )}
+                {(run.collections ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No collections attached.</p>
+                ) : (
+                  (run.collections ?? []).map((c) => (
+                    <CoverageBar
+                      key={c.id}
+                      coverage={c}
+                      onViewGap={() =>
+                        setGap({ path: `/runs/${runId}/collections/${c.id}`, name: c.name })
+                      }
+                    />
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
             {/* Tags */}
             <TagTable entity="runs" entityId={runId} canEdit={canEditTags} />
 
@@ -700,6 +758,15 @@ export function RunDetail({ runId }: RunDetailProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {gap && (
+        <CoverageGapDialog
+          open
+          onOpenChange={(o) => !o && setGap(null)}
+          gapBasePath={gap.path}
+          collectionName={gap.name}
+        />
+      )}
     </>
   );
 }
