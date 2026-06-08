@@ -23,6 +23,8 @@ We already let a `Run` carry one or more **targets**, rolled up onto its
    molecules that are members of the collection ÷ the collection's size.
 3. **Protocol roll-up:** the protocol shows each distinct attached collection
    with its **cumulative** coverage across the runs that attached it.
+4. **Gap drill-down:** from any coverage bar, see exactly **which members are not
+   yet screened** (run-level, and cumulative at the protocol level).
 
 The feature is *intended* for `library`-type collections but is **not
 restricted** — any collection type may be attached.
@@ -157,6 +159,52 @@ for the relevant `collection_id`s. Coverage fraction = `covered / total`, with
 **`total = 0` → fraction is `None`** (empty library → surfaced as "—", never a
 divide-by-zero).
 
+### Gap list — the uncovered members
+
+Beyond the %, the read model exposes the **set difference**: which collection
+members have **not** yet been screened. This is the actionable drill-down behind
+each coverage bar ("160 remaining → see which 160"). Two paginated methods,
+`run_gap(workspace_id, run_id, collection_id, offset, limit)` and
+`protocol_gap(workspace_id, protocol_id, collection_id, offset, limit)`, each
+returning `molecule_id`s ordered by `collection_molecules.added_at`.
+
+**Run-level gap:**
+
+```sql
+SELECT cm.molecule_id
+FROM collection_molecules cm
+WHERE cm.collection_id = :collection_id
+  AND NOT EXISTS (
+    SELECT 1 FROM readout_data rd
+    WHERE rd.run_id = :run_id AND rd.molecule_id = cm.molecule_id
+  )
+ORDER BY cm.added_at, cm.molecule_id
+LIMIT :limit OFFSET :offset
+```
+
+**Protocol-level gap** (uncovered by *any* attaching run):
+
+```sql
+SELECT cm.molecule_id
+FROM collection_molecules cm
+WHERE cm.collection_id = :collection_id
+  AND NOT EXISTS (
+    SELECT 1 FROM readout_data rd
+    JOIN run_collections rc ON rc.run_id = rd.run_id AND rc.collection_id = :collection_id
+    JOIN runs r            ON r.id = rd.run_id AND r.protocol_id = :protocol_id
+    WHERE rd.molecule_id = cm.molecule_id
+  )
+ORDER BY cm.added_at, cm.molecule_id
+LIMIT :limit OFFSET :offset
+```
+
+**Correctness — use `NOT EXISTS`, never `NOT IN`.** `readout_data.molecule_id`
+is nullable; a single NULL in a `NOT IN (…)` subquery makes the whole predicate
+return *zero* rows (silent wrong-empty gap). `NOT EXISTS` with an equality join
+is null-safe — `rd.molecule_id = cm.molecule_id` never matches a NULL, which is
+exactly the intended semantics. The "remaining" count shown above the list is
+free: `total − covered` from the coverage query.
+
 ### Architectural note (cross-context read)
 
 This read model **joins `collection_molecules` (research-org) from screening
@@ -209,6 +257,8 @@ No backfill (new capability, no existing scalar to migrate).
 - **New endpoints** (mirror run-target endpoints):
   - `POST   /runs/{run_id}/collections/{collection_id}` — attach (idempotent, 204).
   - `DELETE /runs/{run_id}/collections/{collection_id}` — detach (204).
+  - `GET    /runs/{run_id}/collections/{collection_id}/gap?offset&limit` —
+    paginated `molecule_id`s not yet screened in this run (the §4 run-level gap).
 
 ### Protocol
 
@@ -216,6 +266,14 @@ No backfill (new capability, no existing scalar to migrate).
   `list[EffectiveCollectionCoverageResponse]`
   (`{ id, name, type, covered, total, fraction|null, run_count }`), mirroring
   `GET /protocols/{protocol_id}/targets`.
+- **New endpoint:** `GET /protocols/{protocol_id}/collections/{collection_id}/gap?offset&limit` —
+  paginated `molecule_id`s not yet screened by **any** attaching run (the §4
+  protocol-level gap).
+
+Both gap endpoints return `molecule_id`s only; the frontend resolves them to
+structures/names through the existing molecule-resolution path (the collection
+detail page already does exactly this). The "remaining" total is `total −
+covered` from the coverage payload, so the list header needs no extra count call.
 
 All attach operations are idempotent (`ON CONFLICT DO NOTHING`). All endpoints
 are workspace-scoped with the same defense-in-depth checks the target endpoints
@@ -231,8 +289,8 @@ existing `add_target` / `remove_target` / `find_target_refs_for_runs`.
 
 **Read model** (`coverage_query.py`, new): `CollectionCoverageQuery` with
 `run_coverage(workspace_id, run_ids)`,
-`protocol_coverage(workspace_id, protocol_id)`, and the denominator size lookup
-(§4).
+`protocol_coverage(workspace_id, protocol_id)`, the denominator size lookup, and
+the two paginated gap methods `run_gap(...)` / `protocol_gap(...)` (§4).
 
 **Application**
 - `manage_run_collections.py` (new): `AddRunCollection` / `RemoveRunCollection`
@@ -254,12 +312,25 @@ existing `add_target` / `remove_target` / `find_target_refs_for_runs`.
 ### Reusable coverage component — `CoverageBar`
 
 One presentational component used across all three surfaces:
-`[type icon] Collection name` + a thin progress bar + `1,840 / 2,000 · 92%`.
+`[type icon] Collection name` + a thin progress bar + `1,840 / 2,000 · 92%`, and
+a **`160 remaining`** affordance that opens the gap drill-down.
 
 - **Single neutral accent fill, NOT a red→green semaphore.** Low coverage early
   in a campaign is expected, not a problem; color-grading would falsely signal
   "bad". The % is the signal, the fill is just proportion.
-- **Empty library (`total = 0`) → "—"**, no bar.
+- **Empty library (`total = 0`) → "—"**, no bar, no gap affordance.
+- The `remaining` count sits **next to** (not inside) the "View not-yet-screened"
+  action — a count, not an operate-on badge.
+
+### Gap drill-down — `CoverageGapDialog`
+
+Clicking "remaining" opens a dialog listing the **uncovered members** (molecule
+cards/table reusing the existing molecule-resolution + structure rendering used
+on the collection detail page), paginated via the gap endpoint. Run-detail bars
+open the run-level gap; protocol roll-up bars open the protocol-level (cumulative)
+gap. v1 is **view-only**; turning a gap into a cherry-pick collection or an export
+is a natural follow-up (the compose/export machinery already exists) and is left
+out of v1.
 
 ### Surfaces
 
@@ -327,6 +398,9 @@ badge, so `distribution_set` uses `Send`.
 - **"Screened" set:** distinct `readout_data.molecule_id`; summary / well-less
   imports count.
 - **Denominator:** full collection membership; `total = 0` → fraction `None` → "—".
+- **Gap list:** in v1, view-only. Set difference via `NOT EXISTS` (null-safe);
+  run-level and protocol-level (cumulative) variants; molecule-id paging resolved
+  to structures through the existing path.
 - **Attachment level:** run-level only; protocol view is pure roll-up.
 - **FK on delete:** `RESTRICT` on `collection_id` (a referenced collection can't
   be silently deleted).
@@ -345,8 +419,9 @@ badge, so `distribution_set` uses `Send`.
   demands).
 - Run-import "collection" column — attach remains a UI/API action, not CSV import.
 - Coverage on campaigns (separate surface; can reuse `CoverageBar` later).
-- A "missing N compounds" drill-down list (which library members are *not* yet
-  screened) — natural follow-up, not v1.
+- **Actions on the gap list** — turning the not-yet-screened set into a
+  cherry-pick collection or a CSV export. The view-only gap drill-down ships in
+  v1; the compose/export actions on it are the immediate follow-up.
 - Accepting collection edits through `update_run` (use the dedicated endpoints).
 
 ---
@@ -358,6 +433,11 @@ badge, so `distribution_set` uses `Send`.
   that screened a member does not inflate it); a molecule screened in two
   attaching runs counts once; `total = 0` yields fraction `None`; all queries
   workspace-scoped.
+- **Gap list (integration):** run-level and protocol-level gaps return exactly
+  the unscreened members (`covered + gap = total`); a `NULL`
+  `readout_data.molecule_id` does **not** collapse the gap to empty (the
+  `NOT EXISTS` null-safety guard); paging is stable; protocol gap excludes
+  anything screened by any attaching run.
 - **Repository:** attach is idempotent; detach removes the link; `RESTRICT`
   blocks deleting a referenced collection; `find_collection_refs_for_runs`
   batches correctly.
@@ -367,7 +447,9 @@ badge, so `distribution_set` uses `Send`.
 - **API:** attach/detach endpoints (idempotent, workspace-scoped); run response
   carries coverage; `GET /protocols/{id}/collection-coverage` shape + run_count.
 - **Frontend:** `CoverageBar` (fill proportion, empty-library "—", neutral
-  color); `CollectionMultiSelect` (search, multi-select, library-first);
-  run-detail Collections card; run-list coverage column overflow; protocol
-  roll-up; `COLLECTION_TYPE_ICONS` rendered across list/detail/picker.
+  color, "remaining" affordance); `CoverageGapDialog` (lists unscreened members,
+  paginates, run vs protocol scope); `CollectionMultiSelect` (search,
+  multi-select, library-first); run-detail Collections card; run-list coverage
+  column overflow; protocol roll-up; `COLLECTION_TYPE_ICONS` rendered across
+  list/detail/picker.
 ```
