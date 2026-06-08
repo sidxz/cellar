@@ -105,6 +105,29 @@ run_targets = Table(
 )
 
 
+# Each run's attached collections (libraries). The protocol shows rolled-up
+# screening coverage over the runs that attached each collection.
+run_collections = Table(
+    "run_collections",
+    Base.metadata,
+    Column(
+        "run_id",
+        Uuid(as_uuid=True),
+        ForeignKey("runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "collection_id",
+        Uuid(as_uuid=True),
+        # RESTRICT: a collection referenced by a run cannot be silently deleted
+        # (the lesson of migration 053).
+        ForeignKey("collections.id", ondelete="RESTRICT"),
+        primary_key=True,
+    ),
+    Index("ix_run_collections_collection", "collection_id"),
+)
+
+
 # ---------------------------------------------------------------------------
 # Reference entities (no VersionMixin — not aggregate roots)
 # ---------------------------------------------------------------------------
