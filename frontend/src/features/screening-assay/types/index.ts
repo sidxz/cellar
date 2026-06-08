@@ -1,9 +1,11 @@
 import type {
   ClassifyDoseResponseCurveRequest,
+  CollectionCoverageResponse,
   ConditionGroupReadoutResponse,
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
   DoseResponseCurveResponse,
+  EffectiveCollectionCoverageResponse,
   InterceptValueResponse,
   LatestRunResponse as LatestRunResponseModel,
   PlateData as PlateDataModel,
@@ -16,6 +18,15 @@ import type {
   RunCountsResponse as RunCountsResponseModel,
   TargetRefResponse,
 } from "@/shared/lib/api/model";
+
+/** A run's coverage of one attached collection (covered / total + fraction).
+ *  Aliases the generated orval type so the shape can't drift from the backend
+ *  DTO. `fraction` is `number | null` (null = empty collection). */
+export type CollectionCoverage = CollectionCoverageResponse;
+
+/** Protocol rollup of collection coverage — adds `run_count` (how many of the
+ *  protocol's runs attach the collection). Aliases the generated type. */
+export type EffectiveCollectionCoverage = EffectiveCollectionCoverageResponse;
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
@@ -428,6 +439,10 @@ export interface Run {
   conditions: Record<string, unknown> | null;
   /** Biological targets linked directly to this run (independent set). */
   targets: TargetRef[];
+  /** Per-collection coverage for collections attached to this run — how many of
+   *  each collection's molecules this run screened. Computed read-time by the
+   *  backend; aliases the generated `CollectionCoverageResponse` shape. */
+  collections?: CollectionCoverage[];
 }
 
 /** A readout-data row for a run. Alias of the generated API type — do not
