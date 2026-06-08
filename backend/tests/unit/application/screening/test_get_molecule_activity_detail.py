@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from types import TracebackType
 from typing import Self
 from unittest.mock import AsyncMock
@@ -12,11 +13,16 @@ from returns.result import Success
 
 from cellar.application.screening.get_molecule_activity_detail import (
     GetMoleculeActivityDetail,
-    MoleculeActivityDetail,
     GetMoleculeActivityDetailQuery,
+    MoleculeActivityDetail,
 )
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.enums import CurveClass, CurveType, ProtocolType
+from cellar.domain.screening_assay.excluded_point_detail import (
+    ExcludedPointDetail,
+    ExclusionReason,
+    ExclusionSource,
+)
 from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.events import DomainEvent
@@ -93,6 +99,7 @@ def _make_curve(
     raw_data: list[dict] | None = None,
     confidence_interval_low: float | None = 3.8,
     confidence_interval_high: float | None = 7.1,
+    excluded_points: list[ExcludedPointDetail] | None = None,
 ) -> DoseResponseCurve:
     return DoseResponseCurve(
         workspace_id=WS,
@@ -112,6 +119,7 @@ def _make_curve(
         raw_data=raw_data,
         confidence_interval_low=confidence_interval_low,
         confidence_interval_high=confidence_interval_high,
+        excluded_points=excluded_points,
     )
 
 
@@ -256,6 +264,86 @@ class TestGroupedByProtocol:
         assert cd.raw_data == condensed_points
 
 
+class TestExcludedPointsSerialization:
+    """Regression: curves carrying typed ``ExcludedPointDetail`` VOs must
+    serialize to plain dicts all the way to the wire response.
+
+    The repo's ``_to_domain`` hydrates the JSONB ``excluded_points`` column
+    into typed ``ExcludedPointDetail`` value objects. The activity-detail
+    DTO (``CurveDetail``) declares ``excluded_points: list[dict]`` and the
+    route's Pydantic ``CurveDetailResponse`` enforces it — so the use case
+    must convert the VOs back to dicts. Without that conversion the endpoint
+    raised a Pydantic ``ValidationError`` (HTTP 500) for every compound whose
+    best/any curve had an auto-3sigma excluded point, and the UI rendered the
+    misleading "No dose-response data available" empty state.
+    """
+
+    @staticmethod
+    def _excluded_point() -> ExcludedPointDetail:
+        return ExcludedPointDetail(
+            idx=0,
+            source=ExclusionSource.AUTO_3SIGMA,
+            excluded=False,  # auto-suggested outlier, not yet confirmed
+            reason=ExclusionReason.AUTO_3SIGMA,
+            author_id=None,
+            ts=datetime(2026, 5, 16, 2, 27, 44, tzinfo=UTC),
+            concentration=100.0,
+            response=61.4,
+        )
+
+    @pytest.mark.asyncio
+    async def test_excluded_points_are_dicts_in_dto(self) -> None:
+        """The application DTO honors its ``list[dict]`` contract."""
+        curve = _make_curve(excluded_points=[self._excluded_point()])
+        curve_repo = AsyncMock()
+        curve_repo.find_by_molecule.return_value = [curve]
+        protocol_repo = AsyncMock()
+        protocol_repo.find_by_ids.return_value = [_FakeProtocol(id=PROTO_A, name="P")]
+
+        uc = _make_uc(curve_repo=curve_repo, protocol_repo=protocol_repo)
+        result = await uc(
+            GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID),
+            auth=FakeAuth(workspace_id=WS),
+        )
+
+        cd = result.unwrap().protocols[0].curves[0]
+        assert cd.excluded_points is not None
+        assert all(isinstance(ep, dict) for ep in cd.excluded_points)
+        assert cd.excluded_points[0]["source"] == "auto_3sigma"
+        assert cd.excluded_points[0]["concentration"] == 100.0
+
+    @pytest.mark.asyncio
+    async def test_response_model_serializes_without_error(self) -> None:
+        """End-to-end: the route response model builds without raising.
+
+        This is the exact path that 500'd in production — reproduces it at
+        the DTO→Pydantic boundary that the unit-level use-case tests miss.
+        """
+        from cellar.interface.routes.molecule_activity import (
+            MoleculeActivityDetailResponse,
+        )
+
+        curve = _make_curve(excluded_points=[self._excluded_point()])
+        curve_repo = AsyncMock()
+        curve_repo.find_by_molecule.return_value = [curve]
+        protocol_repo = AsyncMock()
+        protocol_repo.find_by_ids.return_value = [_FakeProtocol(id=PROTO_A, name="P")]
+
+        uc = _make_uc(curve_repo=curve_repo, protocol_repo=protocol_repo)
+        dto = (
+            await uc(
+                GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID),
+                auth=FakeAuth(workspace_id=WS),
+            )
+        ).unwrap()
+
+        resp = MoleculeActivityDetailResponse.from_dto(dto)
+
+        excluded = resp.protocols[0].curves[0].excluded_points
+        assert excluded is not None
+        assert excluded[0]["source"] == "auto_3sigma"
+
+
 class TestEmptyResults:
     """Edge cases when no curves exist."""
 
@@ -343,9 +431,7 @@ class TestRunDateSurfaced:
             }
         )
 
-        uc = _make_uc(
-            curve_repo=curve_repo, protocol_repo=protocol_repo, run_repo=run_repo
-        )
+        uc = _make_uc(curve_repo=curve_repo, protocol_repo=protocol_repo, run_repo=run_repo)
         auth = FakeAuth(workspace_id=WS)
         result = await uc(
             GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID),
@@ -378,9 +464,7 @@ class TestRunDateSurfaced:
         run_repo = AsyncMock()
         run_repo.find_by_ids = AsyncMock(return_value={})  # Run deleted
 
-        uc = _make_uc(
-            curve_repo=curve_repo, protocol_repo=protocol_repo, run_repo=run_repo
-        )
+        uc = _make_uc(curve_repo=curve_repo, protocol_repo=protocol_repo, run_repo=run_repo)
         auth = FakeAuth(workspace_id=WS)
         result = await uc(
             GetMoleculeActivityDetailQuery(workspace_id=WS, molecule_id=MOL_ID),
