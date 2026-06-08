@@ -14,8 +14,9 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useCollections } from "../hooks/use-collections";
 import { useProjects } from "../hooks/use-projects";
-import { COLLECTION_TYPE_LABELS, type Collection } from "../types";
+import { COLLECTION_TYPE_LABELS, type Collection, type CollectionType } from "../types";
 import { BooleanCollectionsDialog } from "./boolean-collections-dialog";
+import { CollectionTypeIcon } from "./collection/collection-type-icon";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 
 interface CollectionListProps {
@@ -92,12 +93,16 @@ export function CollectionList({ projectId }: CollectionListProps) {
         headerName: "Type",
         field: "type",
         width: 130,
-        cellRenderer: (params: ICellRendererParams<Collection>) => (
-          <Badge variant="outline">
-            {COLLECTION_TYPE_LABELS[params.value as keyof typeof COLLECTION_TYPE_LABELS] ??
-              params.value}
-          </Badge>
-        ),
+        cellRenderer: (params: ICellRendererParams<Collection>) => {
+          const type = params.value as CollectionType;
+          const known = type in COLLECTION_TYPE_LABELS;
+          return (
+            <Badge variant="outline" className="gap-1">
+              {known && <CollectionTypeIcon type={type} />}
+              {COLLECTION_TYPE_LABELS[type] ?? params.value}
+            </Badge>
+          );
+        },
       },
       {
         headerName: "Created By",
