@@ -1,0 +1,37 @@
+// Playwright is not yet configured in this project (no playwright.config.ts,
+// no @playwright/test dependency in package.json).
+//
+// Before this spec can be activated, run:
+//   pnpm add -D @playwright/test
+//   pnpm exec playwright install
+//   # create playwright.config.ts (baseURL, testDir, etc.)
+//
+// The intended happy-path test (attach library collection to a run → see the
+// CoverageBar → open the gap dialog → confirm the protocol rollup) is below.
+// Move this file to collection-coverage.spec.ts and fill in the test once
+// Playwright is wired up. Component-level coverage already exists in:
+//   src/features/screening-assay/components/coverage-bar.test.tsx
+//   src/features/screening-assay/components/collection-coverage-chips.test.tsx
+//   src/features/screening-assay/components/collection-multi-select.test.tsx
+//
+// Scenario — Collection coverage on a run, then the protocol rollup:
+//
+// 1. Attach a library collection to a run.
+//    - Open a run-detail page (a run with screened readout data).
+//    - In the Collections card, open the CollectionMultiSelect picker; the
+//      library-typed collections sort first. Select a library collection
+//      (e.g. "Kinase Set") and confirm the attach.
+//    - Assert a CoverageBar renders for that collection showing
+//      `covered / total · pct%` (e.g. "1,840 / 2,000 · 92%").
+//
+// 2. Inspect the unscreened gap.
+//    - The CoverageBar shows an "N remaining" affordance (e.g. "160 remaining")
+//      when total > covered. Click it.
+//    - Assert the CoverageGapDialog opens and lists the unscreened molecules
+//      (those in the collection with no readout data on this run).
+//
+// 3. Confirm the protocol-level rollup.
+//    - Navigate to the protocol that owns the run.
+//    - Assert the "Library coverage" rollup shows the cumulative coverage % for
+//      that collection with the "across N runs" subtitle (e.g. "across 3 runs"),
+//      reflecting the union of all the protocol's runs that attach it.
