@@ -33,6 +33,7 @@ import type {
   ResetRunDataResponse,
   RunCollectionGapApiV1RunsRunIdCollectionsCollectionIdGapGetParams,
   RunResponse,
+  SetHitCriteriaRequest,
   UnlockRequest,
   UpdateRunRequest
 } from '.././model';
@@ -871,6 +872,135 @@ export const useUnlockRunApiV1RunsRunIdUnlockPost = <TError = HTTPValidationErro
       > => {
 
       const mutationOptions = getUnlockRunApiV1RunsRunIdUnlockPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Record this run's hit criteria — an attributable per-run decision. An
+empty ``criteria`` list is a valid "show all" decision (still recorded).
+ * @summary Set Run Hit Criteria
+ */
+export const setRunHitCriteriaApiV1RunsRunIdHitCriteriaPut = (
+    runId: string,
+    setHitCriteriaRequest: SetHitCriteriaRequest,
+ ) => {
+      
+      
+      return customInstance<RunResponse>(
+      {url: `/api/v1/runs/${runId}/hit-criteria`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: setHitCriteriaRequest
+    },
+      );
+    }
+  
+
+
+export const getSetRunHitCriteriaApiV1RunsRunIdHitCriteriaPutMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setRunHitCriteriaApiV1RunsRunIdHitCriteriaPut>>, TError,{runId: string;data: SetHitCriteriaRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof setRunHitCriteriaApiV1RunsRunIdHitCriteriaPut>>, TError,{runId: string;data: SetHitCriteriaRequest}, TContext> => {
+
+const mutationKey = ['setRunHitCriteriaApiV1RunsRunIdHitCriteriaPut'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setRunHitCriteriaApiV1RunsRunIdHitCriteriaPut>>, {runId: string;data: SetHitCriteriaRequest}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  setRunHitCriteriaApiV1RunsRunIdHitCriteriaPut(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetRunHitCriteriaApiV1RunsRunIdHitCriteriaPutMutationResult = NonNullable<Awaited<ReturnType<typeof setRunHitCriteriaApiV1RunsRunIdHitCriteriaPut>>>
+    export type SetRunHitCriteriaApiV1RunsRunIdHitCriteriaPutMutationBody = SetHitCriteriaRequest
+    export type SetRunHitCriteriaApiV1RunsRunIdHitCriteriaPutMutationError = HTTPValidationError
+
+    /**
+ * @summary Set Run Hit Criteria
+ */
+export const useSetRunHitCriteriaApiV1RunsRunIdHitCriteriaPut = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setRunHitCriteriaApiV1RunsRunIdHitCriteriaPut>>, TError,{runId: string;data: SetHitCriteriaRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setRunHitCriteriaApiV1RunsRunIdHitCriteriaPut>>,
+        TError,
+        {runId: string;data: SetHitCriteriaRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getSetRunHitCriteriaApiV1RunsRunIdHitCriteriaPutMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Clear this run's hit criteria, reverting to "unset" so the protocol
+recommendation is shown again as a suggestion.
+ * @summary Reset Run Hit Criteria
+ */
+export const resetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete = (
+    runId: string,
+ ) => {
+      
+      
+      return customInstance<RunResponse>(
+      {url: `/api/v1/runs/${runId}/hit-criteria`, method: 'DELETE'
+    },
+      );
+    }
+  
+
+
+export const getResetRunHitCriteriaApiV1RunsRunIdHitCriteriaDeleteMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete>>, TError,{runId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof resetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete>>, TError,{runId: string}, TContext> => {
+
+const mutationKey = ['resetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete>>, {runId: string}> = (props) => {
+          const {runId} = props ?? {};
+
+          return  resetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete(runId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetRunHitCriteriaApiV1RunsRunIdHitCriteriaDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof resetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete>>>
+    
+    export type ResetRunHitCriteriaApiV1RunsRunIdHitCriteriaDeleteMutationError = HTTPValidationError
+
+    /**
+ * @summary Reset Run Hit Criteria
+ */
+export const useResetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete>>, TError,{runId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resetRunHitCriteriaApiV1RunsRunIdHitCriteriaDelete>>,
+        TError,
+        {runId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getResetRunHitCriteriaApiV1RunsRunIdHitCriteriaDeleteMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

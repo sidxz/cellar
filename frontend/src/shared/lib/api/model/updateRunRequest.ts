@@ -6,8 +6,10 @@
  */
 import type { UpdateRunRequestQcMetrics } from './updateRunRequestQcMetrics';
 import type { UpdateRunRequestNotes } from './updateRunRequestNotes';
+import type { UpdateRunRequestConditions } from './updateRunRequestConditions';
 
 export interface UpdateRunRequest {
   qc_metrics?: UpdateRunRequestQcMetrics;
   notes?: UpdateRunRequestNotes;
+  conditions?: UpdateRunRequestConditions;
 }

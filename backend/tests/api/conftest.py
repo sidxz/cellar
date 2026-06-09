@@ -11,6 +11,8 @@ from collections.abc import AsyncIterator
 os.environ["SENTINEL_SERVICE_KEY"] = "test-key-for-api-tests"
 os.environ["SENTINEL_URL"] = "https://sentinel.example.com"
 os.environ["SENTINEL_SERVICE_NAME"] = "cellar"
+# Required since Sentinel 0.11.0 (authz mode) — get_sentinel() raises ValueError without it.
+os.environ["SENTINEL_IDP_AUDIENCE"] = "test-audience.apps.googleusercontent.com"
 # Disable Temporal so the DI container binds NullExportOrchestrator (and the other Null
 # orchestrators) without needing a running Temporal server.
 os.environ["TEMPORAL_DISABLED"] = "1"
