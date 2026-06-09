@@ -26,7 +26,9 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { usePlateTemplates } from "../hooks/use-plate-templates";
 import { useCreateRun } from "../hooks/use-runs";
+import { buildConditionsPayload } from "../lib/conditions";
 import { type ConditionDefinition, PLATE_FORMAT_LABELS, type PlateFormat } from "../types";
+import { ConditionFields } from "./condition-fields";
 import { TargetMultiSelect } from "./target-multi-select";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
@@ -140,21 +142,6 @@ export function CreateRunDialog({
     plateTemplateId !== "__none__" &&
     protocolControlLayouts[plateFormat] === plateTemplateId;
 
-  // Build the conditions payload: skip empty values, append unit (if
-  // declared on the definition) so storage shape matches existing data
-  // ("ATP Concentration": "10 uM", "Cell Line": "HeLa").
-  const buildConditionsPayload = (values: FormValues): Record<string, string> | null => {
-    if (!conditionDefinitions || conditionDefinitions.length === 0) return null;
-    const out: Record<string, string> = {};
-    for (const cd of conditionDefinitions) {
-      const raw = (values.conditionValues[cd.name] ?? "").trim();
-      if (!raw) continue;
-      const unit = cd.unit?.trim();
-      out[cd.name] = unit ? `${raw} ${unit}` : raw;
-    }
-    return Object.keys(out).length > 0 ? out : null;
-  };
-
   const onSubmit = (values: FormValues) => {
     createMutation.mutate(
       {
@@ -166,7 +153,7 @@ export function CreateRunDialog({
             ? values.plateTemplateId
             : null,
         notes: values.notes || null,
-        conditions: buildConditionsPayload(values),
+        conditions: buildConditionsPayload(conditionDefinitions ?? [], values.conditionValues),
         target_ids: values.targetIds,
       },
       {
@@ -278,51 +265,11 @@ export function CreateRunDialog({
                 <p className="text-xs text-muted-foreground -mt-2">
                   Run-time variables declared on the protocol. Leave blank if not recorded.
                 </p>
-                {conditionDefinitions.map((cd) => {
-                  const value = conditionValues[cd.name] ?? "";
-                  const labelText = cd.unit ? `${cd.name} (${cd.unit})` : cd.name;
-                  return (
-                    <div key={cd.id} className="grid gap-1">
-                      <Label className="text-xs">{labelText}</Label>
-                      {cd.data_type === "pick_list" &&
-                      cd.pick_list_values &&
-                      cd.pick_list_values.length > 0 ? (
-                        <Select
-                          value={value || "__none__"}
-                          onValueChange={(v) =>
-                            setValue(`conditionValues.${cd.name}`, v === "__none__" ? "" : v)
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">(not recorded)</SelectItem>
-                            {cd.pick_list_values.map((opt) => (
-                              <SelectItem key={opt} value={opt}>
-                                {opt}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input
-                          type={cd.data_type === "numeric" ? "number" : "text"}
-                          inputMode={cd.data_type === "numeric" ? "decimal" : undefined}
-                          placeholder={
-                            cd.data_type === "numeric"
-                              ? cd.unit
-                                ? `e.g. 10 (${cd.unit})`
-                                : "e.g. 10"
-                              : undefined
-                          }
-                          value={value}
-                          onChange={(e) => setValue(`conditionValues.${cd.name}`, e.target.value)}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
+                <ConditionFields
+                  defs={conditionDefinitions}
+                  values={conditionValues}
+                  onChange={(name, v) => setValue(`conditionValues.${name}`, v)}
+                />
               </div>
             )}
 

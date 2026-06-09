@@ -437,6 +437,15 @@ export interface Run {
   run_relationship_type: RunRelationshipType | null;
   plate_format: PlateFormat | null;
   conditions: Record<string, unknown> | null;
+  /** Per-run hit criteria — an attributable analytical decision, distinct from
+   *  the protocol's `recommended_hit_criteria` (the SOP suggestion). `null` =
+   *  unset (show the recommendation, claim no hit count); a list (possibly empty
+   *  `[]` = "show all, recorded") = a recorded decision. `hit_criteria_set_by` /
+   *  `hit_criteria_set_at` are non-null iff `hit_criteria` is non-null. */
+  hit_criteria: HitCriterion[] | null;
+  hit_criteria_set_by: string | null;
+  /** ISO datetime when the run's hit criteria were last set. */
+  hit_criteria_set_at: string | null;
   /** Biological targets linked directly to this run (independent set). */
   targets: TargetRef[];
   /** Per-collection coverage for collections attached to this run — how many of

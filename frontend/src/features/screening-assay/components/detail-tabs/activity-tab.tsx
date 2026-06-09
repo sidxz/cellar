@@ -260,7 +260,8 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-3">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Hit Criteria Filter</span>
+            <span className="text-sm font-medium">Protocol Hit Criteria</span>
+            <span className="text-xs text-muted-foreground">(applied across all runs)</span>
             <span className="text-muted-foreground">|</span>
 
             {activeCriteria.length > 0 ? (

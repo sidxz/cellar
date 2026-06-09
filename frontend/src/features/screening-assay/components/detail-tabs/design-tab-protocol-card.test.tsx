@@ -40,10 +40,6 @@ vi.mock("../../hooks/use-protocols", () => ({
   useRemoveOntologyAnnotation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-vi.mock("../../hooks/use-protocol-collection-coverage", () => ({
-  useProtocolCollectionCoverage: () => ({ data: [] }),
-}));
-
 vi.mock("../../hooks/use-targets", () => ({
   useTargets: () => ({
     data: [

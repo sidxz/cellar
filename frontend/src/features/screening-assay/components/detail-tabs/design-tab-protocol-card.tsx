@@ -19,8 +19,6 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { useProtocolCollectionCoverage } from "../../hooks/use-protocol-collection-coverage";
 import {
   invalidateProtocolTargetQueries,
   useAddProtocolTarget,
@@ -38,8 +36,6 @@ import {
   type Protocol,
   type ProtocolStatus,
 } from "../../types";
-import { CoverageBar } from "../coverage-bar";
-import { CoverageGapDialog } from "../coverage-gap-dialog";
 import { TargetMultiSelect } from "../target-multi-select";
 
 // ---------------------------------------------------------------------------
@@ -73,8 +69,6 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   const removeProtocolTarget = useRemoveProtocolTarget(protocolId);
 
   const { data: ontologySlots } = useOntologySlots();
-  const { data: coverage } = useProtocolCollectionCoverage(protocolId);
-  const [gap, setGap] = useState<{ path: string; name: string } | null>(null);
 
   // Provenance (is_direct / run_count) only exists on the rich
   // GET /protocols/{id}/targets payload — protocol.targets is the
@@ -159,27 +153,6 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
           </div>
         </CardContent>
       </Card>
-
-      {/* ── Library coverage ────────────────────────────────────────────── */}
-      {coverage && coverage.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Library coverage</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {coverage.map((c) => (
-              <CoverageBar
-                key={c.id}
-                coverage={c}
-                runCount={c.run_count}
-                onViewGap={() =>
-                  setGap({ path: `/protocols/${protocolId}/collections/${c.id}`, name: c.name })
-                }
-              />
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
       {/* ── 1. Ontology Annotations ─────────────────────────────────────── */}
       {ontologySlots && ontologySlots.length > 0 && (
@@ -285,15 +258,6 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
           </div>
         </CardContent>
       </Card>
-
-      {gap && (
-        <CoverageGapDialog
-          open
-          onOpenChange={(o) => !o && setGap(null)}
-          gapBasePath={gap.path}
-          collectionName={gap.name}
-        />
-      )}
     </>
   );
 }

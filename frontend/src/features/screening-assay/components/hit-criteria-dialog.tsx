@@ -18,9 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useUpdateProtocol } from "../hooks/use-protocols";
+import { useResetRunHitCriteria, useSetRunHitCriteria } from "../hooks/use-runs";
 import { buildHitCriterionOptions, optionIdForRule } from "../lib/hit-criteria-options";
 import type { HitCriterion, ReadoutDefinition } from "../types";
 
@@ -36,64 +37,53 @@ const OPERATOR_LABELS: Record<string, string> = {
   in: "in",
 };
 
-const _COMPARISON_OPERATORS = ["gt", "lt", "gte", "lte"] as const;
 const ALL_OPERATORS = ["gt", "lt", "gte", "lte", "in"] as const;
 
 const MAX_RULES = 3;
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
-interface HitCriteriaDialogProps {
-  protocolId: string;
-  readoutDefinitions: ReadoutDefinition[];
-  currentCriteria: HitCriterion[] | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-
-// ---------------------------------------------------------------------------
-// Helper: build a default empty rule
-// ---------------------------------------------------------------------------
 
 function emptyRule(): HitCriterion {
   return { readout_name: "", operator: "gt", value: 0, intercept_key: null };
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Shared rule-editing state
+//
+// One hook owns the draft rules + their stable row keys (so focus and
+// uncommitted text stay attached to the right row across add / remove) plus
+// every mutation handler and the validity check. Both the protocol-scoped and
+// run-scoped dialogs build on this — the only difference between them is where
+// the saved rules are persisted.
 // ---------------------------------------------------------------------------
 
-export function HitCriteriaDialog({
-  protocolId,
-  readoutDefinitions,
-  currentCriteria,
-  open,
-  onOpenChange,
-}: HitCriteriaDialogProps) {
-  const updateProtocol = useUpdateProtocol(protocolId);
-  const [rules, setRules] = useState<HitCriterion[]>(
-    () => currentCriteria?.map((r) => ({ ...r })) ?? [],
-  );
-  // Stable client ids kept positionally in lockstep with `rules`, so React
-  // keys each editable row by identity (not array index) — focus and
-  // uncommitted text stay attached to the right row across add / remove.
-  // `HitCriterion` is the backend payload, so the key lives outside it.
+interface HitCriteriaRulesState {
+  rules: HitCriterion[];
+  rowKeys: string[];
+  options: ReturnType<typeof buildHitCriterionOptions>;
+  isValid: boolean;
+  reset: (initial: HitCriterion[] | null) => void;
+  addRule: () => void;
+  removeRule: (index: number) => void;
+  handleOptionChange: (index: number, optionId: string) => void;
+  handleOperatorChange: (index: number, operator: HitCriterion["operator"]) => void;
+  handleValueChange: (index: number, raw: string) => void;
+}
+
+function useHitCriteriaRules(
+  readoutDefinitions: ReadoutDefinition[],
+  initial: HitCriterion[] | null,
+): HitCriteriaRulesState {
+  const [rules, setRules] = useState<HitCriterion[]>(() => initial?.map((r) => ({ ...r })) ?? []);
+  // `HitCriterion` is the backend payload, so the React key lives outside it.
   const [rowKeys, setRowKeys] = useState<string[]>(() =>
-    (currentCriteria ?? []).map(() => crypto.randomUUID()),
+    (initial ?? []).map(() => crypto.randomUUID()),
   );
 
-  // Reset state when dialog opens
-  const handleOpenChange = (next: boolean) => {
-    if (next) {
-      setRules(currentCriteria?.map((r) => ({ ...r })) ?? []);
-      setRowKeys((currentCriteria ?? []).map(() => crypto.randomUUID()));
-    }
-    onOpenChange(next);
-  };
+  const options = useMemo(() => buildHitCriterionOptions(readoutDefinitions), [readoutDefinitions]);
 
-  // --- Rule manipulation ---------------------------------------------------
+  const reset = (next: HitCriterion[] | null) => {
+    setRules(next?.map((r) => ({ ...r })) ?? []);
+    setRowKeys((next ?? []).map(() => crypto.randomUUID()));
+  };
 
   const addRule = () => {
     if (rules.length >= MAX_RULES) return;
@@ -152,7 +142,6 @@ export function HitCriteriaDialog({
   const handleValueChange = (index: number, raw: string) => {
     const rule = rules[index];
     if (rule.operator === "in") {
-      // Comma-separated string values
       const parts = raw
         .split(",")
         .map((s) => s.trim())
@@ -164,131 +153,177 @@ export function HitCriteriaDialog({
     }
   };
 
-  // --- Save ---------------------------------------------------------------
-
-  const handleSave = () => {
-    const payload = rules.length > 0 ? rules : null;
-    updateProtocol.mutate({ recommended_hit_criteria: payload } as Record<string, unknown>, {
-      onSuccess: () => onOpenChange(false),
-    });
-  };
-
-  // --- Derived state -------------------------------------------------------
-
-  const options = useMemo(() => buildHitCriterionOptions(readoutDefinitions), [readoutDefinitions]);
-
   const isValid = rules.every(
     (r) =>
       r.readout_name !== "" &&
       (r.operator !== "in" || (Array.isArray(r.value) && r.value.length > 0)),
   );
 
-  // --- Render --------------------------------------------------------------
+  return {
+    rules,
+    rowKeys,
+    options,
+    isValid,
+    reset,
+    addRule,
+    removeRule,
+    handleOptionChange,
+    handleOperatorChange,
+    handleValueChange,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Shared presentational editor — the rule rows + add button
+// ---------------------------------------------------------------------------
+
+function HitCriteriaRulesEditor({
+  state,
+  readoutDefinitions,
+}: {
+  state: HitCriteriaRulesState;
+  readoutDefinitions: ReadoutDefinition[];
+}) {
+  const { rules, rowKeys, options } = state;
+  return (
+    <div className="space-y-4 py-2">
+      {rules.map((rule, index) => {
+        const isCurveClass = rule.readout_name === "Curve Class";
+        const operators = isCurveClass ? (["in"] as const) : ALL_OPERATORS;
+        return (
+          <div key={rowKeys[index]} className="flex items-end gap-2 rounded-md border p-3">
+            <div className="flex-1 space-y-1">
+              <Label className="text-xs">Readout</Label>
+              <Select
+                value={rule.readout_name === "" ? "" : optionIdForRule(rule, readoutDefinitions)}
+                onValueChange={(v) => state.handleOptionChange(index, v)}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select readout" />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="w-20 space-y-1">
+              <Label className="text-xs">Op</Label>
+              <Select
+                value={rule.operator}
+                onValueChange={(v) =>
+                  state.handleOperatorChange(index, v as HitCriterion["operator"])
+                }
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {operators.map((op) => (
+                    <SelectItem key={op} value={op}>
+                      {OPERATOR_LABELS[op]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="w-32 space-y-1">
+              <Label className="text-xs">Value</Label>
+              <Input
+                className="h-9"
+                type={rule.operator === "in" ? "text" : "number"}
+                placeholder={rule.operator === "in" ? "full, partial" : "0"}
+                value={Array.isArray(rule.value) ? rule.value.join(", ") : rule.value}
+                onChange={(e) => state.handleValueChange(index, e.target.value)}
+              />
+            </div>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+              onClick={() => state.removeRule(index)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        );
+      })}
+
+      {rules.length === 0 && (
+        <p className="text-center text-sm text-muted-foreground">
+          No rules defined. All compounds will be shown unfiltered.
+        </p>
+      )}
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={state.addRule}
+        disabled={rules.length >= MAX_RULES}
+        className="w-full"
+      >
+        <Plus className="mr-2 h-4 w-4" />
+        Add Rule
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Protocol-scoped dialog — edits the protocol's *recommended* criteria (the SOP
+// suggestion). Used on protocol surfaces (e.g. the activity tab). Empty rules
+// clear the recommendation (None).
+// ---------------------------------------------------------------------------
+
+interface HitCriteriaDialogProps {
+  protocolId: string;
+  readoutDefinitions: ReadoutDefinition[];
+  currentCriteria: HitCriterion[] | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function HitCriteriaDialog({
+  protocolId,
+  readoutDefinitions,
+  currentCriteria,
+  open,
+  onOpenChange,
+}: HitCriteriaDialogProps) {
+  const updateProtocol = useUpdateProtocol(protocolId);
+  const state = useHitCriteriaRules(readoutDefinitions, currentCriteria);
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) state.reset(currentCriteria);
+    onOpenChange(next);
+  };
+
+  const handleSave = () => {
+    const payload = state.rules.length > 0 ? state.rules : null;
+    updateProtocol.mutate({ recommended_hit_criteria: payload } as Record<string, unknown>, {
+      onSuccess: () => onOpenChange(false),
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="w-[min(95vw,1000px)] max-w-[1000px] sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Hit Criteria</DialogTitle>
+          <DialogTitle>Recommended Hit Criteria</DialogTitle>
           <DialogDescription>
             Define up to {MAX_RULES} rules (combined with AND) to classify compounds as hits. These
-            criteria are saved on the protocol and recommended to all users.
+            criteria are saved on the protocol and recommended to all runs — each run still chooses
+            whether to apply them.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          {rules.map((rule, index) => {
-            const isCurveClass = rule.readout_name === "Curve Class";
-            const operators = isCurveClass ? (["in"] as const) : ALL_OPERATORS;
-
-            return (
-              <div key={rowKeys[index]} className="flex items-end gap-2 rounded-md border p-3">
-                {/* Readout / intercept selector */}
-                <div className="flex-1 space-y-1">
-                  <Label className="text-xs">Readout</Label>
-                  <Select
-                    value={
-                      rule.readout_name === "" ? "" : optionIdForRule(rule, readoutDefinitions)
-                    }
-                    onValueChange={(v) => handleOptionChange(index, v)}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Select readout" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {options.map((opt) => (
-                        <SelectItem key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Operator selector */}
-                <div className="w-20 space-y-1">
-                  <Label className="text-xs">Op</Label>
-                  <Select
-                    value={rule.operator}
-                    onValueChange={(v) =>
-                      handleOperatorChange(index, v as HitCriterion["operator"])
-                    }
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {operators.map((op) => (
-                        <SelectItem key={op} value={op}>
-                          {OPERATOR_LABELS[op]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Value input */}
-                <div className="w-32 space-y-1">
-                  <Label className="text-xs">Value</Label>
-                  <Input
-                    className="h-9"
-                    type={rule.operator === "in" ? "text" : "number"}
-                    placeholder={rule.operator === "in" ? "full, partial" : "0"}
-                    value={Array.isArray(rule.value) ? rule.value.join(", ") : rule.value}
-                    onChange={(e) => handleValueChange(index, e.target.value)}
-                  />
-                </div>
-
-                {/* Remove button */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => removeRule(index)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            );
-          })}
-
-          {rules.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground">
-              No rules defined. All compounds will be shown unfiltered.
-            </p>
-          )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={addRule}
-            disabled={rules.length >= MAX_RULES}
-            className="w-full"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Rule
-          </Button>
-        </div>
+        <HitCriteriaRulesEditor state={state} readoutDefinitions={readoutDefinitions} />
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -296,9 +331,100 @@ export function HitCriteriaDialog({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={updateProtocol.isPending || (!isValid && rules.length > 0)}
+            disabled={updateProtocol.isPending || (!state.isValid && state.rules.length > 0)}
           >
             {updateProtocol.isPending ? "Saving..." : "Save Criteria"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Run-scoped dialog — records *this run's* hit criteria (an attributable
+// analytical decision). When customizing from an unset run, the editor is
+// seeded with the protocol recommendation as a starting point. Saving with zero
+// rules is a valid, recorded "show all" decision (not a clear) — to revert to
+// unset, use "Reset to recommended" on the filter bar.
+// ---------------------------------------------------------------------------
+
+interface RunHitCriteriaDialogProps {
+  runId: string;
+  readoutDefinitions: ReadoutDefinition[];
+  /** The run's own criteria (null = unset). */
+  currentCriteria: HitCriterion[] | null;
+  /** The protocol's recommended criteria — seeds the editor when customizing
+   *  from an unset run. */
+  recommendation: HitCriterion[] | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function RunHitCriteriaDialog({
+  runId,
+  readoutDefinitions,
+  currentCriteria,
+  recommendation,
+  open,
+  onOpenChange,
+}: RunHitCriteriaDialogProps) {
+  const setHitCriteria = useSetRunHitCriteria();
+  const resetHitCriteria = useResetRunHitCriteria();
+  const seed = currentCriteria ?? recommendation ?? [];
+  const state = useHitCriteriaRules(readoutDefinitions, seed);
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) state.reset(currentCriteria ?? recommendation ?? []);
+    onOpenChange(next);
+  };
+
+  const handleSave = () => {
+    // Empty rules → recorded "show all" decision (not a clear).
+    setHitCriteria.mutate(
+      { runId, criteria: state.rules },
+      { onSuccess: () => onOpenChange(false) },
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="w-[min(95vw,1000px)] max-w-[1000px] sm:max-w-[1000px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Hit Criteria for this Run</DialogTitle>
+          <DialogDescription>
+            Define up to {MAX_RULES} rules (combined with AND) to classify this run's hits. This is
+            recorded as your decision for this run, independent of the protocol recommendation.
+            Saving with no rules records "show all compounds".
+          </DialogDescription>
+        </DialogHeader>
+
+        <HitCriteriaRulesEditor state={state} readoutDefinitions={readoutDefinitions} />
+
+        <DialogFooter>
+          {/* Reset clears the run's recorded decision so it reverts to "unset"
+              and the protocol recommendation is shown again. Only meaningful
+              when the run already has a recorded decision. */}
+          {currentCriteria !== null && (
+            <Button
+              variant="ghost"
+              className="mr-auto text-muted-foreground"
+              onClick={() =>
+                resetHitCriteria.mutate(runId, { onSuccess: () => onOpenChange(false) })
+              }
+              disabled={resetHitCriteria.isPending || setHitCriteria.isPending}
+            >
+              <RotateCcw className="mr-1.5 h-4 w-4" /> Reset to protocol recommendation
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={setHitCriteria.isPending || (!state.isValid && state.rules.length > 0)}
+          >
+            {setHitCriteria.isPending ? "Saving..." : "Save for this Run"}
           </Button>
         </DialogFooter>
       </DialogContent>

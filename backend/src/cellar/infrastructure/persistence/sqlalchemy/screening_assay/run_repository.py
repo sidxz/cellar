@@ -17,6 +17,7 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.repository import CollectionLinkResult, TargetLinkResult
 from cellar.domain.screening_assay.run import Plate, Run, Well
 from cellar.domain.screening_assay.target import TargetRef
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.value_objects import Barcode
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -329,6 +330,15 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             lock_reason=model.lock_reason,
             notes=model.notes,
             eln_entry_id=model.eln_entry_id,
+            # Preserve the unset (None) vs "show all, recorded" ([]) distinction —
+            # do NOT collapse with `or []` the way the protocol's recommendation does.
+            hit_criteria=(
+                [HitCriterion.from_dict(c) for c in model.hit_criteria]
+                if model.hit_criteria is not None
+                else None
+            ),
+            hit_criteria_set_by=model.hit_criteria_set_by,
+            hit_criteria_set_at=model.hit_criteria_set_at,
             plates=plates,
             wells=all_wells,
             created_at=model.created_at,
@@ -359,6 +369,13 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             lock_reason=aggregate.lock_reason,
             notes=aggregate.notes,
             eln_entry_id=aggregate.eln_entry_id,
+            hit_criteria=(
+                [c.to_dict() for c in aggregate.hit_criteria]
+                if aggregate.hit_criteria is not None
+                else None
+            ),
+            hit_criteria_set_by=aggregate.hit_criteria_set_by,
+            hit_criteria_set_at=aggregate.hit_criteria_set_at,
             version=aggregate.version,
         )
 
@@ -391,6 +408,13 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         model.lock_reason = aggregate.lock_reason
         model.notes = aggregate.notes
         model.eln_entry_id = aggregate.eln_entry_id
+        model.hit_criteria = (
+            [c.to_dict() for c in aggregate.hit_criteria]
+            if aggregate.hit_criteria is not None
+            else None
+        )
+        model.hit_criteria_set_by = aggregate.hit_criteria_set_by
+        model.hit_criteria_set_at = aggregate.hit_criteria_set_at
 
         # Rebuild plate/well collections
         wells_by_plate: dict[uuid.UUID, list[Well]] = {}

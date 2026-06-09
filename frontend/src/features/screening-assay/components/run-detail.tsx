@@ -12,6 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
@@ -26,11 +34,14 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { cn } from "@/shared/lib/utils";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import {
+  AlertTriangle,
   Calculator,
   CheckCircle2,
+  ChevronDown,
   Lock,
   Play,
   RotateCcw,
+  ShieldAlert,
   ThumbsDown,
   ThumbsUp,
   Trash2,
@@ -83,6 +94,7 @@ export function RunDetail({ runId }: RunDetailProps) {
   const [unlockReason, setUnlockReason] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
 
   // Per-run fit constraint overrides for Recompute. Mirrors the protocol's
   // Free/Range/Lock vocabulary so the popover matches the protocol-design
@@ -192,6 +204,16 @@ export function RunDetail({ runId }: RunDetailProps) {
         notFoundMessage="Run not found."
         actions={(r) => {
           const status = r.status as RunStatus;
+          // Frequent forward action (Start/Complete/Approve) + Recompute stay
+          // prominent; occasional + destructive actions move into "More", and
+          // the admin hard-delete into a separate role-gated menu.
+          const canLockToggle = status !== "draft";
+          const canReject = status === "completed";
+          const canReset =
+            (status === "draft" || status === "in_progress") && !r.is_locked && r.plate_count > 0;
+          const canDeleteRun = (status === "draft" || status === "in_progress") && !r.is_locked;
+          const hasDestructive = canReject || canReset || canDeleteRun;
+          const hasMore = canLockToggle || hasDestructive;
           return (
             <>
               {status === "draft" && (
@@ -221,31 +243,13 @@ export function RunDetail({ runId }: RunDetailProps) {
                 </Button>
               )}
               {status === "completed" && (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => approveMutation.mutate(runId)}
-                    disabled={approveMutation.isPending}
-                  >
-                    <ThumbsUp className="mr-2 h-4 w-4" />
-                    {approveMutation.isPending ? "Approving..." : "Approve"}
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => setRejectDialogOpen(true)}>
-                    <ThumbsDown className="mr-2 h-4 w-4" />
-                    Reject
-                  </Button>
-                </>
-              )}
-              {status !== "draft" && !r.is_locked && (
-                <Button size="sm" variant="outline" onClick={() => setLockDialogOpen(true)}>
-                  <Lock className="mr-2 h-4 w-4" />
-                  Lock
-                </Button>
-              )}
-              {status !== "draft" && r.is_locked && (
-                <Button size="sm" variant="outline" onClick={() => setUnlockDialogOpen(true)}>
-                  <Unlock className="mr-2 h-4 w-4" />
-                  Unlock
+                <Button
+                  size="sm"
+                  onClick={() => approveMutation.mutate(runId)}
+                  disabled={approveMutation.isPending}
+                >
+                  <ThumbsUp className="mr-2 h-4 w-4" />
+                  {approveMutation.isPending ? "Approving..." : "Approve"}
                 </Button>
               )}
               {!r.is_locked && r.plate_count > 0 && (
@@ -453,36 +457,83 @@ export function RunDetail({ runId }: RunDetailProps) {
                   </Popover>
                 </div>
               )}
-              {(status === "draft" || status === "in_progress") &&
-                !r.is_locked &&
-                r.plate_count > 0 && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setResetDialogOpen(true)}
-                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Reset Data
-                  </Button>
-                )}
-              {(status === "draft" || status === "in_progress") && !r.is_locked && (
-                <Button size="sm" variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </Button>
+              {hasMore && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      More
+                      <ChevronDown className="ml-1.5 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {canLockToggle &&
+                      (r.is_locked ? (
+                        <DropdownMenuItem onClick={() => setUnlockDialogOpen(true)}>
+                          <Unlock className="mr-2 h-4 w-4" />
+                          Unlock
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem onClick={() => setLockDialogOpen(true)}>
+                          <Lock className="mr-2 h-4 w-4" />
+                          Lock
+                        </DropdownMenuItem>
+                      ))}
+                    {canLockToggle && hasDestructive && <DropdownMenuSeparator />}
+                    {canReject && (
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setRejectDialogOpen(true)}
+                      >
+                        <ThumbsDown className="mr-2 h-4 w-4" />
+                        Reject
+                      </DropdownMenuItem>
+                    )}
+                    {canReset && (
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setResetDialogOpen(true)}
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Reset data
+                      </DropdownMenuItem>
+                    )}
+                    {canDeleteRun && (
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setDeleteDialogOpen(true)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               {isAdmin && (
-                <CascadeDeleteDialog
-                  entityType="run"
-                  entityId={runId}
-                  entityLabel={r.notes ?? runId}
-                  onDeleted={() =>
-                    r.protocol_id
-                      ? router.push(`/assays/protocols/${r.protocol_id}`)
-                      : router.push("/assays")
-                  }
-                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Admin actions"
+                      title="Admin actions"
+                    >
+                      <ShieldAlert className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                      Danger zone
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setForceDeleteOpen(true)}
+                    >
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      Force delete (cascade)…
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </>
           );
@@ -605,6 +656,22 @@ export function RunDetail({ runId }: RunDetailProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Force delete (cascade) — admin only, driven from the Admin menu. */}
+      {isAdmin && query.data && (
+        <CascadeDeleteDialog
+          entityType="run"
+          entityId={runId}
+          entityLabel={query.data.notes ?? runId}
+          onDeleted={() =>
+            query.data?.protocol_id
+              ? router.push(`/assays/protocols/${query.data.protocol_id}`)
+              : router.push("/assays")
+          }
+          open={forceDeleteOpen}
+          onOpenChange={setForceDeleteOpen}
+        />
+      )}
     </>
   );
 }

@@ -6,7 +6,12 @@ import { cn } from "@/shared/lib/utils";
 import { classifyZPrime, worstZPrime } from "../lib/qc-metrics";
 import { PLATE_FORMAT_LABELS, type PlateFormat, type Protocol, type Run } from "../types";
 import { RunNotesLine } from "./run-notes-line";
-import { CollectionsRelation, TagsRelation, TargetsRelation } from "./run-relations";
+import {
+  CollectionsRelation,
+  ConditionsRelation,
+  TagsRelation,
+  TargetsRelation,
+} from "./run-relations";
 import { Z_PRIME_BADGE } from "./z-prime-badge";
 
 function Dot() {
@@ -100,6 +105,7 @@ export function RunSummaryCard({ run, protocol, canEditMeta, canEditTags }: RunS
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           <TargetsRelation run={run} canEdit={canEditMeta} />
           <CollectionsRelation run={run} protocol={protocol} canEdit={canEditMeta} />
+          <ConditionsRelation run={run} protocol={protocol} canEdit={canEditMeta} />
         </div>
         <div className="mt-2.5">
           <TagsRelation runId={run.id} canEdit={canEditTags} />

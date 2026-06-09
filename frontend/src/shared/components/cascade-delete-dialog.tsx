@@ -25,6 +25,11 @@ export interface CascadeDeleteDialogProps {
   entityId: string;
   entityLabel: string;
   onDeleted?: () => void;
+  /** Controlled open state. When provided, the built-in red trigger button is
+   *  NOT rendered — drive the dialog from your own control (e.g. a menu item).
+   *  Omit both for the default self-triggering button behavior. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 function NodeView({
@@ -71,8 +76,16 @@ export function CascadeDeleteDialog({
   entityId,
   entityLabel,
   onDeleted,
+  open: controlledOpen,
+  onOpenChange,
 }: CascadeDeleteDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [typed, setTyped] = useState("");
   const [reason, setReason] = useState("");
 
@@ -88,12 +101,14 @@ export function CascadeDeleteDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
-        <Button variant="destructive" size="sm">
-          <AlertTriangle className="mr-1 h-4 w-4" />
-          Force delete (cascade)
-        </Button>
-      </AlertDialogTrigger>
+      {!isControlled && (
+        <AlertDialogTrigger asChild>
+          <Button variant="destructive" size="sm">
+            <AlertTriangle className="mr-1 h-4 w-4" />
+            Force delete (cascade)
+          </Button>
+        </AlertDialogTrigger>
+      )}
       <AlertDialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <AlertDialogHeader>
           <AlertDialogTitle>

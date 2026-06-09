@@ -162,6 +162,10 @@ from cellar.application.screening.run_import_templates import (
     UpdateRunImportTemplate,
 )
 from cellar.application.screening.search_ontology import SearchOntology
+from cellar.application.screening.set_run_hit_criteria import (
+    ResetRunHitCriteria,
+    SetRunHitCriteria,
+)
 from cellar.application.screening.update_run import UpdateRun
 from cellar.application.screening.update_target import UpdateTarget
 from cellar.application.shared.molecule_resolver import MoleculeResolver
@@ -427,6 +431,8 @@ def register_screening(container: Container) -> None:
     container.define(UpdateRun, _run_cmd(UpdateRun))
     container.define(LockRun, _run_cmd(LockRun))
     container.define(UnlockRun, _run_cmd(UnlockRun))
+    container.define(SetRunHitCriteria, _run_cmd(SetRunHitCriteria))
+    container.define(ResetRunHitCriteria, _run_cmd(ResetRunHitCriteria))
     container.define(AddRunTarget, _run_cmd(AddRunTarget))
     container.define(RemoveRunTarget, _run_cmd(RemoveRunTarget))
     container.define(AddRunCollection, _run_cmd(AddRunCollection))

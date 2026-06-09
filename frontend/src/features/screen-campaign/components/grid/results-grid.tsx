@@ -25,6 +25,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { groupBy } from "@/shared/lib/group-by";
@@ -259,7 +260,12 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
         const extra = synonyms.length - visibleSynonyms.length;
         return (
           <div className="flex flex-col py-2 leading-tight">
-            <span className="font-medium text-sm">{label}</span>
+            <EntityLink
+              type="compound"
+              id={r.molecule_id}
+              label={label}
+              className="text-sm font-medium"
+            />
             {m?.name && <span className="text-xs text-muted-foreground truncate">{m.name}</span>}
             {visibleSynonyms.map((s) => (
               <span key={s} className="text-[11px] text-muted-foreground truncate">

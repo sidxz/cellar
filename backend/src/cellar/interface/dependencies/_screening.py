@@ -110,6 +110,10 @@ from cellar.application.screening.resolve_target_links import (
     ResolveProtocolTargets,
     ResolveRunTargets,
 )
+from cellar.application.screening.set_run_hit_criteria import (
+    ResetRunHitCriteria,
+    SetRunHitCriteria,
+)
 from cellar.application.screening.update_run import UpdateRun
 from cellar.application.screening.update_target import UpdateTarget
 
@@ -195,11 +199,13 @@ __all__ = [
     "RemoveRunCollectionDep",
     "RemoveRunTargetDep",
     "ResetRunDataDep",
+    "ResetRunHitCriteriaDep",
     "ResolveProtocolTargetsDep",
     "ResolveRunCollectionsDep",
     "ResolveRunTargetsDep",
     "RetireProtocolDep",
     "SetControlLayoutDep",
+    "SetRunHitCriteriaDep",
     "SetUpRunPlateDep",
     "StartRunDep",
     "UnlockProtocolDep",
@@ -305,6 +311,10 @@ RejectRunDep = Annotated[RejectRun, Depends(_get_use_case(RejectRun))]
 LockRunDep = Annotated[LockRun, Depends(_get_use_case(LockRun))]
 UpdateRunDep = Annotated[UpdateRun, Depends(_get_use_case(UpdateRun))]
 UnlockRunDep = Annotated[UnlockRun, Depends(_get_use_case(UnlockRun))]
+SetRunHitCriteriaDep = Annotated[SetRunHitCriteria, Depends(_get_use_case(SetRunHitCriteria))]
+ResetRunHitCriteriaDep = Annotated[
+    ResetRunHitCriteria, Depends(_get_use_case(ResetRunHitCriteria))
+]
 CreateReadoutDataDep = Annotated[CreateReadoutData, Depends(_get_use_case(CreateReadoutData))]
 BulkCreateReadoutDataDep = Annotated[
     BulkCreateReadoutData, Depends(_get_use_case(BulkCreateReadoutData))

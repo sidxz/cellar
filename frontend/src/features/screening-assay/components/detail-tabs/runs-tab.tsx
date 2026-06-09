@@ -14,23 +14,22 @@ import {
 } from "@/shared/components/ui/select";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { shortId } from "@/shared/lib/utils";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import type { ColDef, ColGroupDef, ICellRendererParams } from "ag-grid-community";
 import { FlaskConical } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { useRunsByProtocol } from "../../hooks/use-runs";
+import { deriveConditionColumns, readConditionCell } from "../../lib/conditions";
 import { worstZPrime } from "../../lib/qc-metrics";
-import {
-  PLATE_FORMAT_LABELS,
-  type PlateFormat,
-  type Protocol,
-  RUN_STATUS_LABELS,
-  type Run,
-} from "../../types";
-
+import { type Protocol, RUN_STATUS_LABELS, type Run } from "../../types";
 interface RunsTabProps {
   protocol: Protocol;
   protocolId: string;
+}
+
+/** Coverage fraction (0–1, or null) → "42%" / "—". */
+function coveragePct(fraction: number | null): string {
+  return fraction == null ? "—" : `${Math.round(fraction * 100)}%`;
 }
 
 function zPrimeBadge(qcMetrics: Record<string, unknown> | null) {
@@ -77,7 +76,85 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
     return runs.filter((r) => r.status === statusFilter);
   }, [runs, statusFilter]);
 
-  const columnDefs = useMemo<ColDef<Run>[]>(
+  // One column per condition variable any run records, typed from the protocol's
+  // definitions. Derived from all runs (not the status-filtered subset) so the
+  // column set is stable as the status filter changes.
+  const conditionGroup = useMemo<ColGroupDef<Run> | null>(() => {
+    const specs = deriveConditionColumns(runs, protocol.condition_definitions ?? []);
+    if (specs.length === 0) return null;
+    return {
+      headerName: "Conditions",
+      children: specs.map((spec) => ({
+        colId: `cond:${spec.key}`,
+        headerName:
+          spec.type === "numeric" && spec.unit ? `${spec.label} (${spec.unit})` : spec.label,
+        headerTooltip: spec.unit ? `${spec.label} (${spec.unit})` : spec.label,
+        width: 140,
+        minWidth: 110,
+        // Per-column override: the grid sets suppressFilters, but condition
+        // columns are sortable + filterable via the header menu.
+        sortable: true,
+        filter: spec.type === "numeric" ? "agNumberColumnFilter" : "agTextColumnFilter",
+        valueGetter: (p) => readConditionCell(p.data?.conditions, spec),
+        valueFormatter: (p) => (p.value == null || p.value === "" ? "—" : String(p.value)),
+      })),
+    };
+  }, [runs, protocol.condition_definitions]);
+
+  // Targets / collections are run associations — show each column only when at
+  // least one run carries the data (mirrors the conditions rule). Derived from
+  // all runs so the column set is stable across the status filter.
+  const hasTargets = useMemo(() => (runs ?? []).some((r) => (r.targets?.length ?? 0) > 0), [runs]);
+  const hasCollections = useMemo(
+    () => (runs ?? []).some((r) => (r.collections?.length ?? 0) > 0),
+    [runs],
+  );
+
+  const associationColumns = useMemo<ColDef<Run>[]>(() => {
+    const cols: ColDef<Run>[] = [];
+    if (hasTargets) {
+      cols.push({
+        colId: "targets",
+        headerName: "Target",
+        flex: 1,
+        minWidth: 140,
+        cellClass: "text-sm",
+        filter: "agTextColumnFilter",
+        // Plain text (with native ellipsis) reads cleaner in a dense grid than
+        // pills; chips stay on the run-detail header.
+        valueGetter: (p) => (p.data?.targets ?? []).map((t) => t.name).join(", "),
+        valueFormatter: (p) => p.value || "—",
+        tooltipValueGetter: (p) => (p.value as string) || null,
+      });
+    }
+    if (hasCollections) {
+      cols.push({
+        colId: "collections",
+        headerName: "Collection",
+        flex: 1,
+        minWidth: 150,
+        cellClass: "text-sm",
+        filter: "agTextColumnFilter",
+        // "<library> (<coverage>%)" — names the library and keeps the coverage
+        // number; full covered/total rides in the tooltip.
+        valueGetter: (p) =>
+          (p.data?.collections ?? [])
+            .map((c) => `${c.name} (${coveragePct(c.fraction)})`)
+            .join(", "),
+        valueFormatter: (p) => p.value || "—",
+        tooltipValueGetter: (p) => {
+          const runCols = p.data?.collections ?? [];
+          if (runCols.length === 0) return null;
+          return runCols
+            .map((c) => `${c.name}: ${c.covered}/${c.total} (${coveragePct(c.fraction)})`)
+            .join(", ");
+        },
+      });
+    }
+    return cols;
+  }, [hasTargets, hasCollections]);
+
+  const columnDefs = useMemo<(ColDef<Run> | ColGroupDef<Run>)[]>(
     () => [
       {
         headerName: "Run Date",
@@ -86,35 +163,15 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         cellClass: "font-mono text-sm",
       },
       {
-        headerName: "Conditions",
-        field: "conditions",
-        flex: 1,
-        minWidth: 200,
-        valueGetter: (p) => {
-          const c = p.data?.conditions;
-          if (!c) return null;
-          if (typeof c === "object" && "description" in c) return c.description;
-          return Object.entries(c)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(", ");
-        },
-        cellRenderer: (params: ICellRendererParams<Run>) => {
-          if (!params.value) return <span className="text-muted-foreground">&mdash;</span>;
-          const text = String(params.value);
-          return (
-            <span className="text-sm" title={text}>
-              {text.length > 80 ? `${text.slice(0, 80)}...` : text}
-            </span>
-          );
-        },
-      },
-      {
         headerName: "Scientist",
         field: "operator",
-        width: 120,
+        width: 130,
+        filter: "agTextColumnFilter",
         valueGetter: (p) =>
           p.data ? (memberName(p.data.operator) ?? shortId(p.data.operator)) : null,
       },
+      ...associationColumns,
+      ...(conditionGroup ? [conditionGroup] : []),
       {
         headerName: "Lab",
         field: "performed_at_org_id",
@@ -130,13 +187,6 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         valueFormatter: (p) => (p.value != null && p.value > 0 ? String(p.value) : "\u2014"),
       },
       { headerName: "Plates", field: "plate_count", width: 80 },
-      {
-        headerName: "Format",
-        field: "plate_format",
-        width: 100,
-        valueFormatter: (p) =>
-          p.value ? (PLATE_FORMAT_LABELS[p.value as PlateFormat] ?? p.value) : "\u2014",
-      },
       {
         headerName: "Z\u2032",
         field: "qc_metrics",
@@ -165,12 +215,18 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
         },
       },
     ],
-    [memberName, orgName],
+    [memberName, orgName, conditionGroup, associationColumns],
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-4">
+    <DataGrid<Run>
+      rowData={filteredRuns}
+      columnDefs={columnDefs}
+      loading={isLoading}
+      height="500px"
+      suppressFilters
+      // Status filter shares the grid's toolbar row, right of the quick filter.
+      toolbarActions={
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Filter by status" />
@@ -184,23 +240,15 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
             ))}
           </SelectContent>
         </Select>
-      </div>
-
-      <DataGrid<Run>
-        rowData={filteredRuns}
-        columnDefs={columnDefs}
-        loading={isLoading}
-        height="500px"
-        suppressFilters
-        onRowClick={(run) => router.push(`/assays/runs/${run.id}`)}
-        emptyState={
-          <EmptyState
-            icon={FlaskConical}
-            title="No runs"
-            description="Create a run to start collecting screening data."
-          />
-        }
-      />
-    </div>
+      }
+      onRowClick={(run) => router.push(`/assays/runs/${run.id}`)}
+      emptyState={
+        <EmptyState
+          icon={FlaskConical}
+          title="No runs"
+          description="Create a run to start collecting screening data."
+        />
+      }
+    />
   );
 }

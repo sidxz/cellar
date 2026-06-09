@@ -27,6 +27,11 @@ export interface AdminDeleteButtonProps {
   entityLabel: string;
   onDeleted?: () => void;
   triggerLabel?: string;
+  /** Controlled open state. When provided, the built-in red trigger button is
+   *  NOT rendered — drive the dialog from your own control (e.g. a menu item).
+   *  Omit both for the default self-triggering button behavior. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function AdminDeleteButton({
@@ -35,19 +40,24 @@ export function AdminDeleteButton({
   entityLabel,
   onDeleted,
   triggerLabel = "Admin: Delete",
+  open: controlledOpen,
+  onOpenChange,
 }: AdminDeleteButtonProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
   const [reason, setReason] = useState("");
   const [blockers, setBlockers] = useState<AdminDeleteBlocker[] | null>(null);
   const m = useAdminDelete({
     onSuccess: () => {
-      setOpen(false);
+      handleOpenChange(false);
       onDeleted?.();
     },
   });
 
   function handleOpenChange(next: boolean) {
-    setOpen(next);
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
     if (!next) {
       setReason("");
       setBlockers(null);
@@ -68,12 +78,14 @@ export function AdminDeleteButton({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogTrigger asChild>
-        <Button variant="destructive" size="sm">
-          <Trash2 className="mr-1 h-4 w-4" />
-          {triggerLabel}
-        </Button>
-      </AlertDialogTrigger>
+      {!isControlled && (
+        <AlertDialogTrigger asChild>
+          <Button variant="destructive" size="sm">
+            <Trash2 className="mr-1 h-4 w-4" />
+            {triggerLabel}
+          </Button>
+        </AlertDialogTrigger>
+      )}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>

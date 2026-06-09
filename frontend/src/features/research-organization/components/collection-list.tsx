@@ -153,7 +153,8 @@ export function CollectionList({ projectId }: CollectionListProps) {
         rowData={filteredCollections}
         columnDefs={columnDefs}
         loading={isLoading}
-        height="500px"
+        // Fill the viewport below the page header and toolbar.
+        height="calc(100vh - 200px)"
         suppressFilters
         searchPlaceholder="Filter collections..."
         onRowClick={(collection) => router.push(`/collections/${collection.id}`)}

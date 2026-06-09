@@ -307,6 +307,13 @@ class RunModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     lock_reason: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
     eln_entry_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    # Per-run hit criteria (attributable analytical decision). NULL = unset
+    # (show protocol recommendation); a JSON list (possibly empty = "show all,
+    # recorded") = a recorded decision. The set_by/set_at pair is non-NULL iff
+    # hit_criteria is non-NULL.
+    hit_criteria: Mapped[list | None] = mapped_column(JSONB)
+    hit_criteria_set_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    hit_criteria_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Owned entity collection
     plates: Mapped[list[PlateModel]] = relationship(

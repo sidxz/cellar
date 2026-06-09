@@ -39,6 +39,10 @@ from cellar.application.screening.reset_run_data import (
 )
 from cellar.application.screening.resolve_collection_coverage import ResolveRunCollectionsQuery
 from cellar.application.screening.resolve_target_links import ResolveRunTargetsQuery
+from cellar.application.screening.set_run_hit_criteria import (
+    ResetRunHitCriteriaCommand,
+    SetRunHitCriteriaCommand,
+)
 from cellar.application.screening.update_run import UpdateRunCommand
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.run import Run
@@ -58,13 +62,16 @@ from cellar.interface.dependencies import (
     RemoveRunCollectionDep,
     RemoveRunTargetDep,
     ResetRunDataDep,
+    ResetRunHitCriteriaDep,
     ResolveRunCollectionsDep,
     ResolveRunTargetsDep,
+    SetRunHitCriteriaDep,
     StartRunDep,
     UnlockRunDep,
     UpdateRunDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes._campaign_dtos import HitCriterionDTO
 from cellar.interface.routes._collection_coverage import CollectionCoverageResponse
 from cellar.interface.routes._target_refs import TargetRefResponse
 
@@ -120,6 +127,12 @@ class RunResponse(BaseModel):
     plate_format: str | None = None
     plate_template_id: uuid.UUID | None = None
     conditions: dict[str, Any] | None = None
+    # Per-run hit criteria (attributable decision). None = unset (show protocol
+    # recommendation); a list (possibly empty = "show all, recorded") = decided.
+    # set_by/set_at are non-null iff hit_criteria is non-null.
+    hit_criteria: list[HitCriterionDTO] | None = None
+    hit_criteria_set_by: uuid.UUID | None = None
+    hit_criteria_set_at: datetime | None = None
     targets: list[TargetRefResponse] = []
     collections: list[CollectionCoverageResponse] = []
 
@@ -157,6 +170,13 @@ class RunResponse(BaseModel):
             plate_format=r.plate_format.value if r.plate_format else None,
             plate_template_id=r.plate_template_id,
             conditions=r.conditions,
+            hit_criteria=(
+                [HitCriterionDTO.from_domain(c) for c in r.hit_criteria]
+                if r.hit_criteria is not None
+                else None
+            ),
+            hit_criteria_set_by=r.hit_criteria_set_by,
+            hit_criteria_set_at=r.hit_criteria_set_at,
             targets=targets or [],
             collections=collections or [],
         )
@@ -201,6 +221,13 @@ class UnlockRequest(BaseModel):
 class UpdateRunRequest(BaseModel):
     qc_metrics: dict[str, Any] | None = None
     notes: str | None = None
+    conditions: dict[str, Any] | None = None
+
+
+class SetHitCriteriaRequest(BaseModel):
+    # An empty list is a valid, recorded "show all" decision; to revert a run to
+    # "unset" (re-show the protocol recommendation), DELETE the hit criteria.
+    criteria: list[HitCriterionDTO] = []
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +324,7 @@ async def update_run(
         run_id=run_id,
         qc_metrics=body.qc_metrics if "qc_metrics" in body.model_fields_set else UNSET,
         notes=body.notes if "notes" in body.model_fields_set else UNSET,
+        conditions=body.conditions if "conditions" in body.model_fields_set else UNSET,
     )
     result = await uc(cmd, auth=auth)
     run = result_to_response(result)
@@ -445,6 +473,45 @@ async def unlock_run(
             run_id=run_id,
             reason=body.reason,
         ),
+        auth=auth,
+    )
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
+
+
+@router.put("/runs/{run_id}/hit-criteria", response_model=RunResponse)
+async def set_run_hit_criteria(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    targets_uc: ResolveRunTargetsDep,
+    body: SetHitCriteriaRequest,
+    uc: SetRunHitCriteriaDep,
+) -> RunResponse:
+    """Record this run's hit criteria — an attributable per-run decision. An
+    empty ``criteria`` list is a valid "show all" decision (still recorded)."""
+    result = await uc(
+        SetRunHitCriteriaCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run_id,
+            criteria=[c.to_domain() for c in body.criteria],
+        ),
+        auth=auth,
+    )
+    run = result_to_response(result)
+    return RunResponse.from_domain(run, targets=await _run_targets(targets_uc, auth, run.id))
+
+
+@router.delete("/runs/{run_id}/hit-criteria", response_model=RunResponse)
+async def reset_run_hit_criteria(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    targets_uc: ResolveRunTargetsDep,
+    uc: ResetRunHitCriteriaDep,
+) -> RunResponse:
+    """Clear this run's hit criteria, reverting to "unset" so the protocol
+    recommendation is shown again as a suggestion."""
+    result = await uc(
+        ResetRunHitCriteriaCommand(workspace_id=auth.workspace_id, run_id=run_id),
         auth=auth,
     )
     run = result_to_response(result)

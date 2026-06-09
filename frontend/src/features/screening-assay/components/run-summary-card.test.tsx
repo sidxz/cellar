@@ -9,6 +9,7 @@ import { RunSummaryCard } from "./run-summary-card";
 vi.mock("./run-relations", () => ({
   TargetsRelation: () => null,
   CollectionsRelation: () => null,
+  ConditionsRelation: () => null,
   TagsRelation: () => null,
 }));
 vi.mock("./run-notes-line", () => ({ RunNotesLine: () => null }));

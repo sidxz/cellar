@@ -134,7 +134,8 @@ export function ProtocolList({ onSelect, projectId }: ProtocolListProps) {
         rowData={protocols}
         columnDefs={columnDefs}
         loading={isLoading}
-        height="400px"
+        // Fill the viewport below the page header, tabs, and filter row.
+        height="calc(100vh - 264px)"
         quickFilterText={search}
         searchPlaceholder={false}
         suppressFilters

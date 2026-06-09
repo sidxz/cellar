@@ -20,6 +20,7 @@ import {
 } from "@/features/screening-assay/types";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
+import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
 import { groupBy } from "@/shared/lib/group-by";
 import { cn } from "@/shared/lib/utils";
@@ -501,9 +502,16 @@ function buildMoleculeColumn(imageSize: string): ColDef<EnrichedMolecule> {
             />
           )}
           <div className="mt-1 text-center min-w-0 w-full">
-            <p className="truncate font-mono text-xs text-muted-foreground">
-              {mol.registration_number ?? "—"}
-            </p>
+            {mol.registration_number ? (
+              <EntityLink
+                type="compound"
+                id={mol.id}
+                label={mol.registration_number}
+                className="block truncate text-xs"
+              />
+            ) : (
+              <p className="truncate font-mono text-xs text-muted-foreground">—</p>
+            )}
             <p className="truncate text-sm">{mol.name || "Unnamed"}</p>
           </div>
         </div>

@@ -23,8 +23,16 @@ import {
   useAddRunTarget,
   useRemoveRunTarget,
 } from "../hooks/use-run-targets";
+import { useUpdateRun } from "../hooks/use-runs";
+import {
+  buildConditionsPayload,
+  editableConditionDefs,
+  seedConditionValues,
+} from "../lib/conditions";
 import type { Protocol, Run } from "../types";
 import { CollectionMultiSelect } from "./collection-multi-select";
+import { ConditionChips } from "./condition-chips";
+import { ConditionFields } from "./condition-fields";
 import { CoverageChip } from "./coverage-chip";
 import { CoverageGapDialog } from "./coverage-gap-dialog";
 import { TargetChips } from "./target-chips";
@@ -93,7 +101,7 @@ export function TargetsRelation({ run, canEdit }: { run: Run; canEdit: boolean }
   return (
     <span className="inline-flex items-center gap-2">
       <RelLabel>Targets</RelLabel>
-      <TargetChips targets={run.targets} max={6} />
+      <TargetChips targets={run.targets} max={6} chipClassName="text-base" />
       {canEdit && (
         <Popover>
           <EditTrigger empty={run.targets.length === 0} label="targets" />
@@ -149,13 +157,14 @@ export function CollectionsRelation({
     <span className="inline-flex min-w-0 items-center gap-2">
       <RelLabel>{collections.length === 1 ? "Collection" : "Collections"}</RelLabel>
       {collections.length === 0 ? (
-        <span className="text-xs text-muted-foreground">None</span>
+        <span className="text-base text-muted-foreground">None</span>
       ) : (
         <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           {collections.map((c) => (
             <CoverageChip
               key={c.id}
               coverage={c}
+              className="text-base"
               onViewGap={() =>
                 setGap({ path: `/runs/${run.id}/collections/${c.id}`, name: c.name })
               }
@@ -188,6 +197,98 @@ export function CollectionsRelation({
   );
 }
 
+// ─── Conditions ─────────────────────────────────────────────────────────────────
+
+/**
+ * Run conditions — the protocol-declared run-time variables (Cell Line, ATP
+ * Concentration, …). Shows them as `key: value` chips and, for editors on an
+ * unlocked run, an edit popover with one typed field per protocol definition.
+ * Any keys already on the run that no definition covers (e.g. imported data)
+ * are rendered as plain text fields so nothing is dropped on save.
+ *
+ * Renders nothing when the protocol declares no conditions and the run carries
+ * none — there's nothing to record or add (conditions are declared on the
+ * protocol's Design tab).
+ */
+export function ConditionsRelation({
+  run,
+  protocol,
+  canEdit,
+}: {
+  run: Run;
+  protocol: Protocol | undefined;
+  canEdit: boolean;
+}) {
+  const update = useUpdateRun();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+
+  const defs = protocol?.condition_definitions ?? [];
+  const editableDefs = editableConditionDefs(defs, run.conditions);
+
+  // Nothing declared and nothing recorded → don't render the relation at all.
+  if (editableDefs.length === 0) return null;
+
+  const hasConditions = !!run.conditions && Object.keys(run.conditions).length > 0;
+
+  // Seed the draft once on open (not via an effect — `defs`/`run.conditions`
+  // change identity each render and would clobber in-flight edits).
+  const handleOpenChange = (next: boolean) => {
+    if (next) setDraft(seedConditionValues(defs, run.conditions));
+    setOpen(next);
+  };
+
+  const save = () => {
+    const payload = buildConditionsPayload(editableDefs, draft);
+    update.mutate(
+      { runId: run.id, data: { conditions: payload } },
+      { onSuccess: () => setOpen(false) },
+    );
+  };
+
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      <RelLabel>Conditions</RelLabel>
+      <ConditionChips
+        conditions={run.conditions}
+        max={6}
+        chipClassName="text-base"
+        emptyFallback={<span className="text-base text-muted-foreground">None</span>}
+      />
+      {canEdit && (
+        <Popover open={open} onOpenChange={handleOpenChange}>
+          <EditTrigger empty={!hasConditions} label="conditions" />
+          <PopoverContent align="start" className="w-80 space-y-3">
+            <p className="text-xs font-medium">Conditions</p>
+            <div className="grid max-h-72 gap-3 overflow-y-auto">
+              <ConditionFields
+                defs={editableDefs}
+                values={draft}
+                onChange={(name, v) => setDraft((d) => ({ ...d, [name]: v }))}
+                disabled={update.isPending}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setOpen(false)}
+                disabled={update.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={save} disabled={update.isPending}>
+                {update.isPending ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+    </span>
+  );
+}
+
 // ─── Tags ────────────────────────────────────────────────────────────────────────
 
 export function TagsRelation({ runId, canEdit }: { runId: string; canEdit: boolean }) {
@@ -211,13 +312,14 @@ export function TagsRelation({ runId, canEdit }: { runId: string; canEdit: boole
     <span className="inline-flex flex-wrap items-center gap-2">
       <RelLabel>Tags</RelLabel>
       {list.length === 0 && (
-        <span className="text-xs italic text-muted-foreground/70">No tags</span>
+        <span className="text-base italic text-muted-foreground/70">No tags</span>
       )}
       {list.map((t) => (
         <TagChip
           key={t.id}
           tagKey={t.key}
           value={t.value}
+          className="text-base"
           title={`${t.value ? `${t.key}=${t.value}` : t.key} · added ${formatRelativeDate(t.assigned_at)}`}
           onRemove={canEdit ? () => unassign.mutate(t.id) : undefined}
         />

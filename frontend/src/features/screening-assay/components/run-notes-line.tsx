@@ -72,7 +72,7 @@ export function RunNotesLine({ run, canEdit }: { run: Run; canEdit: boolean }) {
           rows={2}
           disabled={update.isPending}
           placeholder="Add notes about this run…"
-          className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
+          className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-base focus:outline-none focus:ring-2 focus:ring-ring/50"
         />
         <div className="flex items-center justify-end gap-2">
           <Button
@@ -96,7 +96,7 @@ export function RunNotesLine({ run, canEdit }: { run: Run; canEdit: boolean }) {
   if (!hasNotes && !canEdit) return null;
 
   if (!canEdit) {
-    return <p className="mt-1.5 text-sm text-muted-foreground">{run.notes}</p>;
+    return <p className="mt-1.5 text-base text-muted-foreground">{run.notes}</p>;
   }
 
   return (
@@ -108,7 +108,7 @@ export function RunNotesLine({ run, canEdit }: { run: Run; canEdit: boolean }) {
     >
       <span
         className={
-          hasNotes ? "text-sm text-muted-foreground" : "text-sm italic text-muted-foreground/60"
+          hasNotes ? "text-base text-muted-foreground" : "text-base italic text-muted-foreground/60"
         }
       >
         {hasNotes ? run.notes : "Add notes…"}

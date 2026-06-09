@@ -204,7 +204,8 @@ export function ProjectListPage() {
           rowData={filteredProjects}
           columnDefs={columnDefs}
           loading={isLoading}
-          height="400px"
+          // Fill the viewport below the page header and controls row.
+          height="calc(100vh - 200px)"
           suppressFilters
           onRowClick={(project) => router.push(`/projects/${project.id}`)}
           emptyState={
