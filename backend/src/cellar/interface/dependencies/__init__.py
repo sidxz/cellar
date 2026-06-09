@@ -26,6 +26,7 @@ from . import (
     _dashboard,
     _export,
     _inventory,
+    _personalization,
     _research_organization,
     _run_import,
     _sar_analysis,
@@ -41,6 +42,7 @@ from ._core import *  # noqa: F403
 from ._dashboard import *  # noqa: F403
 from ._export import *  # noqa: F403
 from ._inventory import *  # noqa: F403
+from ._personalization import *  # noqa: F403
 from ._research_organization import *  # noqa: F403
 from ._run_import import *  # noqa: F403
 from ._sar_analysis import *  # noqa: F403
@@ -58,6 +60,7 @@ __all__ = (
     + _sar_analysis.__all__
     + _screening.__all__
     + _research_organization.__all__
+    + _personalization.__all__
     + _attachment.__all__
     + _cdd_import.__all__
     + _dashboard.__all__

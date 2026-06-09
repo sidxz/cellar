@@ -108,6 +108,24 @@ class RunUnlocked(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class RunHitCriteriaSet(DomainEvent):
+    """A screener recorded this run's hit criteria — an attributable per-run
+    analytical decision. ``rule_count == 0`` means the recorded decision was
+    "no threshold — show all compounds"."""
+
+    set_by: uuid.UUID
+    rule_count: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunHitCriteriaCleared(DomainEvent):
+    """A screener cleared this run's hit criteria, reverting to "unset" (the
+    protocol recommendation is shown again as a suggestion)."""
+
+    cleared_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
 class RunTargetAdded(DomainEvent):
     """A target was attached to a run. See ``ProtocolTargetAdded`` for the
     use-case-constructed emission convention."""
@@ -119,6 +137,21 @@ class RunTargetAdded(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class RunTargetRemoved(DomainEvent):
     target_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunCollectionAdded(DomainEvent):
+    """A collection was attached to a run. Use-case-constructed, emitted only
+    when a link row was actually inserted (idempotent re-adds stay silent)."""
+
+    collection_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunCollectionRemoved(DomainEvent):
+    collection_id: uuid.UUID
     user_id: uuid.UUID | None = None
 
 

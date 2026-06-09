@@ -22,6 +22,7 @@ from cellar.infrastructure.di._core import register_core
 from cellar.infrastructure.di._dashboard import register_dashboard
 from cellar.infrastructure.di._export import register_export
 from cellar.infrastructure.di._inventory import register_inventory
+from cellar.infrastructure.di._personalization import register_personalization
 from cellar.infrastructure.di._research_organization import register_research_organization
 from cellar.infrastructure.di._sar_analysis import register_sar_analysis
 from cellar.infrastructure.di._screening import register_screening
@@ -43,6 +44,7 @@ def create_container(db_settings: DatabaseSettings | None = None) -> Container:
     register_screening(container)
     register_inventory(container)
     register_research_organization(container)
+    register_personalization(container)
     register_attachment(container)
     register_dashboard(container)
     register_cdd_import(container)

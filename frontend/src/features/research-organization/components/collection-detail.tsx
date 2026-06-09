@@ -16,10 +16,17 @@ import {
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
 import { Button } from "@/shared/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
-import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
-import Link from "next/link";
+import { ChevronDown, Download, Pencil, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { useRemoveMolecules } from "../hooks/use-collection-molecules";
@@ -58,6 +65,7 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [addMolOpen, setAddMolOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
   const {
     selected: selectedIds,
     set: onSelectChange,
@@ -134,23 +142,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         notFoundMessage="Collection not found."
         actions={() => (
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportSdf}
-              disabled={!molecules.length}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Export SDF
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setDeleteOpen(true)}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </Button>
+            {/* Frequent action stays primary; the rest collapse into "More",
+                and the admin hard-delete into a separate Danger zone menu. */}
             <Button
               size="sm"
               onClick={() => setAddMolOpen(true)}
@@ -160,24 +153,66 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
               <Plus className="mr-2 h-4 w-4" />
               Add Molecules
             </Button>
-            <Link href={`/collections/${collectionId}/import`}>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isFrozen}
-                title={isFrozen ? FROZEN_TOOLTIP : undefined}
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Bulk import
-              </Button>
-            </Link>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline">
+                  More
+                  <ChevronDown className="ml-1.5 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  disabled={isFrozen}
+                  onClick={() => router.push(`/collections/${collectionId}/import`)}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Bulk import
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setEditOpen(true)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!molecules.length} onClick={handleExportSdf}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export SDF
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {isAdmin && (
-              <AdminDeleteButton
-                entityType="collection"
-                entityId={collectionId}
-                entityLabel={query.data?.name ?? collectionId}
-                onDeleted={() => router.push("/collections")}
-              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Admin actions"
+                    title="Admin actions"
+                  >
+                    <ShieldAlert className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                    Danger zone
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setForceDeleteOpen(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Force delete…
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </>
         )}
@@ -272,6 +307,18 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
         open={addMolOpen}
         onOpenChange={setAddMolOpen}
       />
+
+      {/* Admin hard-delete — driven from the Danger zone menu. */}
+      {isAdmin && (
+        <AdminDeleteButton
+          entityType="collection"
+          entityId={collectionId}
+          entityLabel={query.data?.name ?? collectionId}
+          onDeleted={() => router.push("/collections")}
+          open={forceDeleteOpen}
+          onOpenChange={setForceDeleteOpen}
+        />
+      )}
     </>
   );
 }

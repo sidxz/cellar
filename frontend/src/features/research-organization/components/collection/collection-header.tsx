@@ -6,6 +6,7 @@ import { FlaskConical, FolderOpen, Lock } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { COLLECTION_TYPE_LABELS, type CollectionType } from "../../types";
+import { CollectionTypeIcon } from "./collection-type-icon";
 
 export interface CollectionHeaderData {
   id: string;
@@ -51,7 +52,8 @@ export function CollectionHeader({
             {collection.visibility}
           </Badge>
           {collection.type && (
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="gap-1 text-xs">
+              <CollectionTypeIcon type={collection.type} />
               {COLLECTION_TYPE_LABELS[collection.type]}
             </Badge>
           )}

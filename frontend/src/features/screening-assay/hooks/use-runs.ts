@@ -5,7 +5,7 @@ import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { RecomputeRunRequest, RecomputeRunResponse } from "@/shared/lib/api/model";
 import { showSuccess, showWarning } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateRunInput, Run } from "../types";
+import type { CreateRunInput, HitCriterion, Run } from "../types";
 import {
   COMPOUND_CURVES_KEY,
   DOSE_RESPONSE_KEY,
@@ -168,6 +168,7 @@ export function useUpdateRun() {
       data: {
         qc_metrics?: Record<string, unknown> | null;
         notes?: string | null;
+        conditions?: Record<string, string> | null;
       };
     }) =>
       customInstance<Run>({
@@ -178,6 +179,42 @@ export function useUpdateRun() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: RUNS_KEY });
       showSuccess("Run updated");
+    },
+  });
+}
+
+/** Record this run's hit criteria — an attributable per-run decision. An empty
+ *  `criteria` array is a valid "show all, recorded" decision; to revert the run
+ *  to "unset" (re-show the protocol recommendation) use `useResetRunHitCriteria`. */
+export function useSetRunHitCriteria() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, criteria }: { runId: string; criteria: HitCriterion[] }) =>
+      customInstance<Run>({
+        url: `${API_V1}/runs/${runId}/hit-criteria`,
+        method: "PUT",
+        data: { criteria },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Hit criteria saved for this run");
+    },
+  });
+}
+
+/** Clear this run's hit criteria, reverting to "unset" so the protocol
+ *  recommendation is shown again as a suggestion. */
+export function useResetRunHitCriteria() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) =>
+      customInstance<Run>({
+        url: `${API_V1}/runs/${runId}/hit-criteria`,
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: RUNS_KEY });
+      showSuccess("Hit criteria reset to protocol recommendation");
     },
   });
 }

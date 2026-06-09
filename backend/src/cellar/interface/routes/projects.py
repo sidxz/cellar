@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Query
@@ -110,6 +111,10 @@ class ProjectScopeStatsResponse(BaseModel):
     molecule_count: int
     protocol_count: int
     run_count: int
+    campaign_count: int
+    last_activity_at: datetime | None = None
+    member_count: int
+    member_ids: list[uuid.UUID]
 
 
 @router.get(
@@ -131,6 +136,10 @@ async def get_project_scope_stats(
             molecule_count=s.molecule_count,
             protocol_count=s.protocol_count,
             run_count=s.run_count,
+            campaign_count=s.campaign_count,
+            last_activity_at=s.last_activity_at,
+            member_count=s.member_count,
+            member_ids=list(s.member_ids),
         )
         for pid, s in stats.items()
     }

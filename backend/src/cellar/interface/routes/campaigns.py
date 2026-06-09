@@ -107,8 +107,10 @@ async def list_campaigns(
     limit: int | None = None,
     tags: list[uuid.UUID] | None = Query(default=None),
     tag_logic: Literal["any", "all"] = Query(default="any"),
+    targets: list[uuid.UUID] | None = Query(default=None),
+    target_logic: Literal["any", "all"] = Query(default="any"),
 ) -> PaginatedResponse[CampaignResponse]:
-    """List campaigns in the workspace, optionally filtered by project."""
+    """List campaigns in the workspace, optionally filtered by project/tags/targets."""
     query = ListCampaignsQuery(
         workspace_id=auth.workspace_id,
         project_id=project_id,
@@ -116,11 +118,16 @@ async def list_campaigns(
         limit=clamp_limit(limit),
         tags=tags,
         tag_logic=tag_logic,
+        target_ids=targets,
+        target_logic=target_logic,
     )
-    page = result_to_response(await uc(query, auth=auth))
+    out = result_to_response(await uc(query, auth=auth))
     return PaginatedResponse(
-        items=[CampaignResponse.from_domain(c) for c in page.items],
-        next_cursor=page.next_cursor,
+        items=[
+            CampaignResponse.from_domain(c, targets=out.targets_by_campaign.get(c.id, []))
+            for c in out.page.items
+        ],
+        next_cursor=out.page.next_cursor,
     )
 
 
@@ -133,7 +140,7 @@ async def get_campaign(
     """Get a campaign by id (full draft view including channels + results)."""
     query = GetCampaignQuery(workspace_id=auth.workspace_id, campaign_id=campaign_id)
     out = result_to_response(await uc(query, auth=auth))
-    return CampaignResponse.from_domain(out.campaign, out.scientist_by_run_id)
+    return CampaignResponse.from_domain(out.campaign, out.scientist_by_run_id, targets=out.targets)
 
 
 @router.patch("/{campaign_id}", response_model=CampaignResponse)

@@ -83,6 +83,18 @@ def require_same_workspace(auth: AuthContext | None, workspace_id: uuid.UUID | N
         raise NotFoundError("Entity")
 
 
+def require_same_user(auth: AuthContext | None, user_id: uuid.UUID) -> None:
+    """Raise if acting on another user's personal data.
+
+    For per-user-owned resources (favorites, …) where ``user_id`` is the
+    ownership key, not provenance metadata. Workers / system calls bypass.
+    """
+    if auth is None:
+        return  # Workers / system calls bypass
+    if auth.user_id != user_id:
+        raise AuthorizationError("Cannot act on another user's personal data")
+
+
 @runtime_checkable
 class ProjectAccessContext(Protocol):
     """Extended auth with project-level access info."""

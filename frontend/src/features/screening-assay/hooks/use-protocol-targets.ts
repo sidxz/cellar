@@ -3,7 +3,7 @@
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 import type { ProtocolTargetRef } from "../types";
-import { createTargetLinkHooks } from "./create-target-link-hooks";
+import { createLinkHooks } from "./create-link-hooks";
 import { PROTOCOLS_KEY, protocolTargetsKey } from "./query-keys";
 
 /** Rich effective-target list with provenance (`is_direct` / `run_count`) for
@@ -21,8 +21,9 @@ export function useProtocolTargets(protocolId: string) {
   });
 }
 
-const protocolTargetHooks = createTargetLinkHooks({
+const protocolTargetHooks = createLinkHooks({
   entitySegment: "protocols",
+  linkSegment: "targets",
   labels: { addedTo: "Target added to protocol", removedFrom: "Target removed from protocol" },
   // The rich targets list, the protocol detail, and the lists that render
   // target chips — once, not once per mutation.

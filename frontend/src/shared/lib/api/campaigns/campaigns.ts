@@ -124,7 +124,7 @@ export const useCreateCampaignApiV1CampaignsPost = <TError = HTTPValidationError
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * List campaigns in the workspace, optionally filtered by project.
+ * List campaigns in the workspace, optionally filtered by project/tags/targets.
  * @summary List Campaigns
  */
 export const listCampaignsApiV1CampaignsGet = (

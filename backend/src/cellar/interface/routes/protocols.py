@@ -13,6 +13,7 @@ from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
 from cellar.application.screening.create_protocol import CreateProtocolCommand
+from cellar.application.screening.get_collection_gap import GetProtocolCollectionGapQuery
 from cellar.application.screening.get_protocol import (
     GetProtocolQuery,
     ListProtocolsQuery,
@@ -54,6 +55,9 @@ from cellar.application.screening.manage_readout_definitions import (
     RemoveReadoutDefinitionCommand,
     UpdateReadoutDefinitionCommand,
 )
+from cellar.application.screening.resolve_collection_coverage import (
+    GetProtocolCollectionCoverageQuery,
+)
 from cellar.application.screening.resolve_target_links import (
     GetProtocolTargetsQuery,
     ResolveProtocolTargetsQuery,
@@ -69,6 +73,8 @@ from cellar.interface.dependencies import (
     ConditionGroupingServiceDep,
     CreateProtocolDep,
     DeleteProtocolDep,
+    GetProtocolCollectionCoverageDep,
+    GetProtocolCollectionGapDep,
     GetProtocolDep,
     GetProtocolTargetsDep,
     ListProtocolsByProjectDep,
@@ -94,6 +100,7 @@ from cellar.interface.dependencies import (
 )
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
+from cellar.interface.routes._collection_coverage import EffectiveCollectionCoverageResponse
 from cellar.interface.routes._target_refs import (
     ProtocolTargetRefResponse,
     TargetRefResponse,
@@ -1114,6 +1121,60 @@ async def remove_protocol_target(
     )
     result_to_response(result)
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Protocol collection-coverage routes
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/protocols/{protocol_id}/collection-coverage",
+    response_model=list[EffectiveCollectionCoverageResponse],
+    tags=["protocols"],
+)
+async def list_protocol_collection_coverage(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetProtocolCollectionCoverageDep,
+) -> list[EffectiveCollectionCoverageResponse]:
+    """Cumulative coverage per attached collection across the protocol's runs."""
+    result = await uc(
+        GetProtocolCollectionCoverageQuery(
+            workspace_id=auth.workspace_id, protocol_id=protocol_id
+        ),
+        auth=auth,
+    )
+    return [
+        EffectiveCollectionCoverageResponse.from_effective(e) for e in result_to_response(result)
+    ]
+
+
+@router.get(
+    "/protocols/{protocol_id}/collections/{collection_id}/gap",
+    response_model=list[uuid.UUID],
+    tags=["protocols"],
+)
+async def protocol_collection_gap(
+    protocol_id: uuid.UUID,
+    collection_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetProtocolCollectionGapDep,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+) -> list[uuid.UUID]:
+    """Collection members not yet screened by any attaching run (paginated)."""
+    result = await uc(
+        GetProtocolCollectionGapQuery(
+            workspace_id=auth.workspace_id,
+            protocol_id=protocol_id,
+            collection_id=collection_id,
+            offset=offset,
+            limit=limit,
+        ),
+        auth=auth,
+    )
+    return result_to_response(result)
 
 
 # ---------------------------------------------------------------------------

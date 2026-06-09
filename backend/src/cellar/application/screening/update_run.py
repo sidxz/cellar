@@ -24,6 +24,7 @@ class UpdateRunCommand(Command):
     run_id: uuid.UUID
     qc_metrics: dict[str, Any] | None | object = UNSET
     notes: str | None | object = UNSET
+    conditions: dict[str, Any] | None | object = UNSET
 
 
 class UpdateRun:
@@ -53,6 +54,8 @@ class UpdateRun:
                 fields["qc_metrics"] = input.qc_metrics
             if input.notes is not UNSET:
                 fields["notes"] = input.notes
+            if input.conditions is not UNSET:
+                fields["conditions"] = input.conditions
 
             if fields:
                 run.update(**fields)

@@ -32,6 +32,10 @@ export function getSentinelClient(config?: AppConfig): SentinelAuthz {
       sentinelUrl,
       idps: config ? buildIdps(config) : {},
       redirectUri: `${appUrl}/auth/callback`,
+      // Required since Sentinel 0.11.0: the browser no longer mints authz tokens
+      // directly. It POSTs to this same-origin backend route, which forwards to
+      // Sentinel's /authz/resolve with the service key. See app/api/auth/mint.
+      mintEndpoint: "/api/auth/mint",
       storage: typeof window !== "undefined" ? new AuthzLocalStorageStore() : undefined,
       autoRefresh: true,
       refreshBuffer: 30,

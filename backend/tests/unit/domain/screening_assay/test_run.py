@@ -15,6 +15,8 @@ from cellar.domain.screening_assay.events import (
     RunApproved,
     RunCompleted,
     RunCreated,
+    RunHitCriteriaCleared,
+    RunHitCriteriaSet,
     RunLocked,
     RunRejected,
     RunUnlocked,
@@ -22,6 +24,7 @@ from cellar.domain.screening_assay.events import (
 from cellar.domain.screening_assay.run import Plate, Run, Well
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.errors import ConflictError, ValidationError
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.value_objects import Barcode, Concentration
 
 
@@ -607,6 +610,82 @@ class TestRunLocking:
 
 
 # ---------------------------------------------------------------------------
+# TestRunUpdate
+# ---------------------------------------------------------------------------
+
+
+class TestRunUpdate:
+    def test_update_conditions(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        operator_id: uuid.UUID,
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        old_updated = run.updated_at
+
+        run.update(conditions={"Carbon Source": "glucose", "ATP": "10 uM"})
+
+        assert run.conditions == {"Carbon Source": "glucose", "ATP": "10 uM"}
+        assert run.updated_at >= old_updated
+
+    def test_update_conditions_to_none_clears(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        operator_id: uuid.UUID,
+    ) -> None:
+        run = _make_run(
+            workspace_id,
+            protocol_id,
+            operator_id,
+            conditions={"Carbon Source": "glucose"},
+        )
+
+        run.update(conditions=None)
+
+        assert run.conditions is None
+
+    def test_update_notes_and_conditions_together(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        operator_id: uuid.UUID,
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+
+        run.update(notes="rerun", conditions={"pH": "7.4"})
+
+        assert run.notes == "rerun"
+        assert run.conditions == {"pH": "7.4"}
+
+    def test_update_rejects_unknown_field(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        operator_id: uuid.UUID,
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+
+        with pytest.raises(ValidationError, match="Cannot update field"):
+            run.update(run_date=date(2025, 1, 1))
+
+    def test_locked_blocks_update_conditions(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        operator_id: uuid.UUID,
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        run.start()
+        run.complete(plate_count=1, data_point_count=96)
+        run.lock(locked_by=uuid.uuid4(), reason="Finalized")
+
+        with pytest.raises(ConflictError, match="locked"):
+            run.update(conditions={"pH": "7.4"})
+
+
+# ---------------------------------------------------------------------------
 # TestPlate
 # ---------------------------------------------------------------------------
 
@@ -699,3 +778,137 @@ class TestWell:
         for wt in WellType:
             well = Well(plate_id=plate_id, row="A", column=1, well_type=wt)
             assert well.well_type == wt
+
+
+# ---------------------------------------------------------------------------
+# Hit criteria — per-run, attributable analytical decision
+# ---------------------------------------------------------------------------
+
+
+def _completed_run(
+    workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+) -> Run:
+    run = _make_run(workspace_id, protocol_id, operator_id)
+    run.start()
+    run.complete(plate_count=1, data_point_count=96)
+    run.clear_events()
+    return run
+
+
+class TestRunHitCriteria:
+    def test_run_starts_with_hit_criteria_unset(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        assert run.hit_criteria is None
+        assert run.hit_criteria_set_by is None
+        assert run.hit_criteria_set_at is None
+
+    def test_set_hit_criteria_records_criteria_and_provenance(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        screener = uuid.uuid4()
+        criteria = [HitCriterion(readout_name="% Inhibition", operator="gt", value=50.0)]
+
+        run.set_hit_criteria(criteria, set_by=screener)
+
+        assert run.hit_criteria == criteria
+        assert run.hit_criteria_set_by == screener
+        assert run.hit_criteria_set_at is not None
+
+    def test_set_empty_criteria_is_a_recorded_show_all_decision(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        """An empty list is a deliberate "no threshold" decision — distinct
+        from unset (None) — and still carries provenance."""
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        screener = uuid.uuid4()
+
+        run.set_hit_criteria([], set_by=screener)
+
+        assert run.hit_criteria == []
+        assert run.hit_criteria is not None
+        assert run.hit_criteria_set_by == screener
+        assert run.hit_criteria_set_at is not None
+
+    def test_set_hit_criteria_emits_event(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        run.clear_events()
+        screener = uuid.uuid4()
+        criteria = [
+            HitCriterion(readout_name="% Inhibition", operator="gt", value=50.0),
+            HitCriterion(readout_name="Curve Class", operator="in", value=["full"]),
+        ]
+
+        run.set_hit_criteria(criteria, set_by=screener)
+
+        events = run.collect_events()
+        assert len(events) == 1
+        assert isinstance(events[0], RunHitCriteriaSet)
+        assert events[0].set_by == screener
+        assert events[0].rule_count == 2
+
+    def test_clear_hit_criteria_reverts_to_unset(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        run.set_hit_criteria(
+            [HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+            set_by=uuid.uuid4(),
+        )
+
+        run.clear_hit_criteria(cleared_by=uuid.uuid4())
+
+        assert run.hit_criteria is None
+        assert run.hit_criteria_set_by is None
+        assert run.hit_criteria_set_at is None
+
+    def test_clear_hit_criteria_emits_event(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        run.set_hit_criteria([], set_by=uuid.uuid4())
+        run.clear_events()
+        clearer = uuid.uuid4()
+
+        run.clear_hit_criteria(cleared_by=clearer)
+
+        events = run.collect_events()
+        assert len(events) == 1
+        assert isinstance(events[0], RunHitCriteriaCleared)
+        assert events[0].cleared_by == clearer
+
+    def test_set_hit_criteria_blocked_when_locked(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _completed_run(workspace_id, protocol_id, operator_id)
+        run.lock(locked_by=uuid.uuid4(), reason="Finalized")
+
+        with pytest.raises(ConflictError, match="locked"):
+            run.set_hit_criteria(
+                [HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+                set_by=uuid.uuid4(),
+            )
+
+    def test_clear_hit_criteria_blocked_when_locked(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _completed_run(workspace_id, protocol_id, operator_id)
+        run.set_hit_criteria([], set_by=uuid.uuid4())
+        run.lock(locked_by=uuid.uuid4(), reason="Finalized")
+
+        with pytest.raises(ConflictError, match="locked"):
+            run.clear_hit_criteria(cleared_by=uuid.uuid4())
+
+    def test_set_hit_criteria_enforces_max_rules(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        too_many = [
+            HitCriterion(readout_name=f"R{i}", operator="gt", value=float(i)) for i in range(4)
+        ]
+        with pytest.raises(ValidationError, match="Maximum"):
+            run.set_hit_criteria(too_many, set_by=uuid.uuid4())

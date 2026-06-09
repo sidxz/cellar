@@ -28,6 +28,8 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.source_ref import ManualRef
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.shared.target_ref import TargetRef
+from cellar.interface.routes._target_refs import TargetRefResponse
 
 # ---------------------------------------------------------------------------
 # DTOs — requests
@@ -430,12 +432,18 @@ class CampaignResponse(BaseModel):
     version: int
     channels: list[CampaignChannelResponse]
     results: list[CampaignResultResponse]
+    #: Distinct targets unioned from the runs this campaign's measurements
+    #: reference — a derived, read-time field (never stored), like
+    #: ``compound_sources``. Defaults to ``[]`` for callers that don't project
+    #: targets (e.g. mutation responses that return the refreshed campaign).
+    targets: list[TargetRefResponse] = []
 
     @classmethod
     def from_domain(
         cls,
         c: Campaign,
         scientist_by_run_id: dict[uuid.UUID, str] | None = None,
+        targets: list[TargetRef] | None = None,
     ) -> CampaignResponse:
         return cls(
             id=c.id,
@@ -459,6 +467,7 @@ class CampaignResponse(BaseModel):
             version=c.version,
             channels=[CampaignChannelResponse.from_domain(ch) for ch in c.channels],
             results=[CampaignResultResponse.from_domain(r) for r in c.results],
+            targets=[TargetRefResponse.from_ref(t) for t in (targets or [])],
         )
 
 

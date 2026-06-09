@@ -10,6 +10,7 @@ import { FlaskConical } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useRunsByProtocol } from "../hooks/use-runs";
 import { PLATE_FORMAT_LABELS, type PlateFormat, type Run } from "../types";
+import { CollectionCoverageChips } from "./collection-coverage-chips";
 import { TargetChips } from "./target-chips";
 
 interface RunListProps {
@@ -52,6 +53,17 @@ export function RunList({ protocolId, onSelect }: RunListProps) {
         getQuickFilterText: (p) => (p.value ?? []).map((t: { name: string }) => t.name).join(" "),
         cellRenderer: (params: ICellRendererParams<Run>) => (
           <TargetChips targets={params.data?.targets} />
+        ),
+      },
+      {
+        headerName: "Library coverage",
+        field: "collections",
+        flex: 1,
+        minWidth: 150,
+        sortable: false,
+        getQuickFilterText: (p) => (p.value ?? []).map((c: { name: string }) => c.name).join(" "),
+        cellRenderer: (params: ICellRendererParams<Run>) => (
+          <CollectionCoverageChips collections={params.data?.collections} />
         ),
       },
       {

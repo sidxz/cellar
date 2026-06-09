@@ -4,6 +4,11 @@ import { Loader2, Plus } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { TargetChips } from "@/features/screening-assay/components/target-chips";
+import {
+  TargetFilter,
+  type TargetFilterValue,
+} from "@/features/screening-assay/components/target-filter";
 import { TagFilter, type TagFilterValue } from "@/features/tagging/components/tag-filter";
 import { Button } from "@/shared/components/ui/button";
 import {
@@ -35,9 +40,15 @@ interface CampaignListProps {
  */
 export function CampaignList({ projectId }: CampaignListProps) {
   const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
+  const [targetFilter, setTargetFilter] = useState<TargetFilterValue>({
+    targetIds: [],
+    targetLogic: "any",
+  });
   const { data, isLoading, error } = useCampaigns(projectId, {
     tags: tagFilter.tagIds,
     tagLogic: tagFilter.tagLogic,
+    targets: targetFilter.targetIds,
+    targetLogic: targetFilter.targetLogic,
   });
   const { data: project } = useProject(projectId);
 
@@ -47,12 +58,15 @@ export function CampaignList({ projectId }: CampaignListProps) {
     { label: "Campaigns" },
   ]);
 
-  const hasFilter = tagFilter.tagIds.length > 0;
+  const hasFilter = tagFilter.tagIds.length > 0 || targetFilter.targetIds.length > 0;
 
   return (
     <>
       <div className="mb-4 flex items-center gap-3 justify-between">
-        <TagFilter value={tagFilter} onChange={setTagFilter} />
+        <div className="flex items-center gap-2">
+          <TagFilter value={tagFilter} onChange={setTagFilter} />
+          <TargetFilter value={targetFilter} onChange={setTargetFilter} />
+        </div>
         <CreateCampaignDialog
           projectId={projectId}
           trigger={
@@ -75,7 +89,7 @@ export function CampaignList({ projectId }: CampaignListProps) {
           className="flex flex-col items-center justify-center py-12 text-center"
         >
           <p className="mb-4 text-muted-foreground">
-            {hasFilter ? "No campaigns match the selected tags." : "No campaigns yet."}
+            {hasFilter ? "No campaigns match the current filters." : "No campaigns yet."}
           </p>
           {!hasFilter && (
             <CreateCampaignDialog
@@ -95,6 +109,7 @@ export function CampaignList({ projectId }: CampaignListProps) {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Targets</TableHead>
               <TableHead>Channels</TableHead>
               <TableHead>Compounds</TableHead>
               <TableHead>Created</TableHead>
@@ -122,6 +137,9 @@ export function CampaignList({ projectId }: CampaignListProps) {
                 </TableCell>
                 <TableCell>
                   <CampaignStatusChip status={c.status} />
+                </TableCell>
+                <TableCell>
+                  <TargetChips targets={c.targets} max={3} />
                 </TableCell>
                 <TableCell>{c.channels?.length ?? 0}</TableCell>
                 <TableCell>{c.results?.length ?? 0}</TableCell>

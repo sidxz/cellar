@@ -14,7 +14,12 @@ from returns.result import Result, Success
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.screening_assay.repository import ReadoutDataRepository, RunRepository
+from cellar.domain.screening_assay.collection_coverage import CollectionCoverage
+from cellar.domain.screening_assay.repository import (
+    CollectionCoverageReader,
+    ReadoutDataRepository,
+    RunRepository,
+)
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.errors import DomainError
@@ -33,6 +38,7 @@ class RunWithCounts:
     run: Run
     molecule_count: int
     targets: list[TargetRef] = field(default_factory=list)
+    collections: list[CollectionCoverage] = field(default_factory=list)
 
 
 class ListRunsWithCounts:
@@ -43,10 +49,12 @@ class ListRunsWithCounts:
         uow: UnitOfWork,
         run_repo: RunRepository,
         readout_data_repo: ReadoutDataRepository,
+        coverage_reader: CollectionCoverageReader,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
         self._rd_repo = readout_data_repo
+        self._coverage_reader = coverage_reader
 
     async def __call__(
         self,
@@ -68,12 +76,16 @@ class ListRunsWithCounts:
             targets = await self._run_repo.find_target_refs_for_runs(
                 input.workspace_id, [r.id for r in runs]
             )
+            coverage = await self._coverage_reader.run_coverage(
+                input.workspace_id, [r.id for r in runs]
+            )
             return Success(
                 [
                     RunWithCounts(
                         run=r,
                         molecule_count=counts.get(r.id, 0),
                         targets=targets.get(r.id, []),
+                        collections=coverage.get(r.id, []),
                     )
                     for r in runs
                 ]

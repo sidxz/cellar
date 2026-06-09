@@ -36,18 +36,26 @@ export function useCampaigns(
   options?: {
     tags?: string[];
     tagLogic?: "any" | "all";
+    targets?: string[];
+    targetLogic?: "any" | "all";
   } & Partial<UseQueryOptions<CampaignResponse[], Error, CampaignResponse[]>>,
 ) {
-  const { tags: rawTags, tagLogic, ...queryOptions } = options ?? {};
+  const {
+    tags: rawTags,
+    tagLogic,
+    targets: rawTargets,
+    targetLogic,
+    ...queryOptions
+  } = options ?? {};
   const tags = rawTags?.length ? rawTags : null;
+  const targets = rawTargets?.length ? rawTargets : null;
 
-  const queryKey = projectId
-    ? tags
-      ? [...campaignKeys.byProject(projectId), { tags, tagLogic: tagLogic ?? "any" }]
-      : campaignKeys.byProject(projectId)
-    : tags
-      ? [...campaignKeys.all, { tags, tagLogic: tagLogic ?? "any" }]
-      : campaignKeys.all;
+  const filterKey =
+    tags || targets
+      ? { tags, tagLogic: tagLogic ?? "any", targets, targetLogic: targetLogic ?? "any" }
+      : null;
+  const baseKey = projectId ? campaignKeys.byProject(projectId) : campaignKeys.all;
+  const queryKey = filterKey ? [...baseKey, filterKey] : baseKey;
 
   return useQuery({
     queryKey,
@@ -57,6 +65,10 @@ export function useCampaigns(
       if (tags) {
         params.tags = tags;
         params.tag_logic = tagLogic ?? "any";
+      }
+      if (targets) {
+        params.targets = targets;
+        params.target_logic = targetLogic ?? "any";
       }
       const page = await customInstance<PaginatedResponseCampaignResponse>({
         url: `${API_V1}/campaigns`,

@@ -10,17 +10,11 @@ from cellar.domain.screening_assay.enums import TargetType
 from cellar.domain.shared.entity import Entity
 from cellar.domain.shared.errors import ValidationError
 
+# Canonical home is domain.shared (cross-context VO — see target_ref module).
+# Re-exported here so existing screening_assay imports keep working.
+from cellar.domain.shared.target_ref import TargetRef
 
-@dataclass(frozen=True)
-class TargetRef:
-    """Lightweight target reference for read models (grids, chips, run lists).
-
-    Carries only what a display needs — never the full Target entity.
-    """
-
-    id: uuid.UUID
-    name: str
-    target_type: str
+__all__ = ["EffectiveTarget", "Target", "TargetRef"]
 
 
 @dataclass(frozen=True)

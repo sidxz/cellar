@@ -1,10 +1,11 @@
 "use client";
 
-import { createTargetLinkHooks } from "./create-target-link-hooks";
+import { createLinkHooks } from "./create-link-hooks";
 import { PROTOCOLS_KEY, RUNS_KEY } from "./query-keys";
 
-const runTargetHooks = createTargetLinkHooks({
+const runTargetHooks = createLinkHooks({
   entitySegment: "runs",
+  linkSegment: "targets",
   labels: { addedTo: "Target added to run", removedFrom: "Target removed from run" },
   // The run detail, the run lists, and — because run targets roll up into the
   // protocol's effective targets — the protocol queries. Once per gesture.

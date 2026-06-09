@@ -11,6 +11,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
@@ -20,7 +21,7 @@ import { formatRelativeDate } from "@/shared/lib/format-date";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { MoreHorizontal, Pencil, Play, Plus, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, MoreHorizontal, Pencil, Play, Plus, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useProjects } from "../hooks/use-projects";
@@ -45,6 +46,7 @@ interface RowActionsProps {
 }
 
 function RowActions({ search, isAdmin, onRun, onEdit, onDelete, onAdminDeleted }: RowActionsProps) {
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
   return (
     <div className="flex items-center gap-1">
       <DropdownMenu>
@@ -71,6 +73,20 @@ function RowActions({ search, isAdmin, onRun, onEdit, onDelete, onAdminDeleted }
             <Trash2 className="mr-2 h-4 w-4" />
             Delete
           </DropdownMenuItem>
+          {isAdmin && (
+            <>
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Danger zone
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => setForceDeleteOpen(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                Force delete…
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {isAdmin && (
@@ -79,6 +95,8 @@ function RowActions({ search, isAdmin, onRun, onEdit, onDelete, onAdminDeleted }
           entityId={search.id}
           entityLabel={search.name}
           onDeleted={onAdminDeleted}
+          open={forceDeleteOpen}
+          onOpenChange={setForceDeleteOpen}
         />
       )}
     </div>
@@ -173,7 +191,7 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
       },
       {
         headerName: "",
-        width: isAdmin ? 120 : 56,
+        width: 56,
         sortable: false,
         resizable: false,
         suppressHeaderMenuButton: true,
@@ -224,7 +242,8 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
         rowData={savedSearches}
         columnDefs={columnDefs}
         loading={isLoading}
-        height="400px"
+        // Fill the viewport below the page header and toolbar.
+        height="calc(100vh - 200px)"
         suppressFilters
         onRowClick={handleRun}
         emptyState={

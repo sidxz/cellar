@@ -44,6 +44,10 @@ from cellar.application.screening.dose_response_enriched_reader import (
     DoseResponseEnrichedReader,
 )
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
+from cellar.application.screening.get_collection_gap import (
+    GetProtocolCollectionGap,
+    GetRunCollectionGap,
+)
 from cellar.application.screening.get_compound_curves import GetCompoundCurves
 from cellar.application.screening.get_curve_edit_history import GetCurveEditHistory
 from cellar.application.screening.get_dose_response import ListDoseResponseByRun
@@ -113,6 +117,10 @@ from cellar.application.screening.manage_run import (
     RejectRun,
     StartRun,
 )
+from cellar.application.screening.manage_run_collections import (
+    AddRunCollection,
+    RemoveRunCollection,
+)
 from cellar.application.screening.manage_run_targets import (
     AddRunTarget,
     RemoveRunTarget,
@@ -138,6 +146,10 @@ from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
 from cellar.application.screening.reset_run_data import ResetRunData
+from cellar.application.screening.resolve_collection_coverage import (
+    GetProtocolCollectionCoverage,
+    ResolveRunCollections,
+)
 from cellar.application.screening.resolve_target_links import (
     GetProtocolTargets,
     ResolveProtocolTargets,
@@ -150,6 +162,10 @@ from cellar.application.screening.run_import_templates import (
     UpdateRunImportTemplate,
 )
 from cellar.application.screening.search_ontology import SearchOntology
+from cellar.application.screening.set_run_hit_criteria import (
+    ResetRunHitCriteria,
+    SetRunHitCriteria,
+)
 from cellar.application.screening.update_run import UpdateRun
 from cellar.application.screening.update_target import UpdateTarget
 from cellar.application.shared.molecule_resolver import MoleculeResolver
@@ -183,6 +199,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_curve
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_repository import (
     SQLAlchemyCompoundFlagRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.coverage_query import (
+    SQLAlchemyCollectionCoverageQuery,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
     SQLAlchemyDoseResponseCurveRepository,
@@ -412,8 +431,42 @@ def register_screening(container: Container) -> None:
     container.define(UpdateRun, _run_cmd(UpdateRun))
     container.define(LockRun, _run_cmd(LockRun))
     container.define(UnlockRun, _run_cmd(UnlockRun))
+    container.define(SetRunHitCriteria, _run_cmd(SetRunHitCriteria))
+    container.define(ResetRunHitCriteria, _run_cmd(ResetRunHitCriteria))
     container.define(AddRunTarget, _run_cmd(AddRunTarget))
     container.define(RemoveRunTarget, _run_cmd(RemoveRunTarget))
+    container.define(AddRunCollection, _run_cmd(AddRunCollection))
+    container.define(RemoveRunCollection, _run_cmd(RemoveRunCollection))
+
+    def _resolve_run_collections(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResolveRunCollections(uow, SQLAlchemyCollectionCoverageQuery(uow))
+
+    container.define(ResolveRunCollections, _resolve_run_collections)
+
+    def _protocol_collection_coverage(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetProtocolCollectionCoverage(
+            uow, SQLAlchemyProtocolRepository(uow), SQLAlchemyCollectionCoverageQuery(uow)
+        )
+
+    container.define(GetProtocolCollectionCoverage, _protocol_collection_coverage)
+
+    def _run_collection_gap(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetRunCollectionGap(
+            uow, SQLAlchemyRunRepository(uow), SQLAlchemyCollectionCoverageQuery(uow)
+        )
+
+    container.define(GetRunCollectionGap, _run_collection_gap)
+
+    def _protocol_collection_gap(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetProtocolCollectionGap(
+            uow, SQLAlchemyProtocolRepository(uow), SQLAlchemyCollectionCoverageQuery(uow)
+        )
+
+    container.define(GetProtocolCollectionGap, _protocol_collection_gap)
 
     def _list_runs_with_counts(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -421,6 +474,7 @@ def register_screening(container: Container) -> None:
             uow=uow,
             run_repo=SQLAlchemyRunRepository(uow),
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
+            coverage_reader=SQLAlchemyCollectionCoverageQuery(uow),
         )
 
     container.define(ListRunsWithCounts, _list_runs_with_counts)

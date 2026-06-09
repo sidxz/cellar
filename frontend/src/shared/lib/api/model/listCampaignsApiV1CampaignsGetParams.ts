@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListCampaignsApiV1CampaignsGetTagLogic } from './listCampaignsApiV1CampaignsGetTagLogic';
+import type { ListCampaignsApiV1CampaignsGetTargetLogic } from './listCampaignsApiV1CampaignsGetTargetLogic';
 
 export type ListCampaignsApiV1CampaignsGetParams = {
 project_id?: string | null;
@@ -12,4 +13,6 @@ cursor?: string | null;
 limit?: number | null;
 tags?: string[] | null;
 tag_logic?: ListCampaignsApiV1CampaignsGetTagLogic;
+targets?: string[] | null;
+target_logic?: ListCampaignsApiV1CampaignsGetTargetLogic;
 };

@@ -16,12 +16,15 @@ from cellar.domain.screening_assay.events import (
     RunApproved,
     RunCompleted,
     RunCreated,
+    RunHitCriteriaCleared,
+    RunHitCriteriaSet,
     RunLocked,
     RunRejected,
     RunUnlocked,
 )
 from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.errors import ConflictError, ValidationError
+from cellar.domain.shared.hit_criterion import HitCriterion, validate_hit_criteria
 from cellar.domain.shared.value_objects import Barcode
 
 # ---------------------------------------------------------------------------
@@ -167,6 +170,9 @@ class Run(AggregateRoot):
         lock_reason: str | None = None,
         notes: str | None = None,
         eln_entry_id: uuid.UUID | None = None,
+        hit_criteria: list[HitCriterion] | None = None,
+        hit_criteria_set_by: uuid.UUID | None = None,
+        hit_criteria_set_at: datetime | None = None,
         plates: list[Plate] | None = None,
         wells: list[Well] | None = None,
         created_at: datetime | None = None,
@@ -201,6 +207,14 @@ class Run(AggregateRoot):
         self.lock_reason = lock_reason
         self.notes = notes
         self.eln_entry_id = eln_entry_id
+        # Per-run hit criteria — an attributable analytical decision, distinct
+        # from the protocol's recommended criteria (the SOP suggestion). None
+        # means "unset" (show the recommendation); a list (possibly empty,
+        # meaning "show all, on purpose") means a decision was recorded. The
+        # provenance pair below is non-null iff hit_criteria is non-null.
+        self.hit_criteria: list[HitCriterion] | None = hit_criteria
+        self.hit_criteria_set_by = hit_criteria_set_by
+        self.hit_criteria_set_at = hit_criteria_set_at
         self.plates: list[Plate] = plates or []
         self.wells: list[Well] = wells or []
 
@@ -332,7 +346,7 @@ class Run(AggregateRoot):
     def update(self, **fields: Any) -> None:
         """Partial update of mutable fields. Blocked when run is locked.
 
-        Supported fields: qc_metrics, notes.
+        Supported fields: qc_metrics, notes, conditions.
         """
         self._guard_not_locked()
         for key, value in fields.items():
@@ -340,6 +354,8 @@ class Run(AggregateRoot):
                 self.qc_metrics = value
             elif key == "notes":
                 self.notes = value
+            elif key == "conditions":
+                self.conditions = value
             else:
                 raise ValidationError(f"Cannot update field '{key}' on Run")
         self.updated_at = datetime.now(UTC)
@@ -446,5 +462,57 @@ class Run(AggregateRoot):
                 workspace_id=self.workspace_id,
                 unlocked_by=unlocked_by,
                 reason=reason.strip(),
+            )
+        )
+
+    # ------------------------------------------------------------------
+    # Hit criteria (per-run, attributable analytical decision)
+    # ------------------------------------------------------------------
+
+    def set_hit_criteria(self, criteria: list[HitCriterion], *, set_by: uuid.UUID) -> None:
+        """Record this run's hit criteria — an attributable per-run decision.
+
+        An empty list is a valid, recorded decision meaning "no threshold —
+        show all compounds". ``None`` is never stored through this method;
+        reverting to "unset" (so the protocol recommendation is shown again)
+        goes through :meth:`clear_hit_criteria`.
+
+        Frozen on locked runs — the hit threshold is part of the run's
+        finalized analytical record, like its dose-response curves.
+        """
+        self._guard_not_locked()
+        validate_hit_criteria(criteria)
+        self.hit_criteria = list(criteria)
+        self.hit_criteria_set_by = set_by
+        self.hit_criteria_set_at = datetime.now(UTC)
+        self.updated_at = self.hit_criteria_set_at
+        self.register_event(
+            RunHitCriteriaSet(
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                workspace_id=self.workspace_id,
+                set_by=set_by,
+                rule_count=len(criteria),
+            )
+        )
+
+    def clear_hit_criteria(self, *, cleared_by: uuid.UUID) -> None:
+        """Clear this run's hit criteria, reverting to "unset".
+
+        Provenance is nulled atomically with the criteria, restoring the
+        invariant that the set_by/set_at pair is non-null iff hit_criteria is.
+        Frozen on locked runs.
+        """
+        self._guard_not_locked()
+        self.hit_criteria = None
+        self.hit_criteria_set_by = None
+        self.hit_criteria_set_at = None
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            RunHitCriteriaCleared(
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                workspace_id=self.workspace_id,
+                cleared_by=cleared_by,
             )
         )

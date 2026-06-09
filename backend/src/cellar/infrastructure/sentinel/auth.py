@@ -47,6 +47,8 @@ def create_sentinel(settings: SentinelSettings | None = None) -> Sentinel:
         service_key=settings.service_key,
         mode="authz",
         idp_jwks_url=settings.idp_jwks_url,
+        idp_audience=settings.idp_audience,
+        idp_issuer=settings.idp_issuer or None,
         cache_ttl=settings.cache_ttl,
         actions=SERVICE_ACTIONS,
     )

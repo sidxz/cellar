@@ -23,14 +23,23 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.source_ref import SourceRef
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.shared.target_ref import TargetRef
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_target_filter import (  # noqa: E501
+    campaign_target_filter_subquery,
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
     CampaignChannelModel,
     CampaignMeasurementModel,
     CampaignModel,
     CampaignResultModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    RunModel,
+    TargetModel,
+    run_targets,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
     CampaignTagLinkModel,
@@ -348,6 +357,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         limit: int | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
+        target_ids: list[uuid.UUID] | None = None,
+        target_logic: str = "any",
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(
             CampaignModel.workspace_id == workspace_id,
@@ -358,6 +369,16 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                 CampaignModel.id.in_(
                     tag_filter_subquery(
                         CampaignTagLinkModel, "campaign_id", tags, match_all=tag_logic == "all"
+                    )
+                )
+            )
+        if target_ids:
+            stmt = stmt.where(
+                CampaignModel.id.in_(
+                    campaign_target_filter_subquery(
+                        target_ids,
+                        match_all=target_logic == "all",
+                        workspace_id=workspace_id,
                     )
                 )
             )
@@ -377,6 +398,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         limit: int | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
+        target_ids: list[uuid.UUID] | None = None,
+        target_logic: str = "any",
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(CampaignModel.workspace_id == workspace_id)
         if tags:
@@ -384,6 +407,16 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                 CampaignModel.id.in_(
                     tag_filter_subquery(
                         CampaignTagLinkModel, "campaign_id", tags, match_all=tag_logic == "all"
+                    )
+                )
+            )
+        if target_ids:
+            stmt = stmt.where(
+                CampaignModel.id.in_(
+                    campaign_target_filter_subquery(
+                        target_ids,
+                        match_all=target_logic == "all",
+                        workspace_id=workspace_id,
                     )
                 )
             )
@@ -405,6 +438,68 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             CampaignStatus.CLOSED.value,
             CampaignStatus.SUPERSEDED.value,
         }
+
+    async def project_targets(
+        self, workspace_id: uuid.UUID, campaigns: list[Campaign]
+    ) -> dict[uuid.UUID, list[TargetRef]]:
+        # Collect every run id referenced by each campaign's measurements
+        # (source_run_id union contributing_run_ids) — aggregate already loaded.
+        run_ids_by_campaign: dict[uuid.UUID, set[uuid.UUID]] = {}
+        all_run_ids: set[uuid.UUID] = set()
+        for c in campaigns:
+            run_ids: set[uuid.UUID] = set()
+            for result in c.results:
+                for m in result.measurements:
+                    if m.source_run_id is not None:
+                        run_ids.add(m.source_run_id)
+                    for rid in m.contributing_run_ids or ():
+                        run_ids.add(rid)
+            if run_ids:
+                run_ids_by_campaign[c.id] = run_ids
+                all_run_ids |= run_ids
+
+        if not all_run_ids:
+            return {}
+
+        # One batched query: run_id -> TargetRef columns. Mirrors
+        # find_target_refs_for_runs — select only the 3 fields TargetRef needs
+        # and join through RunModel so tenant isolation is enforced on the owner
+        # side too, not just the TargetModel filter.
+        rows = (
+            await self._session.execute(
+                select(
+                    run_targets.c.run_id,
+                    TargetModel.id,
+                    TargetModel.name,
+                    TargetModel.target_type,
+                )
+                .select_from(
+                    run_targets.join(TargetModel, run_targets.c.target_id == TargetModel.id).join(
+                        RunModel, run_targets.c.run_id == RunModel.id
+                    )
+                )
+                .where(
+                    run_targets.c.run_id.in_(all_run_ids),
+                    RunModel.workspace_id == workspace_id,
+                    TargetModel.workspace_id == workspace_id,
+                )
+            )
+        ).all()
+        targets_by_run: dict[uuid.UUID, list[TargetRef]] = {}
+        for run_id, tid, name, tt in rows:
+            targets_by_run.setdefault(run_id, []).append(
+                TargetRef(id=tid, name=name, target_type=tt)
+            )
+
+        out: dict[uuid.UUID, list[TargetRef]] = {}
+        for campaign_id, run_ids in run_ids_by_campaign.items():
+            seen: dict[uuid.UUID, TargetRef] = {}
+            for rid in run_ids:
+                for t in targets_by_run.get(rid, ()):
+                    seen[t.id] = t
+            if seen:
+                out[campaign_id] = sorted(seen.values(), key=lambda r: r.name.lower())
+        return out
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         """Delete a campaign (cascades to channels/results/measurements via FK)."""

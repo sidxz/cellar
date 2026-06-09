@@ -166,6 +166,9 @@ export function MoleculeList() {
           columnDefs={columnDefs}
           loading={isLoading}
           height="calc(100vh - 280px)"
+          // Dedicated CompoundSearchBar above handles search; the grid's global
+          // quick-filter box is redundant here.
+          searchPlaceholder={false}
           onRowClick={(mol) => {
             router.push(`/compounds/${mol.id}`);
           }}

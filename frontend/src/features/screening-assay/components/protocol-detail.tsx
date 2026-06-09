@@ -11,6 +11,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
@@ -19,7 +27,9 @@ import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import {
   Activity,
+  AlertTriangle,
   Archive,
+  ChevronDown,
   Copy,
   FlaskConical,
   LayoutDashboard,
@@ -31,10 +41,11 @@ import {
   RotateCcw,
   Send,
   Settings2,
+  ShieldAlert,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   useDeleteProtocol,
   useLockProtocol,
@@ -80,6 +91,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const [lockOpen, setLockOpen] = useState(false);
   const [lockReason, setLockReason] = useState("");
   const [lockMode, setLockMode] = useState<"lock" | "unlock">("lock");
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
 
   const query = { data: protocol, isLoading };
 
@@ -96,117 +108,165 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         actions={(p) => {
           const s = p.status as ProtocolStatus;
           const locked = p.is_locked;
-          // While locked, hide all destructive/state-changing actions
-          // except the unlock toggle. New Run is always allowed —
-          // running an experiment doesn't mutate protocol metadata.
+
+          // Frequent forward action stays a prominent button; everything
+          // occasional moves into a "More" menu, and admin-only destructive
+          // actions into a separate, role-gated menu. While locked, only the
+          // unlock toggle is offered (plus New Run, which doesn't mutate
+          // protocol metadata).
+          const primary =
+            s === "active" ? (
+              <Button size="sm" onClick={() => setCreateRunOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Run
+              </Button>
+            ) : s === "draft" && !locked ? (
+              <Button
+                size="sm"
+                onClick={() => publishMutation.mutate({ id: protocolId })}
+                disabled={publishMutation.isPending}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                {publishMutation.isPending ? "Publishing..." : "Publish"}
+              </Button>
+            ) : null;
+
+          const neutralItems: ReactNode[] = [];
+          const destructiveItems: ReactNode[] = [];
+
+          if (!locked && s === "draft") {
+            neutralItems.push(
+              <DropdownMenuItem
+                key="edit"
+                onClick={() => {
+                  setEditName(p.name);
+                  setEditDescription(p.description ?? "");
+                  setEditCategory(p.category ?? "");
+                  setEditOpen(true);
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit details
+              </DropdownMenuItem>,
+              <DropdownMenuItem
+                key="duplicate"
+                onClick={() => versionMutation.mutate({ id: protocolId })}
+                disabled={versionMutation.isPending}
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                Duplicate
+              </DropdownMenuItem>,
+            );
+            destructiveItems.push(
+              <DropdownMenuItem
+                key="delete"
+                className="text-destructive focus:text-destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>,
+            );
+          }
+
+          if (!locked && s === "active") {
+            neutralItems.push(
+              <DropdownMenuItem
+                key="version"
+                onClick={() => versionMutation.mutate({ id: protocolId })}
+                disabled={versionMutation.isPending}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                New Version
+              </DropdownMenuItem>,
+            );
+            destructiveItems.push(
+              <DropdownMenuItem
+                key="retire"
+                className="text-destructive focus:text-destructive"
+                onClick={() =>
+                  retireMutation.mutate({ id: protocolId, data: { reason: "Retired by user" } })
+                }
+                disabled={retireMutation.isPending}
+              >
+                <Archive className="mr-2 h-4 w-4" />
+                Retire
+              </DropdownMenuItem>,
+            );
+          }
+
+          if (s !== "retired") {
+            neutralItems.push(
+              <DropdownMenuItem
+                key="lock"
+                onClick={() => {
+                  setLockMode(locked ? "unlock" : "lock");
+                  setLockReason("");
+                  setLockOpen(true);
+                }}
+              >
+                {locked ? (
+                  <>
+                    <LockOpen className="mr-2 h-4 w-4" />
+                    Unlock
+                  </>
+                ) : (
+                  <>
+                    <Lock className="mr-2 h-4 w-4" />
+                    Lock
+                  </>
+                )}
+              </DropdownMenuItem>,
+            );
+          }
+
+          const hasMore = neutralItems.length + destructiveItems.length > 0;
+
           return (
             <>
-              {s === "active" && (
-                <Button size="sm" onClick={() => setCreateRunOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Run
-                </Button>
-              )}
-              {s === "draft" && !locked && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setEditName(p.name);
-                      setEditDescription(p.description ?? "");
-                      setEditCategory(p.category ?? "");
-                      setEditOpen(true);
-                    }}
-                  >
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => versionMutation.mutate({ id: protocolId })}
-                    disabled={versionMutation.isPending}
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    {versionMutation.isPending ? "Duplicating..." : "Duplicate"}
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => setDeleteOpen(true)}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => publishMutation.mutate({ id: protocolId })}
-                    disabled={publishMutation.isPending}
-                  >
-                    <Send className="mr-2 h-4 w-4" />
-                    {publishMutation.isPending ? "Publishing..." : "Publish"}
-                  </Button>
-                </>
-              )}
-              {s === "active" && !locked && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => versionMutation.mutate({ id: protocolId })}
-                    disabled={versionMutation.isPending}
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    {versionMutation.isPending ? "Creating..." : "New Version"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() =>
-                      retireMutation.mutate({
-                        id: protocolId,
-                        data: { reason: "Retired by user" },
-                      })
-                    }
-                    disabled={retireMutation.isPending}
-                  >
-                    <Archive className="mr-2 h-4 w-4" />
-                    {retireMutation.isPending ? "Retiring..." : "Retire"}
-                  </Button>
-                </>
-              )}
-              {s !== "retired" && (
-                <Button
-                  size="sm"
-                  variant={locked ? "default" : "outline"}
-                  title={
-                    locked
-                      ? `Locked: ${p.lock_reason ?? ""}`
-                      : "Lock to freeze metadata for review / submission"
-                  }
-                  onClick={() => {
-                    setLockMode(locked ? "unlock" : "lock");
-                    setLockReason("");
-                    setLockOpen(true);
-                  }}
-                >
-                  {locked ? (
-                    <>
-                      <LockOpen className="mr-2 h-4 w-4" />
-                      Unlock
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="mr-2 h-4 w-4" />
-                      Lock
-                    </>
-                  )}
-                </Button>
+              {primary}
+              {hasMore && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      More
+                      <ChevronDown className="ml-1.5 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {neutralItems}
+                    {destructiveItems.length > 0 && neutralItems.length > 0 && (
+                      <DropdownMenuSeparator />
+                    )}
+                    {destructiveItems}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               {isAdmin && (
-                <CascadeDeleteDialog
-                  entityType="protocol"
-                  entityId={protocolId}
-                  entityLabel={p.name}
-                  onDeleted={() => router.push("/assays")}
-                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Admin actions"
+                      title="Admin actions"
+                    >
+                      <ShieldAlert className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                      Danger zone
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setForceDeleteOpen(true)}
+                    >
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      Force delete (cascade)…
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </>
           );
@@ -394,6 +454,18 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Force delete (cascade) — admin only, driven from the Admin menu. */}
+      {isAdmin && protocol && (
+        <CascadeDeleteDialog
+          entityType="protocol"
+          entityId={protocolId}
+          entityLabel={protocol.name}
+          onDeleted={() => router.push("/assays")}
+          open={forceDeleteOpen}
+          onOpenChange={setForceDeleteOpen}
+        />
+      )}
     </>
   );
 }

@@ -14,7 +14,11 @@ import type { RunResponseRunRelationshipType } from './runResponseRunRelationshi
 import type { RunResponsePlateFormat } from './runResponsePlateFormat';
 import type { RunResponsePlateTemplateId } from './runResponsePlateTemplateId';
 import type { RunResponseConditions } from './runResponseConditions';
+import type { RunResponseHitCriteria } from './runResponseHitCriteria';
+import type { RunResponseHitCriteriaSetBy } from './runResponseHitCriteriaSetBy';
+import type { RunResponseHitCriteriaSetAt } from './runResponseHitCriteriaSetAt';
 import type { TargetRefResponse } from './targetRefResponse';
+import type { CollectionCoverageResponse } from './collectionCoverageResponse';
 
 export interface RunResponse {
   id: string;
@@ -38,5 +42,9 @@ export interface RunResponse {
   plate_format?: RunResponsePlateFormat;
   plate_template_id?: RunResponsePlateTemplateId;
   conditions?: RunResponseConditions;
+  hit_criteria?: RunResponseHitCriteria;
+  hit_criteria_set_by?: RunResponseHitCriteriaSetBy;
+  hit_criteria_set_at?: RunResponseHitCriteriaSetAt;
   targets?: TargetRefResponse[];
+  collections?: CollectionCoverageResponse[];
 }

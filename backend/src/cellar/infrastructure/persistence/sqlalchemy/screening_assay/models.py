@@ -105,6 +105,29 @@ run_targets = Table(
 )
 
 
+# Each run's attached collections (libraries). The protocol shows rolled-up
+# screening coverage over the runs that attached each collection.
+run_collections = Table(
+    "run_collections",
+    Base.metadata,
+    Column(
+        "run_id",
+        Uuid(as_uuid=True),
+        ForeignKey("runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "collection_id",
+        Uuid(as_uuid=True),
+        # RESTRICT: a collection referenced by a run cannot be silently deleted
+        # (the lesson of migration 053).
+        ForeignKey("collections.id", ondelete="RESTRICT"),
+        primary_key=True,
+    ),
+    Index("ix_run_collections_collection", "collection_id"),
+)
+
+
 # ---------------------------------------------------------------------------
 # Reference entities (no VersionMixin — not aggregate roots)
 # ---------------------------------------------------------------------------
@@ -284,6 +307,13 @@ class RunModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     lock_reason: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
     eln_entry_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    # Per-run hit criteria (attributable analytical decision). NULL = unset
+    # (show protocol recommendation); a JSON list (possibly empty = "show all,
+    # recorded") = a recorded decision. The set_by/set_at pair is non-NULL iff
+    # hit_criteria is non-NULL.
+    hit_criteria: Mapped[list | None] = mapped_column(JSONB)
+    hit_criteria_set_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    hit_criteria_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Owned entity collection
     plates: Mapped[list[PlateModel]] = relationship(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.screening_assay.enums import (
@@ -14,18 +14,23 @@ from cellar.domain.screening_assay.enums import (
     RunStatus,
     WellType,
 )
-from cellar.domain.screening_assay.repository import TargetLinkResult
+from cellar.domain.screening_assay.repository import CollectionLinkResult, TargetLinkResult
 from cellar.domain.screening_assay.run import Plate, Run, Well
 from cellar.domain.screening_assay.target import TargetRef
+from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.value_objects import Barcode
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
+    CollectionModel,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     PlateModel,
     RunModel,
     TargetModel,
     WellModel,
+    run_collections,
     run_targets,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import RunTagLinkModel
@@ -225,6 +230,45 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         return out
 
     # ------------------------------------------------------------------
+    # Collection association methods (mirrors run_targets above)
+    # ------------------------------------------------------------------
+
+    async def add_collection(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> CollectionLinkResult:
+        """Link a collection to a run (idempotent). Workspace-checked on both sides.
+
+        The distinct not-found outcomes let callers surface a 404 instead of a
+        silent success.
+        """
+        if not await self._owns(RunModel, run_id, workspace_id):
+            return CollectionLinkResult.OWNER_NOT_FOUND
+        if not await self._owns(CollectionModel, collection_id, workspace_id):
+            return CollectionLinkResult.COLLECTION_NOT_FOUND
+        result = await self._session.execute(
+            pg_insert(run_collections)
+            .values(run_id=run_id, collection_id=collection_id)
+            .on_conflict_do_nothing()
+        )
+        if result.rowcount:
+            return CollectionLinkResult.ADDED
+        return CollectionLinkResult.ALREADY_LINKED
+
+    async def remove_collection(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> bool:
+        """Detach a collection from a run. Returns True if a link row was removed."""
+        if not await self._owns(RunModel, run_id, workspace_id):
+            return False
+        result = await self._session.execute(
+            delete(run_collections).where(
+                run_collections.c.run_id == run_id,
+                run_collections.c.collection_id == collection_id,
+            )
+        )
+        return bool(result.rowcount)
+
+    # ------------------------------------------------------------------
     # Mapping: SA model <-> domain aggregate
     # ------------------------------------------------------------------
 
@@ -286,6 +330,15 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             lock_reason=model.lock_reason,
             notes=model.notes,
             eln_entry_id=model.eln_entry_id,
+            # Preserve the unset (None) vs "show all, recorded" ([]) distinction —
+            # do NOT collapse with `or []` the way the protocol's recommendation does.
+            hit_criteria=(
+                [HitCriterion.from_dict(c) for c in model.hit_criteria]
+                if model.hit_criteria is not None
+                else None
+            ),
+            hit_criteria_set_by=model.hit_criteria_set_by,
+            hit_criteria_set_at=model.hit_criteria_set_at,
             plates=plates,
             wells=all_wells,
             created_at=model.created_at,
@@ -316,6 +369,13 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             lock_reason=aggregate.lock_reason,
             notes=aggregate.notes,
             eln_entry_id=aggregate.eln_entry_id,
+            hit_criteria=(
+                [c.to_dict() for c in aggregate.hit_criteria]
+                if aggregate.hit_criteria is not None
+                else None
+            ),
+            hit_criteria_set_by=aggregate.hit_criteria_set_by,
+            hit_criteria_set_at=aggregate.hit_criteria_set_at,
             version=aggregate.version,
         )
 
@@ -348,6 +408,13 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         model.lock_reason = aggregate.lock_reason
         model.notes = aggregate.notes
         model.eln_entry_id = aggregate.eln_entry_id
+        model.hit_criteria = (
+            [c.to_dict() for c in aggregate.hit_criteria]
+            if aggregate.hit_criteria is not None
+            else None
+        )
+        model.hit_criteria_set_by = aggregate.hit_criteria_set_by
+        model.hit_criteria_set_at = aggregate.hit_criteria_set_at
 
         # Rebuild plate/well collections
         wells_by_plate: dict[uuid.UUID, list[Well]] = {}

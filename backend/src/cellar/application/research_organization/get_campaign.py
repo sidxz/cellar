@@ -16,6 +16,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
+from cellar.domain.shared.target_ref import TargetRef
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -28,6 +29,9 @@ class GetCampaignQuery(Query):
 class GetCampaignResult:
     campaign: Campaign
     scientist_by_run_id: dict[uuid.UUID, str]
+    #: Distinct targets unioned from the runs this campaign's measurements
+    #: reference — a read-time projection (never stored), for the detail header.
+    targets: list[TargetRef]
 
 
 class GetCampaign:
@@ -64,6 +68,15 @@ class GetCampaign:
                 input.workspace_id, run_ids
             )
 
+            targets_by_campaign = await self._campaign_repo.project_targets(
+                input.workspace_id, [campaign]
+            )
+            targets = targets_by_campaign.get(campaign.id, [])
+
         return Success(
-            GetCampaignResult(campaign=campaign, scientist_by_run_id=scientist_by_run_id)
+            GetCampaignResult(
+                campaign=campaign,
+                scientist_by_run_id=scientist_by_run_id,
+                targets=targets,
+            )
         )

@@ -1,12 +1,9 @@
 "use client";
 
-import { TagTable } from "@/features/tagging/components/tag-table";
 import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
-import { ProtocolName } from "@/shared/components/entity-name";
 import { Button } from "@/shared/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
@@ -28,13 +33,15 @@ import {
 import { Textarea } from "@/shared/components/ui/textarea";
 import { cn } from "@/shared/lib/utils";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
-import { useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Calculator,
   CheckCircle2,
+  ChevronDown,
   Lock,
   Play,
   RotateCcw,
+  ShieldAlert,
   ThumbsDown,
   ThumbsUp,
   Trash2,
@@ -44,11 +51,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useRecomputeOverrides } from "../hooks/use-recompute-overrides";
-import {
-  invalidateRunTargetQueries,
-  useAddRunTarget,
-  useRemoveRunTarget,
-} from "../hooks/use-run-targets";
 import {
   useApproveRun,
   useCompleteRun,
@@ -60,11 +62,10 @@ import {
   useStartRun,
   useUnlockRun,
 } from "../hooks/use-runs";
-import { PLATE_FORMAT_LABELS, type PlateFormat, type RunStatus } from "../types";
+import type { RunStatus } from "../types";
 import { ResetRunDataDialog } from "./reset-run-data-dialog";
 import { RunDataPanel } from "./run-data-panel";
-import { TargetChips } from "./target-chips";
-import { TargetMultiSelect } from "./target-multi-select";
+import { RunSummaryCard } from "./run-summary-card";
 
 interface RunDetailProps {
   runId: string;
@@ -72,13 +73,10 @@ interface RunDetailProps {
 
 export function RunDetail({ runId }: RunDetailProps) {
   const router = useRouter();
-  const qc = useQueryClient();
   const isAdmin = useAuthzHasRole("admin");
   const canEditTags = useAuthzHasRole("editor");
   const query = useRun(runId);
   const { data: protocol } = useProtocol(query.data?.protocol_id ?? "");
-  const addRunTarget = useAddRunTarget(runId);
-  const removeRunTarget = useRemoveRunTarget(runId);
   const startMutation = useStartRun();
   const completeMutation = useCompleteRun();
   const approveMutation = useApproveRun();
@@ -96,6 +94,7 @@ export function RunDetail({ runId }: RunDetailProps) {
   const [unlockReason, setUnlockReason] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
 
   // Per-run fit constraint overrides for Recompute. Mirrors the protocol's
   // Free/Range/Lock vocabulary so the popover matches the protocol-design
@@ -205,6 +204,16 @@ export function RunDetail({ runId }: RunDetailProps) {
         notFoundMessage="Run not found."
         actions={(r) => {
           const status = r.status as RunStatus;
+          // Frequent forward action (Start/Complete/Approve) + Recompute stay
+          // prominent; occasional + destructive actions move into "More", and
+          // the admin hard-delete into a separate role-gated menu.
+          const canLockToggle = status !== "draft";
+          const canReject = status === "completed";
+          const canReset =
+            (status === "draft" || status === "in_progress") && !r.is_locked && r.plate_count > 0;
+          const canDeleteRun = (status === "draft" || status === "in_progress") && !r.is_locked;
+          const hasDestructive = canReject || canReset || canDeleteRun;
+          const hasMore = canLockToggle || hasDestructive;
           return (
             <>
               {status === "draft" && (
@@ -234,31 +243,13 @@ export function RunDetail({ runId }: RunDetailProps) {
                 </Button>
               )}
               {status === "completed" && (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => approveMutation.mutate(runId)}
-                    disabled={approveMutation.isPending}
-                  >
-                    <ThumbsUp className="mr-2 h-4 w-4" />
-                    {approveMutation.isPending ? "Approving..." : "Approve"}
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => setRejectDialogOpen(true)}>
-                    <ThumbsDown className="mr-2 h-4 w-4" />
-                    Reject
-                  </Button>
-                </>
-              )}
-              {status !== "draft" && !r.is_locked && (
-                <Button size="sm" variant="outline" onClick={() => setLockDialogOpen(true)}>
-                  <Lock className="mr-2 h-4 w-4" />
-                  Lock
-                </Button>
-              )}
-              {status !== "draft" && r.is_locked && (
-                <Button size="sm" variant="outline" onClick={() => setUnlockDialogOpen(true)}>
-                  <Unlock className="mr-2 h-4 w-4" />
-                  Unlock
+                <Button
+                  size="sm"
+                  onClick={() => approveMutation.mutate(runId)}
+                  disabled={approveMutation.isPending}
+                >
+                  <ThumbsUp className="mr-2 h-4 w-4" />
+                  {approveMutation.isPending ? "Approving..." : "Approve"}
                 </Button>
               )}
               {!r.is_locked && r.plate_count > 0 && (
@@ -466,36 +457,83 @@ export function RunDetail({ runId }: RunDetailProps) {
                   </Popover>
                 </div>
               )}
-              {(status === "draft" || status === "in_progress") &&
-                !r.is_locked &&
-                r.plate_count > 0 && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setResetDialogOpen(true)}
-                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Reset Data
-                  </Button>
-                )}
-              {(status === "draft" || status === "in_progress") && !r.is_locked && (
-                <Button size="sm" variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </Button>
+              {hasMore && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      More
+                      <ChevronDown className="ml-1.5 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {canLockToggle &&
+                      (r.is_locked ? (
+                        <DropdownMenuItem onClick={() => setUnlockDialogOpen(true)}>
+                          <Unlock className="mr-2 h-4 w-4" />
+                          Unlock
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem onClick={() => setLockDialogOpen(true)}>
+                          <Lock className="mr-2 h-4 w-4" />
+                          Lock
+                        </DropdownMenuItem>
+                      ))}
+                    {canLockToggle && hasDestructive && <DropdownMenuSeparator />}
+                    {canReject && (
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setRejectDialogOpen(true)}
+                      >
+                        <ThumbsDown className="mr-2 h-4 w-4" />
+                        Reject
+                      </DropdownMenuItem>
+                    )}
+                    {canReset && (
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setResetDialogOpen(true)}
+                      >
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Reset data
+                      </DropdownMenuItem>
+                    )}
+                    {canDeleteRun && (
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setDeleteDialogOpen(true)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               {isAdmin && (
-                <CascadeDeleteDialog
-                  entityType="run"
-                  entityId={runId}
-                  entityLabel={r.notes ?? runId}
-                  onDeleted={() =>
-                    r.protocol_id
-                      ? router.push(`/assays/protocols/${r.protocol_id}`)
-                      : router.push("/assays")
-                  }
-                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Admin actions"
+                      title="Admin actions"
+                    >
+                      <ShieldAlert className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                      Danger zone
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => setForceDeleteOpen(true)}
+                    >
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      Force delete (cascade)…
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </>
           );
@@ -503,95 +541,13 @@ export function RunDetail({ runId }: RunDetailProps) {
       >
         {(run) => (
           <>
-            {/* Metadata */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Protocol</p>
-                    <a
-                      href={`/assays/protocols/${run.protocol_id}`}
-                      className="text-sm text-primary hover:underline underline-offset-4"
-                    >
-                      <ProtocolName id={run.protocol_id} />
-                    </a>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Run Date</p>
-                    <p className="font-medium font-mono">{run.run_date}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Plate Format</p>
-                    <p className="font-medium">
-                      {run.plate_format
-                        ? (PLATE_FORMAT_LABELS[run.plate_format as PlateFormat] ?? run.plate_format)
-                        : "\u2014"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Plates</p>
-                    <p className="font-medium">{run.plate_count}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Notes</p>
-                    <p className="font-medium">{run.notes ?? "\u2014"}</p>
-                  </div>
-                </div>
-                {run.lock_reason && (
-                  <div className="mt-4 rounded-md bg-destructive/10 p-3">
-                    <p className="text-sm font-medium text-destructive">
-                      Lock reason: {run.lock_reason}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Targets */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Targets</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {canEditTags && !run.is_locked ? (
-                  <TargetMultiSelect
-                    value={run.targets.map((t) => t.id)}
-                    onChange={async (ids) => {
-                      // Diff against the current set, dispatch as one awaited
-                      // batch with a single invalidation pass. The select is
-                      // disabled while in flight so a rapid second toggle
-                      // can't diff against a stale list.
-                      const current = run.targets.map((t) => t.id);
-                      const mutations = [
-                        ...ids
-                          .filter((id) => !current.includes(id))
-                          .map((id) => addRunTarget.mutateAsync(id)),
-                        ...current
-                          .filter((id) => !ids.includes(id))
-                          .map((id) => removeRunTarget.mutateAsync(id)),
-                      ];
-                      try {
-                        await Promise.all(mutations);
-                      } catch {
-                        // Failures already surfaced by the mutations' error toasts.
-                      } finally {
-                        await invalidateRunTargetQueries(qc, runId);
-                      }
-                    }}
-                    placeholder="Add a target…"
-                    disabled={addRunTarget.isPending || removeRunTarget.isPending}
-                  />
-                ) : (
-                  <TargetChips targets={run.targets} max={20} />
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Tags */}
-            <TagTable entity="runs" entityId={runId} canEdit={canEditTags} />
+            {/* Condensed header: facts + targets/collections/tags in one card */}
+            <RunSummaryCard
+              run={run}
+              protocol={protocol}
+              canEditMeta={canEditTags && !run.is_locked}
+              canEditTags={canEditTags}
+            />
 
             {/* Data visualizations + files */}
             <RunDataPanel run={run} />
@@ -700,6 +656,22 @@ export function RunDetail({ runId }: RunDetailProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Force delete (cascade) — admin only, driven from the Admin menu. */}
+      {isAdmin && query.data && (
+        <CascadeDeleteDialog
+          entityType="run"
+          entityId={runId}
+          entityLabel={query.data.notes ?? runId}
+          onDeleted={() =>
+            query.data?.protocol_id
+              ? router.push(`/assays/protocols/${query.data.protocol_id}`)
+              : router.push("/assays")
+          }
+          open={forceDeleteOpen}
+          onOpenChange={setForceDeleteOpen}
+        />
+      )}
     </>
   );
 }

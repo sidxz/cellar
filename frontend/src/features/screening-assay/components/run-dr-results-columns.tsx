@@ -1,3 +1,4 @@
+import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import {
@@ -55,7 +56,8 @@ export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCur
       },
       cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
         if (!params.data) return null;
-        const { registration_number, molecule_name, synonyms, batch_number } = params.data;
+        const { molecule_id, registration_number, molecule_name, synonyms, batch_number } =
+          params.data;
         const aliases: string[] = [];
         if (molecule_name && molecule_name !== registration_number) {
           aliases.push(molecule_name);
@@ -67,7 +69,12 @@ export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCur
         }
         return (
           <div className="leading-tight">
-            <div className="font-mono font-medium">{registration_number}</div>
+            <EntityLink
+              type="compound"
+              id={molecule_id}
+              label={registration_number}
+              className="font-medium"
+            />
             {aliases.length > 0 && (
               <div
                 className="text-xs text-muted-foreground break-words whitespace-normal"

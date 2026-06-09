@@ -20,6 +20,7 @@ from cellar.application.screening import _condense_raw_data
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.excluded_point_detail import ExcludedPointDetail
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     ProtocolRepository,
@@ -124,7 +125,17 @@ class CurveDetail:
             confidence_interval_low=curve.confidence_interval_low,
             confidence_interval_high=curve.confidence_interval_high,
             raw_data=_condense_raw_data(curve.raw_data or []),
-            excluded_points=curve.excluded_points,
+            # ``_to_domain`` hydrates the JSONB column into typed
+            # ``ExcludedPointDetail`` VOs; the wire DTO declares ``list[dict]``
+            # and the route's Pydantic model enforces it, so serialize back to
+            # dicts here. Mirrors the run-page convention in
+            # ``readout_data.DoseResponseCurveResponse.from_domain``. Without
+            # this the endpoint 500'd for any curve with excluded points.
+            excluded_points=[
+                ep.to_jsonb() if isinstance(ep, ExcludedPointDetail) else ep
+                for ep in (curve.excluded_points or [])
+            ]
+            or None,
             fit_quality_warnings=list(curve.fit_quality_warnings or []),
             intercept_values=[
                 InterceptValuePayload(

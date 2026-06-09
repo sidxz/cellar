@@ -9,6 +9,8 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { formatDate } from "@/shared/lib/format-date";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { Beaker, Clock, FlaskConical, Target } from "lucide-react";
+import { useState } from "react";
+import { useProtocolCollectionCoverage } from "../../hooks/use-protocol-collection-coverage";
 import { useProtocolStats } from "../../hooks/use-protocol-stats";
 import {
   PLATE_FORMAT_LABELS,
@@ -17,6 +19,8 @@ import {
   type Protocol,
   type ProtocolType,
 } from "../../types";
+import { CoverageBar } from "../coverage-bar";
+import { CoverageGapDialog } from "../coverage-gap-dialog";
 
 // ---------------------------------------------------------------------------
 // Z' quality badge helper
@@ -93,7 +97,9 @@ interface OverviewTabProps {
 
 export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabProps) {
   const { data: stats, isLoading } = useProtocolStats(protocolId);
+  const { data: coverage } = useProtocolCollectionCoverage(protocolId);
   const canEditTags = useAuthzHasRole("editor");
+  const [gap, setGap] = useState<{ path: string; name: string } | null>(null);
 
   return (
     <div className="space-y-6">
@@ -188,6 +194,27 @@ export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabPr
         </CardContent>
       </Card>
 
+      {/* Coverage */}
+      {coverage && coverage.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Coverage</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {coverage.map((c) => (
+              <CoverageBar
+                key={c.id}
+                coverage={c}
+                runCount={c.run_count}
+                onViewGap={() =>
+                  setGap({ path: `/protocols/${protocolId}/collections/${c.id}`, name: c.name })
+                }
+              />
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Details Card */}
       <Card>
         <CardHeader>
@@ -223,6 +250,15 @@ export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabPr
 
       {/* Tags */}
       <TagTable entity="protocols" entityId={protocolId} canEdit={canEditTags} />
+
+      {gap && (
+        <CoverageGapDialog
+          open
+          onOpenChange={(o) => !o && setGap(null)}
+          gapBasePath={gap.path}
+          collectionName={gap.name}
+        />
+      )}
     </div>
   );
 }

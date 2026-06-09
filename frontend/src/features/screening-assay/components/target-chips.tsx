@@ -9,6 +9,8 @@ interface TargetChipsProps {
   /** Max chips to render before collapsing the remainder into a "+N" chip. */
   max?: number;
   className?: string;
+  /** Override the per-chip badge classes (e.g. a larger text size). */
+  chipClassName?: string;
 }
 
 /**
@@ -16,7 +18,7 @@ interface TargetChipsProps {
  * `Badge` per target up to `max`, collapsing the overflow into a single "+N"
  * chip whose tooltip lists the hidden names. Shows an em-dash when empty.
  */
-export function TargetChips({ targets, max = 3, className }: TargetChipsProps) {
+export function TargetChips({ targets, max = 3, className, chipClassName }: TargetChipsProps) {
   if (!targets || targets.length === 0) {
     return <span className="text-xs text-muted-foreground">—</span>;
   }
@@ -27,14 +29,19 @@ export function TargetChips({ targets, max = 3, className }: TargetChipsProps) {
   return (
     <div className={cn("flex flex-wrap items-center gap-1", className)}>
       {shown.map((t) => (
-        <Badge key={t.id} variant="secondary" className="font-normal text-[10px]" title={t.name}>
+        <Badge
+          key={t.id}
+          variant="secondary"
+          className={cn("font-normal text-[10px]", chipClassName)}
+          title={t.name}
+        >
           {t.name}
         </Badge>
       ))}
       {hidden.length > 0 && (
         <Badge
           variant="outline"
-          className="font-normal text-[10px] text-muted-foreground"
+          className={cn("font-normal text-[10px] text-muted-foreground", chipClassName)}
           title={hidden.map((t) => t.name).join(", ")}
         >
           +{hidden.length}

@@ -1,9 +1,12 @@
 import type {
   ClassifyDoseResponseCurveRequest,
+  CollectionCoverageResponse,
   ConditionGroupReadoutResponse,
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
   DoseResponseCurveResponse,
+  EffectiveCollectionCoverageResponse,
+  HitCriterionDTO,
   InterceptValueResponse,
   LatestRunResponse as LatestRunResponseModel,
   PlateData as PlateDataModel,
@@ -14,8 +17,18 @@ import type {
   ReadoutDataResponse,
   RefitDoseResponseCurveRequest,
   RunCountsResponse as RunCountsResponseModel,
+  RunResponse,
   TargetRefResponse,
 } from "@/shared/lib/api/model";
+
+/** A run's coverage of one attached collection (covered / total + fraction).
+ *  Aliases the generated orval type so the shape can't drift from the backend
+ *  DTO. `fraction` is `number | null` (null = empty collection). */
+export type CollectionCoverage = CollectionCoverageResponse;
+
+/** Protocol rollup of collection coverage — adds `run_count` (how many of the
+ *  protocol's runs attach the collection). Aliases the generated type. */
+export type EffectiveCollectionCoverage = EffectiveCollectionCoverageResponse;
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
@@ -403,32 +416,46 @@ export interface Target {
   target_class: string | null;
 }
 
-export interface Run {
-  id: string;
-  workspace_id: string;
-  protocol_id: string;
-  run_date: string;
-  /** ISO datetime — wall-clock creation time, used for same-day disambiguation. */
-  created_at: string;
-  operator: string;
+/**
+ * Aliases the generated `RunResponse` so the shape can't silently drift from
+ * the backend DTO (see `ReadoutData` / `LatestRunResponse`). The generated type
+ * widens the enum columns to `string` and marks always-present fields optional;
+ * we re-narrow the handful that consumers depend on rather than scatter casts:
+ *  - `status` / `run_relationship_type` / `plate_format` → local enums.
+ *  - `hit_criteria` → local `HitCriterion` (narrowed operator), not the wire
+ *    `HitCriterionDTO`. Per-run hit criteria are an attributable analytical
+ *    decision, distinct from the protocol's `recommended_hit_criteria` (the SOP
+ *    suggestion): `null` = unset (show the recommendation, claim no hit count);
+ *    a list (possibly empty `[]` = "show all, recorded") = a recorded decision.
+ *    `hit_criteria_set_by` / `hit_criteria_set_at` are non-null iff
+ *    `hit_criteria` is non-null.
+ *  - `targets` → required (the backend always returns the run's direct targets);
+ *    consumers iterate it unconditionally.
+ *  - `qc_metrics` / `conditions` → `Record | null` (the wire AnyOf is the same
+ *    `{[k]: unknown} | null`; we only drop the spurious `| undefined`), since
+ *    edit dialogs and the scope picker pass them as `Record | null`.
+ * Other DTO-nullable fields (`locked_by`, `notes`, …) stay loose — narrow at the
+ * render edge. `collections` carries per-collection coverage (how many of each
+ * attached collection's molecules this run screened), computed read-time.
+ */
+export type Run = Omit<
+  RunResponse,
+  | "status"
+  | "run_relationship_type"
+  | "plate_format"
+  | "hit_criteria"
+  | "targets"
+  | "qc_metrics"
+  | "conditions"
+> & {
   status: RunStatus;
-  is_locked: boolean;
-  locked_by: string | null;
-  lock_reason: string | null;
-  qc_metrics: Record<string, unknown> | null;
-  notes: string | null;
-  plate_count: number;
-  /** Plate barcodes attached to the run, in plate_number order. */
-  plate_barcodes: string[];
-  molecule_count: number;
-  performed_at_org_id: string | null;
-  parent_run_id: string | null;
   run_relationship_type: RunRelationshipType | null;
   plate_format: PlateFormat | null;
-  conditions: Record<string, unknown> | null;
-  /** Biological targets linked directly to this run (independent set). */
+  hit_criteria: HitCriterion[] | null;
   targets: TargetRef[];
-}
+  qc_metrics: Record<string, unknown> | null;
+  conditions: Record<string, unknown> | null;
+};
 
 /** A readout-data row for a run. Alias of the generated API type — do not
  * hand-roll the shape (it silently drifts from the backend DTO). Note the
@@ -641,12 +668,18 @@ export interface InterceptKey {
   level: number;
 }
 
-export interface HitCriterion {
-  readout_name: string;
+/**
+ * Aliases the generated `HitCriterionDTO` so `readout_name` / `value` track the
+ * backend DTO (the wire `value` is `number | number[] | string[]`). We re-narrow
+ * the two fields consumers index on rather than accept the loose wire types:
+ *  - `operator` → the literal union (`OPERATOR_SYMBOLS[rule.operator]` etc.).
+ *  - `intercept_key` → the local `InterceptKey` (`kind: "ec" | "ic"`); the
+ *    generated `InterceptKeyDTO` widens `kind` to `string`.
+ */
+export type HitCriterion = Omit<HitCriterionDTO, "operator" | "intercept_key"> & {
   operator: "gt" | "lt" | "gte" | "lte" | "in";
-  value: number | string[];
   intercept_key?: InterceptKey | null;
-}
+};
 
 /** Aliases the generated orval types. `ProtocolStats` below is a local
  *  composite (no backend DTO), so it references these aliases directly. */

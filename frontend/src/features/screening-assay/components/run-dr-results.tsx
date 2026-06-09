@@ -2,6 +2,7 @@
 
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EmptyState } from "@/shared/components/empty-state";
+import { MemberName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -9,20 +10,41 @@ import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/components/ui/sheet";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
+import { formatDate } from "@/shared/lib/format-date";
 
 import type { SelectionChangedEvent } from "ag-grid-community";
-import { Eye, Filter, FlaskConical, Settings2 } from "lucide-react";
+import { Check, Eye, EyeOff, Filter, FlaskConical, Pencil, Settings2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
+import { useSetRunHitCriteria } from "../hooks/use-runs";
 import { worstZPrime } from "../lib/qc-metrics";
 import type { DoseResponseCurve, HitCriterion, Run } from "../types";
 import { ComparisonTable } from "./comparison-table";
 import { CurveNavigator } from "./curve-navigator";
 import { DoseResponseChart } from "./dose-response-chart";
-import { HitCriteriaDialog } from "./hit-criteria-dialog";
+import { RunHitCriteriaDialog } from "./hit-criteria-dialog";
 import { buildColumnDefs } from "./run-dr-results-columns";
 import { applyHitFilter, buildCompoundRows } from "./run-dr-results-transforms";
 import type { CompoundCurveRow } from "./run-dr-results-transforms";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const OPERATOR_SYMBOLS: Record<string, string> = {
+  gt: ">",
+  lt: "<",
+  gte: ">=",
+  lte: "<=",
+  in: "in",
+};
+
+/** Compact chip text for a single rule, e.g. "% Inhibition > 50". */
+function criterionChipText(rule: HitCriterion): string {
+  const op = OPERATOR_SYMBOLS[rule.operator] ?? rule.operator;
+  const val = Array.isArray(rule.value) ? rule.value.join(", ") : rule.value;
+  return `${rule.readout_name} ${op} ${val}`;
+}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -41,12 +63,21 @@ interface RunDoseResponseResultsProps {
 export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseResponseResultsProps) {
   const { data: protocol } = useProtocol(run.protocol_id);
 
-  // Hit criteria state
-  const savedCriteria: HitCriterion[] = protocol?.recommended_hit_criteria ?? [];
-  const [activeCriteria, setActiveCriteria] = useState<HitCriterion[]>(savedCriteria);
-  const isModified = JSON.stringify(activeCriteria) !== JSON.stringify(savedCriteria);
+  // Per-run hit criteria — the run's persisted decision is the source of truth.
+  // The protocol's recommended_hit_criteria is only a *suggestion*, surfaced
+  // when the run is unset; it is never applied to the run automatically.
+  const recommendation: HitCriterion[] = protocol?.recommended_hit_criteria ?? [];
+  // null = unset (show recommendation, no hit count); [] = recorded "show all";
+  // [rules] = recorded threshold. (`?? null` leaves [] intact since it's not nullish.)
+  const runCriteria: HitCriterion[] | null = run.hit_criteria ?? null;
+  const isSet = runCriteria !== null;
+  const hasThreshold = runCriteria !== null && runCriteria.length > 0;
 
+  const setHitCriteria = useSetRunHitCriteria();
   const [criteriaDialogOpen, setCriteriaDialogOpen] = useState(false);
+  // Non-destructive, view-only bypass of the run's filter — lets a screener peek
+  // at every compound without altering the recorded decision or its provenance.
+  const [showAll, setShowAll] = useState(false);
 
   // Selection state (checkbox-driven, for multi-compound comparison)
   const [selectedRows, setSelectedRows] = useState<CompoundCurveRow[]>([]);
@@ -58,47 +89,44 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
   // Viewing state (row-click-driven, for single-compound detail sheet)
   const [viewingId, setViewingId] = useState<string | null>(null);
 
-  // Sync savedCriteria when protocol updates
-  const prevSavedRef = JSON.stringify(protocol?.recommended_hit_criteria ?? []);
-  const [lastSynced, setLastSynced] = useState(prevSavedRef);
-  if (prevSavedRef !== lastSynced) {
-    setActiveCriteria(protocol?.recommended_hit_criteria ?? []);
-    setLastSynced(prevSavedRef);
-  }
-
-  // Build rows from curves (already enriched with reg#, smiles, synonyms)
+  // Build rows from curves (already enriched with reg#, smiles, synonyms).
   const allRows = useMemo(() => buildCompoundRows(curves), [curves]);
-  const filteredRows = useMemo(
-    () => applyHitFilter(allRows, activeCriteria),
-    [allRows, activeCriteria],
+  // The true hit set (threshold applied) — drives the "N hits" count regardless
+  // of the view-only bypass below.
+  const hitRows = useMemo(
+    () => (runCriteria && runCriteria.length > 0 ? applyHitFilter(allRows, runCriteria) : allRows),
+    [allRows, runCriteria],
   );
+  // Rows the grid actually shows: the hit set when a threshold is active, unless
+  // the screener has toggled the non-destructive "Show all" bypass.
+  const displayedRows = hasThreshold && !showAll ? hitRows : allRows;
 
   // Curve navigation (prev/next of the currently viewed compound)
   const viewing = useMemo(
-    () => filteredRows.find((r) => r.molecule_id === viewingId) ?? null,
-    [filteredRows, viewingId],
+    () => displayedRows.find((r) => r.molecule_id === viewingId) ?? null,
+    [displayedRows, viewingId],
   );
   const selectedIndex = viewing
-    ? filteredRows.findIndex((r) => r.molecule_id === viewing.molecule_id)
+    ? displayedRows.findIndex((r) => r.molecule_id === viewing.molecule_id)
     : -1;
 
   const navigateTo = useCallback(
     (index: number) => {
-      const target = filteredRows[index];
+      const target = displayedRows[index];
       if (target) setViewingId(target.molecule_id);
     },
-    [filteredRows],
+    [displayedRows],
   );
 
   const handlePrev = useCallback(() => {
-    const newIdx = selectedIndex <= 0 ? filteredRows.length - 1 : selectedIndex - 1;
+    const newIdx = selectedIndex <= 0 ? displayedRows.length - 1 : selectedIndex - 1;
     navigateTo(newIdx);
-  }, [selectedIndex, filteredRows.length, navigateTo]);
+  }, [selectedIndex, displayedRows.length, navigateTo]);
 
   const handleNext = useCallback(() => {
-    const newIdx = selectedIndex >= filteredRows.length - 1 ? 0 : selectedIndex + 1;
+    const newIdx = selectedIndex >= displayedRows.length - 1 ? 0 : selectedIndex + 1;
     navigateTo(newIdx);
-  }, [selectedIndex, filteredRows.length, navigateTo]);
+  }, [selectedIndex, displayedRows.length, navigateTo]);
 
   // Column set is driven by the protocol's intercept specs — one column
   // per declared intercept (EC50, EC90, IC10, ...). When the protocol
@@ -137,8 +165,6 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
     );
   }
 
-  const hasCriteria = savedCriteria.length > 0 || activeCriteria.length > 0;
-
   return (
     <div className="space-y-4">
       {/* Summary bar */}
@@ -146,9 +172,9 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
         <Badge variant="secondary">
           {allRows.length} compound{allRows.length !== 1 ? "s" : ""}
         </Badge>
-        {hasCriteria && (
+        {hasThreshold && (
           <Badge variant="outline" className="border-success/40 text-success">
-            {filteredRows.length} hit{filteredRows.length !== 1 ? "s" : ""}
+            {hitRows.length} hit{hitRows.length !== 1 ? "s" : ""}
           </Badge>
         )}
         {(() => {
@@ -169,66 +195,116 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
         })()}
       </div>
 
-      {/* Hit Criteria Filter Bar */}
-      {!hasCriteria ? (
+      {/* Hit Criteria — a per-run decision. Unset → recommend (never auto-apply);
+          set → show the recorded decision + who/when. */}
+      {!isSet ? (
         <Card className="border-2 border-dashed">
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="font-medium">No hit criteria defined</p>
-              <p className="text-sm text-muted-foreground">
-                Define criteria on the protocol to filter hits in this run.
-              </p>
-            </div>
-            <Button onClick={() => setCriteriaDialogOpen(true)}>
-              <Settings2 className="mr-2 h-4 w-4" /> Set Hit Criteria
-            </Button>
+          <CardContent className="flex flex-wrap items-center gap-3 p-4">
+            {recommendation.length > 0 ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">Protocol recommends</span>
+                  <span className="text-muted-foreground">|</span>
+                  {recommendation.map((rule, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
+                    <Badge key={i} variant="secondary">
+                      {criterionChipText(rule)}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="w-full text-xs text-muted-foreground">Not yet applied</p>
+                <div className="ml-auto flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      setHitCriteria.mutate({ runId: run.id, criteria: recommendation })
+                    }
+                    disabled={setHitCriteria.isPending || run.is_locked}
+                  >
+                    <Check className="mr-1 h-3.5 w-3.5" /> Apply to this run
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCriteriaDialogOpen(true)}
+                    disabled={run.is_locked}
+                  >
+                    <Settings2 className="mr-1 h-3.5 w-3.5" /> Customize…
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p className="font-medium">No hit criteria set for this run</p>
+                  <p className="text-sm text-muted-foreground">
+                    Define criteria to identify hits in this run.
+                  </p>
+                </div>
+                <Button
+                  className="ml-auto"
+                  size="sm"
+                  onClick={() => setCriteriaDialogOpen(true)}
+                  disabled={run.is_locked}
+                >
+                  <Settings2 className="mr-1 h-3.5 w-3.5" /> Set hit criteria
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-3">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Hit Criteria Filter</span>
+            <span className="text-sm font-medium">Hit Criteria</span>
             <span className="text-muted-foreground">|</span>
 
-            {activeCriteria.length > 0 ? (
-              activeCriteria.map((rule, i) => {
-                const op =
-                  { gt: ">", lt: "<", gte: ">=", lte: "<=", in: "in" }[rule.operator] ??
-                  rule.operator;
-                const val = Array.isArray(rule.value) ? rule.value.join(", ") : rule.value;
-                return (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
-                  <Badge key={i} variant="secondary">
-                    {rule.readout_name} {op} {val}
-                  </Badge>
-                );
-              })
+            {hasThreshold ? (
+              (runCriteria ?? []).map((rule, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
+                <Badge key={i} variant="secondary">
+                  {criterionChipText(rule)}
+                </Badge>
+              ))
             ) : (
               <span className="text-sm text-muted-foreground italic">
-                Disabled — showing all compounds
+                No threshold — showing all compounds (recorded)
               </span>
             )}
 
-            {isModified && activeCriteria.length > 0 && (
-              <Badge variant="outline" className="border-yellow-500/40 text-yellow-400">
-                Modified
-              </Badge>
+            {run.hit_criteria_set_by && (
+              <span className="text-xs text-muted-foreground">
+                · Set by <MemberName id={run.hit_criteria_set_by} />
+                {run.hit_criteria_set_at ? ` on ${formatDate(run.hit_criteria_set_at)}` : ""}
+              </span>
             )}
+
+            {hasThreshold && showAll && (
+              <span className="text-xs italic text-muted-foreground">
+                · showing all (filter bypassed)
+              </span>
+            )}
+
             <div className="ml-auto flex items-center gap-2">
-              {activeCriteria.length > 0 ? (
-                <Button variant="ghost" size="sm" onClick={() => setActiveCriteria([])}>
-                  <Eye className="mr-1 h-3.5 w-3.5" />
-                  Show All
-                </Button>
-              ) : (
-                <Button variant="ghost" size="sm" onClick={() => setActiveCriteria(savedCriteria)}>
-                  <Filter className="mr-1 h-3.5 w-3.5" />
-                  Apply Filter
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => setCriteriaDialogOpen(true)}>
-                <Settings2 className="mr-1 h-3.5 w-3.5" /> Edit Criteria
+              {/* View-only bypass — does not change the recorded decision. */}
+              {hasThreshold &&
+                (showAll ? (
+                  <Button variant="ghost" size="sm" onClick={() => setShowAll(false)}>
+                    <EyeOff className="mr-1 h-3.5 w-3.5" /> Show hits only
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" onClick={() => setShowAll(true)}>
+                    <Eye className="mr-1 h-3.5 w-3.5" /> Show all
+                  </Button>
+                ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCriteriaDialogOpen(true)}
+                disabled={run.is_locked}
+              >
+                <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
               </Button>
             </div>
           </CardContent>
@@ -237,7 +313,7 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
 
       {/* AG Grid */}
       <DataGrid<CompoundCurveRow>
-        rowData={filteredRows}
+        rowData={displayedRows}
         columnDefs={columnDefs}
         height="auto"
         domLayout="autoHeight"
@@ -277,7 +353,7 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                 </div>
                 <CurveNavigator
                   currentIndex={selectedIndex}
-                  total={filteredRows.length}
+                  total={displayedRows.length}
                   onPrev={handlePrev}
                   onNext={handleNext}
                 />
@@ -342,10 +418,11 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
 
       {/* Hit criteria dialog */}
       {protocol && (
-        <HitCriteriaDialog
-          protocolId={protocol.id}
+        <RunHitCriteriaDialog
+          runId={run.id}
           readoutDefinitions={protocol.readout_definitions}
-          currentCriteria={protocol.recommended_hit_criteria}
+          currentCriteria={runCriteria}
+          recommendation={protocol.recommended_hit_criteria}
           open={criteriaDialogOpen}
           onOpenChange={setCriteriaDialogOpen}
         />

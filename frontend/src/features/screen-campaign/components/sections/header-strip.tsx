@@ -1,5 +1,6 @@
 "use client";
 
+import { TargetChips } from "@/features/screening-assay/components/target-chips";
 import { TagTable } from "@/features/tagging/components/tag-table";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -105,6 +106,10 @@ export function HeaderStrip({
         <Badge variant="outline" className="text-xs">
           {compoundCount} {compoundCount === 1 ? "compound" : "compounds"}
         </Badge>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Targets</span>
+          <TargetChips targets={campaign.targets} max={5} />
+        </div>
         {!isDraft && supersedesId && projectId && (
           <Badge variant="outline" className="text-xs gap-1">
             Supersedes{" "}

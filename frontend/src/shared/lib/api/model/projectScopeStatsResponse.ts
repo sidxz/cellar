@@ -4,9 +4,14 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { ProjectScopeStatsResponseLastActivityAt } from './projectScopeStatsResponseLastActivityAt';
 
 export interface ProjectScopeStatsResponse {
   molecule_count: number;
   protocol_count: number;
   run_count: number;
+  campaign_count: number;
+  last_activity_at?: ProjectScopeStatsResponseLastActivityAt;
+  member_count: number;
+  member_ids: string[];
 }
