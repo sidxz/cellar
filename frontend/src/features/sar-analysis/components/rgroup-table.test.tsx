@@ -84,22 +84,18 @@ describe("rgroup-table builders", () => {
 
   it("formats physchem columns to fixed precision with a dash for null", () => {
     const cols = buildRGroupColumns(["R1"]);
-    const mw = cols.find((c) => c.colId === "mw");
-    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
-    expect(mw?.valueFormatter?.({ value: 96.10000001 } as any)).toBe("96.1");
-    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
-    expect(mw?.valueFormatter?.({ value: null } as any)).toBe("—");
-
-    const clogp = cols.find((c) => c.colId === "clogp");
-    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
-    expect(clogp?.valueFormatter?.({ value: 2.27 } as any)).toBe("2.27");
-    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
-    expect(clogp?.valueFormatter?.({ value: null } as any)).toBe("—");
-
-    const tpsa = cols.find((c) => c.colId === "tpsa");
-    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
-    expect(tpsa?.valueFormatter?.({ value: 12.345 } as any)).toBe("12.3");
-    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
-    expect(tpsa?.valueFormatter?.({ value: null } as any)).toBe("—");
+    // ColDef.valueFormatter is typed `string | func`; our builder always sets a
+    // function. Narrow with `typeof` so the call is type-safe.
+    const fmt = (colId: string, value: number | null) => {
+      const f = cols.find((c) => c.colId === colId)?.valueFormatter;
+      // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+      return typeof f === "function" ? f({ value } as any) : undefined;
+    };
+    expect(fmt("mw", 96.10000001)).toBe("96.1");
+    expect(fmt("mw", null)).toBe("—");
+    expect(fmt("clogp", 2.27)).toBe("2.27");
+    expect(fmt("clogp", null)).toBe("—");
+    expect(fmt("tpsa", 12.345)).toBe("12.3");
+    expect(fmt("tpsa", null)).toBe("—");
   });
 });
