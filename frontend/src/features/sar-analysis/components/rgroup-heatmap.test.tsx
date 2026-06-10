@@ -2,8 +2,23 @@ import type { Molecule } from "@/features/chemical-registration/types";
 import type { ActivityValue } from "@/features/research-organization/types";
 import type { RGroupDecompositionResponse } from "@/shared/lib/api/model";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { SarColorSpec } from "../lib/sar-color-spec";
+
+// Radix Select opens via a listbox portal that calls scrollIntoView +
+// hasPointerCapture on its items — jsdom ships neither. Polyfill so the
+// open/click flow works under test. (Same convention as rgroup-color-control.test.tsx.)
+beforeAll(() => {
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = vi.fn();
+  }
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = vi.fn(() => false);
+  }
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = vi.fn();
+  }
+});
 
 // RDKit-free shim for the chemistry barrel (StructureThumbnail uses WASM that
 // jsdom can't run). Render the SMILES into a testid so axis headers are
@@ -158,5 +173,18 @@ describe("RGroupHeatmap", () => {
     expect(container.querySelector(".bg-red-600\\/30")).toBeNull();
     // The legend explains the uncolored readout instead of showing the ramp.
     expect(screen.getByText(/higher-is-better readout/i)).toBeInTheDocument();
+  });
+
+  it("shows the same-axis warning when X is changed to match Y", () => {
+    renderHeatmap();
+    // Default: axisY = R1, axisX = R2. Change X to R1 (same as Y) via the
+    // Radix Select. The trigger is labelled "X axis position".
+    const xTrigger = screen.getByRole("combobox", { name: "X axis position" });
+    fireEvent.click(xTrigger);
+    // The portal renders the items as options; pick R1 to match Y.
+    const option = screen.getByRole("option", { name: "R1" });
+    fireEvent.click(option);
+    // Warning must now be visible.
+    expect(screen.getByText("Same position on both axes — diagonal only.")).toBeInTheDocument();
   });
 });

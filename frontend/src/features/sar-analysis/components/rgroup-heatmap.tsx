@@ -225,14 +225,14 @@ export function RGroupHeatmap({
                     );
                   }
                   const shade = shadeByPotency ? potencyShade(cell.bestScalar, reference) : "";
-                  const av =
-                    cell.moleculeIds.length > 0
-                      ? activityByMolecule[cell.moleculeIds[0]]
-                      : undefined;
-                  const unit = av?.unit ? ` ${av.unit}` : "";
-                  const extra = cell.moleculeIds.length - 1;
-                  // Expand the most-potent molecule of the cell on click.
+                  // Expand the most-potent molecule of the cell on click; read
+                  // its unit so the displayed value is consistent with the id
+                  // used for curve-expand.
                   const bestMolId = bestMoleculeId(cell.moleculeIds, activityByMolecule, colorSpec);
+                  const unit = activityByMolecule[bestMolId]?.unit
+                    ? ` ${activityByMolecule[bestMolId]?.unit}`
+                    : "";
+                  const extra = cell.moleculeIds.length - 1;
                   return (
                     <td key={x} className="p-0">
                       {/* Button = native click + keyboard target (a11y), filling

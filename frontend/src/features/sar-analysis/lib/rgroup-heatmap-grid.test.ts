@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildHeatmapGrid } from "./rgroup-heatmap-grid";
+import { buildHeatmapGrid, heatmapCellKey } from "./rgroup-heatmap-grid";
 
 // Three assignments over R1 × R2. m1 and m2 share the same (R1=F, R2=H) cell;
 // m3 sits in a different cell (R1=Cl, R2=Me). The builder groups by the chosen
@@ -24,7 +24,7 @@ describe("buildHeatmapGrid", () => {
 
   it("groups molecules sharing a (y,x) substituent combo into one cell", () => {
     const grid = buildHeatmapGrid(assignments, "R2", "R1", scalarOf);
-    const shared = grid.cells["[H][*:2]__F[*:1]"];
+    const shared = grid.cells[heatmapCellKey("[H][*:2]", "F[*:1]")];
     expect(shared).toBeDefined();
     expect(shared.moleculeIds.sort()).toEqual(["m1", "m2"]);
     // best = most potent = min non-null scalar (5 beats 50).
@@ -33,7 +33,7 @@ describe("buildHeatmapGrid", () => {
 
   it("keeps a singleton cell with its own scalar", () => {
     const grid = buildHeatmapGrid(assignments, "R2", "R1", scalarOf);
-    const cell = grid.cells["C[*:2]__Cl[*:1]"];
+    const cell = grid.cells[heatmapCellKey("C[*:2]", "Cl[*:1]")];
     expect(cell).toBeDefined();
     expect(cell.moleculeIds).toEqual(["m3"]);
     expect(cell.bestScalar).toBe(100);
@@ -43,13 +43,13 @@ describe("buildHeatmapGrid", () => {
     const grid = buildHeatmapGrid(assignments, "R2", "R1", scalarOf);
     // (R2=H, R1=Cl) and (R2=Me, R1=F) are present axis values but no molecule
     // occupies them — they must NOT appear in cells.
-    expect(grid.cells["[H][*:2]__Cl[*:1]"]).toBeUndefined();
-    expect(grid.cells["C[*:2]__F[*:1]"]).toBeUndefined();
+    expect(grid.cells[heatmapCellKey("[H][*:2]", "Cl[*:1]")]).toBeUndefined();
+    expect(grid.cells[heatmapCellKey("C[*:2]", "F[*:1]")]).toBeUndefined();
   });
 
   it("yields bestScalar null when every molecule in the cell has no scalar", () => {
     const grid = buildHeatmapGrid(assignments, "R2", "R1", () => null);
-    expect(grid.cells["[H][*:2]__F[*:1]"].bestScalar).toBeNull();
+    expect(grid.cells[heatmapCellKey("[H][*:2]", "F[*:1]")].bestScalar).toBeNull();
   });
 
   it("skips assignments missing either axis substituent", () => {

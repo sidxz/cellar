@@ -32,13 +32,18 @@ export interface HeatmapGrid {
   yValues: string[];
   /** Distinct substituent SMILES on the X axis, sorted ascending. */
   xValues: string[];
-  /** Sparse cell map keyed `${yValue}__${xValue}`. Absent key = a gap. */
+  /** Sparse cell map keyed by `heatmapCellKey(yValue, xValue)`. Absent key = a gap. */
   cells: Record<string, HeatmapCell>;
 }
 
-/** Stable cell key for a `(yValue, xValue)` substituent pair. */
+/** Stable cell key for a `(yValue, xValue)` substituent pair.
+ *
+ * `JSON.stringify([y, x])` is provably injective over any SMILES strings (no
+ * embedded `"` in SMILES) and avoids the collision that `${y}__${x}` would
+ * produce when a substituent itself contains `__`.
+ */
 export function heatmapCellKey(yValue: string, xValue: string): string {
-  return `${yValue}__${xValue}`;
+  return JSON.stringify([yValue, xValue]);
 }
 
 export function buildHeatmapGrid(
