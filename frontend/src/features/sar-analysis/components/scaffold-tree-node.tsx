@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, FlaskConical, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { memo } from "react";
 
@@ -6,6 +6,7 @@ import { stashScaffoldSearch } from "@/features/research-organization/lib/scaffo
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { cn } from "@/shared/lib/utils";
 
+import { stashSarHandoff } from "../lib/sar-handoff";
 import type { ActivityRollupBin } from "../lib/scaffold-rollup";
 import {
   NO_SCAFFOLD_SENTINEL,
@@ -61,6 +62,19 @@ function ScaffoldTreeNodeInner(props: Props) {
     const stashed = scaffoldSmiles === NO_SCAFFOLD_SENTINEL ? "" : scaffoldSmiles;
     stashScaffoldSearch(stashed);
     router.push("/search");
+  };
+
+  // Routes to /search?view=sar rather than a collection-scoped URL because
+  // collectionId is not threaded into the per-node props (it lives one level
+  // up in scaffold-tree-view). The SAR view reads readSarHandoff() on mount
+  // to pre-seed the core scaffold and molecule set.
+  const handleOpenInSar = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (scaffoldSmiles === NO_SCAFFOLD_SENTINEL) return; // no core to seed SAR
+    const currentNode = nodesBySmiles.get(scaffoldSmiles);
+    if (!currentNode) return;
+    stashSarHandoff({ coreSmiles: scaffoldSmiles, moleculeIds: currentNode.molecule_ids });
+    router.push("/search?view=sar");
   };
 
   const node = nodesBySmiles.get(scaffoldSmiles);
@@ -133,18 +147,31 @@ function ScaffoldTreeNodeInner(props: Props) {
           </span>
         </span>
 
-        {/* Action button — faintly visible at rest; brightens on row hover or
-            keyboard focus. Opens /search filtered to compounds matching this
-            node's scaffold. */}
-        <button
-          type="button"
-          onClick={handleOpenInSearch}
-          className="ml-auto opacity-30 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
-          aria-label="Find compounds with this scaffold"
-          title="Find compounds with this scaffold"
-        >
-          <Search size={14} />
-        </button>
+        {/* Action buttons — faintly visible at rest; brighten on row hover or
+            keyboard focus. Search opens /search filtered to this scaffold's
+            compounds; SAR seeds the SAR view with this scaffold as core. */}
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleOpenInSearch}
+            className="opacity-30 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+            aria-label="Find compounds with this scaffold"
+            title="Find compounds with this scaffold"
+          >
+            <Search size={14} />
+          </button>
+          {scaffoldSmiles !== NO_SCAFFOLD_SENTINEL && (
+            <button
+              type="button"
+              onClick={handleOpenInSar}
+              className="opacity-30 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+              aria-label="Analyse SAR for this scaffold"
+              title="Analyse SAR for this scaffold"
+            >
+              <FlaskConical size={14} />
+            </button>
+          )}
+        </div>
 
         {/* Activity color band — pinned to the right edge as a status glyph */}
         {colorBin && (
