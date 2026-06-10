@@ -116,7 +116,7 @@ export function RGroupCorePicker({
 
       {showMatchLine && (
         <p className="text-xs text-amber-700">
-          {matchedCount} of {totalCount} match this core
+          {matchedCount} of {totalCount} loaded compounds match this core
           {matchedCount < totalCount ? " · others shown separately, not dropped" : ""}
         </p>
       )}

@@ -80,7 +80,7 @@ describe("RGroupCorePicker", () => {
         totalCount={4}
       />,
     );
-    expect(screen.getByText(/3 of 4 match this core/)).toBeInTheDocument();
+    expect(screen.getByText(/3 of 4 loaded compounds match this core/)).toBeInTheDocument();
     expect(screen.getByText(/not dropped/)).toBeInTheDocument();
   });
 

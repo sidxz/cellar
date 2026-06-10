@@ -79,9 +79,11 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
   const { data: testCounts } = useProtocolTestCounts(moleculeIds, query.data?.project_id ?? null);
 
   // Cluster view: disabled when molecule count is below the UMAP threshold.
+  // SAR view: disabled for sets too small to yield a meaningful R-group table.
   const clusterDisabledModes = useMemo<Set<ViewMode>>(() => {
     const s = new Set<ViewMode>();
     if (molecules.length < 10) s.add("clusters");
+    if (molecules.length < 3) s.add("sar");
     return s;
   }, [molecules.length]);
 

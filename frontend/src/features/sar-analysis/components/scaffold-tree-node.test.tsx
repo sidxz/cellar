@@ -5,6 +5,7 @@ import {
   STORAGE_KEY,
   consumeScaffoldSearch,
 } from "@/features/research-organization/lib/scaffold-search-handoff";
+import { readSarHandoff } from "../lib/sar-handoff";
 import {
   NO_SCAFFOLD_SENTINEL,
   type ScaffoldTreeNode as ScaffoldTreeNodeData,
@@ -284,6 +285,102 @@ describe("scaffold → search loop closer", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /find compounds with this scaffold/i }));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe("scaffold → SAR loop closer", () => {
+  beforeEach(() => {
+    mockPush.mockClear();
+    // readSarHandoff is one-shot (read-and-clear); drain any prior stash.
+    readSarHandoff();
+  });
+
+  it("with a collectionId: stashes core + molecule ids and routes to the collection SAR view", () => {
+    render(
+      <ScaffoldTreeNode
+        scaffoldSmiles="c1ccncc1"
+        nodesBySmiles={nodeMap({
+          nodes: [
+            {
+              scaffold_smiles: "c1ccncc1",
+              molecule_count: 2,
+              subtree_molecule_count: 2,
+              molecule_ids: ["m1", "m2"],
+            },
+          ],
+        })}
+        childIndex={new Map()}
+        colorBins={new Map()}
+        depth={0}
+        expanded={new Set()}
+        selected={null}
+        onToggle={vi.fn()}
+        onSelect={vi.fn()}
+        collectionId="col-123"
+      />,
+    );
+    const action = screen.getByRole("button", { name: /analyse sar for this scaffold/i });
+    fireEvent.click(action);
+    expect(mockPush).toHaveBeenCalledWith("/collections/col-123?view=sar");
+    expect(readSarHandoff()).toEqual({
+      coreSmiles: "c1ccncc1",
+      moleculeIds: ["m1", "m2"],
+    });
+  });
+
+  it("without a collectionId: routes to the relative ?view=sar fallback", () => {
+    render(
+      <ScaffoldTreeNode
+        scaffoldSmiles="c1ccncc1"
+        nodesBySmiles={nodeMap({
+          nodes: [
+            {
+              scaffold_smiles: "c1ccncc1",
+              molecule_count: 1,
+              subtree_molecule_count: 1,
+              molecule_ids: ["m1"],
+            },
+          ],
+        })}
+        childIndex={new Map()}
+        colorBins={new Map()}
+        depth={0}
+        expanded={new Set()}
+        selected={null}
+        onToggle={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /analyse sar for this scaffold/i }));
+    expect(mockPush).toHaveBeenCalledWith("?view=sar");
+  });
+
+  it("SAR action click does NOT fire the row select handler", () => {
+    const onSelect = vi.fn();
+    render(
+      <ScaffoldTreeNode
+        scaffoldSmiles="c1ccncc1"
+        nodesBySmiles={nodeMap({
+          nodes: [
+            {
+              scaffold_smiles: "c1ccncc1",
+              molecule_count: 1,
+              subtree_molecule_count: 1,
+              molecule_ids: ["m1"],
+            },
+          ],
+        })}
+        childIndex={new Map()}
+        colorBins={new Map()}
+        depth={0}
+        expanded={new Set()}
+        selected={null}
+        onToggle={vi.fn()}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /analyse sar for this scaffold/i }));
     expect(onSelect).not.toHaveBeenCalled();
   });
 });

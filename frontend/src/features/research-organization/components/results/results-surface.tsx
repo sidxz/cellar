@@ -21,6 +21,8 @@ import { ViewModeToggle } from "./view-mode-toggle";
 
 // Minimum molecule count for the cluster view to be enabled.
 const MIN_MOLS_FOR_CLUSTER = 10;
+// Minimum molecule count for the SAR view to be meaningful.
+const MIN_MOLS_FOR_SAR = 3;
 
 export interface ResultsSurfaceProps {
   molecules: Molecule[];
@@ -169,10 +171,12 @@ export function ResultsSurface({
     [onOpen],
   );
 
-  // Disabled modes: cluster requires MIN_MOLS_FOR_CLUSTER molecules.
+  // Disabled modes: cluster requires MIN_MOLS_FOR_CLUSTER molecules; SAR needs
+  // at least MIN_MOLS_FOR_SAR to be worth analysing.
   const disabledModes = useMemo<Set<ViewMode>>(() => {
     const disabled = new Set<ViewMode>();
     if (molecules.length < MIN_MOLS_FOR_CLUSTER) disabled.add("clusters");
+    if (molecules.length < MIN_MOLS_FOR_SAR) disabled.add("sar");
     return disabled;
   }, [molecules.length]);
 
