@@ -38,7 +38,15 @@ vi.mock("../hooks/use-scaffold-tree", () => ({
 // scaffold-tree-view.test.tsx.
 vi.mock("@/shared/components/chemistry", () => ({
   StructureThumbnail: ({ smiles }: { smiles: string }) => <div data-testid={`thumb-${smiles}`} />,
-  StructureEditorDialog: () => <div data-testid="structure-editor-dialog" />,
+  StructureEditorDialog: ({
+    open,
+    onApply,
+  }: { open: boolean; onApply: (s: string, f: string) => void }) =>
+    open ? (
+      <button type="button" data-testid="apply-core" onClick={() => onApply("Nc1ccccc1", "smiles")}>
+        apply
+      </button>
+    ) : null,
 }));
 
 import { RGroupCorePicker } from "./rgroup-core-picker";
@@ -74,5 +82,15 @@ describe("RGroupCorePicker", () => {
     );
     expect(screen.getByText(/3 of 4 match this core/)).toBeInTheDocument();
     expect(screen.getByText(/not dropped/)).toBeInTheDocument();
+  });
+
+  it("opens the editor and emits the drawn core via onApply", () => {
+    const onCoreChange = vi.fn();
+    render(
+      <RGroupCorePicker moleculeIds={["a"]} coreSmiles="c1ccccc1" onCoreChange={onCoreChange} />,
+    );
+    fireEvent.click(screen.getByText(/Edit core/i));
+    fireEvent.click(screen.getByTestId("apply-core"));
+    expect(onCoreChange).toHaveBeenCalledWith("Nc1ccccc1");
   });
 });

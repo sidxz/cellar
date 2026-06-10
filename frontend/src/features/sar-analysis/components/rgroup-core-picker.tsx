@@ -40,7 +40,7 @@ export function RGroupCorePicker({
   matchedCount,
   totalCount,
 }: RGroupCorePickerProps) {
-  const { tree, isStarting, isPolling } = useScaffoldTree({ collectionId, moleculeIds });
+  const { tree, isStarting, isPolling, error } = useScaffoldTree({ collectionId, moleculeIds });
   const [editOpen, setEditOpen] = useState(false);
 
   const candidates = useMemo(
@@ -66,6 +66,10 @@ export function RGroupCorePicker({
 
   if (isStarting || isPolling) {
     return <p className="text-xs text-muted-foreground">Finding scaffolds…</p>;
+  }
+
+  if (error) {
+    return <p className="text-xs text-destructive">Could not load scaffold candidates.</p>;
   }
 
   const showMatchLine = matchedCount != null && totalCount != null;
@@ -113,7 +117,7 @@ export function RGroupCorePicker({
       {showMatchLine && (
         <p className="text-xs text-amber-700">
           {matchedCount} of {totalCount} match this core
-          {(matchedCount ?? 0) < (totalCount ?? 0) ? " · others shown separately, not dropped" : ""}
+          {matchedCount < totalCount ? " · others shown separately, not dropped" : ""}
         </p>
       )}
 
@@ -121,7 +125,7 @@ export function RGroupCorePicker({
         open={editOpen}
         onOpenChange={setEditOpen}
         initialStructure={coreSmiles ?? ""}
-        onApply={(structure) => {
+        onApply={(structure, _format) => {
           const trimmed = structure.trim();
           if (trimmed) onCoreChange(trimmed);
         }}
