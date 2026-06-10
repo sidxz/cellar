@@ -25,6 +25,8 @@ import type {
 
 import type {
   HTTPValidationError,
+  RGroupDecompositionRequest,
+  RGroupDecompositionResponse,
   StartUmapClusterBody,
   StartUmapClusterResponse
 } from '.././model';
@@ -35,6 +37,70 @@ import { customInstance } from '.././custom-instance';
 
 
 /**
+ * @summary Decompose Rgroups
+ */
+export const decomposeRgroupsApiV1SarRGroupDecompositionPost = (
+    rGroupDecompositionRequest: RGroupDecompositionRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<RGroupDecompositionResponse>(
+      {url: `/api/v1/sar/r-group-decomposition`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: rGroupDecompositionRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getDecomposeRgroupsApiV1SarRGroupDecompositionPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>, TError,{data: RGroupDecompositionRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>, TError,{data: RGroupDecompositionRequest}, TContext> => {
+
+const mutationKey = ['decomposeRgroupsApiV1SarRGroupDecompositionPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>, {data: RGroupDecompositionRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  decomposeRgroupsApiV1SarRGroupDecompositionPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecomposeRgroupsApiV1SarRGroupDecompositionPostMutationResult = NonNullable<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>>
+    export type DecomposeRgroupsApiV1SarRGroupDecompositionPostMutationBody = RGroupDecompositionRequest
+    export type DecomposeRgroupsApiV1SarRGroupDecompositionPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Decompose Rgroups
+ */
+export const useDecomposeRgroupsApiV1SarRGroupDecompositionPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>, TError,{data: RGroupDecompositionRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>,
+        TError,
+        {data: RGroupDecompositionRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getDecomposeRgroupsApiV1SarRGroupDecompositionPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
  * Compute or schedule a UMAP cluster map.
 
 Accepts either ``molecule_ids`` (explicit list) or ``collection_id``
