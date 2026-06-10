@@ -33,9 +33,7 @@ GetScaffoldTreeJobDep = Annotated[GetScaffoldTreeJob, Depends(_get_use_case(GetS
 CancelScaffoldTreeJobDep = Annotated[
     CancelScaffoldTreeJob, Depends(_get_use_case(CancelScaffoldTreeJob))
 ]
-DecomposeRGroupsDep = Annotated[
-    DecomposeRGroups, Depends(_get_use_case(DecomposeRGroups))
-]
+DecomposeRGroupsDep = Annotated[DecomposeRGroups, Depends(_get_use_case(DecomposeRGroups))]
 _get_start_umap_cluster_job = _get_use_case(StartUmapClusterJob)
 _get_get_umap_cluster_job = _get_use_case(GetUmapClusterJob)
 _get_cancel_umap_cluster_job = _get_use_case(CancelUmapClusterJob)

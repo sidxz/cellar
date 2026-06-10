@@ -78,3 +78,31 @@ async def test_empty_set_returns_empty_result():
     )
     assert result.assignments == []
     assert result.unmatched_ids == []
+
+
+@pytest.mark.asyncio
+async def test_molecule_without_smiles_is_unmatched_not_dropped():
+    good_id, no_smiles_id = uuid.uuid4(), uuid.uuid4()
+    uc = DecomposeRGroups(
+        molecule_fetcher=_FakeFetcher(
+            [
+                (good_id, "Fc1ccccc1", "c1ccccc1"),
+                (no_smiles_id, "", None),
+            ]
+        ),
+        decomposer=RGroupDecomposer(),
+        uow=_NullUoW(),
+    )
+    result = await uc.execute(
+        DecomposeRGroupsInput(
+            molecule_ids=[good_id, no_smiles_id],
+            workspace_id=uuid.uuid4(),
+            core_smiles="c1ccccc1",
+        )
+    )
+    # The empty-SMILES molecule is surfaced as unmatched, never silently dropped.
+    assert no_smiles_id in result.unmatched_ids
+    assert good_id in {a.molecule_id for a in result.assignments}
+    # Every input id is accounted for in exactly one bucket.
+    accounted = {a.molecule_id for a in result.assignments} | set(result.unmatched_ids)
+    assert accounted == {good_id, no_smiles_id}

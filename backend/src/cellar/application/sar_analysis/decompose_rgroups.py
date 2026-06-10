@@ -34,14 +34,10 @@ class DecomposeRGroups:
         self._decomposer = decomposer
         self._uow = uow
 
-    async def execute(
-        self, payload: DecomposeRGroupsInput
-    ) -> RGroupDecompositionResult:
+    async def execute(self, payload: DecomposeRGroupsInput) -> RGroupDecompositionResult:
         async with self._uow:
             rows = await self._fetcher.fetch_for_scaffold_tree(
                 molecule_ids=payload.molecule_ids, workspace_id=payload.workspace_id
             )
-        molecules = [(mid, smiles) for (mid, smiles, _bms) in rows if smiles]
-        return self._decomposer.decompose(
-            core_smiles=payload.core_smiles, molecules=molecules
-        )
+        molecules = [(mid, smiles) for (mid, smiles, _bms) in rows]
+        return self._decomposer.decompose(core_smiles=payload.core_smiles, molecules=molecules)
