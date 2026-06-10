@@ -3,6 +3,7 @@
 import type { Molecule } from "@/features/chemical-registration/types";
 import { ClusterMapView } from "@/features/sar-analysis/components/cluster-map-view";
 import type { ProtocolOption } from "@/features/sar-analysis/components/color-mode-picker";
+import { SarView } from "@/features/sar-analysis/components/sar-view";
 import { ScaffoldTreeView } from "@/features/sar-analysis/components/scaffold-tree-view";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -239,6 +240,14 @@ export function ResultsSurface({
           projects={clusterProjects}
           defaultProjectId={clusterDefaultProjectId}
           sourceLabel={clusterSourceLabel}
+        />
+      ) : mode === "sar" ? (
+        <SarView
+          molecules={molecules}
+          collectionId={collectionId}
+          projects={clusterProjects ?? []}
+          defaultProjectId={clusterDefaultProjectId ?? null}
+          sourceLabel={clusterSourceLabel ?? "this set"}
         />
       ) : mode === "cards" ? (
         <div className="h-[calc(100vh-14rem)] min-h-[480px]">
