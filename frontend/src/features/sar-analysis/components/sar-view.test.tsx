@@ -1,6 +1,6 @@
 import type { RGroupDecompositionResponse } from "@/shared/lib/api/model";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SarView } from "./sar-view";
@@ -39,6 +39,13 @@ vi.mock("../lib/sar-handoff", () => ({
   readSarHandoff: () => null,
 }));
 
+// Bulk-add goes through customInstance — record its calls.
+const mockCustomInstance = vi.fn().mockResolvedValue({});
+vi.mock("@/shared/lib/api/custom-instance", () => ({
+  API_V1: "/api/v1",
+  customInstance: (...args: unknown[]) => mockCustomInstance(...args),
+}));
+
 // Core picker stub — exposes a button that drives onCoreChange.
 vi.mock("./rgroup-core-picker", () => ({
   RGroupCorePicker: ({ onCoreChange }: { onCoreChange: (s: string) => void }) => (
@@ -59,15 +66,33 @@ vi.mock("./rgroup-table", () => ({
   ),
 }));
 
-// Save dialog stub — record whether it is open.
+// Save dialog stub — when open, exposes a button that fires onSave so the
+// create → bulk-add flow can be driven from a test.
 vi.mock("./save-selection-dialog", () => ({
-  SaveSelectionDialog: ({ open }: { open: boolean }) => (
-    <div data-testid="save-dialog" data-open={open ? "true" : "false"} />
-  ),
+  SaveSelectionDialog: ({
+    open,
+    onSave,
+  }: {
+    open: boolean;
+    onSave: (a: { name: string; projectId: string | null; moleculeIds: string[] }) => Promise<void>;
+  }) =>
+    open ? (
+      <button
+        type="button"
+        data-testid="confirm-save"
+        onClick={() => onSave({ name: "Series A", projectId: null, moleculeIds: ["m1"] })}
+      >
+        confirm save
+      </button>
+    ) : null,
 }));
 
-// Create-collection hook — not exercised in these tests, but must exist.
-const mockCreateMutate = vi.fn();
+// Create-collection hook — `mutate` resolves the onSave promise by invoking
+// onSuccess with a fresh collection id.
+const mockCreateMutate = vi.fn(
+  (_data: unknown, opts?: { onSuccess?: (c: { id: string }) => void }) =>
+    opts?.onSuccess?.({ id: "new-coll" }),
+);
 vi.mock("@/features/research-organization/hooks/use-collections", () => ({
   useCreateCollection: () => ({ mutate: mockCreateMutate }),
 }));
@@ -94,6 +119,7 @@ describe("SarView", () => {
   beforeEach(() => {
     mockMutate.mockClear();
     mockCreateMutate.mockClear();
+    mockCustomInstance.mockClear();
   });
 
   it("decomposes against the chosen core with the molecule ids", () => {
@@ -116,10 +142,37 @@ describe("SarView", () => {
 
   it("opens the save dialog when a table selection is saved", () => {
     renderSarView();
-    expect(screen.getByTestId("save-dialog")).toHaveAttribute("data-open", "false");
+    // Dialog closed → its stub renders nothing.
+    expect(screen.queryByTestId("confirm-save")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("save-selection"));
 
-    expect(screen.getByTestId("save-dialog")).toHaveAttribute("data-open", "true");
+    // Dialog open → the stub now renders its confirm trigger.
+    expect(screen.getByTestId("confirm-save")).toBeInTheDocument();
+  });
+
+  it("creates the collection then bulk-adds the selected molecules on save", async () => {
+    renderSarView();
+    // Open the dialog via the table-stub save trigger.
+    fireEvent.click(screen.getByTestId("save-selection"));
+    // Confirm the save → fires onSave (create → bulk-add).
+    fireEvent.click(await screen.findByTestId("confirm-save"));
+
+    await waitFor(() => {
+      expect(mockCreateMutate).toHaveBeenCalledWith(
+        { name: "Series A", project_id: null },
+        expect.anything(),
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockCustomInstance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "/api/v1/collections/new-coll/molecules",
+          method: "POST",
+          data: { references: [{ value: "m1", ref_type: "uuid" }] },
+        }),
+      );
+    });
   });
 });

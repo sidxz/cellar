@@ -3,6 +3,7 @@
 import type { Molecule } from "@/features/chemical-registration/types";
 import { useCreateCollection } from "@/features/research-organization/hooks/use-collections";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { showError } from "@/shared/lib/toast";
 import { useEffect, useState } from "react";
 import { useRGroupDecomposition } from "../hooks/use-rgroup-decomposition";
 import { readSarHandoff } from "../lib/sar-handoff";
@@ -64,22 +65,27 @@ export function SarView(props: SarViewProps) {
         open={saveIds != null}
         onOpenChange={(o) => !o && setSaveIds(null)}
         onSave={async ({ name, projectId, moleculeIds: selectedIds }) => {
-          // Step 1: create the collection.
+          // create errors are surfaced by useCreateCollection's own onError toast
           const created = await new Promise<{ id: string }>((resolve, reject) =>
             createCollection.mutate(
               { name, project_id: projectId },
               { onSuccess: (c) => resolve(c as { id: string }), onError: (err) => reject(err) },
             ),
           );
-          // Step 2: bulk-add the selected molecules to the new collection.
-          if (selectedIds.length > 0) {
-            await customInstance({
-              url: `${API_V1}/collections/${created.id}/molecules`,
-              method: "POST",
-              data: { references: selectedIds.map((id) => ({ value: id, ref_type: "uuid" })) },
-            });
+          try {
+            if (selectedIds.length > 0) {
+              await customInstance({
+                url: `${API_V1}/collections/${created.id}/molecules`,
+                method: "POST",
+                data: { references: selectedIds.map((id) => ({ value: id, ref_type: "uuid" })) },
+              });
+            }
+            setSaveIds(null);
+          } catch {
+            // collection was created but adding compounds failed — keep the dialog
+            // open so the user can retry, and tell them why.
+            showError("Collection created, but adding compounds failed. Please retry.");
           }
-          setSaveIds(null);
         }}
         selectedMolecules={props.molecules.filter((m) => saveIds?.includes(m.id))}
         defaultName={`SAR selection from ${props.sourceLabel}`}
