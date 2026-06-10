@@ -2,7 +2,7 @@
 
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import { ChartScatter, GitFork, LayoutGrid, Table } from "lucide-react";
+import { ChartScatter, GitFork, Grid3x3, LayoutGrid, Table } from "lucide-react";
 import type { ViewMode } from "../../lib/use-view-mode";
 
 export interface ViewModeToggleProps {
@@ -18,7 +18,7 @@ export interface ViewModeToggleProps {
 }
 
 /**
- * Four-segment view-mode toggle: List | Grid | Scaffold | Cluster.
+ * Five-segment view-mode toggle: List | Grid | Scaffold | Cluster | SAR.
  *
  * Icon-only was confusing — chemists asked for text labels. Names chosen
  * to match how chemists actually talk about these surfaces:
@@ -93,6 +93,20 @@ export function ViewModeToggle({ mode, onChange, className, disabledModes }: Vie
       >
         <ChartScatter className="h-3.5 w-3.5" />
         <span className="hidden sm:inline text-xs">Cluster</span>
+      </Button>
+      <Button
+        type="button"
+        variant={mode === "sar" ? "default" : "ghost"}
+        size="sm"
+        className="h-7 px-2 gap-1.5"
+        aria-label="SAR view"
+        aria-pressed={mode === "sar"}
+        disabled={isDisabled("sar")}
+        title={isDisabled("sar") ? "Need a few compounds to analyse SAR" : undefined}
+        onClick={() => mode !== "sar" && onChange("sar")}
+      >
+        <Grid3x3 className="h-3.5 w-3.5" />
+        <span className="hidden sm:inline text-xs">SAR</span>
       </Button>
     </div>
   );

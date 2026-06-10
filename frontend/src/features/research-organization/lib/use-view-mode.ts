@@ -3,9 +3,9 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 
-export type ViewMode = "table" | "cards" | "scaffold-tree" | "clusters";
+export type ViewMode = "table" | "cards" | "scaffold-tree" | "clusters" | "sar";
 
-const _ALL_MODES: ViewMode[] = ["table", "cards", "scaffold-tree", "clusters"];
+const _ALL_MODES: ViewMode[] = ["table", "cards", "scaffold-tree", "clusters", "sar"];
 
 /** Maps URL param values to ViewMode values (and vice versa for short forms). */
 const URL_TO_MODE: Record<string, ViewMode> = {
@@ -13,6 +13,7 @@ const URL_TO_MODE: Record<string, ViewMode> = {
   cards: "cards",
   tree: "scaffold-tree",
   clusters: "clusters",
+  sar: "sar",
 };
 
 const MODE_TO_URL: Record<ViewMode, string> = {
@@ -20,7 +21,12 @@ const MODE_TO_URL: Record<ViewMode, string> = {
   cards: "cards",
   "scaffold-tree": "tree",
   clusters: "clusters",
+  sar: "sar",
 };
+
+// Test-only re-exports (used by use-view-mode.test.ts)
+export const URL_TO_MODE_TEST = URL_TO_MODE;
+export const MODE_TO_URL_TEST = MODE_TO_URL;
 
 function parseViewMode(raw: string | null, fallback: ViewMode): ViewMode {
   if (raw && raw in URL_TO_MODE) return URL_TO_MODE[raw];

@@ -1,6 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useViewMode } from "./use-view-mode";
+import {
+  MODE_TO_URL_TEST as MODE_TO_URL,
+  URL_TO_MODE_TEST as URL_TO_MODE,
+  useViewMode,
+} from "./use-view-mode";
 
 // Mock next/navigation: useRouter().replace + useSearchParams + usePathname.
 const replace = vi.fn();
@@ -58,5 +62,12 @@ describe("useViewMode", () => {
     const { result } = renderHook(() => useViewMode("cards"));
     act(() => result.current.setMode("scaffold-tree"));
     expect(replace).toHaveBeenCalledWith("/collections/abc-123?view=tree", { scroll: false });
+  });
+});
+
+describe("sar view mode mapping", () => {
+  it("maps the sar url token both ways", () => {
+    expect(URL_TO_MODE.sar).toBe("sar");
+    expect(MODE_TO_URL.sar).toBe("sar");
   });
 });
