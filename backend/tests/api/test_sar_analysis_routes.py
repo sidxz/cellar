@@ -1,5 +1,10 @@
 """API tests for POST /api/v1/sar/r-group-decomposition."""
 
+# Scope: these API tests cover route validation + DI wiring only. The real
+# decomposition chemistry is covered by unit tests in
+# tests/unit/infrastructure/rdkit/test_rgroup_decomposer.py and
+# tests/unit/application/sar_analysis/test_decompose_rgroups.py.
+
 from __future__ import annotations
 
 import uuid
@@ -29,6 +34,7 @@ async def test_rejects_neither_input(client: AsyncClient) -> None:
         json={"core_smiles": "c1ccccc1"},
     )
     assert res.status_code == 400
+    assert "exactly one" in res.json()["detail"]
 
 
 @pytest.mark.asyncio
