@@ -55,33 +55,33 @@ class RGroupDecomposer:
             rows, unmatched_idx = rdRGroupDecomposition.RGroupDecompose(
                 [core], mols, asSmiles=True, asRows=True
             )
+
+            unmatched_set = set(unmatched_idx)
+
+            # Discover R-group labels across all rows (keys like "R1"; skip "Core").
+            seen: set[str] = set()
+            for row in rows:
+                for key in row:
+                    if key.startswith("R") and key[1:].isdigit():
+                        seen.add(key)
+            labels = sorted(seen, key=lambda k: int(k[1:]))
+
+            # rows align with matched mols in input order; unmatched indices skipped.
+            assignments: list[RGroupAssignment] = []
+            unmatched_ids: list[UUID] = list(bad_ids)
+            row_iter = iter(rows)
+            for i, mid in enumerate(mol_ids):
+                if i in unmatched_set:
+                    unmatched_ids.append(mid)
+                    continue
+                row = next(row_iter)
+                rgroups = {k: row[k] for k in labels if k in row}
+                assignments.append(RGroupAssignment(molecule_id=mid, rgroups=rgroups))
         except Exception as exc:  # pragma: no cover — defensive
             logger.warning("rgroup_decompose_failed", core=core_smiles, exc=str(exc))
             return RGroupDecompositionResult(
                 core_smiles=core_smiles, unmatched_ids=[*mol_ids, *bad_ids]
             )
-
-        unmatched_set = set(unmatched_idx)
-
-        # Discover R-group labels across all rows (keys like "R1"; skip "Core").
-        seen: set[str] = set()
-        for row in rows:
-            for key in row:
-                if key.startswith("R") and key[1:].isdigit():
-                    seen.add(key)
-        labels = sorted(seen, key=lambda k: int(k[1:]))
-
-        # rows align with matched mols in input order; unmatched indices skipped.
-        assignments: list[RGroupAssignment] = []
-        unmatched_ids: list[UUID] = list(bad_ids)
-        row_iter = iter(rows)
-        for i, mid in enumerate(mol_ids):
-            if i in unmatched_set:
-                unmatched_ids.append(mid)
-                continue
-            row = next(row_iter)
-            rgroups = {k: row[k] for k in labels if k in row}
-            assignments.append(RGroupAssignment(molecule_id=mid, rgroups=rgroups))
 
         return RGroupDecompositionResult(
             core_smiles=core_smiles,

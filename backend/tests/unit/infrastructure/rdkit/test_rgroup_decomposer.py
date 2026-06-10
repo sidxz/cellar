@@ -35,6 +35,7 @@ def test_non_matching_molecule_is_unmatched(decomposer):
     )
     assert pyridine in result.unmatched_ids
     assert benzene_sub not in result.unmatched_ids
+    assert pyridine not in {x.molecule_id for x in result.assignments}
 
 
 def test_unparseable_core_returns_all_unmatched(decomposer):
@@ -58,3 +59,29 @@ def test_empty_molecules_returns_empty(decomposer):
     result = decomposer.decompose(core_smiles="c1ccccc1", molecules=[])
     assert result.assignments == []
     assert result.unmatched_ids == []
+
+
+def test_disubstituted_molecule_yields_two_rgroups(decomposer):
+    mid = uuid.uuid4()
+    result = decomposer.decompose(
+        core_smiles="c1ccccc1",
+        molecules=[(mid, "Fc1ccc(Cl)cc1")],
+    )
+    assert len(result.assignments) == 1
+    assert len(result.rgroup_labels) >= 2
+    values = " ".join(result.assignments[0].rgroups.values())
+    assert "F" in values
+    assert "Cl" in values
+
+
+def test_midsequence_unmatched_preserves_alignment(decomposer):
+    a, b, c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    result = decomposer.decompose(
+        core_smiles="c1ccccc1",
+        molecules=[(a, "Fc1ccccc1"), (b, "c1ccncc1"), (c, "Clc1ccccc1")],
+    )
+    assert b in result.unmatched_ids
+    by_id = {x.molecule_id: x for x in result.assignments}
+    assert set(by_id) == {a, c}
+    assert any("F" in v for v in by_id[a].rgroups.values())
+    assert any("Cl" in v for v in by_id[c].rgroups.values())
