@@ -23,7 +23,7 @@ import { useState } from "react";
 import type { SarColorSpec } from "../lib/sar-color-spec";
 import { whereOptionToColorSpec } from "../lib/sar-color-spec";
 
-export interface RgroupColorControlProps {
+export interface RGroupColorControlProps {
   projectIds?: string[];
   value: SarColorSpec | null;
   onChange: (spec: SarColorSpec | null) => void;
@@ -31,13 +31,13 @@ export interface RgroupColorControlProps {
   onAggregationChange: (m: AggregationMode) => void;
 }
 
-export function RgroupColorControl({
+export function RGroupColorControl({
   projectIds,
   value,
   onChange,
   aggregationMode,
   onAggregationChange,
-}: RgroupColorControlProps) {
+}: RGroupColorControlProps) {
   // Track selected protocol id in local state — initialise from current spec
   // so the control is coherent when re-mounted with an existing value.
   const [selectedProtocolId, setSelectedProtocolId] = useState<string>(value?.protocolId ?? "");

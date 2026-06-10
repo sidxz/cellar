@@ -8,8 +8,7 @@
  */
 import type { WhereOption } from "@/features/research-organization/lib/activity-where-options";
 import { drcColId, rdColId } from "@/features/research-organization/lib/protocol-column-id";
-import type { ActivityValue } from "@/features/research-organization/types";
-import type { InterceptKey } from "@/features/research-organization/types";
+import type { ActivityValue, InterceptKey } from "@/features/research-organization/types";
 import { findInterceptValue } from "@/features/screening-assay/lib/intercept-label";
 
 // ─── Type ─────────────────────────────────────────────────────────────────────

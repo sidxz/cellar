@@ -18,7 +18,7 @@ beforeAll(() => {
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
 import type { Protocol } from "@/features/screening-assay/types";
 import type { SarColorSpec } from "../lib/sar-color-spec";
-import { RgroupColorControl } from "./rgroup-color-control";
+import { RGroupColorControl } from "./rgroup-color-control";
 
 // ─── Mock hooks ───────────────────────────────────────────────────────────────
 
@@ -98,7 +98,7 @@ const TEST_SUMMARY: ProtocolSummary = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe("RgroupColorControl", () => {
+describe("RGroupColorControl", () => {
   beforeEach(async () => {
     const { useProtocolSummaries, useProtocol } = await import(
       "@/features/screening-assay/hooks/use-protocols"
@@ -118,7 +118,7 @@ describe("RgroupColorControl", () => {
 
   it("renders the 'Color by:' label and protocol picker", () => {
     render(
-      <RgroupColorControl
+      <RGroupColorControl
         value={null}
         onChange={vi.fn()}
         aggregationMode="latest"
@@ -142,7 +142,7 @@ describe("RgroupColorControl", () => {
     const onChange = vi.fn();
 
     render(
-      <RgroupColorControl
+      <RGroupColorControl
         value={null}
         onChange={onChange}
         aggregationMode="latest"
@@ -175,7 +175,7 @@ describe("RgroupColorControl", () => {
 
   it("renders the AggregationControl summarise dropdown", () => {
     render(
-      <RgroupColorControl
+      <RGroupColorControl
         value={null}
         onChange={vi.fn()}
         aggregationMode="latest"
