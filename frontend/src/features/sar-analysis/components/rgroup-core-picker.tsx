@@ -122,7 +122,6 @@ export function RGroupCorePicker({
         onOpenChange={setEditOpen}
         initialStructure={coreSmiles ?? ""}
         onApply={(structure) => {
-          setEditOpen(false);
           const trimmed = structure.trim();
           if (trimmed) onCoreChange(trimmed);
         }}
