@@ -448,6 +448,7 @@ export function ScaffoldTreeView({ molecules, activityData, collectionId, onOpen
                   selected={selectedScaffold}
                   onToggle={handleToggle}
                   onSelect={handleSelect}
+                  collectionId={collectionId}
                 />
               ))
             )}

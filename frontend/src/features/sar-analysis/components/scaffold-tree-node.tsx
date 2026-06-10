@@ -32,6 +32,8 @@ type Props = {
   selected: string | null;
   onToggle: (scaffoldSmiles: string) => void;
   onSelect: (scaffoldSmiles: string) => void;
+  /** When provided, "Open in SAR" routes to /collections/{id}?view=sar */
+  collectionId?: string;
 };
 
 const BIN_COLORS: Record<ActivityRollupBin, string> = {
@@ -53,6 +55,7 @@ function ScaffoldTreeNodeInner(props: Props) {
     selected,
     onToggle,
     onSelect,
+    collectionId,
   } = props;
 
   const router = useRouter();
@@ -64,17 +67,13 @@ function ScaffoldTreeNodeInner(props: Props) {
     router.push("/search");
   };
 
-  // Routes to /search?view=sar rather than a collection-scoped URL because
-  // collectionId is not threaded into the per-node props (it lives one level
-  // up in scaffold-tree-view). The SAR view reads readSarHandoff() on mount
-  // to pre-seed the core scaffold and molecule set.
   const handleOpenInSar = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (scaffoldSmiles === NO_SCAFFOLD_SENTINEL) return; // no core to seed SAR
     const currentNode = nodesBySmiles.get(scaffoldSmiles);
     if (!currentNode) return;
     stashSarHandoff({ coreSmiles: scaffoldSmiles, moleculeIds: currentNode.molecule_ids });
-    router.push("/search?view=sar");
+    router.push(collectionId ? `/collections/${collectionId}?view=sar` : "?view=sar");
   };
 
   const node = nodesBySmiles.get(scaffoldSmiles);
@@ -198,6 +197,7 @@ function ScaffoldTreeNodeInner(props: Props) {
               selected={selected}
               onToggle={onToggle}
               onSelect={onSelect}
+              collectionId={collectionId}
             />
           ))}
         </div>

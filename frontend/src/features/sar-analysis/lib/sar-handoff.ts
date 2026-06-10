@@ -6,6 +6,7 @@ export interface SarHandoff {
 }
 
 export function stashSarHandoff(payload: SarHandoff): void {
+  if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(KEY, JSON.stringify(payload));
   } catch {
@@ -15,6 +16,7 @@ export function stashSarHandoff(payload: SarHandoff): void {
 
 /** Reads and clears the stash (one-shot). Returns null if absent/invalid. */
 export function readSarHandoff(): SarHandoff | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(KEY);
     if (!raw) return null;

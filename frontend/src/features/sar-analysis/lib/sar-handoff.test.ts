@@ -12,4 +12,8 @@ describe("sar handoff", () => {
     readSarHandoff();
     expect(readSarHandoff()).toBeNull();
   });
+  it("returns null for a malformed stash", () => {
+    window.sessionStorage.setItem("cellar:sar-handoff", JSON.stringify({ coreSmiles: 123 }));
+    expect(readSarHandoff()).toBeNull();
+  });
 });
