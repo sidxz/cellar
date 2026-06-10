@@ -287,6 +287,10 @@ def create_app() -> FastAPI:
 
     app.include_router(scaffold_tree_router)
 
+    from cellar.interface.routes.sar_analysis import router as sar_analysis_router
+
+    app.include_router(sar_analysis_router)
+
     from cellar.interface.routes.umap_cluster import router as umap_cluster_router
 
     app.include_router(umap_cluster_router)

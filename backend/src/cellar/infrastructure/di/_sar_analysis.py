@@ -34,6 +34,7 @@ from cellar.application.sar_analysis.build_scaffold_network import BuildScaffold
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaffoldTreeJob
 from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
 from cellar.application.sar_analysis.compute_umap_cluster import ComputeUmapCluster
+from cellar.application.sar_analysis.decompose_rgroups import DecomposeRGroups
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
 from cellar.application.sar_analysis.repositories import (
@@ -62,6 +63,7 @@ from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_reposito
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.butina_clusterer import ButinaClusterer
 from cellar.infrastructure.rdkit.maxmin_picker import MaxMinPickerAdapter
+from cellar.infrastructure.rdkit.rgroup_decomposer import RGroupDecomposer
 from cellar.infrastructure.rdkit.scaffold_network_builder import ScaffoldNetworkBuilder
 from cellar.infrastructure.rdkit.umap_embedder import UmapEmbedder
 from cellar.infrastructure.sar_analysis.morgan_fingerprint_loader import MorganFingerprintLoader
@@ -93,6 +95,20 @@ def register_sar_analysis(container: Container) -> None:
         )
 
     container.define(BuildScaffoldNetwork, _build_scaffold_network)
+
+    # --- Pure RDKit wrapper, no deps → Singleton ---
+    container.define(RGroupDecomposer, Singleton(RGroupDecomposer))
+
+    # --- Use case: fresh UoW per resolve, shared by the use case and its repo ---
+    def _decompose_rgroups(c: Container) -> DecomposeRGroups:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DecomposeRGroups(
+            molecule_fetcher=SQLAlchemyMoleculeRepository(uow),
+            decomposer=c[RGroupDecomposer],
+            uow=uow,
+        )
+
+    container.define(DecomposeRGroups, _decompose_rgroups)
 
     # --- RunScaffoldTree ---
     # In-process runner the Temporal activity wraps. Worker pulls this once
