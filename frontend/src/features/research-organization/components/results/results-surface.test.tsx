@@ -34,6 +34,7 @@ vi.mock("../../hooks/use-collections", () => ({
 }));
 
 vi.mock("@/shared/lib/api/custom-instance", () => ({
+  API_V1: "/api/v1",
   customInstance: vi.fn(),
 }));
 
