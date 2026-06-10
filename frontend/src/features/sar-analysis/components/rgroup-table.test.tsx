@@ -81,4 +81,25 @@ describe("rgroup-table builders", () => {
         : undefined;
     expect(value).toBe("F[*:1]");
   });
+
+  it("formats physchem columns to fixed precision with a dash for null", () => {
+    const cols = buildRGroupColumns(["R1"]);
+    const mw = cols.find((c) => c.colId === "mw");
+    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+    expect(mw?.valueFormatter?.({ value: 96.10000001 } as any)).toBe("96.1");
+    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+    expect(mw?.valueFormatter?.({ value: null } as any)).toBe("—");
+
+    const clogp = cols.find((c) => c.colId === "clogp");
+    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+    expect(clogp?.valueFormatter?.({ value: 2.27 } as any)).toBe("2.27");
+    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+    expect(clogp?.valueFormatter?.({ value: null } as any)).toBe("—");
+
+    const tpsa = cols.find((c) => c.colId === "tpsa");
+    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+    expect(tpsa?.valueFormatter?.({ value: 12.345 } as any)).toBe("12.3");
+    // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+    expect(tpsa?.valueFormatter?.({ value: null } as any)).toBe("—");
+  });
 });

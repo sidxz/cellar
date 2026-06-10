@@ -6,7 +6,7 @@ import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { Button } from "@/shared/components/ui/button";
 import type { RGroupDecompositionResponse } from "@/shared/lib/api/model";
-import type { ColDef } from "ag-grid-community";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 
 export interface RGroupTableProps {
   decomposition: RGroupDecompositionResponse;
@@ -67,16 +67,12 @@ export function buildRGroupColumns(labels: string[]): ColDef<RGroupRow>[] {
       width: 160,
       sortable: false,
       valueGetter: (p) => p.data?.rgroups[label] ?? "",
-      cellRenderer: (p: { data?: RGroupRow }) => {
+      cellRenderer: (p: ICellRendererParams<RGroupRow>) => {
         const smi = p.data?.rgroups[label];
         if (!smi) return <span className="text-muted-foreground">—</span>;
         return (
           <div className="flex h-full items-center gap-1.5">
-            <StructureThumbnail
-              smiles={smi}
-              size={40}
-              className="shrink-0 rounded border bg-background"
-            />
+            <StructureThumbnail smiles={smi} size={64} className="shrink-0" />
             <span className="font-mono text-[11px] break-all">{smi}</span>
           </div>
         );
@@ -90,6 +86,7 @@ export function buildRGroupColumns(labels: string[]): ColDef<RGroupRow>[] {
       width: 90,
       type: "numericColumn",
       valueGetter: (p) => p.data?.mw ?? null,
+      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(1) : "—"),
     },
     {
       headerName: "cLogP",
@@ -97,6 +94,7 @@ export function buildRGroupColumns(labels: string[]): ColDef<RGroupRow>[] {
       width: 90,
       type: "numericColumn",
       valueGetter: (p) => p.data?.clogp ?? null,
+      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(2) : "—"),
     },
     {
       headerName: "TPSA",
@@ -104,6 +102,7 @@ export function buildRGroupColumns(labels: string[]): ColDef<RGroupRow>[] {
       width: 90,
       type: "numericColumn",
       valueGetter: (p) => p.data?.tpsa ?? null,
+      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(1) : "—"),
     },
   );
   return cols;
@@ -126,7 +125,7 @@ export function RGroupTable({ decomposition, molecules, onSaveSelection }: RGrou
       rowData={rows}
       columnDefs={columns}
       height="70vh"
-      rowHeight={56}
+      rowHeight={112}
       getRowId={(params) => params.data.id}
       selectionToolbar={(selected) => (
         <Button size="sm" onClick={() => onSaveSelection(selected.map((r) => r.id))}>
