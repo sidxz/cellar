@@ -191,6 +191,14 @@ describe("potencyShade", () => {
     expect(potencyShade(30, 5)).not.toContain("green"); // 6× — off the green band
   });
 
+  it("pins the 3× boundary — just above 3× is amber, not green", () => {
+    // 3× exactly (≤3) is the last green bucket; 3.2× must cross into amber.
+    expect(potencyShade(15, 5)).toContain("green"); // 3.0× — boundary, green
+    const justAbove = potencyShade(16, 5); // 3.2× — first bucket past 3×
+    expect(justAbove).not.toContain("green");
+    expect(justAbove).toContain("amber");
+  });
+
   it("returns an empty string when the scalar or reference is null", () => {
     expect(potencyShade(null, 5)).toBe("");
     expect(potencyShade(5, null)).toBe("");
@@ -225,25 +233,27 @@ describe("buildActivityColumns", () => {
     expect(got).toBe(50);
   });
 
-  it("formats the value column to 3 sig figs with the cell's unit", () => {
+  it("formats the value column to 3 sig figs with the cell's unit, no sci-notation", () => {
     const cols = buildActivityColumns(colorSpec, activityByMolecule, reference);
     const val = cols.find((c) => c.colId === "activity:value");
     const f = val?.valueFormatter;
-    const fmt =
+    const fmt = (value: number | null) =>
       typeof f === "function"
         ? // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
-          (f({ value: 5, data: { id: "m1" } } as any) as string)
+          (f({ value, data: { id: "m1" } } as any) as string)
         : undefined;
-    expect(fmt).toBe("5.00 nM");
-    const dash =
-      typeof f === "function"
-        ? // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
-          (f({ value: null, data: { id: "m1" } } as any) as string)
-        : undefined;
-    expect(dash).toBe("—");
+    // 3 sig figs, trailing zeros stripped (shared chemistry formatter).
+    expect(fmt(5)).toBe("5 nM");
+    expect(fmt(53.399)).toBe("53.4 nM");
+    // Large potency: `toPrecision(3)` would emit "1.25e+3" — the shared
+    // formatter keeps fixed-form output, no scientific notation in the band.
+    const big = fmt(1245.7);
+    expect(big).toBe("1250 nM");
+    expect(big).not.toContain("e");
+    expect(fmt(null)).toBe("—");
   });
 
-  it("shades the value cell by potency vs the reference", () => {
+  it("shades the value cell by potency vs the reference (dr_curve source)", () => {
     const cols = buildActivityColumns(colorSpec, activityByMolecule, reference);
     const val = cols.find((c) => c.colId === "activity:value");
     const cc = val?.cellClass;
@@ -256,6 +266,40 @@ describe("buildActivityColumns", () => {
     // m1 is the reference (5 nM) → green; m2 (50 nM, 10× off) → not green.
     expect(cls("m1")).toContain("green");
     expect(cls("m2")).not.toContain("green");
+  });
+
+  it("omits potency shading for a readout_data source (higher-is-better)", () => {
+    // % inhibition / activation readouts are higher-is-better; the
+    // lower-is-better potency ramp would paint the BEST compounds red, so the
+    // value column must NOT shade them. The number still renders, uncolored.
+    const readoutSpec: SarColorSpec = {
+      protocolId: "p1",
+      column: "rd:p1:rd1",
+      interceptKey: null,
+      source: "readout_data",
+      label: "EGFR · % inhibition",
+    };
+    const cols = buildActivityColumns(readoutSpec, activityByMolecule, reference);
+    const val = cols.find((c) => c.colId === "activity:value");
+    const cc = val?.cellClass;
+    // Either no cellClass at all, or one that yields no class for any row.
+    if (cc == null) {
+      expect(cc).toBeUndefined();
+    } else {
+      const cls = (id: string) =>
+        // biome-ignore lint/suspicious/noExplicitAny: AG Grid CellClassParams shim for the unit test
+        typeof cc === "function" ? (cc({ data: { id } } as any) as string) : "";
+      expect(cls("m1")).toBe("");
+      expect(cls("m2")).toBe("");
+    }
+    // The value column still renders the number (just uncolored).
+    const f = val?.valueFormatter;
+    const fmt =
+      typeof f === "function"
+        ? // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+          (f({ value: 50, data: { id: "m2" } } as any) as string)
+        : undefined;
+    expect(fmt).toBe("50 nM");
   });
 
   it("renders the DoseResponseCell in the plot column", () => {

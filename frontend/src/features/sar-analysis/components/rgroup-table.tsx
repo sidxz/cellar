@@ -4,17 +4,18 @@ import type { Molecule } from "@/features/chemical-registration/types";
 import { DoseResponseCell } from "@/features/research-organization/components/search/dose-response-cell";
 import type { ActivityValue } from "@/features/research-organization/types";
 import {
-  type CurveSnapshot,
-  DoseResponseFigure,
-} from "@/features/screening-assay/components/dose-response-figure";
+  CurveExpandDialog,
+  type ExpandedCurve,
+} from "@/features/screen-campaign/components/grid/curve-expand-dialog";
+import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
 import { structureColumn } from "@/features/screening-assay/components/grid-columns";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { Button } from "@/shared/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog";
 import type { RGroupDecompositionResponse } from "@/shared/lib/api/model";
+import { formatMeasurementValue } from "@/shared/lib/format-number";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { type SarColorSpec, colorSpecScalar } from "../lib/sar-color-spec";
 
 export interface RGroupTableProps {
@@ -145,6 +146,11 @@ export function buildRGroupColumns(
  * fitted concentration means a more potent compound, so the minimum anchors the
  * "best" end of the shading ramp. Returns null when there are no non-null
  * scalars (no activity to anchor against).
+ *
+ * LOWER-is-better is only valid for DR-fitted potencies (`source ===
+ * "dr_curve"`). `readout_data` readouts (e.g. % inhibition / activation) are
+ * HIGHER-is-better, so the minimum is the WORST compound there — callers must
+ * gate any use of this reference (and {@link potencyShade}) by source.
  */
 export function pickReference(scalars: (number | null)[]): number | null {
   let ref: number | null = null;
@@ -169,6 +175,13 @@ export function pickReference(scalars: (number | null)[]): number | null {
  *
  * Returns "" when the scalar or reference is null (nothing to shade) — the
  * grid then renders the cell with its default background.
+ *
+ * LOWER-is-better assumption: a smaller scalar shades greener. This is only
+ * correct for DR-fitted potencies (`source === "dr_curve"`). Applying it to a
+ * HIGHER-is-better `readout_data` readout (% inhibition / activation) inverts
+ * the meaning — the BEST compounds would paint red. Callers MUST gate by
+ * source and skip shading for `readout_data` (the same gating the B4 heatmap
+ * reuses).
  */
 export function potencyShade(scalar: number | null, reference: number | null): string {
   if (scalar == null || reference == null) return "";
@@ -215,8 +228,12 @@ export function snapshotFromActivity(av: ActivityValue | undefined): CurveSnapsh
 
 /**
  * The two activity columns the table appends when a `colorSpec` is set:
- *   - `activity:value` — the named scalar, formatted to 3 sig figs + unit,
- *     with the cell background shaded by {@link potencyShade} vs `reference`.
+ *   - `activity:value` — the named scalar, formatted to 3 sig figs + unit. For
+ *     DR potencies (`source === "dr_curve"`) the cell background is shaded by
+ *     {@link potencyShade} vs `reference`. For `readout_data` readouts (e.g. %
+ *     inhibition / activation) shading is OMITTED — those are higher-is-better,
+ *     so the lower-is-better ramp would invert the meaning (best = red). The
+ *     value still renders, just uncolored.
  *   - `activity:plot` — the shared {@link DoseResponseCell} (renders the curve
  *     for DR sources; an em-dash for readout_data sources, which is fine).
  *
@@ -232,6 +249,11 @@ export function buildActivityColumns(
   const scalarFor = (row: RGroupRow | undefined): number | null =>
     row ? colorSpecScalar(activityByMolecule[row.id], colorSpec) : null;
 
+  // Potency shading is only meaningful for lower-is-better DR potencies. Gate
+  // it on the source so % inhibition / activation (higher-is-better) readouts
+  // render uncolored instead of painting the best compounds red.
+  const shadeByPotency = colorSpec.source === "dr_curve";
+
   return [
     {
       headerName: colorSpec.label,
@@ -240,15 +262,18 @@ export function buildActivityColumns(
       type: "numericColumn",
       valueGetter: (p) => scalarFor(p.data),
       // 3 significant figures matches potency convention (values span orders of
-      // magnitude — fixed decimals would lose precision on sub-nM and clutter
-      // on µM). Unit comes off the cell, like the search grid's readout column.
+      // magnitude). `formatMeasurementValue` keeps fixed-form output across the
+      // potency band (no "5.00e-4" sci-notation for sub-nM, no clutter on µM) —
+      // the shared chemistry formatter the search grid uses. Unit comes off the
+      // cell, like the search grid's readout column.
       valueFormatter: (p) => {
         if (p.value == null) return "—";
         const av = p.data ? activityByMolecule[p.data.id] : undefined;
         const unit = av?.unit ? ` ${av.unit}` : "";
-        return `${Number(p.value).toPrecision(3)}${unit}`;
+        return `${formatMeasurementValue(p.value as number)}${unit}`;
       },
-      cellClass: (p) => potencyShade(scalarFor(p.data), reference),
+      // dr_curve only — see `shadeByPotency` above. readout_data omits cellClass.
+      cellClass: shadeByPotency ? (p) => potencyShade(scalarFor(p.data), reference) : undefined,
     },
     {
       headerName: "Plot",
@@ -281,31 +306,46 @@ export function RGroupTable({
 }: RGroupTableProps) {
   // Curve clicked open in the row-click dialog. Only DR rows produce a
   // snapshot; readout_data rows (or rows with no activity) leave it null so the
-  // click is a no-op.
-  const [openCurve, setOpenCurve] = useState<{
-    snapshot: CurveSnapshot;
-    unit: string | null;
-  } | null>(null);
+  // click is a no-op. `ExpandedCurve` is `CurveSnapshot` + the header context
+  // the shared CurveExpandDialog renders (molecule + channel labels + unit).
+  const [openCurve, setOpenCurve] = useState<ExpandedCurve | null>(null);
 
-  const rows = buildRGroupRows(decomposition, molecules);
+  const rows = useMemo(() => buildRGroupRows(decomposition, molecules), [decomposition, molecules]);
 
-  // Anchor the potency ramp to the most-potent (minimum) scalar across the
-  // visible rows, then build + insert the activity columns. Both are gated on
-  // `colorSpec` — without it the table is exactly Plan A.
-  const activityMap = activityByMolecule ?? {};
-  const reference = colorSpec
-    ? pickReference(rows.map((r) => colorSpecScalar(activityMap[r.id], colorSpec)))
-    : null;
-  const activityColumns = colorSpec ? buildActivityColumns(colorSpec, activityMap, reference) : [];
-  const columns = buildRGroupColumns(decomposition.rgroup_labels, activityColumns);
+  // Build + insert the activity columns. Gated on `colorSpec` — without it the
+  // table is exactly Plan A. The potency ramp is anchored to the most-potent
+  // (minimum) scalar across the visible rows, but only for `dr_curve` sources:
+  // `pickReference` assumes lower-is-better, so it's meaningless (and the
+  // shading is suppressed in `buildActivityColumns`) for `readout_data`.
+  // Keyed on the `activityByMolecule` prop directly (not a `?? {}` fallback) so
+  // the memo stays stable across renders — callers pass a stable React Query
+  // object when `colorSpec` is set.
+  const columns = useMemo(() => {
+    if (!colorSpec) return buildRGroupColumns(decomposition.rgroup_labels);
+    const activityMap = activityByMolecule ?? {};
+    const reference =
+      colorSpec.source === "dr_curve"
+        ? pickReference(rows.map((r) => colorSpecScalar(activityMap[r.id], colorSpec)))
+        : null;
+    const activityColumns = buildActivityColumns(colorSpec, activityMap, reference);
+    return buildRGroupColumns(decomposition.rgroup_labels, activityColumns);
+  }, [decomposition.rgroup_labels, rows, colorSpec, activityByMolecule]);
 
   // Row click → expand the clicked row's DR curve. Wired only when coloring by
-  // an activity spec; a no-op for rows without a fittable curve.
+  // an activity spec; a no-op for rows without a fittable curve. The expand
+  // goes through the shared CurveExpandDialog → DoseResponseChart so the SAR
+  // expand matches the campaign / run / search curve picture 1:1.
   const handleRowClick = colorSpec
     ? (row: RGroupRow) => {
-        const av = activityMap[row.id];
-        const snapshot = snapshotFromActivity(av);
-        if (snapshot) setOpenCurve({ snapshot, unit: av?.unit ?? null });
+        const av = activityByMolecule?.[row.id];
+        const snapshot: CurveSnapshot | null = snapshotFromActivity(av);
+        if (!snapshot) return;
+        setOpenCurve({
+          ...snapshot,
+          unit: av?.unit ?? null,
+          moleculeLabel: row.registration_number ?? row.name ?? row.id,
+          channelLabel: colorSpec.label,
+        });
       }
     : undefined;
 
@@ -324,21 +364,12 @@ export function RGroupTable({
           </Button>
         )}
       />
-      <Dialog open={openCurve != null} onOpenChange={(open) => !open && setOpenCurve(null)}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{colorSpec?.label ?? "Dose-response"}</DialogTitle>
-          </DialogHeader>
-          {openCurve ? (
-            <DoseResponseFigure
-              curve={openCurve.snapshot}
-              size="expand"
-              interactive
-              unit={openCurve.unit}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <CurveExpandDialog
+        data={openCurve}
+        onOpenChange={(open) => {
+          if (!open) setOpenCurve(null);
+        }}
+      />
     </>
   );
 }
