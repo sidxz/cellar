@@ -20,6 +20,7 @@ export function useSarActivity(args: {
 } {
   const search = useExecuteSearch();
   const [activityByMolecule, setActivity] = useState<Record<string, ActivityValue | undefined>>({});
+  const [isFetching, setIsFetching] = useState(false);
   const { mutateAsync } = search;
   const column = args.colorSpec?.column ?? null;
   const idsKey = args.moleculeIds.join(",");
@@ -28,9 +29,11 @@ export function useSarActivity(args: {
   useEffect(() => {
     if (!column || args.moleculeIds.length === 0) {
       setActivity({});
+      setIsFetching(false);
       return;
     }
     let cancelled = false;
+    setIsFetching(true);
     mutateAsync({
       input: {
         query: {
@@ -49,14 +52,18 @@ export function useSarActivity(args: {
           out[molId] = cols[column];
         }
         setActivity(out);
+        setIsFetching(false);
       })
       .catch(() => {
-        if (!cancelled) setActivity({});
+        if (!cancelled) {
+          setActivity({});
+          setIsFetching(false);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [idsKey, column, args.aggregationMode, mutateAsync]);
 
-  return { activityByMolecule, isFetching: search.isPending };
+  return { activityByMolecule, isFetching };
 }
