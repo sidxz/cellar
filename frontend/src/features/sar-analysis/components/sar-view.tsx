@@ -6,7 +6,6 @@ import type { AggregationMode } from "@/features/research-organization/lib/use-a
 import { Button } from "@/shared/components/ui/button";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showError } from "@/shared/lib/toast";
-import { cn } from "@/shared/lib/utils";
 import { useEffect, useState } from "react";
 import { useRGroupDecomposition } from "../hooks/use-rgroup-decomposition";
 import { useSarActivity } from "../hooks/use-sar-activity";
@@ -106,7 +105,11 @@ export function SarView(props: SarViewProps) {
 
       {/* Sub-toggle — only shown when a decomposition result is available. */}
       {result && (
-        <fieldset className="inline-flex items-center gap-1 self-start rounded-md border border-input p-0.5">
+        <div
+          role="group"
+          aria-label="SAR result view"
+          className="inline-flex items-center gap-1 self-start rounded-md border border-input p-0.5"
+        >
           <Button
             type="button"
             variant={!showHeatmap ? "default" : "ghost"}
@@ -122,7 +125,7 @@ export function SarView(props: SarViewProps) {
             type="button"
             variant={showHeatmap ? "default" : "ghost"}
             size="sm"
-            className={cn("h-7 gap-1.5 px-2")}
+            className="h-7 gap-1.5 px-2"
             aria-label="Heatmap view"
             aria-pressed={showHeatmap}
             disabled={!heatmapEnabled}
@@ -131,7 +134,7 @@ export function SarView(props: SarViewProps) {
           >
             <span className="text-xs">Heatmap</span>
           </Button>
-        </fieldset>
+        </div>
       )}
 
       {/* Result area */}
