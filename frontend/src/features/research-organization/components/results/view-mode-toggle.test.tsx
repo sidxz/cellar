@@ -69,4 +69,35 @@ describe("ViewModeToggle", () => {
     fireEvent.click(screen.getByRole("button", { name: /scaffold view/i }));
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("renders the SAR segment button", () => {
+    render(<ViewModeToggle mode="cards" onChange={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /sar view/i })).toBeInTheDocument();
+  });
+
+  it("highlights SAR segment via aria-pressed when mode=sar", () => {
+    render(<ViewModeToggle mode="sar" onChange={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /sar view/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("calls onChange with 'sar' when SAR segment is clicked from cards mode", () => {
+    const onChange = vi.fn();
+    render(<ViewModeToggle mode="cards" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /sar view/i }));
+    expect(onChange).toHaveBeenCalledWith("sar");
+  });
+
+  it("does NOT call onChange when SAR segment is clicked while already in sar mode", () => {
+    const onChange = vi.fn();
+    render(<ViewModeToggle mode="sar" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /sar view/i }));
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
