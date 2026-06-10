@@ -1,5 +1,13 @@
+import type { ActivityValue } from "@/features/research-organization/types";
 import { describe, expect, it } from "vitest";
-import { buildRGroupColumns, buildRGroupRows } from "./rgroup-table";
+import type { SarColorSpec } from "../lib/sar-color-spec";
+import {
+  buildActivityColumns,
+  buildRGroupColumns,
+  buildRGroupRows,
+  pickReference,
+  potencyShade,
+} from "./rgroup-table";
 
 const decomp = {
   core_smiles: "c1ccccc1",
@@ -97,5 +105,162 @@ describe("rgroup-table builders", () => {
     expect(fmt("clogp", null)).toBe("—");
     expect(fmt("tpsa", 12.345)).toBe("12.3");
     expect(fmt("tpsa", null)).toBe("—");
+  });
+
+  it("inserts activity columns between the rgroup columns and physchem columns", () => {
+    const activityCols = buildActivityColumns(colorSpec, {}, null);
+    const cols = buildRGroupColumns(["R1"], activityCols);
+    const ids = cols.map((c) => c.colId);
+    const rgIdx = ids.indexOf("rg:R1");
+    const valIdx = ids.indexOf("activity:value");
+    const mwIdx = ids.indexOf("mw");
+    // R-group → activity → physchem ordering.
+    expect(rgIdx).toBeGreaterThanOrEqual(0);
+    expect(valIdx).toBeGreaterThan(rgIdx);
+    expect(mwIdx).toBeGreaterThan(valIdx);
+  });
+});
+
+// ─── Activity: potency reference + shading + columns ──────────────────────────
+
+const colorSpec: SarColorSpec = {
+  protocolId: "p1",
+  column: "drc:rd1",
+  interceptKey: null,
+  source: "dr_curve",
+  label: "EGFR · IC50",
+};
+
+/** Minimal DR ActivityValue carrying a primary scalar (`value`) + a unit. */
+function drActivity(value: number): ActivityValue {
+  return {
+    value,
+    qualifier: "=",
+    unit: "nM",
+    source: "dose_response",
+    curve_type: "ic50",
+    r_squared: 0.99,
+    data_point_count: 8,
+    raw_data: [
+      { x: 1e-9, y: 100 },
+      { x: 1e-6, y: 0 },
+    ],
+    curve_params: {
+      hill_slope: 1,
+      top: 100,
+      bottom: 0,
+      num_points: 8,
+      curve_class: "full",
+      confidence_interval_low: null,
+      confidence_interval_high: null,
+    },
+  };
+}
+
+describe("pickReference", () => {
+  it("returns the minimum non-null scalar (most potent)", () => {
+    expect(pickReference([30, 5, 100, null])).toBe(5);
+  });
+
+  it("ignores nulls and non-finite values", () => {
+    expect(pickReference([null, Number.NaN, 12, Number.POSITIVE_INFINITY])).toBe(12);
+  });
+
+  it("returns null when empty or all-null", () => {
+    expect(pickReference([])).toBeNull();
+    expect(pickReference([null, null])).toBeNull();
+  });
+});
+
+describe("potencyShade", () => {
+  it("returns a green-ish class when the scalar is at/below the reference", () => {
+    expect(potencyShade(5, 5)).toContain("green");
+    expect(potencyShade(3, 5)).toContain("green");
+  });
+
+  it("returns a redder/weaker class as the scalar grows far above the reference", () => {
+    // 1000× off the most-potent reference → the most-saturated (red) end.
+    const far = potencyShade(5000, 5);
+    expect(far).toContain("red");
+    expect(far).not.toContain("green");
+  });
+
+  it("walks the ramp away from green as the fold increases", () => {
+    // ≤3× still green; 6× (>3×) leaves green for the amber/orange/red end.
+    expect(potencyShade(15, 5)).toContain("green"); // 3× — still green
+    expect(potencyShade(30, 5)).not.toContain("green"); // 6× — off the green band
+  });
+
+  it("returns an empty string when the scalar or reference is null", () => {
+    expect(potencyShade(null, 5)).toBe("");
+    expect(potencyShade(5, null)).toBe("");
+  });
+});
+
+describe("buildActivityColumns", () => {
+  const activityByMolecule: Record<string, ActivityValue | undefined> = {
+    m1: drActivity(5),
+    m2: drActivity(50),
+  };
+  const reference = pickReference([5, 50]);
+
+  it("returns a value column + a plot column with the expected colIds", () => {
+    const cols = buildActivityColumns(colorSpec, activityByMolecule, reference);
+    const ids = cols.map((c) => c.colId);
+    expect(ids).toContain("activity:value");
+    expect(ids).toContain("activity:plot");
+  });
+
+  it("uses colorSpecScalar(activity[id]) as the value column's valueGetter", () => {
+    const cols = buildActivityColumns(colorSpec, activityByMolecule, reference);
+    const val = cols.find((c) => c.colId === "activity:value");
+    const getter = val?.valueGetter;
+    expect(typeof getter).toBe("function");
+    // primary intercept (interceptKey null) → av.value
+    const got =
+      typeof getter === "function"
+        ? // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueGetterParams shim for the unit test
+          getter({ data: { id: "m2" } } as any)
+        : undefined;
+    expect(got).toBe(50);
+  });
+
+  it("formats the value column to 3 sig figs with the cell's unit", () => {
+    const cols = buildActivityColumns(colorSpec, activityByMolecule, reference);
+    const val = cols.find((c) => c.colId === "activity:value");
+    const f = val?.valueFormatter;
+    const fmt =
+      typeof f === "function"
+        ? // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+          (f({ value: 5, data: { id: "m1" } } as any) as string)
+        : undefined;
+    expect(fmt).toBe("5.00 nM");
+    const dash =
+      typeof f === "function"
+        ? // biome-ignore lint/suspicious/noExplicitAny: AG Grid ValueFormatterParams shim for the unit test
+          (f({ value: null, data: { id: "m1" } } as any) as string)
+        : undefined;
+    expect(dash).toBe("—");
+  });
+
+  it("shades the value cell by potency vs the reference", () => {
+    const cols = buildActivityColumns(colorSpec, activityByMolecule, reference);
+    const val = cols.find((c) => c.colId === "activity:value");
+    const cc = val?.cellClass;
+    expect(typeof cc).toBe("function");
+    const cls = (id: string) =>
+      typeof cc === "function"
+        ? // biome-ignore lint/suspicious/noExplicitAny: AG Grid CellClassParams shim for the unit test
+          (cc({ data: { id } } as any) as string)
+        : undefined;
+    // m1 is the reference (5 nM) → green; m2 (50 nM, 10× off) → not green.
+    expect(cls("m1")).toContain("green");
+    expect(cls("m2")).not.toContain("green");
+  });
+
+  it("renders the DoseResponseCell in the plot column", () => {
+    const cols = buildActivityColumns(colorSpec, activityByMolecule, reference);
+    const plot = cols.find((c) => c.colId === "activity:plot");
+    expect(typeof plot?.cellRenderer).toBe("function");
   });
 });
