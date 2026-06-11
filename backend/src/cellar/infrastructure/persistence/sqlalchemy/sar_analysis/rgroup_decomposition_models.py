@@ -30,7 +30,7 @@ class RGroupDecompositionRunModel(Base, WorkspaceIdMixin, VersionMixin):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    rgroup_labels: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    rgroup_labels: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     matched_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     unmatched_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     total_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
@@ -43,4 +43,4 @@ class RGroupAssignmentModel(Base):
         Uuid, ForeignKey("rgroup_decomposition_runs.id", ondelete="CASCADE"), primary_key=True
     )
     molecule_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
-    rgroups: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    rgroups: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
