@@ -1,41 +1,24 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { UseScaffoldTreeReturn } from "../hooks/use-scaffold-tree";
+import type { ScaffoldTreeResult } from "../types/scaffold-tree";
 
-// Mock the scaffold-tree hook with two ringed nodes (counts 3 and 1). The
-// picker should rank by molecule_count DESC, auto-suggest the dominant one
-// (benzene), and emit on click of any candidate.
+const BENZENE = "c1ccccc1";
+const QUINAZOLINE = "c1ccc2ncncc2c1";
+const PYRIDINE = "c1ccncc1";
+
+// Mutable hook return, swapped per test via `setTree`.
+const h = vi.hoisted(() => ({
+  ret: null as unknown as UseScaffoldTreeReturn,
+}));
+
 vi.mock("../hooks/use-scaffold-tree", () => ({
-  useScaffoldTree: (): UseScaffoldTreeReturn => ({
-    tree: {
-      nodes: [
-        {
-          scaffold_smiles: "c1ccncc1",
-          molecule_ids: ["d"],
-          molecule_count: 1,
-          subtree_molecule_count: 1,
-        },
-        {
-          scaffold_smiles: "c1ccccc1",
-          molecule_ids: ["a", "b", "c"],
-          molecule_count: 3,
-          subtree_molecule_count: 3,
-        },
-      ],
-      edges: [],
-      stats: { node_count: 2, elapsed_ms: 1, cache_hit: false },
-    },
-    jobId: null,
-    isStarting: false,
-    isPolling: false,
-    error: null,
-  }),
+  useScaffoldTree: (): UseScaffoldTreeReturn => h.ret,
 }));
 
 // RDKit-free shim for the chemistry barrel (StructureThumbnail uses WASM that
-// jsdom can't run; StructureEditorDialog pulls in Ketcher). Same convention as
-// scaffold-tree-view.test.tsx.
+// jsdom can't run; StructureEditorDialog pulls in Ketcher).
 vi.mock("@/shared/components/chemistry", () => ({
   StructureThumbnail: ({ smiles }: { smiles: string }) => <div data-testid={`thumb-${smiles}`} />,
   StructureEditorDialog: ({
@@ -51,8 +34,61 @@ vi.mock("@/shared/components/chemistry", () => ({
 
 import { RGroupCorePicker } from "./rgroup-core-picker";
 
+function setTree(tree: ScaffoldTreeResult | null) {
+  h.ret = { tree, jobId: null, isStarting: false, isPolling: false, error: null };
+}
+
+/**
+ * A congeneric series: 3 quinazolines (a,b,c) + 1 lone pyridine (d). Benzene is
+ * the generic ancestor with NO direct members. Coverage: quinazoline 3, benzene
+ * 3, pyridine 1. With a floor of 3, pyridine drops and quinazoline (the most
+ * specific broadly-shared core) is the default.
+ */
+const series: ScaffoldTreeResult = {
+  nodes: [
+    { scaffold_smiles: BENZENE, molecule_ids: [], molecule_count: 0, subtree_molecule_count: 3 },
+    {
+      scaffold_smiles: QUINAZOLINE,
+      molecule_ids: ["a", "b", "c"],
+      molecule_count: 3,
+      subtree_molecule_count: 3,
+    },
+    {
+      scaffold_smiles: PYRIDINE,
+      molecule_ids: ["d"],
+      molecule_count: 1,
+      subtree_molecule_count: 1,
+    },
+  ],
+  edges: [{ parent_smiles: BENZENE, child_smiles: QUINAZOLINE }],
+  stats: { node_count: 3, elapsed_ms: 1, cache_hit: false },
+};
+
+/** A diverse set: three unrelated singletons. Nothing clears the floor. */
+const diverse: ScaffoldTreeResult = {
+  nodes: [
+    { scaffold_smiles: BENZENE, molecule_ids: ["a"], molecule_count: 1, subtree_molecule_count: 1 },
+    {
+      scaffold_smiles: "c1ccoc1",
+      molecule_ids: ["b"],
+      molecule_count: 1,
+      subtree_molecule_count: 1,
+    },
+    {
+      scaffold_smiles: PYRIDINE,
+      molecule_ids: ["c"],
+      molecule_count: 1,
+      subtree_molecule_count: 1,
+    },
+  ],
+  edges: [],
+  stats: { node_count: 3, elapsed_ms: 1, cache_hit: false },
+};
+
 describe("RGroupCorePicker", () => {
-  it("preselects the dominant scaffold and emits on change", () => {
+  beforeEach(() => setTree(series));
+
+  it("auto-suggests the most specific broadly-shared core, not the generic ancestor or a singleton", () => {
     const onCoreChange = vi.fn();
     render(
       <RGroupCorePicker
@@ -61,20 +97,72 @@ describe("RGroupCorePicker", () => {
         onCoreChange={onCoreChange}
       />,
     );
-
-    // Auto-suggest fires once on mount with the dominant scaffold (count 3).
-    expect(onCoreChange).toHaveBeenCalledWith("c1ccccc1");
-
-    // Clicking the other candidate emits its SMILES.
-    fireEvent.click(screen.getByText(/c1ccncc1/));
-    expect(onCoreChange).toHaveBeenCalledWith("c1ccncc1");
+    // quinazoline covers all 3 ring compounds AND is more specific than benzene.
+    expect(onCoreChange).toHaveBeenCalledWith(QUINAZOLINE);
+    expect(onCoreChange).not.toHaveBeenCalledWith(PYRIDINE);
   });
 
-  it("shows matched/unmatched line when counts are provided", () => {
+  it("filters out singleton cores but surfaces 0-direct-member frameworks by coverage", () => {
     render(
       <RGroupCorePicker
         moleculeIds={["a", "b", "c", "d"]}
-        coreSmiles="c1ccccc1"
+        coreSmiles={QUINAZOLINE}
+        onCoreChange={vi.fn()}
+      />,
+    );
+    // pyridine (coverage 1) is gone; benzene (molecule_count 0, coverage 3) stays.
+    expect(screen.queryByTestId(`thumb-${PYRIDINE}`)).toBeNull();
+    expect(screen.getByTestId(`thumb-${BENZENE}`)).toBeInTheDocument();
+    expect(screen.getByTestId(`thumb-${QUINAZOLINE}`)).toBeInTheDocument();
+  });
+
+  it("shows a coverage badge (covers / total) on each candidate", () => {
+    render(
+      <RGroupCorePicker
+        moleculeIds={["a", "b", "c", "d"]}
+        coreSmiles={QUINAZOLINE}
+        onCoreChange={vi.fn()}
+      />,
+    );
+    // both candidates cover 3 of the 4 loaded compounds
+    expect(screen.getAllByText("3/4").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("emits the clicked candidate's core", () => {
+    const onCoreChange = vi.fn();
+    render(
+      <RGroupCorePicker
+        moleculeIds={["a", "b", "c", "d"]}
+        coreSmiles={QUINAZOLINE}
+        onCoreChange={onCoreChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(`Select core ${BENZENE}`) }));
+    expect(onCoreChange).toHaveBeenCalledWith(BENZENE);
+  });
+
+  it("guides instead of auto-suggesting when no scaffold is shared (diverse set)", () => {
+    setTree(diverse);
+    const onCoreChange = vi.fn();
+    render(
+      <RGroupCorePicker
+        moleculeIds={["a", "b", "c"]}
+        coreSmiles={null}
+        onCoreChange={onCoreChange}
+      />,
+    );
+    // no auto-suggest, a plain-language guidance panel, and the draw-core CTA
+    expect(onCoreChange).not.toHaveBeenCalled();
+    expect(screen.getByText(/No shared scaffold/i)).toBeInTheDocument();
+    expect(screen.getByText(/covers only 1 of 3/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Draw core/i })).toBeInTheDocument();
+  });
+
+  it("shows the matched/unmatched advisory line when counts are provided", () => {
+    render(
+      <RGroupCorePicker
+        moleculeIds={["a", "b", "c", "d"]}
+        coreSmiles={QUINAZOLINE}
         onCoreChange={vi.fn()}
         matchedCount={3}
         totalCount={4}
@@ -87,7 +175,7 @@ describe("RGroupCorePicker", () => {
   it("opens the editor and emits the drawn core via onApply", () => {
     const onCoreChange = vi.fn();
     render(
-      <RGroupCorePicker moleculeIds={["a"]} coreSmiles="c1ccccc1" onCoreChange={onCoreChange} />,
+      <RGroupCorePicker moleculeIds={["a"]} coreSmiles={QUINAZOLINE} onCoreChange={onCoreChange} />,
     );
     fireEvent.click(screen.getByText(/Edit core/i));
     fireEvent.click(screen.getByTestId("apply-core"));

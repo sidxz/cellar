@@ -1,13 +1,22 @@
 import type { ActivityValue } from "@/features/research-organization/types";
-import { describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { describe, expect, it, vi } from "vitest";
 import type { SarColorSpec } from "../lib/sar-color-spec";
 import {
+  type RGroupRow,
   buildActivityColumns,
   buildRGroupColumns,
   buildRGroupRows,
   pickReference,
   potencyShade,
 } from "./rgroup-table";
+
+// RDKit-free shim for the chemistry barrel (StructureThumbnail uses WASM jsdom
+// can't run). rgroup-table + its structure column import only StructureThumbnail.
+vi.mock("@/shared/components/chemistry", () => ({
+  StructureThumbnail: ({ smiles }: { smiles: string }) => <div data-testid={`thumb-${smiles}`} />,
+}));
 
 const decomp = {
   core_smiles: "c1ccccc1",
@@ -118,6 +127,37 @@ describe("rgroup-table builders", () => {
     expect(rgIdx).toBeGreaterThanOrEqual(0);
     expect(valIdx).toBeGreaterThan(rgIdx);
     expect(mwIdx).toBeGreaterThan(valIdx);
+  });
+});
+
+// ─── R-group cell rendering — clean fragment labels, never raw [*:1] ──────────
+
+function renderRgroupCell(fragmentSmiles: string) {
+  const col = buildRGroupColumns(["R1"]).find((c) => c.colId === "rg:R1");
+  // The rg cellRenderer only reads `p.data`; type it to the partial row it needs.
+  const renderer = col?.cellRenderer as unknown as (p: {
+    data?: Partial<RGroupRow>;
+  }) => ReactElement;
+  return render(renderer({ data: { rgroups: { R1: fragmentSmiles } } }));
+}
+
+describe("rgroup cell rendering", () => {
+  it("shows a human substituent label, never the raw [*:1] attachment SMARTS", () => {
+    renderRgroupCell("N#C[*:1]");
+    expect(screen.getByText("CN")).toBeInTheDocument();
+    expect(screen.queryByText(/\[\*/)).toBeNull();
+  });
+
+  it("renders hydrogen (unsubstituted) plainly with no structure thumbnail", () => {
+    const { container } = renderRgroupCell("[H][*:1]");
+    expect(screen.getByText("–H")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid^="thumb-"]')).toBeNull();
+  });
+
+  it("falls back to a cleaned SMILES (attachment as *) for unknown fragments", () => {
+    renderRgroupCell("Cc1ccc(Cl)cc1[*:1]");
+    expect(screen.getByText("Cc1ccc(Cl)cc1*")).toBeInTheDocument();
+    expect(screen.queryByText(/\[\*/)).toBeNull();
   });
 });
 

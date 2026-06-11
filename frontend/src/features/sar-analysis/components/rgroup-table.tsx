@@ -17,6 +17,7 @@ import { formatMeasurementValue } from "@/shared/lib/format-number";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { useMemo, useState } from "react";
 import { type SarColorSpec, colorSpecScalar } from "../lib/sar-color-spec";
+import { fragmentDisplay } from "../lib/sar-fragment-label";
 
 export interface RGroupTableProps {
   decomposition: RGroupDecompositionResponse;
@@ -99,10 +100,23 @@ export function buildRGroupColumns(
       cellRenderer: (p: ICellRendererParams<RGroupRow>) => {
         const smi = p.data?.rgroups[label];
         if (!smi) return <span className="text-muted-foreground">—</span>;
+        // Humanize the substituent: a clean label (CN, OMe, –H, …) instead of
+        // the raw `[*:1]` attachment SMARTS, with the full name + raw SMILES on
+        // hover. Hydrogen (an unsubstituted position) shows plainly, no depiction.
+        const frag = fragmentDisplay(smi);
+        if (frag.isHydrogen) {
+          return (
+            <div className="flex h-full items-center" title={frag.title}>
+              <span className="text-muted-foreground">{frag.label}</span>
+            </div>
+          );
+        }
         return (
-          <div className="flex h-full items-center gap-1.5">
-            <StructureThumbnail smiles={smi} size={64} className="shrink-0" />
-            <span className="font-mono text-[11px] break-all">{smi}</span>
+          <div className="flex h-full items-center gap-1.5" title={frag.title}>
+            {frag.thumbnailSmiles && (
+              <StructureThumbnail smiles={frag.thumbnailSmiles} size={64} className="shrink-0" />
+            )}
+            <span className="break-all text-[11px] font-medium">{frag.label}</span>
           </div>
         );
       },

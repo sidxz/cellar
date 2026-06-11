@@ -41,6 +41,7 @@ import { cn } from "@/shared/lib/utils";
 import { useMemo, useState } from "react";
 import { buildHeatmapGrid, heatmapCellKey } from "../lib/rgroup-heatmap-grid";
 import { type SarColorSpec, colorSpecScalar } from "../lib/sar-color-spec";
+import { fragmentDisplay } from "../lib/sar-fragment-label";
 // Reuse the table's exact potency reference + shading + snapshot mapping so the
 // heatmap and the table read identically. (Importing from the sibling component
 // is acceptable for now — see B4 spec.)
@@ -65,6 +66,34 @@ const GAP_CLASS =
 
 function moleculeLabelFor(m: Molecule | undefined, fallbackId: string): string {
   return m?.registration_number ?? m?.name ?? fallbackId;
+}
+
+/**
+ * Axis header for an R-group substituent: the shared clean fragment label
+ * (CN, OMe, –H, …) + structure thumbnail (skipped for hydrogen), so the heatmap
+ * axes read identically to the table cells instead of exposing raw `[*:1]`.
+ */
+function AxisFragment({ smiles, orientation }: { smiles: string; orientation: "col" | "row" }) {
+  const frag = fragmentDisplay(smiles);
+  return (
+    <div
+      className={cn(
+        orientation === "col"
+          ? "flex w-20 flex-col items-center gap-0.5"
+          : "flex w-24 items-center gap-1",
+      )}
+      title={frag.title}
+    >
+      {frag.thumbnailSmiles && (
+        <StructureThumbnail
+          smiles={frag.thumbnailSmiles}
+          size={32}
+          className={orientation === "row" ? "shrink-0" : undefined}
+        />
+      )}
+      <span className="break-all text-[9px] leading-tight text-muted-foreground">{frag.label}</span>
+    </div>
+  );
 }
 
 export function RGroupHeatmap({
@@ -183,12 +212,7 @@ export function RGroupHeatmap({
               </th>
               {grid.xValues.map((x) => (
                 <th key={x} className="p-1 align-bottom font-normal" scope="col">
-                  <div className="flex w-20 flex-col items-center gap-0.5">
-                    <StructureThumbnail smiles={x} size={32} />
-                    <span className="break-all font-mono text-[9px] leading-tight text-muted-foreground">
-                      {x}
-                    </span>
-                  </div>
+                  <AxisFragment smiles={x} orientation="col" />
                 </th>
               ))}
             </tr>
@@ -200,12 +224,7 @@ export function RGroupHeatmap({
                   scope="row"
                   className="sticky left-0 z-10 bg-background p-1 text-left align-middle font-normal"
                 >
-                  <div className="flex w-24 items-center gap-1">
-                    <StructureThumbnail smiles={y} size={32} className="shrink-0" />
-                    <span className="break-all font-mono text-[9px] leading-tight text-muted-foreground">
-                      {y}
-                    </span>
-                  </div>
+                  <AxisFragment smiles={y} orientation="row" />
                 </th>
                 {grid.xValues.map((x) => {
                   const cell = grid.cells[heatmapCellKey(y, x)];

@@ -125,14 +125,20 @@ describe("RGroupHeatmap", () => {
     expect(screen.getByText(/Need at least two R-group positions/i)).toBeInTheDocument();
   });
 
-  it("renders axis headers for every distinct substituent (default R1=Y, R2=X)", () => {
+  it("renders humanized axis headers for every distinct substituent (default R1=Y, R2=X)", () => {
     renderHeatmap();
     // Default axisY = labels[0] = R1, axisX = labels[1] = R2.
-    // R1 substituents (Y rows): F, Cl. R2 substituents (X cols): H, Me.
+    // R1 substituents (Y rows): F, Cl. R2 substituents (X cols): –H, Me.
+    expect(screen.getByText("F")).toBeInTheDocument();
+    expect(screen.getByText("Cl")).toBeInTheDocument();
+    expect(screen.getByText("Me")).toBeInTheDocument();
+    expect(screen.getByText("–H")).toBeInTheDocument();
+    // structures still depict the non-hydrogen substituents…
     expect(screen.getByTestId("thumb-F[*:1]")).toBeInTheDocument();
-    expect(screen.getByTestId("thumb-Cl[*:1]")).toBeInTheDocument();
-    expect(screen.getByTestId("thumb-[H][*:2]")).toBeInTheDocument();
     expect(screen.getByTestId("thumb-C[*:2]")).toBeInTheDocument();
+    // …but hydrogen (unsubstituted) shows no thumbnail, and no raw [*:n] leaks.
+    expect(screen.queryByTestId("thumb-[H][*:2]")).toBeNull();
+    expect(screen.queryByText(/\[\*/)).toBeNull();
   });
 
   it("renders a populated cell with the most-potent scalar + unit", () => {
