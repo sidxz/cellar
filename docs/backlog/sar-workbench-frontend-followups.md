@@ -4,6 +4,8 @@ Deferred items from the SAR workbench Phase-1 frontend (Plans A + B, branch `des
 
 > **PRE-PHASE-2 core-selection refinement — ✅ DONE** (2026-06-11, branch `design-6`, commits `c49bebf8` + `3444e926`). The core picker now ranks/filters candidate cores by **coverage** (exact subtree mol-id union, reusing `buildSubtreeMolIdMap`) instead of direct `molecule_count`; renders cores as structure tiles with a `covers N/total` badge (SMILES → tooltip); auto-suggests the most-specific broadly-shared core; humanizes R-group fragment cells **and** heatmap axes via a shared `fragmentDisplay` (CN/OMe/–H/…, never raw `[*:1]`, RDKit-validated dictionary + safe fallback); and shows plain-language *draw-a-core* guidance on non-congeneric sets. Design: `docs/superpowers/specs/2026-06-11-sar-core-selection-refinement-design.md`; original handoff: `…-refinement-handoff.md`. The proxy was validated against the backend RDKit (`matched ≤ coverage ≤ total`). The items below remain open follow-ups.
 
+> **Phase-2 handoff (2026-06-11).** Item #1 below (full-collection coverage), plus **activity cliffs** and **matched molecular pairs (MMP)**, are scoped — with codebase findings + file pointers + recommended sequencing — in **`docs/superpowers/specs/2026-06-11-sar-phase2-handoff.md`**. Each is its own brainstorm → spec → plan → implement cycle for a fresh session (sizes: #1 small, cliffs moderate, MMP large/Temporal).
+
 ## 1. Full-collection coverage (most significant)
 
 **Now:** `SarView` receives the host's paginated `molecules` (the loaded page from `collection-detail`). Decomposition, the activity fetch, the table, and the heatmap all scope to that loaded set — consistent, and honestly labelled "of N loaded compounds match this core".
