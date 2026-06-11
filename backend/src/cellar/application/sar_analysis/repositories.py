@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
+from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
+from cellar.domain.sar_analysis.rgroup_types import RGroupAssignment
 from cellar.domain.sar_analysis.scaffold_tree_job import ScaffoldTreeJob
 from cellar.domain.sar_analysis.scaffold_tree_types import ScaffoldTreeResult
 from cellar.domain.sar_analysis.umap_job import UmapJob
@@ -50,3 +52,30 @@ class UmapJobRepository(Protocol):
         threshold: float,
         ttl_seconds: int,
     ) -> UmapJob | None: ...
+
+
+class RGroupDecompositionRunRepository(Protocol):
+    async def save(self, run: RGroupDecompositionRun) -> None: ...
+
+    async def find_by_id(
+        self, run_id: UUID, *, workspace_id: UUID
+    ) -> RGroupDecompositionRun | None: ...
+
+    async def find_cached(
+        self, *, membership_hash: str, core_hash: str
+    ) -> RGroupDecompositionRun | None:
+        """Return the latest READY run for this (membership_hash, core_hash), or
+        None. No TTL: a ready run is valid until membership or core changes (each
+        of which changes a hash). Assignment rows for the returned run are already
+        persisted under its id."""
+        ...
+
+    async def write_assignments(
+        self, run_id: UUID, assignments: list[RGroupAssignment]
+    ) -> None: ...
+
+    async def fetch_assignments(
+        self, run_id: UUID, *, workspace_id: UUID, offset: int, limit: int
+    ) -> list[RGroupAssignment]: ...
+
+    async def count_assignments(self, run_id: UUID, *, workspace_id: UUID) -> int: ...
