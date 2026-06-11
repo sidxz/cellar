@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, insert, select
 
 from cellar.domain.sar_analysis.rgroup_decomposition_run import (
     RGroupDecompositionRun,
@@ -58,19 +58,57 @@ class SQLAlchemyRGroupDecompositionRunRepository:
         model = (await session.execute(stmt)).scalar_one_or_none()
         return _to_domain(model) if model else None
 
-    # --- assignment rows: implemented in Task 6 -----------------------------
     async def write_assignments(
         self, run_id: UUID, assignments: list[RGroupAssignment]
     ) -> None:
-        raise NotImplementedError  # Task 6
+        session = self._uow.session
+        BATCH = 1000
+        rows = [
+            {"run_id": run_id, "molecule_id": a.molecule_id, "rgroups": a.rgroups}
+            for a in assignments
+        ]
+        for i in range(0, len(rows), BATCH):
+            await session.execute(insert(RGroupAssignmentModel), rows[i : i + BATCH])
 
     async def fetch_assignments(
         self, run_id: UUID, *, workspace_id: UUID, offset: int, limit: int
     ) -> list[RGroupAssignment]:
-        raise NotImplementedError  # Task 6
+        session = self._uow.session
+        stmt = (
+            select(RGroupAssignmentModel)
+            .join(
+                RGroupDecompositionRunModel,
+                RGroupDecompositionRunModel.id == RGroupAssignmentModel.run_id,
+            )
+            .where(
+                RGroupAssignmentModel.run_id == run_id,
+                RGroupDecompositionRunModel.workspace_id == workspace_id,
+            )
+            .order_by(RGroupAssignmentModel.molecule_id)
+            .offset(offset)
+            .limit(limit)
+        )
+        models = (await session.execute(stmt)).scalars().all()
+        return [
+            RGroupAssignment(molecule_id=m.molecule_id, rgroups=dict(m.rgroups))
+            for m in models
+        ]
 
     async def count_assignments(self, run_id: UUID, *, workspace_id: UUID) -> int:
-        raise NotImplementedError  # Task 6
+        session = self._uow.session
+        stmt = (
+            select(func.count())
+            .select_from(RGroupAssignmentModel)
+            .join(
+                RGroupDecompositionRunModel,
+                RGroupDecompositionRunModel.id == RGroupAssignmentModel.run_id,
+            )
+            .where(
+                RGroupAssignmentModel.run_id == run_id,
+                RGroupDecompositionRunModel.workspace_id == workspace_id,
+            )
+        )
+        return int((await session.execute(stmt)).scalar_one())
 
 
 def _to_model(run: RGroupDecompositionRun) -> RGroupDecompositionRunModel:

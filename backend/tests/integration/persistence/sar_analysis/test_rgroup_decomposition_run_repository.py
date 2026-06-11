@@ -148,3 +148,87 @@ async def test_find_cached_ignores_pending(uow):
         cached = await repo.find_cached(membership_hash="mh3", core_hash="ch3")
 
     assert cached is None
+
+
+from cellar.domain.sar_analysis.rgroup_types import RGroupAssignment
+
+
+async def _persist_run(uow, *, workspace_id, membership_hash="mh-a", core_hash="ch-a"):
+    run = RGroupDecompositionRun.create(
+        workspace_id=workspace_id,
+        requested_by=uuid.uuid4(),
+        membership_hash=membership_hash,
+        core_smiles="c1ccccc1",
+        core_hash=core_hash,
+        now=_NOW,
+    )
+    async with uow:
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        await repo.save(run)
+        await uow.commit()
+    return run
+
+
+@pytest.mark.asyncio
+async def test_write_and_count_assignments(uow):
+    ws = uuid.uuid4()
+    run = await _persist_run(uow, workspace_id=ws)
+    rows = [
+        RGroupAssignment(molecule_id=uuid.uuid4(), rgroups={"R1": "F"}),
+        RGroupAssignment(molecule_id=uuid.uuid4(), rgroups={"R1": "Cl"}),
+        RGroupAssignment(molecule_id=uuid.uuid4(), rgroups={"R1": "Br"}),
+    ]
+    async with uow:
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        await repo.write_assignments(run.id, rows)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        n = await repo.count_assignments(run.id, workspace_id=ws)
+
+    assert n == 3
+
+
+@pytest.mark.asyncio
+async def test_fetch_assignments_paginates_stably(uow):
+    ws = uuid.uuid4()
+    run = await _persist_run(uow, workspace_id=ws, membership_hash="mh-b", core_hash="ch-b")
+    rows = [
+        RGroupAssignment(molecule_id=uuid.uuid4(), rgroups={"R1": str(i)}) for i in range(5)
+    ]
+    async with uow:
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        await repo.write_assignments(run.id, rows)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        page1 = await repo.fetch_assignments(run.id, workspace_id=ws, offset=0, limit=2)
+        page2 = await repo.fetch_assignments(run.id, workspace_id=ws, offset=2, limit=2)
+        page3 = await repo.fetch_assignments(run.id, workspace_id=ws, offset=4, limit=2)
+
+    seen = [a.molecule_id for a in (*page1, *page2, *page3)]
+    assert len(seen) == 5
+    assert len(set(seen)) == 5  # no overlap across pages — stable ordering
+
+
+@pytest.mark.asyncio
+async def test_fetch_count_scoped_to_workspace(uow):
+    ws = uuid.uuid4()
+    run = await _persist_run(uow, workspace_id=ws, membership_hash="mh-c", core_hash="ch-c")
+    async with uow:
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        await repo.write_assignments(
+            run.id, [RGroupAssignment(molecule_id=uuid.uuid4(), rgroups={"R1": "F"})]
+        )
+        await uow.commit()
+
+    other_ws = uuid.uuid4()
+    async with uow:
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        n = await repo.count_assignments(run.id, workspace_id=other_ws)
+        rows = await repo.fetch_assignments(run.id, workspace_id=other_ws, offset=0, limit=10)
+
+    assert n == 0        # the run belongs to ws, not other_ws
+    assert rows == []
