@@ -2,7 +2,7 @@
 
 Deferred items from the SAR workbench Phase-1 frontend (Plans A + B, branch `design-6`, 2026-06-09/10). None are correctness bugs in the shipped scope; each is a scoped follow-up with its root cause.
 
-> **PRE-PHASE-2 PRIORITY — core-selection refinement.** Running the shipped UI on a diverse collection revealed the core picker offers 0-member/singleton cores, ranks by the wrong metric (direct `molecule_count` vs coverage), shows cores as raw SMILES, and doesn't guide non-congeneric sets. Full problem statement + proposed scope + file pointers: **`docs/superpowers/specs/2026-06-11-sar-core-selection-refinement-handoff.md`**. Do this before Phase 2. The items below are lower priority.
+> **PRE-PHASE-2 core-selection refinement — ✅ DONE** (2026-06-11, branch `design-6`, commits `c49bebf8` + `3444e926`). The core picker now ranks/filters candidate cores by **coverage** (exact subtree mol-id union, reusing `buildSubtreeMolIdMap`) instead of direct `molecule_count`; renders cores as structure tiles with a `covers N/total` badge (SMILES → tooltip); auto-suggests the most-specific broadly-shared core; humanizes R-group fragment cells **and** heatmap axes via a shared `fragmentDisplay` (CN/OMe/–H/…, never raw `[*:1]`, RDKit-validated dictionary + safe fallback); and shows plain-language *draw-a-core* guidance on non-congeneric sets. Design: `docs/superpowers/specs/2026-06-11-sar-core-selection-refinement-design.md`; original handoff: `…-refinement-handoff.md`. The proxy was validated against the backend RDKit (`matched ≤ coverage ≤ total`). The items below remain open follow-ups.
 
 ## 1. Full-collection coverage (most significant)
 
