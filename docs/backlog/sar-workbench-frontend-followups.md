@@ -2,6 +2,8 @@
 
 Deferred items from the SAR workbench Phase-1 frontend (Plans A + B, branch `design-6`, 2026-06-09/10). None are correctness bugs in the shipped scope; each is a scoped follow-up with its root cause.
 
+> **PRE-PHASE-2 PRIORITY — core-selection refinement.** Running the shipped UI on a diverse collection revealed the core picker offers 0-member/singleton cores, ranks by the wrong metric (direct `molecule_count` vs coverage), shows cores as raw SMILES, and doesn't guide non-congeneric sets. Full problem statement + proposed scope + file pointers: **`docs/superpowers/specs/2026-06-11-sar-core-selection-refinement-handoff.md`**. Do this before Phase 2. The items below are lower priority.
+
 ## 1. Full-collection coverage (most significant)
 
 **Now:** `SarView` receives the host's paginated `molecules` (the loaded page from `collection-detail`). Decomposition, the activity fetch, the table, and the heatmap all scope to that loaded set — consistent, and honestly labelled "of N loaded compounds match this core".
