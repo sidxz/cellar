@@ -54,12 +54,19 @@ def test_unparseable_core_marks_all_unmatched():
 
 
 def test_labels_consistent_across_molecules_substituting_different_positions():
-    # Each molecule varies a different ring position. A per-batch *independent*
-    # decomposition could disagree on the label set; the single session must give
-    # every assignment labels drawn from one shared, consistent set.
+    # A di-substituted molecule forces a 2nd R-position; the mono-substituted
+    # ones must be handled consistently against it. Streaming (one shared RDKit
+    # object) must equal the functional oracle on this multi-position set — the
+    # §8.1 invariant a per-batch *independent* decomposition would break.
     ids = [uuid.uuid4() for _ in range(3)]
-    res = _stream(
-        [(ids[0], "Fc1ccccc1"), (ids[1], "Clc1ccc(C)cc1"), (ids[2], "Cc1ccccc1")]
-    )
-    for asg in res.assignments:
-        assert set(asg.rgroups).issubset(set(res.rgroup_labels))
+    mols = [(ids[0], "Fc1ccccc1"), (ids[1], "Clc1ccc(C)cc1"), (ids[2], "Cc1ccccc1")]
+
+    res = _stream(mols)
+    ref = RGroupDecomposer().decompose(core_smiles=CORE, molecules=mols)
+
+    assert len(res.rgroup_labels) >= 2  # the multi-position scenario is real, not vacuous
+    assert res.rgroup_labels == ref.rgroup_labels
+    assert {a.molecule_id: a.rgroups for a in res.assignments} == {
+        a.molecule_id: a.rgroups for a in ref.assignments
+    }
+    assert set(res.unmatched_ids) == set(ref.unmatched_ids)

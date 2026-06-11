@@ -11,7 +11,7 @@ the congeneric series, not the whole collection.
 
 from __future__ import annotations
 
-from typing import Any
+from uuid import UUID
 
 import structlog
 from rdkit import Chem
@@ -30,9 +30,10 @@ class RGroupDecompositionSession:
 
     def __init__(self, core_smiles: str) -> None:
         self._core_smiles = core_smiles
+        self._finished = False
         core = Chem.MolFromSmiles(core_smiles)
-        self._added_ids: list[Any] = []
-        self._unmatched_ids: list[Any] = []
+        self._added_ids: list[UUID] = []
+        self._unmatched_ids: list[UUID] = []
         if core is None:
             logger.warning("streaming_rgroup_core_unparseable", core=core_smiles)
             self._rgd = None
@@ -40,7 +41,7 @@ class RGroupDecompositionSession:
             params = rdRGroupDecomposition.RGroupDecompositionParameters()
             self._rgd = rdRGroupDecomposition.RGroupDecomposition([core], params)
 
-    def add(self, molecule_id: Any, smiles: str) -> bool:
+    def add(self, molecule_id: UUID, smiles: str) -> bool:
         """Add one molecule. Returns True if it matched the core and was added."""
         if self._rgd is None:
             self._unmatched_ids.append(molecule_id)
@@ -56,13 +57,27 @@ class RGroupDecompositionSession:
         return True
 
     def finish(self) -> RGroupDecompositionResult:
+        if self._finished:
+            raise RuntimeError("RGroupDecompositionSession.finish() called more than once")
+        self._finished = True
+
         if self._rgd is None or not self._added_ids:
             return RGroupDecompositionResult(
                 core_smiles=self._core_smiles,
                 unmatched_ids=list(self._unmatched_ids),
             )
         try:
-            self._rgd.Process()
+            processed = self._rgd.Process()
+            if not processed:
+                logger.warning(
+                    "streaming_rgroup_process_failed",
+                    core=self._core_smiles,
+                    n_added=len(self._added_ids),
+                )
+                return RGroupDecompositionResult(
+                    core_smiles=self._core_smiles,
+                    unmatched_ids=[*self._added_ids, *self._unmatched_ids],
+                )
             rows = self._rgd.GetRGroupsAsRows(asSmiles=True)
             seen: set[str] = set()
             for row in rows:
@@ -78,7 +93,7 @@ class RGroupDecompositionSession:
                 for mid, row in zip(self._added_ids, rows)
             ]
         except Exception as exc:  # pragma: no cover — defensive
-            logger.warning("streaming_rgroup_failed", core=self._core_smiles, exc=str(exc))
+            logger.warning("streaming_rgroup_decompose_failed", core=self._core_smiles, exc=str(exc))
             return RGroupDecompositionResult(
                 core_smiles=self._core_smiles,
                 unmatched_ids=[*self._added_ids, *self._unmatched_ids],
