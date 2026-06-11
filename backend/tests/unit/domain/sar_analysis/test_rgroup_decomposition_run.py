@@ -69,3 +69,21 @@ def test_ready_is_terminal():
     )
     with pytest.raises(InvalidRGroupRunTransition):
         ready.mark_cancelled(_NOW)
+
+
+def test_cancel_from_pending_succeeds():
+    cancelled = _new_run().mark_cancelled(_NOW)
+    assert cancelled.status == RGroupDecompositionRunStatus.CANCELLED
+
+
+def test_cancel_from_running_succeeds():
+    cancelled = _new_run().mark_running(_NOW).mark_cancelled(_NOW)
+    assert cancelled.status == RGroupDecompositionRunStatus.CANCELLED
+
+
+def test_cancelled_is_terminal():
+    # Guards _TERMINAL: a cancelled run cannot be re-run. mark_running only checks
+    # `!= PENDING`, so without CANCELLED in _TERMINAL this would wrongly succeed.
+    cancelled = _new_run().mark_cancelled(_NOW)
+    with pytest.raises(InvalidRGroupRunTransition):
+        cancelled.mark_running(_NOW)

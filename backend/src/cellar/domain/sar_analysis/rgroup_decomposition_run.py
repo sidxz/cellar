@@ -5,6 +5,8 @@ State machine (mirrors ScaffoldTreeJob):
   pending -> running -> {ready | failed | cancelled}
   pending             ->  cancelled
 
+ready / failed / cancelled are terminal.
+
 The aggregate holds only the *header* (discovered labels + counts). The
 per-molecule assignments are persisted as separate rows (see the repository),
 so the result scales past what a single JSONB blob could hold.
