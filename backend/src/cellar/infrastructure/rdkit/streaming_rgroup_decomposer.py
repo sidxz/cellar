@@ -79,6 +79,22 @@ class RGroupDecompositionSession:
                     unmatched_ids=[*self._added_ids, *self._unmatched_ids],
                 )
             rows = self._rgd.GetRGroupsAsRows(asSmiles=True)
+            # RDKit returns exactly one row per successfully Add()-ed molecule, in
+            # add order — the invariant the id↔row zip (and the whole matched/
+            # unmatched count bridge) rests on. If it ever breaks its contract,
+            # fail the whole batch closed rather than silently mis-aligning ids to
+            # R-groups or under-counting via a truncated zip.
+            if len(rows) != len(self._added_ids):
+                logger.warning(
+                    "streaming_rgroup_row_count_mismatch",
+                    core=self._core_smiles,
+                    n_added=len(self._added_ids),
+                    n_rows=len(rows),
+                )
+                return RGroupDecompositionResult(
+                    core_smiles=self._core_smiles,
+                    unmatched_ids=[*self._added_ids, *self._unmatched_ids],
+                )
             seen: set[str] = set()
             for row in rows:
                 for key in row:
