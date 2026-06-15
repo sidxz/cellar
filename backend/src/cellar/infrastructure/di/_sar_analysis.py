@@ -1,4 +1,4 @@
-"""SAR analysis bounded context bindings: scaffold-tree + UMAP cluster jobs + use cases.
+"""SAR analysis bindings: scaffold-tree + UMAP cluster + R-group decomposition jobs + use cases.
 
 Wires:
 - ``ScaffoldNetworkBuilder``         — Singleton (pure RDKit wrapper)

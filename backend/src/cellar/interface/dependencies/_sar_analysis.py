@@ -1,4 +1,4 @@
-"""SAR analysis (scaffold tree + UMAP cluster) use-case dependencies."""
+"""SAR analysis (scaffold tree + UMAP cluster + R-group decomposition) use-case dependencies."""
 
 from __future__ import annotations
 
