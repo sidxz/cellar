@@ -94,9 +94,7 @@ class FetchActivityHeatmap:
                 payload.projection_id, workspace_id=payload.workspace_id
             )
             if projection is None:
-                return Failure(
-                    NotFoundError("SarActivityProjection", str(payload.projection_id))
-                )
+                return Failure(NotFoundError("SarActivityProjection", str(payload.projection_id)))
             result = await self._reader.fetch_heatmap(
                 payload.run_id,
                 workspace_id=payload.workspace_id,

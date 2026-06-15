@@ -166,9 +166,7 @@ def create_app() -> FastAPI:
         container.define(ExportOrchestrator, Singleton(lambda: export_orch))
         container.define(ScaffoldTreeOrchestrator, Singleton(lambda: scaffold_orch))
         container.define(RGroupDecompositionOrchestrator, Singleton(lambda: rgroup_orch))
-        container.define(
-            SarActivityProjectionOrchestrator, Singleton(lambda: activity_proj_orch)
-        )
+        container.define(SarActivityProjectionOrchestrator, Singleton(lambda: activity_proj_orch))
         container.define(UmapClusterOrchestrator, Singleton(lambda: umap_orch))
 
         # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)

@@ -56,12 +56,6 @@ async def run_worker() -> None:
     from cellar.application.sar_analysis.run_decomposition import RunDecomposition
     from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
     from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
-    from cellar.infrastructure.temporal.activities.sar_activity_projection import (
-        SarActivityProjectionActivities,
-    )
-    from cellar.infrastructure.temporal.workflows.sar_activity_projection import (
-        SarActivityProjectionWorkflow,
-    )
     from cellar.domain.shared.secret_provider import SecretProvider
     from cellar.infrastructure.cdd.client import CddVaultClient
     from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -76,6 +70,9 @@ async def run_worker() -> None:
     from cellar.infrastructure.temporal.activities.rgroup_decomposition import (
         RGroupDecompositionActivities,
     )
+    from cellar.infrastructure.temporal.activities.sar_activity_projection import (
+        SarActivityProjectionActivities,
+    )
     from cellar.infrastructure.temporal.activities.scaffold_tree import ScaffoldTreeActivities
     from cellar.infrastructure.temporal.activities.umap_cluster import UmapClusterActivities
     from cellar.infrastructure.temporal.workflows.bulk_registration import (
@@ -86,6 +83,9 @@ async def run_worker() -> None:
     from cellar.infrastructure.temporal.workflows.export import ExportWorkflow
     from cellar.infrastructure.temporal.workflows.rgroup_decomposition import (
         RGroupDecompositionWorkflow,
+    )
+    from cellar.infrastructure.temporal.workflows.sar_activity_projection import (
+        SarActivityProjectionWorkflow,
     )
     from cellar.infrastructure.temporal.workflows.scaffold_tree import ScaffoldTreeWorkflow
     from cellar.infrastructure.temporal.workflows.umap_cluster import UmapClusterWorkflow
@@ -116,7 +116,9 @@ async def run_worker() -> None:
 
     # --- SAR activity projection activity ---
     run_sar_activity_projection = container[RunActivityProjection]
-    sar_activity_projection_activities = SarActivityProjectionActivities(run_sar_activity_projection)
+    sar_activity_projection_activities = SarActivityProjectionActivities(
+        run_sar_activity_projection
+    )
 
     # --- UMAP cluster activity ---
     # RunUmapCluster is wired by the DI container via register_sar_analysis.

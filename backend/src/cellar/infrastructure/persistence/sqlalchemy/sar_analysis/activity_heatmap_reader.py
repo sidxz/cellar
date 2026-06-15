@@ -125,10 +125,14 @@ class SQLAlchemyActivityHeatmapReader:
             .cte("capped")
         )
 
-        rn = func.row_number().over(
-            partition_by=[capped.c.y, capped.c.x],
-            order_by=[capped.c.scalar.asc(), capped.c.molecule_id],
-        ).label("rn")
+        rn = (
+            func.row_number()
+            .over(
+                partition_by=[capped.c.y, capped.c.x],
+                order_by=[capped.c.scalar.asc(), capped.c.molecule_id],
+            )
+            .label("rn")
+        )
         cell_count = func.count().over(partition_by=[capped.c.y, capped.c.x]).label("cell_count")
         ranked = select(
             capped.c.molecule_id,
