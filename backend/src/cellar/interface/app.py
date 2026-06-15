@@ -73,6 +73,9 @@ def create_app() -> FastAPI:
             BulkRegistrationOrchestrator,
         )
         from cellar.application.export.orchestration import ExportOrchestrator
+        from cellar.application.sar_analysis.start_decomposition_run import (
+            RGroupDecompositionOrchestrator,
+        )
         from cellar.application.sar_analysis.start_scaffold_tree_job import (
             ScaffoldTreeOrchestrator,
         )
@@ -90,6 +93,10 @@ def create_app() -> FastAPI:
         from cellar.infrastructure.temporal.orchestrators.export import (
             NullExportOrchestrator,
             TemporalExportOrchestrator,
+        )
+        from cellar.infrastructure.temporal.orchestrators.rgroup_decomposition import (
+            NullRGroupDecompositionOrchestrator,
+            TemporalRGroupDecompositionOrchestrator,
         )
         from cellar.infrastructure.temporal.orchestrators.scaffold_tree import (
             NullScaffoldTreeOrchestrator,
@@ -114,6 +121,9 @@ def create_app() -> FastAPI:
             scaffold_orch: ScaffoldTreeOrchestrator = TemporalScaffoldTreeOrchestrator(
                 app.state.temporal_client
             )
+            rgroup_orch: RGroupDecompositionOrchestrator = TemporalRGroupDecompositionOrchestrator(
+                app.state.temporal_client
+            )
             umap_orch: UmapClusterOrchestrator = TemporalUmapClusterOrchestrator(
                 client=app.state.temporal_client
             )
@@ -122,11 +132,13 @@ def create_app() -> FastAPI:
             plate_orch = NullCddPlateImportOrchestrator()
             bulk_orch = NullBulkRegistrationOrchestrator()
             from cellar.application.export.render_export import RenderExport
+            from cellar.application.sar_analysis.run_decomposition import RunDecomposition
             from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
             from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
 
             export_orch = NullExportOrchestrator(container[RenderExport])
             scaffold_orch = NullScaffoldTreeOrchestrator(container[RunScaffoldTree])
+            rgroup_orch = NullRGroupDecompositionOrchestrator(container[RunDecomposition])
             umap_orch = NullUmapClusterOrchestrator(runner=container[RunUmapCluster].execute)
 
         from lagom import Singleton
@@ -136,6 +148,7 @@ def create_app() -> FastAPI:
         container.define(BulkRegistrationOrchestrator, Singleton(lambda: bulk_orch))
         container.define(ExportOrchestrator, Singleton(lambda: export_orch))
         container.define(ScaffoldTreeOrchestrator, Singleton(lambda: scaffold_orch))
+        container.define(RGroupDecompositionOrchestrator, Singleton(lambda: rgroup_orch))
         container.define(UmapClusterOrchestrator, Singleton(lambda: umap_orch))
 
         # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)

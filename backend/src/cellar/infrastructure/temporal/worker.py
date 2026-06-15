@@ -52,6 +52,7 @@ async def run_worker() -> None:
         StructureProcessorProtocol,
     )
     from cellar.application.export.render_export import RenderExport
+    from cellar.application.sar_analysis.run_decomposition import RunDecomposition
     from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
     from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
     from cellar.domain.shared.secret_provider import SecretProvider
@@ -65,6 +66,9 @@ async def run_worker() -> None:
         PlateRegistrationActivities,
     )
     from cellar.infrastructure.temporal.activities.registration import RegistrationActivities
+    from cellar.infrastructure.temporal.activities.rgroup_decomposition import (
+        RGroupDecompositionActivities,
+    )
     from cellar.infrastructure.temporal.activities.scaffold_tree import ScaffoldTreeActivities
     from cellar.infrastructure.temporal.activities.umap_cluster import UmapClusterActivities
     from cellar.infrastructure.temporal.workflows.bulk_registration import (
@@ -73,6 +77,9 @@ async def run_worker() -> None:
     from cellar.infrastructure.temporal.workflows.cdd_plate_import import CddPlateImportWorkflow
     from cellar.infrastructure.temporal.workflows.cdd_vault_import import CddVaultImportWorkflow
     from cellar.infrastructure.temporal.workflows.export import ExportWorkflow
+    from cellar.infrastructure.temporal.workflows.rgroup_decomposition import (
+        RGroupDecompositionWorkflow,
+    )
     from cellar.infrastructure.temporal.workflows.scaffold_tree import ScaffoldTreeWorkflow
     from cellar.infrastructure.temporal.workflows.umap_cluster import UmapClusterWorkflow
 
@@ -94,6 +101,11 @@ async def run_worker() -> None:
     # RunScaffoldTree is wired by the DI container via register_sar_analysis.
     run_scaffold_tree = container[RunScaffoldTree]
     scaffold_tree_activities = ScaffoldTreeActivities(run_scaffold_tree)
+
+    # --- R-group decomposition activity ---
+    # RunDecomposition is wired by the DI container via register_sar_analysis.
+    run_rgroup_decomposition = container[RunDecomposition]
+    rgroup_decomposition_activities = RGroupDecompositionActivities(run_rgroup_decomposition)
 
     # --- UMAP cluster activity ---
     # RunUmapCluster is wired by the DI container via register_sar_analysis.
@@ -117,11 +129,14 @@ async def run_worker() -> None:
             CddPlateImportWorkflow,
             ExportWorkflow,
             ScaffoldTreeWorkflow,
+            RGroupDecompositionWorkflow,
             UmapClusterWorkflow,
         ],
         activities=[
             # Scaffold tree
             scaffold_tree_activities.run_scaffold_tree,
+            # R-group decomposition
+            rgroup_decomposition_activities.run_rgroup_decomposition,
             # UMAP cluster
             umap_cluster_activities.run_umap_cluster,
             # Export
