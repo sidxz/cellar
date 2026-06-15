@@ -11,7 +11,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://cellar:cellar@postgres:5432/cellar
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cellar}:${POSTGRES_PASSWORD:-cellar}@postgres:5432/${POSTGRES_DB:-cellar}
 
   backend:
     image: ghcr.io/sidxz/cellar-backend:${CELLAR_TAG:-latest}
@@ -26,7 +26,7 @@ services:
       temporal:
         condition: service_started
     environment:
-      DATABASE_URL: postgresql+asyncpg://cellar:cellar@postgres:5432/cellar
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cellar}:${POSTGRES_PASSWORD:-cellar}@postgres:5432/${POSTGRES_DB:-cellar}
       REDIS_URL: redis://valkey:6379
       SENTINEL_URL: ${APP_SENTINEL_URL:-http://sentinel:9003}
       TEMPORAL_ADDRESS: temporal:7233
@@ -52,7 +52,7 @@ services:
       temporal:
         condition: service_started
     environment:
-      DATABASE_URL: postgresql+asyncpg://cellar:cellar@postgres:5432/cellar
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cellar}:${POSTGRES_PASSWORD:-cellar}@postgres:5432/${POSTGRES_DB:-cellar}
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
       STORAGE_ROOT: /data/storage

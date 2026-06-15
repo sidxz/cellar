@@ -3,19 +3,23 @@
 #   dev infra only:  docker compose -f docker-compose.infra.yml up -d
 #   build stack:     docker compose -f docker-compose.infra.yml -f docker-compose.yml up
 #   prod stack:      docker compose -f docker-compose.infra.yml -f docker-compose.prod.yml up -d
+#
+# Credentials default to dev values when their env vars are unset, so `make up`
+# works with zero config. For ANY real deployment, set the *_USER / *_PASSWORD
+# and INFISICAL_* secrets in .env / your secrets manager (see .env.example).
 services:
   postgres:
     image: informaticsmatters/rdkit-cartridge-debian:Release_2024_03_3
     environment:
-      POSTGRES_USER: cellar
-      POSTGRES_PASSWORD: cellar
-      POSTGRES_DB: cellar
+      POSTGRES_USER: ${POSTGRES_USER:-cellar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cellar}
+      POSTGRES_DB: ${POSTGRES_DB:-cellar}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cellar"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cellar}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,8 +37,8 @@ services:
   temporal-db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: ${TEMPORAL_DB_USER:-temporal}
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:-temporal}
     volumes:
       - temporal-pgdata:/var/lib/postgresql/data
 
@@ -46,8 +50,8 @@ services:
     environment:
       - DB=postgres12
       - DB_PORT=5432
-      - POSTGRES_USER=temporal
-      - POSTGRES_PWD=temporal
+      - POSTGRES_USER=${TEMPORAL_DB_USER:-temporal}
+      - POSTGRES_PWD=${TEMPORAL_DB_PASSWORD:-temporal}
       - POSTGRES_SEEDS=temporal-db
     ports:
       - "7233:7233"
@@ -64,13 +68,13 @@ services:
   infisical-db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: infisical
-      POSTGRES_PASSWORD: infisical
-      POSTGRES_DB: infisical
+      POSTGRES_USER: ${INFISICAL_DB_USER:-infisical}
+      POSTGRES_PASSWORD: ${INFISICAL_DB_PASSWORD:-infisical}
+      POSTGRES_DB: ${INFISICAL_DB_NAME:-infisical}
     volumes:
       - infisical-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U infisical"]
+      test: ["CMD-SHELL", "pg_isready -U ${INFISICAL_DB_USER:-infisical}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -83,7 +87,7 @@ services:
       valkey:
         condition: service_healthy
     environment:
-      DB_CONNECTION_URI: postgres://infisical:infisical@infisical-db:5432/infisical
+      DB_CONNECTION_URI: postgres://${INFISICAL_DB_USER:-infisical}:${INFISICAL_DB_PASSWORD:-infisical}@infisical-db:5432/${INFISICAL_DB_NAME:-infisical}
       REDIS_URL: redis://valkey:6379
       ENCRYPTION_KEY: ${INFISICAL_ENCRYPTION_KEY:-6f2b5e3c8a1d4f7e9b0c2d5a8e3f1b4c}
       JWT_SIGNUP_SECRET: ${INFISICAL_JWT_SIGNUP:-dev-signup-secret-change-in-prod}
