@@ -215,6 +215,7 @@ def register_sar_analysis(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return FetchDecompositionRows(
             repository=SQLAlchemyRGroupDecompositionRunRepository(uow),
+            projection_repository=SQLAlchemySarActivityProjectionRepository(uow),
             reader=SQLAlchemyDecompositionRowReader(uow),
             uow=uow,
         )

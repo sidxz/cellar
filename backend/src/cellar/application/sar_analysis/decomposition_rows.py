@@ -14,7 +14,10 @@ from uuid import UUID
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.sar_analysis.repositories import RGroupDecompositionRunRepository
+from cellar.application.sar_analysis.repositories import (
+    RGroupDecompositionRunRepository,
+    SarActivityProjectionRepository,
+)
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
@@ -74,10 +77,12 @@ class FetchDecompositionRows:
         self,
         *,
         repository: RGroupDecompositionRunRepository,
+        projection_repository: SarActivityProjectionRepository,
         reader: DecompositionRowReader,
         uow: UnitOfWork,
     ) -> None:
         self._repo = repository
+        self._projections = projection_repository
         self._reader = reader
         self._uow = uow
 
@@ -88,6 +93,17 @@ class FetchDecompositionRows:
             run = await self._repo.find_by_id(payload.run_id, workspace_id=payload.workspace_id)
             if run is None:
                 return Failure(NotFoundError("RGroupDecompositionRun", str(payload.run_id)))
+            # Validate projection ownership explicitly (mirrors the heatmap use
+            # case) so the activity LEFT JOIN never depends on the implicit
+            # molecule-UUID-disjointness invariant to stay tenant-safe.
+            if payload.projection_id is not None:
+                projection = await self._projections.find_by_id(
+                    payload.projection_id, workspace_id=payload.workspace_id
+                )
+                if projection is None:
+                    return Failure(
+                        NotFoundError("SarActivityProjection", str(payload.projection_id))
+                    )
             rows = await self._reader.fetch_rows(
                 payload.run_id,
                 workspace_id=payload.workspace_id,

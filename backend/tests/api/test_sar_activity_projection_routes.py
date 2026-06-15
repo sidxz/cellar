@@ -177,3 +177,16 @@ async def test_rows_carry_activity_when_projection_given(client, api_app, worksp
     rows = res.json()["rows"]
     assert rows[0]["registration_number"] == "CV-POTENT"  # lowest activity first
     assert rows[0]["activity"] == pytest.approx(0.1)
+
+
+@pytest.mark.asyncio
+async def test_rows_rejects_unknown_projection(client, api_app, workspace_id) -> None:
+    # Valid run + a projection_id not owned by this workspace -> 404, never a
+    # 200 with silently-null activity. Proves /rows validates projection
+    # ownership (no cross-tenant activity leak), mirroring the heatmap route.
+    run_id, _projection_id, _potent = await _seed_heatmap_fixture(api_app, workspace_id)
+    res = await client.post(
+        f"/api/v1/sar/decomposition/{run_id}/rows",
+        json={"offset": 0, "limit": 50, "projection_id": str(uuid.uuid4())},
+    )
+    assert res.status_code == 404
