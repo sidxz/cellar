@@ -91,11 +91,14 @@ class SarActivityProjectionRepository(Protocol):
     ) -> SarActivityProjection | None: ...
 
     async def find_cached(
-        self, *, membership_hash: str, channel_hash: str
+        self, *, workspace_id: UUID, membership_hash: str, channel_hash: str
     ) -> SarActivityProjection | None:
-        """Latest READY projection for this (membership_hash, channel_hash), or
-        None. No TTL: valid until membership or channel changes (each changes a
-        hash). Value rows for the returned projection are already persisted."""
+        """Latest READY projection for this workspace's (membership_hash,
+        channel_hash), or None. No TTL: valid until membership or channel changes
+        (each changes a hash). Scoped to ``workspace_id`` for defense-in-depth —
+        the hash inputs are already workspace-scoped, but the cache key is
+        filtered explicitly like every other lookup. Value rows for the returned
+        projection are already persisted."""
         ...
 
     async def write_values(self, projection_id: UUID, values: list[ActivityScalar]) -> None: ...

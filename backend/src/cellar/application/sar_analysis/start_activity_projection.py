@@ -81,7 +81,9 @@ class StartActivityProjection:
             membership_hash = compute_membership_hash(pairs)
 
             cached = await self._repo.find_cached(
-                membership_hash=membership_hash, channel_hash=ch_hash
+                workspace_id=payload.workspace_id,
+                membership_hash=membership_hash,
+                channel_hash=ch_hash,
             )
             if cached is not None:
                 return cached

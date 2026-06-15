@@ -57,10 +57,14 @@ async def test_find_cached_returns_latest_ready_for_keys(uow):
         await uow.commit()
     async with uow:
         repo = SQLAlchemySarActivityProjectionRepository(uow)
-        hit = await repo.find_cached(membership_hash="m1", channel_hash="c1")
-        miss = await repo.find_cached(membership_hash="m1", channel_hash="nope")
+        hit = await repo.find_cached(workspace_id=ws, membership_hash="m1", channel_hash="c1")
+        miss = await repo.find_cached(workspace_id=ws, membership_hash="m1", channel_hash="nope")
+        other_ws = await repo.find_cached(
+            workspace_id=uuid.uuid4(), membership_hash="m1", channel_hash="c1"
+        )
     assert hit is not None and hit.value_count == 3
     assert miss is None
+    assert other_ws is None  # cache is workspace-scoped — no cross-tenant hit
 
 
 @pytest.mark.asyncio

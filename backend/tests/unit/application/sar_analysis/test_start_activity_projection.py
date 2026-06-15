@@ -52,7 +52,7 @@ class FakeRepo:
     async def find_by_id(self, pid, *, workspace_id):
         return self._by_id.get(pid)
 
-    async def find_cached(self, *, membership_hash, channel_hash):
+    async def find_cached(self, *, workspace_id, membership_hash, channel_hash):
         return self._cached
 
     async def write_values(self, pid, values):

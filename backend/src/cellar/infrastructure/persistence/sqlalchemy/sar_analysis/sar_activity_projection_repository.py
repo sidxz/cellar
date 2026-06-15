@@ -42,12 +42,13 @@ class SQLAlchemySarActivityProjectionRepository:
         return _to_domain(model) if model else None
 
     async def find_cached(
-        self, *, membership_hash: str, channel_hash: str
+        self, *, workspace_id: UUID, membership_hash: str, channel_hash: str
     ) -> SarActivityProjection | None:
         session = self._uow.session
         stmt = (
             select(SarActivityProjectionModel)
             .where(
+                SarActivityProjectionModel.workspace_id == workspace_id,
                 SarActivityProjectionModel.membership_hash == membership_hash,
                 SarActivityProjectionModel.channel_hash == channel_hash,
                 SarActivityProjectionModel.status == SarActivityProjectionStatus.READY.value,
