@@ -40,10 +40,34 @@ from cellar.application.sar_analysis.decomposition_rows import FetchDecompositio
 from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
+from cellar.application.sar_analysis.cancel_activity_projection import CancelActivityProjection
+from cellar.application.sar_analysis.get_activity_projection import GetActivityProjection
+from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
+from cellar.application.sar_analysis.start_activity_projection import (
+    SarActivityProjectionOrchestrator,
+    StartActivityProjection,
+)
 from cellar.application.sar_analysis.repositories import (
     RGroupDecompositionRunRepository,
+    SarActivityProjectionRepository,
     ScaffoldTreeJobRepository,
     UmapJobRepository,
+)
+from cellar.application.screening.molecule_activity_service import MoleculeActivityService
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
+    SQLAlchemySarActivityProjectionRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
+    SQLAlchemyDoseResponseCurveRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+    SQLAlchemyProtocolRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
+    SQLAlchemyReadoutDataRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
+    SQLAlchemyRunRepository,
 )
 from cellar.application.sar_analysis.run_decomposition import RunDecomposition
 from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
@@ -195,6 +219,84 @@ def register_sar_analysis(container: Container) -> None:
     container.define(GetDecompositionRun, _get_decomposition)
     container.define(CancelDecompositionRun, _cancel_decomposition)
     container.define(FetchDecompositionRows, _fetch_decomposition_rows)
+
+    # =====================================================================
+    # Activity projection slice (mirrors the decomposition slice above)
+    # =====================================================================
+
+    def _activity_projection_repo(c: Container) -> SarActivityProjectionRepository:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SQLAlchemySarActivityProjectionRepository(uow)  # type: ignore[return-value]
+
+    container.define(SarActivityProjectionRepository, _activity_projection_repo)
+
+    def _activity_enricher(uow: AsyncUnitOfWork) -> MoleculeActivityService:
+        # Shares the caller's UoW so enrich reads + value writes run on one session.
+        return MoleculeActivityService(
+            uow=uow,
+            readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            run_repo=SQLAlchemyRunRepository(uow),
+        )
+
+    def _run_activity_projection(c: Container) -> RunActivityProjection:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        members = DecompositionMemberStream(
+            molecule_fetcher=SQLAlchemyMoleculeRepository(uow),
+            collection_reader=SQLAlchemyCollectionRepository(uow),
+        )
+        return RunActivityProjection(
+            members=members,
+            enricher=_activity_enricher(uow),
+            repository=SQLAlchemySarActivityProjectionRepository(uow),
+            uow=uow,
+        )
+
+    container.define(RunActivityProjection, _run_activity_projection)
+
+    if os.environ.get("TEMPORAL_DISABLED") == "1":
+        from cellar.infrastructure.temporal.orchestrators.sar_activity_projection import (
+            NullSarActivityProjectionOrchestrator,
+        )
+
+        def _null_activity_orchestrator(c: Container) -> NullSarActivityProjectionOrchestrator:
+            return NullSarActivityProjectionOrchestrator(c[RunActivityProjection])
+
+        container.define(SarActivityProjectionOrchestrator, _null_activity_orchestrator)
+
+    def _start_activity_projection(c: Container) -> StartActivityProjection:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        members = DecompositionMemberStream(
+            molecule_fetcher=SQLAlchemyMoleculeRepository(uow),
+            collection_reader=SQLAlchemyCollectionRepository(uow),
+        )
+        return StartActivityProjection(
+            members=members,
+            enricher=_activity_enricher(uow),
+            repository=SQLAlchemySarActivityProjectionRepository(uow),
+            orchestrator=c[SarActivityProjectionOrchestrator],
+            uow=uow,
+        )
+
+    def _get_activity_projection(c: Container) -> GetActivityProjection:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetActivityProjection(
+            repository=SQLAlchemySarActivityProjectionRepository(uow), uow=uow
+        )
+
+    def _cancel_activity_projection(c: Container) -> CancelActivityProjection:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CancelActivityProjection(
+            repository=SQLAlchemySarActivityProjectionRepository(uow),
+            orchestrator=c[SarActivityProjectionOrchestrator],
+            uow=uow,
+        )
+
+    container.define(StartActivityProjection, _start_activity_projection)
+    container.define(GetActivityProjection, _get_activity_projection)
+    container.define(CancelActivityProjection, _cancel_activity_projection)
+    # NOTE: FetchActivityHeatmap is registered in Task 14 (its module lands there).
 
     # --- RunScaffoldTree ---
     # In-process runner the Temporal activity wraps. Worker pulls this once

@@ -126,3 +126,28 @@ class TestSarAnalysisWiring:
         assert isinstance(container[GetDecompositionRun], GetDecompositionRun)
         assert isinstance(container[CancelDecompositionRun], CancelDecompositionRun)
         assert isinstance(container[FetchDecompositionRows], FetchDecompositionRows)
+
+    def test_activity_projection_use_cases_resolve_with_temporal_disabled(
+        self, test_settings: DatabaseSettings, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Start/Cancel depend on SarActivityProjectionOrchestrator; under
+        # TEMPORAL_DISABLED=1 _sar_analysis binds the Null one. RunActivityProjection
+        # is what that Null wraps; FetchActivityHeatmap has no orchestrator dep.
+        monkeypatch.setenv("TEMPORAL_DISABLED", "1")
+        from cellar.application.sar_analysis.cancel_activity_projection import (
+            CancelActivityProjection,
+        )
+        from cellar.application.sar_analysis.get_activity_projection import GetActivityProjection
+        from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
+        from cellar.application.sar_analysis.start_activity_projection import (
+            SarActivityProjectionOrchestrator,
+            StartActivityProjection,
+        )
+
+        container = create_container(test_settings)
+        assert isinstance(container[RunActivityProjection], RunActivityProjection)
+        assert isinstance(container[StartActivityProjection], StartActivityProjection)
+        assert isinstance(container[GetActivityProjection], GetActivityProjection)
+        assert isinstance(container[CancelActivityProjection], CancelActivityProjection)
+        orch = container[SarActivityProjectionOrchestrator]
+        assert orch.__class__.__name__ == "NullSarActivityProjectionOrchestrator"

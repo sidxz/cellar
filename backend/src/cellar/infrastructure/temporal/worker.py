@@ -52,9 +52,16 @@ async def run_worker() -> None:
         StructureProcessorProtocol,
     )
     from cellar.application.export.render_export import RenderExport
+    from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
     from cellar.application.sar_analysis.run_decomposition import RunDecomposition
     from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
     from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
+    from cellar.infrastructure.temporal.activities.sar_activity_projection import (
+        SarActivityProjectionActivities,
+    )
+    from cellar.infrastructure.temporal.workflows.sar_activity_projection import (
+        SarActivityProjectionWorkflow,
+    )
     from cellar.domain.shared.secret_provider import SecretProvider
     from cellar.infrastructure.cdd.client import CddVaultClient
     from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -107,6 +114,10 @@ async def run_worker() -> None:
     run_rgroup_decomposition = container[RunDecomposition]
     rgroup_decomposition_activities = RGroupDecompositionActivities(run_rgroup_decomposition)
 
+    # --- SAR activity projection activity ---
+    run_sar_activity_projection = container[RunActivityProjection]
+    sar_activity_projection_activities = SarActivityProjectionActivities(run_sar_activity_projection)
+
     # --- UMAP cluster activity ---
     # RunUmapCluster is wired by the DI container via register_sar_analysis.
     run_umap_cluster = container[RunUmapCluster]
@@ -131,12 +142,15 @@ async def run_worker() -> None:
             ScaffoldTreeWorkflow,
             RGroupDecompositionWorkflow,
             UmapClusterWorkflow,
+            SarActivityProjectionWorkflow,
         ],
         activities=[
             # Scaffold tree
             scaffold_tree_activities.run_scaffold_tree,
             # R-group decomposition
             rgroup_decomposition_activities.run_rgroup_decomposition,
+            # SAR activity projection
+            sar_activity_projection_activities.run_sar_activity_projection,
             # UMAP cluster
             umap_cluster_activities.run_umap_cluster,
             # Export
