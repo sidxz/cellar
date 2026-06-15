@@ -37,3 +37,21 @@ All three predate tagging and reference fields/columns the tagging work never to
 **Root cause (confirmed):** commit `8f094c5e` ("refactor(tagging): regen orval, alias tag types to generated, drop legacy string-tag cruft", on the kvt tagging branch) removed the legacy `tags` field from the `Molecule` type in `features/chemical-registration/types/index.ts`, but the `molecule-card.test.tsx` fixture's `tags: []` line was not removed in the same change — model ↔ test-fixture drift.
 
 **Recommended fix:** either drop the stray `tags: []` from the fixture, or — if molecules are meant to surface tags — add `tags` to the `Molecule` type and its DTO. Left untouched to keep the targets branch scoped.
+
+## 4. Batch-identifier mirror tests — workspace-guard / `editor_auth` fixture mismatch
+
+**Status:** open · **Found:** 2026-06-15 (during the CDD-import batch-identifier-mirror fix on `design-7`) · **Origin:** predates this work
+
+**Failing (4):**
+- `tests/integration/inventory/test_create_batch_fans_out_mirrors.py::test_create_batch_fans_out_mirrors_from_existing_synonyms`
+- `tests/integration/inventory/test_mirror_cascade_delete.py::TestMirrorCascadeDelete::test_remove_identifier_cascades_to_mirrors`
+- `tests/integration/chemical_registration/test_add_identifier_fans_out_mirrors.py::TestAddIdentifierFansOutMirrors::test_add_identifier_creates_one_mirror_per_existing_batch`
+- `tests/integration/chemical_registration/test_add_identifier_fans_out_mirrors.py::TestAddIdentifierFansOutMirrors::test_add_identifier_no_batches_returns_zero_mirrors`
+
+All fail with `cellar.domain.shared.errors.NotFoundError: Entity not found` raised from `application/auth.py::require_same_workspace`, *before* any mirror logic runs.
+
+**Empirically proven pre-existing** (2026-06-15): `git stash`-ing the CDD-import mirror fix (`infrastructure/temporal/activities/registration.py`) reproduces all four identically on the clean tree, and they also fail when run in isolation (so this is a deterministic guard/fixture mismatch, not shared-testcontainer contamination). None of these tests import the activity that was changed.
+
+**Root cause (confirmed):** commit `bae2a3e1` ("fix(security): enforce workspace tenant guard in every application use case") added `require_same_workspace(auth, input.workspace_id)` to `CreateBatch.__call__` and `AddIdentifier.__call__`. These mirror tests (added earlier in `86c37a74`) pass `auth=editor_auth`, where the `editor_auth` fixture is `FakeAuth(role="editor")` — and `FakeAuth.__init__` defaults `workspace_id` to a **fresh random uuid** (`workspace_id or uuid.uuid4()`) that never matches the `seeded_workspace_and_molecule` workspace. The guard sweep did not update these co-located tests → guard ↔ test-fixture drift. (The new CDD-import mirror tests are unaffected: the Temporal activity calls `CreateBatch` with `auth=None`, the system/worker bypass path.)
+
+**Recommended fix (clean, root-cause):** give the test auth the seeded workspace — e.g. `FakeAuth(role="editor", workspace_id=workspace_id)` in each affected test, or an `editor_auth` fixture derived from `seeded_workspace_and_molecule`. Both the tenant guard and the mirror logic are correct; only the fixtures need to share a workspace id. Left untouched to keep this branch scoped.

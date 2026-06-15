@@ -33,6 +33,7 @@ from cellar.application.inventory.batch_identifiers import (
 from cellar.application.inventory.batch_policy import should_create_batch
 from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from cellar.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
+from cellar.application.inventory.sync_batch_identifier_mirrors import SyncBatchIdentifierMirrors
 from cellar.domain.chemical_registration.enums import RegistrationAction
 from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -328,13 +329,24 @@ async def _create_batch(
                     salt_smiles = detected_salt.salt_smiles
                     salt_stoichiometry = detected_salt.stoichiometry
 
-    # Batch creation uses its own UoW (CreateBatch manages it internally)
+    # Batch creation uses its own UoW (CreateBatch manages it internally).
+    # The batch repo is shared with SyncBatchIdentifierMirrors so its
+    # in-transaction workspace-uniqueness lookups run on the same session
+    # (matches the DI wiring in di/_inventory.py). Passing sync fans the
+    # molecule's identifiers out onto the new batch as `<synonym>-NNN` aliases;
+    # workspace_settings_repo makes the batch honor the workspace's configured
+    # sequence width. custom_field_validator is intentionally omitted — the
+    # activity writes an internal cdd_batch_id custom field that is not a
+    # workspace-defined custom field and would be rejected by the validator.
     batch_uow = AsyncUnitOfWork(session_factory)
+    batch_repo = SQLAlchemyBatchRepository(batch_uow)
     create_batch = CreateBatch(
         uow=batch_uow,
-        repo=SQLAlchemyBatchRepository(batch_uow),
+        repo=batch_repo,
         molecule_repo=SQLAlchemyMoleculeRepository(batch_uow),
         dispatcher=dispatcher,
+        workspace_settings_repo=SQLAlchemyWorkspaceSettingsRepository(batch_uow),
+        sync=SyncBatchIdentifierMirrors(batch_repo),
     )
 
     # Separate UoW for the alias-capture step; AddBatchIdentifier manages its own txn.
