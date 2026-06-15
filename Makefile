@@ -21,8 +21,10 @@ endif
 BACKEND  := cd backend
 FRONTEND := cd frontend
 LOGDIR   := .logs
+COMPOSE_INFRA := docker compose -f docker-compose.infra.yml
+COMPOSE_PROD  := docker compose -f docker-compose.infra.yml -f docker-compose.prod.yml
 
-.PHONY: help up down install dev dev-be dev-fe dev-worker stop migrate test test-api test-all lint nuke restart status logs logs-dev
+.PHONY: help up down install dev dev-be dev-fe dev-worker stop migrate test test-api test-all lint nuke restart status logs logs-dev prod-up prod-down prod-logs prod-pull
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -30,23 +32,23 @@ help: ## Show this help
 
 # ── Infrastructure ─────────────────────────────────────────────
 
-up: ## Start Postgres + Valkey + Infisical + Temporal, run migrations, bootstrap secrets
-	docker compose up -d postgres valkey infisical-db infisical temporal-db temporal temporal-ui
+up: ## Start infra (Postgres + Valkey + Infisical + Temporal), run migrations, bootstrap secrets
+	$(COMPOSE_INFRA) up -d
 	@echo "Waiting for Postgres to be healthy..."
-	@until docker compose exec postgres pg_isready -U cellar -q 2>/dev/null; do sleep 1; done
+	@until $(COMPOSE_INFRA) exec postgres pg_isready -U cellar -q 2>/dev/null; do sleep 1; done
 	@echo "Postgres ready"
 	$(BACKEND) && uv run alembic upgrade head
 	@echo "Migrations applied"
 	@./scripts/bootstrap-infisical.sh
 
 down: ## Stop all containers (keep data)
-	docker compose down
+	$(COMPOSE_INFRA) down
 
 status: ## Show container status
-	docker compose ps
+	$(COMPOSE_INFRA) ps
 
 logs: ## Tail container logs
-	docker compose logs -f postgres valkey infisical temporal
+	$(COMPOSE_INFRA) logs -f postgres valkey infisical temporal
 
 # ── Dependencies ──────────────────────────────────────────────
 
@@ -147,10 +149,25 @@ lint: ## Run import-linter only
 # ── Cleanup ────────────────────────────────────────────────────
 
 nuke: stop ## Destroy containers, volumes, and all data
-	docker compose down -v --remove-orphans
+	$(COMPOSE_INFRA) down -v --remove-orphans
 	rm -rf $(LOGDIR)
 	rm -f .infisical-bootstrapped
 	@sed -i '' '/^INFISICAL_/d' .env 2>/dev/null || true
 	@echo "All containers and volumes removed"
 
 restart: nuke up dev ## Nuke + start fresh + dev servers
+
+# ── Production (GHCR images) ───────────────────────────────────
+
+prod-pull: ## Pull the prod images from GHCR (CELLAR_TAG=<tag>, default latest)
+	$(COMPOSE_PROD) pull
+
+prod-up: ## Start the prod stack from GHCR images (runs migrations first)
+	$(COMPOSE_PROD) up -d
+	@echo "Prod stack up. Backend :8000  Frontend :3000  (tag: $${CELLAR_TAG:-latest})"
+
+prod-down: ## Stop the prod stack (keep data)
+	$(COMPOSE_PROD) down
+
+prod-logs: ## Tail prod app logs
+	$(COMPOSE_PROD) logs -f migrate backend temporal-worker frontend
