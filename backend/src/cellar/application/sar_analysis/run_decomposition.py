@@ -15,8 +15,8 @@ from uuid import UUID
 import structlog
 
 from cellar.application.sar_analysis.decomposition_members import DecompositionMemberStream
-from cellar.application.sar_analysis.rgroup_decomposition import StreamingDecomposer
 from cellar.application.sar_analysis.repositories import RGroupDecompositionRunRepository
+from cellar.application.sar_analysis.rgroup_decomposition import StreamingDecomposer
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRunStatus
 from cellar.domain.sar_analysis.rgroup_types import RGroupDecompositionResult
@@ -89,7 +89,10 @@ class RunDecomposition:
             try:
                 async with self.uow:
                     current = await self.repository.find_by_id(run_id, workspace_id=workspace_id)
-                    if current is not None and current.status == RGroupDecompositionRunStatus.RUNNING:
+                    if (
+                        current is not None
+                        and current.status == RGroupDecompositionRunStatus.RUNNING
+                    ):
                         failed = current.mark_failed(str(exc), datetime.now(UTC))
                         await self.repository.save(failed)
                         await self.uow.commit()

@@ -21,7 +21,7 @@ from cellar.application.sar_analysis.decomposition_rows import (
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
-from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_models import (  # noqa: E501
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_models import (
     RGroupAssignmentModel,
     RGroupDecompositionRunModel,
 )
@@ -94,7 +94,8 @@ class SQLAlchemyDecompositionRowReader:
             col = _sort_column(spec.col)
             if col is None:
                 continue  # unknown sort key — ignored (lenient); tiebreaker keeps it stable
-            order_by.append(col.desc().nulls_last() if spec.direction == "desc" else col.asc().nulls_last())
+            ordered = col.desc() if spec.direction == "desc" else col.asc()
+            order_by.append(ordered.nulls_last())
         order_by.append(RGroupAssignmentModel.molecule_id)  # stable tiebreaker
 
         stmt = stmt.order_by(*order_by).offset(offset).limit(limit)

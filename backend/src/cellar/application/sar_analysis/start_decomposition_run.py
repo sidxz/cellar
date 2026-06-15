@@ -21,8 +21,8 @@ from uuid import UUID
 
 from cellar.application.sar_analysis.decomposition_members import DecompositionMemberStream
 from cellar.application.sar_analysis.hashing import compute_membership_hash, sha256_hex
-from cellar.application.sar_analysis.rgroup_decomposition import StreamingDecomposer
 from cellar.application.sar_analysis.repositories import RGroupDecompositionRunRepository
+from cellar.application.sar_analysis.rgroup_decomposition import StreamingDecomposer
 from cellar.application.sar_analysis.run_decomposition import ready_counts
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
