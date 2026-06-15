@@ -40,6 +40,7 @@ from cellar.application.sar_analysis.decomposition_rows import FetchDecompositio
 from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
+from cellar.application.sar_analysis.activity_heatmap import FetchActivityHeatmap
 from cellar.application.sar_analysis.cancel_activity_projection import CancelActivityProjection
 from cellar.application.sar_analysis.get_activity_projection import GetActivityProjection
 from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
@@ -89,6 +90,9 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
     SQLAlchemyCollectionRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.activity_heatmap_reader import (
+    SQLAlchemyActivityHeatmapReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.decomposition_row_reader import (
     SQLAlchemyDecompositionRowReader,
@@ -296,7 +300,17 @@ def register_sar_analysis(container: Container) -> None:
     container.define(StartActivityProjection, _start_activity_projection)
     container.define(GetActivityProjection, _get_activity_projection)
     container.define(CancelActivityProjection, _cancel_activity_projection)
-    # NOTE: FetchActivityHeatmap is registered in Task 14 (its module lands there).
+
+    def _fetch_activity_heatmap(c: Container) -> FetchActivityHeatmap:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return FetchActivityHeatmap(
+            run_repository=SQLAlchemyRGroupDecompositionRunRepository(uow),
+            projection_repository=SQLAlchemySarActivityProjectionRepository(uow),
+            reader=SQLAlchemyActivityHeatmapReader(uow),
+            uow=uow,
+        )
+
+    container.define(FetchActivityHeatmap, _fetch_activity_heatmap)
 
     # --- RunScaffoldTree ---
     # In-process runner the Temporal activity wraps. Worker pulls this once

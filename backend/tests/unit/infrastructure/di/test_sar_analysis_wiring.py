@@ -134,6 +134,7 @@ class TestSarAnalysisWiring:
         # TEMPORAL_DISABLED=1 _sar_analysis binds the Null one. RunActivityProjection
         # is what that Null wraps; FetchActivityHeatmap has no orchestrator dep.
         monkeypatch.setenv("TEMPORAL_DISABLED", "1")
+        from cellar.application.sar_analysis.activity_heatmap import FetchActivityHeatmap
         from cellar.application.sar_analysis.cancel_activity_projection import (
             CancelActivityProjection,
         )
@@ -151,3 +152,4 @@ class TestSarAnalysisWiring:
         assert isinstance(container[CancelActivityProjection], CancelActivityProjection)
         orch = container[SarActivityProjectionOrchestrator]
         assert orch.__class__.__name__ == "NullSarActivityProjectionOrchestrator"
+        assert isinstance(container[FetchActivityHeatmap], FetchActivityHeatmap)
