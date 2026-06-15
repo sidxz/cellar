@@ -211,6 +211,31 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         result = await self._session.execute(stmt)
         return [(row[0], row[1], row[2]) for row in result.all()]
 
+    async def fetch_for_decomposition(
+        self, *, molecule_ids: list[uuid.UUID], workspace_id: uuid.UUID
+    ) -> list[tuple[uuid.UUID, str | None, int]]:
+        """Lean projection ``(id, smiles, version)`` for decomposition runs.
+
+        Unlike ``fetch_for_scaffold_tree`` this KEEPS NULL-smiles rows — a
+        structureless member must still count (it becomes ``unmatched``), so
+        totals stay honest. Merged molecules (``merged_into_id IS NOT NULL``)
+        are excluded, matching the molecule reader's visibility and keeping
+        membership consistent with the ``/rows`` join.
+        """
+        if not molecule_ids:
+            return []
+        stmt = select(
+            MoleculeModel.id,
+            MoleculeModel.smiles,
+            MoleculeModel.version,
+        ).where(
+            MoleculeModel.workspace_id == workspace_id,
+            MoleculeModel.id.in_(molecule_ids),
+            MoleculeModel.merged_into_id.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        return [(row[0], row[1], row[2]) for row in result.all()]
+
     async def find_by_inchi_key(self, workspace_id: uuid.UUID, inchi_key: str) -> Molecule | None:
         stmt = select(MoleculeModel).where(
             MoleculeModel.workspace_id == workspace_id,
