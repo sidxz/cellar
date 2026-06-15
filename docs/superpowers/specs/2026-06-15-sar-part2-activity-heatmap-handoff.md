@@ -111,16 +111,47 @@ activity enrich per mol; may differ from 200 — see open items).
 **FE orchestration is explicit (carries into Unit B):** pick core → ensure run → pick channel → ensure
 projection → `rows`/`heatmap` take the ready `run_id`/`projection_id`. Read endpoints never trigger compute.
 
-## Open items to settle (light brainstorm, then plan)
-- **`SarColorSpec`→scalar port** — confirm the FE `colorSpecScalar` logic + `MoleculeActivityService`
-  signature; decide the server `SarColorSpec`/`channel_spec` shape (protocol_columns + aggregation +
-  run_scopes) and its normalization for `channel_hash`. (Pivotal correctness item.)
-- **Inline threshold** for activity projection (start at the decomposition 200; activity enrich may be
-  heavier — may want lower).
-- **Heatmap axis cardinality guard** (spec §8.4) — a pathological core with thousands of distinct
-  substituents at a position → huge grid. Decide a cap + honest "top-K substituents" labeling.
-- **Member fetch for projection** — reuse `DecompositionMemberStream` (ignore smiles) vs a leaner
-  `(id, version)` fetch. Check `fetch_for_decomposition` callers before adding a sibling.
+## Locked decisions (brainstorm 2026-06-15 — biochemist's call, delegated by user)
+
+1. **`SarColorSpec`→scalar port (keystone) — confirmed, low-risk.** The FE `colorSpecScalar` does **not**
+   aggregate; `MoleculeActivityService.enrich_molecules` already applied the selection rule and returns a
+   per-cell `ActivityValue`. The port only *picks*: `intercept_key` set ⇒ match `av.intercept_values` by
+   `(kind, level)` → `.value`; else ⇒ `av.value`. So `RunActivityProjection` = stream member ids →
+   `enrich_molecules(batch_ids, [column], selection_rule=…, run_scopes=…)` → pick → batched-insert sparse
+   `sar_activity_value(scalar, unit, qualifier, source, snapshot)`. **No aggregation re-implementation.**
+   - `channel_spec` (JSONB): `{protocol_id, column ("drc:<rd>"|"rd:<proto>:<rd>"), intercept_key {kind,level}|null,
+     source, selection_rule, qualifier_handling, run_scopes}` + cosmetic `label`.
+   - `channel_hash` = `sha256_hex` of normalized JSON over the **semantic** fields only —
+     `{column, intercept_key, selection_rule, qualifier_handling, run_scopes}`; `label`/`protocol_id`/`source`
+     excluded (cosmetic or redundant with `column`) so a relabel is a cache hit.
+   - Parity defaults match today's FE (`use-sar-activity` sends only `protocol_columns`+`aggregation`):
+     `qualifier_handling = exclude_qualified`, `run_scopes = null`.
+   - `snapshot` = the full `ActivityValue` per value, so curve-expand works off-`props.molecules`.
+
+2. **Heatmap cell representative = `argmin(scalar)` (lower-is-better) — correct for v1, no direction flag.**
+   The FE gates heatmap **coloring and curve-expand to `dr_curve` channels only**, and every dose-response
+   potency scalar (IC50/EC50/Ki/Kd) is a concentration where **lower = more potent = better**, universally.
+   So the most-potent member is the right cell representative. A higher-is-better *colored* channel cannot
+   arise under the gating ⇒ a direction flag is speculative (YAGNI). Document the reasoning at the SQL site;
+   readout-data channels still populate `sar_activity_value` for table sort, they just aren't colored.
+
+3. **Inline threshold = 200 (match decomposition).** Both jobs gate the same SAR view; a split threshold
+   yields an incoherent "decomposition instant, activity still polling" UX. Exposed as an `inline_threshold`
+   constructor param (tunable); confirm `enrich_molecules` latency at 200 in an integration test and lower
+   only if the sync call is too slow.
+
+4. **Heatmap axis cardinality cap = top-30 per axis, ranked by descending member count.** Most-populated
+   substituents carry the most SAR signal and keep the grid readable (≤30×30 = 900 cells, bounded payload).
+   The endpoint returns `y_total`, `x_total`, `truncated` so the FE shows an honest "top 30 of N R1 groups"
+   banner; omitted substituents are dropped (no meaningless "other × other" cell).
+
+5. **Member fetch = reuse `DecompositionMemberStream` + `fetch_for_decomposition` as-is** (hash `(id, version)`,
+   feed `id` to enrich, ignore smiles). No leaner sibling — the smiles fetch is cheap.
+
+6. **Plan staging.** This brainstorm closes Part 2's open items. `writing-plans` produces the **Part 2 backend
+   plan** (activity-projection slice mirroring Part 1b + the `/heatmap` endpoint + the `/rows` activity
+   extension = completes Unit A). Unit B (frontend atomic swap) and Unit C (save + polish + docs) follow as
+   their own plans, implemented "in one pass" as far as the session reaches.
 
 ## Then Unit B (frontend — atomic swap; spec §5) — "one pass" continuation
 Rewire **table and heatmap together** to the new endpoints (no interim regression — the old sync path is
