@@ -54,7 +54,7 @@ services:
     depends_on:
       - backend
     environment:
-      APP_API_URL: http://localhost:8000
+      APP_API_URL: ${APP_API_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
 
