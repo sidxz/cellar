@@ -2,16 +2,27 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
+# RDKit's drawing extension (rdMolDraw2D) links against these system libs;
+# the slim base omits them, so the app fails to import at runtime without them.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    libxrender1 \
+    libxext6 \
+    libx11-6 \
+    libexpat1 \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Install dependencies first (layer caching)
+# Install dependencies first (layer caching) — project itself not yet installed
 COPY pyproject.toml uv.lock* ./
-RUN uv sync --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project
 
-# Copy application code
+# Copy application code, then install the project so `cellar` is importable
 COPY src/ src/
 COPY alembic/ alembic/
 COPY alembic.ini .
+RUN uv sync --frozen --no-dev
 
 RUN adduser --disabled-password --uid 1000 cellar
 USER cellar
