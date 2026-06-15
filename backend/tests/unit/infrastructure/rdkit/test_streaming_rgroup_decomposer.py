@@ -70,3 +70,19 @@ def test_labels_consistent_across_molecules_substituting_different_positions():
         a.molecule_id: a.rgroups for a in ref.assignments
     }
     assert set(res.unmatched_ids) == set(ref.unmatched_ids)
+
+
+def test_canonical_core_smiles_is_stable_across_equivalent_inputs():
+    dec = StreamingRGroupDecomposer()
+    # Two equivalent ways to write pyridine -> identical RDKit canonical SMILES.
+    assert dec.canonical_core_smiles("c1ccncc1") == dec.canonical_core_smiles("n1ccccc1")
+
+
+def test_canonical_core_smiles_distinguishes_different_cores():
+    dec = StreamingRGroupDecomposer()
+    assert dec.canonical_core_smiles("c1ccccc1") != dec.canonical_core_smiles("c1ccncc1")
+
+
+def test_canonical_core_smiles_falls_back_to_stripped_raw_when_unparseable():
+    dec = StreamingRGroupDecomposer()
+    assert dec.canonical_core_smiles("  not-a-smiles  ") == "not-a-smiles"

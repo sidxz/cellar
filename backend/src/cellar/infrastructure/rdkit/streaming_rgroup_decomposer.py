@@ -125,5 +125,17 @@ class RGroupDecompositionSession:
 class StreamingRGroupDecomposer:
     """Factory for one decomposition session per (core, member-stream)."""
 
+    def canonical_core_smiles(self, core_smiles: str) -> str:
+        """RDKit-canonical core SMILES; stable cache key for one core.
+
+        Falls back to the stripped raw string when RDKit cannot parse it — an
+        unparseable core still gets a deterministic (if non-canonical) key, and
+        the decomposition itself fails closed downstream (all unmatched).
+        """
+        mol = Chem.MolFromSmiles(core_smiles)
+        if mol is None:
+            return core_smiles.strip()
+        return Chem.MolToSmiles(mol)
+
     def session(self, *, core_smiles: str) -> RGroupDecompositionSession:
         return RGroupDecompositionSession(core_smiles)
