@@ -29,6 +29,7 @@ class DecompositionRow:
     molecular_weight: float | None
     logp: float | None
     tpsa: float | None
+    activity: float | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class DecompositionRowReader(Protocol):
         offset: int,
         limit: int,
         sort: list[DecompositionRowSort],
+        projection_id: UUID | None = None,
     ) -> list[DecompositionRow]: ...
 
     async def count_rows(self, run_id: UUID, *, workspace_id: UUID) -> int: ...
@@ -58,6 +60,7 @@ class FetchDecompositionRowsInput:
     offset: int
     limit: int
     sort: list[DecompositionRowSort]
+    projection_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,7 @@ class FetchDecompositionRows:
                 offset=payload.offset,
                 limit=payload.limit,
                 sort=payload.sort,
+                projection_id=payload.projection_id,
             )
             total = await self._reader.count_rows(
                 payload.run_id, workspace_id=payload.workspace_id

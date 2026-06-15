@@ -12,7 +12,7 @@ import re
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, null, select
 
 from cellar.application.sar_analysis.decomposition_rows import (
     DecompositionRow,
@@ -24,6 +24,9 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models i
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_models import (
     RGroupAssignmentModel,
     RGroupDecompositionRunModel,
+)
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_models import (  # noqa: E501
+    SarActivityValueModel,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
@@ -73,7 +76,12 @@ class SQLAlchemyDecompositionRowReader:
         offset: int,
         limit: int,
         sort: list[DecompositionRowSort],
+        projection_id: UUID | None = None,
     ) -> list[DecompositionRow]:
+        # Activity is a LEFT JOIN to the projection's sparse values; absent ⇒
+        # null (uncolored / unsortable for that row), exactly like the client did.
+        activity_col = SarActivityValueModel.scalar if projection_id is not None else null()
+
         stmt = self._scoped_join(
             select(
                 RGroupAssignmentModel.molecule_id,
@@ -84,16 +92,26 @@ class SQLAlchemyDecompositionRowReader:
                 MoleculeModel.molecular_weight,
                 MoleculeModel.logp,
                 MoleculeModel.tpsa,
+                activity_col.label("activity"),
             ),
             run_id,
             workspace_id,
         )
+        if projection_id is not None:
+            stmt = stmt.outerjoin(
+                SarActivityValueModel,
+                (SarActivityValueModel.projection_id == projection_id)
+                & (SarActivityValueModel.molecule_id == RGroupAssignmentModel.molecule_id),
+            )
 
         order_by = []
         for spec in sort:
-            col = _sort_column(spec.col)
+            if spec.col == "activity":
+                col = SarActivityValueModel.scalar if projection_id is not None else None
+            else:
+                col = _sort_column(spec.col)
             if col is None:
-                continue  # unknown sort key — ignored (lenient); tiebreaker keeps it stable
+                continue  # unknown / inapplicable sort key — ignored (lenient)
             ordered = col.desc() if spec.direction == "desc" else col.asc()
             order_by.append(ordered.nulls_last())
         order_by.append(RGroupAssignmentModel.molecule_id)  # stable tiebreaker
@@ -110,6 +128,7 @@ class SQLAlchemyDecompositionRowReader:
                 molecular_weight=row[5],
                 logp=row[6],
                 tpsa=row[7],
+                activity=row[8],
             )
             for row in result.all()
         ]

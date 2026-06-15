@@ -181,3 +181,104 @@ async def test_fetch_rows_excludes_merged_and_scopes_workspace(uow):
     assert {r.molecule_id for r in rows} == {visible}  # merged excluded
     assert total == 1
     assert other == []  # wrong workspace sees nothing
+
+
+async def _seed_ready_projection(uow, ws):
+    from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
+    from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
+        SQLAlchemySarActivityProjectionRepository,
+    )
+
+    proj = (
+        SarActivityProjection.create(
+            workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
+            channel_hash="ch", channel_spec={"column": "drc:x"}, now=_NOW,
+        )
+        .mark_running(_NOW)
+        .mark_ready(value_count=0, now=_NOW)
+    )
+    await SQLAlchemySarActivityProjectionRepository(uow).save(proj)
+    return proj
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_joins_activity_when_projection_given(uow):
+    from cellar.domain.sar_analysis.activity_projection_types import ActivityScalar
+    from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
+        SQLAlchemySarActivityProjectionRepository,
+    )
+
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _seed_ready_run(uow, ws)
+        proj = await _seed_ready_projection(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        with_act = await _seed_molecule(uow, ws, org, reg="CV-ACT", smiles="Fc1ccccc1")
+        no_act = await _seed_molecule(uow, ws, org, reg="CV-NONE", smiles="Clc1ccccc1")
+        await repo.write_assignments(run.id, [
+            RGroupAssignment(molecule_id=with_act, rgroups={"R1": "F"}),
+            RGroupAssignment(molecule_id=no_act, rgroups={"R1": "Cl"}),
+        ])
+        await SQLAlchemySarActivityProjectionRepository(uow).write_values(proj.id, [
+            ActivityScalar(molecule_id=with_act, scalar=0.7, unit="uM", qualifier=None,
+                           source="dose_response", snapshot={}),
+        ])
+        await uow.commit()
+
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        rows = await reader.fetch_rows(
+            run.id, workspace_id=ws, offset=0, limit=50, sort=[], projection_id=proj.id
+        )
+    by_reg = {r.registration_number: r for r in rows}
+    assert by_reg["CV-ACT"].activity == pytest.approx(0.7)
+    assert by_reg["CV-NONE"].activity is None  # sparse LEFT JOIN null
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_sorts_by_activity(uow):
+    from cellar.domain.sar_analysis.activity_projection_types import ActivityScalar
+    from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
+        SQLAlchemySarActivityProjectionRepository,
+    )
+
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _seed_ready_run(uow, ws)
+        proj = await _seed_ready_projection(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        values = []
+        for reg, scalar in (("CV-HI", 9.0), ("CV-LO", 0.2), ("CV-MID", 1.5)):
+            m = await _seed_molecule(uow, ws, org, reg=reg, smiles="Fc1ccccc1")
+            await repo.write_assignments(run.id, [RGroupAssignment(molecule_id=m, rgroups={"R1": "F"})])
+            values.append(ActivityScalar(molecule_id=m, scalar=scalar, unit="uM", qualifier=None,
+                                         source="dose_response", snapshot={}))
+        await SQLAlchemySarActivityProjectionRepository(uow).write_values(proj.id, values)
+        await uow.commit()
+
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        rows = await reader.fetch_rows(
+            run.id, workspace_id=ws, offset=0, limit=50,
+            sort=[DecompositionRowSort(col="activity", direction="asc")], projection_id=proj.id,
+        )
+    assert [r.registration_number for r in rows] == ["CV-LO", "CV-MID", "CV-HI"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_activity_is_none_without_projection(uow):
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _seed_ready_run(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        m = await _seed_molecule(uow, ws, org, reg="CV-1", smiles="Fc1ccccc1")
+        await repo.write_assignments(run.id, [RGroupAssignment(molecule_id=m, rgroups={"R1": "F"})])
+        await uow.commit()
+
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        rows = await reader.fetch_rows(run.id, workspace_id=ws, offset=0, limit=50, sort=[])
+    assert rows[0].activity is None  # no projection -> activity absent
