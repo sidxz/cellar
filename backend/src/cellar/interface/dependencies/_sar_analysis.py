@@ -6,13 +6,17 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from cellar.application.sar_analysis.activity_heatmap import FetchActivityHeatmap
+from cellar.application.sar_analysis.cancel_activity_projection import CancelActivityProjection
 from cellar.application.sar_analysis.cancel_decomposition_run import CancelDecompositionRun
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaffoldTreeJob
 from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
 from cellar.application.sar_analysis.decomposition_rows import FetchDecompositionRows
+from cellar.application.sar_analysis.get_activity_projection import GetActivityProjection
 from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
+from cellar.application.sar_analysis.start_activity_projection import StartActivityProjection
 from cellar.application.sar_analysis.start_decomposition_run import StartDecompositionRun
 from cellar.application.sar_analysis.start_scaffold_tree_job import StartScaffoldTreeJob
 from cellar.application.sar_analysis.start_umap_cluster_job import StartUmapClusterJob
@@ -20,18 +24,34 @@ from cellar.application.sar_analysis.start_umap_cluster_job import StartUmapClus
 from ._core import _get_use_case
 
 __all__ = [
+    "CancelActivityProjectionDep",
     "CancelDecompositionRunDep",
     "CancelScaffoldTreeJobDep",
     "CancelUmapClusterJobDep",
+    "FetchActivityHeatmapDep",
     "FetchDecompositionRowsDep",
+    "GetActivityProjectionDep",
     "GetDecompositionRunDep",
     "GetScaffoldTreeJobDep",
     "GetUmapClusterJobDep",
+    "StartActivityProjectionDep",
     "StartDecompositionRunDep",
     "StartScaffoldTreeJobDep",
     "StartUmapClusterJobDep",
 ]
 
+StartActivityProjectionDep = Annotated[
+    StartActivityProjection, Depends(_get_use_case(StartActivityProjection))
+]
+GetActivityProjectionDep = Annotated[
+    GetActivityProjection, Depends(_get_use_case(GetActivityProjection))
+]
+CancelActivityProjectionDep = Annotated[
+    CancelActivityProjection, Depends(_get_use_case(CancelActivityProjection))
+]
+FetchActivityHeatmapDep = Annotated[
+    FetchActivityHeatmap, Depends(_get_use_case(FetchActivityHeatmap))
+]
 StartScaffoldTreeJobDep = Annotated[
     StartScaffoldTreeJob, Depends(_get_use_case(StartScaffoldTreeJob))
 ]
