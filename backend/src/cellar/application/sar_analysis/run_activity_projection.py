@@ -84,7 +84,10 @@ class RunActivityProjection:
             try:
                 async with self.uow:
                     current = await self.repository.find_by_id(run_id, workspace_id=workspace_id)
-                    if current is not None and current.status == SarActivityProjectionStatus.RUNNING:
+                    if (
+                        current is not None
+                        and current.status == SarActivityProjectionStatus.RUNNING
+                    ):
                         failed = current.mark_failed(str(exc), datetime.now(UTC))
                         await self.repository.save(failed)
                         await self.uow.commit()

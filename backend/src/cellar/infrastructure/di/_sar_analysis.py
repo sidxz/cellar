@@ -30,49 +30,33 @@ import os
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from cellar.application.sar_analysis.activity_heatmap import FetchActivityHeatmap
 from cellar.application.sar_analysis.build_scaffold_network import BuildScaffoldNetwork
+from cellar.application.sar_analysis.cancel_activity_projection import CancelActivityProjection
 from cellar.application.sar_analysis.cancel_decomposition_run import CancelDecompositionRun
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaffoldTreeJob
 from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
 from cellar.application.sar_analysis.compute_umap_cluster import ComputeUmapCluster
 from cellar.application.sar_analysis.decomposition_members import DecompositionMemberStream
 from cellar.application.sar_analysis.decomposition_rows import FetchDecompositionRows
+from cellar.application.sar_analysis.get_activity_projection import GetActivityProjection
 from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
-from cellar.application.sar_analysis.activity_heatmap import FetchActivityHeatmap
-from cellar.application.sar_analysis.cancel_activity_projection import CancelActivityProjection
-from cellar.application.sar_analysis.get_activity_projection import GetActivityProjection
-from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
-from cellar.application.sar_analysis.start_activity_projection import (
-    SarActivityProjectionOrchestrator,
-    StartActivityProjection,
-)
 from cellar.application.sar_analysis.repositories import (
     RGroupDecompositionRunRepository,
     SarActivityProjectionRepository,
     ScaffoldTreeJobRepository,
     UmapJobRepository,
 )
-from cellar.application.screening.molecule_activity_service import MoleculeActivityService
-from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
-    SQLAlchemySarActivityProjectionRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
-    SQLAlchemyDoseResponseCurveRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
-    SQLAlchemyProtocolRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
-    SQLAlchemyReadoutDataRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
-    SQLAlchemyRunRepository,
-)
+from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
 from cellar.application.sar_analysis.run_decomposition import RunDecomposition
 from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
 from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
+from cellar.application.sar_analysis.start_activity_projection import (
+    SarActivityProjectionOrchestrator,
+    StartActivityProjection,
+)
 from cellar.application.sar_analysis.start_decomposition_run import (
     RGroupDecompositionOrchestrator,
     StartDecompositionRun,
@@ -85,6 +69,7 @@ from cellar.application.sar_analysis.start_umap_cluster_job import (
     StartUmapClusterJob,
     UmapClusterOrchestrator,
 )
+from cellar.application.screening.molecule_activity_service import MoleculeActivityService
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
@@ -100,11 +85,26 @@ from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.decomposition_row
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_run_repository import (  # noqa: E501
     SQLAlchemyRGroupDecompositionRunRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
+    SQLAlchemySarActivityProjectionRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.scaffold_tree_job_repository import (  # noqa: E501
     SQLAlchemyScaffoldTreeJobRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_repository import (
     SQLAlchemyUmapJobRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
+    SQLAlchemyDoseResponseCurveRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+    SQLAlchemyProtocolRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
+    SQLAlchemyReadoutDataRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
+    SQLAlchemyRunRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.butina_clusterer import ButinaClusterer

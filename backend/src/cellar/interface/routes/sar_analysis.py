@@ -37,7 +37,9 @@ from cellar.domain.sar_analysis.sar_activity_projection import (
     SarActivityProjection,
     SarActivityProjectionStatus,
 )
-from cellar.domain.screening_assay.run_scope import RunScope  # noqa: F401  (documents run_scopes wire)
+from cellar.domain.screening_assay.run_scope import (
+    RunScope,  # noqa: F401  (documents run_scopes wire)
+)
 from cellar.domain.shared.aggregation_types import QualifierHandling, SelectionRule
 from cellar.domain.shared.hit_criterion import InterceptKey
 from cellar.interface.dependencies import AuthDep
