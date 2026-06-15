@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
+from cellar.domain.sar_analysis.activity_projection_types import ActivityScalar
 from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
 from cellar.domain.sar_analysis.rgroup_types import RGroupAssignment
+from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
 from cellar.domain.sar_analysis.scaffold_tree_job import ScaffoldTreeJob
 from cellar.domain.sar_analysis.scaffold_tree_types import ScaffoldTreeResult
 from cellar.domain.sar_analysis.umap_job import UmapJob
@@ -79,3 +81,23 @@ class RGroupDecompositionRunRepository(Protocol):
     ) -> list[RGroupAssignment]: ...
 
     async def count_assignments(self, run_id: UUID, *, workspace_id: UUID) -> int: ...
+
+
+class SarActivityProjectionRepository(Protocol):
+    async def save(self, projection: SarActivityProjection) -> None: ...
+
+    async def find_by_id(
+        self, projection_id: UUID, *, workspace_id: UUID
+    ) -> SarActivityProjection | None: ...
+
+    async def find_cached(
+        self, *, membership_hash: str, channel_hash: str
+    ) -> SarActivityProjection | None:
+        """Latest READY projection for this (membership_hash, channel_hash), or
+        None. No TTL: valid until membership or channel changes (each changes a
+        hash). Value rows for the returned projection are already persisted."""
+        ...
+
+    async def write_values(self, projection_id: UUID, values: list[ActivityScalar]) -> None: ...
+
+    async def count_values(self, projection_id: UUID, *, workspace_id: UUID) -> int: ...
