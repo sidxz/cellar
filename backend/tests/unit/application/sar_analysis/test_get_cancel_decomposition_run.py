@@ -115,6 +115,7 @@ async def test_cancel_terminal_run_is_idempotent_no_op():
     out = await uc.execute(CancelDecompositionRunInput(run_id=ready.id, workspace_id=ws, now=_NOW))
     assert isinstance(out, Success)
     assert out.unwrap().status == RGroupDecompositionRunStatus.READY  # unchanged
+    assert orch.cancelled == []  # terminal cancel must not signal the orchestrator
 
 
 @pytest.mark.asyncio
