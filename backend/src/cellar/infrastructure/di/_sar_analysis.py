@@ -31,18 +31,27 @@ from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.sar_analysis.build_scaffold_network import BuildScaffoldNetwork
+from cellar.application.sar_analysis.cancel_decomposition_run import CancelDecompositionRun
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaffoldTreeJob
 from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
 from cellar.application.sar_analysis.compute_umap_cluster import ComputeUmapCluster
-from cellar.application.sar_analysis.decompose_rgroups import DecomposeRGroups
+from cellar.application.sar_analysis.decomposition_members import DecompositionMemberStream
+from cellar.application.sar_analysis.decomposition_rows import FetchDecompositionRows
+from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
 from cellar.application.sar_analysis.repositories import (
+    RGroupDecompositionRunRepository,
     ScaffoldTreeJobRepository,
     UmapJobRepository,
 )
+from cellar.application.sar_analysis.run_decomposition import RunDecomposition
 from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
 from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
+from cellar.application.sar_analysis.start_decomposition_run import (
+    RGroupDecompositionOrchestrator,
+    StartDecompositionRun,
+)
 from cellar.application.sar_analysis.start_scaffold_tree_job import (
     ScaffoldTreeOrchestrator,
     StartScaffoldTreeJob,
@@ -54,6 +63,15 @@ from cellar.application.sar_analysis.start_umap_cluster_job import (
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
+    SQLAlchemyCollectionRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.decomposition_row_reader import (
+    SQLAlchemyDecompositionRowReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_run_repository import (  # noqa: E501
+    SQLAlchemyRGroupDecompositionRunRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.scaffold_tree_job_repository import (  # noqa: E501
     SQLAlchemyScaffoldTreeJobRepository,
 )
@@ -63,8 +81,8 @@ from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_reposito
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.butina_clusterer import ButinaClusterer
 from cellar.infrastructure.rdkit.maxmin_picker import MaxMinPickerAdapter
-from cellar.infrastructure.rdkit.rgroup_decomposer import RGroupDecomposer
 from cellar.infrastructure.rdkit.scaffold_network_builder import ScaffoldNetworkBuilder
+from cellar.infrastructure.rdkit.streaming_rgroup_decomposer import StreamingRGroupDecomposer
 from cellar.infrastructure.rdkit.umap_embedder import UmapEmbedder
 from cellar.infrastructure.sar_analysis.morgan_fingerprint_loader import MorganFingerprintLoader
 
@@ -96,19 +114,87 @@ def register_sar_analysis(container: Container) -> None:
 
     container.define(BuildScaffoldNetwork, _build_scaffold_network)
 
-    # --- Pure RDKit wrapper, no deps → Singleton ---
-    container.define(RGroupDecomposer, Singleton(RGroupDecomposer))
+    # --- Streaming R-group decomposer (pure RDKit wrapper, no deps) → Singleton ---
+    container.define(StreamingRGroupDecomposer, Singleton(StreamingRGroupDecomposer))
 
-    # --- Use case: fresh UoW per resolve, shared by the use case and its repo ---
-    def _decompose_rgroups(c: Container) -> DecomposeRGroups:
+    # --- RGroupDecompositionRunRepository — per-resolve fresh UoW ---
+    def _rgroup_run_repo(c: Container) -> RGroupDecompositionRunRepository:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return DecomposeRGroups(
+        return SQLAlchemyRGroupDecompositionRunRepository(uow)  # type: ignore[return-value]
+
+    container.define(RGroupDecompositionRunRepository, _rgroup_run_repo)
+
+    # --- RunDecomposition — in-process runner the Temporal activity wraps. The
+    # member stream + repo share one UoW so streaming + persistence are one tx. ---
+    def _run_decomposition(c: Container) -> RunDecomposition:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        members = DecompositionMemberStream(
             molecule_fetcher=SQLAlchemyMoleculeRepository(uow),
-            decomposer=c[RGroupDecomposer],
+            collection_reader=SQLAlchemyCollectionRepository(uow),
+        )
+        return RunDecomposition(
+            members=members,
+            decomposer=c[StreamingRGroupDecomposer],
+            repository=SQLAlchemyRGroupDecompositionRunRepository(uow),
             uow=uow,
         )
 
-    container.define(DecomposeRGroups, _decompose_rgroups)
+    container.define(RunDecomposition, _run_decomposition)
+
+    # --- RGroupDecompositionOrchestrator — Null when TEMPORAL_DISABLED=1; live
+    # TemporalRGroupDecompositionOrchestrator bound by app.py's lifespan. ---
+    if os.environ.get("TEMPORAL_DISABLED") == "1":
+        from cellar.infrastructure.temporal.orchestrators.rgroup_decomposition import (
+            NullRGroupDecompositionOrchestrator,
+        )
+
+        def _null_rgroup_orchestrator(c: Container) -> NullRGroupDecompositionOrchestrator:
+            return NullRGroupDecompositionOrchestrator(c[RunDecomposition])
+
+        container.define(RGroupDecompositionOrchestrator, _null_rgroup_orchestrator)
+
+    # --- Decomposition use cases (each shares one UoW across its collaborators) ---
+    def _start_decomposition(c: Container) -> StartDecompositionRun:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        members = DecompositionMemberStream(
+            molecule_fetcher=SQLAlchemyMoleculeRepository(uow),
+            collection_reader=SQLAlchemyCollectionRepository(uow),
+        )
+        return StartDecompositionRun(
+            members=members,
+            decomposer=c[StreamingRGroupDecomposer],
+            repository=SQLAlchemyRGroupDecompositionRunRepository(uow),
+            orchestrator=c[RGroupDecompositionOrchestrator],
+            uow=uow,
+        )
+
+    def _get_decomposition(c: Container) -> GetDecompositionRun:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetDecompositionRun(
+            repository=SQLAlchemyRGroupDecompositionRunRepository(uow),
+            uow=uow,
+        )
+
+    def _cancel_decomposition(c: Container) -> CancelDecompositionRun:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CancelDecompositionRun(
+            repository=SQLAlchemyRGroupDecompositionRunRepository(uow),
+            orchestrator=c[RGroupDecompositionOrchestrator],
+            uow=uow,
+        )
+
+    def _fetch_decomposition_rows(c: Container) -> FetchDecompositionRows:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return FetchDecompositionRows(
+            repository=SQLAlchemyRGroupDecompositionRunRepository(uow),
+            reader=SQLAlchemyDecompositionRowReader(uow),
+            uow=uow,
+        )
+
+    container.define(StartDecompositionRun, _start_decomposition)
+    container.define(GetDecompositionRun, _get_decomposition)
+    container.define(CancelDecompositionRun, _cancel_decomposition)
+    container.define(FetchDecompositionRows, _fetch_decomposition_rows)
 
     # --- RunScaffoldTree ---
     # In-process runner the Temporal activity wraps. Worker pulls this once

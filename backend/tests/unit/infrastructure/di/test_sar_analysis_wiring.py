@@ -104,3 +104,25 @@ class TestSarAnalysisWiring:
         except Exception:
             return  # Expected — no Temporal client yet at container build.
         assert orch.__class__.__name__ != "NullScaffoldTreeOrchestrator"
+
+    def test_decomposition_use_cases_resolve_with_temporal_disabled(
+        self, test_settings: DatabaseSettings, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Start/Cancel depend on RGroupDecompositionOrchestrator; under
+        # TEMPORAL_DISABLED=1 _sar_analysis binds the Null one (mirrors the
+        # scaffold-tree pattern). RunDecomposition is what that Null wraps.
+        monkeypatch.setenv("TEMPORAL_DISABLED", "1")
+        from cellar.application.sar_analysis.cancel_decomposition_run import (
+            CancelDecompositionRun,
+        )
+        from cellar.application.sar_analysis.decomposition_rows import FetchDecompositionRows
+        from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
+        from cellar.application.sar_analysis.run_decomposition import RunDecomposition
+        from cellar.application.sar_analysis.start_decomposition_run import StartDecompositionRun
+
+        container = create_container(test_settings)
+        assert isinstance(container[RunDecomposition], RunDecomposition)
+        assert isinstance(container[StartDecompositionRun], StartDecompositionRun)
+        assert isinstance(container[GetDecompositionRun], GetDecompositionRun)
+        assert isinstance(container[CancelDecompositionRun], CancelDecompositionRun)
+        assert isinstance(container[FetchDecompositionRows], FetchDecompositionRows)

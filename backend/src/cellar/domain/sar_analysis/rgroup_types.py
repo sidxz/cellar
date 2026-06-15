@@ -2,7 +2,7 @@
 
 Serializable to JSON. No behavior — compute lives in
 ``infrastructure.rdkit.rgroup_decomposer`` and the use case in
-``application.sar_analysis.decompose_rgroups``.
+``application.sar_analysis.start_decomposition_run``.
 """
 
 from __future__ import annotations

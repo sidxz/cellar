@@ -6,22 +6,28 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from cellar.application.sar_analysis.cancel_decomposition_run import CancelDecompositionRun
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaffoldTreeJob
 from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
-from cellar.application.sar_analysis.decompose_rgroups import DecomposeRGroups
+from cellar.application.sar_analysis.decomposition_rows import FetchDecompositionRows
+from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
+from cellar.application.sar_analysis.start_decomposition_run import StartDecompositionRun
 from cellar.application.sar_analysis.start_scaffold_tree_job import StartScaffoldTreeJob
 from cellar.application.sar_analysis.start_umap_cluster_job import StartUmapClusterJob
 
 from ._core import _get_use_case
 
 __all__ = [
+    "CancelDecompositionRunDep",
     "CancelScaffoldTreeJobDep",
     "CancelUmapClusterJobDep",
-    "DecomposeRGroupsDep",
+    "FetchDecompositionRowsDep",
+    "GetDecompositionRunDep",
     "GetScaffoldTreeJobDep",
     "GetUmapClusterJobDep",
+    "StartDecompositionRunDep",
     "StartScaffoldTreeJobDep",
     "StartUmapClusterJobDep",
 ]
@@ -33,7 +39,18 @@ GetScaffoldTreeJobDep = Annotated[GetScaffoldTreeJob, Depends(_get_use_case(GetS
 CancelScaffoldTreeJobDep = Annotated[
     CancelScaffoldTreeJob, Depends(_get_use_case(CancelScaffoldTreeJob))
 ]
-DecomposeRGroupsDep = Annotated[DecomposeRGroups, Depends(_get_use_case(DecomposeRGroups))]
+StartDecompositionRunDep = Annotated[
+    StartDecompositionRun, Depends(_get_use_case(StartDecompositionRun))
+]
+GetDecompositionRunDep = Annotated[
+    GetDecompositionRun, Depends(_get_use_case(GetDecompositionRun))
+]
+CancelDecompositionRunDep = Annotated[
+    CancelDecompositionRun, Depends(_get_use_case(CancelDecompositionRun))
+]
+FetchDecompositionRowsDep = Annotated[
+    FetchDecompositionRows, Depends(_get_use_case(FetchDecompositionRows))
+]
 _get_start_umap_cluster_job = _get_use_case(StartUmapClusterJob)
 _get_get_umap_cluster_job = _get_use_case(GetUmapClusterJob)
 _get_cancel_umap_cluster_job = _get_use_case(CancelUmapClusterJob)
