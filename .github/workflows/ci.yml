@@ -95,4 +95,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: docker compose build backend frontend
+      - run: docker compose -f docker-compose.infra.yml -f docker-compose.yml build backend frontend
