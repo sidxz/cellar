@@ -1,0 +1,100 @@
+# Backing services for Cellar — the single source of truth for infra.
+# Combined at runtime with an app file:
+#   dev infra only:  docker compose -f docker-compose.infra.yml up -d
+#   build stack:     docker compose -f docker-compose.infra.yml -f docker-compose.yml up
+#   prod stack:      docker compose -f docker-compose.infra.yml -f docker-compose.prod.yml up -d
+services:
+  postgres:
+    image: informaticsmatters/rdkit-cartridge-debian:Release_2024_03_3
+    environment:
+      POSTGRES_USER: cellar
+      POSTGRES_PASSWORD: cellar
+      POSTGRES_DB: cellar
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cellar"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - temporal-pgdata:/var/lib/postgresql/data
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    depends_on:
+      temporal-db:
+        condition: service_started
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-db
+    ports:
+      - "7233:7233"
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    ports:
+      - "8080:8080"
+
+  infisical-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: infisical
+      POSTGRES_PASSWORD: infisical
+      POSTGRES_DB: infisical
+    volumes:
+      - infisical-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infisical"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  infisical:
+    image: infisical/infisical:latest
+    depends_on:
+      infisical-db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    environment:
+      DB_CONNECTION_URI: postgres://infisical:infisical@infisical-db:5432/infisical
+      REDIS_URL: redis://valkey:6379
+      ENCRYPTION_KEY: ${INFISICAL_ENCRYPTION_KEY:-6f2b5e3c8a1d4f7e9b0c2d5a8e3f1b4c}
+      JWT_SIGNUP_SECRET: ${INFISICAL_JWT_SIGNUP:-dev-signup-secret-change-in-prod}
+      JWT_AUTH_SECRET: ${INFISICAL_JWT_AUTH:-dev-auth-secret-change-in-prod}
+      JWT_REFRESH_SECRET: ${INFISICAL_JWT_REFRESH:-dev-refresh-secret-change-in-prod}
+      SITE_URL: http://localhost:8089
+      AUTH_SECRET: ${INFISICAL_AUTH_SECRET:-dev-auth-secret-32-chars-minimum!}
+    ports:
+      - "8089:8080"
+
+volumes:
+  pgdata:
+  temporal-pgdata:
+  infisical-pgdata:
