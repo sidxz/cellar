@@ -25,6 +25,12 @@
 **Commit convention:** Every commit uses explicit pathspec (`git commit ... -- <paths>`) because the working tree may carry unrelated staged work, and ends with the trailer:
 `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
 
+**Amendment (2026-06-15, post-implementation security review):** `SarActivityProjectionRepository.find_cached`
+takes a **`workspace_id`** keyword and filters on it (defense-in-depth — every sibling lookup is
+workspace-scoped; the hash inputs already are, but the cache key is filtered explicitly). This applies to the
+Protocol (Task 6), the SQLAlchemy impl + its test (Task 8), and the `StartActivityProjection` call site + its
+fake (Task 10) — all carry `workspace_id=...`. Canonical change: commit `ae064e0a`.
+
 ---
 
 ## File Structure
