@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { useDecompositionRun } from "./use-decomposition-run";
@@ -72,5 +72,72 @@ describe("useDecompositionRun", () => {
       },
     );
     expect(startFn).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a cancelled poll via isCancelled, not error", async () => {
+    const startFn = vi.fn().mockResolvedValue({ ...READY, status: "running" });
+    const pollFn = vi.fn().mockResolvedValue({ ...READY, status: "cancelled" });
+    const { result } = renderHook(
+      () =>
+        useDecompositionRun({
+          collectionId: "c1",
+          coreSmiles: "c1ccccc1",
+          startFn,
+          pollFn,
+          pollIntervalMs: 5,
+        }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(result.current.isCancelled).toBe(true));
+    expect(result.current.error).toBeNull();
+    expect(result.current.isPolling).toBe(false);
+  });
+
+  it("cancel() calls cancelFn and flips isCancelled optimistically", async () => {
+    const startFn = vi.fn().mockResolvedValue({ ...READY, status: "running" });
+    const pollFn = vi.fn().mockResolvedValue({ ...READY, status: "running" });
+    const cancelFn = vi.fn().mockResolvedValue({ ...READY, status: "cancelled" });
+    const { result } = renderHook(
+      () =>
+        useDecompositionRun({
+          collectionId: "c1",
+          coreSmiles: "c1ccccc1",
+          startFn,
+          pollFn,
+          cancelFn,
+          pollIntervalMs: 5,
+        }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(result.current.runId).toBe("run-1"));
+    act(() => result.current.cancel());
+    expect(cancelFn).toHaveBeenCalledWith("run-1");
+    await waitFor(() => expect(result.current.isCancelled).toBe(true));
+  });
+
+  it("runAgain() re-starts (a fresh POST) and clears the cancelled flag", async () => {
+    const startFn = vi.fn().mockResolvedValue({ ...READY, status: "running" });
+    const pollFn = vi.fn().mockResolvedValue({ ...READY, status: "cancelled" });
+    const cancelFn = vi.fn().mockResolvedValue({ ...READY, status: "cancelled" });
+    const { result } = renderHook(
+      () =>
+        useDecompositionRun({
+          collectionId: "c1",
+          coreSmiles: "c1ccccc1",
+          startFn,
+          pollFn,
+          cancelFn,
+          pollIntervalMs: 5,
+        }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(result.current.isCancelled).toBe(true));
+    act(() => result.current.runAgain());
+    // No flicker: the nonce bump re-keys both the start and poll queries, so
+    // startRun/runId/polledData reset atomically — isCancelled is false
+    // immediately, not only after the new start resolves.
+    expect(result.current.isCancelled).toBe(false);
+    await waitFor(() => expect(startFn).toHaveBeenCalledTimes(2));
+    expect(result.current.isCancelled).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { useJobPoll } from "@/shared/hooks/use-job-poll";
 import type { DecompositionRunResponse } from "@/shared/lib/api/model";
@@ -13,6 +13,7 @@ export type UseDecompositionRunParams = {
   coreSmiles: string | null;
   startFn?: (input: StartInput) => Promise<DecompositionRunResponse>;
   pollFn?: (runId: string) => Promise<DecompositionRunResponse>;
+  cancelFn?: (runId: string) => Promise<DecompositionRunResponse>;
   pollIntervalMs?: number;
   enabled?: boolean;
 };
@@ -24,7 +25,10 @@ export type UseDecompositionRunReturn = {
   status: string | null;
   isStarting: boolean;
   isPolling: boolean;
+  isCancelled: boolean;
   error: Error | null;
+  cancel: () => void;
+  runAgain: () => void;
 };
 
 const DEFAULT_POLL_MS = 1500;
@@ -40,12 +44,16 @@ export function useDecompositionRun(params: UseDecompositionRunParams): UseDecom
     coreSmiles,
     startFn = defaultStartFn,
     pollFn = defaultPollFn,
+    cancelFn = defaultCancelFn,
     pollIntervalMs = DEFAULT_POLL_MS,
     enabled = true,
   } = params;
 
+  const [runNonce, setRunNonce] = useState(0);
+  const [cancelledRunId, setCancelledRunId] = useState<string | null>(null);
+
   const sourceKey = collectionId ? `coll:${collectionId}` : `ids:${sortedKey(moleculeIds ?? [])}`;
-  const key = `${sourceKey}|core:${coreSmiles ?? ""}`;
+  const key = `${sourceKey}|core:${coreSmiles ?? ""}|n:${runNonce}`;
   const queryEnabled =
     enabled && !!coreSmiles && (collectionId !== undefined || (moleculeIds ?? []).length > 0);
 
@@ -67,19 +75,16 @@ export function useDecompositionRun(params: UseDecompositionRunParams): UseDecom
     [startRun],
   );
 
-  const { result: polled, error: pollError } = useJobPoll<
-    DecompositionRunResponse,
-    DecompositionRunResponse
-  >({
+  const {
+    result: polled,
+    error: pollError,
+    data: polledData,
+  } = useJobPoll<DecompositionRunResponse, DecompositionRunResponse>({
     job,
     pollFn,
     getStatus: (j) => j.status,
     getResult: (j) => (j.status === "ready" ? j : null),
-    getError: (j) => {
-      if (j.status === "failed") return j.error_message ?? "decomposition failed";
-      if (j.status === "cancelled") return "decomposition cancelled";
-      return null;
-    },
+    getError: (j) => (j.status === "failed" ? (j.error_message ?? "decomposition failed") : null),
     pollIntervalMs,
     queryKey: "decomposition-run-poll",
   });
@@ -89,8 +94,25 @@ export function useDecompositionRun(params: UseDecompositionRunParams): UseDecom
   const ready = polled ?? (startRun?.status === "ready" ? startRun : null);
   const current = ready ?? startRun;
 
+  const runId = startRun?.run_id ?? null;
+  const serverCancelled = polledData?.status === "cancelled" || startRun?.status === "cancelled";
+  const isCancelled = serverCancelled || (cancelledRunId != null && cancelledRunId === runId);
+
+  const cancel = useCallback(() => {
+    if (!runId) return;
+    setCancelledRunId(runId);
+    // Optimistic: the flag drives the UI now; the poll confirms the cancel, and
+    // a failed cancel POST resolves itself on the next poll — nothing to surface.
+    void cancelFn(runId).catch(() => {});
+  }, [runId, cancelFn]);
+
+  const runAgain = useCallback(() => {
+    setCancelledRunId(null);
+    setRunNonce((n) => n + 1);
+  }, []);
+
   return {
-    runId: startRun?.run_id ?? null,
+    runId,
     labels: current?.rgroup_labels ?? [],
     counts: current
       ? {
@@ -101,8 +123,11 @@ export function useDecompositionRun(params: UseDecompositionRunParams): UseDecom
       : null,
     status: current?.status ?? null,
     isStarting: start.isPending && queryEnabled,
-    isPolling: job != null && ready === null && pollError === null,
+    isPolling: job != null && ready === null && pollError === null && !isCancelled,
+    isCancelled,
     error: (pollError ? new Error(pollError) : null) ?? (start.error as Error | null) ?? null,
+    cancel,
+    runAgain,
   };
 }
 
@@ -118,6 +143,15 @@ async function defaultPollFn(runId: string): Promise<DecompositionRunResponse> {
     "@/shared/lib/api/sar-analysis/sar-analysis"
   );
   return getDecompositionRunApiV1SarDecompositionJobsRunIdGet(
+    runId,
+  ) as unknown as DecompositionRunResponse;
+}
+
+async function defaultCancelFn(runId: string): Promise<DecompositionRunResponse> {
+  const { cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost } = await import(
+    "@/shared/lib/api/sar-analysis/sar-analysis"
+  );
+  return cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost(
     runId,
   ) as unknown as DecompositionRunResponse;
 }
