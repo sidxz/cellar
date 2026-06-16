@@ -139,7 +139,8 @@ export function SarView(props: SarViewProps) {
       <SaveSelectionDialog
         open={saveRows != null}
         onOpenChange={(o) => !o && setSaveRows(null)}
-        onSave={async ({ name, projectId, moleculeIds: selectedIds }) => {
+        onSave={async ({ name, projectId }) => {
+          const selectedIds = (saveRows ?? []).map((r) => r.id);
           const created = await new Promise<{ id: string }>((resolve, reject) =>
             createCollection.mutate(
               { name, project_id: projectId },
@@ -159,11 +160,8 @@ export function SarView(props: SarViewProps) {
             showError("Collection created, but adding compounds failed. Please retry.");
           }
         }}
-        selectedMolecules={(saveRows ?? []).map((r) => ({
-          id: r.id,
-          reg_number: r.label,
-          name: r.label,
-        }))}
+        count={(saveRows ?? []).length}
+        preview={(saveRows ?? []).map((r) => ({ id: r.id, reg_number: r.label, name: r.label }))}
         defaultName={`SAR selection from ${props.sourceLabel}`}
         projects={props.projects}
         defaultProjectId={props.defaultProjectId}

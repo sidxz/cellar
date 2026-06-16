@@ -34,12 +34,9 @@ interface ProjectOption {
 interface SaveSelectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (args: {
-    name: string;
-    projectId: string | null;
-    moleculeIds: string[];
-  }) => Promise<void>;
-  selectedMolecules: MoleculeLite[];
+  onSave: (args: { name: string; projectId: string | null }) => Promise<void>;
+  count: number;
+  preview?: MoleculeLite[];
   defaultName: string;
   projects: ProjectOption[];
   defaultProjectId: string | null;
@@ -49,7 +46,8 @@ export function SaveSelectionDialog({
   open,
   onOpenChange,
   onSave,
-  selectedMolecules,
+  count,
+  preview,
   defaultName,
   projects,
   defaultProjectId,
@@ -69,7 +67,7 @@ export function SaveSelectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Save {selectedMolecules.length} compounds as a new collection</DialogTitle>
+          <DialogTitle>Save {count} compounds as a new collection</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -96,16 +94,18 @@ export function SaveSelectionDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="max-h-72 overflow-auto rounded border p-2">
-            <ul className="grid grid-cols-3 gap-2 text-xs">
-              {selectedMolecules.map((m) => (
-                <li key={m.id} className="rounded border px-2 py-1">
-                  <div className="font-mono">{m.reg_number ?? shortId(m.id)}</div>
-                  {m.name && <div className="text-muted-foreground truncate">{m.name}</div>}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {preview && preview.length > 0 && (
+            <div className="max-h-72 overflow-auto rounded border p-2">
+              <ul className="grid grid-cols-3 gap-2 text-xs">
+                {preview.map((m) => (
+                  <li key={m.id} className="rounded border px-2 py-1">
+                    <div className="font-mono">{m.reg_number ?? shortId(m.id)}</div>
+                    {m.name && <div className="text-muted-foreground truncate">{m.name}</div>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -113,15 +113,11 @@ export function SaveSelectionDialog({
             Cancel
           </Button>
           <Button
-            disabled={saving || !name.trim() || selectedMolecules.length === 0}
+            disabled={saving || !name.trim() || count === 0}
             onClick={async () => {
               setSaving(true);
               try {
-                await onSave({
-                  name: name.trim(),
-                  projectId,
-                  moleculeIds: selectedMolecules.map((m) => m.id),
-                });
+                await onSave({ name: name.trim(), projectId });
               } finally {
                 setSaving(false);
               }

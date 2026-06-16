@@ -358,11 +358,20 @@ export function ClusterMapView({
       <SaveSelectionDialog
         open={saveOpen}
         onOpenChange={setSaveOpen}
-        onSave={async (args) => {
-          await onSaveCollection(args);
+        onSave={async ({ name, projectId }) => {
+          await onSaveCollection({
+            name,
+            projectId,
+            moleculeIds: basketMolecules.map((m) => m.id),
+          });
           setSaveOpen(false);
         }}
-        selectedMolecules={basketMolecules}
+        count={basketMolecules.length}
+        preview={basketMolecules.map((m) => ({
+          id: m.id,
+          reg_number: (m as { reg_number?: string | null }).reg_number ?? undefined,
+          name: (m as { name?: string | null }).name ?? undefined,
+        }))}
         defaultName={defaultName}
         projects={projects}
         defaultProjectId={defaultProjectId}
