@@ -60,26 +60,64 @@ class MoleculeResolver:
         workspace_id: uuid.UUID,
         refs: list[MoleculeReference],
     ) -> tuple[list[ResolvedMolecule], list[UnresolvedMolecule]]:
-        """Resolve each reference and return (resolved, unresolved) lists."""
+        """Resolve each reference and return (resolved, unresolved) lists.
+
+        UUID refs are resolved in a single bulk ``find_by_ids`` (avoids an N+1 of
+        per-ref ``find_by_id_in_workspace`` aggregate loads); non-UUID refs keep the
+        per-ref path. Output order matches input ``refs``; duplicates are preserved.
+        """
         resolved: list[ResolvedMolecule] = []
         unresolved: list[UnresolvedMolecule] = []
 
-        for ref in refs:
-            result = await self._resolve_one(workspace_id, ref)
-            if isinstance(result, ResolvedMolecule):
-                resolved.append(result)
+        # Pass 1: parse UUID-type refs; collect valid ids for one bulk fetch.
+        # parsed_ids[i] is the parsed UUID, or None if ref i is an unparseable
+        # UUID string (recorded as "invalid" in pass 2 without a DB hit).
+        parsed_ids: dict[int, uuid.UUID | None] = {}
+        valid_ids: list[uuid.UUID] = []
+        for i, ref in enumerate(refs):
+            if ref.ref_type == RefType.UUID:
+                try:
+                    pid = uuid.UUID(ref.value)
+                except ValueError:
+                    parsed_ids[i] = None
+                else:
+                    parsed_ids[i] = pid
+                    valid_ids.append(pid)
+
+        by_id: dict[uuid.UUID, object] = {}
+        if valid_ids:
+            mols = await self._molecule_repo.find_by_ids(workspace_id, valid_ids)
+            by_id = {m.id: m for m in mols}
+
+        # Pass 2: emit outcomes in input order.
+        for i, ref in enumerate(refs):
+            if ref.ref_type == RefType.UUID:
+                pid = parsed_ids[i]
+                if pid is None:
+                    unresolved.append(UnresolvedMolecule(ref=ref, reason="invalid"))
+                    continue
+                mol = by_id.get(pid)
+                if mol is None:
+                    unresolved.append(UnresolvedMolecule(ref=ref, reason="not_found"))
+                elif mol.is_tombstone:
+                    unresolved.append(UnresolvedMolecule(ref=ref, reason="tombstone"))
+                else:
+                    resolved.append(ResolvedMolecule(ref=ref, molecule_id=mol.id))
             else:
-                unresolved.append(result)
+                result = await self._resolve_one(workspace_id, ref)
+                if isinstance(result, ResolvedMolecule):
+                    resolved.append(result)
+                else:
+                    unresolved.append(result)
 
         return resolved, unresolved
 
     async def _resolve_one(
         self, workspace_id: uuid.UUID, ref: MoleculeReference
     ) -> ResolvedMolecule | UnresolvedMolecule:
-        """Dispatch to the appropriate resolver based on ref_type."""
-        if ref.ref_type == RefType.UUID:
-            return await self._resolve_uuid(workspace_id, ref)
-        elif ref.ref_type == RefType.REGISTRATION_NUMBER:
+        """Dispatch to the appropriate resolver based on ref_type (non-UUID only;
+        UUID refs are batched in ``resolve``)."""
+        if ref.ref_type == RefType.REGISTRATION_NUMBER:
             return await self._resolve_registration_number(workspace_id, ref)
         elif ref.ref_type == RefType.EXTERNAL_ID:
             return await self._resolve_external_id(workspace_id, ref)
@@ -91,21 +129,6 @@ class MoleculeResolver:
             return await self._resolve_name(workspace_id, ref)
         else:
             return UnresolvedMolecule(ref=ref, reason="invalid")
-
-    async def _resolve_uuid(
-        self, workspace_id: uuid.UUID, ref: MoleculeReference
-    ) -> ResolvedMolecule | UnresolvedMolecule:
-        try:
-            mol_id = uuid.UUID(ref.value)
-        except ValueError:
-            return UnresolvedMolecule(ref=ref, reason="invalid")
-
-        mol = await self._molecule_repo.find_by_id_in_workspace(workspace_id, mol_id)
-        if mol is None:
-            return UnresolvedMolecule(ref=ref, reason="not_found")
-        if mol.is_tombstone:
-            return UnresolvedMolecule(ref=ref, reason="tombstone")
-        return ResolvedMolecule(ref=ref, molecule_id=mol.id)
 
     async def _resolve_registration_number(
         self, workspace_id: uuid.UUID, ref: MoleculeReference
