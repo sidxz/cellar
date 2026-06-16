@@ -282,3 +282,83 @@ async def test_fetch_rows_activity_is_none_without_projection(uow):
         reader = SQLAlchemyDecompositionRowReader(uow)
         rows = await reader.fetch_rows(run.id, workspace_id=ws, offset=0, limit=50, sort=[])
     assert rows[0].activity is None  # no projection -> activity absent
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_numeric_filter_on_physchem(uow):
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _seed_ready_run(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        light = await _seed_molecule(uow, ws, org, reg="CV-LIGHT", smiles="C", mw=100.0)
+        heavy = await _seed_molecule(uow, ws, org, reg="CV-HEAVY", smiles="CC", mw=400.0)
+        await repo.write_assignments(run.id, [
+            RGroupAssignment(molecule_id=light, rgroups={"R1": "F"}),
+            RGroupAssignment(molecule_id=heavy, rgroups={"R1": "Cl"}),
+        ])
+        await uow.commit()
+    flt = {"molecular_weight": {"kind": "number", "op": "gte", "value": 300}}
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        rows = await reader.fetch_rows(run.id, workspace_id=ws, offset=0, limit=50, sort=[], filter=flt)
+        total = await reader.count_rows(run.id, workspace_id=ws, filter=flt)
+    assert [r.registration_number for r in rows] == ["CV-HEAVY"]
+    assert total == 1  # filtered count
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_text_filter_on_rgroup(uow):
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _seed_ready_run(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        for reg, r1 in (("CV-1", "Cl"), ("CV-2", "Br"), ("CV-3", "F")):
+            m = await _seed_molecule(uow, ws, org, reg=reg, smiles="Fc1ccccc1")
+            await repo.write_assignments(run.id, [RGroupAssignment(molecule_id=m, rgroups={"R1": r1})])
+        await uow.commit()
+    flt = {"R1": {"kind": "text", "op": "eq", "value": "Br"}}
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        rows = await reader.fetch_rows(run.id, workspace_id=ws, offset=0, limit=50, sort=[], filter=flt)
+    assert [r.rgroups["R1"] for r in rows] == ["Br"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_text_contains_on_registration(uow):
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _seed_ready_run(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        a = await _seed_molecule(uow, ws, org, reg="ABC-1", smiles="Fc1ccccc1")
+        b = await _seed_molecule(uow, ws, org, reg="XYZ-2", smiles="Clc1ccccc1")
+        await repo.write_assignments(run.id, [
+            RGroupAssignment(molecule_id=a, rgroups={"R1": "F"}),
+            RGroupAssignment(molecule_id=b, rgroups={"R1": "Cl"}),
+        ])
+        await uow.commit()
+    flt = {"registration_number": {"kind": "text", "op": "contains", "value": "abc"}}  # case-insensitive
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        rows = await reader.fetch_rows(run.id, workspace_id=ws, offset=0, limit=50, sort=[], filter=flt)
+    assert [r.registration_number for r in rows] == ["ABC-1"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_unknown_filter_clause_is_ignored(uow):
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _seed_ready_run(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        m = await _seed_molecule(uow, ws, org, reg="CV-1", smiles="Fc1ccccc1")
+        await repo.write_assignments(run.id, [RGroupAssignment(molecule_id=m, rgroups={"R1": "F"})])
+        await uow.commit()
+    flt = {"bogus_col": {"kind": "number", "op": "gt", "value": 1}, "R1": {"kind": "text", "op": "weird", "value": "F"}}
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        rows = await reader.fetch_rows(run.id, workspace_id=ws, offset=0, limit=50, sort=[], filter=flt)
+        total = await reader.count_rows(run.id, workspace_id=ws, filter=flt)
+    assert len(rows) == 1 and total == 1  # unknown col + unknown op both skipped (lenient)

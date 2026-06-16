@@ -9,7 +9,7 @@ Part 2 (activity projection), so it is not part of this contract yet.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from returns.result import Failure, Result, Success
@@ -51,9 +51,17 @@ class DecompositionRowReader(Protocol):
         limit: int,
         sort: list[DecompositionRowSort],
         projection_id: UUID | None = None,
+        filter: dict[str, Any] | None = None,
     ) -> list[DecompositionRow]: ...
 
-    async def count_rows(self, run_id: UUID, *, workspace_id: UUID) -> int: ...
+    async def count_rows(
+        self,
+        run_id: UUID,
+        *,
+        workspace_id: UUID,
+        projection_id: UUID | None = None,
+        filter: dict[str, Any] | None = None,
+    ) -> int: ...
 
 
 @dataclass(frozen=True)
@@ -64,6 +72,7 @@ class FetchDecompositionRowsInput:
     limit: int
     sort: list[DecompositionRowSort]
     projection_id: UUID | None = None
+    filter: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -111,8 +120,12 @@ class FetchDecompositionRows:
                 limit=payload.limit,
                 sort=payload.sort,
                 projection_id=payload.projection_id,
+                filter=payload.filter,
             )
             total = await self._reader.count_rows(
-                payload.run_id, workspace_id=payload.workspace_id
+                payload.run_id,
+                workspace_id=payload.workspace_id,
+                projection_id=payload.projection_id,
+                filter=payload.filter,
             )
         return Success(FetchDecompositionRowsOutput(rows=rows, total=total))

@@ -49,6 +49,89 @@ def _sort_column(col: str):
     return None
 
 
+_TEXT_FILTER_COLS: dict[str, Any] = {
+    "registration_number": MoleculeModel.registration_number,
+    "name": MoleculeModel.name,
+}
+_NUMERIC_FILTER_COLS: dict[str, Any] = {
+    "molecular_weight": MoleculeModel.molecular_weight,
+    "logp": MoleculeModel.logp,
+    "tpsa": MoleculeModel.tpsa,
+}
+
+
+def _filter_column(col: str, *, projection_id: UUID | None):
+    """Resolve a filter key to a column expression, or None if unknown / N/A."""
+    if col in _NUMERIC_FILTER_COLS:
+        return _NUMERIC_FILTER_COLS[col]
+    if col in _TEXT_FILTER_COLS:
+        return _TEXT_FILTER_COLS[col]
+    if col == "activity":
+        return SarActivityValueModel.scalar if projection_id is not None else None
+    if _RGROUP_LABEL.match(col):
+        return RGroupAssignmentModel.rgroups[col].as_string()
+    return None
+
+
+def _number_condition(column, op: str, value, value2):
+    if op == "eq":
+        return column == value
+    if op == "neq":
+        return column != value
+    if op == "gt":
+        return column > value
+    if op == "gte":
+        return column >= value
+    if op == "lt":
+        return column < value
+    if op == "lte":
+        return column <= value
+    if op == "between" and value2 is not None:
+        return column.between(value, value2)
+    return None
+
+
+def _text_condition(column, op: str, value: str):
+    if op == "eq":
+        return column == value
+    if op == "neq":
+        return column != value
+    if op == "contains":
+        return column.ilike(f"%{value}%")
+    if op == "startsWith":
+        return column.ilike(f"{value}%")
+    if op == "endsWith":
+        return column.ilike(f"%{value}")
+    return None
+
+
+def _apply_filter(stmt, filter: dict[str, Any] | None, *, projection_id: UUID | None):
+    """Apply each recognized filter clause as a WHERE condition; skip unknowns
+    (lenient, like the sort handling). Numeric clauses target physchem columns or
+    the joined activity scalar; text clauses target reg#/name (ILIKE) or
+    ``rgroups->>'Rn'``."""
+    if not filter:
+        return stmt
+    for col, clause in filter.items():
+        if not isinstance(clause, dict):
+            continue
+        column = _filter_column(col, projection_id=projection_id)
+        if column is None:
+            continue
+        kind = clause.get("kind")
+        op = clause.get("op")
+        value = clause.get("value")
+        if kind == "number" and isinstance(value, (int, float)):
+            cond = _number_condition(column, op, value, clause.get("value2"))
+        elif kind == "text" and isinstance(value, str):
+            cond = _text_condition(column, op, value)
+        else:
+            cond = None
+        if cond is not None:
+            stmt = stmt.where(cond)
+    return stmt
+
+
 class SQLAlchemyDecompositionRowReader:
     def __init__(self, uow: AsyncUnitOfWork) -> None:
         self._uow = uow
@@ -68,6 +151,15 @@ class SQLAlchemyDecompositionRowReader:
             )
         )
 
+    def _activity_join(self, stmt, projection_id: UUID | None):
+        if projection_id is None:
+            return stmt
+        return stmt.outerjoin(
+            SarActivityValueModel,
+            (SarActivityValueModel.projection_id == projection_id)
+            & (SarActivityValueModel.molecule_id == RGroupAssignmentModel.molecule_id),
+        )
+
     async def fetch_rows(
         self,
         run_id: UUID,
@@ -77,6 +169,7 @@ class SQLAlchemyDecompositionRowReader:
         limit: int,
         sort: list[DecompositionRowSort],
         projection_id: UUID | None = None,
+        filter: dict[str, Any] | None = None,
     ) -> list[DecompositionRow]:
         # Activity is a LEFT JOIN to the projection's sparse values; absent ⇒
         # null (uncolored / unsortable for that row), exactly like the client did.
@@ -97,12 +190,8 @@ class SQLAlchemyDecompositionRowReader:
             run_id,
             workspace_id,
         )
-        if projection_id is not None:
-            stmt = stmt.outerjoin(
-                SarActivityValueModel,
-                (SarActivityValueModel.projection_id == projection_id)
-                & (SarActivityValueModel.molecule_id == RGroupAssignmentModel.molecule_id),
-            )
+        stmt = self._activity_join(stmt, projection_id)
+        stmt = _apply_filter(stmt, filter, projection_id=projection_id)
 
         order_by = []
         for spec in sort:
@@ -133,8 +222,17 @@ class SQLAlchemyDecompositionRowReader:
             for row in result.all()
         ]
 
-    async def count_rows(self, run_id: UUID, *, workspace_id: UUID) -> int:
+    async def count_rows(
+        self,
+        run_id: UUID,
+        *,
+        workspace_id: UUID,
+        projection_id: UUID | None = None,
+        filter: dict[str, Any] | None = None,
+    ) -> int:
         stmt = self._scoped_join(
             select(func.count()).select_from(RGroupAssignmentModel), run_id, workspace_id
         )
+        stmt = self._activity_join(stmt, projection_id)
+        stmt = _apply_filter(stmt, filter, projection_id=projection_id)
         return int((await self._uow.session.execute(stmt)).scalar_one())
