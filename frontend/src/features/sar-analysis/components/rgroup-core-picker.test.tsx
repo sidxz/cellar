@@ -158,20 +158,6 @@ describe("RGroupCorePicker", () => {
     expect(screen.getByRole("button", { name: /Draw core/i })).toBeInTheDocument();
   });
 
-  it("shows the matched/unmatched advisory line when counts are provided", () => {
-    render(
-      <RGroupCorePicker
-        moleculeIds={["a", "b", "c", "d"]}
-        coreSmiles={QUINAZOLINE}
-        onCoreChange={vi.fn()}
-        matchedCount={3}
-        totalCount={4}
-      />,
-    );
-    expect(screen.getByText(/3 of 4 loaded compounds match this core/)).toBeInTheDocument();
-    expect(screen.getByText(/not dropped/)).toBeInTheDocument();
-  });
-
   it("opens the editor and emits the drawn core via onApply", () => {
     const onCoreChange = vi.fn();
     render(

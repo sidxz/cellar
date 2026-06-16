@@ -77,8 +77,6 @@ export function SarView(props: SarViewProps) {
         moleculeIds={moleculeIds}
         coreSmiles={core}
         onCoreChange={setCore}
-        matchedCount={run.counts?.matched}
-        totalCount={run.counts?.total}
       />
 
       {(run.isStarting || run.isPolling) && (

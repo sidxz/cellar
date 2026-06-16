@@ -22,9 +22,6 @@ export interface RGroupCorePickerProps {
   /** Current core. `null` triggers the on-mount auto-suggest. */
   coreSmiles: string | null;
   onCoreChange: (coreSmiles: string) => void;
-  /** When both provided, renders the "N of M match this core" advisory line. */
-  matchedCount?: number;
-  totalCount?: number;
 }
 
 /** Max candidate chips shown before the "+N more" expander. */
@@ -50,8 +47,6 @@ export function RGroupCorePicker({
   moleculeIds,
   coreSmiles,
   onCoreChange,
-  matchedCount,
-  totalCount,
 }: RGroupCorePickerProps) {
   const { tree, isStarting, isPolling, error } = useScaffoldTree({ collectionId, moleculeIds });
   const [editOpen, setEditOpen] = useState(false);
@@ -98,8 +93,6 @@ export function RGroupCorePicker({
   if (error) {
     return <p className="text-xs text-destructive">Could not load scaffold candidates.</p>;
   }
-
-  const showMatchLine = matchedCount != null && totalCount != null;
 
   return (
     <div className="flex flex-col gap-2">
@@ -176,13 +169,6 @@ export function RGroupCorePicker({
             <span className="font-medium">Draw core</span> to decompose against a core you choose.
           </p>
         </div>
-      )}
-
-      {showMatchLine && (
-        <p className="text-xs text-amber-700">
-          {matchedCount} of {totalCount} loaded compounds match this core
-          {matchedCount < totalCount ? " · others shown separately, not dropped" : ""}
-        </p>
       )}
 
       <StructureEditorDialog
