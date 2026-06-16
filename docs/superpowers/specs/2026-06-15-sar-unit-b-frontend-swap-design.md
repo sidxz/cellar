@@ -6,6 +6,13 @@ endpoints below exist, are tested, and are CI-clean. This unit rewires the SAR w
 **Parent design.** `docs/superpowers/specs/2026-06-11-sar-full-collection-coverage-design.md` §5 (frontend rework) + §8.3
 (the AG-Grid `filterModel` → `/rows` `filter` mapping, which this unit designs **and builds**).
 
+**Amendment (2026-06-15, surfaced while writing the plan).** The table keeps its inline **plot column + potency
+shading + row-click curve-expand** (§5 "kept verbatim"), which under server pagination need per-row data `/rows` didn't
+return. So `/rows` is extended with **`activity_snapshot`** (per row — the stored `ActivityValue` wire shape) +
+**`activity_reference`** (response-level min scalar over the filtered set, so the ramp anchors consistently across pages).
+This is the same shape the `/search` grid already returns (`activity_data`), so it's a precedented, low-risk extension —
+implemented in plan Task 2. Canonical plan: `docs/superpowers/plans/2026-06-15-sar-unit-b-frontend-swap.md`.
+
 ---
 
 ## 1. Why / the headline win
