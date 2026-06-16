@@ -16,13 +16,15 @@ describe("colIdToBackendKey", () => {
 describe("agFilterModelToParam", () => {
   it("maps a text 'contains' filter", () => {
     const out = agFilterModelToParam({
-      "registration_number": { filterType: "text", type: "contains", filter: "CV" },
+      registration_number: { filterType: "text", type: "contains", filter: "CV" },
     });
     expect(out).toEqual({ registration_number: { kind: "text", op: "contains", value: "CV" } });
   });
 
   it("maps a number 'greaterThan' filter on physchem", () => {
-    const out = agFilterModelToParam({ mw: { filterType: "number", type: "greaterThan", filter: 200 } });
+    const out = agFilterModelToParam({
+      mw: { filterType: "number", type: "greaterThan", filter: 200 },
+    });
     expect(out).toEqual({ molecular_weight: { kind: "number", op: "gt", value: 200 } });
   });
 
@@ -34,7 +36,9 @@ describe("agFilterModelToParam", () => {
   });
 
   it("maps an R-group equals filter to the bare label key", () => {
-    const out = agFilterModelToParam({ "rg:R1": { filterType: "text", type: "equals", filter: "F" } });
+    const out = agFilterModelToParam({
+      "rg:R1": { filterType: "text", type: "equals", filter: "F" },
+    });
     expect(out).toEqual({ R1: { kind: "text", op: "eq", value: "F" } });
   });
 
