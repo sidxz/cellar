@@ -12,6 +12,16 @@ needs — the bits that previously diverged into bugs when hand-copied:
 Runners stay plain ``@dataclass`` objects and call these; the compute itself
 stays explicit in each runner. A runner must NEVER mark FAILED — it re-raises
 so a retry can re-enter; FAILED is owned by ``MarkJobFailed`` at the boundary.
+
+Two deliberate properties to preserve when building on these:
+
+- ``claim_job`` opens its own UoW (a fresh session), so its PENDING -> RUNNING
+  commit is visible to the later ``finalize_if_still_running`` re-read. Do not
+  collapse claim and compute into one shared session — the re-read guard relies
+  on this separation.
+- Both helpers ``commit()`` but intentionally do NOT dispatch the returned
+  domain events (these jobs emit none). A job that needs event dispatch must do
+  it in its own runner, not here.
 """
 
 from __future__ import annotations
@@ -82,7 +92,7 @@ async def finalize_if_still_running(
     version-checked ``save`` as the TOCTOU backstop.
 
     ``job_type`` is a stable string identifying the kind of job (e.g.
-    ``"fingerprint_run"``). A fixed event name (``async_job_no_longer_running``)
+    ``"rgroup_decomposition"``). A fixed event name (``async_job_no_longer_running``)
     keeps log cardinality low and aggregatable; the job's identity is carried in
     this structured ``job_type`` field — matching the codebase's string-literal
     event-name convention.
