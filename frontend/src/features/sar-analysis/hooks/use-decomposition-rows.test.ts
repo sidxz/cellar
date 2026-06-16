@@ -69,4 +69,25 @@ describe("useDecompositionRows", () => {
     const { result } = renderHook(() => useDecompositionRows(null, null, { fetchFn: vi.fn() }));
     expect(result.current.datasource).toBeNull();
   });
+
+  it("exposes the live filterParam and total after a getRows call", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(PAGE);
+    const { result } = renderHook(() => useDecompositionRows("run-1", "proj-1", { fetchFn }));
+    const params = getRowsParams({
+      filterModel: { mw: { filterType: "number", type: "greaterThan", filter: 400 } } as never,
+    });
+    await result.current.datasource?.getRows(params);
+    await waitFor(() => expect(result.current.total).toBe(1));
+    expect(result.current.filterParam).toEqual({
+      molecular_weight: { kind: "number", op: "gt", value: 400 },
+    });
+  });
+
+  it("filterParam is undefined when no column filter is active", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(PAGE);
+    const { result } = renderHook(() => useDecompositionRows("run-1", null, { fetchFn }));
+    await result.current.datasource?.getRows(getRowsParams());
+    await waitFor(() => expect(result.current.total).toBe(1));
+    expect(result.current.filterParam).toBeUndefined();
+  });
 });

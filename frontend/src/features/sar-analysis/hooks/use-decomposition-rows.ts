@@ -30,6 +30,8 @@ type RowsBody = {
 export type UseDecompositionRowsReturn = {
   datasource: IDatasource | null;
   activityReference: number | null;
+  filterParam: Record<string, unknown> | undefined;
+  total: number | null;
 };
 
 export function useDecompositionRows(
@@ -39,6 +41,8 @@ export function useDecompositionRows(
 ): UseDecompositionRowsReturn {
   const fetchFn = opts?.fetchFn ?? defaultFetchRows;
   const [activityReference, setActivityReference] = useState<number | null>(null);
+  const [filterParam, setFilterParam] = useState<Record<string, unknown> | undefined>(undefined);
+  const [total, setTotal] = useState<number | null>(null);
 
   const datasource = useMemo<IDatasource | null>(() => {
     if (!runId) return null;
@@ -56,6 +60,8 @@ export function useDecompositionRows(
         try {
           const res = await fetchFn(runId, body);
           setActivityReference(res.activity_reference ?? null);
+          setFilterParam(body.filter);
+          setTotal(res.total);
           params.successCallback(res.rows.map(toRow), res.total);
         } catch {
           params.failCallback();
@@ -65,7 +71,7 @@ export function useDecompositionRows(
     // setActivityReference is stable; runId/projectionId/fetchFn are the real deps.
   }, [runId, projectionId, fetchFn]);
 
-  return { datasource, activityReference };
+  return { datasource, activityReference, filterParam, total };
 }
 
 function toRow(r: DecompositionRowsResponse["rows"][number]): RGroupRow {
