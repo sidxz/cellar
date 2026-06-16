@@ -8,6 +8,7 @@ import {
   type ColDef,
   type ColGroupDef,
   type GridReadyEvent,
+  type IDatasource,
   ModuleRegistry,
   type RowClickedEvent,
   type SelectionChangedEvent,
@@ -22,6 +23,10 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 export interface DataGridProps<TData = unknown>
   extends Omit<AgGridReactProps<TData>, "theme" | "rowData" | "columnDefs"> {
   rowData: TData[] | undefined;
+  /** When provided, the grid uses AG-Grid's Infinite Row Model: rows stream from
+   *  this datasource's getRows (server pagination/sort/filter) instead of client
+   *  `rowData`. Additive — existing client-side consumers omit it. */
+  datasource?: IDatasource;
   /** Accepts flat ColDef arrays or ColDef/ColGroupDef mixed arrays (for grouped headers). */
   columnDefs: (ColDef<TData> | ColGroupDef<TData>)[];
   loading?: boolean;
@@ -73,6 +78,7 @@ export interface DataGridProps<TData = unknown>
 
 export function DataGrid<TData = unknown>({
   rowData,
+  datasource,
   columnDefs,
   loading,
   emptyState,
@@ -90,6 +96,7 @@ export function DataGrid<TData = unknown>({
   ...rest
 }: DataGridProps<TData>) {
   const selectionEnabled = !!selectionToolbar || !!enableMultiSelect;
+  const isInfinite = !!datasource;
   const {
     onSelectionChanged: consumerOnSelectionChanged,
     rowSelection: _rowSelectionFromRest,
@@ -194,7 +201,9 @@ export function DataGrid<TData = unknown>({
     [consumerOnSelectionChanged],
   );
 
-  const hasRows = !!rowData?.length;
+  // In infinite mode rowData is undefined and AG-Grid owns the no-rows overlay,
+  // so never short-circuit to the client empty-state.
+  const hasRows = isInfinite ? true : !!rowData?.length;
   const showSearch = searchPlaceholder !== false && hasRows;
   const renderToolbar = showSearch || !!toolbarActions || !!toolbarLeft;
 
@@ -251,7 +260,9 @@ export function DataGrid<TData = unknown>({
         <AgGridReact<TData>
           ref={gridRef}
           theme={cellarTheme}
-          rowData={rowData ?? []}
+          rowModelType={isInfinite ? "infinite" : undefined}
+          datasource={isInfinite ? datasource : undefined}
+          rowData={isInfinite ? undefined : (rowData ?? [])}
           columnDefs={finalColumnDefs}
           defaultColDef={defaultColDef}
           onRowClicked={onRowClick ? handleRowClicked : undefined}
@@ -266,7 +277,7 @@ export function DataGrid<TData = unknown>({
           onColumnMoved={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
           onColumnVisible={hasPrefs ? prefs.onColumnChanged(gridRef) : undefined}
           rowClass={onRowClick ? "cursor-pointer" : undefined}
-          quickFilterText={quickFilter || undefined}
+          quickFilterText={isInfinite ? undefined : quickFilter || undefined}
           suppressCellFocus
           animateRows={false}
           {...restWithoutSelection}
