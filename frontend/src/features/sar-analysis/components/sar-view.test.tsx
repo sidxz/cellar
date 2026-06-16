@@ -54,6 +54,11 @@ vi.mock("../hooks/use-activity-projection", () => ({
 
 vi.mock("../lib/sar-handoff", () => ({ readSarHandoff: () => null }));
 
+const mockSaveAll = vi.fn().mockResolvedValue({ collection_id: "all-coll" });
+vi.mock("../hooks/use-save-decomposition-collection", () => ({
+  useSaveDecompositionCollection: () => ({ saveAll: mockSaveAll }),
+}));
+
 const mockCustomInstance = vi.fn().mockResolvedValue({});
 vi.mock("@/shared/lib/api/custom-instance", () => ({
   API_V1: "/api/v1",
@@ -100,7 +105,15 @@ vi.mock("./rgroup-color-control", () => ({
 vi.mock("./rgroup-table", () => ({
   RGroupTable: ({
     onSaveSelection,
-  }: { onSaveSelection: (rows: { id: string; label: string }[]) => void }) => (
+    onSaveAll,
+  }: {
+    onSaveSelection: (rows: { id: string; label: string }[]) => void;
+    onSaveAll?: (a: {
+      count: number;
+      filter?: Record<string, unknown>;
+      projectionId?: string | null;
+    }) => void;
+  }) => (
     <div data-testid="rgroup-table">
       <button
         type="button"
@@ -108,6 +121,19 @@ vi.mock("./rgroup-table", () => ({
         onClick={() => onSaveSelection([{ id: "m1", label: "CV-1" }])}
       >
         save
+      </button>
+      <button
+        type="button"
+        data-testid="save-all"
+        onClick={() =>
+          onSaveAll?.({
+            count: 8,
+            filter: { molecular_weight: { kind: "number", op: "gt", value: 400 } },
+            projectionId: "proj-1",
+          })
+        }
+      >
+        save all
       </button>
     </div>
   ),
@@ -123,13 +149,13 @@ vi.mock("./save-selection-dialog", () => ({
     onSave,
   }: {
     open: boolean;
-    onSave: (a: { name: string; projectId: string | null; moleculeIds: string[] }) => Promise<void>;
+    onSave: (a: { name: string; projectId: string | null }) => Promise<void>;
   }) =>
     open ? (
       <button
         type="button"
         data-testid="confirm-save"
-        onClick={() => onSave({ name: "Series A", projectId: null, moleculeIds: ["m1"] })}
+        onClick={() => onSave({ name: "Series A", projectId: null })}
       >
         confirm save
       </button>
@@ -161,6 +187,7 @@ function renderSarView() {
 
 describe("SarView (server orchestration)", () => {
   beforeEach(() => {
+    mockSaveAll.mockClear();
     mockCreateMutate.mockClear();
     mockCustomInstance.mockClear();
     runReturn = { ...READY_RUN };
@@ -230,5 +257,20 @@ describe("SarView (server orchestration)", () => {
         }),
       );
     });
+  });
+
+  it("saves all matched via the server endpoint with the live filter + projection", async () => {
+    renderSarView();
+    fireEvent.click(screen.getByTestId("save-all"));
+    fireEvent.click(await screen.findByTestId("confirm-save"));
+    await waitFor(() =>
+      expect(mockSaveAll).toHaveBeenCalledWith({
+        runId: "run-1",
+        name: "Series A",
+        projectId: null,
+        filter: { molecular_weight: { kind: "number", op: "gt", value: 400 } },
+        projectionId: "proj-1",
+      }),
+    );
   });
 });

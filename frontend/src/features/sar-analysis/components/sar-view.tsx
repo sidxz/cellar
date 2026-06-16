@@ -9,6 +9,7 @@ import { showError } from "@/shared/lib/toast";
 import { useState } from "react";
 import { channelFromColorSpec, useActivityProjection } from "../hooks/use-activity-projection";
 import { useDecompositionRun } from "../hooks/use-decomposition-run";
+import { useSaveDecompositionCollection } from "../hooks/use-save-decomposition-collection";
 import type { SarColorSpec } from "../lib/sar-color-spec";
 import { readSarHandoff } from "../lib/sar-handoff";
 import { RGroupColorControl } from "./rgroup-color-control";
@@ -27,14 +28,19 @@ export interface SarViewProps {
 
 type SaveRow = { id: string; label: string };
 
+type SaveIntent =
+  | { mode: "selection"; rows: SaveRow[] }
+  | { mode: "all"; count: number; filter?: Record<string, unknown>; projectionId?: string | null };
+
 export function SarView(props: SarViewProps) {
   // Prefer the collection (full membership, server-expanded) over the loaded page.
   const moleculeIds = props.molecules.map((m) => m.id);
   const source = props.collectionId ? { collectionId: props.collectionId } : { moleculeIds };
 
   const createCollection = useCreateCollection();
+  const saveCollection = useSaveDecompositionCollection();
   const [core, setCore] = useState<string | null>(() => readSarHandoff()?.coreSmiles ?? null);
-  const [saveRows, setSaveRows] = useState<SaveRow[] | null>(null);
+  const [saveIntent, setSaveIntent] = useState<SaveIntent | null>(null);
   const [colorSpec, setColorSpec] = useState<SarColorSpec | null>(null);
   const [aggMode, setAggMode] = useState<AggregationMode>("latest");
   const [sub, setSub] = useState<"table" | "heatmap">("table");
@@ -132,15 +138,35 @@ export function SarView(props: SarViewProps) {
             projectionId={projectionReady ? projection.projectionId : null}
             labels={run.labels}
             colorSpec={colorSpec}
-            onSaveSelection={setSaveRows}
+            matchedCount={run.counts?.matched}
+            onSaveSelection={(rows) => setSaveIntent({ mode: "selection", rows })}
+            onSaveAll={({ count, filter, projectionId }) =>
+              setSaveIntent({ mode: "all", count, filter, projectionId })
+            }
           />
         ))}
 
       <SaveSelectionDialog
-        open={saveRows != null}
-        onOpenChange={(o) => !o && setSaveRows(null)}
+        open={saveIntent != null}
+        onOpenChange={(o) => !o && setSaveIntent(null)}
         onSave={async ({ name, projectId }) => {
-          const selectedIds = (saveRows ?? []).map((r) => r.id);
+          if (saveIntent?.mode === "all") {
+            try {
+              await saveCollection.saveAll({
+                runId: run.runId as string,
+                name,
+                projectId,
+                filter: saveIntent.filter,
+                projectionId: saveIntent.projectionId,
+              });
+              setSaveIntent(null);
+            } catch {
+              showError("Could not save the collection. Please retry.");
+            }
+            return;
+          }
+          const selectedIds =
+            saveIntent?.mode === "selection" ? saveIntent.rows.map((r) => r.id) : [];
           const created = await new Promise<{ id: string }>((resolve, reject) =>
             createCollection.mutate(
               { name, project_id: projectId },
@@ -155,13 +181,23 @@ export function SarView(props: SarViewProps) {
                 data: { references: selectedIds.map((id) => ({ value: id, ref_type: "uuid" })) },
               });
             }
-            setSaveRows(null);
+            setSaveIntent(null);
           } catch {
             showError("Collection created, but adding compounds failed. Please retry.");
           }
         }}
-        count={(saveRows ?? []).length}
-        preview={(saveRows ?? []).map((r) => ({ id: r.id, reg_number: r.label, name: r.label }))}
+        count={
+          saveIntent?.mode === "all"
+            ? saveIntent.count
+            : saveIntent?.mode === "selection"
+              ? saveIntent.rows.length
+              : 0
+        }
+        preview={
+          saveIntent?.mode === "selection"
+            ? saveIntent.rows.map((r) => ({ id: r.id, reg_number: r.label, name: r.label }))
+            : undefined
+        }
         defaultName={`SAR selection from ${props.sourceLabel}`}
         projects={props.projects}
         defaultProjectId={props.defaultProjectId}
