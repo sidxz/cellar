@@ -54,6 +54,10 @@ export function SarView(props: SarViewProps) {
   const heatmapEnabled = ready && run.labels.length >= 2 && colorSpec != null && projectionReady;
   const showHeatmap = sub === "heatmap" && heatmapEnabled;
 
+  const matched = run.counts?.matched ?? 0;
+  const hasMatches = ready && run.runId != null && matched > 0;
+  const noMatches = ready && run.runId != null && matched === 0;
+
   return (
     <div className="flex flex-col gap-3">
       <RGroupColorControl
@@ -74,16 +78,86 @@ export function SarView(props: SarViewProps) {
       />
 
       {(run.isStarting || run.isPolling) && (
-        <p className="text-xs text-muted-foreground">Decomposing…</p>
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          Decomposing…
+          <button
+            type="button"
+            aria-label="Cancel decomposition"
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={run.cancel}
+          >
+            Cancel
+          </button>
+        </p>
       )}
-      {colorSpec != null && (projection.isStarting || projection.isPolling) && (
-        <p className="text-xs text-muted-foreground">Computing activity…</p>
+      {run.isCancelled && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          Decomposition cancelled
+          <button
+            type="button"
+            aria-label="Run decomposition again"
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={run.runAgain}
+          >
+            Run again
+          </button>
+        </p>
       )}
-      {run.error && (
-        <p className="text-xs text-destructive">Decomposition failed: {run.error.message}</p>
+      {!run.isCancelled && run.error && (
+        <p className="flex items-center gap-2 text-xs text-destructive">
+          Decomposition failed: {run.error.message}
+          <button
+            type="button"
+            aria-label="Try decomposition again"
+            className="underline underline-offset-2 hover:opacity-80"
+            onClick={run.runAgain}
+          >
+            Try again
+          </button>
+        </p>
       )}
 
-      {ready && (
+      {colorSpec != null && (projection.isStarting || projection.isPolling) && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          Computing activity…
+          <button
+            type="button"
+            aria-label="Cancel activity computation"
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={projection.cancel}
+          >
+            Cancel
+          </button>
+        </p>
+      )}
+      {colorSpec != null && projection.isCancelled && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          Activity computation cancelled
+          <button
+            type="button"
+            aria-label="Run activity computation again"
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={projection.runAgain}
+          >
+            Run again
+          </button>
+        </p>
+      )}
+      {colorSpec != null && !projection.isCancelled && projection.error && (
+        <p className="flex items-center gap-2 text-xs text-destructive">
+          Activity computation failed: {projection.error.message}
+          <button
+            type="button"
+            aria-label="Try activity computation again"
+            className="underline underline-offset-2 hover:opacity-80"
+            onClick={projection.runAgain}
+          >
+            Try again
+          </button>
+        </p>
+      )}
+
+      {hasMatches && (
         <div
           role="group"
           aria-label="SAR result view"
@@ -123,7 +197,13 @@ export function SarView(props: SarViewProps) {
         </p>
       )}
 
-      {ready &&
+      {noMatches && (
+        <p className="text-xs text-muted-foreground">
+          No compounds matched this core. Try a different scaffold.
+        </p>
+      )}
+
+      {hasMatches &&
         run.runId &&
         (showHeatmap && colorSpec && projection.projectionId ? (
           <RGroupHeatmap

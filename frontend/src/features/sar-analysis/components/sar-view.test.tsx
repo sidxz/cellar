@@ -14,14 +14,20 @@ type RunReturn = {
   status: string | null;
   isStarting: boolean;
   isPolling: boolean;
+  isCancelled: boolean;
   error: Error | null;
+  cancel: () => void;
+  runAgain: () => void;
 };
 type ProjReturn = {
   projectionId: string | null;
   status: string | null;
   isStarting: boolean;
   isPolling: boolean;
+  isCancelled: boolean;
   error: Error | null;
+  cancel: () => void;
+  runAgain: () => void;
 };
 
 const READY_RUN: RunReturn = {
@@ -31,14 +37,20 @@ const READY_RUN: RunReturn = {
   status: "ready",
   isStarting: false,
   isPolling: false,
+  isCancelled: false,
   error: null,
+  cancel: vi.fn(),
+  runAgain: vi.fn(),
 };
 const READY_PROJ: ProjReturn = {
   projectionId: "proj-1",
   status: "ready",
   isStarting: false,
   isPolling: false,
+  isCancelled: false,
   error: null,
+  cancel: vi.fn(),
+  runAgain: vi.fn(),
 };
 
 let runReturn: RunReturn = { ...READY_RUN };
@@ -272,5 +284,65 @@ describe("SarView (server orchestration)", () => {
         projectionId: "proj-1",
       }),
     );
+  });
+
+  it("shows a Cancel affordance while decomposing and calls run.cancel", () => {
+    const cancel = vi.fn();
+    runReturn = { ...READY_RUN, runId: "run-1", status: "running", isPolling: true, cancel };
+    renderSarView();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel decomposition" }));
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("shows a neutral cancelled state with Run again", () => {
+    const runAgain = vi.fn();
+    runReturn = { ...READY_RUN, status: "cancelled", isCancelled: true, runAgain };
+    renderSarView();
+    expect(screen.getByText("Decomposition cancelled")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Run decomposition again" }));
+    expect(runAgain).toHaveBeenCalled();
+  });
+
+  it("surfaces a decomposition failure with Try again", () => {
+    runReturn = { ...READY_RUN, status: "failed", error: new Error("bad core") };
+    renderSarView();
+    expect(screen.getByText(/Decomposition failed: bad core/)).toBeInTheDocument();
+  });
+
+  it("surfaces an activity-projection failure (table still renders)", () => {
+    projReturn = { ...READY_PROJ, status: "failed", error: new Error("no data") };
+    renderSarView();
+    fireEvent.click(screen.getByTestId("set-color-spec"));
+    expect(screen.getByText(/Activity computation failed: no data/)).toBeInTheDocument();
+    expect(screen.getByTestId("rgroup-table")).toBeInTheDocument();
+  });
+
+  it("shows a Cancel affordance while computing activity and calls projection.cancel", () => {
+    const cancel = vi.fn();
+    projReturn = { ...READY_PROJ, status: "running", isPolling: true, cancel };
+    renderSarView();
+    fireEvent.click(screen.getByTestId("set-color-spec"));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel activity computation" }));
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("shows a neutral activity-cancelled state with Run again", () => {
+    const runAgain = vi.fn();
+    projReturn = { ...READY_PROJ, status: "cancelled", isCancelled: true, runAgain };
+    renderSarView();
+    fireEvent.click(screen.getByTestId("set-color-spec"));
+    expect(screen.getByText("Activity computation cancelled")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Run activity computation again" }));
+    expect(runAgain).toHaveBeenCalled();
+  });
+
+  it("shows a no-match empty state instead of an empty grid", () => {
+    runReturn = { ...READY_RUN, counts: { matched: 0, unmatched: 10, total: 10 } };
+    renderSarView();
+    expect(
+      screen.getByText("No compounds matched this core. Try a different scaffold."),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("rgroup-table")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Heatmap view" })).not.toBeInTheDocument();
   });
 });
