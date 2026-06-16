@@ -132,8 +132,10 @@ async function defaultStartFn(input: StartInput): Promise<ActivityProjectionResp
   const { startActivityProjectionApiV1SarActivityProjectionPost } = await import(
     "@/shared/lib/api/sar-analysis/sar-analysis"
   );
+  // The loose ActivityChannel (selection_rule: string) is cast to the generated
+  // request type at this orval boundary — same intent as the response cast below.
   return startActivityProjectionApiV1SarActivityProjectionPost(
-    input,
+    input as unknown as Parameters<typeof startActivityProjectionApiV1SarActivityProjectionPost>[0],
   ) as unknown as ActivityProjectionResponse;
 }
 
