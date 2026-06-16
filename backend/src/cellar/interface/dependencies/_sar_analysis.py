@@ -16,6 +16,9 @@ from cellar.application.sar_analysis.get_activity_projection import GetActivityP
 from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
+from cellar.application.sar_analysis.save_decomposition_collection import (
+    SaveDecompositionCollection,
+)
 from cellar.application.sar_analysis.start_activity_projection import StartActivityProjection
 from cellar.application.sar_analysis.start_decomposition_run import StartDecompositionRun
 from cellar.application.sar_analysis.start_scaffold_tree_job import StartScaffoldTreeJob
@@ -34,6 +37,7 @@ __all__ = [
     "GetDecompositionRunDep",
     "GetScaffoldTreeJobDep",
     "GetUmapClusterJobDep",
+    "SaveDecompositionCollectionDep",
     "StartActivityProjectionDep",
     "StartDecompositionRunDep",
     "StartScaffoldTreeJobDep",
@@ -70,6 +74,9 @@ CancelDecompositionRunDep = Annotated[
 ]
 FetchDecompositionRowsDep = Annotated[
     FetchDecompositionRows, Depends(_get_use_case(FetchDecompositionRows))
+]
+SaveDecompositionCollectionDep = Annotated[
+    SaveDecompositionCollection, Depends(_get_use_case(SaveDecompositionCollection))
 ]
 _get_start_umap_cluster_job = _get_use_case(StartUmapClusterJob)
 _get_get_umap_cluster_job = _get_use_case(GetUmapClusterJob)

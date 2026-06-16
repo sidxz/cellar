@@ -30,6 +30,8 @@ import os
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from cellar.application.research_organization.collection_membership import AddMoleculesToCollection
+from cellar.application.research_organization.create_collection import CreateCollection
 from cellar.application.sar_analysis.activity_heatmap import FetchActivityHeatmap
 from cellar.application.sar_analysis.build_scaffold_network import BuildScaffoldNetwork
 from cellar.application.sar_analysis.cancel_activity_projection import CancelActivityProjection
@@ -53,6 +55,9 @@ from cellar.application.sar_analysis.run_activity_projection import RunActivityP
 from cellar.application.sar_analysis.run_decomposition import RunDecomposition
 from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
 from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
+from cellar.application.sar_analysis.save_decomposition_collection import (
+    SaveDecompositionCollection,
+)
 from cellar.application.sar_analysis.start_activity_projection import (
     SarActivityProjectionOrchestrator,
     StartActivityProjection,
@@ -220,10 +225,22 @@ def register_sar_analysis(container: Container) -> None:
             uow=uow,
         )
 
+    def _save_decomposition_collection(c: Container) -> SaveDecompositionCollection:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SaveDecompositionCollection(
+            run_repository=SQLAlchemyRGroupDecompositionRunRepository(uow),
+            projection_repository=SQLAlchemySarActivityProjectionRepository(uow),
+            reader=SQLAlchemyDecompositionRowReader(uow),
+            create_collection=c[CreateCollection],
+            add_molecules=c[AddMoleculesToCollection],
+            uow=uow,
+        )
+
     container.define(StartDecompositionRun, _start_decomposition)
     container.define(GetDecompositionRun, _get_decomposition)
     container.define(CancelDecompositionRun, _cancel_decomposition)
     container.define(FetchDecompositionRows, _fetch_decomposition_rows)
+    container.define(SaveDecompositionCollection, _save_decomposition_collection)
 
     # =====================================================================
     # Activity projection slice (mirrors the decomposition slice above)

@@ -24,6 +24,9 @@ from cellar.application.sar_analysis.decomposition_rows import (
 )
 from cellar.application.sar_analysis.get_activity_projection import GetActivityProjectionInput
 from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRunInput
+from cellar.application.sar_analysis.save_decomposition_collection import (
+    SaveDecompositionCollectionInput,
+)
 from cellar.application.sar_analysis.start_activity_projection import (
     StartActivityProjectionInput,
 )
@@ -50,6 +53,7 @@ from cellar.interface.dependencies._sar_analysis import (
     FetchDecompositionRowsDep,
     GetActivityProjectionDep,
     GetDecompositionRunDep,
+    SaveDecompositionCollectionDep,
     StartActivityProjectionDep,
     StartDecompositionRunDep,
 )
@@ -218,6 +222,43 @@ async def decomposition_rows(
         total=out.total,
         activity_reference=out.activity_reference,
     )
+
+
+class SaveCollectionRequest(BaseModel):
+    name: str
+    project_id: UUID | None = None
+    filter: dict[str, Any] | None = None
+    projection_id: UUID | None = None
+
+
+class SaveCollectionResponse(BaseModel):
+    collection_id: UUID
+
+
+@router.post("/decomposition/{run_id}/save-collection", status_code=status.HTTP_201_CREATED)
+async def save_decomposition_collection(
+    run_id: UUID,
+    payload: SaveCollectionRequest,
+    auth: AuthDep,
+    uc: SaveDecompositionCollectionDep,
+) -> SaveCollectionResponse:
+    if not payload.name.strip():
+        raise HTTPException(status_code=400, detail="name must not be empty")
+    collection_id = result_to_response(
+        await uc.execute(
+            SaveDecompositionCollectionInput(
+                run_id=run_id,
+                workspace_id=auth.workspace_id,
+                requested_by=auth.user_id,
+                name=payload.name.strip(),
+                project_id=payload.project_id,
+                filter=payload.filter,
+                projection_id=payload.projection_id,
+            ),
+            auth=auth,
+        )
+    )
+    return SaveCollectionResponse(collection_id=collection_id)
 
 
 class InterceptKeyModel(BaseModel):
