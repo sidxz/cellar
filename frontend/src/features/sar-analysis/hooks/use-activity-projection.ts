@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { AggregationMode } from "@/features/research-organization/lib/use-aggregation-mode";
 import { aggregationModeToWire } from "@/features/research-organization/lib/use-aggregation-mode";
@@ -42,6 +42,7 @@ export type UseActivityProjectionParams = {
   channel: ActivityChannel | null;
   startFn?: (input: StartInput) => Promise<ActivityProjectionResponse>;
   pollFn?: (id: string) => Promise<ActivityProjectionResponse>;
+  cancelFn?: (id: string) => Promise<ActivityProjectionResponse>;
   pollIntervalMs?: number;
   enabled?: boolean;
 };
@@ -51,7 +52,10 @@ export type UseActivityProjectionReturn = {
   status: string | null;
   isStarting: boolean;
   isPolling: boolean;
+  isCancelled: boolean;
   error: Error | null;
+  cancel: () => void;
+  runAgain: () => void;
 };
 
 const DEFAULT_POLL_MS = 1500;
@@ -69,9 +73,13 @@ export function useActivityProjection(
     channel,
     startFn = defaultStartFn,
     pollFn = defaultPollFn,
+    cancelFn = defaultCancelFn,
     pollIntervalMs = DEFAULT_POLL_MS,
     enabled = true,
   } = params;
+
+  const [runNonce, setRunNonce] = useState(0);
+  const [cancelledId, setCancelledId] = useState<string | null>(null);
 
   // Channel identity for the query key: the semantic fields that change the scalar.
   const channelKey = channel
@@ -82,7 +90,7 @@ export function useActivityProjection(
     enabled && channel != null && (collectionId !== undefined || (moleculeIds ?? []).length > 0);
 
   const start = useQuery({
-    queryKey: ["activity-projection", "start", sourceKey, channelKey],
+    queryKey: ["activity-projection", "start", sourceKey, channelKey, runNonce],
     queryFn: () =>
       startFn(
         collectionId
@@ -99,19 +107,17 @@ export function useActivityProjection(
     [startProj],
   );
 
-  const { result: polled, error: pollError } = useJobPoll<
-    ActivityProjectionResponse,
-    ActivityProjectionResponse
-  >({
+  const {
+    result: polled,
+    error: pollError,
+    data: polledData,
+  } = useJobPoll<ActivityProjectionResponse, ActivityProjectionResponse>({
     job,
     pollFn,
     getStatus: (j) => j.status,
     getResult: (j) => (j.status === "ready" ? j : null),
-    getError: (j) => {
-      if (j.status === "failed") return j.error_message ?? "activity projection failed";
-      if (j.status === "cancelled") return "activity projection cancelled";
-      return null;
-    },
+    getError: (j) =>
+      j.status === "failed" ? (j.error_message ?? "activity projection failed") : null,
     pollIntervalMs,
     queryKey: "activity-projection-poll",
   });
@@ -119,12 +125,32 @@ export function useActivityProjection(
   const ready = polled ?? (startProj?.status === "ready" ? startProj : null);
   const current = ready ?? startProj;
 
+  const projectionId = startProj?.projection_id ?? null;
+  const serverCancelled = polledData?.status === "cancelled" || startProj?.status === "cancelled";
+  const isCancelled = serverCancelled || (cancelledId != null && cancelledId === projectionId);
+
+  const cancel = useCallback(() => {
+    if (!projectionId) return;
+    setCancelledId(projectionId);
+    // Optimistic: the flag drives the UI now; the poll confirms the cancel, and
+    // a failed cancel POST resolves itself on the next poll — nothing to surface.
+    void cancelFn(projectionId).catch(() => {});
+  }, [projectionId, cancelFn]);
+
+  const runAgain = useCallback(() => {
+    setCancelledId(null);
+    setRunNonce((n) => n + 1);
+  }, []);
+
   return {
-    projectionId: startProj?.projection_id ?? null,
+    projectionId,
     status: current?.status ?? null,
     isStarting: start.isPending && queryEnabled,
-    isPolling: job != null && ready === null && pollError === null,
+    isPolling: job != null && ready === null && pollError === null && !isCancelled,
+    isCancelled,
     error: (pollError ? new Error(pollError) : null) ?? (start.error as Error | null) ?? null,
+    cancel,
+    runAgain,
   };
 }
 
@@ -144,6 +170,14 @@ async function defaultPollFn(id: string): Promise<ActivityProjectionResponse> {
     "@/shared/lib/api/sar-analysis/sar-analysis"
   );
   return getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet(
+    id,
+  ) as unknown as ActivityProjectionResponse;
+}
+
+async function defaultCancelFn(id: string): Promise<ActivityProjectionResponse> {
+  const { cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost } =
+    await import("@/shared/lib/api/sar-analysis/sar-analysis");
+  return cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost(
     id,
   ) as unknown as ActivityProjectionResponse;
 }

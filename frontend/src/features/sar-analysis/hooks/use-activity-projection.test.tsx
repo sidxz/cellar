@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { channelFromColorSpec, useActivityProjection } from "./use-activity-projection";
@@ -18,6 +18,16 @@ const SPEC = {
   source: "dr_curve",
   label: "EGFR · IC50",
 } as const;
+
+const CHANNEL = {
+  column: "drc:rd1",
+  source: "dr_curve" as const,
+  intercept_key: null,
+  selection_rule: "latest",
+  protocol_id: "p1",
+  label: "IC50",
+};
+const PROJ_RUNNING = { projection_id: "proj-1", status: "running", error_message: null };
 
 describe("channelFromColorSpec", () => {
   it("maps a SarColorSpec + aggregation mode to the channel request", () => {
@@ -64,5 +74,71 @@ describe("useActivityProjection", () => {
       },
     );
     expect(startFn).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a cancelled projection poll via isCancelled, not error", async () => {
+    const startFn = vi.fn().mockResolvedValue(PROJ_RUNNING);
+    const pollFn = vi.fn().mockResolvedValue({ ...PROJ_RUNNING, status: "cancelled" });
+    const { result } = renderHook(
+      () =>
+        useActivityProjection({
+          collectionId: "c1",
+          channel: CHANNEL,
+          startFn,
+          pollFn,
+          pollIntervalMs: 5,
+        }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(result.current.isCancelled).toBe(true));
+    expect(result.current.error).toBeNull();
+    expect(result.current.isPolling).toBe(false);
+  });
+
+  it("cancel() calls cancelFn and flips isCancelled", async () => {
+    const startFn = vi.fn().mockResolvedValue(PROJ_RUNNING);
+    const pollFn = vi.fn().mockResolvedValue(PROJ_RUNNING);
+    const cancelFn = vi.fn().mockResolvedValue({ ...PROJ_RUNNING, status: "cancelled" });
+    const { result } = renderHook(
+      () =>
+        useActivityProjection({
+          collectionId: "c1",
+          channel: CHANNEL,
+          startFn,
+          pollFn,
+          cancelFn,
+          pollIntervalMs: 5,
+        }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(result.current.projectionId).toBe("proj-1"));
+    act(() => result.current.cancel());
+    expect(cancelFn).toHaveBeenCalledWith("proj-1");
+    await waitFor(() => expect(result.current.isCancelled).toBe(true));
+  });
+
+  it("runAgain() re-starts and clears the cancelled flag (no flicker)", async () => {
+    const startFn = vi.fn().mockResolvedValue(PROJ_RUNNING);
+    const pollFn = vi.fn().mockResolvedValue({ ...PROJ_RUNNING, status: "cancelled" });
+    const cancelFn = vi.fn().mockResolvedValue({ ...PROJ_RUNNING, status: "cancelled" });
+    const { result } = renderHook(
+      () =>
+        useActivityProjection({
+          collectionId: "c1",
+          channel: CHANNEL,
+          startFn,
+          pollFn,
+          cancelFn,
+          pollIntervalMs: 5,
+        }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(result.current.isCancelled).toBe(true));
+    act(() => result.current.runAgain());
+    // No flicker: the nonce bump re-keys both queries, so derived state resets
+    // atomically — isCancelled is false immediately, not only after re-start.
+    expect(result.current.isCancelled).toBe(false);
+    await waitFor(() => expect(startFn).toHaveBeenCalledTimes(2));
+    expect(result.current.isCancelled).toBe(false);
   });
 });
