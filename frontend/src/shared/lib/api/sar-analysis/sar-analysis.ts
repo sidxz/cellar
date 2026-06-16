@@ -24,9 +24,15 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ActivityProjectionResponse,
+  DecompositionRowsRequest,
+  DecompositionRowsResponse,
+  DecompositionRunResponse,
   HTTPValidationError,
-  RGroupDecompositionRequest,
-  RGroupDecompositionResponse,
+  HeatmapRequest,
+  HeatmapResponse,
+  StartActivityProjectionRequest,
+  StartDecompositionRequest,
   StartUmapClusterBody,
   StartUmapClusterResponse
 } from '.././model';
@@ -37,29 +43,29 @@ import { customInstance } from '.././custom-instance';
 
 
 /**
- * @summary Decompose Rgroups
+ * @summary Start Decomposition
  */
-export const decomposeRgroupsApiV1SarRGroupDecompositionPost = (
-    rGroupDecompositionRequest: RGroupDecompositionRequest,
+export const startDecompositionApiV1SarDecompositionPost = (
+    startDecompositionRequest: StartDecompositionRequest,
  signal?: AbortSignal
 ) => {
       
       
-      return customInstance<RGroupDecompositionResponse>(
-      {url: `/api/v1/sar/r-group-decomposition`, method: 'POST',
+      return customInstance<DecompositionRunResponse>(
+      {url: `/api/v1/sar/decomposition`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: rGroupDecompositionRequest, signal
+      data: startDecompositionRequest, signal
     },
       );
     }
   
 
 
-export const getDecomposeRgroupsApiV1SarRGroupDecompositionPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>, TError,{data: RGroupDecompositionRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>, TError,{data: RGroupDecompositionRequest}, TContext> => {
+export const getStartDecompositionApiV1SarDecompositionPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startDecompositionApiV1SarDecompositionPost>>, TError,{data: StartDecompositionRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof startDecompositionApiV1SarDecompositionPost>>, TError,{data: StartDecompositionRequest}, TContext> => {
 
-const mutationKey = ['decomposeRgroupsApiV1SarRGroupDecompositionPost'];
+const mutationKey = ['startDecompositionApiV1SarDecompositionPost'];
 const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -69,10 +75,10 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>, {data: RGroupDecompositionRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startDecompositionApiV1SarDecompositionPost>>, {data: StartDecompositionRequest}> = (props) => {
           const {data} = props ?? {};
 
-          return  decomposeRgroupsApiV1SarRGroupDecompositionPost(data,)
+          return  startDecompositionApiV1SarDecompositionPost(data,)
         }
 
         
@@ -80,23 +86,525 @@ const {mutation: mutationOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type DecomposeRgroupsApiV1SarRGroupDecompositionPostMutationResult = NonNullable<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>>
-    export type DecomposeRgroupsApiV1SarRGroupDecompositionPostMutationBody = RGroupDecompositionRequest
-    export type DecomposeRgroupsApiV1SarRGroupDecompositionPostMutationError = HTTPValidationError
+    export type StartDecompositionApiV1SarDecompositionPostMutationResult = NonNullable<Awaited<ReturnType<typeof startDecompositionApiV1SarDecompositionPost>>>
+    export type StartDecompositionApiV1SarDecompositionPostMutationBody = StartDecompositionRequest
+    export type StartDecompositionApiV1SarDecompositionPostMutationError = HTTPValidationError
 
     /**
- * @summary Decompose Rgroups
+ * @summary Start Decomposition
  */
-export const useDecomposeRgroupsApiV1SarRGroupDecompositionPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>, TError,{data: RGroupDecompositionRequest}, TContext>, }
+export const useStartDecompositionApiV1SarDecompositionPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startDecompositionApiV1SarDecompositionPost>>, TError,{data: StartDecompositionRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof decomposeRgroupsApiV1SarRGroupDecompositionPost>>,
+        Awaited<ReturnType<typeof startDecompositionApiV1SarDecompositionPost>>,
         TError,
-        {data: RGroupDecompositionRequest},
+        {data: StartDecompositionRequest},
         TContext
       > => {
 
-      const mutationOptions = getDecomposeRgroupsApiV1SarRGroupDecompositionPostMutationOptions(options);
+      const mutationOptions = getStartDecompositionApiV1SarDecompositionPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * @summary Get Decomposition Run
+ */
+export const getDecompositionRunApiV1SarDecompositionJobsRunIdGet = (
+    runId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<DecompositionRunResponse>(
+      {url: `/api/v1/sar/decomposition/jobs/${runId}`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getGetDecompositionRunApiV1SarDecompositionJobsRunIdGetQueryKey = (runId?: string,) => {
+    return [
+    `/api/v1/sar/decomposition/jobs/${runId}`
+    ] as const;
+    }
+
+    
+export const getGetDecompositionRunApiV1SarDecompositionJobsRunIdGetQueryOptions = <TData = Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError = HTTPValidationError>(runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDecompositionRunApiV1SarDecompositionJobsRunIdGetQueryKey(runId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>> = ({ signal }) => getDecompositionRunApiV1SarDecompositionJobsRunIdGet(runId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(runId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetDecompositionRunApiV1SarDecompositionJobsRunIdGetQueryResult = NonNullable<Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>>
+export type GetDecompositionRunApiV1SarDecompositionJobsRunIdGetQueryError = HTTPValidationError
+
+
+export function useGetDecompositionRunApiV1SarDecompositionJobsRunIdGet<TData = Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError = HTTPValidationError>(
+ runId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>,
+          TError,
+          Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDecompositionRunApiV1SarDecompositionJobsRunIdGet<TData = Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError = HTTPValidationError>(
+ runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>,
+          TError,
+          Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDecompositionRunApiV1SarDecompositionJobsRunIdGet<TData = Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError = HTTPValidationError>(
+ runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Decomposition Run
+ */
+
+export function useGetDecompositionRunApiV1SarDecompositionJobsRunIdGet<TData = Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError = HTTPValidationError>(
+ runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDecompositionRunApiV1SarDecompositionJobsRunIdGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetDecompositionRunApiV1SarDecompositionJobsRunIdGetQueryOptions(runId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Cancel Decomposition Run
+ */
+export const cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost = (
+    runId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<DecompositionRunResponse>(
+      {url: `/api/v1/sar/decomposition/jobs/${runId}/cancel`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getCancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost>>, TError,{runId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost>>, TError,{runId: string}, TContext> => {
+
+const mutationKey = ['cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost>>, {runId: string}> = (props) => {
+          const {runId} = props ?? {};
+
+          return  cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost(runId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPostMutationResult = NonNullable<Awaited<ReturnType<typeof cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost>>>
+    
+    export type CancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Cancel Decomposition Run
+ */
+export const useCancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost>>, TError,{runId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof cancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPost>>,
+        TError,
+        {runId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getCancelDecompositionRunApiV1SarDecompositionJobsRunIdCancelPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * @summary Decomposition Rows
+ */
+export const decompositionRowsApiV1SarDecompositionRunIdRowsPost = (
+    runId: string,
+    decompositionRowsRequest: DecompositionRowsRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<DecompositionRowsResponse>(
+      {url: `/api/v1/sar/decomposition/${runId}/rows`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: decompositionRowsRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getDecompositionRowsApiV1SarDecompositionRunIdRowsPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decompositionRowsApiV1SarDecompositionRunIdRowsPost>>, TError,{runId: string;data: DecompositionRowsRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof decompositionRowsApiV1SarDecompositionRunIdRowsPost>>, TError,{runId: string;data: DecompositionRowsRequest}, TContext> => {
+
+const mutationKey = ['decompositionRowsApiV1SarDecompositionRunIdRowsPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decompositionRowsApiV1SarDecompositionRunIdRowsPost>>, {runId: string;data: DecompositionRowsRequest}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  decompositionRowsApiV1SarDecompositionRunIdRowsPost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecompositionRowsApiV1SarDecompositionRunIdRowsPostMutationResult = NonNullable<Awaited<ReturnType<typeof decompositionRowsApiV1SarDecompositionRunIdRowsPost>>>
+    export type DecompositionRowsApiV1SarDecompositionRunIdRowsPostMutationBody = DecompositionRowsRequest
+    export type DecompositionRowsApiV1SarDecompositionRunIdRowsPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Decomposition Rows
+ */
+export const useDecompositionRowsApiV1SarDecompositionRunIdRowsPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decompositionRowsApiV1SarDecompositionRunIdRowsPost>>, TError,{runId: string;data: DecompositionRowsRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof decompositionRowsApiV1SarDecompositionRunIdRowsPost>>,
+        TError,
+        {runId: string;data: DecompositionRowsRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getDecompositionRowsApiV1SarDecompositionRunIdRowsPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * @summary Start Activity Projection
+ */
+export const startActivityProjectionApiV1SarActivityProjectionPost = (
+    startActivityProjectionRequest: StartActivityProjectionRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ActivityProjectionResponse>(
+      {url: `/api/v1/sar/activity-projection`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: startActivityProjectionRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getStartActivityProjectionApiV1SarActivityProjectionPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startActivityProjectionApiV1SarActivityProjectionPost>>, TError,{data: StartActivityProjectionRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof startActivityProjectionApiV1SarActivityProjectionPost>>, TError,{data: StartActivityProjectionRequest}, TContext> => {
+
+const mutationKey = ['startActivityProjectionApiV1SarActivityProjectionPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startActivityProjectionApiV1SarActivityProjectionPost>>, {data: StartActivityProjectionRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  startActivityProjectionApiV1SarActivityProjectionPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartActivityProjectionApiV1SarActivityProjectionPostMutationResult = NonNullable<Awaited<ReturnType<typeof startActivityProjectionApiV1SarActivityProjectionPost>>>
+    export type StartActivityProjectionApiV1SarActivityProjectionPostMutationBody = StartActivityProjectionRequest
+    export type StartActivityProjectionApiV1SarActivityProjectionPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Start Activity Projection
+ */
+export const useStartActivityProjectionApiV1SarActivityProjectionPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startActivityProjectionApiV1SarActivityProjectionPost>>, TError,{data: StartActivityProjectionRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startActivityProjectionApiV1SarActivityProjectionPost>>,
+        TError,
+        {data: StartActivityProjectionRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getStartActivityProjectionApiV1SarActivityProjectionPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * @summary Get Activity Projection
+ */
+export const getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet = (
+    projectionId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ActivityProjectionResponse>(
+      {url: `/api/v1/sar/activity-projection/jobs/${projectionId}`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getGetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGetQueryKey = (projectionId?: string,) => {
+    return [
+    `/api/v1/sar/activity-projection/jobs/${projectionId}`
+    ] as const;
+    }
+
+    
+export const getGetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGetQueryOptions = <TData = Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError = HTTPValidationError>(projectionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGetQueryKey(projectionId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>> = ({ signal }) => getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet(projectionId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(projectionId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGetQueryResult = NonNullable<Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>>
+export type GetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGetQueryError = HTTPValidationError
+
+
+export function useGetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet<TData = Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError = HTTPValidationError>(
+ projectionId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>,
+          TError,
+          Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet<TData = Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError = HTTPValidationError>(
+ projectionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>,
+          TError,
+          Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet<TData = Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError = HTTPValidationError>(
+ projectionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Activity Projection
+ */
+
+export function useGetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet<TData = Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError = HTTPValidationError>(
+ projectionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetActivityProjectionApiV1SarActivityProjectionJobsProjectionIdGetQueryOptions(projectionId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * @summary Cancel Activity Projection
+ */
+export const cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost = (
+    projectionId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ActivityProjectionResponse>(
+      {url: `/api/v1/sar/activity-projection/jobs/${projectionId}/cancel`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getCancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost>>, TError,{projectionId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost>>, TError,{projectionId: string}, TContext> => {
+
+const mutationKey = ['cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost>>, {projectionId: string}> = (props) => {
+          const {projectionId} = props ?? {};
+
+          return  cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost(projectionId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPostMutationResult = NonNullable<Awaited<ReturnType<typeof cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost>>>
+    
+    export type CancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Cancel Activity Projection
+ */
+export const useCancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost>>, TError,{projectionId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof cancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPost>>,
+        TError,
+        {projectionId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getCancelActivityProjectionApiV1SarActivityProjectionJobsProjectionIdCancelPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * @summary Decomposition Heatmap
+ */
+export const decompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost = (
+    runId: string,
+    heatmapRequest: HeatmapRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<HeatmapResponse>(
+      {url: `/api/v1/sar/decomposition/${runId}/heatmap`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: heatmapRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getDecompositionHeatmapApiV1SarDecompositionRunIdHeatmapPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost>>, TError,{runId: string;data: HeatmapRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof decompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost>>, TError,{runId: string;data: HeatmapRequest}, TContext> => {
+
+const mutationKey = ['decompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost>>, {runId: string;data: HeatmapRequest}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  decompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecompositionHeatmapApiV1SarDecompositionRunIdHeatmapPostMutationResult = NonNullable<Awaited<ReturnType<typeof decompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost>>>
+    export type DecompositionHeatmapApiV1SarDecompositionRunIdHeatmapPostMutationBody = HeatmapRequest
+    export type DecompositionHeatmapApiV1SarDecompositionRunIdHeatmapPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Decomposition Heatmap
+ */
+export const useDecompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost>>, TError,{runId: string;data: HeatmapRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof decompositionHeatmapApiV1SarDecompositionRunIdHeatmapPost>>,
+        TError,
+        {runId: string;data: HeatmapRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getDecompositionHeatmapApiV1SarDecompositionRunIdHeatmapPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
