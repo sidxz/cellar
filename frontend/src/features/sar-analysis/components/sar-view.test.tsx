@@ -345,4 +345,19 @@ describe("SarView (server orchestration)", () => {
     expect(screen.queryByTestId("rgroup-table")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Heatmap view" })).not.toBeInTheDocument();
   });
+
+  it("a cancel hides the results region even if the run reached ready (no double-banner)", () => {
+    runReturn = {
+      ...READY_RUN,
+      status: "ready",
+      counts: { matched: 0, unmatched: 10, total: 10 },
+      isCancelled: true,
+    };
+    renderSarView();
+    expect(screen.getByText("Decomposition cancelled")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No compounds matched this core. Try a different scaffold."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rgroup-table")).not.toBeInTheDocument();
+  });
 });

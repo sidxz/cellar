@@ -55,8 +55,12 @@ export function SarView(props: SarViewProps) {
   const showHeatmap = sub === "heatmap" && heatmapEnabled;
 
   const matched = run.counts?.matched ?? 0;
-  const hasMatches = ready && run.runId != null && matched > 0;
-  const noMatches = ready && run.runId != null && matched === 0;
+  // A cancel (even the optimistic flag) hides the whole results region — toggle,
+  // counts banner, table/heatmap, and the no-match panel — so none of them can
+  // co-render with the "Decomposition cancelled · Run again" line.
+  const showResults = ready && run.runId != null && !run.isCancelled;
+  const hasMatches = showResults && matched > 0;
+  const noMatches = showResults && matched === 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -190,7 +194,7 @@ export function SarView(props: SarViewProps) {
         </div>
       )}
 
-      {ready && run.runId && (
+      {showResults && (
         <p className="text-xs text-muted-foreground">
           {run.counts?.matched ?? 0} matched of {run.counts?.total ?? 0} (
           {run.counts?.unmatched ?? 0} unmatched)
