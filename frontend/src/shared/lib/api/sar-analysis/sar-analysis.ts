@@ -31,6 +31,8 @@ import type {
   HTTPValidationError,
   HeatmapRequest,
   HeatmapResponse,
+  SaveCollectionRequest,
+  SaveCollectionResponse,
   StartActivityProjectionRequest,
   StartDecompositionRequest,
   StartUmapClusterBody,
@@ -322,6 +324,71 @@ export const useDecompositionRowsApiV1SarDecompositionRunIdRowsPost = <TError = 
       > => {
 
       const mutationOptions = getDecompositionRowsApiV1SarDecompositionRunIdRowsPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * @summary Save Decomposition Collection
+ */
+export const saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost = (
+    runId: string,
+    saveCollectionRequest: SaveCollectionRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<SaveCollectionResponse>(
+      {url: `/api/v1/sar/decomposition/${runId}/save-collection`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: saveCollectionRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getSaveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost>>, TError,{runId: string;data: SaveCollectionRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost>>, TError,{runId: string;data: SaveCollectionRequest}, TContext> => {
+
+const mutationKey = ['saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost>>, {runId: string;data: SaveCollectionRequest}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPostMutationResult = NonNullable<Awaited<ReturnType<typeof saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost>>>
+    export type SaveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPostMutationBody = SaveCollectionRequest
+    export type SaveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Save Decomposition Collection
+ */
+export const useSaveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost>>, TError,{runId: string;data: SaveCollectionRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost>>,
+        TError,
+        {runId: string;data: SaveCollectionRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getSaveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
