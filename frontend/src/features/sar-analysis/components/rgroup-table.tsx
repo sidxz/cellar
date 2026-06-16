@@ -26,6 +26,15 @@ export interface RGroupTableProps {
   /** Receives the selected (loaded) rows so the save dialog can preview them
    *  without `props.molecules`. */
   onSaveSelection: (rows: { id: string; label: string }[]) => void;
+  /** Total matched (pre-filter) baseline for the toolbar count before the first
+   *  page returns; the live filtered `total` from the rows hook supersedes it. */
+  matchedCount?: number;
+  /** Save every matched compound under the current filter (server-resolved). */
+  onSaveAll?: (args: {
+    count: number;
+    filter?: Record<string, unknown>;
+    projectionId?: string | null;
+  }) => void;
 }
 
 /** Structure + Compound + one column per R-group + (optional) activity + physchem. */
@@ -122,6 +131,17 @@ export function potencyShade(scalar: number | null, reference: number | null): s
   return "bg-red-600/30 text-red-900 dark:text-red-100";
 }
 
+/** Toolbar label for the save-all action: matched (no filter) vs filtered. */
+export function saveAllLabel(count: number | null, filterActive: boolean): string {
+  const n = count ?? 0;
+  return filterActive ? `Save ${n} filtered` : `Save all ${n} matched`;
+}
+
+/** Save-all is actionable only with a known, positive count. */
+export function canSaveAll(count: number | null): boolean {
+  return count != null && count > 0;
+}
+
 /** Map a DR `ActivityValue` snapshot → the shared `CurveSnapshot` for expand. */
 export function snapshotFromActivity(av: ActivityValue | undefined | null): CurveSnapshot | null {
   if (
@@ -193,9 +213,16 @@ export function RGroupTable({
   labels,
   colorSpec,
   onSaveSelection,
+  matchedCount,
+  onSaveAll,
 }: RGroupTableProps) {
   const [openCurve, setOpenCurve] = useState<ExpandedCurve | null>(null);
-  const { datasource, activityReference } = useDecompositionRows(runId, projectionId ?? null);
+  const { datasource, activityReference, filterParam, total } = useDecompositionRows(
+    runId,
+    projectionId ?? null,
+  );
+  const filterActive = !!filterParam && Object.keys(filterParam).length > 0;
+  const saveAllCount = total ?? matchedCount ?? null;
 
   const columns = useMemo(() => {
     if (!colorSpec) return buildRGroupColumns(labels);
@@ -226,6 +253,24 @@ export function RGroupTable({
         getRowId={(params) => params.data.id}
         searchPlaceholder={false}
         onRowClick={handleRowClick}
+        toolbarActions={
+          onSaveAll ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canSaveAll(saveAllCount)}
+              onClick={() =>
+                onSaveAll({
+                  count: saveAllCount ?? 0,
+                  filter: filterActive ? filterParam : undefined,
+                  projectionId: projectionId ?? null,
+                })
+              }
+            >
+              {saveAllLabel(saveAllCount, filterActive)}
+            </Button>
+          ) : undefined
+        }
         selectionToolbar={(selected) => (
           <Button
             size="sm"

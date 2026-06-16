@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildActivityColumns, pickReference, potencyShade } from "./rgroup-table";
+import {
+  buildActivityColumns,
+  canSaveAll,
+  pickReference,
+  potencyShade,
+  saveAllLabel,
+} from "./rgroup-table";
 
 const SPEC = {
   protocolId: "p",
@@ -38,5 +44,18 @@ describe("rgroup-table pure helpers (kept)", () => {
       (c) => c.colId === "activity:value",
     );
     expect(ro?.cellClass).toBeUndefined();
+  });
+});
+
+describe("save-all toolbar action helpers", () => {
+  it("labels matched vs filtered by filter state", () => {
+    expect(saveAllLabel(1234, false)).toBe("Save all 1234 matched");
+    expect(saveAllLabel(320, true)).toBe("Save 320 filtered");
+    expect(saveAllLabel(null, false)).toBe("Save all 0 matched");
+  });
+  it("canSaveAll gates null/zero", () => {
+    expect(canSaveAll(5)).toBe(true);
+    expect(canSaveAll(0)).toBe(false);
+    expect(canSaveAll(null)).toBe(false);
   });
 });
