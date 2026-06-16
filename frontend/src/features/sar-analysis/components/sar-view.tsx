@@ -6,9 +6,9 @@ import type { AggregationMode } from "@/features/research-organization/lib/use-a
 import { Button } from "@/shared/components/ui/button";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showError } from "@/shared/lib/toast";
-import { useEffect, useState } from "react";
-import { useRGroupDecomposition } from "../hooks/use-rgroup-decomposition";
-import { useSarActivity } from "../hooks/use-sar-activity";
+import { useState } from "react";
+import { channelFromColorSpec, useActivityProjection } from "../hooks/use-activity-projection";
+import { useDecompositionRun } from "../hooks/use-decomposition-run";
 import type { SarColorSpec } from "../lib/sar-color-spec";
 import { readSarHandoff } from "../lib/sar-handoff";
 import { RGroupColorControl } from "./rgroup-color-control";
@@ -25,65 +25,31 @@ export interface SarViewProps {
   sourceLabel: string;
 }
 
-/**
- * R-group SAR view: a core picker, a decomposition table keyed off the chosen
- * core, and a "save selection → new collection" path that mirrors the cluster
- * view's create-then-bulk-add flow.
- *
- * B5 additions:
- *   - `RGroupColorControl` — protocol + readout picker + aggregation rule.
- *     Renders above the result area so the chemist can pre-pick an activity
- *     before decomposing; it is always visible (not gated on a result).
- *   - `useSarActivity` — fetches activity for the loaded molecules whenever a
- *     `colorSpec` is set; passes the result into both the table and heatmap.
- *   - Sub-toggle (Table / Heatmap) — shown once a decomposition result exists.
- *     The Heatmap button is disabled when there are fewer than 2 R-positions or
- *     no colorSpec (title explains the requirement). Switching to `heatmap`
- *     while those guards are false falls back silently to `table`.
- */
+type SaveRow = { id: string; label: string };
+
 export function SarView(props: SarViewProps) {
+  // Prefer the collection (full membership, server-expanded) over the loaded page.
   const moleculeIds = props.molecules.map((m) => m.id);
-  const decompose = useRGroupDecomposition();
+  const source = props.collectionId ? { collectionId: props.collectionId } : { moleculeIds };
+
   const createCollection = useCreateCollection();
   const [core, setCore] = useState<string | null>(() => readSarHandoff()?.coreSmiles ?? null);
-  const [saveIds, setSaveIds] = useState<string[] | null>(null);
-
-  // B5 state ----------------------------------------------------------------
+  const [saveRows, setSaveRows] = useState<SaveRow[] | null>(null);
   const [colorSpec, setColorSpec] = useState<SarColorSpec | null>(null);
   const [aggMode, setAggMode] = useState<AggregationMode>("latest");
   const [sub, setSub] = useState<"table" | "heatmap">("table");
 
-  // Re-run decomposition whenever the chosen core changes.
-  // NOTE (v1 limitation): decomposes the currently-loaded `molecules` (the
-  // visible page from the host). For collections larger than one page this
-  // analyses the loaded subset; full-member decomposition is a follow-up.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run only when the core or the source collection changes; `moleculeIds`/`decompose` would re-fire on every render (fresh array/mutation identity) — they're read from the latest closure, not tracked.
-  useEffect(() => {
-    if (!core) return;
-    decompose.mutate({ moleculeIds, coreSmiles: core });
-  }, [core, props.collectionId]);
+  const run = useDecompositionRun({ ...source, coreSmiles: core });
+  const channel = colorSpec ? channelFromColorSpec(colorSpec, aggMode) : null;
+  const projection = useActivityProjection({ ...source, channel });
 
-  // Activity fetch — wired by colorSpec; returns {} when no spec is set.
-  const { activityByMolecule } = useSarActivity({
-    moleculeIds,
-    colorSpec,
-    aggregationMode: aggMode,
-  });
-
-  const result = decompose.data;
-
-  // Heatmap is only valid with ≥2 R-positions and an active colorSpec.
-  const heatmapEnabled = result != null && result.rgroup_labels.length >= 2 && colorSpec != null;
-
-  // If the current result drops below the heatmap threshold (e.g. a new
-  // decomposition with only 1 R-group), silently fall back to table rather
-  // than rendering a broken heatmap.
+  const ready = run.status === "ready" && run.runId != null;
+  const projectionReady = projection.status === "ready" && projection.projectionId != null;
+  const heatmapEnabled = ready && run.labels.length >= 2 && colorSpec != null && projectionReady;
   const showHeatmap = sub === "heatmap" && heatmapEnabled;
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Activity color-by control — always visible so the chemist can
-          pre-pick a protocol before choosing a core. */}
       <RGroupColorControl
         projectIds={undefined}
         value={colorSpec}
@@ -97,14 +63,21 @@ export function SarView(props: SarViewProps) {
         moleculeIds={moleculeIds}
         coreSmiles={core}
         onCoreChange={setCore}
-        matchedCount={result?.assignments.length}
-        totalCount={result ? result.assignments.length + result.unmatched_ids.length : undefined}
+        matchedCount={run.counts?.matched}
+        totalCount={run.counts?.total}
       />
 
-      {decompose.isPending && <p className="text-xs text-muted-foreground">Decomposing…</p>}
+      {(run.isStarting || run.isPolling) && (
+        <p className="text-xs text-muted-foreground">Decomposing…</p>
+      )}
+      {colorSpec != null && (projection.isStarting || projection.isPolling) && (
+        <p className="text-xs text-muted-foreground">Computing activity…</p>
+      )}
+      {run.error && (
+        <p className="text-xs text-destructive">Decomposition failed: {run.error.message}</p>
+      )}
 
-      {/* Sub-toggle — only shown when a decomposition result is available. */}
-      {result && (
+      {ready && (
         <div
           role="group"
           aria-label="SAR result view"
@@ -137,30 +110,36 @@ export function SarView(props: SarViewProps) {
         </div>
       )}
 
-      {/* Result area */}
-      {result &&
-        (showHeatmap ? (
+      {ready && run.runId && (
+        <p className="text-xs text-muted-foreground">
+          {run.counts?.matched ?? 0} matched of {run.counts?.total ?? 0} (
+          {run.counts?.unmatched ?? 0} unmatched)
+        </p>
+      )}
+
+      {ready &&
+        run.runId &&
+        (showHeatmap && colorSpec && projection.projectionId ? (
           <RGroupHeatmap
-            decomposition={result}
-            activityByMolecule={activityByMolecule}
+            runId={run.runId}
+            projectionId={projection.projectionId}
+            labels={run.labels}
             colorSpec={colorSpec}
-            molecules={props.molecules}
           />
         ) : (
           <RGroupTable
-            decomposition={result}
-            molecules={props.molecules}
-            onSaveSelection={setSaveIds}
+            runId={run.runId}
+            projectionId={projectionReady ? projection.projectionId : null}
+            labels={run.labels}
             colorSpec={colorSpec}
-            activityByMolecule={activityByMolecule}
+            onSaveSelection={setSaveRows}
           />
         ))}
 
       <SaveSelectionDialog
-        open={saveIds != null}
-        onOpenChange={(o) => !o && setSaveIds(null)}
+        open={saveRows != null}
+        onOpenChange={(o) => !o && setSaveRows(null)}
         onSave={async ({ name, projectId, moleculeIds: selectedIds }) => {
-          // create errors are surfaced by useCreateCollection's own onError toast
           const created = await new Promise<{ id: string }>((resolve, reject) =>
             createCollection.mutate(
               { name, project_id: projectId },
@@ -175,14 +154,16 @@ export function SarView(props: SarViewProps) {
                 data: { references: selectedIds.map((id) => ({ value: id, ref_type: "uuid" })) },
               });
             }
-            setSaveIds(null);
+            setSaveRows(null);
           } catch {
-            // collection was created but adding compounds failed — keep the dialog
-            // open so the user can retry, and tell them why.
             showError("Collection created, but adding compounds failed. Please retry.");
           }
         }}
-        selectedMolecules={props.molecules.filter((m) => saveIds?.includes(m.id))}
+        selectedMolecules={(saveRows ?? []).map((r) => ({
+          id: r.id,
+          reg_number: r.label,
+          name: r.label,
+        }))}
         defaultName={`SAR selection from ${props.sourceLabel}`}
         projects={props.projects}
         defaultProjectId={props.defaultProjectId}
