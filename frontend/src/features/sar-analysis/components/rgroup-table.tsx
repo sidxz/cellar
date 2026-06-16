@@ -1,12 +1,11 @@
 "use client";
 
 import { DoseResponseCell } from "@/features/research-organization/components/search/dose-response-cell";
-import type { ActivityValue } from "@/features/research-organization/types";
+import { activityValueToCurveSnapshot } from "@/features/research-organization/lib/activity-curve-snapshot";
 import {
   CurveExpandDialog,
   type ExpandedCurve,
 } from "@/features/screen-campaign/components/grid/curve-expand-dialog";
-import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
 import { structureColumn } from "@/features/screening-assay/components/grid-columns";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -15,6 +14,7 @@ import { formatMeasurementValue } from "@/shared/lib/format-number";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { useMemo, useState } from "react";
 import { type RGroupRow, useDecompositionRows } from "../hooks/use-decomposition-rows";
+import { potencyShade } from "../lib/sar-activity-display";
 import type { SarColorSpec } from "../lib/sar-color-spec";
 import { fragmentDisplay } from "../lib/sar-fragment-label";
 
@@ -109,28 +109,6 @@ export function buildRGroupColumns(
   return cols;
 }
 
-/** Most-potent (min) reference scalar — LOWER-is-better (dr_curve only). */
-export function pickReference(scalars: (number | null)[]): number | null {
-  let ref: number | null = null;
-  for (const s of scalars) {
-    if (s == null || !Number.isFinite(s)) continue;
-    if (ref == null || s < ref) ref = s;
-  }
-  return ref;
-}
-
-/** Green→red potency ramp by fold-off from the most-potent reference (dr_curve only). */
-export function potencyShade(scalar: number | null, reference: number | null): string {
-  if (scalar == null || reference == null) return "";
-  if (!Number.isFinite(scalar) || !Number.isFinite(reference) || reference <= 0) return "";
-  const fold = scalar / reference;
-  if (fold <= 1) return "bg-green-600/30 text-green-900 dark:text-green-100";
-  if (fold <= 3) return "bg-green-500/20 text-green-900 dark:text-green-100";
-  if (fold <= 10) return "bg-amber-500/20 text-amber-900 dark:text-amber-100";
-  if (fold <= 100) return "bg-orange-500/25 text-orange-900 dark:text-orange-100";
-  return "bg-red-600/30 text-red-900 dark:text-red-100";
-}
-
 /** Toolbar label for the save-all action: matched (no filter) vs filtered. */
 export function saveAllLabel(count: number | null, filterActive: boolean): string {
   const n = count ?? 0;
@@ -140,31 +118,6 @@ export function saveAllLabel(count: number | null, filterActive: boolean): strin
 /** Save-all is actionable only with a known, positive count. */
 export function canSaveAll(count: number | null): boolean {
   return count != null && count > 0;
-}
-
-/** Map a DR `ActivityValue` snapshot → the shared `CurveSnapshot` for expand. */
-export function snapshotFromActivity(av: ActivityValue | undefined | null): CurveSnapshot | null {
-  if (
-    !av ||
-    !av.raw_data ||
-    av.raw_data.length === 0 ||
-    av.source !== "dose_response" ||
-    av.curve_params == null ||
-    av.value == null
-  ) {
-    return null;
-  }
-  return {
-    fitted_value: av.value,
-    top: av.curve_params.top,
-    bottom: av.curve_params.bottom,
-    hill_slope: av.curve_params.hill_slope,
-    r_squared: av.r_squared,
-    curve_class: av.curve_params.curve_class ?? null,
-    raw_data: av.raw_data,
-    additional_curves: av.additional_curves ?? null,
-    aggregate: av.aggregate ?? null,
-  };
 }
 
 /**
@@ -231,7 +184,7 @@ export function RGroupTable({
 
   const handleRowClick = colorSpec
     ? (row: RGroupRow) => {
-        const snapshot = snapshotFromActivity(row.activitySnapshot);
+        const snapshot = activityValueToCurveSnapshot(row.activitySnapshot);
         if (!snapshot) return;
         setOpenCurve({
           ...snapshot,

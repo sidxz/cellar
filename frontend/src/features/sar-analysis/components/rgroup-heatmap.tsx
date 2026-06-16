@@ -3,13 +3,15 @@
 /**
  * 2-axis R-group heatmap — server-aggregated. Pick two R-positions → POST
  * /heatmap → a grid of (Ry × Rx) cells, each with the most-potent (argmin)
- * representative + count + a curve snapshot. Coloring reuses the table's
- * `pickReference`/`potencyShade` over the (small) returned cells, gated to
+ * representative + count + a curve snapshot. Coloring reuses the shared
+ * `pickReference`/`potencyShade` (sar-analysis/lib/sar-activity-display) over
+ * the (small) returned cells, gated to
  * `dr_curve`. Click a cell → expand its representative's DR curve off the
  * server `best_snapshot`. Axes that exceed the server top-30 cap surface an
  * honest "top 30 of N" note.
  */
 
+import { activityValueToCurveSnapshot } from "@/features/research-organization/lib/activity-curve-snapshot";
 import {
   CurveExpandDialog,
   type ExpandedCurve,
@@ -28,9 +30,9 @@ import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { cn } from "@/shared/lib/utils";
 import { useMemo, useState } from "react";
 import { useHeatmapAggregation } from "../hooks/use-heatmap-aggregation";
+import { pickReference, potencyShade } from "../lib/sar-activity-display";
 import type { SarColorSpec } from "../lib/sar-color-spec";
 import { fragmentDisplay } from "../lib/sar-fragment-label";
-import { pickReference, potencyShade, snapshotFromActivity } from "./rgroup-table";
 
 export interface RGroupHeatmapProps {
   runId: string;
@@ -102,7 +104,9 @@ export function RGroupHeatmap({ runId, projectionId, labels, colorSpec }: RGroup
   }
 
   function handleCellClick(cell: HeatmapCellView) {
-    const snapshot: CurveSnapshot | null = snapshotFromActivity(cell.best_snapshot as never);
+    const snapshot: CurveSnapshot | null = activityValueToCurveSnapshot(
+      cell.best_snapshot as never,
+    );
     if (!snapshot) return;
     setOpenCurve({
       ...snapshot,
