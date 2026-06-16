@@ -242,6 +242,23 @@ class SQLAlchemyDecompositionRowReader:
         stmt = _apply_filter(stmt, filter, projection_id=projection_id)
         return int((await self._uow.session.execute(stmt)).scalar_one())
 
+    async def fetch_matched_ids(
+        self,
+        run_id: UUID,
+        *,
+        workspace_id: UUID,
+        projection_id: UUID | None = None,
+        filter: dict[str, Any] | None = None,
+    ) -> list[UUID]:
+        # Identical scoped/activity joins + filter as count_rows, but project the
+        # molecule_id instead of counting — so the resolved set equals exactly the
+        # filtered total the table shows. One row per molecule per run.
+        stmt = self._scoped_join(select(RGroupAssignmentModel.molecule_id), run_id, workspace_id)
+        stmt = self._activity_join(stmt, projection_id)
+        stmt = _apply_filter(stmt, filter, projection_id=projection_id)
+        result = await self._uow.session.execute(stmt)
+        return [row[0] for row in result.all()]
+
     async def activity_reference(
         self,
         run_id: UUID,

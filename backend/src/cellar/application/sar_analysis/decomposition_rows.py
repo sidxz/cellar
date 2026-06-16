@@ -64,6 +64,15 @@ class DecompositionRowReader(Protocol):
         filter: dict[str, Any] | None = None,
     ) -> int: ...
 
+    async def fetch_matched_ids(
+        self,
+        run_id: UUID,
+        *,
+        workspace_id: UUID,
+        projection_id: UUID | None = None,
+        filter: dict[str, Any] | None = None,
+    ) -> list[UUID]: ...
+
     async def activity_reference(
         self,
         run_id: UUID,

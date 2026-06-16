@@ -413,3 +413,70 @@ async def test_activity_reference_none_without_projection(uow):
         reader = SQLAlchemyDecompositionRowReader(uow)
         ref = await reader.activity_reference(run.id, workspace_id=ws, projection_id=None, filter=None)
     assert ref is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_matched_ids_returns_all_matched(uow):
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        a = await _seed_molecule(uow, ws, org, reg="CV-A", smiles="Fc1ccccc1")
+        b = await _seed_molecule(uow, ws, org, reg="CV-B", smiles="Clc1ccccc1")
+        run = await _seed_ready_run(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        await repo.write_assignments(run.id, [
+            RGroupAssignment(molecule_id=a, rgroups={"R1": "F"}),
+            RGroupAssignment(molecule_id=b, rgroups={"R1": "Cl"}),
+        ])
+        await uow.commit()
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        ids = await reader.fetch_matched_ids(run.id, workspace_id=ws)
+    assert set(ids) == {a, b}
+
+
+@pytest.mark.asyncio
+async def test_fetch_matched_ids_applies_text_filter(uow):
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        a = await _seed_molecule(uow, ws, org, reg="CV-A", smiles="Fc1ccccc1")
+        b = await _seed_molecule(uow, ws, org, reg="CV-B", smiles="Clc1ccccc1")
+        run = await _seed_ready_run(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        await repo.write_assignments(run.id, [
+            RGroupAssignment(molecule_id=a, rgroups={"R1": "F"}),
+            RGroupAssignment(molecule_id=b, rgroups={"R1": "Cl"}),
+        ])
+        await uow.commit()
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        ids = await reader.fetch_matched_ids(
+            run.id, workspace_id=ws, filter={"R1": {"kind": "text", "op": "eq", "value": "Cl"}}
+        )
+    assert ids == [b]
+
+
+@pytest.mark.asyncio
+async def test_fetch_matched_ids_excludes_merged_and_other_workspace(uow):
+    ws = uuid.uuid4()
+    other_ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        keep = await _seed_molecule(uow, ws, org, reg="CV-A", smiles="Fc1ccccc1")
+        merged = await _seed_molecule(
+            uow, ws, org, reg="CV-M", smiles="Clc1ccccc1", merged=keep
+        )
+        run = await _seed_ready_run(uow, ws)
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        await repo.write_assignments(run.id, [
+            RGroupAssignment(molecule_id=keep, rgroups={"R1": "F"}),
+            RGroupAssignment(molecule_id=merged, rgroups={"R1": "Cl"}),
+        ])
+        await uow.commit()
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        ids = await reader.fetch_matched_ids(run.id, workspace_id=ws)
+        wrong_ws = await reader.fetch_matched_ids(run.id, workspace_id=other_ws)
+    assert ids == [keep]          # merged-into row excluded
+    assert wrong_ws == []         # workspace-scoped
