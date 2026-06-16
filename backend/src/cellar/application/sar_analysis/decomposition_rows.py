@@ -97,7 +97,11 @@ class FetchDecompositionRowsInput:
 @dataclass(frozen=True)
 class FetchDecompositionRowsOutput:
     rows: list[DecompositionRow]
-    total: int
+    # total / activity_reference are computed only on the first block (offset 0) —
+    # the full-scan COUNT + MIN are invariant across scroll blocks of one
+    # (run, projection, filter), and AG-Grid refetches block 0 whenever sort or
+    # filter changes. They are None on later blocks; the client caches them.
+    total: int | None = None
     activity_reference: float | None = None
 
 
@@ -142,20 +146,26 @@ class FetchDecompositionRows:
                 projection_id=payload.projection_id,
                 filter=payload.filter,
             )
-            total = await self._reader.count_rows(
-                payload.run_id,
-                workspace_id=payload.workspace_id,
-                projection_id=payload.projection_id,
-                filter=payload.filter,
-            )
-            reference = None
-            if payload.projection_id is not None:
-                reference = await self._reader.activity_reference(
+            # The COUNT + MIN scans are invariant across scroll blocks of one
+            # (run, projection, filter), so compute them once on the first block;
+            # the client caches them for subsequent blocks. AG-Grid refetches
+            # block 0 on any sort/filter change, so the cache stays correct.
+            total: int | None = None
+            reference: float | None = None
+            if payload.offset == 0:
+                total = await self._reader.count_rows(
                     payload.run_id,
                     workspace_id=payload.workspace_id,
                     projection_id=payload.projection_id,
                     filter=payload.filter,
                 )
+                if payload.projection_id is not None:
+                    reference = await self._reader.activity_reference(
+                        payload.run_id,
+                        workspace_id=payload.workspace_id,
+                        projection_id=payload.projection_id,
+                        filter=payload.filter,
+                    )
         return Success(
             FetchDecompositionRowsOutput(rows=rows, total=total, activity_reference=reference)
         )

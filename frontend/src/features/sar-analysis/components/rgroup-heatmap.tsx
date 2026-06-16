@@ -3,12 +3,14 @@
 /**
  * 2-axis R-group heatmap — server-aggregated. Pick two R-positions → POST
  * /heatmap → a grid of (Ry × Rx) cells, each with the most-potent (argmin)
- * representative + count + a curve snapshot. Coloring reuses the shared
- * `pickReference`/`potencyShade` (sar-analysis/lib/sar-activity-display) over
- * the (small) returned cells, gated to
- * `dr_curve`. Click a cell → expand its representative's DR curve off the
- * server `best_snapshot`. Axes that exceed the server top-30 cap surface an
- * honest "top 30 of N" note.
+ * representative + count + a curve snapshot. Coloring uses `potencyShade`
+ * (sar-analysis/lib/sar-activity-display) anchored on the server-supplied
+ * `activity_reference` — the min over the whole (uncapped) scored set, the same
+ * anchor the R-group table uses, so the two surfaces shade identically even when
+ * an axis is truncated. Gated to `dr_curve`. A matched cell with no value for the
+ * channel renders uncolored (a tested-but-unscreened corner). Click a cell →
+ * expand its representative's DR curve off the server `best_snapshot`. Axes that
+ * exceed the server top-30 cap surface an honest "top 30 of N" note.
  */
 
 import { activityValueToCurveSnapshot } from "@/features/research-organization/lib/activity-curve-snapshot";
@@ -28,9 +30,9 @@ import {
 import type { HeatmapCellView } from "@/shared/lib/api/model";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { cn } from "@/shared/lib/utils";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useHeatmapAggregation } from "../hooks/use-heatmap-aggregation";
-import { pickReference, potencyShade } from "../lib/sar-activity-display";
+import { potencyShade } from "../lib/sar-activity-display";
 import type { SarColorSpec } from "../lib/sar-color-spec";
 import { fragmentDisplay } from "../lib/sar-fragment-label";
 
@@ -47,11 +49,6 @@ const GAP_CLASS =
 /** Stable, collision-free key for a (y, x) cell. */
 export function cellKey(y: string, x: string): string {
   return JSON.stringify([y, x]);
-}
-
-/** Most-potent (min) best_scalar across the returned cells — the ramp anchor. */
-export function heatmapReference(cells: Pick<HeatmapCellView, "best_scalar">[]): number | null {
-  return pickReference(cells.map((c) => c.best_scalar));
 }
 
 function AxisFragment({ smiles, orientation }: { smiles: string; orientation: "col" | "row" }) {
@@ -82,10 +79,23 @@ export function RGroupHeatmap({ runId, projectionId, labels, colorSpec }: RGroup
   const [axisX, setAxisX] = useState<string>(() => labels[1] ?? "");
   const [openCurve, setOpenCurve] = useState<ExpandedCurve | null>(null);
 
+  // Re-sync the axes whenever the run's label set changes (e.g. switching to a
+  // previously cached core that resolves without an unmount) so we never query a
+  // stale axis the new core doesn't have. Functional updates read the current
+  // axis without needing it in the deps; keyed on the label set.
+  const labelsKey = labels.join("");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: labelsKey encodes labels
+  useEffect(() => {
+    setAxisY((cur) => (labels.includes(cur) ? cur : (labels[0] ?? "")));
+    setAxisX((cur) => (labels.includes(cur) ? cur : (labels[1] ?? labels[0] ?? "")));
+  }, [labelsKey]);
+
   const { data, isLoading } = useHeatmapAggregation({ runId, projectionId, axisY, axisX });
 
   const shadeByPotency = colorSpec.source === "dr_curve";
-  const reference = useMemo(() => (data ? heatmapReference(data.cells) : null), [data]);
+  // Shared anchor with the R-group table: the server's full-set min, not a
+  // client recompute over the (truncation-capped) returned cells.
+  const reference = data?.activity_reference ?? null;
   const cellsByKey = useMemo(() => {
     const m = new Map<string, HeatmapCellView>();
     for (const c of data?.cells ?? []) m.set(cellKey(c.y, c.x), c);
@@ -106,6 +116,10 @@ export function RGroupHeatmap({ runId, projectionId, labels, colorSpec }: RGroup
   function handleCellClick(cell: HeatmapCellView) {
     const snapshot: CurveSnapshot | null = activityValueToCurveSnapshot(
       cell.best_snapshot as never,
+      {
+        value: cell.best_scalar,
+        label: colorSpec.label,
+      },
     );
     if (!snapshot) return;
     setOpenCurve({
@@ -197,7 +211,9 @@ export function RGroupHeatmap({ runId, projectionId, labels, colorSpec }: RGroup
                       </td>
                     );
                   }
-                  const shade = shadeByPotency ? potencyShade(cell.best_scalar, reference) : "";
+                  const shade = shadeByPotency
+                    ? potencyShade(cell.best_scalar ?? null, reference)
+                    : "";
                   const unit = (cell.best_snapshot as { unit?: string | null })?.unit
                     ? ` ${(cell.best_snapshot as { unit?: string | null }).unit}`
                     : "";

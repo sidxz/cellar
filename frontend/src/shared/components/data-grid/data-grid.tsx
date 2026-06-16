@@ -7,10 +7,13 @@ import {
   AllCommunityModule,
   type ColDef,
   type ColGroupDef,
+  type GetRowIdParams,
   type GridReadyEvent,
   type IDatasource,
+  type ModelUpdatedEvent,
   ModuleRegistry,
   type RowClickedEvent,
+  type RowSelectedEvent,
   type SelectionChangedEvent,
 } from "ag-grid-community";
 import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
@@ -99,6 +102,8 @@ export function DataGrid<TData = unknown>({
   const isInfinite = !!datasource;
   const {
     onSelectionChanged: consumerOnSelectionChanged,
+    onRowSelected: consumerOnRowSelected,
+    onModelUpdated: consumerOnModelUpdated,
     rowSelection: _rowSelectionFromRest,
     ...restWithoutSelection
   } = rest;
@@ -106,6 +111,22 @@ export function DataGrid<TData = unknown>({
   const gridRef = useRef<AgGridReact<TData>>(null);
   const [quickFilter, setQuickFilter] = useState("");
   const [selectedRows, setSelectedRows] = useState<TData[]>([]);
+
+  // Infinite-model selection: AG-Grid's getSelectedRows() only ever sees rows in
+  // currently-loaded cache blocks, so a multi-select that spans scroll positions
+  // (or "select all") would silently save a subset. When a stable row id is
+  // available we instead accumulate picks by id across blocks in a ref-backed
+  // map, drive the toolbar from that, and re-apply the selection to freshly
+  // loaded blocks so checkboxes survive scrolling away and back.
+  const getRowIdFn = (restWithoutSelection as { getRowId?: (p: GetRowIdParams<TData>) => string })
+    .getRowId;
+  const trackAcrossBlocks = isInfinite && selectionEnabled && !!getRowIdFn;
+  const selectedByIdRef = useRef<Map<string, TData>>(new Map());
+  const reapplyingRef = useRef(false);
+  const rowId = useCallback(
+    (data: TData): string => getRowIdFn?.({ data } as GetRowIdParams<TData>) ?? "",
+    [getRowIdFn],
+  );
   const prefs = useGridPreferences(preferencesKey ?? "__unused__");
   const hasPrefs = !!preferencesKey;
   const defaultColDef = useMemo<ColDef<TData>>(
@@ -141,11 +162,15 @@ export function DataGrid<TData = unknown>({
       sortable: false,
       filter: false,
       suppressMovable: true,
-      headerCheckboxSelection: true,
+      // In the infinite model "select all" would only select loaded blocks
+      // (a silent partial selection) — suppress it; per-row picks accumulate
+      // across blocks and "select all" is served by the toolbar's server-side
+      // "Save all matched" action instead.
+      headerCheckboxSelection: !isInfinite,
       checkboxSelection: true,
     };
     return [selectCol, ...withTooltips];
-  }, [columnDefs, selectionEnabled, suppressSelectColumn]);
+  }, [columnDefs, selectionEnabled, suppressSelectColumn, isInfinite]);
 
   // Sync external clear-selection signal (e.g. after a new search resets state).
   // The effect fires whenever clearSelectionToken changes; `deselectAll` is
@@ -154,6 +179,8 @@ export function DataGrid<TData = unknown>({
   // tracked set's size — 0 triggers the clear, positive values are ignored.
   useEffect(() => {
     if (clearSelectionToken !== undefined && !clearSelectionToken && gridRef.current?.api) {
+      selectedByIdRef.current.clear();
+      setSelectedRows([]);
       gridRef.current.api.deselectAll();
     }
   }, [clearSelectionToken]);
@@ -199,6 +226,47 @@ export function DataGrid<TData = unknown>({
       consumerOnSelectionChanged?.(event);
     },
     [consumerOnSelectionChanged],
+  );
+
+  // Infinite mode: accumulate/drop the toggled row by id (the map persists
+  // across block loads, unlike AG-Grid's own selection), and drive the toolbar
+  // from the map rather than getSelectedRows().
+  const handleRowSelected = useCallback(
+    (event: RowSelectedEvent<TData>) => {
+      if (!reapplyingRef.current && event.node?.data) {
+        const id = rowId(event.node.data);
+        if (id) {
+          const map = selectedByIdRef.current;
+          if (event.node.isSelected()) map.set(id, event.node.data);
+          else map.delete(id);
+          setSelectedRows([...map.values()]);
+        }
+      }
+      consumerOnRowSelected?.(event);
+    },
+    [rowId, consumerOnRowSelected],
+  );
+
+  // Re-check tracked rows when a block (re)loads so checkboxes survive scrolling
+  // away and back. reapplyingRef suppresses the onRowSelected re-entry.
+  const handleModelUpdated = useCallback(
+    (event: ModelUpdatedEvent<TData>) => {
+      const map = selectedByIdRef.current;
+      if (map.size > 0) {
+        reapplyingRef.current = true;
+        try {
+          event.api.forEachNode((node) => {
+            if (node.data && map.has(rowId(node.data)) && !node.isSelected()) {
+              node.setSelected(true);
+            }
+          });
+        } finally {
+          reapplyingRef.current = false;
+        }
+      }
+      consumerOnModelUpdated?.(event);
+    },
+    [rowId, consumerOnModelUpdated],
   );
 
   // In infinite mode rowData is undefined and AG-Grid owns the no-rows overlay,
@@ -268,8 +336,14 @@ export function DataGrid<TData = unknown>({
           onRowClicked={onRowClick ? handleRowClicked : undefined}
           onGridReady={handleGridReady}
           onSelectionChanged={
-            selectionEnabled ? handleSelectionChanged : consumerOnSelectionChanged
+            trackAcrossBlocks
+              ? consumerOnSelectionChanged // map-driven via onRowSelected instead
+              : selectionEnabled
+                ? handleSelectionChanged
+                : consumerOnSelectionChanged
           }
+          onRowSelected={trackAcrossBlocks ? handleRowSelected : consumerOnRowSelected}
+          onModelUpdated={trackAcrossBlocks ? handleModelUpdated : consumerOnModelUpdated}
           rowSelection={selectionEnabled ? "multiple" : undefined}
           suppressRowClickSelection={selectionEnabled ? true : undefined}
           tooltipShowDelay={300}

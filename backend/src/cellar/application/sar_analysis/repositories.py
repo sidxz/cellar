@@ -64,17 +64,23 @@ class RGroupDecompositionRunRepository(Protocol):
     ) -> RGroupDecompositionRun | None: ...
 
     async def find_cached(
-        self, *, membership_hash: str, core_hash: str
+        self, *, workspace_id: UUID, membership_hash: str, core_hash: str
     ) -> RGroupDecompositionRun | None:
-        """Return the latest READY run for this (membership_hash, core_hash), or
-        None. No TTL: a ready run is valid until membership or core changes (each
-        of which changes a hash). Assignment rows for the returned run are already
-        persisted under its id."""
+        """Return the latest READY run for this workspace's (membership_hash,
+        core_hash), or None. No TTL: a ready run is valid until membership or core
+        changes (each of which changes a hash). Scoped to ``workspace_id`` for
+        defense-in-depth — like the sibling projection cache — so a hash collision
+        can never surface another tenant's run. Assignment rows for the returned
+        run are already persisted under its id."""
         ...
 
     async def write_assignments(
         self, run_id: UUID, assignments: list[RGroupAssignment]
     ) -> None: ...
+
+    async def delete_assignments(self, run_id: UUID) -> None:
+        """Remove all assignment rows for a run, so a re-run is idempotent."""
+        ...
 
     async def fetch_assignments(
         self, run_id: UUID, *, workspace_id: UUID, offset: int, limit: int
@@ -102,5 +108,9 @@ class SarActivityProjectionRepository(Protocol):
         ...
 
     async def write_values(self, projection_id: UUID, values: list[ActivityScalar]) -> None: ...
+
+    async def delete_values(self, projection_id: UUID) -> None:
+        """Remove all value rows for a projection, so a re-run is idempotent."""
+        ...
 
     async def count_values(self, projection_id: UUID, *, workspace_id: UUID) -> int: ...

@@ -184,7 +184,10 @@ export function RGroupTable({
 
   const handleRowClick = colorSpec
     ? (row: RGroupRow) => {
-        const snapshot = activityValueToCurveSnapshot(row.activitySnapshot);
+        const snapshot = activityValueToCurveSnapshot(row.activitySnapshot, {
+          value: row.activity,
+          label: colorSpec.label,
+        });
         if (!snapshot) return;
         setOpenCurve({
           ...snapshot,

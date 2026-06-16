@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func, insert, select, update
 
 from cellar.domain.sar_analysis.rgroup_decomposition_run import (
     RGroupDecompositionRun,
     RGroupDecompositionRunStatus,
 )
 from cellar.domain.sar_analysis.rgroup_types import RGroupAssignment
+from cellar.domain.shared.errors import AuthorizationError, ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_models import (
     RGroupAssignmentModel,
     RGroupDecompositionRunModel,
@@ -23,12 +25,37 @@ class SQLAlchemyRGroupDecompositionRunRepository:
         self._uow = uow
 
     async def save(self, run: RGroupDecompositionRun) -> None:
+        """Persist the run header (INSERT or version-checked UPDATE).
+
+        The UPDATE is guarded on the version the aggregate was loaded with and
+        bumps it; a stale writer (``rowcount == 0``) raises
+        ``ConcurrencyConflictError`` rather than silently clobbering a row a
+        concurrent transition (e.g. a cancel) already advanced.
+        """
         session = self._uow.session
         existing = await session.get(RGroupDecompositionRunModel, run.id)
         if existing is None:
             session.add(_to_model(run))
-        else:
-            _apply_to_model(existing, run)
+            return
+        if existing.workspace_id != run.workspace_id:
+            raise AuthorizationError(
+                "Cannot update RGroupDecompositionRun from a different workspace"
+            )
+        loaded_version = run.version
+        _apply_to_model(existing, run)
+        result = await session.execute(
+            update(RGroupDecompositionRunModel)
+            .where(
+                RGroupDecompositionRunModel.id == run.id,
+                RGroupDecompositionRunModel.workspace_id == run.workspace_id,
+                RGroupDecompositionRunModel.version == loaded_version,
+            )
+            .values(version=loaded_version + 1)
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount == 0:
+            raise ConcurrencyConflictError("RGroupDecompositionRun", str(run.id))
+        existing.version = loaded_version + 1
 
     async def find_by_id(
         self, run_id: UUID, *, workspace_id: UUID
@@ -42,12 +69,13 @@ class SQLAlchemyRGroupDecompositionRunRepository:
         return _to_domain(model) if model else None
 
     async def find_cached(
-        self, *, membership_hash: str, core_hash: str
+        self, *, workspace_id: UUID, membership_hash: str, core_hash: str
     ) -> RGroupDecompositionRun | None:
         session = self._uow.session
         stmt = (
             select(RGroupDecompositionRunModel)
             .where(
+                RGroupDecompositionRunModel.workspace_id == workspace_id,
                 RGroupDecompositionRunModel.membership_hash == membership_hash,
                 RGroupDecompositionRunModel.core_hash == core_hash,
                 RGroupDecompositionRunModel.status == RGroupDecompositionRunStatus.READY.value,
@@ -69,6 +97,18 @@ class SQLAlchemyRGroupDecompositionRunRepository:
         ]
         for i in range(0, len(rows), BATCH):
             await session.execute(insert(RGroupAssignmentModel), rows[i : i + BATCH])
+
+    async def delete_assignments(self, run_id: UUID) -> None:
+        """Remove all assignment rows for a run.
+
+        Used by the runner to reset before recomputing, so a re-run (e.g. a
+        Temporal retry) is idempotent and never collides on the
+        (run_id, molecule_id) primary key.
+        """
+        session = self._uow.session
+        await session.execute(
+            sa_delete(RGroupAssignmentModel).where(RGroupAssignmentModel.run_id == run_id)
+        )
 
     async def fetch_assignments(
         self, run_id: UUID, *, workspace_id: UUID, offset: int, limit: int
@@ -133,6 +173,7 @@ def _to_model(run: RGroupDecompositionRun) -> RGroupDecompositionRunModel:
 
 
 def _apply_to_model(model: RGroupDecompositionRunModel, run: RGroupDecompositionRun) -> None:
+    # version is owned by save()'s optimistic-concurrency UPDATE, not copied here.
     model.status = run.status.value
     model.started_at = run.started_at
     model.completed_at = run.completed_at
@@ -141,7 +182,6 @@ def _apply_to_model(model: RGroupDecompositionRunModel, run: RGroupDecomposition
     model.matched_count = run.matched_count
     model.unmatched_count = run.unmatched_count
     model.total_count = run.total_count
-    model.version = run.version
 
 
 def _to_domain(model: RGroupDecompositionRunModel) -> RGroupDecompositionRun:

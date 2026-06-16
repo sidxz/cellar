@@ -44,7 +44,7 @@ class FakeRunRepo:
     async def find_by_id(self, run_id, *, workspace_id):
         return self._runs.get(run_id)
 
-    async def find_cached(self, *, membership_hash, core_hash):
+    async def find_cached(self, *, workspace_id, membership_hash, core_hash):
         return self._cached
 
     async def write_assignments(self, run_id, assignments):
@@ -208,3 +208,28 @@ async def test_empty_input_yields_ready_empty_run():
     assert out.status == RGroupDecompositionRunStatus.READY
     assert out.total_count == 0
     assert out.rgroup_labels == []
+
+
+@pytest.mark.asyncio
+async def test_inline_failure_marks_run_failed_and_reraises():
+    # The inline path commits RUNNING before decomposing; a failure must leave
+    # the row FAILED, never orphaned RUNNING.
+    ws = uuid.uuid4()
+    repo = FakeRunRepo(cached=None)
+
+    class BoomSession(FakeSession):
+        def finish(self):
+            raise RuntimeError("rdkit boom")
+
+    uc = StartDecompositionRun(
+        members=FakeStream([[(uuid.uuid4(), "Fc1ccccc1", 1)]]),
+        decomposer=FakeDecomposer(BoomSession(RGroupDecompositionResult(core_smiles="c1ccccc1"))),
+        repository=repo,
+        orchestrator=FakeOrchestrator(),
+        uow=FakeUoW(),
+        inline_threshold=200,
+    )
+    with pytest.raises(RuntimeError, match="rdkit boom"):
+        await uc.execute(_input(ws, molecule_ids=[uuid.uuid4()]))
+    saved = next(iter(repo._runs.values()))
+    assert saved.status == RGroupDecompositionRunStatus.FAILED

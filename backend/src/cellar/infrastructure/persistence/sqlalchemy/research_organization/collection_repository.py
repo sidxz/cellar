@@ -259,7 +259,13 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
                 CollectionMoleculeModel.collection_id == collection_id,
                 CollectionModel.workspace_id == workspace_id,
             )
-            .order_by(CollectionMoleculeModel.added_at)
+            # added_at is non-unique (a bulk add stamps every row with the same
+            # transaction timestamp). Tie-break on molecule_id — part of the
+            # composite PK, so unique within a collection — to give OFFSET/LIMIT a
+            # total, stable order; otherwise paging a >page-size collection can
+            # repeat or skip a member, which would duplicate-insert into a
+            # decomposition/projection run and fail it.
+            .order_by(CollectionMoleculeModel.added_at, CollectionMoleculeModel.molecule_id)
             .offset(offset)
             .limit(limit)
         )

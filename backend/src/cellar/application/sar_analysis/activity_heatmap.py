@@ -21,7 +21,7 @@ from cellar.application.sar_analysis.repositories import (
     SarActivityProjectionRepository,
 )
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.shared.errors import DomainError, NotFoundError
+from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 
 HEATMAP_AXIS_TOP_K = 30
 
@@ -31,7 +31,10 @@ class HeatmapCell:
     y: str
     x: str
     count: int
-    best_scalar: float
+    # None when the cell's matched molecules have no activity value for the
+    # channel (a tested-but-unscreened corner) — the cell renders uncolored but
+    # is NOT dropped from the matrix.
+    best_scalar: float | None
     best_molecule_id: UUID
     best_molecule_label: str
     best_snapshot: dict[str, Any]
@@ -45,6 +48,10 @@ class HeatmapResult:
     y_total: int
     x_total: int
     truncated: bool
+    # Min scalar over the full (uncapped, unfiltered) scored set — the shared
+    # color anchor so the heatmap and the R-group table shade against the same
+    # reference even when an axis is truncated. None when nothing is scored.
+    activity_reference: float | None
 
 
 class ActivityHeatmapReader(Protocol):
@@ -90,6 +97,17 @@ class FetchActivityHeatmap:
             run = await self._runs.find_by_id(payload.run_id, workspace_id=payload.workspace_id)
             if run is None:
                 return Failure(NotFoundError("RGroupDecompositionRun", str(payload.run_id)))
+            # Validate axes against the run's discovered labels. An unknown axis
+            # would otherwise resolve to a NULL JSONB key and silently return an
+            # empty matrix indistinguishable from "no data".
+            labels = set(run.rgroup_labels)
+            if payload.axis_y not in labels or payload.axis_x not in labels:
+                return Failure(
+                    ValidationError(
+                        "axis_y and axis_x must be R-group labels of the run "
+                        f"({sorted(labels)})"
+                    )
+                )
             projection = await self._projections.find_by_id(
                 payload.projection_id, workspace_id=payload.workspace_id
             )

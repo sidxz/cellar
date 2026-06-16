@@ -6,9 +6,16 @@ import type { ActivityValue } from "../types";
  * or null when the value isn't a usable DR fit (no raw points, wrong source,
  * no curve params, or no fitted value). Single source of truth for both the
  * search/SAR table cell and the SAR heatmap.
+ *
+ * `selected` is the scalar + label of the channel the surface is coloring by
+ * (e.g. IC90). When it differs from the primary `av.value`, it's surfaced as
+ * `selected_intercept` so the figure draws a distinct marker there — the
+ * expanded curve then agrees with the colored column instead of always marking
+ * the primary intercept.
  */
 export function activityValueToCurveSnapshot(
   av: ActivityValue | undefined | null,
+  selected?: { value: number | null | undefined; label: string },
 ): CurveSnapshot | null {
   if (
     !av ||
@@ -20,6 +27,10 @@ export function activityValueToCurveSnapshot(
   ) {
     return null;
   }
+  const selectedIntercept =
+    selected?.value != null && Number.isFinite(selected.value) && selected.value !== av.value
+      ? { value: selected.value, label: selected.label }
+      : null;
   return {
     fitted_value: av.value,
     top: av.curve_params.top,
@@ -30,5 +41,6 @@ export function activityValueToCurveSnapshot(
     raw_data: av.raw_data,
     additional_curves: av.additional_curves ?? null,
     aggregate: av.aggregate ?? null,
+    selected_intercept: selectedIntercept,
   };
 }

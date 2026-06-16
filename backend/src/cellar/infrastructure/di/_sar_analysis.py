@@ -45,6 +45,12 @@ from cellar.application.sar_analysis.get_activity_projection import GetActivityP
 from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
 from cellar.application.sar_analysis.get_scaffold_tree_job import GetScaffoldTreeJob
 from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJob
+from cellar.application.sar_analysis.mark_activity_projection_failed import (
+    MarkActivityProjectionFailed,
+)
+from cellar.application.sar_analysis.mark_decomposition_run_failed import (
+    MarkDecompositionRunFailed,
+)
 from cellar.application.sar_analysis.repositories import (
     RGroupDecompositionRunRepository,
     SarActivityProjectionRepository,
@@ -182,7 +188,14 @@ def register_sar_analysis(container: Container) -> None:
         )
 
         def _null_rgroup_orchestrator(c: Container) -> NullRGroupDecompositionOrchestrator:
-            return NullRGroupDecompositionOrchestrator(c[RunDecomposition])
+            fail_uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return NullRGroupDecompositionOrchestrator(
+                c[RunDecomposition],
+                mark_failed=MarkDecompositionRunFailed(
+                    repository=SQLAlchemyRGroupDecompositionRunRepository(fail_uow),
+                    uow=fail_uow,
+                ),
+            )
 
         container.define(RGroupDecompositionOrchestrator, _null_rgroup_orchestrator)
 
@@ -283,7 +296,14 @@ def register_sar_analysis(container: Container) -> None:
         )
 
         def _null_activity_orchestrator(c: Container) -> NullSarActivityProjectionOrchestrator:
-            return NullSarActivityProjectionOrchestrator(c[RunActivityProjection])
+            fail_uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return NullSarActivityProjectionOrchestrator(
+                c[RunActivityProjection],
+                mark_failed=MarkActivityProjectionFailed(
+                    repository=SQLAlchemySarActivityProjectionRepository(fail_uow),
+                    uow=fail_uow,
+                ),
+            )
 
         container.define(SarActivityProjectionOrchestrator, _null_activity_orchestrator)
 

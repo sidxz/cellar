@@ -5,10 +5,11 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DecompositionRowView } from './decompositionRowView';
+import type { DecompositionRowsResponseTotal } from './decompositionRowsResponseTotal';
 import type { DecompositionRowsResponseActivityReference } from './decompositionRowsResponseActivityReference';
 
 export interface DecompositionRowsResponse {
   rows: DecompositionRowView[];
-  total: number;
+  total?: DecompositionRowsResponseTotal;
   activity_reference?: DecompositionRowsResponseActivityReference;
 }

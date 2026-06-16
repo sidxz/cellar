@@ -172,3 +172,26 @@ async def test_empty_input_yields_ready_empty():
     out = await uc.execute(_input(ws, molecule_ids=[]))
     assert out.status == SarActivityProjectionStatus.READY
     assert out.value_count == 0
+
+
+@pytest.mark.asyncio
+async def test_inline_failure_marks_projection_failed_and_reraises():
+    # The inline path commits RUNNING before enriching; a failure must leave the
+    # row FAILED, never orphaned RUNNING.
+    ws = uuid.uuid4()
+    a = uuid.uuid4()
+    repo = FakeRepo(cached=None)
+
+    class BoomEnricher:
+        async def enrich_molecules(self, ws_, ids, cols, *, selection_rule, qualifier_handling, run_scopes=None):
+            raise RuntimeError("enrich boom")
+
+    uc = StartActivityProjection(
+        members=FakeStream([[(a, "Fc1ccccc1", 1)]]),
+        enricher=BoomEnricher(), repository=repo, orchestrator=FakeOrchestrator(), uow=FakeUoW(),
+        inline_threshold=200,
+    )
+    with pytest.raises(RuntimeError, match="enrich boom"):
+        await uc.execute(_input(ws, molecule_ids=[a]))
+    saved = next(iter(repo._by_id.values()))
+    assert saved.status == SarActivityProjectionStatus.FAILED

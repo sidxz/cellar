@@ -39,3 +39,29 @@ async def test_null_orchestrator_runs_inline_as_background_task():
 async def test_null_orchestrator_cancel_is_noop():
     orch = NullSarActivityProjectionOrchestrator(FakeRunner())
     assert await orch.cancel(projection_id=uuid.uuid4()) is None
+
+
+class BoomRunner:
+    async def run(self, *, run_id, workspace_id, channel_spec, collection_id=None, molecule_ids=None):
+        raise RuntimeError("runner boom")
+
+
+class SpyMarkFailed:
+    def __init__(self):
+        self.calls = []
+
+    async def execute(self, payload):
+        self.calls.append(payload)
+
+
+@pytest.mark.asyncio
+async def test_null_orchestrator_marks_failed_when_runner_raises():
+    # The inline path has no Temporal workflow to mark FAILED on exhaustion, so
+    # the Null orchestrator records it. The background task must not propagate.
+    spy = SpyMarkFailed()
+    orch = NullSarActivityProjectionOrchestrator(BoomRunner(), mark_failed=spy)
+    pid = uuid.uuid4()
+    await orch.schedule(projection_id=pid, workspace_id=uuid.uuid4(), channel_spec={"column": "drc:x"})
+    await asyncio.gather(*list(orch._tasks))  # swallowed after recording — no raise
+    assert len(spy.calls) == 1
+    assert spy.calls[0].projection_id == pid

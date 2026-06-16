@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import func, insert, select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func, insert, select, update
 
 from cellar.domain.sar_analysis.activity_projection_types import ActivityScalar
 from cellar.domain.sar_analysis.sar_activity_projection import (
     SarActivityProjection,
     SarActivityProjectionStatus,
 )
+from cellar.domain.shared.errors import AuthorizationError, ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_models import (  # noqa: E501
     SarActivityProjectionModel,
     SarActivityValueModel,
@@ -23,12 +25,37 @@ class SQLAlchemySarActivityProjectionRepository:
         self._uow = uow
 
     async def save(self, projection: SarActivityProjection) -> None:
+        """Persist the projection header (INSERT or version-checked UPDATE).
+
+        The UPDATE is guarded on the version the aggregate was loaded with and
+        bumps it; a stale writer (``rowcount == 0``) raises
+        ``ConcurrencyConflictError`` rather than silently clobbering a row a
+        concurrent transition (e.g. a cancel) already advanced.
+        """
         session = self._uow.session
         existing = await session.get(SarActivityProjectionModel, projection.id)
         if existing is None:
             session.add(_to_model(projection))
-        else:
-            _apply_to_model(existing, projection)
+            return
+        if existing.workspace_id != projection.workspace_id:
+            raise AuthorizationError(
+                "Cannot update SarActivityProjection from a different workspace"
+            )
+        loaded_version = projection.version
+        _apply_to_model(existing, projection)
+        result = await session.execute(
+            update(SarActivityProjectionModel)
+            .where(
+                SarActivityProjectionModel.id == projection.id,
+                SarActivityProjectionModel.workspace_id == projection.workspace_id,
+                SarActivityProjectionModel.version == loaded_version,
+            )
+            .values(version=loaded_version + 1)
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount == 0:
+            raise ConcurrencyConflictError("SarActivityProjection", str(projection.id))
+        existing.version = loaded_version + 1
 
     async def find_by_id(
         self, projection_id: UUID, *, workspace_id: UUID
@@ -77,6 +104,20 @@ class SQLAlchemySarActivityProjectionRepository:
         for i in range(0, len(rows), BATCH):
             await session.execute(insert(SarActivityValueModel), rows[i : i + BATCH])
 
+    async def delete_values(self, projection_id: UUID) -> None:
+        """Remove all value rows for a projection.
+
+        Used by the runner to reset before recomputing, so a re-run (e.g. a
+        Temporal retry) is idempotent and never collides on the
+        (projection_id, molecule_id) primary key.
+        """
+        session = self._uow.session
+        await session.execute(
+            sa_delete(SarActivityValueModel).where(
+                SarActivityValueModel.projection_id == projection_id
+            )
+        )
+
     async def count_values(self, projection_id: UUID, *, workspace_id: UUID) -> int:
         session = self._uow.session
         stmt = (
@@ -113,12 +154,12 @@ def _to_model(p: SarActivityProjection) -> SarActivityProjectionModel:
 
 
 def _apply_to_model(model: SarActivityProjectionModel, p: SarActivityProjection) -> None:
+    # version is owned by save()'s optimistic-concurrency UPDATE, not copied here.
     model.status = p.status.value
     model.started_at = p.started_at
     model.completed_at = p.completed_at
     model.error_message = p.error_message
     model.value_count = p.value_count
-    model.version = p.version
 
 
 def _to_domain(model: SarActivityProjectionModel) -> SarActivityProjection:

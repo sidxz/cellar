@@ -121,6 +121,51 @@ async def test_heatmap_argmin_per_cell(uow):
     assert fcl.best_snapshot == {"value": 0.1}
     assert res.truncated is False
     assert res.y_total == 2 and res.x_total == 1
+    # Server-side reference = min scalar over the whole scored set (0.1, 5.0, 2.0).
+    assert res.activity_reference == pytest.approx(0.1)
+
+
+@pytest.mark.asyncio
+async def test_heatmap_keeps_matched_cells_without_activity(uow):
+    # A matched (y,x) combo whose molecules have NO activity value still appears
+    # as an (uncolored) cell with its full count — the "tested-but-unscreened
+    # corner" signal. LEFT join, not INNER; count is over all matched molecules.
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _ready_run(uow, ws)
+        proj = await _ready_projection(uow, ws)
+        run_repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        proj_repo = SQLAlchemySarActivityProjectionRepository(uow)
+        scored = await _seed_molecule(uow, ws, org, reg="CV-SCORED")
+        un1 = await _seed_molecule(uow, ws, org, reg="CV-UN1")
+        un2 = await _seed_molecule(uow, ws, org, reg="CV-UN2")
+        await run_repo.write_assignments(run.id, [
+            RGroupAssignment(molecule_id=scored, rgroups={"R1": "F", "R2": "Cl"}),
+            RGroupAssignment(molecule_id=un1, rgroups={"R1": "Br", "R2": "Cl"}),
+            RGroupAssignment(molecule_id=un2, rgroups={"R1": "Br", "R2": "Cl"}),
+        ])
+        # Only `scored` has an activity value; the (Br, Cl) corner is unscreened.
+        await proj_repo.write_values(proj.id, [
+            ActivityScalar(molecule_id=scored, scalar=0.1, unit="uM", qualifier=None,
+                           source="dose_response", snapshot={"value": 0.1}),
+        ])
+        await uow.commit()
+
+    async with uow:
+        reader = SQLAlchemyActivityHeatmapReader(uow)
+        res = await reader.fetch_heatmap(
+            run.id, workspace_id=ws, projection_id=proj.id, axis_y="R1", axis_x="R2"
+        )
+
+    cells = {(c.y, c.x): c for c in res.cells}
+    assert ("Br", "Cl") in cells  # unscreened corner is NOT dropped
+    brcl = cells[("Br", "Cl")]
+    assert brcl.count == 2  # both unscreened molecules counted
+    assert brcl.best_scalar is None  # no activity → uncolored
+    assert brcl.best_snapshot == {}
+    assert cells[("F", "Cl")].best_scalar == pytest.approx(0.1)  # scored cell colors
+    assert res.activity_reference == pytest.approx(0.1)  # min over the scored set
 
 
 @pytest.mark.asyncio

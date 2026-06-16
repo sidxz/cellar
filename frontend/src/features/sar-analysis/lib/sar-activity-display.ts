@@ -1,17 +1,9 @@
 /**
  * SAR activity-display helpers — the potency ramp shared by the R-group table
  * and the heatmap. Pure; gated to `dr_curve` (lower-is-better) at the call site.
+ * Both surfaces anchor on the server-supplied `activity_reference` (min over the
+ * full scored set), so there is no client-side reference computation.
  */
-
-/** Most-potent (min) reference scalar — LOWER-is-better (dr_curve only). */
-export function pickReference(scalars: (number | null)[]): number | null {
-  let ref: number | null = null;
-  for (const s of scalars) {
-    if (s == null || !Number.isFinite(s)) continue;
-    if (ref == null || s < ref) ref = s;
-  }
-  return ref;
-}
 
 /** Green→red potency ramp by fold-off from the most-potent reference (dr_curve only). */
 export function potencyShade(scalar: number | null, reference: number | null): string {

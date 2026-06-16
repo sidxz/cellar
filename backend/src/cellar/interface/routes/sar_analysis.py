@@ -107,7 +107,9 @@ class DecompositionRowView(BaseModel):
 
 class DecompositionRowsResponse(BaseModel):
     rows: list[DecompositionRowView]
-    total: int
+    # total / activity_reference are returned only on the first block (offset 0);
+    # null on later scroll blocks, where the client reuses the cached values.
+    total: int | None = None
     activity_reference: float | None = None
 
 
@@ -300,7 +302,9 @@ class HeatmapCellView(BaseModel):
     y: str
     x: str
     count: int
-    best_scalar: float
+    # None when the cell's matched molecules have no value for the channel — the
+    # cell renders uncolored (a tested-but-unscreened corner) rather than dropping.
+    best_scalar: float | None = None
     best_molecule_id: UUID
     best_molecule_label: str
     best_snapshot: dict[str, Any]
@@ -313,6 +317,9 @@ class HeatmapResponse(BaseModel):
     y_total: int
     x_total: int
     truncated: bool
+    # Shared color anchor (min scalar over the full uncapped scored set) so the
+    # heatmap and the R-group table shade against the same reference.
+    activity_reference: float | None = None
 
 
 def _projection_view(p: SarActivityProjection) -> ActivityProjectionResponse:
@@ -437,4 +444,5 @@ async def decomposition_heatmap(
         y_total=out.y_total,
         x_total=out.x_total,
         truncated=out.truncated,
+        activity_reference=out.activity_reference,
     )

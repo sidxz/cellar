@@ -34,4 +34,21 @@ describe("activityValueToCurveSnapshot", () => {
     expect(activityValueToCurveSnapshot({ ...DR, curve_params: null } as never)).toBeNull();
     expect(activityValueToCurveSnapshot({ ...DR, value: null } as never)).toBeNull();
   });
+
+  it("marks the selected intercept when it differs from the primary fitted_value", () => {
+    // Colored by IC90 (5.0) while the primary is 1.5 → a distinct marker at 5.0.
+    const snap = activityValueToCurveSnapshot(DR, { value: 5.0, label: "IC90" });
+    expect(snap?.fitted_value).toBe(1.5); // primary unchanged
+    expect(snap?.selected_intercept).toEqual({ value: 5.0, label: "IC90" });
+  });
+
+  it("omits the selected marker when the channel IS the primary (no duplicate line)", () => {
+    expect(
+      activityValueToCurveSnapshot(DR, { value: 1.5, label: "IC50" })?.selected_intercept,
+    ).toBeNull();
+    expect(
+      activityValueToCurveSnapshot(DR, { value: null, label: "IC50" })?.selected_intercept,
+    ).toBeNull();
+    expect(activityValueToCurveSnapshot(DR)?.selected_intercept).toBeNull();
+  });
 });

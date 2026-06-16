@@ -83,6 +83,25 @@ describe("useDecompositionRows", () => {
     });
   });
 
+  it("caches total + reference from the first block and reuses them on later blocks", async () => {
+    // Block 0 carries the full-scan total + reference; block 1 returns them null
+    // (server skips the scans) and the datasource feeds AG-Grid the cached total.
+    const block1 = { rows: [], total: null, activity_reference: null };
+    const fetchFn = vi.fn().mockResolvedValueOnce(PAGE).mockResolvedValueOnce(block1);
+    const { result } = renderHook(() => useDecompositionRows("run-1", "proj-1", { fetchFn }));
+    const ds = result.current.datasource;
+
+    await ds?.getRows(getRowsParams({ startRow: 0, endRow: 100 }));
+    await waitFor(() => expect(result.current.total).toBe(1));
+    expect(result.current.activityReference).toBe(0.1);
+
+    const p1 = getRowsParams({ startRow: 100, endRow: 200 });
+    await ds?.getRows(p1);
+    expect(p1.successCallback).toHaveBeenCalledWith([], 1); // cached total, not null
+    expect(result.current.total).toBe(1);
+    expect(result.current.activityReference).toBe(0.1);
+  });
+
   it("filterParam is undefined when no column filter is active", async () => {
     const fetchFn = vi.fn().mockResolvedValue(PAGE);
     const { result } = renderHook(() => useDecompositionRows("run-1", null, { fetchFn }));

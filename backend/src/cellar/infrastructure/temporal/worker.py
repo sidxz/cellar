@@ -52,6 +52,12 @@ async def run_worker() -> None:
         StructureProcessorProtocol,
     )
     from cellar.application.export.render_export import RenderExport
+    from cellar.application.sar_analysis.mark_activity_projection_failed import (
+        MarkActivityProjectionFailed,
+    )
+    from cellar.application.sar_analysis.mark_decomposition_run_failed import (
+        MarkDecompositionRunFailed,
+    )
     from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
     from cellar.application.sar_analysis.run_decomposition import RunDecomposition
     from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
@@ -111,13 +117,35 @@ async def run_worker() -> None:
 
     # --- R-group decomposition activity ---
     # RunDecomposition is wired by the DI container via register_sar_analysis.
+    # The mark-failed use case (own UoW) lets the workflow record FAILED on retry
+    # exhaustion — the runner leaves FAILED-marking to this boundary.
+    from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_run_repository import (  # noqa: E501
+        SQLAlchemyRGroupDecompositionRunRepository,
+    )
+    from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
+        SQLAlchemySarActivityProjectionRepository,
+    )
+    from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+
     run_rgroup_decomposition = container[RunDecomposition]
-    rgroup_decomposition_activities = RGroupDecompositionActivities(run_rgroup_decomposition)
+    _dec_fail_uow = AsyncUnitOfWork(session_factory)
+    rgroup_decomposition_activities = RGroupDecompositionActivities(
+        run_rgroup_decomposition,
+        MarkDecompositionRunFailed(
+            repository=SQLAlchemyRGroupDecompositionRunRepository(_dec_fail_uow),
+            uow=_dec_fail_uow,
+        ),
+    )
 
     # --- SAR activity projection activity ---
     run_sar_activity_projection = container[RunActivityProjection]
+    _proj_fail_uow = AsyncUnitOfWork(session_factory)
     sar_activity_projection_activities = SarActivityProjectionActivities(
-        run_sar_activity_projection
+        run_sar_activity_projection,
+        MarkActivityProjectionFailed(
+            repository=SQLAlchemySarActivityProjectionRepository(_proj_fail_uow),
+            uow=_proj_fail_uow,
+        ),
     )
 
     # --- UMAP cluster activity ---
@@ -151,8 +179,10 @@ async def run_worker() -> None:
             scaffold_tree_activities.run_scaffold_tree,
             # R-group decomposition
             rgroup_decomposition_activities.run_rgroup_decomposition,
+            rgroup_decomposition_activities.mark_rgroup_decomposition_failed,
             # SAR activity projection
             sar_activity_projection_activities.run_sar_activity_projection,
+            sar_activity_projection_activities.mark_sar_activity_projection_failed,
             # UMAP cluster
             umap_cluster_activities.run_umap_cluster,
             # Export

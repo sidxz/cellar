@@ -53,6 +53,32 @@ async def test_null_orchestrator_cancel_is_noop():
     await orch.cancel(run_id=uuid.uuid4())  # must not raise
 
 
+class BoomRunner:
+    async def run(self, *, run_id, workspace_id, core_smiles, collection_id=None, molecule_ids=None):
+        raise RuntimeError("runner boom")
+
+
+class SpyMarkFailed:
+    def __init__(self):
+        self.calls = []
+
+    async def execute(self, payload):
+        self.calls.append(payload)
+
+
+@pytest.mark.asyncio
+async def test_null_orchestrator_marks_failed_when_runner_raises():
+    # No Temporal workflow on the inline path, so the Null orchestrator records
+    # FAILED itself; the background task must not propagate the error.
+    spy = SpyMarkFailed()
+    orch = NullRGroupDecompositionOrchestrator(BoomRunner(), mark_failed=spy)
+    run_id = uuid.uuid4()
+    await orch.schedule(run_id=run_id, workspace_id=uuid.uuid4(), core_smiles="c1ccccc1")
+    await asyncio.gather(*list(orch._tasks))  # swallowed after recording — no raise
+    assert len(spy.calls) == 1
+    assert spy.calls[0].run_id == run_id
+
+
 class FakeClient:
     def __init__(self):
         self.started: list[dict] = []

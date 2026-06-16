@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { HeatmapCellView } from './heatmapCellView';
+import type { HeatmapResponseActivityReference } from './heatmapResponseActivityReference';
 
 export interface HeatmapResponse {
   x_values: string[];
@@ -13,4 +14,5 @@ export interface HeatmapResponse {
   y_total: number;
   x_total: number;
   truncated: boolean;
+  activity_reference?: HeatmapResponseActivityReference;
 }

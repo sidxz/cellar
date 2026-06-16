@@ -1,5 +1,5 @@
 import type { IDatasource, IGetRowsParams } from "ag-grid-community";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ActivityValue } from "@/features/research-organization/types";
 import type { DecompositionRowsResponse } from "@/shared/lib/api/model";
@@ -44,6 +44,19 @@ export function useDecompositionRows(
   const [filterParam, setFilterParam] = useState<Record<string, unknown> | undefined>(undefined);
   const [total, setTotal] = useState<number | null>(null);
 
+  // total + activity_reference are full-scan COUNT/MIN the server computes only on
+  // the first block (offset 0); later blocks return null and reuse these caches.
+  // AG-Grid still needs the row count on every getRows to size the scrollbar, so
+  // we hand it the cached total. Reset when the run/projection changes.
+  const totalRef = useRef<number | null>(null);
+  const referenceRef = useRef<number | null>(null);
+  useEffect(() => {
+    totalRef.current = null;
+    referenceRef.current = null;
+    setTotal(null);
+    setActivityReference(null);
+  }, [runId, projectionId]);
+
   const datasource = useMemo<IDatasource | null>(() => {
     if (!runId) return null;
     return {
@@ -59,16 +72,22 @@ export function useDecompositionRows(
         };
         try {
           const res = await fetchFn(runId, body);
-          setActivityReference(res.activity_reference ?? null);
-          setFilterParam(body.filter);
-          setTotal(res.total);
-          params.successCallback(res.rows.map(toRow), res.total);
+          // total != null marks the first block of a (filter/sort) result set:
+          // cache the count + reference; later blocks (total == null) reuse them.
+          if (res.total != null) {
+            totalRef.current = res.total;
+            referenceRef.current = res.activity_reference ?? null;
+            setTotal(res.total);
+            setActivityReference(res.activity_reference ?? null);
+            setFilterParam(body.filter);
+          }
+          params.successCallback(res.rows.map(toRow), totalRef.current ?? undefined);
         } catch {
           params.failCallback();
         }
       },
     };
-    // setActivityReference is stable; runId/projectionId/fetchFn are the real deps.
+    // refs/setters are stable; runId/projectionId/fetchFn are the real deps.
   }, [runId, projectionId, fetchFn]);
 
   return { datasource, activityReference, filterParam, total };

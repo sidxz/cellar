@@ -3,7 +3,6 @@ import { useCallback, useMemo, useState } from "react";
 
 import { useJobPoll } from "@/shared/hooks/use-job-poll";
 import type { DecompositionRunResponse } from "@/shared/lib/api/model";
-import { STALE_TIME } from "@/shared/lib/query-defaults";
 
 type StartInput = { collection_id?: string; molecule_ids?: string[]; core_smiles: string };
 
@@ -66,7 +65,13 @@ export function useDecompositionRun(params: UseDecompositionRunParams): UseDecom
           : { molecule_ids: moleculeIds ?? [], core_smiles: coreSmiles as string },
       ),
     enabled: queryEnabled,
-    staleTime: STALE_TIME.MEDIUM,
+    // "start" is a side-effecting POST modeled as a query: never auto-refetch it
+    // (window focus / reconnect / remount) or it would re-POST and re-stream the
+    // whole membership. A fresh run is triggered explicitly — runAgain bumps the
+    // nonce, or the inputs change — both of which re-key the query.
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const startRun = start.data ?? null;

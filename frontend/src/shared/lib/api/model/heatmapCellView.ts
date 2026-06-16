@@ -4,13 +4,14 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { HeatmapCellViewBestScalar } from './heatmapCellViewBestScalar';
 import type { HeatmapCellViewBestSnapshot } from './heatmapCellViewBestSnapshot';
 
 export interface HeatmapCellView {
   y: string;
   x: string;
   count: number;
-  best_scalar: number;
+  best_scalar?: HeatmapCellViewBestScalar;
   best_molecule_id: string;
   best_molecule_label: string;
   best_snapshot: HeatmapCellViewBestSnapshot;

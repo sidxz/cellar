@@ -60,6 +60,12 @@ export interface CurveSnapshot {
    *  Drives the secondary chip strip and the headline label via
    *  `interceptLabel(spec)` when present. Legacy snapshots omit. */
   intercept_values?: Array<Record<string, unknown>> | null;
+  /** When the surface colors by a NON-primary intercept (e.g. IC90), the value
+   *  + label of that selected intercept. Drawn as a distinct solid reference
+   *  line so the expanded curve agrees with the colored column; `fitted_value`
+   *  stays at the primary intercept (the curve's own marker). Omitted when the
+   *  selected channel IS the primary. */
+  selected_intercept?: { value: number; label: string } | null;
   /** Machine-readable fit-quality codes (`"ec50_at_bound"`, …). Rendered
    *  as amber badges in the SummaryCard. */
   fit_quality_warnings?: string[] | null;
@@ -414,6 +420,26 @@ function buildPlotInputs(curve: CurveSnapshot, preset: Preset, unit: string | nu
       y1: 1,
       line: { color: CHART_COLORS.warning, width: 1, dash: "dot" },
       opacity: 0.7,
+    });
+  }
+  // Distinct solid line at the SELECTED (non-primary) intercept — e.g. IC90 —
+  // so the expanded curve's potency marker agrees with the column the cell is
+  // colored by, rather than always sitting at the primary (IC50) fitted_value.
+  if (
+    curve.selected_intercept != null &&
+    Number.isFinite(curve.selected_intercept.value) &&
+    curve.selected_intercept.value > 0
+  ) {
+    shapes.push({
+      type: "line",
+      xref: "x",
+      x0: curve.selected_intercept.value,
+      x1: curve.selected_intercept.value,
+      yref: "paper",
+      y0: 0,
+      y1: 1,
+      line: { color: CHART_COLORS.primary, width: 1.5 },
+      opacity: 0.9,
     });
   }
 

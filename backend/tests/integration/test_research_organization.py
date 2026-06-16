@@ -445,6 +445,38 @@ class TestCollectionMembership:
             # All 5 molecules accounted for
             assert set(page1 + page2) == set(mols)
 
+    async def test_get_molecule_ids_pages_completely_with_tied_added_at(
+        self, uow: AsyncUnitOfWork
+    ) -> None:
+        # A single add_molecules() stamps every row with the same transaction
+        # timestamp, so added_at ties across all members. OFFSET/LIMIT paging
+        # must still cover the whole set exactly once — the (added_at, molecule_id)
+        # tiebreak guarantees a total order so no member repeats or is skipped
+        # across page boundaries (which would duplicate-insert into a run).
+        ws_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        mols = [uuid.uuid4() for _ in range(12)]
+        for m in mols:
+            await _insert_molecule(uow, m, ws_id)
+
+        async with uow:
+            repo = SQLAlchemyCollectionRepository(uow)
+            c = Collection.create(workspace_id=ws_id, name="Tied", created_by=user_id)
+            await repo.save(c)
+            await uow.commit()
+        async with uow:
+            repo = SQLAlchemyCollectionRepository(uow)
+            await repo.add_molecules(ws_id, c.id, mols)  # one stmt -> tied added_at
+            await uow.commit()
+
+        async with uow:
+            repo = SQLAlchemyCollectionRepository(uow)
+            seen: list[uuid.UUID] = []
+            for offset in range(0, 12, 5):  # pages of 5: [0,5,10]
+                seen += await repo.get_molecule_ids(ws_id, c.id, offset=offset, limit=5)
+        assert len(seen) == 12
+        assert set(seen) == set(mols)  # complete, no repeats, no skips
+
     async def test_replace_molecule_swap(self, uow: AsyncUnitOfWork) -> None:
         """Source mol in collection, target not — simple UPDATE."""
         ws_id = uuid.uuid4()

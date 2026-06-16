@@ -21,11 +21,18 @@ from uuid import UUID
 
 from cellar.application.sar_analysis.decomposition_members import DecompositionMemberStream
 from cellar.application.sar_analysis.hashing import compute_membership_hash, sha256_hex
+from cellar.application.sar_analysis.mark_decomposition_run_failed import (
+    MarkDecompositionRunFailed,
+    MarkDecompositionRunFailedInput,
+)
 from cellar.application.sar_analysis.repositories import RGroupDecompositionRunRepository
 from cellar.application.sar_analysis.rgroup_decomposition import StreamingDecomposer
 from cellar.application.sar_analysis.run_decomposition import ready_counts
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
+from cellar.domain.sar_analysis.rgroup_decomposition_run import (
+    RGroupDecompositionRun,
+    RGroupDecompositionRunStatus,
+)
 
 
 @dataclass(frozen=True)
@@ -68,6 +75,9 @@ class StartDecompositionRun:
         self._repo = repository
         self._orchestrator = orchestrator
         self._uow = uow
+        # The inline path marks FAILED on error via the same guarded use case the
+        # async boundary uses; it reuses this use case's repo + uow.
+        self._mark_failed = MarkDecompositionRunFailed(repository=repository, uow=uow)
         self._inline_threshold = inline_threshold
 
     async def execute(self, payload: StartDecompositionRunInput) -> RGroupDecompositionRun:
@@ -78,7 +88,9 @@ class StartDecompositionRun:
             membership_hash = compute_membership_hash(pairs)
 
             cached = await self._repo.find_cached(
-                membership_hash=membership_hash, core_hash=core_hash
+                workspace_id=payload.workspace_id,
+                membership_hash=membership_hash,
+                core_hash=core_hash,
             )
             if cached is not None:
                 return cached
@@ -91,19 +103,38 @@ class StartDecompositionRun:
                 core_hash=core_hash,
                 now=payload.now,
             )
+            is_inline = count <= self._inline_threshold
+            # Persist the initial row: RUNNING for the inline path (assignment FKs
+            # need the row to exist), PENDING for the async path.
+            await self._repo.save(run.mark_running(payload.now) if is_inline else run)
+            await self._uow.commit()
 
-            if count <= self._inline_threshold:
-                running = run.mark_running(payload.now)
-                await self._repo.save(running)
-                await self._uow.commit()  # run row must exist before assignment FKs
+        if not is_inline:
+            await self._orchestrator.schedule(
+                run_id=run.id,
+                workspace_id=payload.workspace_id,
+                core_smiles=payload.core_smiles,
+                collection_id=payload.collection_id,
+                molecule_ids=payload.molecule_ids,
+            )
+            return run
 
+        # Inline: decompose the small set now. On failure, mark FAILED so we never
+        # leave an orphaned RUNNING row (mirrors the async runner's contract).
+        try:
+            async with self._uow:
                 session = self._decomposer.session(core_smiles=payload.core_smiles)
                 for molecule_id, smiles in buffer:
                     session.add(molecule_id, smiles or "")
                 result = session.finish()
                 await self._repo.write_assignments(run.id, result.assignments)
                 matched, unmatched, total = ready_counts(result)
-                ready = running.mark_ready(
+                # Re-read so a concurrent cancel is respected (and to mark_ready at
+                # the row's current version under optimistic concurrency).
+                current = await self._repo.find_by_id(run.id, workspace_id=payload.workspace_id)
+                if current is None or current.status != RGroupDecompositionRunStatus.RUNNING:
+                    return current if current is not None else run
+                ready = current.mark_ready(
                     rgroup_labels=result.rgroup_labels,
                     matched_count=matched,
                     unmatched_count=unmatched,
@@ -113,18 +144,16 @@ class StartDecompositionRun:
                 await self._repo.save(ready)
                 await self._uow.commit()
                 return ready
-
-            await self._repo.save(run)
-            await self._uow.commit()
-
-        await self._orchestrator.schedule(
-            run_id=run.id,
-            workspace_id=payload.workspace_id,
-            core_smiles=payload.core_smiles,
-            collection_id=payload.collection_id,
-            molecule_ids=payload.molecule_ids,
-        )
-        return run
+        except Exception:
+            await self._mark_failed.execute(
+                MarkDecompositionRunFailedInput(
+                    run_id=run.id,
+                    workspace_id=payload.workspace_id,
+                    error="inline decomposition failed",
+                    now=payload.now,
+                )
+            )
+            raise
 
     async def _collect(
         self, payload: StartDecompositionRunInput

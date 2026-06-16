@@ -46,7 +46,10 @@ class FakeRunRepo:
         return run
 
     async def write_assignments(self, run_id, assignments):
-        self.written[run_id] = list(assignments)
+        self.written.setdefault(run_id, []).extend(assignments)
+
+    async def delete_assignments(self, run_id):
+        self.written.pop(run_id, None)
 
 
 class FakeSession:
@@ -152,7 +155,9 @@ async def test_run_null_smiles_member_is_added_as_empty_string():
 
 
 @pytest.mark.asyncio
-async def test_run_marks_failed_and_reraises_on_exception():
+async def test_run_reraises_without_marking_failed():
+    # FAILED is set at the orchestration boundary, not the runner, so a Temporal
+    # retry can re-enter and recover. The runner re-raises, leaving it RUNNING.
     ws = uuid.uuid4()
     run = _pending_run(ws)
     repo = FakeRunRepo(run)
@@ -164,12 +169,68 @@ async def test_run_marks_failed_and_reraises_on_exception():
     )
     with pytest.raises(RuntimeError, match="rdkit boom"):
         await uc.run(run_id=run.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[uuid.uuid4()])
-    assert repo._runs[run.id].status == RGroupDecompositionRunStatus.FAILED
-    assert "rdkit boom" in (repo._runs[run.id].error_message or "")
+    assert repo._runs[run.id].status == RGroupDecompositionRunStatus.RUNNING
 
 
 @pytest.mark.asyncio
-async def test_run_skips_when_not_pending():
+async def test_run_reclaims_running_and_resets_prior_assignments():
+    # Temporal retry: run is already RUNNING with stale assignment rows. The
+    # runner re-claims, resets the stale rows, recomputes, reaches READY.
+    ws = uuid.uuid4()
+    running = _pending_run(ws).mark_running(_NOW)
+    matched = uuid.uuid4()
+    result = RGroupDecompositionResult(
+        core_smiles="c1ccccc1",
+        rgroup_labels=["R1"],
+        assignments=[RGroupAssignment(molecule_id=matched, rgroups={"R1": "F"})],
+        unmatched_ids=[],
+    )
+    repo = FakeRunRepo(running)
+    repo.written[running.id] = ["STALE", "STALE"]
+    uc = RunDecomposition(
+        members=FakeStream([[(matched, "Fc1ccccc1", 1)]]),
+        decomposer=FakeDecomposer(FakeSession(result)),
+        repository=repo,
+        uow=FakeUoW(),
+    )
+    await uc.run(run_id=running.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[matched])
+    saved = repo._runs[running.id]
+    assert saved.status == RGroupDecompositionRunStatus.READY
+    assert len(repo.written[running.id]) == 1  # reset, then fresh assignment
+
+
+@pytest.mark.asyncio
+async def test_run_respects_concurrent_cancel_and_does_not_mark_ready():
+    # A cancel commits mid-run; the runner re-reads before the terminal
+    # transition and bails, so the run stays CANCELLED.
+    ws = uuid.uuid4()
+    run = _pending_run(ws)
+    matched = uuid.uuid4()
+    result = RGroupDecompositionResult(
+        core_smiles="c1ccccc1",
+        rgroup_labels=["R1"],
+        assignments=[RGroupAssignment(molecule_id=matched, rgroups={"R1": "F"})],
+        unmatched_ids=[],
+    )
+    repo = FakeRunRepo(run)
+
+    class CancellingSession(FakeSession):
+        def finish(self):
+            repo._runs[run.id] = repo._runs[run.id].mark_cancelled(_NOW)
+            return super().finish()
+
+    uc = RunDecomposition(
+        members=FakeStream([[(matched, "Fc1ccccc1", 1)]]),
+        decomposer=FakeDecomposer(CancellingSession(result)),
+        repository=repo,
+        uow=FakeUoW(),
+    )
+    await uc.run(run_id=run.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[matched])
+    assert repo._runs[run.id].status == RGroupDecompositionRunStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_run_skips_when_terminal():
     ws = uuid.uuid4()
     cancelled = _pending_run(ws).mark_cancelled(_NOW)
     repo = FakeRunRepo(cancelled)

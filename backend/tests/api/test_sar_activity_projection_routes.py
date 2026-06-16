@@ -154,6 +154,19 @@ async def test_heatmap_happy_path(client, api_app, workspace_id) -> None:
     assert cells[("F", "Cl")]["best_scalar"] == pytest.approx(0.1)  # argmin
     assert cells[("F", "Cl")]["best_molecule_id"] == str(potent)
     assert body["truncated"] is False
+    # Shared color anchor is served so heatmap + table shade against one reference.
+    assert body["activity_reference"] is not None
+
+
+@pytest.mark.asyncio
+async def test_heatmap_rejects_unknown_axis(client, api_app, workspace_id) -> None:
+    # A stale/bogus axis must 422 — never a silent empty matrix that reads as "no data".
+    run_id, projection_id, _potent = await _seed_heatmap_fixture(api_app, workspace_id)
+    res = await client.post(
+        f"/api/v1/sar/decomposition/{run_id}/heatmap",
+        json={"axis_y": "R1", "axis_x": "R9", "projection_id": str(projection_id)},
+    )
+    assert res.status_code == 422
 
 
 @pytest.mark.asyncio

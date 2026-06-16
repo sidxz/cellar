@@ -1,12 +1,17 @@
 """SQLAlchemy read-model for the activity heatmap.
 
-GROUP BY (rgroups->>axis_y, rgroups->>axis_x) over assignment ⋈ activity_value ⋈
-molecules, argmin(scalar) per cell. ``argmin`` is the *lower-is-better* cell
-representative — correct because the FE only colors/expands dose-response potency
-channels (concentrations, where lower = more potent). Each axis is capped to the
-top-K substituents by member count; totals are reported separately so the UI can
-label "top K of N" honestly. Molecules missing either axis substituent are not
-placeable in a 2D cell and are excluded.
+GROUP BY (rgroups->>axis_y, rgroups->>axis_x) over assignment LEFT JOIN
+activity_value ⋈ molecules, argmin(scalar) per cell. ``argmin`` is the
+*lower-is-better* cell representative — correct because the FE only
+colors/expands dose-response potency channels (concentrations, where lower =
+more potent). The activity join is a LEFT join: a matched (y, x) combo whose
+molecules have no value for the channel still appears as an (uncolored) cell
+with its full member count — the tested-but-unscreened-corner SAR signal — so
+``best_scalar`` is None for such cells. ``activity_reference`` is the min scalar
+over the whole (uncapped) scored set, the shared color anchor with the R-group
+table. Each axis is capped to the top-K substituents by member count; totals are
+reported separately so the UI can label "top K of N" honestly. Molecules missing
+either axis substituent are not placeable in a 2D cell and are excluded.
 """
 
 from __future__ import annotations
@@ -65,7 +70,7 @@ class SQLAlchemyActivityHeatmapReader:
                 RGroupDecompositionRunModel,
                 RGroupDecompositionRunModel.id == RGroupAssignmentModel.run_id,
             )
-            .join(
+            .outerjoin(
                 SarActivityValueModel,
                 (SarActivityValueModel.projection_id == projection_id)
                 & (SarActivityValueModel.molecule_id == RGroupAssignmentModel.molecule_id),
@@ -82,13 +87,19 @@ class SQLAlchemyActivityHeatmapReader:
             .cte("base")
         )
 
-        # Honest totals (distinct substituents per axis, before the cap).
+        # Honest totals (distinct substituents per axis, before the cap) and the
+        # shared color anchor: min scalar over the whole uncapped scored set.
         totals = (
             await session.execute(
-                select(func.count(distinct(base.c.y)), func.count(distinct(base.c.x)))
+                select(
+                    func.count(distinct(base.c.y)),
+                    func.count(distinct(base.c.x)),
+                    func.min(base.c.scalar),
+                )
             )
         ).one()
         y_total, x_total = int(totals[0]), int(totals[1])
+        activity_reference = float(totals[2]) if totals[2] is not None else None
 
         # Top-K substituents per axis by member count.
         # Materialize as .subquery() so the IN clause renders as a correlated
@@ -164,7 +175,7 @@ class SQLAlchemyActivityHeatmapReader:
                 y=r.y,
                 x=r.x,
                 count=int(r.cell_count),
-                best_scalar=float(r.scalar),
+                best_scalar=float(r.scalar) if r.scalar is not None else None,
                 best_molecule_id=r.molecule_id,
                 best_molecule_label=r.label or "",
                 best_snapshot=dict(r.snapshot or {}),
@@ -180,4 +191,5 @@ class SQLAlchemyActivityHeatmapReader:
             y_total=y_total,
             x_total=x_total,
             truncated=(y_total > top_k or x_total > top_k),
+            activity_reference=activity_reference,
         )

@@ -48,19 +48,25 @@ class RunActivityProjection:
         log = logger.bind(projection_id=str(run_id), workspace_id=str(workspace_id))
         channel = ActivityChannelSpec.from_spec_dict(channel_spec)
         try:
+            # 1. Claim. Idempotent re-entry: PENDING -> RUNNING, or re-claim a
+            #    projection already RUNNING from a crashed attempt (a Temporal
+            #    retry). Terminal states (incl. a cancel) are respected — no-op.
             async with self.uow:
                 proj = await self.repository.find_by_id(run_id, workspace_id=workspace_id)
                 if proj is None:
                     log.error("sar_activity_projection_not_found")
                     return
-                if proj.status != SarActivityProjectionStatus.PENDING:
-                    log.info("sar_activity_projection_not_pending", status=str(proj.status))
+                if proj.status == SarActivityProjectionStatus.PENDING:
+                    await self.repository.save(proj.mark_running(datetime.now(UTC)))
+                    await self.uow.commit()
+                elif proj.status != SarActivityProjectionStatus.RUNNING:
+                    log.info("sar_activity_projection_not_runnable", status=str(proj.status))
                     return
-                running = proj.mark_running(datetime.now(UTC))
-                await self.repository.save(running)
-                await self.uow.commit()
 
+            # 2. (Re)compute. Reset any rows from a prior attempt first, so a
+            #    retry is idempotent and never collides on the value PK.
             async with self.uow:
+                await self.repository.delete_values(run_id)
                 total = 0
                 async for batch in self.members.stream(
                     workspace_id=workspace_id,
@@ -74,23 +80,26 @@ class RunActivityProjection:
                     if scalars:
                         await self.repository.write_values(run_id, scalars)
                         total += len(scalars)
-                ready = running.mark_ready(value_count=total, now=datetime.now(UTC))
-                await self.repository.save(ready)
+
+                # 3. Finalize. Re-read so a cancel that landed mid-run is
+                #    respected rather than clobbered back to READY (the save is
+                #    also version-checked as a backstop against the TOCTOU gap).
+                current = await self.repository.find_by_id(run_id, workspace_id=workspace_id)
+                if current is None or current.status != SarActivityProjectionStatus.RUNNING:
+                    log.info(
+                        "sar_activity_projection_no_longer_running",
+                        status=str(current.status) if current is not None else "missing",
+                    )
+                    return
+                await self.repository.save(
+                    current.mark_ready(value_count=total, now=datetime.now(UTC))
+                )
                 await self.uow.commit()
             log.info("sar_activity_projection_ready", value_count=total)
 
-        except Exception as exc:
-            log.exception("sar_activity_projection_failed")
-            try:
-                async with self.uow:
-                    current = await self.repository.find_by_id(run_id, workspace_id=workspace_id)
-                    if (
-                        current is not None
-                        and current.status == SarActivityProjectionStatus.RUNNING
-                    ):
-                        failed = current.mark_failed(str(exc), datetime.now(UTC))
-                        await self.repository.save(failed)
-                        await self.uow.commit()
-            except Exception:
-                log.exception("sar_activity_projection_fail_mark_failed")
+        except Exception:
+            # FAILED is marked at the orchestration boundary (Temporal workflow
+            # on retry exhaustion, or the inline/Null handler), not here — so a
+            # retry can re-enter and recover. Re-raise for the boundary.
+            log.exception("sar_activity_projection_run_failed")
             raise

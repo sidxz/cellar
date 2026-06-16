@@ -53,6 +53,9 @@ class FakeRepo:
     async def write_values(self, pid, values):
         self.written.setdefault(pid, []).extend(values)
 
+    async def delete_values(self, pid):
+        self.written.pop(pid, None)
+
 
 class FakeEnricher:
     def __init__(self, table, *, raise_on_call=False):
@@ -105,7 +108,11 @@ async def test_run_marks_ready_with_value_count():
 
 
 @pytest.mark.asyncio
-async def test_run_marks_failed_and_reraises():
+async def test_run_reraises_without_marking_failed():
+    # FAILED is set at the orchestration boundary (workflow exhaustion / inline
+    # handler), NOT inside the runner — so a Temporal retry can re-enter and
+    # recover from a transient failure. The runner re-raises and leaves the row
+    # RUNNING (claimed).
     ws = uuid.uuid4()
     proj = _pending(ws)
     repo = FakeRepo(proj)
@@ -117,11 +124,69 @@ async def test_run_marks_failed_and_reraises():
     )
     with pytest.raises(RuntimeError, match="enrich boom"):
         await uc.run(run_id=proj.id, workspace_id=ws, channel_spec=_channel_spec_dict(), molecule_ids=[uuid.uuid4()])
-    assert repo._by_id[proj.id].status == SarActivityProjectionStatus.FAILED
+    assert repo._by_id[proj.id].status == SarActivityProjectionStatus.RUNNING
 
 
 @pytest.mark.asyncio
-async def test_run_skips_when_not_pending():
+async def test_run_reclaims_running_and_resets_prior_values():
+    # Temporal retry: the projection is already RUNNING from a crashed attempt
+    # and carries stale value rows. The runner re-claims (no PENDING required),
+    # resets the stale rows, recomputes, and reaches READY with the fresh count.
+    ws = uuid.uuid4()
+    running = _pending(ws).mark_running(_NOW)  # already RUNNING
+    a = uuid.uuid4()
+    table = {
+        a: {_COLUMN: ActivityValue(value=0.5, qualifier=None, unit="uM", source="dose_response")}
+    }
+    repo = FakeRepo(running)
+    repo.written[running.id] = ["STALE", "STALE"]  # leftovers from a prior attempt
+    uc = RunActivityProjection(
+        members=FakeStream([[(a, "Fc1ccccc1", 1)]]),
+        enricher=FakeEnricher(table),
+        repository=repo,
+        uow=FakeUoW(),
+    )
+    await uc.run(run_id=running.id, workspace_id=ws, channel_spec=_channel_spec_dict(), molecule_ids=[a])
+    saved = repo._by_id[running.id]
+    assert saved.status == SarActivityProjectionStatus.READY
+    assert saved.value_count == 1
+    assert len(repo.written[running.id]) == 1  # stale rows reset, not doubled
+
+
+@pytest.mark.asyncio
+async def test_run_respects_concurrent_cancel_and_does_not_mark_ready():
+    # A cancel commits while the runner is mid-flight. The runner re-reads the
+    # projection before the terminal transition and bails, so a lost cancel
+    # cannot flip CANCELLED back to READY.
+    ws = uuid.uuid4()
+    proj = _pending(ws)
+    repo = FakeRepo(proj)
+    a = uuid.uuid4()
+    table = {
+        a: {_COLUMN: ActivityValue(value=0.5, qualifier=None, unit="uM", source="dose_response")}
+    }
+
+    class CancellingEnricher(FakeEnricher):
+        async def enrich_molecules(self, ws_, ids, cols, *, selection_rule, qualifier_handling, run_scopes=None):
+            # Simulate a concurrent cancel committing during enrichment.
+            repo._by_id[proj.id] = repo._by_id[proj.id].mark_cancelled(_NOW)
+            return await super().enrich_molecules(
+                ws_, ids, cols, selection_rule=selection_rule,
+                qualifier_handling=qualifier_handling, run_scopes=run_scopes,
+            )
+
+    uc = RunActivityProjection(
+        members=FakeStream([[(a, "Fc1ccccc1", 1)]]),
+        enricher=CancellingEnricher(table),
+        repository=repo,
+        uow=FakeUoW(),
+    )
+    await uc.run(run_id=proj.id, workspace_id=ws, channel_spec=_channel_spec_dict(), molecule_ids=[a])
+    assert repo._by_id[proj.id].status == SarActivityProjectionStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_run_skips_when_terminal():
     ws = uuid.uuid4()
     cancelled = _pending(ws).mark_cancelled(_NOW)
     repo = FakeRepo(cancelled)

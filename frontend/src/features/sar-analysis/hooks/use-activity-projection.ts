@@ -5,7 +5,6 @@ import type { AggregationMode } from "@/features/research-organization/lib/use-a
 import { aggregationModeToWire } from "@/features/research-organization/lib/use-aggregation-mode";
 import { useJobPoll } from "@/shared/hooks/use-job-poll";
 import type { ActivityProjectionResponse } from "@/shared/lib/api/model";
-import { STALE_TIME } from "@/shared/lib/query-defaults";
 import type { SarColorSpec } from "../lib/sar-color-spec";
 
 export type ActivityChannel = {
@@ -98,7 +97,13 @@ export function useActivityProjection(
           : { molecule_ids: moleculeIds ?? [], channel: channel as ActivityChannel },
       ),
     enabled: queryEnabled,
-    staleTime: STALE_TIME.MEDIUM,
+    // "start" is a side-effecting POST modeled as a query: never auto-refetch it
+    // (window focus / reconnect / remount) or it would re-POST and re-stream the
+    // whole membership. A fresh projection is triggered explicitly — runAgain
+    // bumps the nonce, or the inputs change — both of which re-key the query.
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const startProj = start.data ?? null;
