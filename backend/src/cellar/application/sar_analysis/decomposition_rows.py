@@ -33,6 +33,7 @@ class DecompositionRow:
     logp: float | None
     tpsa: float | None
     activity: float | None = None
+    activity_snapshot: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,15 @@ class DecompositionRowReader(Protocol):
         filter: dict[str, Any] | None = None,
     ) -> int: ...
 
+    async def activity_reference(
+        self,
+        run_id: UUID,
+        *,
+        workspace_id: UUID,
+        projection_id: UUID | None,
+        filter: dict[str, Any] | None = None,
+    ) -> float | None: ...
+
 
 @dataclass(frozen=True)
 class FetchDecompositionRowsInput:
@@ -79,6 +89,7 @@ class FetchDecompositionRowsInput:
 class FetchDecompositionRowsOutput:
     rows: list[DecompositionRow]
     total: int
+    activity_reference: float | None = None
 
 
 class FetchDecompositionRows:
@@ -128,4 +139,14 @@ class FetchDecompositionRows:
                 projection_id=payload.projection_id,
                 filter=payload.filter,
             )
-        return Success(FetchDecompositionRowsOutput(rows=rows, total=total))
+            reference = None
+            if payload.projection_id is not None:
+                reference = await self._reader.activity_reference(
+                    payload.run_id,
+                    workspace_id=payload.workspace_id,
+                    projection_id=payload.projection_id,
+                    filter=payload.filter,
+                )
+        return Success(
+            FetchDecompositionRowsOutput(rows=rows, total=total, activity_reference=reference)
+        )

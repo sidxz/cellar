@@ -173,7 +173,10 @@ class SQLAlchemyDecompositionRowReader:
     ) -> list[DecompositionRow]:
         # Activity is a LEFT JOIN to the projection's sparse values; absent ⇒
         # null (uncolored / unsortable for that row), exactly like the client did.
+        # The snapshot rides alongside (the stored ActivityValue wire shape) so the
+        # table's plot column + curve-expand work under pagination.
         activity_col = SarActivityValueModel.scalar if projection_id is not None else null()
+        snapshot_col = SarActivityValueModel.snapshot if projection_id is not None else null()
 
         stmt = self._scoped_join(
             select(
@@ -186,6 +189,7 @@ class SQLAlchemyDecompositionRowReader:
                 MoleculeModel.logp,
                 MoleculeModel.tpsa,
                 activity_col.label("activity"),
+                snapshot_col.label("activity_snapshot"),
             ),
             run_id,
             workspace_id,
@@ -218,6 +222,7 @@ class SQLAlchemyDecompositionRowReader:
                 logp=row[6],
                 tpsa=row[7],
                 activity=row[8],
+                activity_snapshot=dict(row[9]) if row[9] is not None else None,
             )
             for row in result.all()
         ]
@@ -236,3 +241,26 @@ class SQLAlchemyDecompositionRowReader:
         stmt = self._activity_join(stmt, projection_id)
         stmt = _apply_filter(stmt, filter, projection_id=projection_id)
         return int((await self._uow.session.execute(stmt)).scalar_one())
+
+    async def activity_reference(
+        self,
+        run_id: UUID,
+        *,
+        workspace_id: UUID,
+        projection_id: UUID | None,
+        filter: dict[str, Any] | None = None,
+    ) -> float | None:
+        """The most-potent (min) activity scalar across the filtered matched set,
+        anchoring the table's potency ramp consistently across pages. None when no
+        projection or no values."""
+        if projection_id is None:
+            return None
+        stmt = self._scoped_join(
+            select(func.min(SarActivityValueModel.scalar)).select_from(RGroupAssignmentModel),
+            run_id,
+            workspace_id,
+        )
+        stmt = self._activity_join(stmt, projection_id)
+        stmt = _apply_filter(stmt, filter, projection_id=projection_id)
+        value = (await self._uow.session.execute(stmt)).scalar_one_or_none()
+        return float(value) if value is not None else None

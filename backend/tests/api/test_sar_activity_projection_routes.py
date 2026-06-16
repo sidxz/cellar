@@ -190,3 +190,19 @@ async def test_rows_rejects_unknown_projection(client, api_app, workspace_id) ->
         json={"offset": 0, "limit": 50, "projection_id": str(uuid.uuid4())},
     )
     assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_rows_return_snapshot_and_reference(client, api_app, workspace_id) -> None:
+    run_id, projection_id, potent = await _seed_heatmap_fixture(api_app, workspace_id)
+    res = await client.post(
+        f"/api/v1/sar/decomposition/{run_id}/rows",
+        json={"offset": 0, "limit": 50, "projection_id": str(projection_id),
+              "sort": [{"col": "activity", "dir": "asc"}]},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["activity_reference"] == pytest.approx(0.1)  # min across the set
+    top = body["rows"][0]
+    assert top["registration_number"] == "CV-POTENT"
+    assert top["activity_snapshot"] == {"value": 0.1}  # the stored snapshot, per row

@@ -98,11 +98,13 @@ class DecompositionRowView(BaseModel):
     clogp: float | None
     tpsa: float | None
     activity: float | None = None
+    activity_snapshot: dict[str, Any] | None = None
 
 
 class DecompositionRowsResponse(BaseModel):
     rows: list[DecompositionRowView]
     total: int
+    activity_reference: float | None = None
 
 
 def _run_view(run: RGroupDecompositionRun) -> DecompositionRunResponse:
@@ -128,6 +130,7 @@ def _row_view(row: DecompositionRow) -> DecompositionRowView:
         clogp=row.logp,
         tpsa=row.tpsa,
         activity=row.activity,
+        activity_snapshot=row.activity_snapshot,
     )
 
 
@@ -206,10 +209,15 @@ async def decomposition_rows(
                 limit=payload.limit,
                 sort=sort,
                 projection_id=payload.projection_id,
+                filter=payload.filter,
             )
         )
     )
-    return DecompositionRowsResponse(rows=[_row_view(r) for r in out.rows], total=out.total)
+    return DecompositionRowsResponse(
+        rows=[_row_view(r) for r in out.rows],
+        total=out.total,
+        activity_reference=out.activity_reference,
+    )
 
 
 class InterceptKeyModel(BaseModel):

@@ -362,3 +362,54 @@ async def test_fetch_rows_unknown_filter_clause_is_ignored(uow):
         rows = await reader.fetch_rows(run.id, workspace_id=ws, offset=0, limit=50, sort=[], filter=flt)
         total = await reader.count_rows(run.id, workspace_id=ws, filter=flt)
     assert len(rows) == 1 and total == 1  # unknown col + unknown op both skipped (lenient)
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_returns_snapshot_and_reference(uow):
+    from cellar.domain.sar_analysis.activity_projection_types import ActivityScalar
+    from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
+        SQLAlchemySarActivityProjectionRepository,
+    )
+
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _seed_ready_run(uow, ws)
+        proj = await _seed_ready_projection(uow, ws)  # helper added in Part-2 Task 15
+        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
+        pr = SQLAlchemySarActivityProjectionRepository(uow)
+        potent = await _seed_molecule(uow, ws, org, reg="CV-POTENT", smiles="Fc1ccccc1")
+        weak = await _seed_molecule(uow, ws, org, reg="CV-WEAK", smiles="Clc1ccccc1")
+        await repo.write_assignments(run.id, [
+            RGroupAssignment(molecule_id=potent, rgroups={"R1": "F"}),
+            RGroupAssignment(molecule_id=weak, rgroups={"R1": "Cl"}),
+        ])
+        await pr.write_values(proj.id, [
+            ActivityScalar(molecule_id=potent, scalar=0.1, unit="uM", qualifier=None,
+                           source="dose_response", snapshot={"value": 0.1, "raw_data": []}),
+            ActivityScalar(molecule_id=weak, scalar=5.0, unit="uM", qualifier=None,
+                           source="dose_response", snapshot={"value": 5.0}),
+        ])
+        await uow.commit()
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        rows = await reader.fetch_rows(run.id, workspace_id=ws, offset=0, limit=50, sort=[], projection_id=proj.id)
+        ref = await reader.activity_reference(run.id, workspace_id=ws, projection_id=proj.id, filter=None)
+    by_reg = {r.registration_number: r for r in rows}
+    assert by_reg["CV-POTENT"].activity_snapshot == {"value": 0.1, "raw_data": []}
+    assert by_reg["CV-WEAK"].activity_snapshot == {"value": 5.0}
+    assert ref == pytest.approx(0.1)  # min scalar = most-potent reference
+
+
+@pytest.mark.asyncio
+async def test_activity_reference_none_without_projection(uow):
+    ws = uuid.uuid4()
+    async with uow:
+        org = await _seed_org(uow, ws)
+        run = await _seed_ready_run(uow, ws)
+        async with uow:
+            pass
+    async with uow:
+        reader = SQLAlchemyDecompositionRowReader(uow)
+        ref = await reader.activity_reference(run.id, workspace_id=ws, projection_id=None, filter=None)
+    assert ref is None
