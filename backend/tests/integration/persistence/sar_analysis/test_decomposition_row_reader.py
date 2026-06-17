@@ -51,7 +51,9 @@ async def _seed_ready_run(uow, ws):
     run = RGroupDecompositionRun.create(
         workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
         core_smiles="c1ccccc1", core_hash="ch", now=_NOW,
-    ).mark_running(_NOW).mark_ready(
+    )
+    run.mark_running(_NOW)
+    run.mark_ready(
         rgroup_labels=["R1"], matched_count=0, unmatched_count=0, total_count=0, now=_NOW
     )
     repo = SQLAlchemyRGroupDecompositionRunRepository(uow)

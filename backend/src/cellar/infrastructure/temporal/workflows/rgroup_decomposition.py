@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from temporalio import workflow
-from temporalio.common import RetryPolicy
-from temporalio.exceptions import ActivityError
+
+from cellar.infrastructure.temporal.workflow_support import run_job_with_failure_marking
 
 with workflow.unsafe.imports_passed_through():
     from cellar.infrastructure.temporal.activities.rgroup_decomposition import (
@@ -36,31 +36,20 @@ class RGroupDecompositionWorkflowInput:
 class RGroupDecompositionWorkflow:
     @workflow.run
     async def run(self, input: RGroupDecompositionWorkflowInput) -> None:
-        try:
-            await workflow.execute_activity(
-                RGroupDecompositionActivities.run_rgroup_decomposition,
-                RunDecompositionInput(
-                    run_id=input.run_id,
-                    workspace_id=input.workspace_id,
-                    core_smiles=input.core_smiles,
-                    collection_id=input.collection_id,
-                    molecule_ids=input.molecule_ids,
-                ),
-                start_to_close_timeout=timedelta(hours=1),
-                retry_policy=RetryPolicy(maximum_attempts=3),
-            )
-        except ActivityError:
-            # Retries exhausted — mark FAILED so the row is never orphaned in
-            # RUNNING (the runner leaves FAILED-marking to this boundary so a
-            # retry can re-enter and recover). Then fail the workflow.
-            await workflow.execute_activity(
-                RGroupDecompositionActivities.mark_rgroup_decomposition_failed,
-                MarkRunFailedInput(
-                    run_id=input.run_id,
-                    workspace_id=input.workspace_id,
-                    error="decomposition failed after retries",
-                ),
-                start_to_close_timeout=timedelta(minutes=5),
-                retry_policy=RetryPolicy(maximum_attempts=5),
-            )
-            raise
+        await run_job_with_failure_marking(
+            run_activity=RGroupDecompositionActivities.run_rgroup_decomposition,
+            run_input=RunDecompositionInput(
+                run_id=input.run_id,
+                workspace_id=input.workspace_id,
+                core_smiles=input.core_smiles,
+                collection_id=input.collection_id,
+                molecule_ids=input.molecule_ids,
+            ),
+            mark_failed_activity=RGroupDecompositionActivities.mark_rgroup_decomposition_failed,
+            mark_failed_input=MarkRunFailedInput(
+                run_id=input.run_id,
+                workspace_id=input.workspace_id,
+                error="decomposition failed after retries",
+            ),
+            run_timeout=timedelta(hours=1),
+        )

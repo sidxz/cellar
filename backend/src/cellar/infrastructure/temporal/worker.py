@@ -55,13 +55,11 @@ async def run_worker() -> None:
     from cellar.application.sar_analysis.mark_activity_projection_failed import (
         MarkActivityProjectionFailed,
     )
-    from cellar.application.sar_analysis.mark_decomposition_run_failed import (
-        MarkDecompositionRunFailed,
-    )
     from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
     from cellar.application.sar_analysis.run_decomposition import RunDecomposition
     from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
     from cellar.application.sar_analysis.run_umap_cluster import RunUmapCluster
+    from cellar.application.shared.mark_job_failed import MarkJobFailed
     from cellar.domain.shared.secret_provider import SecretProvider
     from cellar.infrastructure.cdd.client import CddVaultClient
     from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -131,9 +129,10 @@ async def run_worker() -> None:
     _dec_fail_uow = AsyncUnitOfWork(session_factory)
     rgroup_decomposition_activities = RGroupDecompositionActivities(
         run_rgroup_decomposition,
-        MarkDecompositionRunFailed(
+        MarkJobFailed(
             repository=SQLAlchemyRGroupDecompositionRunRepository(_dec_fail_uow),
             uow=_dec_fail_uow,
+            job_type="rgroup_decomposition",
         ),
     )
 

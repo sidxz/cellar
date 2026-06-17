@@ -32,10 +32,7 @@ from cellar.application.sar_analysis.start_activity_projection import (
 )
 from cellar.application.sar_analysis.start_decomposition_run import StartDecompositionRunInput
 from cellar.application.shared.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
-from cellar.domain.sar_analysis.rgroup_decomposition_run import (
-    RGroupDecompositionRun,
-    RGroupDecompositionRunStatus,
-)
+from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
 from cellar.domain.sar_analysis.sar_activity_projection import (
     SarActivityProjection,
     SarActivityProjectionStatus,
@@ -44,6 +41,7 @@ from cellar.domain.screening_assay.run_scope import (
     RunScope,  # noqa: F401  (documents run_scopes wire)
 )
 from cellar.domain.shared.aggregation_types import QualifierHandling, SelectionRule
+from cellar.domain.shared.async_job import AsyncJobStatus
 from cellar.domain.shared.hit_criterion import InterceptKey
 from cellar.interface.dependencies import AuthDep
 from cellar.interface.dependencies._sar_analysis import (
@@ -165,7 +163,7 @@ async def start_decomposition(
             now=datetime.now(UTC),
         )
     )
-    if run.status != RGroupDecompositionRunStatus.READY:
+    if run.status != AsyncJobStatus.READY:
         response.status_code = status.HTTP_202_ACCEPTED
     return _run_view(run)
 

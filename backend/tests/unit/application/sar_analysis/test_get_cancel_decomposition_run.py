@@ -14,10 +14,8 @@ from cellar.application.sar_analysis.get_decomposition_run import (
     GetDecompositionRun,
     GetDecompositionRunInput,
 )
-from cellar.domain.sar_analysis.rgroup_decomposition_run import (
-    RGroupDecompositionRun,
-    RGroupDecompositionRunStatus,
-)
+from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
+from cellar.domain.shared.async_job import AsyncJobStatus
 
 _NOW = datetime(2026, 6, 15, tzinfo=UTC)
 
@@ -42,7 +40,7 @@ class FakeRunRepo:
     async def save(self, run):
         self._runs[run.id] = run
 
-    async def find_by_id(self, run_id, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, run_id):
         run = self._runs.get(run_id)
         if run is None or run.workspace_id != workspace_id:
             return None
@@ -99,28 +97,30 @@ async def test_cancel_marks_cancelled_and_forwards_to_orchestrator():
     uc = CancelDecompositionRun(repository=repo, orchestrator=orch, uow=FakeUoW())
     out = await uc.execute(CancelDecompositionRunInput(run_id=run.id, workspace_id=ws, now=_NOW))
     assert isinstance(out, Success)
-    assert out.unwrap().status == RGroupDecompositionRunStatus.CANCELLED
+    assert out.unwrap().status == AsyncJobStatus.CANCELLED
     assert orch.cancelled == [run.id]
 
 
 @pytest.mark.asyncio
 async def test_cancel_terminal_run_is_idempotent_no_op():
     ws = uuid.uuid4()
-    ready = _pending(ws).mark_running(_NOW).mark_ready(
-        rgroup_labels=[], matched_count=0, unmatched_count=0, total_count=0, now=_NOW
-    )
+    ready = _pending(ws)
+    ready.mark_running(_NOW)
+    ready.mark_ready(rgroup_labels=[], matched_count=0, unmatched_count=0, total_count=0, now=_NOW)
     repo = FakeRunRepo(ready)
     orch = FakeOrchestrator()
     uc = CancelDecompositionRun(repository=repo, orchestrator=orch, uow=FakeUoW())
     out = await uc.execute(CancelDecompositionRunInput(run_id=ready.id, workspace_id=ws, now=_NOW))
     assert isinstance(out, Success)
-    assert out.unwrap().status == RGroupDecompositionRunStatus.READY  # unchanged
+    assert out.unwrap().status == AsyncJobStatus.READY  # unchanged
     assert orch.cancelled == []  # terminal cancel must not signal the orchestrator
 
 
 @pytest.mark.asyncio
 async def test_cancel_missing_is_failure():
-    uc = CancelDecompositionRun(repository=FakeRunRepo(), orchestrator=FakeOrchestrator(), uow=FakeUoW())
+    uc = CancelDecompositionRun(
+        repository=FakeRunRepo(), orchestrator=FakeOrchestrator(), uow=FakeUoW()
+    )
     out = await uc.execute(
         CancelDecompositionRunInput(run_id=uuid.uuid4(), workspace_id=uuid.uuid4(), now=_NOW)
     )

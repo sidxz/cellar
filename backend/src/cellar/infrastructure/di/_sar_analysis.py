@@ -48,9 +48,6 @@ from cellar.application.sar_analysis.get_umap_cluster_job import GetUmapClusterJ
 from cellar.application.sar_analysis.mark_activity_projection_failed import (
     MarkActivityProjectionFailed,
 )
-from cellar.application.sar_analysis.mark_decomposition_run_failed import (
-    MarkDecompositionRunFailed,
-)
 from cellar.application.sar_analysis.repositories import (
     RGroupDecompositionRunRepository,
     SarActivityProjectionRepository,
@@ -81,6 +78,7 @@ from cellar.application.sar_analysis.start_umap_cluster_job import (
     UmapClusterOrchestrator,
 )
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
+from cellar.application.shared.mark_job_failed import MarkJobFailed
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
@@ -191,9 +189,10 @@ def register_sar_analysis(container: Container) -> None:
             fail_uow = AsyncUnitOfWork(c[async_sessionmaker])
             return NullRGroupDecompositionOrchestrator(
                 c[RunDecomposition],
-                mark_failed=MarkDecompositionRunFailed(
+                mark_failed=MarkJobFailed(
                     repository=SQLAlchemyRGroupDecompositionRunRepository(fail_uow),
                     uow=fail_uow,
+                    job_type="rgroup_decomposition",
                 ),
             )
 

@@ -6,11 +6,11 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.research_organization.collection_membership import MembershipResult
-from cellar.application.shared.molecule_resolver import RefType
 from cellar.application.sar_analysis.save_decomposition_collection import (
     SaveDecompositionCollection,
     SaveDecompositionCollectionInput,
 )
+from cellar.application.shared.molecule_resolver import RefType
 from cellar.domain.shared.errors import NotFoundError, ValidationError
 
 
@@ -26,7 +26,7 @@ class FakeRunRepo:
     def __init__(self, exists=True):
         self._exists = exists
 
-    async def find_by_id(self, run_id, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, run_id):
         return object() if self._exists else None
 
 

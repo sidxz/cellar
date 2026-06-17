@@ -74,23 +74,21 @@ async def test_rows_query_uses_pk_indexes(uow, capsys):
         org = await _seed_org(uow, ws)
         a = await _seed_molecule(uow, ws, org, reg="CV-A", smiles="Fc1ccccc1", mw=120.0)
         b = await _seed_molecule(uow, ws, org, reg="CV-B", smiles="Clc1ccccc1", mw=130.0)
-        run = (
-            RGroupDecompositionRun.create(
-                workspace_id=ws,
-                requested_by=uuid.uuid4(),
-                membership_hash="m",
-                core_smiles="c1ccccc1",
-                core_hash="ch",
-                now=_NOW,
-            )
-            .mark_running(_NOW)
-            .mark_ready(
-                rgroup_labels=["R1"],
-                matched_count=2,
-                unmatched_count=0,
-                total_count=2,
-                now=_NOW,
-            )
+        run = RGroupDecompositionRun.create(
+            workspace_id=ws,
+            requested_by=uuid.uuid4(),
+            membership_hash="m",
+            core_smiles="c1ccccc1",
+            core_hash="ch",
+            now=_NOW,
+        )
+        run.mark_running(_NOW)
+        run.mark_ready(
+            rgroup_labels=["R1"],
+            matched_count=2,
+            unmatched_count=0,
+            total_count=2,
+            now=_NOW,
         )
         run_repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
         await run_repo.save(run)

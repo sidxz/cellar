@@ -33,7 +33,7 @@ class FakeRunRepo:
     def __init__(self, run):
         self._run = run
 
-    async def find_by_id(self, run_id, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, run_id):
         if self._run and self._run.id == run_id and self._run.workspace_id == workspace_id:
             return self._run
         return None
@@ -62,14 +62,13 @@ class FakeReader:
 
 
 def _ready_run(ws, labels):
-    return (
-        RGroupDecompositionRun.create(
-            workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
-            core_smiles="c1ccccc1", core_hash="ch", now=_NOW,
-        )
-        .mark_running(_NOW)
-        .mark_ready(rgroup_labels=labels, matched_count=0, unmatched_count=0, total_count=0, now=_NOW)
+    run = RGroupDecompositionRun.create(
+        workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
+        core_smiles="c1ccccc1", core_hash="ch", now=_NOW,
     )
+    run.mark_running(_NOW)
+    run.mark_ready(rgroup_labels=labels, matched_count=0, unmatched_count=0, total_count=0, now=_NOW)
+    return run
 
 
 def _ready_proj(ws):

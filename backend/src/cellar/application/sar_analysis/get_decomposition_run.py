@@ -26,7 +26,7 @@ class GetDecompositionRun:
         self, payload: GetDecompositionRunInput
     ) -> Result[RGroupDecompositionRun, DomainError]:
         async with self._uow:
-            run = await self._repo.find_by_id(payload.run_id, workspace_id=payload.workspace_id)
+            run = await self._repo.find_by_id_in_workspace(payload.workspace_id, payload.run_id)
         if run is None:
             return Failure(NotFoundError("RGroupDecompositionRun", str(payload.run_id)))
         return Success(run)

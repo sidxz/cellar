@@ -6,14 +6,12 @@ from datetime import UTC, datetime
 import pytest
 
 from cellar.application.sar_analysis.run_decomposition import RunDecomposition, ready_counts
-from cellar.domain.sar_analysis.rgroup_decomposition_run import (
-    RGroupDecompositionRun,
-    RGroupDecompositionRunStatus,
-)
+from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
 from cellar.domain.sar_analysis.rgroup_types import (
     RGroupAssignment,
     RGroupDecompositionResult,
 )
+from cellar.domain.shared.async_job import AsyncJobStatus
 
 _NOW = datetime(2026, 6, 15, tzinfo=UTC)
 
@@ -39,7 +37,7 @@ class FakeRunRepo:
     async def save(self, run):
         self._runs[run.id] = run
 
-    async def find_by_id(self, run_id, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, run_id):
         run = self._runs.get(run_id)
         if run is None or run.workspace_id != workspace_id:
             return None
@@ -129,10 +127,12 @@ async def test_run_marks_ready_with_assignments_and_counts():
         uow=FakeUoW(),
     )
 
-    await uc.run(run_id=run.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[matched, unmatched])
+    await uc.run(
+        run_id=run.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[matched, unmatched]
+    )
 
     saved = repo._runs[run.id]
-    assert saved.status == RGroupDecompositionRunStatus.READY
+    assert saved.status == AsyncJobStatus.READY
     assert saved.rgroup_labels == ["R1"]
     assert (saved.matched_count, saved.unmatched_count, saved.total_count) == (1, 1, 2)
     assert repo.written[run.id][0].molecule_id == matched
@@ -143,7 +143,9 @@ async def test_run_null_smiles_member_is_added_as_empty_string():
     ws = uuid.uuid4()
     run = _pending_run(ws)
     structureless = uuid.uuid4()
-    session = FakeSession(RGroupDecompositionResult(core_smiles="c1ccccc1", unmatched_ids=[structureless]))
+    session = FakeSession(
+        RGroupDecompositionResult(core_smiles="c1ccccc1", unmatched_ids=[structureless])
+    )
     uc = RunDecomposition(
         members=FakeStream([[(structureless, None, 1)]]),
         decomposer=FakeDecomposer(session),
@@ -151,7 +153,7 @@ async def test_run_null_smiles_member_is_added_as_empty_string():
         uow=FakeUoW(),
     )
     await uc.run(run_id=run.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[structureless])
-    assert session.added == [(structureless, "")]  # None -> "" so the session routes it to unmatched
+    assert session.added == [(structureless, "")]  # None -> "" so the session routes to unmatched
 
 
 @pytest.mark.asyncio
@@ -163,13 +165,15 @@ async def test_run_reraises_without_marking_failed():
     repo = FakeRunRepo(run)
     uc = RunDecomposition(
         members=FakeStream([[(uuid.uuid4(), "Fc1ccccc1", 1)]]),
-        decomposer=FakeDecomposer(FakeSession(RGroupDecompositionResult(core_smiles="c1ccccc1"), raise_on_finish=True)),
+        decomposer=FakeDecomposer(
+            FakeSession(RGroupDecompositionResult(core_smiles="c1ccccc1"), raise_on_finish=True)
+        ),
         repository=repo,
         uow=FakeUoW(),
     )
     with pytest.raises(RuntimeError, match="rdkit boom"):
         await uc.run(run_id=run.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[uuid.uuid4()])
-    assert repo._runs[run.id].status == RGroupDecompositionRunStatus.RUNNING
+    assert repo._runs[run.id].status == AsyncJobStatus.RUNNING
 
 
 @pytest.mark.asyncio
@@ -177,7 +181,8 @@ async def test_run_reclaims_running_and_resets_prior_assignments():
     # Temporal retry: run is already RUNNING with stale assignment rows. The
     # runner re-claims, resets the stale rows, recomputes, reaches READY.
     ws = uuid.uuid4()
-    running = _pending_run(ws).mark_running(_NOW)
+    running = _pending_run(ws)
+    running.mark_running(_NOW)
     matched = uuid.uuid4()
     result = RGroupDecompositionResult(
         core_smiles="c1ccccc1",
@@ -195,7 +200,7 @@ async def test_run_reclaims_running_and_resets_prior_assignments():
     )
     await uc.run(run_id=running.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[matched])
     saved = repo._runs[running.id]
-    assert saved.status == RGroupDecompositionRunStatus.READY
+    assert saved.status == AsyncJobStatus.READY
     assert len(repo.written[running.id]) == 1  # reset, then fresh assignment
 
 
@@ -216,7 +221,7 @@ async def test_run_respects_concurrent_cancel_and_does_not_mark_ready():
 
     class CancellingSession(FakeSession):
         def finish(self):
-            repo._runs[run.id] = repo._runs[run.id].mark_cancelled(_NOW)
+            repo._runs[run.id].mark_cancelled(_NOW)
             return super().finish()
 
     uc = RunDecomposition(
@@ -226,13 +231,14 @@ async def test_run_respects_concurrent_cancel_and_does_not_mark_ready():
         uow=FakeUoW(),
     )
     await uc.run(run_id=run.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[matched])
-    assert repo._runs[run.id].status == RGroupDecompositionRunStatus.CANCELLED
+    assert repo._runs[run.id].status == AsyncJobStatus.CANCELLED
 
 
 @pytest.mark.asyncio
 async def test_run_skips_when_terminal():
     ws = uuid.uuid4()
-    cancelled = _pending_run(ws).mark_cancelled(_NOW)
+    cancelled = _pending_run(ws)
+    cancelled.mark_cancelled(_NOW)
     repo = FakeRunRepo(cancelled)
     session = FakeSession(RGroupDecompositionResult(core_smiles="c1ccccc1"))
     uc = RunDecomposition(
@@ -242,5 +248,5 @@ async def test_run_skips_when_terminal():
         uow=FakeUoW(),
     )
     await uc.run(run_id=cancelled.id, workspace_id=ws, core_smiles="c1ccccc1", molecule_ids=[])
-    assert repo._runs[cancelled.id].status == RGroupDecompositionRunStatus.CANCELLED
+    assert repo._runs[cancelled.id].status == AsyncJobStatus.CANCELLED
     assert session.added == []  # never decomposed a cancelled run

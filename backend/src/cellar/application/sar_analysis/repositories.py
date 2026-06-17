@@ -59,8 +59,8 @@ class UmapJobRepository(Protocol):
 class RGroupDecompositionRunRepository(Protocol):
     async def save(self, run: RGroupDecompositionRun) -> None: ...
 
-    async def find_by_id(
-        self, run_id: UUID, *, workspace_id: UUID
+    async def find_by_id_in_workspace(
+        self, workspace_id: UUID, id: UUID
     ) -> RGroupDecompositionRun | None: ...
 
     async def find_cached(

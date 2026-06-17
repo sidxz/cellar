@@ -7,10 +7,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from cellar.domain.sar_analysis.rgroup_decomposition_run import (
-    RGroupDecompositionRun,
-    RGroupDecompositionRunStatus,
-)
+from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
+from cellar.domain.shared.async_job import AsyncJobStatus
 from cellar.domain.shared.errors import ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_run_repository import (
     SQLAlchemyRGroupDecompositionRunRepository,
@@ -20,20 +18,19 @@ _NOW = datetime.now(timezone.utc)
 
 
 def _ready_run(*, workspace_id, membership_hash, core_hash) -> RGroupDecompositionRun:
-    return (
-        RGroupDecompositionRun.create(
-            workspace_id=workspace_id,
-            requested_by=uuid.uuid4(),
-            membership_hash=membership_hash,
-            core_smiles="c1ccccc1",
-            core_hash=core_hash,
-            now=_NOW,
-        )
-        .mark_running(_NOW)
-        .mark_ready(
-            rgroup_labels=["R1"], matched_count=2, unmatched_count=0, total_count=2, now=_NOW
-        )
+    run = RGroupDecompositionRun.create(
+        workspace_id=workspace_id,
+        requested_by=uuid.uuid4(),
+        membership_hash=membership_hash,
+        core_smiles="c1ccccc1",
+        core_hash=core_hash,
+        now=_NOW,
     )
+    run.mark_running(_NOW)
+    run.mark_ready(
+        rgroup_labels=["R1"], matched_count=2, unmatched_count=0, total_count=2, now=_NOW
+    )
+    return run
 
 
 @pytest.mark.asyncio
@@ -54,10 +51,10 @@ async def test_save_and_find_by_id(uow):
 
     async with uow:
         repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        fetched = await repo.find_by_id(run.id, workspace_id=ws)
+        fetched = await repo.find_by_id_in_workspace(ws, run.id)
 
     assert fetched is not None
-    assert fetched.status == RGroupDecompositionRunStatus.PENDING
+    assert fetched.status == AsyncJobStatus.PENDING
     assert fetched.membership_hash == "m1"
 
 
@@ -77,19 +74,20 @@ async def test_save_updates_status_labels_counts(uow):
         await repo.save(run)
         await uow.commit()
 
-    ready = run.mark_running(_NOW).mark_ready(
+    run.mark_running(_NOW)
+    run.mark_ready(
         rgroup_labels=["R1", "R2"], matched_count=5, unmatched_count=1, total_count=6, now=_NOW
     )
     async with uow:
         repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        await repo.save(ready)
+        await repo.save(run)
         await uow.commit()
 
     async with uow:
         repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        fetched = await repo.find_by_id(run.id, workspace_id=ws)
+        fetched = await repo.find_by_id_in_workspace(ws, run.id)
 
-    assert fetched.status == RGroupDecompositionRunStatus.READY
+    assert fetched.status == AsyncJobStatus.READY
     assert fetched.rgroup_labels == ["R1", "R2"]
     assert fetched.matched_count == 5
     assert fetched.total_count == 6
@@ -254,16 +252,18 @@ async def test_save_rejects_stale_version(uow):
         await uow.commit()
     async with uow:
         repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        stale = await repo.find_by_id(run.id, workspace_id=ws)  # v1
+        stale = await repo.find_by_id_in_workspace(ws, run.id)  # v1
     async with uow:
         repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        fresh = await repo.find_by_id(run.id, workspace_id=ws)
-        await repo.save(fresh.mark_running(_NOW))  # row advances to v2
+        fresh = await repo.find_by_id_in_workspace(ws, run.id)
+        fresh.mark_running(_NOW)  # row advances to v2
+        await repo.save(fresh)
         await uow.commit()
     async with uow:
         repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
         with pytest.raises(ConcurrencyConflictError):
-            await repo.save(stale.mark_cancelled(_NOW))  # still expects v1 -> reject
+            stale.mark_cancelled(_NOW)  # still expects v1 -> reject
+            await repo.save(stale)
 
 
 @pytest.mark.asyncio

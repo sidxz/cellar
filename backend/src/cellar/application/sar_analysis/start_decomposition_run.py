@@ -21,18 +21,13 @@ from uuid import UUID
 
 from cellar.application.sar_analysis.decomposition_members import DecompositionMemberStream
 from cellar.application.sar_analysis.hashing import compute_membership_hash, sha256_hex
-from cellar.application.sar_analysis.mark_decomposition_run_failed import (
-    MarkDecompositionRunFailed,
-    MarkDecompositionRunFailedInput,
-)
 from cellar.application.sar_analysis.repositories import RGroupDecompositionRunRepository
 from cellar.application.sar_analysis.rgroup_decomposition import StreamingDecomposer
 from cellar.application.sar_analysis.run_decomposition import ready_counts
+from cellar.application.shared.mark_job_failed import MarkJobFailed, MarkJobFailedInput
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.sar_analysis.rgroup_decomposition_run import (
-    RGroupDecompositionRun,
-    RGroupDecompositionRunStatus,
-)
+from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
+from cellar.domain.shared.async_job import AsyncJobStatus
 
 
 @dataclass(frozen=True)
@@ -77,7 +72,9 @@ class StartDecompositionRun:
         self._uow = uow
         # The inline path marks FAILED on error via the same guarded use case the
         # async boundary uses; it reuses this use case's repo + uow.
-        self._mark_failed = MarkDecompositionRunFailed(repository=repository, uow=uow)
+        self._mark_failed = MarkJobFailed(
+            repository=repository, uow=uow, job_type="rgroup_decomposition"
+        )
         self._inline_threshold = inline_threshold
 
     async def execute(self, payload: StartDecompositionRunInput) -> RGroupDecompositionRun:
@@ -106,7 +103,9 @@ class StartDecompositionRun:
             is_inline = count <= self._inline_threshold
             # Persist the initial row: RUNNING for the inline path (assignment FKs
             # need the row to exist), PENDING for the async path.
-            await self._repo.save(run.mark_running(payload.now) if is_inline else run)
+            if is_inline:
+                run.mark_running(payload.now)
+            await self._repo.save(run)
             await self._uow.commit()
 
         if not is_inline:
@@ -131,23 +130,23 @@ class StartDecompositionRun:
                 matched, unmatched, total = ready_counts(result)
                 # Re-read so a concurrent cancel is respected (and to mark_ready at
                 # the row's current version under optimistic concurrency).
-                current = await self._repo.find_by_id(run.id, workspace_id=payload.workspace_id)
-                if current is None or current.status != RGroupDecompositionRunStatus.RUNNING:
+                current = await self._repo.find_by_id_in_workspace(payload.workspace_id, run.id)
+                if current is None or current.status != AsyncJobStatus.RUNNING:
                     return current if current is not None else run
-                ready = current.mark_ready(
+                current.mark_ready(
                     rgroup_labels=result.rgroup_labels,
                     matched_count=matched,
                     unmatched_count=unmatched,
                     total_count=total,
                     now=payload.now,
                 )
-                await self._repo.save(ready)
+                await self._repo.save(current)
                 await self._uow.commit()
-                return ready
+                return current
         except Exception:
             await self._mark_failed.execute(
-                MarkDecompositionRunFailedInput(
-                    run_id=run.id,
+                MarkJobFailedInput(
+                    job_id=run.id,
                     workspace_id=payload.workspace_id,
                     error="inline decomposition failed",
                     now=payload.now,

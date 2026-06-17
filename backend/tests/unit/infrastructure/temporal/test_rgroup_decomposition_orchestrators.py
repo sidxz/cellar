@@ -76,7 +76,7 @@ async def test_null_orchestrator_marks_failed_when_runner_raises():
     await orch.schedule(run_id=run_id, workspace_id=uuid.uuid4(), core_smiles="c1ccccc1")
     await asyncio.gather(*list(orch._tasks))  # swallowed after recording — no raise
     assert len(spy.calls) == 1
-    assert spy.calls[0].run_id == run_id
+    assert spy.calls[0].job_id == run_id
 
 
 class FakeClient:

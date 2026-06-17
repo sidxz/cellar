@@ -9,10 +9,8 @@ from returns.result import Failure, Result, Success
 from cellar.application.sar_analysis.repositories import RGroupDecompositionRunRepository
 from cellar.application.sar_analysis.start_decomposition_run import RGroupDecompositionOrchestrator
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.sar_analysis.rgroup_decomposition_run import (
-    InvalidRGroupRunTransition,
-    RGroupDecompositionRun,
-)
+from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
+from cellar.domain.shared.async_job import InvalidJobTransition
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 
@@ -39,14 +37,14 @@ class CancelDecompositionRun:
         self, payload: CancelDecompositionRunInput
     ) -> Result[RGroupDecompositionRun, DomainError]:
         async with self._uow:
-            run = await self._repo.find_by_id(payload.run_id, workspace_id=payload.workspace_id)
+            run = await self._repo.find_by_id_in_workspace(payload.workspace_id, payload.run_id)
             if run is None:
                 return Failure(NotFoundError("RGroupDecompositionRun", str(payload.run_id)))
             try:
-                cancelled = run.mark_cancelled(payload.now)
-            except InvalidRGroupRunTransition:
+                run.mark_cancelled(payload.now)
+            except InvalidJobTransition:
                 return Success(run)  # already terminal — idempotent no-op
-            await self._repo.save(cancelled)
+            await self._repo.save(run)
             await self._uow.commit()
         await self._orchestrator.cancel(run_id=run.id)
-        return Success(cancelled)
+        return Success(run)

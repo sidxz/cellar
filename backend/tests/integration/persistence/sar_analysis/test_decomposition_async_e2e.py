@@ -26,7 +26,7 @@ from cellar.application.sar_analysis.start_decomposition_run import (
     StartDecompositionRun,
     StartDecompositionRunInput,
 )
-from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRunStatus
+from cellar.domain.shared.async_job import AsyncJobStatus
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
@@ -113,7 +113,7 @@ async def test_async_path_completes_via_null_orchestrator(session_factory):
             now=datetime.now(UTC),
         )
     )
-    assert run.status == RGroupDecompositionRunStatus.PENDING  # scheduled, not inline
+    assert run.status == AsyncJobStatus.PENDING  # scheduled, not inline
 
     # Drain the fire-and-forget task the Null orchestrator spawned.
     assert orchestrator._tasks, "orchestrator should have scheduled a background run"
@@ -123,11 +123,11 @@ async def test_async_path_completes_via_null_orchestrator(session_factory):
     verify_uow = AsyncUnitOfWork(session_factory)
     async with verify_uow:
         repo = SQLAlchemyRGroupDecompositionRunRepository(verify_uow)
-        final = await repo.find_by_id(run.id, workspace_id=ws)
+        final = await repo.find_by_id_in_workspace(ws, run.id)
         assignment_count = await repo.count_assignments(run.id, workspace_id=ws)
 
     assert final is not None
-    assert final.status == RGroupDecompositionRunStatus.READY
+    assert final.status == AsyncJobStatus.READY
     assert final.matched_count == 3
     assert final.total_count == 3
     assert final.rgroup_labels  # at least one R-position discovered

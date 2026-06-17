@@ -55,3 +55,29 @@ All fail with `cellar.domain.shared.errors.NotFoundError: Entity not found` rais
 **Root cause (confirmed):** commit `bae2a3e1` ("fix(security): enforce workspace tenant guard in every application use case") added `require_same_workspace(auth, input.workspace_id)` to `CreateBatch.__call__` and `AddIdentifier.__call__`. These mirror tests (added earlier in `86c37a74`) pass `auth=editor_auth`, where the `editor_auth` fixture is `FakeAuth(role="editor")` — and `FakeAuth.__init__` defaults `workspace_id` to a **fresh random uuid** (`workspace_id or uuid.uuid4()`) that never matches the `seeded_workspace_and_molecule` workspace. The guard sweep did not update these co-located tests → guard ↔ test-fixture drift. (The new CDD-import mirror tests are unaffected: the Temporal activity calls `CreateBatch` with `auth=None`, the system/worker bypass path.)
 
 **Recommended fix (clean, root-cause):** give the test auth the seeded workspace — e.g. `FakeAuth(role="editor", workspace_id=workspace_id)` in each affected test, or an `editor_auth` fixture derived from `seeded_workspace_and_molecule`. Both the tenant guard and the mirror logic are correct; only the fixtures need to share a workspace id. Left untouched to keep this branch scoped.
+
+## 5. `tests/unit/cascade/test_fk_coverage.py::test_every_fk_is_categorized` — SAR job FKs uncategorized
+
+**Status:** open · **Found:** 2026-06-16 (during the R-group decomposition AsyncJob migration on `design-7`) · **Origin:** predates this work
+
+**Failing (1):** `test_every_fk_is_categorized` reports two uncategorized inbound FKs:
+- `rgroup_assignments.run_id -> rgroup_decomposition_runs`
+- `sar_activity_values.projection_id -> sar_activity_projections`
+
+**Empirically proven pre-existing** (2026-06-16): `git -C <root> stash push -- backend/src backend/tests` (verified the aggregate reverted to its `@dataclass(frozen=True)` baseline) and re-running the full `tests/unit` suite reproduces the identical failure on the clean tree (`1 failed, 2857 passed`). The migration touches neither FK definition (both live in unchanged model files) and does not touch the activity-projection job at all. The failure only surfaces in the full suite (import order populates `Base.metadata` with the SAR job tables); `test_fk_coverage.py` passes in isolation.
+
+**Root cause:** the cascade system has no `rules_sar_analysis` module (the test's `_CASCADE_MODULES` registers only audit / chemical_registration / inventory / research_organization / screening_assay), and the two SAR job parent tables (`rgroup_decomposition_runs`, `sar_activity_projections`) are neither Tier-1-deletable nor listed in `IGNORED_FKS`. When the SAR compute-job features were added, their child-row FKs were never categorized.
+
+**Recommended fix:** decide the cascade policy for SAR compute-job child rows (they are recomputable results keyed to a job; the schema already carries `ON DELETE CASCADE`). Either add a `rules_sar_analysis` Tier-2 cascade module (covering rgroup + projection, and the scaffold/umap analogues), or add the child FKs to `IGNORED_FKS` with a justifying comment. Left untouched to keep the AsyncJob-migration branch scoped.
+
+## 6. `ruff check src/` — two pre-existing lint errors in `streaming_rgroup_decomposer.py`
+
+**Status:** open · **Found:** 2026-06-16 (during the R-group decomposition AsyncJob migration on `design-7`) · **Origin:** predates this work
+
+**Failing:** CI's `ruff check src/` (`.github/workflows/ci.yml`) reports two errors in `src/cellar/infrastructure/rdkit/streaming_rgroup_decomposer.py`:
+- `:109` **B905** `zip()` without an explicit `strict=` parameter
+- `:112` **E501** line too long (101 > 99)
+
+**Pre-existing:** the file is unmodified by the migration (`git diff HEAD -- …streaming_rgroup_decomposer.py` is empty); the migration's own touched modules are ruff-clean. These errors are on the committed `design-7` HEAD.
+
+**Recommended fix:** add `strict=...` to the `zip()` at line 109 and wrap the long line at 112 — trivial. Left untouched to keep the migration branch scoped (CI's ruff gate was already red on this file independent of this work).

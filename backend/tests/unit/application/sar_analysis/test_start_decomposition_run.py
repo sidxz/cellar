@@ -9,14 +9,12 @@ from cellar.application.sar_analysis.start_decomposition_run import (
     StartDecompositionRun,
     StartDecompositionRunInput,
 )
-from cellar.domain.sar_analysis.rgroup_decomposition_run import (
-    RGroupDecompositionRun,
-    RGroupDecompositionRunStatus,
-)
+from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
 from cellar.domain.sar_analysis.rgroup_types import (
     RGroupAssignment,
     RGroupDecompositionResult,
 )
+from cellar.domain.shared.async_job import AsyncJobStatus
 
 _NOW = datetime(2026, 6, 15, tzinfo=UTC)
 
@@ -41,7 +39,7 @@ class FakeRunRepo:
     async def save(self, run):
         self._runs[run.id] = run
 
-    async def find_by_id(self, run_id, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, run_id):
         return self._runs.get(run_id)
 
     async def find_cached(self, *, workspace_id, membership_hash, core_hash):
@@ -117,14 +115,12 @@ def _input(ws, *, collection_id=None, molecule_ids=None):
 @pytest.mark.asyncio
 async def test_cache_hit_returns_prior_ready_run_without_compute():
     ws = uuid.uuid4()
-    prior = (
-        RGroupDecompositionRun.create(
-            workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
-            core_smiles="c1ccccc1", core_hash="ch", now=_NOW,
-        )
-        .mark_running(_NOW)
-        .mark_ready(rgroup_labels=["R1"], matched_count=3, unmatched_count=0, total_count=3, now=_NOW)
+    prior = RGroupDecompositionRun.create(
+        workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
+        core_smiles="c1ccccc1", core_hash="ch", now=_NOW,
     )
+    prior.mark_running(_NOW)
+    prior.mark_ready(rgroup_labels=["R1"], matched_count=3, unmatched_count=0, total_count=3, now=_NOW)
     repo = FakeRunRepo(cached=prior)
     orch = FakeOrchestrator()
     ids = [uuid.uuid4()]
@@ -137,7 +133,7 @@ async def test_cache_hit_returns_prior_ready_run_without_compute():
     )
     out = await uc.execute(_input(ws, molecule_ids=ids))
     assert out.id == prior.id
-    assert out.status == RGroupDecompositionRunStatus.READY
+    assert out.status == AsyncJobStatus.READY
     assert orch.scheduled == []
     assert repo.written == {}  # no new compute
 
@@ -163,7 +159,7 @@ async def test_inline_path_computes_persists_ready_and_assignments():
         inline_threshold=200,
     )
     out = await uc.execute(_input(ws, molecule_ids=[matched, unmatched]))
-    assert out.status == RGroupDecompositionRunStatus.READY
+    assert out.status == AsyncJobStatus.READY
     assert out.rgroup_labels == ["R1"]
     assert (out.matched_count, out.unmatched_count, out.total_count) == (1, 1, 2)
     assert repo.written[out.id][0].molecule_id == matched
@@ -186,7 +182,7 @@ async def test_async_path_schedules_pending_run_above_threshold():
         inline_threshold=2,
     )
     out = await uc.execute(_input(ws, collection_id=cid))
-    assert out.status == RGroupDecompositionRunStatus.PENDING
+    assert out.status == AsyncJobStatus.PENDING
     assert repo.written == {}  # nothing computed inline
     assert len(orch.scheduled) == 1
     assert orch.scheduled[0]["run_id"] == out.id
@@ -205,7 +201,7 @@ async def test_empty_input_yields_ready_empty_run():
         uow=FakeUoW(),
     )
     out = await uc.execute(_input(ws, molecule_ids=[]))
-    assert out.status == RGroupDecompositionRunStatus.READY
+    assert out.status == AsyncJobStatus.READY
     assert out.total_count == 0
     assert out.rgroup_labels == []
 
@@ -232,4 +228,4 @@ async def test_inline_failure_marks_run_failed_and_reraises():
     with pytest.raises(RuntimeError, match="rdkit boom"):
         await uc.execute(_input(ws, molecule_ids=[uuid.uuid4()]))
     saved = next(iter(repo._runs.values()))
-    assert saved.status == RGroupDecompositionRunStatus.FAILED
+    assert saved.status == AsyncJobStatus.FAILED
