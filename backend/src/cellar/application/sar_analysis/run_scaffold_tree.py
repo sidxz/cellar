@@ -1,12 +1,11 @@
-"""RunScaffoldTree — in-process runner: fetch → build network → persist → mark READY.
+"""RunScaffoldTree — in-process runner: claim -> build network -> finalize.
 
-The Temporal activity wraps this runner. The NullScaffoldTreeOrchestrator also
-invokes it inline for environments without a Temporal cluster (TEMPORAL_DISABLED=1
-or unit tests).
-
-Mirroring RenderExport, all state-machine transitions are handled here so that
-the activity is a thin adapter and the orchestrator Null path has identical
-business semantics.
+The Temporal activity wraps this; the Null orchestrator invokes it inline. The
+lifecycle scaffolding (claim, re-read-before-finalize) is the shared
+``claim_job`` / ``finalize_if_still_running``; the build stays explicit. The
+result is header-only (no child rows), so there is no reset step. The runner
+never marks FAILED — it re-raises so a retry can re-enter; FAILED is recorded at
+the orchestration boundary (``MarkJobFailed``).
 """
 
 from __future__ import annotations
@@ -22,47 +21,34 @@ from cellar.application.sar_analysis.build_scaffold_network import (
     BuildScaffoldNetworkInput,
 )
 from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository
+from cellar.application.shared.async_job_runner import claim_job, finalize_if_still_running
 from cellar.application.shared.unit_of_work import UnitOfWork
 
 logger = structlog.get_logger(__name__)
 
+_JOB_TYPE = "scaffold_tree"
+
 
 @dataclass
 class RunScaffoldTree:
-    """Callable runner that drives the full scaffold-tree pipeline for one job.
-
-    Dependencies are injected as dataclass fields so both the Temporal
-    activity and the NullScaffoldTreeOrchestrator can wire them independently.
-
-    Usage::
-
-        runner = RunScaffoldTree(builder=..., repository=..., uow=...)
-        await runner.run(job_id=job.id, workspace_id=job.workspace_id, molecule_ids=[...])
-    """
+    """Callable runner that drives the full scaffold-tree pipeline for one job."""
 
     builder: BuildScaffoldNetwork
     repository: ScaffoldTreeJobRepository
     uow: UnitOfWork
 
     async def run(self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]) -> None:
-        """Execute the scaffold-tree pipeline for *job_id*.
-
-        1. Load the job from the repository.
-        2. Advance the state machine: PENDING → RUNNING.
-        3. Run BuildScaffoldNetwork.
-        4. Advance the state machine: RUNNING → READY (result attached).
-        5. On any exception: advance to FAILED and re-raise so Temporal retries.
-        """
         log = logger.bind(job_id=str(job_id), workspace_id=str(workspace_id))
         try:
-            async with self.uow:
-                job = await self.repository.find_by_id(job_id, workspace_id=workspace_id)
-                if job is None:
-                    log.error("scaffold_tree_job_not_found")
-                    return
-                running = job.mark_running(datetime.now(UTC))
-                await self.repository.save(running)
-                await self.uow.commit()
+            if not await claim_job(
+                self.repository,
+                self.uow,
+                job_id=job_id,
+                workspace_id=workspace_id,
+                now=datetime.now(UTC),
+                job_type=_JOB_TYPE,
+            ):
+                return
 
             tree = await self.builder.execute(
                 BuildScaffoldNetworkInput(
@@ -72,20 +58,19 @@ class RunScaffoldTree:
             )
 
             async with self.uow:
-                ready = running.mark_ready(tree, datetime.now(UTC))
-                await self.repository.save(ready)
-                await self.uow.commit()
+                await finalize_if_still_running(
+                    self.repository,
+                    self.uow,
+                    job_id=job_id,
+                    workspace_id=workspace_id,
+                    apply_ready=lambda job: job.mark_ready(result=tree, now=datetime.now(UTC)),
+                    job_type=_JOB_TYPE,
+                )
             log.info("scaffold_tree_job_ready", node_count=tree.stats.node_count)
 
-        except Exception as exc:
+        except Exception:
+            # FAILED is marked at the orchestration boundary (Temporal workflow on
+            # retry exhaustion, or the Null orchestrator), not here — so a retry
+            # can re-enter and recover. Re-raise for the boundary.
             log.exception("scaffold_tree_job_failed")
-            try:
-                async with self.uow:
-                    current = await self.repository.find_by_id(job_id, workspace_id=workspace_id)
-                    if current is not None:
-                        failed = current.mark_failed(str(exc), datetime.now(UTC))
-                        await self.repository.save(failed)
-                        await self.uow.commit()
-            except Exception:
-                log.exception("scaffold_tree_fail_mark_failed")
             raise

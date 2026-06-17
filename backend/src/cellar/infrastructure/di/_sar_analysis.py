@@ -372,7 +372,15 @@ def register_sar_analysis(container: Container) -> None:
         )
 
         def _null_orchestrator(c: Container) -> NullScaffoldTreeOrchestrator:
-            return NullScaffoldTreeOrchestrator(c[RunScaffoldTree])
+            fail_uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return NullScaffoldTreeOrchestrator(
+                c[RunScaffoldTree],
+                mark_failed=MarkJobFailed(
+                    repository=SQLAlchemyScaffoldTreeJobRepository(fail_uow),
+                    uow=fail_uow,
+                    job_type="scaffold_tree",
+                ),
+            )
 
         container.define(ScaffoldTreeOrchestrator, _null_orchestrator)
 

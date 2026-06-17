@@ -5,54 +5,72 @@ from __future__ import annotations
 import dataclasses
 import uuid
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
 
 from sqlalchemy import select
 
-from cellar.domain.sar_analysis.scaffold_tree_job import (
-    ScaffoldTreeJob,
-    ScaffoldTreeJobStatus,
-)
+from cellar.domain.sar_analysis.scaffold_tree_job import ScaffoldTreeJob
 from cellar.domain.sar_analysis.scaffold_tree_types import (
     ScaffoldTreeEdge,
     ScaffoldTreeNode,
     ScaffoldTreeResult,
     ScaffoldTreeStats,
 )
+from cellar.domain.shared.async_job import AsyncJobStatus
+from cellar.infrastructure.persistence.sqlalchemy.base_repository import SQLAlchemyRepository
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.models import (
     ScaffoldTreeJobModel,
 )
-from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
-class SQLAlchemyScaffoldTreeJobRepository:
-    def __init__(self, uow: AsyncUnitOfWork) -> None:
-        self._uow = uow
+class SQLAlchemyScaffoldTreeJobRepository(
+    SQLAlchemyRepository[ScaffoldTreeJob, ScaffoldTreeJobModel]
+):
+    model_class = ScaffoldTreeJobModel
 
-    async def save(self, job: ScaffoldTreeJob) -> None:
-        session = self._uow.session
-        existing = await session.get(ScaffoldTreeJobModel, job.id)
-        if existing is None:
-            session.add(_to_model(job))
-        else:
-            _apply_to_model(existing, job)
-
-    async def find_by_id(self, job_id: UUID, *, workspace_id: UUID) -> ScaffoldTreeJob | None:
-        session = self._uow.session
-        stmt = select(ScaffoldTreeJobModel).where(
-            ScaffoldTreeJobModel.id == job_id,
-            ScaffoldTreeJobModel.workspace_id == workspace_id,
+    def _to_domain(self, model: ScaffoldTreeJobModel) -> ScaffoldTreeJob:
+        return ScaffoldTreeJob(
+            id=model.id,
+            workspace_id=model.workspace_id,
+            requested_by=model.requested_by,
+            ids_hash=model.ids_hash,
+            requested_at=model.requested_at,
+            status=AsyncJobStatus(model.status),
+            started_at=model.started_at,
+            completed_at=model.completed_at,
+            error_message=model.error_message,
+            result=_deserialize_result(model.result_json) if model.result_json else None,
+            version=model.version,
         )
-        model = (await session.execute(stmt)).scalar_one_or_none()
-        return _to_domain(model) if model else None
+
+    def _to_model(self, aggregate: ScaffoldTreeJob) -> ScaffoldTreeJobModel:
+        return ScaffoldTreeJobModel(
+            id=aggregate.id,
+            workspace_id=aggregate.workspace_id,
+            requested_by=aggregate.requested_by,
+            ids_hash=aggregate.ids_hash,
+            requested_at=aggregate.requested_at,
+            status=aggregate.status.value,
+            started_at=aggregate.started_at,
+            completed_at=aggregate.completed_at,
+            error_message=aggregate.error_message,
+            result_json=_serialize_result(aggregate.result) if aggregate.result else None,
+            version=aggregate.version,
+        )
+
+    def _update_model(self, model: ScaffoldTreeJobModel, aggregate: ScaffoldTreeJob) -> None:
+        # version is owned by the base save()'s optimistic-concurrency UPDATE.
+        model.status = aggregate.status.value
+        model.started_at = aggregate.started_at
+        model.completed_at = aggregate.completed_at
+        model.error_message = aggregate.error_message
+        model.result_json = _serialize_result(aggregate.result) if aggregate.result else None
 
     async def find_cached(
         self, *, ids_hash: str, ttl_seconds: int | None
     ) -> ScaffoldTreeResult | None:
-        session = self._uow.session
         conditions = [
             ScaffoldTreeJobModel.ids_hash == ids_hash,
-            ScaffoldTreeJobModel.status == ScaffoldTreeJobStatus.READY.value,
+            ScaffoldTreeJobModel.status == AsyncJobStatus.READY.value,
         ]
         # ttl_seconds=None → id-based cache: a ready tree for this exact member
         # set (ids_hash) never goes stale on time alone. Membership changes
@@ -66,51 +84,10 @@ class SQLAlchemyScaffoldTreeJobRepository:
             .order_by(ScaffoldTreeJobModel.completed_at.desc())
             .limit(1)
         )
-        model = (await session.execute(stmt)).scalar_one_or_none()
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
         if model is None or model.result_json is None:
             return None
         return _deserialize_result(model.result_json)
-
-
-def _to_model(job: ScaffoldTreeJob) -> ScaffoldTreeJobModel:
-    return ScaffoldTreeJobModel(
-        id=job.id,
-        workspace_id=job.workspace_id,
-        requested_by=job.requested_by,
-        ids_hash=job.ids_hash,
-        requested_at=job.requested_at,
-        status=job.status.value,
-        started_at=job.started_at,
-        completed_at=job.completed_at,
-        error_message=job.error_message,
-        result_json=_serialize_result(job.result) if job.result else None,
-        version=job.version,
-    )
-
-
-def _apply_to_model(model: ScaffoldTreeJobModel, job: ScaffoldTreeJob) -> None:
-    model.status = job.status.value
-    model.started_at = job.started_at
-    model.completed_at = job.completed_at
-    model.error_message = job.error_message
-    model.result_json = _serialize_result(job.result) if job.result else None
-    model.version = job.version
-
-
-def _to_domain(model: ScaffoldTreeJobModel) -> ScaffoldTreeJob:
-    return ScaffoldTreeJob(
-        id=model.id,
-        workspace_id=model.workspace_id,
-        requested_by=model.requested_by,
-        ids_hash=model.ids_hash,
-        requested_at=model.requested_at,
-        status=ScaffoldTreeJobStatus(model.status),
-        started_at=model.started_at,
-        completed_at=model.completed_at,
-        error_message=model.error_message,
-        result=_deserialize_result(model.result_json) if model.result_json else None,
-        version=model.version,
-    )
 
 
 def _serialize_result(result: ScaffoldTreeResult) -> dict:

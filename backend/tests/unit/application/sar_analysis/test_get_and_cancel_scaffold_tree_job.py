@@ -13,10 +13,8 @@ from cellar.application.sar_analysis.cancel_scaffold_tree_job import (
     CancelScaffoldTreeJob,
     CancelScaffoldTreeJobInput,
 )
-from cellar.domain.sar_analysis.scaffold_tree_job import (
-    ScaffoldTreeJob,
-    ScaffoldTreeJobStatus,
-)
+from cellar.domain.sar_analysis.scaffold_tree_job import ScaffoldTreeJob
+from cellar.domain.shared.async_job import AsyncJobStatus
 from cellar.domain.shared.errors import NotFoundError
 
 
@@ -47,7 +45,7 @@ class _InMemoryRepo:
     async def save(self, job):
         self.saved[job.id] = job
 
-    async def find_by_id(self, jid, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, jid):
         job = self.saved.get(jid)
         if job and job.workspace_id == workspace_id:
             return job
@@ -129,7 +127,7 @@ async def test_cancel_transitions_to_cancelled_and_calls_orchestrator():
         )
     )
     assert isinstance(result, Success)
-    assert result.unwrap().status == ScaffoldTreeJobStatus.CANCELLED
+    assert result.unwrap().status == AsyncJobStatus.CANCELLED
     assert orchestrator.cancels == [job.id]
 
 
@@ -137,14 +135,12 @@ async def test_cancel_transitions_to_cancelled_and_calls_orchestrator():
 async def test_cancel_idempotent_on_terminal_returns_unchanged():
     workspace_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
-    job = (
-        ScaffoldTreeJob.create(
-            workspace_id=workspace_id, requested_by=uuid.uuid4(),
-            ids_hash="x", now=now,
-        )
-        .mark_running(now)
-        .mark_failed("boom", now)
+    job = ScaffoldTreeJob.create(
+        workspace_id=workspace_id, requested_by=uuid.uuid4(),
+        ids_hash="x", now=now,
     )
+    job.mark_running(now)
+    job.mark_failed("boom", now)
     repo = _InMemoryRepo()
     await repo.save(job)
     result = await CancelScaffoldTreeJob(
@@ -155,7 +151,7 @@ async def test_cancel_idempotent_on_terminal_returns_unchanged():
         )
     )
     assert isinstance(result, Success)
-    assert result.unwrap().status == ScaffoldTreeJobStatus.FAILED  # unchanged
+    assert result.unwrap().status == AsyncJobStatus.FAILED  # unchanged
 
 
 @pytest.mark.asyncio

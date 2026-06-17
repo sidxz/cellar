@@ -91,16 +91,14 @@ class StartScaffoldTreeJob:
                     workspace_id=payload.workspace_id,
                 )
             )
-            job = (
-                ScaffoldTreeJob.create(
-                    workspace_id=payload.workspace_id,
-                    requested_by=payload.requested_by,
-                    ids_hash=ids_hash,
-                    now=payload.now,
-                )
-                .mark_running(payload.now)
-                .mark_ready(tree, payload.now)
+            job = ScaffoldTreeJob.create(
+                workspace_id=payload.workspace_id,
+                requested_by=payload.requested_by,
+                ids_hash=ids_hash,
+                now=payload.now,
             )
+            job.mark_running(payload.now)
+            job.mark_ready(result=tree, now=payload.now)
             async with self._uow:
                 await self._repo.save(job)
                 await self._uow.commit()

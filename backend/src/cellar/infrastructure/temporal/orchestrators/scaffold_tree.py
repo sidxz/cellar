@@ -1,24 +1,22 @@
 """Orchestrator implementations for the scaffold-tree workflow.
 
-``TemporalScaffoldTreeOrchestrator`` — submits ``ScaffoldTreeWorkflow`` to
-the Temporal cluster and implements ``cancel`` via workflow handle.
-
-``NullScaffoldTreeOrchestrator`` — in-process fallback for dev/test
-environments where a Temporal worker is not running. Runs ``RunScaffoldTree``
-as a fire-and-forget ``asyncio.Task`` so the route handler returns immediately
-(job_id) while the build proceeds in the background. The FE polls
-``GET /scaffold-tree/{id}`` for status.
+``TemporalScaffoldTreeOrchestrator`` submits ``ScaffoldTreeWorkflow`` and cancels
+via workflow handle. ``NullScaffoldTreeOrchestrator`` runs ``RunScaffoldTree``
+inline as a fire-and-forget asyncio task (dev / tests) via the shared
+``NullJobOrchestrator``, which records FAILED at the boundary when the runner
+raises (the runner leaves FAILED-marking to the boundary).
 """
 
 from __future__ import annotations
 
-import asyncio
 from typing import Protocol
 from uuid import UUID
 
 from temporalio.client import Client
 
 from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
+from cellar.application.shared.mark_job_failed import MarkJobFailed
+from cellar.infrastructure.temporal.orchestrator_base import NullJobOrchestrator
 from cellar.infrastructure.temporal.task_queues import MAIN_TASK_QUEUE
 from cellar.infrastructure.temporal.workflows.scaffold_tree import (
     ScaffoldTreeWorkflow,
@@ -41,7 +39,6 @@ class TemporalScaffoldTreeOrchestrator:
     async def schedule(
         self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]
     ) -> None:
-        wf_id = f"scaffold-tree-{job_id}"
         await self._client.start_workflow(
             ScaffoldTreeWorkflow.run,
             ScaffoldTreeWorkflowInput(
@@ -49,7 +46,7 @@ class TemporalScaffoldTreeOrchestrator:
                 workspace_id=str(workspace_id),
                 molecule_ids=[str(mid) for mid in molecule_ids],
             ),
-            id=wf_id,
+            id=f"scaffold-tree-{job_id}",
             task_queue=MAIN_TASK_QUEUE,
         )
 
@@ -58,33 +55,28 @@ class TemporalScaffoldTreeOrchestrator:
         await handle.cancel()
 
 
-class NullScaffoldTreeOrchestrator:
-    """In-process fallback when Temporal is unavailable.
+class NullScaffoldTreeOrchestrator(NullJobOrchestrator):
+    """In-process fallback when Temporal is unavailable."""
 
-    Runs the runner as a fire-and-forget ``asyncio.Task``. The route returns
-    the job_id immediately; the FE polls ``GET /scaffold-tree/{id}`` for
-    progress. Errors are written to the job record by ``RunScaffoldTree``
-    itself, so they surface on the next status poll.
-
-    Suitable for local dev and unit tests where the Temporal worker is not
-    running.
-    """
-
-    def __init__(self, runner: ScaffoldTreeRunner | RunScaffoldTree) -> None:
+    def __init__(
+        self,
+        runner: ScaffoldTreeRunner | RunScaffoldTree,
+        *,
+        mark_failed: MarkJobFailed | None = None,
+    ) -> None:
+        super().__init__(mark_failed=mark_failed, job_type="scaffold_tree")
         self._runner = runner
-        # Keep strong references to in-flight tasks — asyncio only holds weak
-        # refs, so a fire-and-forget task can be garbage-collected mid-build.
-        self._tasks: set[asyncio.Task] = set()
 
     async def schedule(
         self, *, job_id: UUID, workspace_id: UUID, molecule_ids: list[UUID]
     ) -> None:
-        task = asyncio.create_task(
-            self._runner.run(job_id=job_id, workspace_id=workspace_id, molecule_ids=molecule_ids)
+        self._spawn(
+            lambda: self._runner.run(
+                job_id=job_id, workspace_id=workspace_id, molecule_ids=molecule_ids
+            ),
+            job_id=job_id,
+            workspace_id=workspace_id,
         )
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
 
     async def cancel(self, *, job_id: UUID) -> None:
-        # No-op — inline tasks cannot be cancelled by job id.
-        return None
+        return None  # inline tasks cannot be cancelled by job id

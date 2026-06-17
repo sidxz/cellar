@@ -57,7 +57,7 @@ class _InMemoryRepo:
     async def save(self, job):
         self.saved.append(job)
 
-    async def find_by_id(self, job_id, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, job_id):
         for j in self.saved:
             if j.id == job_id and j.workspace_id == workspace_id:
                 return j
@@ -158,7 +158,7 @@ async def test_large_set_cache_hit_returns_inline_no_job():
         async def save(self, job):
             repo.saved.append(job)
 
-        async def find_by_id(self, job_id, *, workspace_id):
+        async def find_by_id_in_workspace(self, workspace_id, job_id):
             return None
 
         async def find_cached(self, *, ids_hash, ttl_seconds):

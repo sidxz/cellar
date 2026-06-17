@@ -17,7 +17,9 @@ from cellar.domain.sar_analysis.umap_job import UmapJob
 class ScaffoldTreeJobRepository(Protocol):
     async def save(self, job: ScaffoldTreeJob) -> None: ...
 
-    async def find_by_id(self, job_id: UUID, *, workspace_id: UUID) -> ScaffoldTreeJob | None: ...
+    async def find_by_id_in_workspace(
+        self, workspace_id: UUID, id: UUID
+    ) -> ScaffoldTreeJob | None: ...
 
     async def find_cached(
         self, *, ids_hash: str, ttl_seconds: int | None

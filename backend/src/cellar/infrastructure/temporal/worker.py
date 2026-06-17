@@ -105,10 +105,9 @@ async def run_worker() -> None:
     render_export = container[RenderExport]
     export_activities = ExportActivities(render_export)
 
-    # --- Scaffold-tree activity ---
+    # --- Scaffold-tree activity (mark-failed wired below, after the repo imports). ---
     # RunScaffoldTree is wired by the DI container via register_sar_analysis.
     run_scaffold_tree = container[RunScaffoldTree]
-    scaffold_tree_activities = ScaffoldTreeActivities(run_scaffold_tree)
 
     # --- R-group decomposition activity ---
     # RunDecomposition is wired by the DI container via register_sar_analysis.
@@ -120,7 +119,20 @@ async def run_worker() -> None:
     from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
         SQLAlchemySarActivityProjectionRepository,
     )
+    from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.scaffold_tree_job_repository import (  # noqa: E501
+        SQLAlchemyScaffoldTreeJobRepository,
+    )
     from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+
+    _scaffold_fail_uow = AsyncUnitOfWork(session_factory)
+    scaffold_tree_activities = ScaffoldTreeActivities(
+        run_scaffold_tree,
+        MarkJobFailed(
+            repository=SQLAlchemyScaffoldTreeJobRepository(_scaffold_fail_uow),
+            uow=_scaffold_fail_uow,
+            job_type="scaffold_tree",
+        ),
+    )
 
     run_rgroup_decomposition = container[RunDecomposition]
     _dec_fail_uow = AsyncUnitOfWork(session_factory)
@@ -174,6 +186,7 @@ async def run_worker() -> None:
         activities=[
             # Scaffold tree
             scaffold_tree_activities.run_scaffold_tree,
+            scaffold_tree_activities.mark_scaffold_tree_job_failed,
             # R-group decomposition
             rgroup_decomposition_activities.run_rgroup_decomposition,
             rgroup_decomposition_activities.mark_rgroup_decomposition_failed,
