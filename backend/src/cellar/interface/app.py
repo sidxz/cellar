@@ -21,13 +21,8 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """App lifespan — initialize container, register Sentinel actions, cleanup."""
-        # Structured logging
-        import os
-
-        configure_logging(
-            json_output=os.getenv("LOG_FORMAT", "json") == "json",
-            log_level=os.getenv("LOG_LEVEL", "INFO"),
-        )
+        # Structured logging (reads LOG_LEVEL / LOG_FORMAT / LOG_LEVEL_OVERRIDES)
+        configure_logging()
 
         # Initialize DI container and attach to app state
         container = create_container()

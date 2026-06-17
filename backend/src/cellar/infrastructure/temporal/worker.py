@@ -8,7 +8,6 @@ Run as::
 from __future__ import annotations
 
 import asyncio
-import os
 
 import structlog
 from temporalio.worker import Worker
@@ -23,10 +22,7 @@ logger = structlog.get_logger(__name__)
 
 async def run_worker() -> None:
     """Connect to Temporal, create DI container, and run the worker forever."""
-    configure_logging(
-        json_output=os.getenv("LOG_FORMAT", "json") == "json",
-        log_level=os.getenv("LOG_LEVEL", "INFO"),
-    )
+    configure_logging()
 
     settings = TemporalSettings()
     logger.info(
