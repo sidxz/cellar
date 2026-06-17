@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 from dataclasses import dataclass
 
+import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.attachment.storage import StorageClient
@@ -16,7 +16,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.repository import AttachmentRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -54,7 +54,11 @@ class DeleteAttachment:
             try:
                 await self._storage.delete(attachment.storage_key)
             except OSError:
-                logger.warning("Failed to delete blob %s", attachment.storage_key, exc_info=True)
+                logger.warning(
+                    "attachment.blob_delete_failed",
+                    storage_key=attachment.storage_key,
+                    exc_info=True,
+                )
 
             attachment.delete()
             await self._repo.delete(attachment)

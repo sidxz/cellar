@@ -26,10 +26,10 @@ async def run_worker() -> None:
 
     settings = TemporalSettings()
     logger.info(
-        "Connecting to Temporal at %s (namespace=%s, queue=%s)",
-        settings.address,
-        settings.namespace,
-        settings.task_queue,
+        "temporal.connecting",
+        address=settings.address,
+        namespace=settings.namespace,
+        queue=settings.task_queue,
     )
 
     client = await create_temporal_client(settings)
@@ -243,7 +243,7 @@ async def run_worker() -> None:
         ],
     )
 
-    logger.info("Temporal worker started on queue %r", settings.task_queue)
+    logger.info("temporal.worker_started", queue=settings.task_queue)
     await worker.run()
 
 

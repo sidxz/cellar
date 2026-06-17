@@ -6,10 +6,10 @@ workflow in S49 for production-grade async execution with progress tracking.
 
 from __future__ import annotations
 
-import logging
 import uuid
 from dataclasses import dataclass, field
 
+import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
@@ -42,7 +42,7 @@ from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.shared.errors import DomainError, ValidationError
 from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -437,10 +437,10 @@ class BulkRegistrationService:
         if isinstance(batch_result, Failure):
             err = batch_result.failure()
             logger.warning(
-                "Batch creation failed for molecule %s row %d: %s",
-                molecule.id,
-                item.row_index,
-                err,
+                "bulk_registration.batch_create_failed",
+                molecule_id=str(molecule.id),
+                row_index=item.row_index,
+                error=str(err),
             )
             return None, None, False, str(err)
 

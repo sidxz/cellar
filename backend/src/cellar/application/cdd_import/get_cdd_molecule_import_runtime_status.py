@@ -11,10 +11,10 @@ Composes three application services to produce the user-facing status:
 
 from __future__ import annotations
 
-import logging
 import uuid
 from dataclasses import dataclass
 
+import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
@@ -32,7 +32,7 @@ from cellar.application.orchestration.workflow_status import (
 from cellar.application.shared.query import Query
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -85,8 +85,8 @@ class GetCddMoleculeImportRuntimeStatus:
             return await self._fallback_to_db(input, auth)
         except Exception:
             logger.warning(
-                "orchestrator_get_progress_failed: workflow_id=%s — falling back to DB",
-                input.workflow_id,
+                "cdd_molecule_import.progress_failed_fallback_to_db",
+                workflow_id=input.workflow_id,
             )
             return await self._fallback_to_db(input, auth)
 

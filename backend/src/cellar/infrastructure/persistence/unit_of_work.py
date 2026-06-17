@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 from types import TracebackType
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.events import DomainEvent
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AsyncUnitOfWork:
@@ -88,7 +88,7 @@ class AsyncUnitOfWork:
                 # rollback failure must not mask the original exception that
                 # caused the body to exit. Close the session and re-raise the
                 # original by letting __aexit__ return None.
-                logger.exception("UnitOfWork rollback failed during __aexit__")
+                logger.exception("unit_of_work.rollback_failed")
         if self._session is not None:
             await self._session.close()
         self._session = None

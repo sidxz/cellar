@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import uuid
 
+import structlog
 from temporalio.client import Client, WorkflowExecutionStatus
 from temporalio.service import RPCError, RPCStatusCode
 
@@ -22,7 +22,7 @@ from cellar.infrastructure.temporal.workflows.cdd_vault_import import (
     CddVaultImportWorkflowInput,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _TERMINAL_FAILURE_STATUSES = (
     WorkflowExecutionStatus.FAILED,
@@ -80,8 +80,8 @@ class TemporalCddMoleculeImportOrchestrator:
                     status = "failed"
             except Exception:
                 logger.warning(
-                    "temporal_describe_failed: workflow_id=%s",
-                    workflow_id,
+                    "temporal.describe_failed",
+                    workflow_id=workflow_id,
                 )
 
         return CddMoleculeImportProgress(
