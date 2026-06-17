@@ -468,7 +468,15 @@ def register_sar_analysis(container: Container) -> None:
         )
 
         def _null_umap_orchestrator(c: Container) -> NullUmapClusterOrchestrator:
-            return NullUmapClusterOrchestrator(runner=c[RunUmapCluster].execute)
+            fail_uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return NullUmapClusterOrchestrator(
+                runner=c[RunUmapCluster].execute,
+                mark_failed=MarkJobFailed(
+                    repository=SQLAlchemyUmapJobRepository(fail_uow),
+                    uow=fail_uow,
+                    job_type="umap_cluster",
+                ),
+            )
 
         container.define(UmapClusterOrchestrator, _null_umap_orchestrator)
 

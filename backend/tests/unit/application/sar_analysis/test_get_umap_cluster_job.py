@@ -17,7 +17,7 @@ class _Repo:
         self.job = job
         self.calls: list[tuple] = []
 
-    async def find_by_id(self, job_id, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, job_id):
         self.calls.append((job_id, workspace_id))
         if self.job is None:
             return None

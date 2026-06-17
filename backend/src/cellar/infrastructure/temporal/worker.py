@@ -122,6 +122,9 @@ async def run_worker() -> None:
     from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.scaffold_tree_job_repository import (  # noqa: E501
         SQLAlchemyScaffoldTreeJobRepository,
     )
+    from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_repository import (
+        SQLAlchemyUmapJobRepository,
+    )
     from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
     _scaffold_fail_uow = AsyncUnitOfWork(session_factory)
@@ -160,7 +163,15 @@ async def run_worker() -> None:
     # --- UMAP cluster activity ---
     # RunUmapCluster is wired by the DI container via register_sar_analysis.
     run_umap_cluster = container[RunUmapCluster]
-    umap_cluster_activities = UmapClusterActivities(run_umap_cluster)
+    _umap_fail_uow = AsyncUnitOfWork(session_factory)
+    umap_cluster_activities = UmapClusterActivities(
+        run_umap_cluster,
+        MarkJobFailed(
+            repository=SQLAlchemyUmapJobRepository(_umap_fail_uow),
+            uow=_umap_fail_uow,
+            job_type="umap_cluster",
+        ),
+    )
 
     tracking = BulkTrackingActivities(session_factory, dispatcher)
     cdd_fetch = CddFetchActivities(session_factory, secret_provider, cdd_client)
@@ -195,6 +206,7 @@ async def run_worker() -> None:
             sar_activity_projection_activities.mark_sar_activity_projection_failed,
             # UMAP cluster
             umap_cluster_activities.run_umap_cluster,
+            umap_cluster_activities.mark_umap_cluster_job_failed,
             # Export
             export_activities.run_export,
             # BulkRegistration tracking

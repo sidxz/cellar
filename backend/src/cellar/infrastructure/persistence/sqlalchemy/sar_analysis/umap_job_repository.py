@@ -8,17 +8,18 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from cellar.domain.sar_analysis.umap_job import UmapJob, UmapJobStatus
+from cellar.domain.sar_analysis.umap_job import UmapJob
 from cellar.domain.sar_analysis.umap_types import (
     ClusterAssignment,
     RepresentativePick,
     UmapPoint,
     UmapResult,
 )
+from cellar.domain.shared.async_job import AsyncJobStatus
+from cellar.infrastructure.persistence.sqlalchemy.base_repository import SQLAlchemyRepository
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_model import (
     UmapJobModel,
 )
-from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
 def _encode_result(result: UmapResult) -> dict[str, Any]:
@@ -60,76 +61,52 @@ def _decode_result(payload: dict[str, Any]) -> UmapResult:
     )
 
 
-def _domain_to_model(job: UmapJob) -> UmapJobModel:
-    return UmapJobModel(
-        id=job.id,
-        workspace_id=job.workspace_id,
-        requested_by=job.requested_by,
-        ids_hash=job.ids_hash,
-        picker=job.picker,
-        picker_params=job.picker_params,
-        picker_param_hash=job.picker_param_hash,
-        status=job.status.value,
-        result_json=_encode_result(job.result) if job.result else None,
-        error_message=job.error_message,
-        requested_at=job.requested_at,
-        started_at=job.started_at,
-        completed_at=job.completed_at,
-        version=job.version,
-    )
+class SQLAlchemyUmapJobRepository(SQLAlchemyRepository[UmapJob, UmapJobModel]):
+    model_class = UmapJobModel
 
-
-def _apply_to_model(model: UmapJobModel, job: UmapJob) -> None:
-    model.status = job.status.value
-    model.started_at = job.started_at
-    model.completed_at = job.completed_at
-    model.error_message = job.error_message
-    model.result_json = _encode_result(job.result) if job.result else None
-    model.version = job.version
-
-
-def _model_to_domain(model: UmapJobModel) -> UmapJob:
-    return UmapJob(
-        id=model.id,
-        workspace_id=model.workspace_id,
-        requested_by=model.requested_by,
-        ids_hash=model.ids_hash,
-        picker=model.picker,
-        picker_params=model.picker_params,
-        picker_param_hash=model.picker_param_hash,
-        requested_at=model.requested_at,
-        status=UmapJobStatus(model.status),
-        started_at=model.started_at,
-        completed_at=model.completed_at,
-        error_message=model.error_message,
-        result=_decode_result(model.result_json) if model.result_json else None,
-        version=model.version,
-    )
-
-
-class SQLAlchemyUmapJobRepository:
-    def __init__(self, uow: AsyncUnitOfWork) -> None:
-        self._uow = uow
-
-    async def save(self, job: UmapJob) -> None:
-        session = self._uow.session
-        existing = await session.get(UmapJobModel, job.id)
-        if existing is None:
-            session.add(_domain_to_model(job))
-            return
-        if existing.workspace_id != job.workspace_id:
-            from cellar.domain.shared.errors import AuthorizationError
-
-            raise AuthorizationError(f"Cannot update UmapJob {job.id}: workspace mismatch")
-        _apply_to_model(existing, job)
-
-    async def find_by_id(self, job_id: UUID, *, workspace_id: UUID) -> UmapJob | None:
-        stmt = select(UmapJobModel).where(
-            UmapJobModel.id == job_id,
-            UmapJobModel.workspace_id == workspace_id,
+    def _to_domain(self, model: UmapJobModel) -> UmapJob:
+        return UmapJob(
+            id=model.id,
+            workspace_id=model.workspace_id,
+            requested_by=model.requested_by,
+            ids_hash=model.ids_hash,
+            picker=model.picker,
+            picker_params=model.picker_params,
+            picker_param_hash=model.picker_param_hash,
+            requested_at=model.requested_at,
+            status=AsyncJobStatus(model.status),
+            started_at=model.started_at,
+            completed_at=model.completed_at,
+            error_message=model.error_message,
+            result=_decode_result(model.result_json) if model.result_json else None,
+            version=model.version,
         )
-        model = (await self._uow.session.execute(stmt)).scalar_one_or_none()
-        return _model_to_domain(model) if model else None
+
+    def _to_model(self, aggregate: UmapJob) -> UmapJobModel:
+        return UmapJobModel(
+            id=aggregate.id,
+            workspace_id=aggregate.workspace_id,
+            requested_by=aggregate.requested_by,
+            ids_hash=aggregate.ids_hash,
+            picker=aggregate.picker,
+            picker_params=aggregate.picker_params,
+            picker_param_hash=aggregate.picker_param_hash,
+            status=aggregate.status.value,
+            result_json=_encode_result(aggregate.result) if aggregate.result else None,
+            error_message=aggregate.error_message,
+            requested_at=aggregate.requested_at,
+            started_at=aggregate.started_at,
+            completed_at=aggregate.completed_at,
+            version=aggregate.version,
+        )
+
+    def _update_model(self, model: UmapJobModel, aggregate: UmapJob) -> None:
+        # version is owned by the base save()'s optimistic-concurrency UPDATE.
+        model.status = aggregate.status.value
+        model.started_at = aggregate.started_at
+        model.completed_at = aggregate.completed_at
+        model.error_message = aggregate.error_message
+        model.result_json = _encode_result(aggregate.result) if aggregate.result else None
 
     async def find_cached(
         self,
@@ -148,14 +125,14 @@ class SQLAlchemyUmapJobRepository:
                 UmapJobModel.ids_hash == ids_hash,
                 UmapJobModel.picker == picker,
                 UmapJobModel.picker_param_hash == picker_param_hash,
-                UmapJobModel.status == UmapJobStatus.READY.value,
+                UmapJobModel.status == AsyncJobStatus.READY.value,
                 UmapJobModel.completed_at >= cutoff,
             )
             .order_by(UmapJobModel.completed_at.desc())
             .limit(1)
         )
-        model = (await self._uow.session.execute(stmt)).scalar_one_or_none()
-        return _model_to_domain(model) if model else None
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
+        return self._to_domain(model) if model else None
 
     async def find_compatible_for_pick(
         self,
@@ -180,11 +157,11 @@ class SQLAlchemyUmapJobRepository:
                 UmapJobModel.workspace_id == workspace_id,
                 UmapJobModel.ids_hash == ids_hash,
                 threshold_expr == threshold,
-                UmapJobModel.status == UmapJobStatus.READY.value,
+                UmapJobModel.status == AsyncJobStatus.READY.value,
                 UmapJobModel.completed_at >= cutoff,
             )
             .order_by(UmapJobModel.completed_at.desc())
             .limit(1)
         )
-        model = (await self._uow.session.execute(stmt)).scalar_one_or_none()
-        return _model_to_domain(model) if model else None
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
+        return self._to_domain(model) if model else None

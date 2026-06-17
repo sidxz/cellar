@@ -33,7 +33,7 @@ class GetUmapClusterJob:
 
     async def execute(self, payload: GetUmapClusterJobInput) -> Result[UmapJob, DomainError]:
         async with self._uow:
-            job = await self._repo.find_by_id(payload.job_id, workspace_id=payload.workspace_id)
+            job = await self._repo.find_by_id_in_workspace(payload.workspace_id, payload.job_id)
         if job is None:
             return Failure(NotFoundError("UmapJob", str(payload.job_id)))
         return Success(job)

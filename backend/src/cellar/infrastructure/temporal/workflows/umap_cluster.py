@@ -1,9 +1,8 @@
 """UmapClusterWorkflow — durable single-activity wrapper for RunUmapCluster.
 
-One workflow per UMAP cluster job. The single ``run_umap_cluster_activity``
-activity does all the heavy lifting (compute UMAP → persist result → mark READY).
-The 30-minute timeout accommodates large molecule sets with expensive fingerprint
-computation; most sub-500-mol builds complete in seconds.
+One workflow per UMAP cluster job. The 30-minute timeout accommodates large
+molecule sets with expensive fingerprint computation; most sub-500-mol builds
+complete in seconds. On retry exhaustion the run is marked FAILED at the boundary.
 """
 
 from __future__ import annotations
@@ -14,10 +13,12 @@ from typing import Any
 from uuid import UUID
 
 from temporalio import workflow
-from temporalio.common import RetryPolicy
+
+from cellar.infrastructure.temporal.workflow_support import run_job_with_failure_marking
 
 with workflow.unsafe.imports_passed_through():
     from cellar.infrastructure.temporal.activities.umap_cluster import (
+        MarkUmapFailedInput,
         RunUmapClusterActivityInput,
         UmapClusterActivities,
     )
@@ -38,15 +39,20 @@ class UmapClusterWorkflow:
 
     @workflow.run
     async def run(self, payload: UmapClusterWorkflowInput) -> None:
-        await workflow.execute_activity(
-            UmapClusterActivities.run_umap_cluster,
-            RunUmapClusterActivityInput(
+        await run_job_with_failure_marking(
+            run_activity=UmapClusterActivities.run_umap_cluster,
+            run_input=RunUmapClusterActivityInput(
                 job_id=payload.job_id,
                 workspace_id=payload.workspace_id,
                 molecule_ids=payload.molecule_ids,
                 picker=payload.picker,
                 picker_params=payload.picker_params,
             ),
-            start_to_close_timeout=timedelta(minutes=30),
-            retry_policy=RetryPolicy(maximum_attempts=3),
+            mark_failed_activity=UmapClusterActivities.mark_umap_cluster_job_failed,
+            mark_failed_input=MarkUmapFailedInput(
+                job_id=payload.job_id,
+                workspace_id=payload.workspace_id,
+                error="umap cluster build failed after retries",
+            ),
+            run_timeout=timedelta(minutes=30),
         )

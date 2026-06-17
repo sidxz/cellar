@@ -16,8 +16,9 @@ from cellar.application.sar_analysis.start_umap_cluster_job import (
     StartUmapClusterJob,
     StartUmapClusterJobInput,
 )
-from cellar.domain.sar_analysis.umap_job import UmapJob, UmapJobStatus
+from cellar.domain.sar_analysis.umap_job import UmapJob
 from cellar.domain.sar_analysis.umap_types import UmapResult
+from cellar.domain.shared.async_job import AsyncJobStatus
 
 
 class _FakeRepo:
@@ -29,7 +30,7 @@ class _FakeRepo:
     async def save(self, job: UmapJob) -> None:
         self.saved.append(job)
 
-    async def find_by_id(self, _id: UUID) -> UmapJob | None:
+    async def find_by_id_in_workspace(self, workspace_id: UUID, job_id: UUID) -> UmapJob | None:
         return None
 
     async def find_cached(self, **_kwargs) -> UmapJob | None:
@@ -97,18 +98,22 @@ class _FakeOrchestrator:
 @pytest.mark.asyncio
 async def test_cache_hit_returns_result_no_compute() -> None:
     repo = _FakeRepo()
-    repo.cached = UmapJob.create(
+    _now = datetime.now(timezone.utc)
+    _cached_job = UmapJob.create(
         workspace_id=uuid4(),
         requested_by=uuid4(),
         ids_hash="h",
         picker="maxmin",
         picker_params={"n": 50},
         picker_param_hash="ph",
-        now=datetime.now(timezone.utc),
-    ).mark_running(datetime.now(timezone.utc)).mark_ready(
-        UmapResult([], [], [], 0, "maxmin", {"n": 50}),
-        datetime.now(timezone.utc),
+        now=_now,
     )
+    _cached_job.mark_running(_now)
+    _cached_job.mark_ready(
+        result=UmapResult([], [], [], 0, "maxmin", {"n": 50}),
+        now=_now,
+    )
+    repo.cached = _cached_job
     compute = _FakeCompute()
     use_case = StartUmapClusterJob(
         compute=compute,
@@ -158,7 +163,7 @@ async def test_sync_path_computes_and_persists_ready() -> None:
     assert len(compute.calls) == 1
     # Persisted as READY for future cache hit.
     assert len(repo.saved) == 1
-    assert repo.saved[0].status == UmapJobStatus.READY
+    assert repo.saved[0].status == AsyncJobStatus.READY
 
 
 @pytest.mark.asyncio
@@ -184,7 +189,7 @@ async def test_async_path_schedules_when_above_limit() -> None:
     )
     assert out.result is None
     assert out.job is not None
-    assert out.job.status == UmapJobStatus.PENDING
+    assert out.job.status == AsyncJobStatus.PENDING
     assert len(orch.scheduled) == 1
     assert orch.scheduled[0]["picker"] == "butina"
 
@@ -194,29 +199,29 @@ async def test_partial_cache_hit_runs_pick_only_skipping_full_compute() -> None:
     """Chemist scrubs N at the same threshold → reuse UMAP + clusters, only
     re-run the picker."""
     repo = _FakeRepo()
-    repo.partial = (
-        UmapJob.create(
-            workspace_id=uuid4(),
-            requested_by=uuid4(),
-            ids_hash="h",
+    _pnow = datetime.now(timezone.utc)
+    _partial_job = UmapJob.create(
+        workspace_id=uuid4(),
+        requested_by=uuid4(),
+        ids_hash="h",
+        picker="maxmin",
+        picker_params={"n": 5, "threshold": 0.4},
+        picker_param_hash="ph_prev",
+        now=_pnow,
+    )
+    _partial_job.mark_running(_pnow)
+    _partial_job.mark_ready(
+        result=UmapResult(
+            points=[],
+            clusters=[],
+            representatives=[],
+            cluster_count=3,
             picker="maxmin",
             picker_params={"n": 5, "threshold": 0.4},
-            picker_param_hash="ph_prev",
-            now=datetime.now(timezone.utc),
-        )
-        .mark_running(datetime.now(timezone.utc))
-        .mark_ready(
-            UmapResult(
-                points=[],
-                clusters=[],
-                representatives=[],
-                cluster_count=3,
-                picker="maxmin",
-                picker_params={"n": 5, "threshold": 0.4},
-            ),
-            datetime.now(timezone.utc),
-        )
+        ),
+        now=_pnow,
     )
+    repo.partial = _partial_job
     compute = _FakeCompute()
     use_case = StartUmapClusterJob(
         compute=compute,
@@ -244,4 +249,4 @@ async def test_partial_cache_hit_runs_pick_only_skipping_full_compute() -> None:
     assert compute.pick_only_calls[0]["picker_params"] == {"n": 10, "threshold": 0.4}
     # And the new READY job is persisted for next-time full-cache-hit.
     assert len(repo.saved) == 1
-    assert repo.saved[0].status == UmapJobStatus.READY
+    assert repo.saved[0].status == AsyncJobStatus.READY

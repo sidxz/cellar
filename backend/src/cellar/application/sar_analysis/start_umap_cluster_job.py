@@ -109,19 +109,17 @@ class StartUmapClusterJob:
                 # through to full compute.
                 result = None
             if result is not None:
-                job = (
-                    UmapJob.create(
-                        workspace_id=payload.workspace_id,
-                        requested_by=payload.requested_by,
-                        ids_hash=ids_hash,
-                        picker=payload.picker,
-                        picker_params=payload.picker_params,
-                        picker_param_hash=pp_hash,
-                        now=payload.now,
-                    )
-                    .mark_running(payload.now)
-                    .mark_ready(result, payload.now)
+                job = UmapJob.create(
+                    workspace_id=payload.workspace_id,
+                    requested_by=payload.requested_by,
+                    ids_hash=ids_hash,
+                    picker=payload.picker,
+                    picker_params=payload.picker_params,
+                    picker_param_hash=pp_hash,
+                    now=payload.now,
                 )
+                job.mark_running(payload.now)
+                job.mark_ready(result=result, now=payload.now)
                 async with self._uow:
                     await self._repo.save(job)
                     await self._uow.commit()
@@ -135,19 +133,17 @@ class StartUmapClusterJob:
                     picker_params=payload.picker_params,
                 )
             )
-            job = (
-                UmapJob.create(
-                    workspace_id=payload.workspace_id,
-                    requested_by=payload.requested_by,
-                    ids_hash=ids_hash,
-                    picker=payload.picker,
-                    picker_params=payload.picker_params,
-                    picker_param_hash=pp_hash,
-                    now=payload.now,
-                )
-                .mark_running(payload.now)
-                .mark_ready(result, payload.now)
+            job = UmapJob.create(
+                workspace_id=payload.workspace_id,
+                requested_by=payload.requested_by,
+                ids_hash=ids_hash,
+                picker=payload.picker,
+                picker_params=payload.picker_params,
+                picker_param_hash=pp_hash,
+                now=payload.now,
             )
+            job.mark_running(payload.now)
+            job.mark_ready(result=result, now=payload.now)
             async with self._uow:
                 await self._repo.save(job)
                 await self._uow.commit()

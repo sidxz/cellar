@@ -10,7 +10,8 @@ from cellar.application.sar_analysis.cancel_umap_cluster_job import (
     CancelUmapClusterJob,
     CancelUmapClusterJobInput,
 )
-from cellar.domain.sar_analysis.umap_job import UmapJob, UmapJobStatus
+from cellar.domain.sar_analysis.umap_job import UmapJob
+from cellar.domain.shared.async_job import AsyncJobStatus
 from cellar.domain.shared.errors import NotFoundError
 
 
@@ -20,7 +21,7 @@ class _Repo:
         self.saved = []
         self.calls: list[tuple] = []
 
-    async def find_by_id(self, job_id, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, job_id):
         self.calls.append((job_id, workspace_id))
         if self.job is None:
             return None
@@ -76,7 +77,7 @@ async def test_cancels_pending_job():
         CancelUmapClusterJobInput(job_id=job.id, workspace_id=job.workspace_id)
     )
     assert isinstance(result, Success)
-    assert repo.saved[0].status == UmapJobStatus.CANCELLED
+    assert repo.saved[0].status == AsyncJobStatus.CANCELLED
     assert orch.cancelled == [job.id]
 
 
@@ -101,17 +102,18 @@ async def test_noop_on_terminal_job():
     """Idempotent when the job is already in a terminal state — returns Success(job)."""
     job = _make_job()
     now = datetime.now(timezone.utc)
-    terminal_job = job.mark_running(now).mark_ready(
-        type("R", (), {"points": [], "picker_indices": []})(),
-        now,
+    job.mark_running(now)
+    job.mark_ready(
+        result=type("R", (), {"points": [], "picker_indices": [], "skipped_molecule_ids": []})(),
+        now=now,
     )
-    repo = _Repo(terminal_job)
+    repo = _Repo(job)
     orch = _Orch()
     result = await CancelUmapClusterJob(
         repository=repo, uow=_Uow(), orchestrator=orch
     ).execute(
         CancelUmapClusterJobInput(
-            job_id=terminal_job.id, workspace_id=terminal_job.workspace_id
+            job_id=job.id, workspace_id=job.workspace_id
         )
     )
     assert isinstance(result, Success)

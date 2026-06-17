@@ -1,12 +1,11 @@
-"""RunUmapCluster — in-process runner: mark running → compute UMAP → mark READY.
+"""RunUmapCluster — in-process runner: claim -> compute UMAP -> finalize.
 
-The Temporal activity wraps this runner. The NullUmapClusterOrchestrator also
-invokes it inline for environments without a Temporal cluster
-(``TEMPORAL_DISABLED=1`` or unit tests).
-
-Mirroring RunScaffoldTree, all state-machine transitions are handled here so
-that the activity is a thin adapter and the Null path has identical business
-semantics.
+The Temporal activity wraps this; the Null orchestrator invokes it inline. The
+lifecycle scaffolding (claim, re-read-before-finalize) is the shared
+``claim_job`` / ``finalize_if_still_running``; the compute stays explicit. The
+result is header-only (no child rows), so there is no reset step. The runner
+never marks FAILED — it re-raises so a retry can re-enter; FAILED is recorded at
+the orchestration boundary (``MarkJobFailed``).
 """
 
 from __future__ import annotations
@@ -23,29 +22,17 @@ from cellar.application.sar_analysis.compute_umap_cluster import (
     ComputeUmapClusterInput,
 )
 from cellar.application.sar_analysis.repositories import UmapJobRepository
+from cellar.application.shared.async_job_runner import claim_job, finalize_if_still_running
 from cellar.application.shared.unit_of_work import UnitOfWork
 
 logger = structlog.get_logger(__name__)
 
+_JOB_TYPE = "umap_cluster"
+
 
 @dataclass
 class RunUmapCluster:
-    """Callable runner that drives the full UMAP pipeline for one job.
-
-    Dependencies are injected as dataclass fields so both the Temporal
-    activity and the NullUmapClusterOrchestrator can wire them independently.
-
-    Usage::
-
-        runner = RunUmapCluster(compute=..., repository=..., uow=...)
-        await runner.execute(
-            job_id=job.id,
-            workspace_id=job.workspace_id,
-            molecule_ids=[...],
-            picker="maxmin",
-            picker_params={"n": 50},
-        )
-    """
+    """Callable runner that drives the full UMAP pipeline for one job."""
 
     compute: ComputeUmapCluster
     repository: UmapJobRepository
@@ -60,25 +47,17 @@ class RunUmapCluster:
         picker: str,
         picker_params: dict[str, Any],
     ) -> None:
-        """Execute the UMAP pipeline for *job_id*.
-
-        1. Load the job from the repository.
-        2. Advance the state machine: PENDING → RUNNING.
-        3. Run ComputeUmapCluster.
-        4. Advance the state machine: RUNNING → READY (result attached).
-        5. On any exception: advance to FAILED and re-raise so Temporal retries.
-        """
         log = logger.bind(job_id=str(job_id), workspace_id=str(workspace_id))
-        running = None
         try:
-            async with self.uow:
-                job = await self.repository.find_by_id(job_id, workspace_id=workspace_id)
-                if job is None:
-                    log.error("umap_cluster_job_not_found")
-                    return
-                running = job.mark_running(datetime.now(UTC))
-                await self.repository.save(running)
-                await self.uow.commit()
+            if not await claim_job(
+                self.repository,
+                self.uow,
+                job_id=job_id,
+                workspace_id=workspace_id,
+                now=datetime.now(UTC),
+                job_type=_JOB_TYPE,
+            ):
+                return
 
             result = await self.compute.execute(
                 ComputeUmapClusterInput(
@@ -89,24 +68,23 @@ class RunUmapCluster:
             )
 
             async with self.uow:
-                ready = running.mark_ready(result, datetime.now(UTC))
-                await self.repository.save(ready)
-                await self.uow.commit()
+                await finalize_if_still_running(
+                    self.repository,
+                    self.uow,
+                    job_id=job_id,
+                    workspace_id=workspace_id,
+                    apply_ready=lambda job: job.mark_ready(result=result, now=datetime.now(UTC)),
+                    job_type=_JOB_TYPE,
+                )
             log.info(
                 "umap_cluster_job_ready",
                 point_count=len(result.points),
                 cluster_count=result.cluster_count,
             )
 
-        except Exception as exc:
+        except Exception:
+            # FAILED is marked at the orchestration boundary (Temporal workflow on
+            # retry exhaustion, or the Null orchestrator), not here — so a retry
+            # can re-enter and recover. Re-raise for the boundary.
             log.exception("umap_cluster_job_failed")
-            try:
-                async with self.uow:
-                    current = await self.repository.find_by_id(job_id, workspace_id=workspace_id)
-                    if current is not None:
-                        failed = current.mark_failed(str(exc), datetime.now(UTC))
-                        await self.repository.save(failed)
-                        await self.uow.commit()
-            except Exception:
-                log.exception("umap_cluster_fail_mark_failed")
             raise

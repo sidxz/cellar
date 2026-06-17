@@ -10,11 +10,15 @@ from uuid import uuid4
 
 import pytest
 
-from cellar.domain.sar_analysis.umap_job import UmapJob, UmapJobStatus
+from cellar.domain.sar_analysis.umap_job import UmapJob
 from cellar.domain.sar_analysis.umap_types import UmapResult
+from cellar.domain.shared.async_job import AsyncJobStatus
+from cellar.domain.shared.errors import ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_repository import (
     SQLAlchemyUmapJobRepository,
 )
+
+_NOW = datetime.now(timezone.utc)
 
 
 def _now() -> datetime:
@@ -51,11 +55,11 @@ async def test_round_trip(uow) -> None:
 
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
-        found = await repo.find_by_id(job.id, workspace_id=workspace_id)
+        found = await repo.find_by_id_in_workspace(workspace_id, job.id)
 
     assert found is not None
     assert found.id == job.id
-    assert found.status == UmapJobStatus.PENDING
+    assert found.status == AsyncJobStatus.PENDING
 
 
 @pytest.mark.asyncio
@@ -79,7 +83,7 @@ async def test_find_by_id_isolates_across_workspaces(uow) -> None:
 
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
-        miss = await repo.find_by_id(job.id, workspace_id=workspace_b)
+        miss = await repo.find_by_id_in_workspace(workspace_b, job.id)
 
     assert miss is None
 
@@ -88,19 +92,17 @@ async def test_find_by_id_isolates_across_workspaces(uow) -> None:
 async def test_find_cached_hits_ready_within_ttl(uow) -> None:
     now = _now()
     workspace_id = uuid4()
-    job = (
-        UmapJob.create(
-            workspace_id=workspace_id,
-            requested_by=uuid4(),
-            ids_hash="X",
-            picker="maxmin",
-            picker_params={"n": 50},
-            picker_param_hash="ph",
-            now=now - timedelta(minutes=5),
-        )
-        .mark_running(now - timedelta(minutes=4))
-        .mark_ready(_empty_result(), now - timedelta(minutes=3))
+    job = UmapJob.create(
+        workspace_id=workspace_id,
+        requested_by=uuid4(),
+        ids_hash="X",
+        picker="maxmin",
+        picker_params={"n": 50},
+        picker_param_hash="ph",
+        now=now - timedelta(minutes=5),
     )
+    job.mark_running(now - timedelta(minutes=4))
+    job.mark_ready(result=_empty_result(), now=now - timedelta(minutes=3))
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
         await repo.save(job)
@@ -117,26 +119,24 @@ async def test_find_cached_hits_ready_within_ttl(uow) -> None:
         )
 
     assert found is not None
-    assert found.status == UmapJobStatus.READY
+    assert found.status == AsyncJobStatus.READY
 
 
 @pytest.mark.asyncio
 async def test_find_cached_misses_on_different_picker(uow) -> None:
     now = _now()
     workspace_id = uuid4()
-    job = (
-        UmapJob.create(
-            workspace_id=workspace_id,
-            requested_by=uuid4(),
-            ids_hash="X",
-            picker="maxmin",
-            picker_params={"n": 50},
-            picker_param_hash="phA",
-            now=now - timedelta(minutes=3),
-        )
-        .mark_running(now - timedelta(minutes=2))
-        .mark_ready(_empty_result(), now - timedelta(minutes=1))
+    job = UmapJob.create(
+        workspace_id=workspace_id,
+        requested_by=uuid4(),
+        ids_hash="X",
+        picker="maxmin",
+        picker_params={"n": 50},
+        picker_param_hash="phA",
+        now=now - timedelta(minutes=3),
     )
+    job.mark_running(now - timedelta(minutes=2))
+    job.mark_ready(result=_empty_result(), now=now - timedelta(minutes=1))
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
         await repo.save(job)
@@ -165,19 +165,17 @@ async def test_find_cached_misses_past_ttl(uow) -> None:
     unique_hash = f"ttl-test-{uuid4().hex}"
     workspace_id = uuid4()
     now = _now()
-    job = (
-        UmapJob.create(
-            workspace_id=workspace_id,
-            requested_by=uuid4(),
-            ids_hash=unique_hash,
-            picker="maxmin",
-            picker_params={"n": 50},
-            picker_param_hash="ph",
-            now=now - timedelta(hours=3),
-        )
-        .mark_running(now - timedelta(hours=2, minutes=59))
-        .mark_ready(_empty_result(), now - timedelta(hours=2))
+    job = UmapJob.create(
+        workspace_id=workspace_id,
+        requested_by=uuid4(),
+        ids_hash=unique_hash,
+        picker="maxmin",
+        picker_params={"n": 50},
+        picker_param_hash="ph",
+        now=now - timedelta(hours=3),
     )
+    job.mark_running(now - timedelta(hours=2, minutes=59))
+    job.mark_ready(result=_empty_result(), now=now - timedelta(hours=2))
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
         await repo.save(job)
@@ -203,19 +201,17 @@ async def test_find_cached_isolates_across_workspaces(uow) -> None:
     workspace_b = uuid4()
     shared_hash = f"shared-{uuid4().hex}"
     now = _now()
-    job = (
-        UmapJob.create(
-            workspace_id=workspace_a,
-            requested_by=uuid4(),
-            ids_hash=shared_hash,
-            picker="maxmin",
-            picker_params={"n": 50},
-            picker_param_hash="ph",
-            now=now - timedelta(minutes=5),
-        )
-        .mark_running(now - timedelta(minutes=4))
-        .mark_ready(_empty_result(), now - timedelta(minutes=3))
+    job = UmapJob.create(
+        workspace_id=workspace_a,
+        requested_by=uuid4(),
+        ids_hash=shared_hash,
+        picker="maxmin",
+        picker_params={"n": 50},
+        picker_param_hash="ph",
+        now=now - timedelta(minutes=5),
     )
+    job.mark_running(now - timedelta(minutes=4))
+    job.mark_ready(result=_empty_result(), now=now - timedelta(minutes=3))
     async with uow:
         repo = SQLAlchemyUmapJobRepository(uow)
         await repo.save(job)
@@ -232,3 +228,41 @@ async def test_find_cached_isolates_across_workspaces(uow) -> None:
         )
 
     assert miss is None
+
+
+@pytest.mark.asyncio
+async def test_save_rejects_stale_version(uow) -> None:
+    # The lost-cancel race: a runner holding a stale RUNNING aggregate must not
+    # be able to overwrite a row a concurrent cancel already advanced.
+    ws = uuid4()
+    job = UmapJob.create(
+        workspace_id=ws,
+        requested_by=uuid4(),
+        ids_hash=f"stale-v-{uuid4().hex}",
+        picker="maxmin",
+        picker_params={"n": 50},
+        picker_param_hash="ph-sv",
+        now=_NOW,
+    )
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        await repo.save(job)
+        await uow.commit()
+
+    # Capture a stale reference (v1) before advancing
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        stale = await repo.find_by_id_in_workspace(ws, job.id)  # v1
+
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        fresh = await repo.find_by_id_in_workspace(ws, job.id)
+        fresh.mark_running(_NOW)  # row advances to v2
+        await repo.save(fresh)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyUmapJobRepository(uow)
+        with pytest.raises(ConcurrencyConflictError):
+            stale.mark_cancelled(_NOW)  # still expects v1 -> reject
+            await repo.save(stale)
