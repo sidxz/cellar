@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import structlog
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
@@ -27,6 +29,24 @@ def _client():
     return TestClient(app, raise_server_exceptions=False)
 
 
+def _completed_lines(captured_out: str) -> list[dict]:
+    """request.completed access logs parsed from rendered JSON stdout.
+
+    Robust against ``cache_logger_on_first_use=True`` (which makes
+    ``structlog.testing.capture_logs`` unreliable for a cached module logger):
+    this asserts on the actual handler output instead.
+    """
+    entries = []
+    for line in captured_out.strip().splitlines():
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        if obj.get("event") == "request.completed":
+            entries.append(obj)
+    return entries
+
+
 def test_mints_request_id_and_echoes_header():
     r = _client().get("/ok")
     assert r.status_code == 200
@@ -40,11 +60,10 @@ def test_passes_through_supplied_request_id():
     assert r.text == "abc-123"
 
 
-def test_access_log_emitted_with_fields():
+def test_access_log_emitted_with_fields(capsys):
     configure_logging(LoggingSettings(_env_file=None, format="json"))
-    with structlog.testing.capture_logs() as logs:
-        _client().get("/ok")
-    completed = [e for e in logs if e["event"] == "request.completed"]
+    _client().get("/ok")
+    completed = _completed_lines(capsys.readouterr().out)
     assert completed
     entry = completed[0]
     assert entry["method"] == "GET"
@@ -54,10 +73,10 @@ def test_access_log_emitted_with_fields():
     assert entry["client_ip"] == "testclient"  # Starlette TestClient sets scope["client"]
 
 
-def test_health_excluded_from_access_log():
-    with structlog.testing.capture_logs() as logs:
-        _client().get("/health")
-    assert not [e for e in logs if e["event"] == "request.completed"]
+def test_health_excluded_from_access_log(capsys):
+    configure_logging(LoggingSettings(_env_file=None, format="json"))
+    _client().get("/health")
+    assert not _completed_lines(capsys.readouterr().out)
 
 
 def test_health_still_gets_request_id_header():
