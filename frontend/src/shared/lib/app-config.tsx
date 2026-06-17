@@ -10,6 +10,10 @@ export interface AppConfig {
   googleClientId: string;
   entraIdClientId: string;
   entraIdTenantId: string;
+  uiVersion: string;
+  uiGitSha: string;
+  uiBuildDate: string;
+  environment: string;
 }
 
 const defaultConfig: AppConfig = {
@@ -20,6 +24,10 @@ const defaultConfig: AppConfig = {
   googleClientId: "",
   entraIdClientId: "",
   entraIdTenantId: "",
+  uiVersion: "0.0.0+dev",
+  uiGitSha: "unknown",
+  uiBuildDate: "unknown",
+  environment: "development",
 };
 
 const AppConfigContext = createContext<AppConfig>(defaultConfig);
@@ -58,5 +66,9 @@ export async function fetchAppConfig(): Promise<AppConfig> {
     googleClientId: process.env.NEXT_PUBLIC_IDP_CLIENT_ID ?? defaultConfig.googleClientId,
     entraIdClientId: process.env.NEXT_PUBLIC_ENTRA_ID_CLIENT_ID ?? defaultConfig.entraIdClientId,
     entraIdTenantId: process.env.NEXT_PUBLIC_ENTRA_TENANT_ID ?? defaultConfig.entraIdTenantId,
+    uiVersion: process.env.NEXT_PUBLIC_UI_VERSION ?? defaultConfig.uiVersion,
+    uiGitSha: process.env.NEXT_PUBLIC_UI_GIT_SHA ?? defaultConfig.uiGitSha,
+    uiBuildDate: process.env.NEXT_PUBLIC_UI_BUILD_DATE ?? defaultConfig.uiBuildDate,
+    environment: process.env.NEXT_PUBLIC_ENVIRONMENT ?? defaultConfig.environment,
   };
 }

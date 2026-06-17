@@ -26,6 +26,16 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Build identity — injected by CI from the git tag (see publish-images.yml).
+# Image-specific (not environment-specific), so baking as ENV is correct; the
+# Node server reads these at runtime and serves them from /api/config.
+ARG APP_VERSION=0.0.0+dev
+ARG APP_GIT_SHA=unknown
+ARG APP_BUILD_DATE=unknown
+ENV APP_VERSION=$APP_VERSION \
+    APP_GIT_SHA=$APP_GIT_SHA \
+    APP_BUILD_DATE=$APP_BUILD_DATE
+
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
