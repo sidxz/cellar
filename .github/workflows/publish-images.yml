@@ -28,16 +28,21 @@ jobs:
             frontend:
               - 'frontend/**'
       - id: decide
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          FILTER_BACKEND: ${{ steps.filter.outputs.backend }}
+          FILTER_FRONTEND: ${{ steps.filter.outputs.frontend }}
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            case "${{ github.ref_name }}" in
+          if [ "$REF_TYPE" = "tag" ]; then
+            case "$REF_NAME" in
               backend-v*)  echo "backend=true"  >> "$GITHUB_OUTPUT"; echo "frontend=false" >> "$GITHUB_OUTPUT" ;;
               frontend-v*) echo "backend=false" >> "$GITHUB_OUTPUT"; echo "frontend=true"  >> "$GITHUB_OUTPUT" ;;
               *)           echo "backend=false" >> "$GITHUB_OUTPUT"; echo "frontend=false" >> "$GITHUB_OUTPUT" ;;
             esac
           else
-            echo "backend=${{ steps.filter.outputs.backend }}" >> "$GITHUB_OUTPUT"
-            echo "frontend=${{ steps.filter.outputs.frontend }}" >> "$GITHUB_OUTPUT"
+            echo "backend=$FILTER_BACKEND" >> "$GITHUB_OUTPUT"
+            echo "frontend=$FILTER_FRONTEND" >> "$GITHUB_OUTPUT"
           fi
 
   backend:
@@ -59,8 +64,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: ver
+        env:
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
+          if [ "$REF_TYPE" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#backend-v}"
           else
             VERSION="$(git describe --tags --match 'backend-v*' --always | sed 's/^backend-v//')"
@@ -112,8 +119,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: ver
+        env:
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
+          if [ "$REF_TYPE" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#frontend-v}"
           else
             VERSION="$(git describe --tags --match 'frontend-v*' --always | sed 's/^frontend-v//')"
