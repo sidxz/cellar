@@ -2,23 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic_settings.sources import EnvSettingsSource
-
-
-class _CustomEnvSource(EnvSettingsSource):
-    """Custom env source that doesn't JSON-decode string values for level_overrides."""
-
-    def field_is_complex(self, field: Any) -> bool:
-        """Mark level_overrides as non-complex so it won't be JSON-decoded."""
-        if field.annotation == dict[str, str]:
-            # For our custom parsing, treat it as non-complex
-            # The validator will handle the string-to-dict conversion
-            return False
-        return super().field_is_complex(field)
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class LoggingSettings(BaseSettings):
@@ -34,34 +21,18 @@ class LoggingSettings(BaseSettings):
 
     level: str = "INFO"
     format: str = "json"
-    level_overrides: dict[str, str] = Field(default_factory=dict)
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: Any,
-        env_settings: Any,
-        dotenv_settings: Any,
-        file_secret_settings: Any,
-    ) -> tuple[Any, ...]:
-        """Use custom env source that doesn't JSON-decode level_overrides."""
-        return (
-            init_settings,
-            _CustomEnvSource(settings_cls),
-            dotenv_settings,
-            file_secret_settings,
-        )
+    # NoDecode: pydantic-settings would otherwise JSON-decode dict fields from the
+    # environment before validators run, which breaks the "name=LEVEL,name=LEVEL"
+    # string format. NoDecode hands the raw string to the before-validator.
+    level_overrides: Annotated[dict[str, str], NoDecode] = Field(default_factory=dict)
 
     @field_validator("level_overrides", mode="before")
     @classmethod
-    def _parse_overrides(cls, value: object) -> dict[str, str]:
-        """Accept ``"name=LEVEL,name=LEVEL"`` strings; pass dicts through."""
+    def _parse_overrides(cls, value: object) -> object:
+        """Accept ``"name=LEVEL,name=LEVEL"`` strings; pass dicts through; skip malformed."""
         if isinstance(value, dict):
             return value
-        if not isinstance(value, str):
-            return {}
-        if not value:
+        if not isinstance(value, str) or not value:
             return {}
         result: dict[str, str] = {}
         for pair in value.split(","):
