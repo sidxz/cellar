@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";
 import {
   DropdownMenu,
@@ -16,11 +18,14 @@ import {
   useSidebar,
 } from "@/shared/components/ui/sidebar";
 import { useAuthz } from "@sentinel-auth/nextjs";
-import { ChevronsUpDown, LogOut, User } from "lucide-react";
+import { ChevronsUpDown, Info, LogOut, User } from "lucide-react";
+
+import { AboutDialog } from "./about-dialog";
 
 export function UserMenu() {
   const { user, logout } = useAuthz();
   const { isMobile } = useSidebar();
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const initials = user?.name
     ? user.name
@@ -73,12 +78,18 @@ export function UserMenu() {
               Profile
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setAboutOpen(true)}>
+              <Info className="mr-2 size-4" />
+              About
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout}>
               <LogOut className="mr-2 size-4" />
               Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
       </SidebarMenuItem>
     </SidebarMenu>
   );
