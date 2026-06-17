@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-16
 **Branch:** design-7
-**Status:** Approved design → ready for implementation plan
+**Status:** Implemented 2026-06-17 (plan: `docs/superpowers/plans/2026-06-16-logging-standardization.md`; all 9 tasks complete, reviewed, green)
 **Scope tier:** Tier 2 (standardize + request observability) + sensitive-data redaction. Backend code only.
 
 ---

@@ -8,6 +8,8 @@
 
 > Re-confirmed 2026-06-02 during the summary-results-import feature's final verification (Task 13). The full backend suite reported `6 failed, 3102 passed`: the three `test_molecules.py` failures and the three `test_backfill_bemis_murcko.py` failures below. None touch any summary-import file (verified by inspection + git history) — all unrelated to the summary-import feature. One variant observed this run: `test_tested_molecule_returns_count` / `test_project_scoped_count` surfaced a `dose_response_curves.batch_id` NOT-NULL violation rather than the `intercept_values` column error, but it is the same shared-testcontainer / model↔migration fragility family already tracked here.
 
+> Re-confirmed 2026-06-17 during the logging-standardization work (`design-7`): full `tests/api` run reported `3 failed, 333 passed` — the same three `test_molecules.py` failures in section 2 (`test_register_disclosed_molecule` CV-/CC- prefix; `test_tested_molecule_returns_count` and `test_project_scoped_count` surfacing `projects.visibility` UndefinedColumn / `dose_response_curves` drift). The logging work touches no models, migrations, or SQL — unrelated.
+
 These failures were **empirically proven pre-existing** — they already fail in the full suite at commit `5554e342` (the `kvt` HEAD before any tagging work began). They are unrelated to the tagging feature and were deliberately left untouched so the tagging branch stays scoped. Recording them here so they're tracked.
 
 ## 1. `tests/integration/test_backfill_bemis_murcko.py` — global NULL-count fragility
