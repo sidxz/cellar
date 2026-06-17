@@ -88,6 +88,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     from cellar.interface.routes.runs import router as runs_router
     from cellar.interface.routes.targets import router as targets_router
     from cellar.interface.routes.inventory_hub import router as inventory_hub_router
+    from cellar.interface.routes.version import router as version_router
 
     app.include_router(user_router)
     app.include_router(org_router)
@@ -125,6 +126,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(runs_router)
     app.include_router(targets_router)
     app.include_router(inventory_hub_router)
+    app.include_router(version_router)
 
     # Override the stable auth wrapper (not the sentinel SDK directly)
     app.dependency_overrides[get_auth] = lambda: fake_auth

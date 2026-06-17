@@ -13,6 +13,7 @@ from cellar.infrastructure.logging import configure_logging
 from cellar.infrastructure.sentinel.auth import get_sentinel
 from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.middleware.request_context import RequestContextMiddleware
+from cellar.version import build_info
 
 
 def create_app() -> FastAPI:
@@ -186,7 +187,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title="Cellar",
-        version="0.1.0",
+        version=build_info().version,
         docs_url="/docs",
         redoc_url=None,
         lifespan=lifespan,
@@ -195,7 +196,7 @@ def create_app() -> FastAPI:
     # Auth middleware — validates IdP + Sentinel authz tokens
     sentinel.protect(
         app,
-        exclude_paths=["/health", "/docs", "/openapi.json"],
+        exclude_paths=["/health", "/version", "/docs", "/openapi.json"],
     )
 
     # CORS — added last so it runs first (LIFO)
@@ -415,6 +416,10 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    from cellar.interface.routes.version import router as version_router
+
+    app.include_router(version_router)
 
     return app
 
