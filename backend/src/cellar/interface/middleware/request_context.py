@@ -39,9 +39,7 @@ class RequestContextMiddleware:
         client = scope.get("client")
         client_ip = client[0] if client else None
 
-        bind_request_context(
-            request_id=request_id, http_method=method, http_path=path
-        )
+        bind_request_context(request_id=request_id, http_method=method, http_path=path)
         status_holder: dict[str, int | None] = {"status": None}
         start = time.monotonic()
 

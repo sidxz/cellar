@@ -10,9 +10,7 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     return structlog.get_logger(name)
 
 
-def bind_request_context(
-    *, request_id: str, http_method: str, http_path: str
-) -> None:
+def bind_request_context(*, request_id: str, http_method: str, http_path: str) -> None:
     """Bind per-request fields so every downstream log carries them."""
     structlog.contextvars.bind_contextvars(
         request_id=request_id, http_method=http_method, http_path=http_path
