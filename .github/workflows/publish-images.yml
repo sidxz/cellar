@@ -154,3 +154,40 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+  release:
+    name: Publish GitHub Release
+    needs: [backend, frontend]
+    if: ${{ always() && github.ref_type == 'tag' && (needs.backend.result == 'success' || needs.frontend.result == 'success') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: range
+        run: |
+          NS="${GITHUB_REF_NAME%%-v*}"                       # backend | frontend
+          PREV="$(git tag --list "${NS}-v*" --sort=-creatordate | sed -n '2p')"
+          if [ -n "$PREV" ]; then
+            echo "range=${PREV}..${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "range=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "path=${NS}/**" >> "$GITHUB_OUTPUT"
+          # Title-case the namespace: "backend" -> "Backend".
+          TITLE="$(printf '%s' "$NS" | sed 's/^./\U&/') ${GITHUB_REF_NAME#${NS}-}"
+          echo "title=${TITLE}" >> "$GITHUB_OUTPUT"
+      - uses: orhun/git-cliff-action@v4
+        id: cliff
+        with:
+          config: cliff.toml
+          args: --include-path "${{ steps.range.outputs.path }}" ${{ steps.range.outputs.range }}
+        env:
+          OUTPUT: CHANGES.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ steps.range.outputs.title }}
+          body_path: ${{ steps.cliff.outputs.changelog }}
