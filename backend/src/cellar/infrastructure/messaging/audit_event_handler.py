@@ -38,7 +38,7 @@ class AuditEventHandler:
             # Audit failure must not break the business operation.
             # Log and continue — the primary use case already committed.
             logger.exception(
-                "Failed to record audit for %s (aggregate=%s)",
-                type(event).__name__,
-                event.aggregate_id,
+                "audit.record_failed",
+                event_type=type(event).__name__,
+                aggregate_id=str(event.aggregate_id),
             )

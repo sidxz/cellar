@@ -384,10 +384,10 @@ async def _create_batch(
 
     if isinstance(batch_result, Failure):
         logger.warning(
-            "Batch creation failed for molecule %s row %d: %s",
-            molecule.id,
-            item.row_index,
-            batch_result.failure(),
+            "registration.batch_create_failed",
+            molecule_id=str(molecule.id),
+            row_index=item.row_index,
+            error=str(batch_result.failure()),
         )
         return None, None, False
 
@@ -414,9 +414,9 @@ async def _create_batch(
             # batch); log and continue. Other failures are also non-fatal: the batch
             # exists, only the alias capture failed.
             logger.warning(
-                "Capturing CDD batch alias for cdd_batch_id=%s failed: %s",
-                item.cdd_batch_id,
-                alias_result.failure(),
+                "registration.cdd_batch_alias_failed",
+                cdd_batch_id=item.cdd_batch_id,
+                error=str(alias_result.failure()),
             )
 
     return batch.id, batch.batch_number.value, salt_matched

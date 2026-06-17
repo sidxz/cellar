@@ -11,7 +11,9 @@ Logging conventions (enforced across the backend):
     /recoverable · ERROR failed op needing attention · CRITICAL app failure.
 
 Sensitive values (keys matching the redaction denylist) are scrubbed
-automatically by the ``redact_sensitive`` processor.
+automatically by the ``redact_sensitive`` processor. Redaction is KEY-based:
+pass sensitive data as a denylisted kwarg (e.g. ``token=``) so it is scrubbed
+— a secret string-formatted into the event message itself is NOT scrubbed.
 """
 
 from __future__ import annotations

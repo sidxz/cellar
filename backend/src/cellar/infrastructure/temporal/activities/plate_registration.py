@@ -67,8 +67,8 @@ class PlateRegistrationActivities:
                     output.sync_pairs.append(result)
             except Exception:
                 logger.exception(
-                    "Error processing plate cdd_plate_id=%s",
-                    plate.cdd_plate_id,
+                    "plate.processing_failed",
+                    cdd_plate_id=plate.cdd_plate_id,
                 )
                 output.plates_error += 1
 
@@ -124,9 +124,9 @@ class PlateRegistrationActivities:
 
         if isinstance(reg_result, Failure):
             logger.warning(
-                "Failed to register plate %s: %s",
-                barcode,
-                reg_result.failure(),
+                "plate.registration_failed",
+                barcode=barcode,
+                error=str(reg_result.failure()),
             )
             output.plates_error += 1
             return None

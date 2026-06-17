@@ -96,10 +96,10 @@ class FileParsingActivities:
         activity.heartbeat(f"parsed {len(valid_items)} items into {len(chunks)} chunks")
 
         logger.info(
-            "Parsed %s: %d items, %d chunks",
-            input.filename,
-            len(valid_items),
-            len(chunks),
+            "file_parsing.parsed",
+            filename=input.filename,
+            item_count=len(valid_items),
+            chunk_count=len(chunks),
         )
 
         return ParseFileOutput(

@@ -95,12 +95,12 @@ class CddFetchActivities:
             effective_count = min(input.max_molecules, total_count)
 
         logger.info(
-            "CDD export started: vault=%s export_id=%d total=%d effective=%d mode=%s",
-            input.vault_id,
-            export_id,
-            total_count,
-            effective_count,
-            "modified_after" if input.modified_after else "full",
+            "cdd_fetch.export_started",
+            vault_id=input.vault_id,
+            export_id=export_id,
+            total_count=total_count,
+            effective_count=effective_count,
+            mode="modified_after" if input.modified_after else "full",
         )
         return CddStartExportOutput(export_id=export_id, total_count=effective_count)
 
@@ -162,7 +162,9 @@ class CddFetchActivities:
         else:
             raw_size = raw_path.stat().st_size
             logger.info(
-                "CDD export %d already on disk (%d bytes), reusing", input.export_id, raw_size
+                "cdd_fetch.export_already_on_disk",
+                export_id=input.export_id,
+                raw_bytes=raw_size,
             )
 
         # Parse from disk (file-based, avoids double-memory of response.json())
@@ -184,10 +186,10 @@ class CddFetchActivities:
 
         total_bytes = sum(f.stat().st_size for f in export_dir.glob("chunk_*.json"))
         logger.info(
-            "Saved CDD export to %s (%d bytes across %d chunks)",
-            export_dir,
-            total_bytes,
-            (len(objects) + CHUNK_SIZE - 1) // CHUNK_SIZE,
+            "cdd_fetch.export_saved",
+            export_dir=str(export_dir),
+            total_bytes=total_bytes,
+            chunk_count=(len(objects) + CHUNK_SIZE - 1) // CHUNK_SIZE,
         )
 
         return CddPollExportOutput(finished=True, count=count, storage_path=str(export_dir))
@@ -343,10 +345,10 @@ class CddFetchActivities:
         modified_after_iso = last_modified.isoformat() if last_modified else None
 
         logger.info(
-            "Sync watermark: vault=%s last_modified=%s synced=%d",
-            input.vault_id,
-            modified_after_iso,
-            known_count,
+            "cdd_fetch.sync_watermark",
+            vault_id=input.vault_id,
+            last_modified=modified_after_iso,
+            synced_count=known_count,
         )
 
         return CddSyncWatermarkOutput(
@@ -373,10 +375,10 @@ class CddFetchActivities:
         )
 
         logger.info(
-            "CDD plate export started: vault=%s export_id=%d total=%d",
-            input.vault_id,
-            export_id,
-            total_count,
+            "cdd_fetch.plate_export_started",
+            vault_id=input.vault_id,
+            export_id=export_id,
+            total_count=total_count,
         )
         return CddStartExportOutput(export_id=export_id, total_count=total_count)
 

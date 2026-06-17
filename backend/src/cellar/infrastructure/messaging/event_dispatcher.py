@@ -54,9 +54,9 @@ class EventDispatcher:
         # Exact-match handlers
         for handler in self._handlers.get(event_type, []):
             logger.debug(
-                "Dispatching %s to %s",
-                event_type.__name__,
-                getattr(handler, "__qualname__", repr(handler)),
+                "event.dispatching",
+                event_type=event_type.__name__,
+                handler=getattr(handler, "__qualname__", repr(handler)),
             )
             await handler(event)
 
@@ -64,9 +64,9 @@ class EventDispatcher:
         if event_type is not DomainEvent:
             for handler in self._handlers.get(DomainEvent, []):
                 logger.debug(
-                    "Dispatching %s to catch-all %s",
-                    event_type.__name__,
-                    getattr(handler, "__qualname__", repr(handler)),
+                    "event.dispatching_catch_all",
+                    event_type=event_type.__name__,
+                    handler=getattr(handler, "__qualname__", repr(handler)),
                 )
                 await handler(event)
 
