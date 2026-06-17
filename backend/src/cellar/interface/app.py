@@ -12,6 +12,7 @@ from cellar.infrastructure.di.container import create_container
 from cellar.infrastructure.logging import configure_logging
 from cellar.infrastructure.sentinel.auth import get_sentinel
 from cellar.interface.error_handlers import register_error_handlers
+from cellar.interface.middleware.request_context import RequestContextMiddleware
 
 
 def create_app() -> FastAPI:
@@ -208,6 +209,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Request context — outermost, so request_id wraps everything incl. CORS.
+    app.add_middleware(RequestContextMiddleware)
 
     # Domain error → HTTP response mapping
     register_error_handlers(app)
