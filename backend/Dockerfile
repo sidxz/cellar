@@ -27,6 +27,15 @@ RUN uv sync --frozen --no-dev
 RUN adduser --disabled-password --uid 1000 cellar
 USER cellar
 
+# Build identity — injected by CI from the git tag (see publish-images.yml).
+# Defaults keep local `docker build` runs honest about being unversioned.
+ARG APP_VERSION=0.0.0+dev
+ARG GIT_SHA=unknown
+ARG BUILD_DATE=unknown
+ENV CELLAR_VERSION=$APP_VERSION \
+    CELLAR_GIT_SHA=$GIT_SHA \
+    CELLAR_BUILD_DATE=$BUILD_DATE
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
