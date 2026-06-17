@@ -11,7 +11,7 @@ describe("/api/config", () => {
     vi.stubEnv("APP_VERSION", "2.1.0");
     vi.stubEnv("APP_GIT_SHA", "84e7848");
     vi.stubEnv("APP_BUILD_DATE", "2026-06-17T12:00:00Z");
-    vi.stubEnv("APP_ENVIRONMENT", "production");
+    vi.stubEnv("APP_ENV", "production");
 
     const body = await GET().json();
 
@@ -24,7 +24,7 @@ describe("/api/config", () => {
   it("falls back to dev placeholders when env is absent", async () => {
     vi.stubEnv("APP_VERSION", "");
     vi.stubEnv("APP_GIT_SHA", "");
-    vi.stubEnv("APP_ENVIRONMENT", "");
+    vi.stubEnv("APP_ENV", "");
 
     const body = await GET().json();
 

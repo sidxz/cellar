@@ -34,5 +34,5 @@ async def get_version() -> VersionResponse:
         version=info.version,
         git_sha=info.git_sha,
         build_date=info.build_date,
-        environment=os.environ.get("ENVIRONMENT", "development"),
+        environment=os.environ.get("APP_ENV", "development"),
     )

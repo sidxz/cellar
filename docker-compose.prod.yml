@@ -76,6 +76,7 @@ services:
       APP_GOOGLE_CLIENT_ID: ${APP_GOOGLE_CLIENT_ID:-}
       APP_ENTRA_ID_CLIENT_ID: ${APP_ENTRA_ID_CLIENT_ID:-}
       APP_ENTRA_ID_TENANT_ID: ${APP_ENTRA_ID_TENANT_ID:-}
+      APP_ENV: ${APP_ENV:-production}
     ports:
       - "3000:3000"
 

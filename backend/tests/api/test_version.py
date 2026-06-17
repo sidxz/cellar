@@ -22,7 +22,7 @@ async def test_version_reports_injected_build_env(
 ) -> None:
     monkeypatch.setenv("CELLAR_VERSION", "1.4.0")
     monkeypatch.setenv("CELLAR_GIT_SHA", "84e7848")
-    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("APP_ENV", "production")
     resp = await client.get("/version")
     body = resp.json()
     assert body["version"] == "1.4.0"

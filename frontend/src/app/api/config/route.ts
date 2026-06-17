@@ -25,6 +25,6 @@ export function GET() {
     uiVersion: process.env.APP_VERSION || "0.0.0+dev",
     uiGitSha: process.env.APP_GIT_SHA || "unknown",
     uiBuildDate: process.env.APP_BUILD_DATE || "unknown",
-    environment: process.env.APP_ENVIRONMENT || "development",
+    environment: process.env.APP_ENV || "development",
   });
 }

@@ -55,6 +55,7 @@ services:
       - backend
     environment:
       APP_API_URL: ${APP_API_URL:-http://localhost:8000}
+      APP_ENV: development
     ports:
       - "3000:3000"
 

@@ -169,6 +169,7 @@ jobs:
       - id: range
         run: |
           NS="${GITHUB_REF_NAME%%-v*}"                       # backend | frontend
+          # Previous same-namespace tag by creation date (assumes tags are created in version order).
           PREV="$(git tag --list "${NS}-v*" --sort=-creatordate | sed -n '2p')"
           if [ -n "$PREV" ]; then
             echo "range=${PREV}..${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
