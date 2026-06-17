@@ -31,7 +31,4 @@ def redact_sensitive(
     _logger: Any, _method_name: str, event_dict: dict[str, Any]
 ) -> dict[str, Any]:
     """Replace values of sensitive-looking keys with ``REDACTED`` (recursive)."""
-    return {
-        k: (REDACTED if SENSITIVE_KEY_RE.search(str(k)) else _redact(v))
-        for k, v in event_dict.items()
-    }
+    return _redact(event_dict)

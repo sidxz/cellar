@@ -37,3 +37,14 @@ def test_recurses_into_nested_dicts_and_lists():
     assert out["payload"]["nested"]["secret"] == REDACTED
     assert out["items"][0]["refresh_token"] == REDACTED
     assert out["items"][1]["name"] == "ok"
+
+
+def test_redacts_apikey_without_underscore():
+    out = _run({"apikey": "k", "api_key": "k2"})
+    assert out["apikey"] == REDACTED
+    assert out["api_key"] == REDACTED
+
+
+def test_redacts_set_cookie_hyphen_form():
+    out = _run({"set-cookie": "sessionid=abc"})
+    assert out["set-cookie"] == REDACTED
