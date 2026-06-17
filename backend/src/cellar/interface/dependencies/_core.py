@@ -21,6 +21,7 @@ from cellar.application.shared.unit_of_work import (
 )
 from cellar.application.user.get_preferences import GetPreferences
 from cellar.application.user.update_preferences import UpdatePreferences
+from cellar.infrastructure.logging import bind_user_context
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
     SQLAlchemySaltEntryRepository,
@@ -147,8 +148,22 @@ else:
         _sentinel_get_auth = _sentinel_not_configured
 
 
-async def get_auth(auth: Annotated[Any, Depends(_sentinel_get_auth)]) -> Any:
-    """Stable auth dependency wrapper — overridable via dependency_overrides."""
+async def get_auth(
+    request: Request,
+    auth: Annotated[Any, Depends(_sentinel_get_auth)],
+) -> Any:
+    """Stable auth dependency wrapper — overridable via dependency_overrides.
+
+    Also binds the authenticated user/workspace into the logging context and
+    onto ``request.state`` so the access-log line can include them.
+    """
+    user_id = getattr(auth, "user_id", None)
+    workspace_id = getattr(auth, "workspace_id", None)
+    user_id = str(user_id) if user_id is not None else None
+    workspace_id = str(workspace_id) if workspace_id is not None else None
+    bind_user_context(user_id=user_id, workspace_id=workspace_id)
+    request.state.user_id = user_id
+    request.state.workspace_id = workspace_id
     return auth
 
 
