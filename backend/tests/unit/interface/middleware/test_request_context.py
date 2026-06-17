@@ -51,12 +51,19 @@ def test_access_log_emitted_with_fields():
     assert entry["path"] == "/ok"
     assert entry["status_code"] == 200
     assert "duration_ms" in entry
+    assert entry["client_ip"] == "testclient"  # Starlette TestClient sets scope["client"]
 
 
 def test_health_excluded_from_access_log():
     with structlog.testing.capture_logs() as logs:
         _client().get("/health")
     assert not [e for e in logs if e["event"] == "request.completed"]
+
+
+def test_health_still_gets_request_id_header():
+    r = _client().get("/health")
+    assert r.status_code == 200
+    assert r.headers["x-request-id"]  # bound + echoed even though access log is skipped
 
 
 def test_context_cleared_after_request():

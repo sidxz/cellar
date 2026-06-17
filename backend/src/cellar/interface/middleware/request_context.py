@@ -42,7 +42,7 @@ class RequestContextMiddleware:
         bind_request_context(
             request_id=request_id, http_method=method, http_path=path
         )
-        status_holder: dict[str, int] = {"status": 0}
+        status_holder: dict[str, int | None] = {"status": None}
         start = time.monotonic()
 
         async def send_wrapper(message: dict) -> None:
