@@ -59,7 +59,7 @@ class FsspecStorageClient:
     def _sync_delete(self, key: str) -> None:
         path = self._full_path(key)
         if not self._fs.exists(path):
-            logger.warning("Storage key not found during delete: %s", key)
+            logger.warning("storage.key_not_found_on_delete", storage_key=key)
             return
         self._fs.rm(path)
 

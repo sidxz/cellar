@@ -61,7 +61,8 @@ class InfisicalSecretProvider:
             data = resp.json()
             return data.get("secret", {}).get("secretValue")
         except Exception:
-            logger.warning("Failed to retrieve secret %s from Infisical", key, exc_info=True)
+            # field name avoids the redaction denylist; this is the lookup key, not a secret value
+            logger.warning("infisical.secret_retrieve_failed", key=key, exc_info=True)
             return None
 
     async def set_secret(self, key: str, value: str) -> None:

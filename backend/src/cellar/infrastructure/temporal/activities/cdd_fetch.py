@@ -138,12 +138,12 @@ class CddFetchActivities:
         # Clean up any partial download from a previous crashed attempt
         if tmp_path.exists():
             tmp_path.unlink()
-            logger.info("Removed partial download %s", tmp_path)
+            logger.info("cdd_fetch.partial_download_removed", tmp_path=str(tmp_path))
 
         # If raw file already exists (retry after chunk-splitting failed),
         # skip the download — reuse what we already have.
         if not raw_path.exists():
-            logger.info("Streaming CDD export %d to disk...", input.export_id)
+            logger.info("cdd_fetch.export_streaming", export_id=input.export_id)
             activity.heartbeat(f"export {input.export_id}: downloading")
             await client.stream_export_to_file(
                 input.vault_id,
@@ -154,7 +154,11 @@ class CddFetchActivities:
             # Atomic rename — only complete downloads get the final name
             tmp_path.rename(raw_path)
             raw_size = raw_path.stat().st_size
-            logger.info("CDD export %d downloaded: %d bytes", input.export_id, raw_size)
+            logger.info(
+                "cdd_fetch.export_downloaded",
+                export_id=input.export_id,
+                raw_bytes=raw_size,
+            )
         else:
             raw_size = raw_path.stat().st_size
             logger.info(
@@ -168,7 +172,7 @@ class CddFetchActivities:
 
         objects = data.get("objects", [])
         count = data.get("count", len(objects))
-        logger.info("CDD export %d: %d objects", input.export_id, count)
+        logger.info("cdd_fetch.export_parsed", export_id=input.export_id, object_count=count)
 
         # Write manifest
         (export_dir / "manifest.json").write_text(json.dumps({"count": len(objects)}))
