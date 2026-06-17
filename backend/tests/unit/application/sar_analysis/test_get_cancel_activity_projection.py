@@ -14,10 +14,8 @@ from cellar.application.sar_analysis.get_activity_projection import (
     GetActivityProjection,
     GetActivityProjectionInput,
 )
-from cellar.domain.sar_analysis.sar_activity_projection import (
-    SarActivityProjection,
-    SarActivityProjectionStatus,
-)
+from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
+from cellar.domain.shared.async_job import AsyncJobStatus
 
 _NOW = datetime(2026, 6, 15, tzinfo=UTC)
 
@@ -40,7 +38,7 @@ class FakeRepo:
     async def save(self, p):
         self._by_id[p.id] = p
 
-    async def find_by_id(self, pid, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, pid):
         p = self._by_id.get(pid)
         return p if p and p.workspace_id == workspace_id else None
 
@@ -89,20 +87,22 @@ async def test_cancel_marks_cancelled_and_signals_orchestrator():
     uc = CancelActivityProjection(repository=repo, orchestrator=orch, uow=FakeUoW())
     out = await uc.execute(CancelActivityProjectionInput(projection_id=proj.id, workspace_id=ws, now=_NOW))
     assert isinstance(out, Success)
-    assert repo._by_id[proj.id].status == SarActivityProjectionStatus.CANCELLED
+    assert repo._by_id[proj.id].status == AsyncJobStatus.CANCELLED
     assert orch.cancelled == [proj.id]
 
 
 @pytest.mark.asyncio
 async def test_cancel_already_terminal_is_idempotent_noop():
     ws = uuid.uuid4()
-    ready = _pending(ws).mark_running(_NOW).mark_ready(value_count=0, now=_NOW)
+    ready = _pending(ws)
+    ready.mark_running(_NOW)
+    ready.mark_ready(value_count=0, now=_NOW)
     repo = FakeRepo(ready)
     orch = FakeOrchestrator()
     uc = CancelActivityProjection(repository=repo, orchestrator=orch, uow=FakeUoW())
     out = await uc.execute(CancelActivityProjectionInput(projection_id=ready.id, workspace_id=ws, now=_NOW))
     assert isinstance(out, Success)
-    assert repo._by_id[ready.id].status == SarActivityProjectionStatus.READY  # unchanged
+    assert repo._by_id[ready.id].status == AsyncJobStatus.READY  # unchanged
 
 
 @pytest.mark.asyncio

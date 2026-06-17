@@ -33,10 +33,7 @@ from cellar.application.sar_analysis.start_activity_projection import (
 from cellar.application.sar_analysis.start_decomposition_run import StartDecompositionRunInput
 from cellar.application.shared.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
-from cellar.domain.sar_analysis.sar_activity_projection import (
-    SarActivityProjection,
-    SarActivityProjectionStatus,
-)
+from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
 from cellar.domain.screening_assay.run_scope import (
     RunScope,  # noqa: F401  (documents run_scopes wire)
 )
@@ -371,7 +368,7 @@ async def start_activity_projection(
             now=datetime.now(UTC),
         )
     )
-    if proj.status != SarActivityProjectionStatus.READY:
+    if proj.status != AsyncJobStatus.READY:
         response.status_code = status.HTTP_202_ACCEPTED
     return _projection_view(proj)
 

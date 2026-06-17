@@ -8,10 +8,8 @@ from datetime import UTC, datetime
 import pytest
 
 from cellar.domain.sar_analysis.activity_projection_types import ActivityScalar
-from cellar.domain.sar_analysis.sar_activity_projection import (
-    SarActivityProjection,
-    SarActivityProjectionStatus,
-)
+from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
+from cellar.domain.shared.async_job import AsyncJobStatus
 from cellar.domain.shared.errors import ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_repository import (  # noqa: E501
     SQLAlchemySarActivityProjectionRepository,
@@ -21,14 +19,13 @@ _NOW = datetime(2026, 6, 15, tzinfo=UTC)
 
 
 def _ready(ws, *, mh="m", ch="ch", value_count=0) -> SarActivityProjection:
-    return (
-        SarActivityProjection.create(
-            workspace_id=ws, requested_by=uuid.uuid4(), membership_hash=mh,
-            channel_hash=ch, channel_spec={"column": "drc:x"}, now=_NOW,
-        )
-        .mark_running(_NOW)
-        .mark_ready(value_count=value_count, now=_NOW)
+    proj = SarActivityProjection.create(
+        workspace_id=ws, requested_by=uuid.uuid4(), membership_hash=mh,
+        channel_hash=ch, channel_spec={"column": "drc:x"}, now=_NOW,
     )
+    proj.mark_running(_NOW)
+    proj.mark_ready(value_count=value_count, now=_NOW)
+    return proj
 
 
 @pytest.mark.asyncio
@@ -41,9 +38,9 @@ async def test_save_and_find_by_id_scoped_to_workspace(uow):
         await uow.commit()
     async with uow:
         repo = SQLAlchemySarActivityProjectionRepository(uow)
-        found = await repo.find_by_id(proj.id, workspace_id=ws)
-        other = await repo.find_by_id(proj.id, workspace_id=uuid.uuid4())
-    assert found is not None and found.status == SarActivityProjectionStatus.READY
+        found = await repo.find_by_id_in_workspace(ws, proj.id)
+        other = await repo.find_by_id_in_workspace(uuid.uuid4(), proj.id)
+    assert found is not None and found.status == AsyncJobStatus.READY
     assert other is None  # cross-workspace invisible
 
 
@@ -105,15 +102,17 @@ async def test_save_increments_version_on_update(uow):
         await uow.commit()
     async with uow:
         repo = SQLAlchemySarActivityProjectionRepository(uow)
-        loaded = await repo.find_by_id(proj.id, workspace_id=ws)
-        await repo.save(loaded.mark_running(_NOW))  # UPDATE WHERE v1 -> v2
+        loaded = await repo.find_by_id_in_workspace(ws, proj.id)
+        v_before = loaded.version
+        loaded.mark_running(_NOW)  # UPDATE WHERE v1 -> v2
+        await repo.save(loaded)
         await uow.commit()
     async with uow:
         repo = SQLAlchemySarActivityProjectionRepository(uow)
-        again = await repo.find_by_id(proj.id, workspace_id=ws)
+        again = await repo.find_by_id_in_workspace(ws, proj.id)
     assert again is not None
-    assert again.status == SarActivityProjectionStatus.RUNNING
-    assert again.version == loaded.version + 1
+    assert again.status == AsyncJobStatus.RUNNING
+    assert again.version == v_before + 1
 
 
 @pytest.mark.asyncio
@@ -131,16 +130,18 @@ async def test_save_rejects_stale_version(uow):
         await uow.commit()
     async with uow:
         repo = SQLAlchemySarActivityProjectionRepository(uow)
-        stale = await repo.find_by_id(proj.id, workspace_id=ws)  # v1
+        stale = await repo.find_by_id_in_workspace(ws, proj.id)  # v1
     async with uow:
         repo = SQLAlchemySarActivityProjectionRepository(uow)
-        fresh = await repo.find_by_id(proj.id, workspace_id=ws)
-        await repo.save(fresh.mark_running(_NOW))  # row advances to v2
+        fresh = await repo.find_by_id_in_workspace(ws, proj.id)
+        fresh.mark_running(_NOW)  # row advances to v2
+        await repo.save(fresh)
         await uow.commit()
     async with uow:
         repo = SQLAlchemySarActivityProjectionRepository(uow)
         with pytest.raises(ConcurrencyConflictError):
-            await repo.save(stale.mark_cancelled(_NOW))  # still expects v1 -> reject
+            stale.mark_cancelled(_NOW)  # still expects v1 -> reject
+            await repo.save(stale)
 
 
 @pytest.mark.asyncio

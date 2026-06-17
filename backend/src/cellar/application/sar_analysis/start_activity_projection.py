@@ -25,16 +25,11 @@ from cellar.application.sar_analysis.activity_enrichment import (
 )
 from cellar.application.sar_analysis.decomposition_members import DecompositionMemberStream
 from cellar.application.sar_analysis.hashing import compute_membership_hash
-from cellar.application.sar_analysis.mark_activity_projection_failed import (
-    MarkActivityProjectionFailed,
-    MarkActivityProjectionFailedInput,
-)
 from cellar.application.sar_analysis.repositories import SarActivityProjectionRepository
+from cellar.application.shared.mark_job_failed import MarkJobFailed, MarkJobFailedInput
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.sar_analysis.sar_activity_projection import (
-    SarActivityProjection,
-    SarActivityProjectionStatus,
-)
+from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
+from cellar.domain.shared.async_job import AsyncJobStatus
 
 
 @dataclass(frozen=True)
@@ -79,7 +74,9 @@ class StartActivityProjection:
         self._uow = uow
         # The inline path marks FAILED on error via the same guarded use case the
         # async boundary uses; it reuses this use case's repo + uow.
-        self._mark_failed = MarkActivityProjectionFailed(repository=repository, uow=uow)
+        self._mark_failed = MarkJobFailed(
+            repository=repository, uow=uow, job_type="sar_activity_projection"
+        )
         self._inline_threshold = inline_threshold
 
     async def execute(self, payload: StartActivityProjectionInput) -> SarActivityProjection:
@@ -109,7 +106,9 @@ class StartActivityProjection:
             is_inline = count <= self._inline_threshold
             # Persist the initial row: RUNNING for the inline path (value FKs need
             # the row to exist), PENDING for the async path.
-            await self._repo.save(proj.mark_running(payload.now) if is_inline else proj)
+            if is_inline:
+                proj.mark_running(payload.now)
+            await self._repo.save(proj)
             await self._uow.commit()
 
         if not is_inline:
@@ -135,19 +134,17 @@ class StartActivityProjection:
                 await self._repo.write_values(proj.id, scalars)
                 # Re-read so a concurrent cancel is respected (and to mark_ready at
                 # the row's current version under optimistic concurrency).
-                current = await self._repo.find_by_id(
-                    proj.id, workspace_id=payload.workspace_id
-                )
-                if current is None or current.status != SarActivityProjectionStatus.RUNNING:
+                current = await self._repo.find_by_id_in_workspace(payload.workspace_id, proj.id)
+                if current is None or current.status != AsyncJobStatus.RUNNING:
                     return current if current is not None else proj
-                ready = current.mark_ready(value_count=len(scalars), now=payload.now)
-                await self._repo.save(ready)
+                current.mark_ready(value_count=len(scalars), now=payload.now)
+                await self._repo.save(current)
                 await self._uow.commit()
-                return ready
+                return current
         except Exception:
             await self._mark_failed.execute(
-                MarkActivityProjectionFailedInput(
-                    projection_id=proj.id,
+                MarkJobFailedInput(
+                    job_id=proj.id,
                     workspace_id=payload.workspace_id,
                     error="inline activity projection failed",
                     now=payload.now,

@@ -11,10 +11,8 @@ from cellar.application.sar_analysis.start_activity_projection import (
     SarActivityProjectionOrchestrator,
 )
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.sar_analysis.sar_activity_projection import (
-    InvalidSarProjectionTransition,
-    SarActivityProjection,
-)
+from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
+from cellar.domain.shared.async_job import InvalidJobTransition
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 
@@ -41,16 +39,16 @@ class CancelActivityProjection:
         self, payload: CancelActivityProjectionInput
     ) -> Result[SarActivityProjection, DomainError]:
         async with self._uow:
-            proj = await self._repo.find_by_id(
-                payload.projection_id, workspace_id=payload.workspace_id
+            proj = await self._repo.find_by_id_in_workspace(
+                payload.workspace_id, payload.projection_id
             )
             if proj is None:
                 return Failure(NotFoundError("SarActivityProjection", str(payload.projection_id)))
             try:
-                cancelled = proj.mark_cancelled(payload.now)
-            except InvalidSarProjectionTransition:
+                proj.mark_cancelled(payload.now)
+            except InvalidJobTransition:
                 return Success(proj)  # already terminal — idempotent no-op
-            await self._repo.save(cancelled)
+            await self._repo.save(proj)
             await self._uow.commit()
         await self._orchestrator.cancel(projection_id=proj.id)
-        return Success(cancelled)
+        return Success(proj)

@@ -10,8 +10,8 @@ from datetime import timedelta
 from typing import Any
 
 from temporalio import workflow
-from temporalio.common import RetryPolicy
-from temporalio.exceptions import ActivityError
+
+from cellar.infrastructure.temporal.workflow_support import run_job_with_failure_marking
 
 with workflow.unsafe.imports_passed_through():
     from cellar.infrastructure.temporal.activities.sar_activity_projection import (
@@ -34,31 +34,20 @@ class SarActivityProjectionWorkflowInput:
 class SarActivityProjectionWorkflow:
     @workflow.run
     async def run(self, input: SarActivityProjectionWorkflowInput) -> None:
-        try:
-            await workflow.execute_activity(
-                SarActivityProjectionActivities.run_sar_activity_projection,
-                RunActivityProjectionInput(
-                    projection_id=input.projection_id,
-                    workspace_id=input.workspace_id,
-                    channel_spec=input.channel_spec,
-                    collection_id=input.collection_id,
-                    molecule_ids=input.molecule_ids,
-                ),
-                start_to_close_timeout=timedelta(hours=1),
-                retry_policy=RetryPolicy(maximum_attempts=3),
-            )
-        except ActivityError:
-            # Retries exhausted — mark FAILED so the row is never orphaned in
-            # RUNNING (the runner leaves FAILED-marking to this boundary so a
-            # retry can re-enter and recover). Then fail the workflow.
-            await workflow.execute_activity(
-                SarActivityProjectionActivities.mark_sar_activity_projection_failed,
-                MarkProjectionFailedInput(
-                    projection_id=input.projection_id,
-                    workspace_id=input.workspace_id,
-                    error="activity projection failed after retries",
-                ),
-                start_to_close_timeout=timedelta(minutes=5),
-                retry_policy=RetryPolicy(maximum_attempts=5),
-            )
-            raise
+        await run_job_with_failure_marking(
+            run_activity=SarActivityProjectionActivities.run_sar_activity_projection,
+            run_input=RunActivityProjectionInput(
+                projection_id=input.projection_id,
+                workspace_id=input.workspace_id,
+                channel_spec=input.channel_spec,
+                collection_id=input.collection_id,
+                molecule_ids=input.molecule_ids,
+            ),
+            mark_failed_activity=SarActivityProjectionActivities.mark_sar_activity_projection_failed,
+            mark_failed_input=MarkProjectionFailedInput(
+                projection_id=input.projection_id,
+                workspace_id=input.workspace_id,
+                error="activity projection failed after retries",
+            ),
+            run_timeout=timedelta(hours=1),
+        )

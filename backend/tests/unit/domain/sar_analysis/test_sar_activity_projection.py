@@ -5,11 +5,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from cellar.domain.sar_analysis.sar_activity_projection import (
-    InvalidSarProjectionTransition,
-    SarActivityProjection,
-    SarActivityProjectionStatus,
-)
+from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
+from cellar.domain.shared.async_job import AsyncJobStatus, InvalidJobTransition
 
 _NOW = datetime(2026, 6, 15, tzinfo=UTC)
 
@@ -27,36 +24,43 @@ def _pending() -> SarActivityProjection:
 
 def test_create_is_pending():
     p = _pending()
-    assert p.status == SarActivityProjectionStatus.PENDING
+    assert p.status == AsyncJobStatus.PENDING
     assert p.value_count == 0
     assert p.channel_spec == {"column": "drc:x"}
     assert p.version == 1
 
 
 def test_running_then_ready_sets_value_count():
-    ready = _pending().mark_running(_NOW).mark_ready(value_count=7, now=_NOW)
-    assert ready.status == SarActivityProjectionStatus.READY
-    assert ready.value_count == 7
-    assert ready.completed_at == _NOW
+    p = _pending()
+    p.mark_running(_NOW)
+    p.mark_ready(value_count=7, now=_NOW)
+    assert p.status == AsyncJobStatus.READY
+    assert p.value_count == 7
+    assert p.completed_at == _NOW
 
 
 def test_ready_requires_running():
-    with pytest.raises(InvalidSarProjectionTransition):
+    with pytest.raises(InvalidJobTransition):
         _pending().mark_ready(value_count=1, now=_NOW)
 
 
 def test_failed_from_running_carries_message():
-    failed = _pending().mark_running(_NOW).mark_failed("boom", _NOW)
-    assert failed.status == SarActivityProjectionStatus.FAILED
-    assert failed.error_message == "boom"
+    p = _pending()
+    p.mark_running(_NOW)
+    p.mark_failed("boom", _NOW)
+    assert p.status == AsyncJobStatus.FAILED
+    assert p.error_message == "boom"
 
 
 def test_cancel_terminal_is_rejected():
-    ready = _pending().mark_running(_NOW).mark_ready(value_count=0, now=_NOW)
-    with pytest.raises(InvalidSarProjectionTransition):
-        ready.mark_cancelled(_NOW)
+    p = _pending()
+    p.mark_running(_NOW)
+    p.mark_ready(value_count=0, now=_NOW)
+    with pytest.raises(InvalidJobTransition):
+        p.mark_cancelled(_NOW)
 
 
 def test_cancel_pending_ok():
-    cancelled = _pending().mark_cancelled(_NOW)
-    assert cancelled.status == SarActivityProjectionStatus.CANCELLED
+    p = _pending()
+    p.mark_cancelled(_NOW)
+    assert p.status == AsyncJobStatus.CANCELLED

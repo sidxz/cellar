@@ -10,10 +10,8 @@ from cellar.application.sar_analysis.start_activity_projection import (
     StartActivityProjection,
     StartActivityProjectionInput,
 )
-from cellar.domain.sar_analysis.sar_activity_projection import (
-    SarActivityProjection,
-    SarActivityProjectionStatus,
-)
+from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
+from cellar.domain.shared.async_job import AsyncJobStatus
 from cellar.domain.screening_assay.activity_types import ActivityValue
 from cellar.domain.shared.aggregation_types import QualifierHandling, SelectionRule
 
@@ -49,7 +47,7 @@ class FakeRepo:
     async def save(self, p):
         self._by_id[p.id] = p
 
-    async def find_by_id(self, pid, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, pid):
         return self._by_id.get(pid)
 
     async def find_cached(self, *, workspace_id, membership_hash, channel_hash):
@@ -100,14 +98,12 @@ def _input(ws, *, collection_id=None, molecule_ids=None):
 @pytest.mark.asyncio
 async def test_cache_hit_returns_prior_ready_without_compute():
     ws = uuid.uuid4()
-    prior = (
-        SarActivityProjection.create(
-            workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
-            channel_hash="ch", channel_spec={"column": _COLUMN}, now=_NOW,
-        )
-        .mark_running(_NOW)
-        .mark_ready(value_count=5, now=_NOW)
+    prior = SarActivityProjection.create(
+        workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
+        channel_hash="ch", channel_spec={"column": _COLUMN}, now=_NOW,
     )
+    prior.mark_running(_NOW)
+    prior.mark_ready(value_count=5, now=_NOW)
     repo = FakeRepo(cached=prior)
     orch = FakeOrchestrator()
     a = uuid.uuid4()
@@ -116,7 +112,7 @@ async def test_cache_hit_returns_prior_ready_without_compute():
         enricher=FakeEnricher({}), repository=repo, orchestrator=orch, uow=FakeUoW(),
     )
     out = await uc.execute(_input(ws, molecule_ids=[a]))
-    assert out.id == prior.id and out.status == SarActivityProjectionStatus.READY
+    assert out.id == prior.id and out.status == AsyncJobStatus.READY
     assert orch.scheduled == [] and repo.written == {}
 
 
@@ -136,7 +132,7 @@ async def test_inline_path_enriches_and_persists_ready():
         inline_threshold=200,
     )
     out = await uc.execute(_input(ws, molecule_ids=[a, b]))
-    assert out.status == SarActivityProjectionStatus.READY
+    assert out.status == AsyncJobStatus.READY
     assert out.value_count == 1  # sparse — only 'a'
     assert len(repo.written[out.id]) == 1
     assert orch.scheduled == []
@@ -154,7 +150,7 @@ async def test_async_path_schedules_pending_with_source():
         inline_threshold=2,
     )
     out = await uc.execute(_input(ws, collection_id=cid))
-    assert out.status == SarActivityProjectionStatus.PENDING
+    assert out.status == AsyncJobStatus.PENDING
     assert repo.written == {}
     assert len(orch.scheduled) == 1
     assert orch.scheduled[0]["collection_id"] == cid  # source passed, not expanded ids
@@ -170,7 +166,7 @@ async def test_empty_input_yields_ready_empty():
         repository=repo, orchestrator=FakeOrchestrator(), uow=FakeUoW(),
     )
     out = await uc.execute(_input(ws, molecule_ids=[]))
-    assert out.status == SarActivityProjectionStatus.READY
+    assert out.status == AsyncJobStatus.READY
     assert out.value_count == 0
 
 
@@ -194,4 +190,4 @@ async def test_inline_failure_marks_projection_failed_and_reraises():
     with pytest.raises(RuntimeError, match="enrich boom"):
         await uc.execute(_input(ws, molecule_ids=[a]))
     saved = next(iter(repo._by_id.values()))
-    assert saved.status == SarActivityProjectionStatus.FAILED
+    assert saved.status == AsyncJobStatus.FAILED

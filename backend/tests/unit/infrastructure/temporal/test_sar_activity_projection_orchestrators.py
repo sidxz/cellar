@@ -64,4 +64,4 @@ async def test_null_orchestrator_marks_failed_when_runner_raises():
     await orch.schedule(projection_id=pid, workspace_id=uuid.uuid4(), channel_spec={"column": "drc:x"})
     await asyncio.gather(*list(orch._tasks))  # swallowed after recording — no raise
     assert len(spy.calls) == 1
-    assert spy.calls[0].projection_id == pid
+    assert spy.calls[0].job_id == pid

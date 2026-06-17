@@ -7,10 +7,8 @@ import pytest
 
 from cellar.application.sar_analysis.activity_channel import ActivityChannelSpec
 from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
-from cellar.domain.sar_analysis.sar_activity_projection import (
-    SarActivityProjection,
-    SarActivityProjectionStatus,
-)
+from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjection
+from cellar.domain.shared.async_job import AsyncJobStatus
 from cellar.domain.screening_assay.activity_types import ActivityValue
 from cellar.domain.shared.aggregation_types import QualifierHandling, SelectionRule
 
@@ -46,7 +44,7 @@ class FakeRepo:
     async def save(self, p):
         self._by_id[p.id] = p
 
-    async def find_by_id(self, pid, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, pid):
         p = self._by_id.get(pid)
         return p if p and p.workspace_id == workspace_id else None
 
@@ -102,7 +100,7 @@ async def test_run_marks_ready_with_value_count():
     )
     await uc.run(run_id=proj.id, workspace_id=ws, channel_spec=_channel_spec_dict(), molecule_ids=[a, b])
     saved = repo._by_id[proj.id]
-    assert saved.status == SarActivityProjectionStatus.READY
+    assert saved.status == AsyncJobStatus.READY
     assert saved.value_count == 1  # only 'a' had a scalar (sparse)
     assert len(repo.written[proj.id]) == 1
 
@@ -124,7 +122,7 @@ async def test_run_reraises_without_marking_failed():
     )
     with pytest.raises(RuntimeError, match="enrich boom"):
         await uc.run(run_id=proj.id, workspace_id=ws, channel_spec=_channel_spec_dict(), molecule_ids=[uuid.uuid4()])
-    assert repo._by_id[proj.id].status == SarActivityProjectionStatus.RUNNING
+    assert repo._by_id[proj.id].status == AsyncJobStatus.RUNNING
 
 
 @pytest.mark.asyncio
@@ -133,7 +131,8 @@ async def test_run_reclaims_running_and_resets_prior_values():
     # and carries stale value rows. The runner re-claims (no PENDING required),
     # resets the stale rows, recomputes, and reaches READY with the fresh count.
     ws = uuid.uuid4()
-    running = _pending(ws).mark_running(_NOW)  # already RUNNING
+    running = _pending(ws)
+    running.mark_running(_NOW)  # already RUNNING
     a = uuid.uuid4()
     table = {
         a: {_COLUMN: ActivityValue(value=0.5, qualifier=None, unit="uM", source="dose_response")}
@@ -148,7 +147,7 @@ async def test_run_reclaims_running_and_resets_prior_values():
     )
     await uc.run(run_id=running.id, workspace_id=ws, channel_spec=_channel_spec_dict(), molecule_ids=[a])
     saved = repo._by_id[running.id]
-    assert saved.status == SarActivityProjectionStatus.READY
+    assert saved.status == AsyncJobStatus.READY
     assert saved.value_count == 1
     assert len(repo.written[running.id]) == 1  # stale rows reset, not doubled
 
@@ -169,7 +168,7 @@ async def test_run_respects_concurrent_cancel_and_does_not_mark_ready():
     class CancellingEnricher(FakeEnricher):
         async def enrich_molecules(self, ws_, ids, cols, *, selection_rule, qualifier_handling, run_scopes=None):
             # Simulate a concurrent cancel committing during enrichment.
-            repo._by_id[proj.id] = repo._by_id[proj.id].mark_cancelled(_NOW)
+            repo._by_id[proj.id].mark_cancelled(_NOW)
             return await super().enrich_molecules(
                 ws_, ids, cols, selection_rule=selection_rule,
                 qualifier_handling=qualifier_handling, run_scopes=run_scopes,
@@ -182,17 +181,18 @@ async def test_run_respects_concurrent_cancel_and_does_not_mark_ready():
         uow=FakeUoW(),
     )
     await uc.run(run_id=proj.id, workspace_id=ws, channel_spec=_channel_spec_dict(), molecule_ids=[a])
-    assert repo._by_id[proj.id].status == SarActivityProjectionStatus.CANCELLED
+    assert repo._by_id[proj.id].status == AsyncJobStatus.CANCELLED
 
 
 @pytest.mark.asyncio
 async def test_run_skips_when_terminal():
     ws = uuid.uuid4()
-    cancelled = _pending(ws).mark_cancelled(_NOW)
+    cancelled = _pending(ws)
+    cancelled.mark_cancelled(_NOW)
     repo = FakeRepo(cancelled)
     uc = RunActivityProjection(
         members=FakeStream([]), enricher=FakeEnricher({}), repository=repo, uow=FakeUoW()
     )
     await uc.run(run_id=cancelled.id, workspace_id=ws, channel_spec=_channel_spec_dict(), molecule_ids=[])
-    assert repo._by_id[cancelled.id].status == SarActivityProjectionStatus.CANCELLED
+    assert repo._by_id[cancelled.id].status == AsyncJobStatus.CANCELLED
     assert repo.written == {}

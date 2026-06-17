@@ -25,7 +25,7 @@ from cellar.application.sar_analysis.start_activity_projection import (
     StartActivityProjectionInput,
 )
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
-from cellar.domain.sar_analysis.sar_activity_projection import SarActivityProjectionStatus
+from cellar.domain.shared.async_job import AsyncJobStatus
 from cellar.domain.shared.aggregation_types import QualifierHandling, SelectionRule
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
@@ -138,7 +138,7 @@ async def test_async_projection_completes_via_null_orchestrator(session_factory)
             now=datetime.now(UTC),
         )
     )
-    assert proj.status == SarActivityProjectionStatus.PENDING  # scheduled, not inline
+    assert proj.status == AsyncJobStatus.PENDING  # scheduled, not inline
 
     assert orchestrator._tasks, "orchestrator should have scheduled a background run"
     await asyncio.gather(*list(orchestrator._tasks))
@@ -146,10 +146,10 @@ async def test_async_projection_completes_via_null_orchestrator(session_factory)
     verify_uow = AsyncUnitOfWork(session_factory)
     async with verify_uow:
         repo = SQLAlchemySarActivityProjectionRepository(verify_uow)
-        final = await repo.find_by_id(proj.id, workspace_id=ws)
+        final = await repo.find_by_id_in_workspace(ws, proj.id)
         n_values = await repo.count_values(proj.id, workspace_id=ws)
 
     assert final is not None
-    assert final.status == SarActivityProjectionStatus.READY
+    assert final.status == AsyncJobStatus.READY
     assert final.value_count == 0  # no screening data seeded -> sparse, empty
     assert n_values == 0

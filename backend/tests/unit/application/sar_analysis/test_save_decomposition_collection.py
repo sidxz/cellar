@@ -34,7 +34,7 @@ class FakeProjRepo:
     def __init__(self, exists=True):
         self._exists = exists
 
-    async def find_by_id(self, projection_id, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, projection_id):
         return object() if self._exists else None
 
 

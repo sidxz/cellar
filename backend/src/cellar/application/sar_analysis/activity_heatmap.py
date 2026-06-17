@@ -108,8 +108,8 @@ class FetchActivityHeatmap:
                         f"({sorted(labels)})"
                     )
                 )
-            projection = await self._projections.find_by_id(
-                payload.projection_id, workspace_id=payload.workspace_id
+            projection = await self._projections.find_by_id_in_workspace(
+                payload.workspace_id, payload.projection_id
             )
             if projection is None:
                 return Failure(NotFoundError("SarActivityProjection", str(payload.projection_id)))

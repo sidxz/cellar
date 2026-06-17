@@ -74,14 +74,12 @@ async def _seed_heatmap_fixture(api_app, ws):
         run.mark_ready(
             rgroup_labels=["R1", "R2"], matched_count=3, unmatched_count=0, total_count=3, now=_NOW
         )
-        proj = (
-            SarActivityProjection.create(
-                workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
-                channel_hash="ch", channel_spec={"column": "drc:x"}, now=_NOW,
-            )
-            .mark_running(_NOW)
-            .mark_ready(value_count=3, now=_NOW)
+        proj = SarActivityProjection.create(
+            workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
+            channel_hash="ch", channel_spec={"column": "drc:x"}, now=_NOW,
         )
+        proj.mark_running(_NOW)
+        proj.mark_ready(value_count=3, now=_NOW)
         await SQLAlchemyRGroupDecompositionRunRepository(uow).save(run)
         await SQLAlchemyRGroupDecompositionRunRepository(uow).write_assignments(run.id, [
             RGroupAssignment(molecule_id=potent, rgroups={"R1": "F", "R2": "Cl"}),

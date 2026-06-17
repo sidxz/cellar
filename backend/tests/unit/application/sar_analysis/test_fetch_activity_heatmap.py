@@ -43,7 +43,7 @@ class FakeProjRepo:
     def __init__(self, proj):
         self._proj = proj
 
-    async def find_by_id(self, pid, *, workspace_id):
+    async def find_by_id_in_workspace(self, workspace_id, pid):
         if self._proj and self._proj.id == pid and self._proj.workspace_id == workspace_id:
             return self._proj
         return None
@@ -72,14 +72,13 @@ def _ready_run(ws, labels):
 
 
 def _ready_proj(ws):
-    return (
-        SarActivityProjection.create(
-            workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
-            channel_hash="ch", channel_spec={"column": "drc:x"}, now=_NOW,
-        )
-        .mark_running(_NOW)
-        .mark_ready(value_count=0, now=_NOW)
+    proj = SarActivityProjection.create(
+        workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
+        channel_hash="ch", channel_spec={"column": "drc:x"}, now=_NOW,
     )
+    proj.mark_running(_NOW)
+    proj.mark_ready(value_count=0, now=_NOW)
+    return proj
 
 
 def _uc(run, proj, reader):

@@ -92,8 +92,8 @@ class RGroupDecompositionRunRepository(Protocol):
 class SarActivityProjectionRepository(Protocol):
     async def save(self, projection: SarActivityProjection) -> None: ...
 
-    async def find_by_id(
-        self, projection_id: UUID, *, workspace_id: UUID
+    async def find_by_id_in_workspace(
+        self, workspace_id: UUID, id: UUID
     ) -> SarActivityProjection | None: ...
 
     async def find_cached(

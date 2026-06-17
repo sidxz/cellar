@@ -130,8 +130,8 @@ class FetchDecompositionRows:
             # case) so the activity LEFT JOIN never depends on the implicit
             # molecule-UUID-disjointness invariant to stay tenant-safe.
             if payload.projection_id is not None:
-                projection = await self._projections.find_by_id(
-                    payload.projection_id, workspace_id=payload.workspace_id
+                projection = await self._projections.find_by_id_in_workspace(
+                    payload.workspace_id, payload.projection_id
                 )
                 if projection is None:
                     return Failure(

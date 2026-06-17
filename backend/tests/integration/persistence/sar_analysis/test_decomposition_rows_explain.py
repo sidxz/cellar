@@ -101,18 +101,16 @@ async def test_rows_query_uses_pk_indexes(uow, capsys):
         )
 
         # Seed projection via domain + repository (matches the real schema exactly)
-        proj = (
-            SarActivityProjection.create(
-                workspace_id=ws,
-                requested_by=uuid.uuid4(),
-                membership_hash="m",
-                channel_hash="ch",
-                channel_spec={"column": "drc:x"},
-                now=_NOW,
-            )
-            .mark_running(_NOW)
-            .mark_ready(value_count=1, now=_NOW)
+        proj = SarActivityProjection.create(
+            workspace_id=ws,
+            requested_by=uuid.uuid4(),
+            membership_hash="m",
+            channel_hash="ch",
+            channel_spec={"column": "drc:x"},
+            now=_NOW,
         )
+        proj.mark_running(_NOW)
+        proj.mark_ready(value_count=1, now=_NOW)
         proj_repo = SQLAlchemySarActivityProjectionRepository(uow)
         await proj_repo.save(proj)
         await proj_repo.write_values(

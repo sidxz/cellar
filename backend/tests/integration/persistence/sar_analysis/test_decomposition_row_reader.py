@@ -191,14 +191,12 @@ async def _seed_ready_projection(uow, ws):
         SQLAlchemySarActivityProjectionRepository,
     )
 
-    proj = (
-        SarActivityProjection.create(
-            workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
-            channel_hash="ch", channel_spec={"column": "drc:x"}, now=_NOW,
-        )
-        .mark_running(_NOW)
-        .mark_ready(value_count=0, now=_NOW)
+    proj = SarActivityProjection.create(
+        workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="m",
+        channel_hash="ch", channel_spec={"column": "drc:x"}, now=_NOW,
     )
+    proj.mark_running(_NOW)
+    proj.mark_ready(value_count=0, now=_NOW)
     await SQLAlchemySarActivityProjectionRepository(uow).save(proj)
     return proj
 

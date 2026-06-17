@@ -26,8 +26,8 @@ class GetActivityProjection:
         self, payload: GetActivityProjectionInput
     ) -> Result[SarActivityProjection, DomainError]:
         async with self._uow:
-            proj = await self._repo.find_by_id(
-                payload.projection_id, workspace_id=payload.workspace_id
+            proj = await self._repo.find_by_id_in_workspace(
+                payload.workspace_id, payload.projection_id
             )
         if proj is None:
             return Failure(NotFoundError("SarActivityProjection", str(payload.projection_id)))

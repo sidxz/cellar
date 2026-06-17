@@ -52,9 +52,6 @@ async def run_worker() -> None:
         StructureProcessorProtocol,
     )
     from cellar.application.export.render_export import RenderExport
-    from cellar.application.sar_analysis.mark_activity_projection_failed import (
-        MarkActivityProjectionFailed,
-    )
     from cellar.application.sar_analysis.run_activity_projection import RunActivityProjection
     from cellar.application.sar_analysis.run_decomposition import RunDecomposition
     from cellar.application.sar_analysis.run_scaffold_tree import RunScaffoldTree
@@ -141,9 +138,10 @@ async def run_worker() -> None:
     _proj_fail_uow = AsyncUnitOfWork(session_factory)
     sar_activity_projection_activities = SarActivityProjectionActivities(
         run_sar_activity_projection,
-        MarkActivityProjectionFailed(
+        MarkJobFailed(
             repository=SQLAlchemySarActivityProjectionRepository(_proj_fail_uow),
             uow=_proj_fail_uow,
+            job_type="sar_activity_projection",
         ),
     )
 
