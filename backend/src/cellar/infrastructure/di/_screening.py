@@ -57,6 +57,7 @@ from cellar.application.screening.get_dose_response_curves_batch import (
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
 from cellar.application.screening.get_plate_map import GetPlateMap
+from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
 from cellar.application.screening.get_protocol_activity import GetProtocolActivitySummary
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
@@ -261,9 +262,14 @@ def register_screening(container: Container) -> None:
 
         return _f
 
+    def _find_similar_protocols(c: Container) -> FindSimilarProtocols:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return FindSimilarProtocols(uow, SQLAlchemyProtocolRepository(uow))
+
     container.define(CreateProtocol, _protocol_cmd(CreateProtocol))
     container.define(GetProtocol, _protocol_query(GetProtocol))
     container.define(ListProtocols, _protocol_query(ListProtocols))
+    container.define(FindSimilarProtocols, _find_similar_protocols)
     container.define(PublishProtocol, _protocol_cmd(PublishProtocol))
     container.define(RetireProtocol, _protocol_cmd(RetireProtocol))
     container.define(LockProtocol, _protocol_cmd(LockProtocol))

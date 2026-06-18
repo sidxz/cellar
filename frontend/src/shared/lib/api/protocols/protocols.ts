@@ -29,6 +29,7 @@ import type {
   ConditionGroupsResponse,
   CreateProtocolRequest,
   EffectiveCollectionCoverageResponse,
+  FindSimilarProtocolsRequest,
   GetConditionGroupsApiV1ProtocolsProtocolIdConditionGroupsGetParams,
   HTTPValidationError,
   ListProtocolSummariesApiV1ProtocolsSummaryGetParams,
@@ -42,6 +43,7 @@ import type {
   RetireRequest,
   SetControlLayoutRequest,
   SetOntologyAnnotationRequest,
+  SimilarProtocolResponse,
   UpdateConditionDefinitionRequest,
   UpdateProtocolRequest,
   UpdateReadoutDefinitionRequest
@@ -307,6 +309,71 @@ export function useListProtocolSummariesApiV1ProtocolsSummaryGet<TData = Awaited
 
 
 /**
+ * Suggest structurally-similar existing protocols for a draft. Never blocks.
+ * @summary Find Similar Protocols
+ */
+export const findSimilarProtocolsApiV1ProtocolsSimilarPost = (
+    findSimilarProtocolsRequest: FindSimilarProtocolsRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<SimilarProtocolResponse[]>(
+      {url: `/api/v1/protocols/similar`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: findSimilarProtocolsRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getFindSimilarProtocolsApiV1ProtocolsSimilarPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof findSimilarProtocolsApiV1ProtocolsSimilarPost>>, TError,{data: FindSimilarProtocolsRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof findSimilarProtocolsApiV1ProtocolsSimilarPost>>, TError,{data: FindSimilarProtocolsRequest}, TContext> => {
+
+const mutationKey = ['findSimilarProtocolsApiV1ProtocolsSimilarPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof findSimilarProtocolsApiV1ProtocolsSimilarPost>>, {data: FindSimilarProtocolsRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  findSimilarProtocolsApiV1ProtocolsSimilarPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FindSimilarProtocolsApiV1ProtocolsSimilarPostMutationResult = NonNullable<Awaited<ReturnType<typeof findSimilarProtocolsApiV1ProtocolsSimilarPost>>>
+    export type FindSimilarProtocolsApiV1ProtocolsSimilarPostMutationBody = FindSimilarProtocolsRequest
+    export type FindSimilarProtocolsApiV1ProtocolsSimilarPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Find Similar Protocols
+ */
+export const useFindSimilarProtocolsApiV1ProtocolsSimilarPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof findSimilarProtocolsApiV1ProtocolsSimilarPost>>, TError,{data: FindSimilarProtocolsRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof findSimilarProtocolsApiV1ProtocolsSimilarPost>>,
+        TError,
+        {data: FindSimilarProtocolsRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getFindSimilarProtocolsApiV1ProtocolsSimilarPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
  * @summary Get Protocol
  */
 export const getProtocolApiV1ProtocolsProtocolIdGet = (

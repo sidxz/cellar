@@ -13,6 +13,7 @@ from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
 from cellar.application.screening.create_protocol import CreateProtocolCommand
+from cellar.application.screening.find_similar_protocols import FindSimilarProtocolsQuery
 from cellar.application.screening.get_collection_gap import GetProtocolCollectionGapQuery
 from cellar.application.screening.get_protocol import (
     GetProtocolQuery,
@@ -73,6 +74,7 @@ from cellar.interface.dependencies import (
     ConditionGroupingServiceDep,
     CreateProtocolDep,
     DeleteProtocolDep,
+    FindSimilarProtocolsDep,
     GetProtocolCollectionCoverageDep,
     GetProtocolCollectionGapDep,
     GetProtocolDep,
@@ -156,6 +158,25 @@ class ReadoutDefinitionResponse(BaseModel):
     # variables.
     pick_list_values: list[dict] | None = None
     dose_response_config: dict | None = None
+
+
+class FindSimilarProtocolsRequest(BaseModel):
+    name: str
+    protocol_type: str | None = None
+    target_ids: list[uuid.UUID] = []
+    readout_names: list[str] = []
+    limit: int = 5
+
+
+class SimilarProtocolResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    protocol_type: str
+    status: str
+    score: float
+    is_run_candidate: bool
+    shared_readout_kinds: list[str]
+    targets: list[TargetRefResponse] = []
 
 
 class ConditionDefinitionResponse(BaseModel):
@@ -446,6 +467,45 @@ async def list_protocol_summaries(
             last_run_date=s.last_run_date,
         )
         for s in summaries
+    ]
+
+
+@router.post(
+    "/protocols/similar",
+    response_model=list[SimilarProtocolResponse],
+    tags=["protocols"],
+)
+async def find_similar_protocols(
+    body: FindSimilarProtocolsRequest,
+    auth: AuthDep,
+    uc: FindSimilarProtocolsDep,
+) -> list[SimilarProtocolResponse]:
+    """Suggest structurally-similar existing protocols for a draft. Never blocks."""
+    results = result_to_response(
+        await uc(
+            FindSimilarProtocolsQuery(
+                workspace_id=auth.workspace_id,
+                name=body.name,
+                protocol_type=body.protocol_type,
+                target_ids=body.target_ids,
+                readout_names=body.readout_names,
+                limit=body.limit,
+            ),
+            auth=auth,
+        )
+    )
+    return [
+        SimilarProtocolResponse(
+            id=r.match.protocol_id,
+            name=r.match.name,
+            protocol_type=r.match.protocol_type,
+            status=r.match.status,
+            score=r.match.score,
+            is_run_candidate=r.match.is_run_candidate,
+            shared_readout_kinds=r.match.shared_readout_kinds,
+            targets=[TargetRefResponse.from_ref(t) for t in r.targets],
+        )
+        for r in results
     ]
 
 

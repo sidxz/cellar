@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
+from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.condition_grouping_service import ConditionGroupingService
 from cellar.application.screening.create_compound_flag import CreateCompoundFlag
@@ -148,6 +149,7 @@ __all__ = [
     "DeleteProtocolDep",
     "DeleteRunDep",
     "DeleteTargetDep",
+    "FindSimilarProtocolsDep",
     "FitDoseResponseCurvesDep",
     "GetCompoundCurvesDep",
     "GetCurveEditHistoryDep",
@@ -369,6 +371,9 @@ ListDoseResponseEnrichedDep = Annotated[
     ListDoseResponseEnriched, Depends(_get_use_case(ListDoseResponseEnriched))
 ]
 GetPlateMapDep = Annotated[GetPlateMap, Depends(_get_use_case(GetPlateMap))]
+FindSimilarProtocolsDep = Annotated[
+    FindSimilarProtocols, Depends(_get_use_case(FindSimilarProtocols))
+]
 
 # --- Compound Flag dependencies ---
 ListCompoundFlagsDep = Annotated[ListCompoundFlags, Depends(_get_use_case(ListCompoundFlags))]
