@@ -31,7 +31,7 @@ class _FakeRepo:
         self._targets = targets
         self.call: dict | None = None
 
-    async def find_similar(self, workspace_id, *, name, protocol_type, target_ids, readout_names, name_floor=0.3, limit=5):
+    async def find_similar(self, workspace_id, *, name, protocol_type, target_ids, readout_names, limit=5):
         self.call = {"name": name, "target_ids": list(target_ids), "readout_names": list(readout_names)}
         return self._matches
 
@@ -44,7 +44,7 @@ def match() -> ProtocolSimilarityMatch:
     return ProtocolSimilarityMatch(
         protocol_id=uuid.uuid4(), name="RNAP core IC50", protocol_type="biochemical",
         status="active", score=0.82, is_run_candidate=True,
-        shared_target_ids=[], shared_readout_kinds=["ic50"],
+        shared_target_ids=(), shared_readout_kinds=("ic50",),
     )
 
 

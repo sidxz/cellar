@@ -16,5 +16,7 @@ class ProtocolSimilarityMatch:
     # reroute), not a new method: strong readout-schema overlap AND a shared
     # target or a strong name match.
     is_run_candidate: bool
-    shared_target_ids: list[uuid.UUID]
-    shared_readout_kinds: list[str]
+    # Tuples, not lists — the dataclass is frozen=True, so fields must also be
+    # immutable to prevent accidental mutation after construction.
+    shared_target_ids: tuple[uuid.UUID, ...]
+    shared_readout_kinds: tuple[str, ...]

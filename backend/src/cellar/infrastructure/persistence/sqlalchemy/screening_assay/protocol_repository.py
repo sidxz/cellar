@@ -54,6 +54,13 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
 )
 
 
+# Similarity thresholds for find_similar (the tunable knobs; spec: "start conservative").
+_NAME_BLOCK_FLOOR = 0.3       # blocking: word_similarity(stored_name, draft) must exceed this (OR share a target)
+_RUN_READOUT_JACCARD = 0.5    # run-candidate (targets present): minimum readout-schema overlap
+_RUN_NAME_FLOOR = 0.6         # run-candidate (no targets yet): minimum name match
+_RUN_MIN_SHARED_READOUTS = 2  # run-candidate (no targets yet): minimum shared readout kinds
+
+
 class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]):
     model_class = ProtocolModel
 
@@ -100,7 +107,6 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         protocol_type: str | None,
         target_ids: list[uuid.UUID],
         readout_names: list[str],
-        name_floor: float = 0.3,
         limit: int = 5,
     ) -> list[ProtocolSimilarityMatch]:
         draft_readouts = {self._norm_readout(n) for n in readout_names if n.strip()}
@@ -112,7 +118,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         # protocol?" — e.g. "RNAP core IC50 GSK4329-31 before plates" should
         # score 1.0 against stored "RNAP core IC50".
         name_sim = func.word_similarity(ProtocolModel.name, name)
-        blocking = [name_sim > name_floor]
+        blocking = [name_sim > _NAME_BLOCK_FLOOR]
         if draft_targets:
             blocking.append(
                 ProtocolModel.id.in_(
@@ -161,7 +167,19 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 + 0.10 * type_match
                 + 0.15 * name_score
             )
-            is_run_candidate = readout_jaccard >= 0.5 and (bool(shared_targets) or name_score >= 0.45)
+            # Conservative target-aware run-candidate rule:
+            # • If the draft already has targets, require actual shared targets AND
+            #   strong readout overlap — avoiding false positives from name alone.
+            # • If the draft has no targets yet (common create-dialog case), fall
+            #   back to name + readout count so we still surface likely matches
+            #   without demanding a target that hasn't been picked yet.
+            if draft_targets:
+                is_run_candidate = bool(shared_targets) and readout_jaccard >= _RUN_READOUT_JACCARD
+            else:
+                is_run_candidate = (
+                    name_score >= _RUN_NAME_FLOOR
+                    and len(shared_readouts) >= _RUN_MIN_SHARED_READOUTS
+                )
             matches.append(
                 ProtocolSimilarityMatch(
                     protocol_id=model.id,
@@ -170,8 +188,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                     status=model.status,
                     score=round(score, 4),
                     is_run_candidate=is_run_candidate,
-                    shared_target_ids=sorted(shared_targets),
-                    shared_readout_kinds=sorted(shared_readouts),
+                    shared_target_ids=tuple(sorted(shared_targets)),
+                    shared_readout_kinds=tuple(sorted(shared_readouts)),
                 )
             )
         matches.sort(key=lambda m: m.score, reverse=True)
