@@ -27,6 +27,7 @@ export interface SimilarProtocolDraft {
   protocol_type?: string | null;
   target_ids?: string[];
   readout_names?: string[];
+  facet_ids?: string[];
 }
 
 export function useSimilarProtocols(draft: SimilarProtocolDraft) {
@@ -39,6 +40,7 @@ export function useSimilarProtocols(draft: SimilarProtocolDraft) {
       draft.protocol_type ?? null,
       draft.target_ids ?? [],
       draft.readout_names ?? [],
+      draft.facet_ids ?? [],
     ],
     queryFn: () =>
       customInstance<SimilarProtocol[]>({
@@ -49,6 +51,7 @@ export function useSimilarProtocols(draft: SimilarProtocolDraft) {
           protocol_type: draft.protocol_type ?? null,
           target_ids: draft.target_ids ?? [],
           readout_names: draft.readout_names ?? [],
+          facet_ids: draft.facet_ids ?? [],
           limit: 5,
         },
       }),

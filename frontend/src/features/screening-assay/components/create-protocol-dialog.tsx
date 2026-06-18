@@ -9,6 +9,7 @@ import {
 import { useVocabularies } from "@/features/workspace-config/hooks/use-vocabularies";
 import { OntologySearchInput, type OntologyTerm } from "@/shared/components/ontology-search-input";
 import { SearchableSelect } from "@/shared/components/searchable-select";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import {
@@ -59,12 +60,25 @@ import {
   READOUT_DATA_TYPE_LABELS,
   type ReadoutNormalization,
 } from "../types";
+import { ontologyAnnotationWrites } from "../lib/ontology-annotation-writes";
 import { FormulaInput } from "./formula-input";
 import { InterceptsEditor } from "./intercepts-editor";
 import { PickListEditor } from "./pick-list-editor";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
+
+// ---------------------------------------------------------------------------
+// Standard facet slots (spec §5.3) — always present in the create dialog.
+// Admin-configured slots (useOntologySlots) override these by name.
+// allow_free_text so a chemist is never blocked when a term isn't in the ontology.
+// ---------------------------------------------------------------------------
+
+const STANDARD_FACET_SLOTS = [
+  { name: "organism", label: "Organism", ontology_sources: ["NCBITAXON"], allow_free_text: true },
+  { name: "assay_format", label: "Assay format", ontology_sources: ["BAO"], allow_free_text: true },
+  { name: "detection", label: "Detection method", ontology_sources: ["BAO"], allow_free_text: true },
+] as const;
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -174,6 +188,19 @@ export function CreateProtocolDialog({
   const { data: vocabularies } = useVocabularies();
   const { data: protocolForms } = useProtocolForms();
   const { data: ontologySlots } = useOntologySlots();
+  const mergedFacetSlots = useMemo(() => {
+    const adminNames = new Set((ontologySlots ?? []).map((s) => s.name));
+    const standards = STANDARD_FACET_SLOTS.filter((s) => !adminNames.has(s.name)).map((s) => ({
+      id: `std:${s.name}`,
+      name: s.name,
+      label: s.label,
+      ontology_sources: [...s.ontology_sources],
+      root_concept_id: null as string | null,
+      allow_free_text: s.allow_free_text,
+      is_required: false,
+    }));
+    return [...(ontologySlots ?? []), ...standards];
+  }, [ontologySlots]);
   // For @-completion in the formula editor.
   const { data: allProtocols } = useProtocols();
   const crossProtocolNames = useMemo(() => (allProtocols ?? []).map((p) => p.name), [allProtocols]);
@@ -379,6 +406,21 @@ export function CreateProtocolDialog({
       },
       {
         onSuccess: async (protocol) => {
+          if (protocol?.id) {
+            // Persist facets the chemist entered. Best-effort: the protocol
+            // already exists; a failed annotation write is non-fatal (the
+            // PUT endpoint's own error toast surfaces it). The create payload
+            // has no slot for ontology annotations, so we write them here.
+            await Promise.allSettled(
+              ontologyAnnotationWrites(ontologyAnnotations).map((w) =>
+                customInstance({
+                  url: `${API_V1}/protocols/${protocol.id}/ontology-annotations`,
+                  method: "PUT",
+                  data: w,
+                }),
+              ),
+            );
+          }
           if (projectId && protocol?.id) {
             // Non-blocking: the protocol is already created. A failed assignment
             // is surfaced by the mutation's onError toast (recovery hint) rather
@@ -424,6 +466,9 @@ export function CreateProtocolDialog({
                 readout_names: (form.watch("readouts") ?? [])
                   .map((r) => r.name)
                   .filter((n): n is string => Boolean(n)),
+                facet_ids: Object.values(ontologyAnnotations)
+                  .flat()
+                  .map((t) => t.term_id),
               }}
               onLogRun={(protocolId) => {
                 onOpenChange(false);
@@ -569,16 +614,16 @@ export function CreateProtocolDialog({
             <Textarea placeholder="Optional description..." {...form.register("description")} />
           </div>
 
-          {/* Ontology Annotations */}
-          {ontologySlots && ontologySlots.length > 0 && (
+          {/* Facets (always shown: standard slots + any admin-configured slots) */}
+          {mergedFacetSlots.length > 0 && (
             <>
               <Separator />
               <Label className="text-base font-semibold">
-                Ontology Annotations{" "}
+                Facets{" "}
                 <span className="text-xs font-normal text-muted-foreground">(optional)</span>
               </Label>
               <div className="space-y-3">
-                {ontologySlots.map((slot) => (
+                {mergedFacetSlots.map((slot) => (
                   <div key={slot.id} className="grid gap-1.5">
                     <Label className="text-xs">
                       {slot.label}
