@@ -165,6 +165,7 @@ class FindSimilarProtocolsRequest(BaseModel):
     protocol_type: str | None = None
     target_ids: list[uuid.UUID] = []
     readout_names: list[str] = []
+    facet_ids: list[str] = []
     limit: int = 5
 
 
@@ -489,6 +490,7 @@ async def find_similar_protocols(
                 protocol_type=body.protocol_type,
                 target_ids=body.target_ids,
                 readout_names=body.readout_names,
+                facet_ids=body.facet_ids,
                 limit=body.limit,
             ),
             auth=auth,

@@ -51,3 +51,33 @@ async def test_find_similar_flags_run_candidate_and_excludes_unrelated(uow: Asyn
     assert top.name == "RNAP core IC50"
     assert top.is_run_candidate is True
     assert "ic50" in top.shared_readout_kinds
+
+
+async def test_find_similar_facet_overlap_boosts_score(uow: AsyncUnitOfWork) -> None:
+    from cellar.domain.shared.ontology import OntologyTerm
+
+    ws = uuid.uuid4()
+    faceted = _make(ws, "RNAP core IC50", ["IC50", "Hill slope"])
+    faceted.set_ontology_annotation(
+        "organism",
+        [OntologyTerm(term_id="NCBITaxon:1773", label="Mtb", ontology_source="NCBITAXON")],
+    )
+    plain = _make(ws, "RNAP core IC50 clone", ["IC50", "Hill slope"])
+    async with uow:
+        repo = SQLAlchemyProtocolRepository(uow)
+        await repo.save(faceted)
+        await repo.save(plain)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyProtocolRepository(uow)
+        matches = await repo.find_similar(
+            ws,
+            name="RNAP core IC50",
+            protocol_type="biochemical",
+            target_ids=[],
+            readout_names=["IC50", "Hill slope"],
+            facet_ids=["ncbitaxon:1773"],
+        )
+    by_name = {m.name: m.score for m in matches}
+    assert by_name["RNAP core IC50"] > by_name["RNAP core IC50 clone"]

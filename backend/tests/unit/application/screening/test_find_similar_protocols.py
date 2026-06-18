@@ -31,8 +31,8 @@ class _FakeRepo:
         self._targets = targets
         self.call: dict | None = None
 
-    async def find_similar(self, workspace_id, *, name, protocol_type, target_ids, readout_names, limit=5):
-        self.call = {"name": name, "target_ids": list(target_ids), "readout_names": list(readout_names)}
+    async def find_similar(self, workspace_id, *, name, protocol_type, target_ids, readout_names, facet_ids=(), limit=5):
+        self.call = {"name": name, "target_ids": list(target_ids), "readout_names": list(readout_names), "facet_ids": list(facet_ids)}
         return self._matches
 
     async def find_effective_targets_for_protocols(self, workspace_id, protocol_ids):

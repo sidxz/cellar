@@ -27,6 +27,7 @@ class FindSimilarProtocolsQuery(Query):
     protocol_type: str | None = None
     target_ids: list[uuid.UUID] = field(default_factory=list)
     readout_names: list[str] = field(default_factory=list)
+    facet_ids: list[str] = field(default_factory=list)
     limit: int = 5
 
 
@@ -55,6 +56,7 @@ class FindSimilarProtocols:
                 protocol_type=input.protocol_type,
                 target_ids=input.target_ids,
                 readout_names=input.readout_names,
+                facet_ids=input.facet_ids,
                 limit=input.limit,
             )
             targets = await self._repo.find_effective_targets_for_protocols(

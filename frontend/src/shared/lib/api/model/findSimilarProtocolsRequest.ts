@@ -11,5 +11,6 @@ export interface FindSimilarProtocolsRequest {
   protocol_type?: FindSimilarProtocolsRequestProtocolType;
   target_ids?: string[];
   readout_names?: string[];
+  facet_ids?: string[];
   limit?: number;
 }

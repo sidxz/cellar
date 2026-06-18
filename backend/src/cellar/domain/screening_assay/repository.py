@@ -73,14 +73,15 @@ class ProtocolRepository(Protocol):
         protocol_type: str | None,
         target_ids: list[uuid.UUID],
         readout_names: list[str],
+        facet_ids: list[str] = (),
         limit: int = 5,
     ) -> list[ProtocolSimilarityMatch]:
         """Find protocols similar to a draft signature, ordered by score desc.
 
         Blocking: pg_trgm name similarity > _NAME_BLOCK_FLOOR OR shares >=1 target.
         Scoring: weighted blend of target Jaccard, readout-kind Jaccard,
-        type match, and name similarity. ``is_run_candidate`` is set via a
-        conservative target-aware rule (see protocol_repository module constants)."""
+        facet Jaccard, type match, and name similarity. ``is_run_candidate`` is set
+        via a conservative target-aware rule (see protocol_repository module constants)."""
         ...
 
     async def find_by_workspace(

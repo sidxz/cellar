@@ -107,10 +107,12 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         protocol_type: str | None,
         target_ids: list[uuid.UUID],
         readout_names: list[str],
+        facet_ids: list[str] = (),
         limit: int = 5,
     ) -> list[ProtocolSimilarityMatch]:
         draft_readouts = {self._norm_readout(n) for n in readout_names if n.strip()}
         draft_targets = set(target_ids)
+        draft_facets = {f.strip().lower() for f in facet_ids if f.strip()}
 
         # word_similarity(stored_name, query): measures how well the stored
         # protocol name appears as a contiguous substring of the query name.
@@ -159,12 +161,18 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             tgt_union = draft_targets | cand_targets
             target_jaccard = len(shared_targets) / len(tgt_union) if tgt_union else 0.0
 
+            cand_facets = {f for vals in (fp.get("facets") or {}).values() for f in vals}
+            shared_facets = draft_facets & cand_facets
+            facet_union = draft_facets | cand_facets
+            facet_jaccard = len(shared_facets) / len(facet_union) if facet_union else 0.0
+
             type_match = 1.0 if protocol_type and fp.get("protocol_type") == protocol_type else 0.0
             name_score = float(sim)
             score = (
-                0.45 * target_jaccard
-                + 0.30 * readout_jaccard
-                + 0.10 * type_match
+                0.40 * target_jaccard
+                + 0.25 * readout_jaccard
+                + 0.15 * facet_jaccard
+                + 0.05 * type_match
                 + 0.15 * name_score
             )
             # Conservative target-aware run-candidate rule:
