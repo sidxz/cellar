@@ -39,12 +39,14 @@ import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
+import { useTargets } from "../hooks/use-targets";
 import { ontologyAnnotationWrites } from "../lib/ontology-annotation-writes";
 import {
   VISIBLE_READOUT_DATA_TYPES,
   WELL_CONC_X,
   isReservedReadoutName,
 } from "../lib/readout-constants";
+import { suggestProtocolName } from "../lib/suggest-protocol-name";
 import {
   CURVE_TYPE_LABELS,
   type CreateReadoutDefinitionInput,
@@ -259,6 +261,7 @@ export function CreateProtocolDialog({
   });
 
   const readoutValues = form.watch("readouts");
+  const { data: targets } = useTargets();
 
   // ---- form-template application ----
 
@@ -343,6 +346,19 @@ export function CreateProtocolDialog({
     validReadouts.length > 0 &&
     !hasReservedReadoutName &&
     !createMutation.isPending;
+
+  const targetIdsValue = form.watch("target_ids");
+  const suggestedName = useMemo(() => {
+    const targetNames = (targetIdsValue ?? [])
+      .map((id) => (targets ?? []).find((t) => t.id === id)?.name)
+      .filter((n): n is string => Boolean(n));
+    const readoutNames = (readoutValues ?? []).map((r) => r.name).filter(Boolean);
+    return suggestProtocolName({
+      targetNames,
+      readoutNames,
+      protocolType: form.watch("protocol_type") || "",
+    });
+  }, [targetIdsValue, readoutValues, targets, form]);
 
   // ---- submit handler ----
 
@@ -481,6 +497,15 @@ export function CreateProtocolDialog({
                 onLogRun?.(protocolId);
               }}
             />
+            {!nameValue?.trim() && suggestedName && (
+              <button
+                type="button"
+                onClick={() => form.setValue("name", suggestedName, { shouldValidate: true })}
+                className="self-start text-xs text-muted-foreground hover:text-foreground"
+              >
+                Suggest name: <span className="font-medium">{suggestedName}</span>
+              </button>
+            )}
           </div>
 
           {/* Protocol Form Selector */}
