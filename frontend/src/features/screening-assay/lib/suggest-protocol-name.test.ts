@@ -14,7 +14,11 @@ describe("suggestProtocolName", () => {
 
   it("omits empty segments", () => {
     expect(
-      suggestProtocolName({ targetNames: [], readoutNames: ["% Inhibition"], typeLabel: "Cell-Based" }),
+      suggestProtocolName({
+        targetNames: [],
+        readoutNames: ["% Inhibition"],
+        typeLabel: "Cell-Based",
+      }),
     ).toBe("% Inhibition · Cell-Based");
   });
 
