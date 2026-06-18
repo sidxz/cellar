@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.screening_assay.activity_types import AggregatedReadout
+from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
 from cellar.domain.screening_assay.collection_coverage import (
     CollectionCoverage,
     EffectiveCollectionCoverage,
@@ -64,6 +65,25 @@ class ProtocolRepository(Protocol):
         self, workspace_id: uuid.UUID, parent_protocol_id: uuid.UUID
     ) -> AssayProtocol | None: ...
     async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> AssayProtocol | None: ...
+    async def find_similar(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        name: str,
+        protocol_type: str | None,
+        target_ids: list[uuid.UUID],
+        readout_names: list[str],
+        name_floor: float = 0.3,
+        limit: int = 5,
+    ) -> list[ProtocolSimilarityMatch]:
+        """Find protocols similar to a draft signature, ordered by score desc.
+
+        Blocking: pg_trgm name similarity > name_floor OR shares >=1 target.
+        Scoring: weighted blend of target Jaccard, readout-kind Jaccard,
+        type match, and name similarity. ``is_run_candidate`` flags strong
+        readout overlap + (shared target OR strong name match)."""
+        ...
+
     async def find_by_workspace(
         self,
         workspace_id: uuid.UUID,

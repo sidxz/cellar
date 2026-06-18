@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.application.screening._dose_response_config_serde import (
@@ -27,6 +27,7 @@ from cellar.domain.screening_assay.protocol import (
     ReadoutDefinition,
 )
 from cellar.domain.screening_assay.protocol_fingerprint import compute_protocol_fingerprint
+from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
 from cellar.domain.screening_assay.repository import TargetLinkResult
 from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
@@ -86,6 +87,95 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         if model is None:
             return None
         return self._to_domain_tracked(model)
+
+    @staticmethod
+    def _norm_readout(name: str) -> str:
+        return " ".join(name.strip().lower().split())
+
+    async def find_similar(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        name: str,
+        protocol_type: str | None,
+        target_ids: list[uuid.UUID],
+        readout_names: list[str],
+        name_floor: float = 0.3,
+        limit: int = 5,
+    ) -> list[ProtocolSimilarityMatch]:
+        draft_readouts = {self._norm_readout(n) for n in readout_names if n.strip()}
+        draft_targets = set(target_ids)
+
+        # word_similarity(stored_name, query): measures how well the stored
+        # protocol name appears as a contiguous substring of the query name.
+        # This is the right function for "is this query a run of an existing
+        # protocol?" — e.g. "RNAP core IC50 GSK4329-31 before plates" should
+        # score 1.0 against stored "RNAP core IC50".
+        name_sim = func.word_similarity(ProtocolModel.name, name)
+        blocking = [name_sim > name_floor]
+        if draft_targets:
+            blocking.append(
+                ProtocolModel.id.in_(
+                    select(protocol_targets.c.protocol_id).where(
+                        protocol_targets.c.target_id.in_(draft_targets)
+                    )
+                )
+            )
+        stmt = (
+            select(ProtocolModel, name_sim.label("name_sim"))
+            .where(ProtocolModel.workspace_id == workspace_id, or_(*blocking))
+            .limit(200)  # candidate-set safety cap
+        )
+        rows = (await self._session.execute(stmt)).all()
+        if not rows:
+            return []
+
+        candidate_ids = [m.id for m, _ in rows]
+        tgt_rows = await self._session.execute(
+            select(protocol_targets.c.protocol_id, protocol_targets.c.target_id).where(
+                protocol_targets.c.protocol_id.in_(candidate_ids)
+            )
+        )
+        targets_by_protocol: dict[uuid.UUID, set[uuid.UUID]] = {}
+        for pid, tid in tgt_rows.all():
+            targets_by_protocol.setdefault(pid, set()).add(tid)
+
+        matches: list[ProtocolSimilarityMatch] = []
+        for model, sim in rows:
+            fp = model.fingerprint or {}
+            cand_readouts = set(fp.get("readout_kinds", []))
+            shared_readouts = draft_readouts & cand_readouts
+            ro_union = draft_readouts | cand_readouts
+            readout_jaccard = len(shared_readouts) / len(ro_union) if ro_union else 0.0
+
+            cand_targets = targets_by_protocol.get(model.id, set())
+            shared_targets = draft_targets & cand_targets
+            tgt_union = draft_targets | cand_targets
+            target_jaccard = len(shared_targets) / len(tgt_union) if tgt_union else 0.0
+
+            type_match = 1.0 if protocol_type and fp.get("protocol_type") == protocol_type else 0.0
+            name_score = float(sim)
+            score = (
+                0.45 * target_jaccard
+                + 0.30 * readout_jaccard
+                + 0.10 * type_match
+                + 0.15 * name_score
+            )
+            is_run_candidate = readout_jaccard >= 0.5 and (bool(shared_targets) or name_score >= 0.45)
+            matches.append(
+                ProtocolSimilarityMatch(
+                    protocol_id=model.id,
+                    name=model.name,
+                    protocol_type=model.protocol_type,
+                    status=model.status,
+                    score=round(score, 4),
+                    is_run_candidate=is_run_candidate,
+                    shared_target_ids=sorted(shared_targets),
+                    shared_readout_kinds=sorted(shared_readouts),
+                )
+            )
+        matches.sort(key=lambda m: m.score, reverse=True)
+        return matches[:limit]
 
     async def find_by_workspace(
         self,
