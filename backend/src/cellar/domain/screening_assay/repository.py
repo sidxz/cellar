@@ -84,6 +84,20 @@ class ProtocolRepository(Protocol):
         via a conservative target-aware rule (see protocol_repository module constants)."""
         ...
 
+    async def list_distinct_values(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        field: str,
+        q: str | None = None,
+        limit: int = 10,
+    ) -> list[str]:
+        """Distinct existing values for ``field`` ('readout_name' | 'category')
+        in the workspace, ranked by trigram similarity to ``q`` when given,
+        else by frequency. Powers autocomplete-at-entry. Returns [] for an
+        unknown field."""
+        ...
+
     async def find_by_workspace(
         self,
         workspace_id: uuid.UUID,

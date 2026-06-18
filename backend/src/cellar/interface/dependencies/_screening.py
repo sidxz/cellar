@@ -8,6 +8,7 @@ from fastapi import Depends
 
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
+from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.condition_grouping_service import ConditionGroupingService
 from cellar.application.screening.create_compound_flag import CreateCompoundFlag
@@ -174,6 +175,7 @@ __all__ = [
     "ListDoseResponseEnrichedDep",
     "ListPlateTemplatesDep",
     "ListProtocolSummariesDep",
+    "ListProtocolVocabularyDep",
     "ListProtocolsByProjectDep",
     "ListProtocolsDep",
     "ListReadoutDataByRunDep",
@@ -373,6 +375,9 @@ ListDoseResponseEnrichedDep = Annotated[
 GetPlateMapDep = Annotated[GetPlateMap, Depends(_get_use_case(GetPlateMap))]
 FindSimilarProtocolsDep = Annotated[
     FindSimilarProtocols, Depends(_get_use_case(FindSimilarProtocols))
+]
+ListProtocolVocabularyDep = Annotated[
+    ListProtocolVocabulary, Depends(_get_use_case(ListProtocolVocabulary))
 ]
 
 # --- Compound Flag dependencies ---

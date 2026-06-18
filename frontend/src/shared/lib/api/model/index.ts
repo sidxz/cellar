@@ -721,6 +721,7 @@ export * from './listPlatesApiV1PlatesGetTagLogic';
 export * from './listProjectsApiV1ProjectsGetParams';
 export * from './listProjectsApiV1ProjectsGetTagLogic';
 export * from './listProtocolSummariesApiV1ProtocolsSummaryGetParams';
+export * from './listProtocolVocabularyApiV1ProtocolsVocabularyGetParams';
 export * from './listProtocolsApiV1ProtocolsGetParams';
 export * from './listProtocolsApiV1ProtocolsGetTagLogic';
 export * from './listReadoutDataApiV1ReadoutDataGetParams';

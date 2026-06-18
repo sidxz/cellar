@@ -203,6 +203,43 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         matches.sort(key=lambda m: m.score, reverse=True)
         return matches[:limit]
 
+    async def list_distinct_values(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        field: str,
+        q: str | None = None,
+        limit: int = 10,
+    ) -> list[str]:
+        if field == "readout_name":
+            src = (
+                select(ReadoutDefinitionModel.name.label("v"))
+                .join(ProtocolModel, ReadoutDefinitionModel.protocol_id == ProtocolModel.id)
+                .where(
+                    ProtocolModel.workspace_id == workspace_id,
+                    func.trim(ReadoutDefinitionModel.name) != "",
+                )
+            )
+        elif field == "category":
+            src = select(ProtocolModel.category.label("v")).where(
+                ProtocolModel.workspace_id == workspace_id,
+                ProtocolModel.category.is_not(None),
+                func.trim(ProtocolModel.category) != "",
+            )
+        else:
+            return []
+
+        sub = src.subquery()
+        value = sub.c.v
+        stmt = select(value).group_by(value)
+        if q and q.strip():
+            sim = func.similarity(value, q.strip())
+            stmt = stmt.where(sim > 0.1).order_by(sim.desc(), func.count().desc())
+        else:
+            stmt = stmt.order_by(func.count().desc(), value.asc())
+        rows = (await self._session.execute(stmt.limit(limit))).all()
+        return [r[0] for r in rows]
+
     async def find_by_workspace(
         self,
         workspace_id: uuid.UUID,

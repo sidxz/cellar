@@ -33,6 +33,7 @@ import type {
   GetConditionGroupsApiV1ProtocolsProtocolIdConditionGroupsGetParams,
   HTTPValidationError,
   ListProtocolSummariesApiV1ProtocolsSummaryGetParams,
+  ListProtocolVocabularyApiV1ProtocolsVocabularyGetParams,
   ListProtocolsApiV1ProtocolsGetParams,
   LockProtocolRequest,
   PaginatedResponseProtocolResponse,
@@ -374,6 +375,100 @@ export const useFindSimilarProtocolsApiV1ProtocolsSimilarPost = <TError = HTTPVa
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * Distinct existing readout names / categories for autocomplete-at-entry.
+ * @summary List Protocol Vocabulary
+ */
+export const listProtocolVocabularyApiV1ProtocolsVocabularyGet = (
+    params: ListProtocolVocabularyApiV1ProtocolsVocabularyGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<string[]>(
+      {url: `/api/v1/protocols/vocabulary`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getListProtocolVocabularyApiV1ProtocolsVocabularyGetQueryKey = (params?: ListProtocolVocabularyApiV1ProtocolsVocabularyGetParams,) => {
+    return [
+    `/api/v1/protocols/vocabulary`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getListProtocolVocabularyApiV1ProtocolsVocabularyGetQueryOptions = <TData = Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError = HTTPValidationError>(params: ListProtocolVocabularyApiV1ProtocolsVocabularyGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProtocolVocabularyApiV1ProtocolsVocabularyGetQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>> = ({ signal }) => listProtocolVocabularyApiV1ProtocolsVocabularyGet(params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListProtocolVocabularyApiV1ProtocolsVocabularyGetQueryResult = NonNullable<Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>>
+export type ListProtocolVocabularyApiV1ProtocolsVocabularyGetQueryError = HTTPValidationError
+
+
+export function useListProtocolVocabularyApiV1ProtocolsVocabularyGet<TData = Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError = HTTPValidationError>(
+ params: ListProtocolVocabularyApiV1ProtocolsVocabularyGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolVocabularyApiV1ProtocolsVocabularyGet<TData = Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError = HTTPValidationError>(
+ params: ListProtocolVocabularyApiV1ProtocolsVocabularyGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolVocabularyApiV1ProtocolsVocabularyGet<TData = Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError = HTTPValidationError>(
+ params: ListProtocolVocabularyApiV1ProtocolsVocabularyGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Protocol Vocabulary
+ */
+
+export function useListProtocolVocabularyApiV1ProtocolsVocabularyGet<TData = Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError = HTTPValidationError>(
+ params: ListProtocolVocabularyApiV1ProtocolsVocabularyGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolVocabularyApiV1ProtocolsVocabularyGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListProtocolVocabularyApiV1ProtocolsVocabularyGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
  * @summary Get Protocol
  */
 export const getProtocolApiV1ProtocolsProtocolIdGet = (

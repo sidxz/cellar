@@ -59,6 +59,7 @@ from cellar.application.screening.get_molecule_test_counts import GetMoleculeTes
 from cellar.application.screening.get_plate_map import GetPlateMap
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
+from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.get_protocol_activity import GetProtocolActivitySummary
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
 from cellar.application.screening.get_readout_data import ListReadoutDataByRun
@@ -269,6 +270,7 @@ def register_screening(container: Container) -> None:
     container.define(CreateProtocol, _protocol_cmd(CreateProtocol))
     container.define(GetProtocol, _protocol_query(GetProtocol))
     container.define(ListProtocols, _protocol_query(ListProtocols))
+    container.define(ListProtocolVocabulary, _protocol_query(ListProtocolVocabulary))
     container.define(FindSimilarProtocols, _find_similar_protocols)
     container.define(PublishProtocol, _protocol_cmd(PublishProtocol))
     container.define(RetireProtocol, _protocol_cmd(RetireProtocol))

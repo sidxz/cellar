@@ -14,6 +14,7 @@ from cellar.application.screening._dose_response_config_serde import (
 )
 from cellar.application.screening.create_protocol import CreateProtocolCommand
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocolsQuery
+from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabularyQuery
 from cellar.application.screening.get_collection_gap import GetProtocolCollectionGapQuery
 from cellar.application.screening.get_protocol import (
     GetProtocolQuery,
@@ -75,6 +76,7 @@ from cellar.interface.dependencies import (
     CreateProtocolDep,
     DeleteProtocolDep,
     FindSimilarProtocolsDep,
+    ListProtocolVocabularyDep,
     GetProtocolCollectionCoverageDep,
     GetProtocolCollectionGapDep,
     GetProtocolDep,
@@ -509,6 +511,29 @@ async def find_similar_protocols(
         )
         for r in results
     ]
+
+
+@router.get(
+    "/protocols/vocabulary",
+    response_model=list[str],
+    tags=["protocols"],
+)
+async def list_protocol_vocabulary(
+    auth: AuthDep,
+    uc: ListProtocolVocabularyDep,
+    field: str,
+    q: str | None = None,
+    limit: int = 10,
+) -> list[str]:
+    """Distinct existing readout names / categories for autocomplete-at-entry."""
+    return result_to_response(
+        await uc(
+            ListProtocolVocabularyQuery(
+                workspace_id=auth.workspace_id, field=field, q=q, limit=limit
+            ),
+            auth=auth,
+        )
+    )
 
 
 @router.get("/protocols", response_model=PaginatedResponse[ProtocolResponse], tags=["protocols"])
