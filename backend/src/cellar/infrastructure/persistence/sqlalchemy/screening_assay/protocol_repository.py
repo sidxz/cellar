@@ -26,6 +26,7 @@ from cellar.domain.screening_assay.protocol import (
     Protocol,
     ReadoutDefinition,
 )
+from cellar.domain.screening_assay.protocol_fingerprint import compute_protocol_fingerprint
 from cellar.domain.screening_assay.repository import TargetLinkResult
 from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
@@ -536,6 +537,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             locked_by=model.locked_by,
             lock_reason=model.lock_reason,
             locked_at=model.locked_at,
+            fingerprint=model.fingerprint,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -594,6 +596,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             locked_by=aggregate.locked_by,
             lock_reason=aggregate.lock_reason,
             locked_at=aggregate.locked_at,
+            fingerprint=compute_protocol_fingerprint(aggregate),
         )
         model.readout_definitions = [
             self._readout_def_to_model(rd) for rd in aggregate.readout_definitions
@@ -626,6 +629,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.locked_by = aggregate.locked_by
         model.lock_reason = aggregate.lock_reason
         model.locked_at = aggregate.locked_at
+        model.fingerprint = compute_protocol_fingerprint(aggregate)
 
         # Replace owned entity collections
         model.readout_definitions = [
