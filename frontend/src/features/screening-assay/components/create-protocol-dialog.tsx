@@ -357,7 +357,7 @@ export function CreateProtocolDialog({
     return suggestProtocolName({
       targetNames,
       readoutNames,
-      protocolType: protocolTypeValue || "",
+      typeLabel: protocolTypeValue ? (PROTOCOL_TYPE_LABELS[protocolTypeValue as ProtocolType] ?? protocolTypeValue) : "",
     });
   }, [targetIdsValue, readoutValues, targets, protocolTypeValue]);
 

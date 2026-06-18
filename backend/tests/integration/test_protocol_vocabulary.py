@@ -55,3 +55,19 @@ async def test_list_distinct_categories(uow: AsyncUnitOfWork) -> None:
         repo = SQLAlchemyProtocolRepository(uow)
         cats = await repo.list_distinct_values(ws, field="category", q=None, limit=10)
         assert set(cats) == {"Enzyme", "Whole Cell"}
+
+
+async def test_list_distinct_values_is_workspace_scoped(uow: AsyncUnitOfWork) -> None:
+    ws1 = uuid.uuid4()
+    ws2 = uuid.uuid4()
+    async with uow:
+        repo = SQLAlchemyProtocolRepository(uow)
+        await repo.save(_make(ws1, "P1", ["IC50 ws1"]))
+        await repo.save(_make(ws2, "P2", ["Tm ws2"]))
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyProtocolRepository(uow)
+        names1 = await repo.list_distinct_values(ws1, field="readout_name", q=None, limit=20)
+    assert "IC50 ws1" in names1
+    assert "Tm ws2" not in names1

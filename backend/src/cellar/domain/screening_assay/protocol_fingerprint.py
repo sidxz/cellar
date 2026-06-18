@@ -16,6 +16,20 @@ from cellar.domain.shared.ontology import OntologyTerm
 # re-derived.
 FINGERPRINT_VERSION = 2
 
+_FREE_TEXT_PREFIX = "free_text:"
+
+
+def normalize_facet_id(facet_id: str) -> str:
+    """Canonical comparable key for a facet id. Grounded ids → lowercased/
+    stripped/whitespace-collapsed; free-text ids (``free_text:<label>``) keep
+    the prefix and collapse/lower only the label. Used by both the fingerprint
+    builder and the similarity query so their keys always agree."""
+    s = facet_id.strip()
+    if s.startswith(_FREE_TEXT_PREFIX):
+        label = s[len(_FREE_TEXT_PREFIX):]
+        return _FREE_TEXT_PREFIX + " ".join(label.lower().split())
+    return " ".join(s.lower().split())
+
 
 def _normalize_readout_name(name: str) -> str:
     return " ".join(name.strip().lower().split())
@@ -27,9 +41,8 @@ def _facet_key(term: OntologyTerm) -> str:
     Grounded terms cluster by their (lowercased) ontology id; free-text terms
     by a normalized label so casing/whitespace variants converge.
     """
-    if term.ontology_source == "free_text":
-        return "free_text:" + " ".join(term.label.strip().lower().split())
-    return term.term_id.strip().lower()
+    raw = f"{_FREE_TEXT_PREFIX}{term.label}" if term.ontology_source == "free_text" else term.term_id
+    return normalize_facet_id(raw)
 
 
 def compute_protocol_fingerprint(protocol: Protocol) -> dict:

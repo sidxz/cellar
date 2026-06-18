@@ -81,3 +81,33 @@ async def test_find_similar_facet_overlap_boosts_score(uow: AsyncUnitOfWork) -> 
         )
     by_name = {m.name: m.score for m in matches}
     assert by_name["RNAP core IC50"] > by_name["RNAP core IC50 clone"]
+
+
+async def test_find_similar_free_text_facet_boost_round_trips(uow: AsyncUnitOfWork) -> None:
+    from cellar.domain.shared.ontology import OntologyTerm
+
+    ws = uuid.uuid4()
+    faceted = _make(ws, "MDH coupled assay", ["IC50"])
+    faceted.set_ontology_annotation(
+        "detection",
+        [OntologyTerm(term_id="free_text:Biomol  Green", label="Biomol  Green", ontology_source="free_text")],
+    )
+    plain = _make(ws, "MDH coupled assay clone", ["IC50"])
+    async with uow:
+        repo = SQLAlchemyProtocolRepository(uow)
+        await repo.save(faceted)
+        await repo.save(plain)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyProtocolRepository(uow)
+        matches = await repo.find_similar(
+            ws,
+            name="MDH coupled assay",
+            protocol_type="biochemical",
+            target_ids=[],
+            readout_names=["IC50"],
+            facet_ids=["free_text:Biomol  Green"],  # raw FE id, double space — must still match
+        )
+    by_name = {m.name: m.score for m in matches}
+    assert by_name["MDH coupled assay"] > by_name["MDH coupled assay clone"]

@@ -26,7 +26,10 @@ from cellar.domain.screening_assay.protocol import (
     Protocol,
     ReadoutDefinition,
 )
-from cellar.domain.screening_assay.protocol_fingerprint import compute_protocol_fingerprint
+from cellar.domain.screening_assay.protocol_fingerprint import (
+    compute_protocol_fingerprint,
+    normalize_facet_id,
+)
 from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
 from cellar.domain.screening_assay.repository import TargetLinkResult
 from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
@@ -112,7 +115,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     ) -> list[ProtocolSimilarityMatch]:
         draft_readouts = {self._norm_readout(n) for n in readout_names if n.strip()}
         draft_targets = set(target_ids)
-        draft_facets = {f.strip().lower() for f in facet_ids if f.strip()}
+        draft_facets = {normalize_facet_id(f) for f in facet_ids if f.strip()}
 
         # word_similarity(stored_name, query): measures how well the stored
         # protocol name appears as a contiguous substring of the query name.
