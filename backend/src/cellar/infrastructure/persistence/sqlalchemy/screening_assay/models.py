@@ -196,6 +196,9 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     control_layouts: Mapped[dict | None] = mapped_column(JSONB)
     ontology_annotations: Mapped[dict | None] = mapped_column(JSONB)
     recommended_hit_criteria: Mapped[list | None] = mapped_column(JSONB)
+    # Authoritative-derived structural signature (protocol_type + readout
+    # schema). Powers similarity blocking/scoring; recomputed on every save.
+    fingerprint: Mapped[dict | None] = mapped_column(JSONB)
     # Lock state — orthogonal to status. Mirrors RunModel lock fields.
     is_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
