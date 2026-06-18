@@ -318,6 +318,7 @@ class Protocol(AggregateRoot):
         control_layouts: dict[str, uuid.UUID] | None = None,
         ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
         recommended_hit_criteria: list[HitCriterion] | None = None,
+        fingerprint: dict | None = None,
         is_locked: bool = False,
         locked_by: uuid.UUID | None = None,
         lock_reason: str | None = None,
@@ -352,6 +353,10 @@ class Protocol(AggregateRoot):
         self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
         self.ontology_annotations: dict[str, list[OntologyTerm]] = ontology_annotations or {}
         self.recommended_hit_criteria: list[HitCriterion] | None = recommended_hit_criteria
+        # Authoritative-derived structural signature — recomputed by the
+        # repository on every save (see compute_protocol_fingerprint). Held
+        # here only so a hydrated aggregate carries it for reads.
+        self.fingerprint: dict | None = fingerprint
         # Lock state — orthogonal to status. Mirrors Run.is_locked semantics:
         # an explicit freeze gate, independent of DRAFT/ACTIVE/RETIRED. Used
         # to hold a protocol still during regulatory review or cross-team
