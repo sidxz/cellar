@@ -14,9 +14,9 @@ const match: SimilarProtocol = {
   targets: [{ id: "t1", name: "RNAP", target_type: "protein" }],
 };
 
-const data = vi.fn<[], SimilarProtocol[]>(() => [match]);
+const data = vi.fn<() => SimilarProtocol[]>(() => [match]);
 vi.mock("../hooks/use-similar-protocols", async () => ({
-  ...(await vi.importActual<object>("../hooks/use-similar-protocols")),
+  ...(await vi.importActual("../hooks/use-similar-protocols")),
   useSimilarProtocols: () => ({ data: data() }),
 }));
 

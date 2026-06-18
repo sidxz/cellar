@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useCddEnabled } from "../hooks/use-cdd-enabled";
 import { CddImportDialog } from "./cdd-import-dialog";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
+import { CreateRunDialog } from "./create-run-dialog";
 import { CreateTargetDialog } from "./create-target-dialog";
 import { ProtocolList } from "./protocol-list";
 import { TargetList } from "./target-list";
@@ -19,6 +20,7 @@ export function ScreeningDashboard() {
   const [createProtocolOpen, setCreateProtocolOpen] = useState(false);
   const [createTargetOpen, setCreateTargetOpen] = useState(false);
   const [cddImportOpen, setCddImportOpen] = useState(false);
+  const [createRunForProtocol, setCreateRunForProtocol] = useState<string | null>(null);
   const { enabled: cddEnabled } = useCddEnabled();
 
   return (
@@ -73,7 +75,20 @@ export function ScreeningDashboard() {
         </TabsContent>
       </Tabs>
 
-      <CreateProtocolDialog open={createProtocolOpen} onOpenChange={setCreateProtocolOpen} />
+      <CreateProtocolDialog
+        open={createProtocolOpen}
+        onOpenChange={setCreateProtocolOpen}
+        onLogRun={(protocolId) => setCreateRunForProtocol(protocolId)}
+      />
+      {createRunForProtocol && (
+        <CreateRunDialog
+          protocolId={createRunForProtocol}
+          open={true}
+          onOpenChange={(o) => {
+            if (!o) setCreateRunForProtocol(null);
+          }}
+        />
+      )}
       <CreateTargetDialog open={createTargetOpen} onOpenChange={setCreateTargetOpen} />
       <CddImportDialog
         open={cddImportOpen}

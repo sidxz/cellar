@@ -1,0 +1,31 @@
+// Playwright is not yet configured in this project (no playwright.config.ts,
+// no @playwright/test dependency in package.json).
+//
+// Before this spec can be activated, run:
+//   pnpm add -D @playwright/test
+//   pnpm exec playwright install
+//   # create playwright.config.ts (baseURL, testDir, etc.)
+//
+// The dev DB has a protocol named "EGFR Kinase Inhibition IC50"; the filled
+// string below is chosen so word_similarity matching will surface it when
+// the harness is enabled.  Move this file to
+// protocol-similar-suggestion.spec.ts once Playwright is wired up and mirror
+// the auth/storageState setup from the other e2e specs.
+
+import { expect, test } from "@playwright/test";
+
+// Assumes an authenticated session + at least one existing protocol named
+// "EGFR Kinase Inhibition IC50" in the dev DB.
+// Mirror the auth/setup of the other e2e specs (storageState / beforeEach
+// login helper) when activating this file.
+test("typing a near-duplicate name surfaces a suggestion and never blocks", async ({ page }) => {
+  await page.goto("/assays");
+  await page.getByRole("button", { name: "New Protocol" }).click();
+  await page
+    .getByPlaceholder("e.g., EGFR Kinase IC50")
+    .fill("EGFR Kinase Inhibition IC50 — GSK series before");
+
+  // Suggestion appears (above-threshold), and the create flow is NOT blocked.
+  await expect(page.getByText(/existing method|Similar protocols exist/i)).toBeVisible();
+  await expect(page.getByPlaceholder("e.g., EGFR Kinase IC50")).toBeEditable();
+});

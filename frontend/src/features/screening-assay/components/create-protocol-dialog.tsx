@@ -63,6 +63,7 @@ import { FormulaInput } from "./formula-input";
 import { InterceptsEditor } from "./intercepts-editor";
 import { PickListEditor } from "./pick-list-editor";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
+import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
 
 // ---------------------------------------------------------------------------
@@ -156,12 +157,16 @@ interface CreateProtocolDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Pre-select a project (e.g., when creating from project detail). */
   defaultProjectId?: string;
+  /** Called when the user clicks "Log a run of this" on a suggestion.
+   *  The dialog closes itself before calling this. */
+  onLogRun?: (protocolId: string) => void;
 }
 
 export function CreateProtocolDialog({
   open,
   onOpenChange,
   defaultProjectId,
+  onLogRun,
 }: CreateProtocolDialogProps) {
   const createMutation = useCreateProtocol();
   const assignToProject = useAssignProtocolToProject();
@@ -411,6 +416,20 @@ export function CreateProtocolDialog({
             {form.formState.errors.name && (
               <p className="text-[11px] text-destructive">{form.formState.errors.name.message}</p>
             )}
+            <SimilarProtocolsPanel
+              draft={{
+                name: form.watch("name") ?? "",
+                protocol_type: form.watch("protocol_type") || null,
+                target_ids: form.watch("target_ids") ?? [],
+                readout_names: (form.watch("readouts") ?? [])
+                  .map((r) => r.name)
+                  .filter((n): n is string => Boolean(n)),
+              }}
+              onLogRun={(protocolId) => {
+                onOpenChange(false);
+                onLogRun?.(protocolId);
+              }}
+            />
           </div>
 
           {/* Protocol Form Selector */}
