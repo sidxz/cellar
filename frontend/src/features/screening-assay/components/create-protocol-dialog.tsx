@@ -9,7 +9,6 @@ import {
 import { useVocabularies } from "@/features/workspace-config/hooks/use-vocabularies";
 import { OntologySearchInput, type OntologyTerm } from "@/shared/components/ontology-search-input";
 import { SearchableSelect } from "@/shared/components/searchable-select";
-import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import {
@@ -32,6 +31,7 @@ import {
 import { Separator } from "@/shared/components/ui/separator";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -39,6 +39,7 @@ import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
+import { ontologyAnnotationWrites } from "../lib/ontology-annotation-writes";
 import {
   VISIBLE_READOUT_DATA_TYPES,
   WELL_CONC_X,
@@ -60,13 +61,13 @@ import {
   READOUT_DATA_TYPE_LABELS,
   type ReadoutNormalization,
 } from "../types";
-import { ontologyAnnotationWrites } from "../lib/ontology-annotation-writes";
 import { FormulaInput } from "./formula-input";
 import { InterceptsEditor } from "./intercepts-editor";
 import { PickListEditor } from "./pick-list-editor";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
+import { VocabularyAutocomplete } from "./vocabulary-autocomplete";
 
 // ---------------------------------------------------------------------------
 // Standard facet slots (spec §5.3) — always present in the create dialog.
@@ -77,7 +78,12 @@ import { TargetMultiSelect } from "./target-multi-select";
 const STANDARD_FACET_SLOTS = [
   { name: "organism", label: "Organism", ontology_sources: ["NCBITAXON"], allow_free_text: true },
   { name: "assay_format", label: "Assay format", ontology_sources: ["BAO"], allow_free_text: true },
-  { name: "detection", label: "Detection method", ontology_sources: ["BAO"], allow_free_text: true },
+  {
+    name: "detection",
+    label: "Detection method",
+    ontology_sources: ["BAO"],
+    allow_free_text: true,
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -601,9 +607,17 @@ export function CreateProtocolDialog({
                   )}
                 />
               ) : (
-                <Input
-                  placeholder="e.g., Primary Screen, Counter Screen"
-                  {...form.register("category")}
+                <Controller
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <VocabularyAutocomplete
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      placeholder="e.g., Primary Screen, Counter Screen"
+                      field="category"
+                    />
+                  )}
                 />
               )}
             </div>
@@ -619,8 +633,7 @@ export function CreateProtocolDialog({
             <>
               <Separator />
               <Label className="text-base font-semibold">
-                Facets{" "}
-                <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                Facets <span className="text-xs font-normal text-muted-foreground">(optional)</span>
               </Label>
               <div className="space-y-3">
                 {mergedFacetSlots.map((slot) => (
@@ -675,9 +688,17 @@ export function CreateProtocolDialog({
                         <div className="grid grid-cols-2 gap-3">
                           <div className="grid gap-1">
                             <Label className="text-xs">Name</Label>
-                            <Input
-                              placeholder="e.g., % Inhibition"
-                              {...form.register(`readouts.${index}.name`)}
+                            <Controller
+                              control={form.control}
+                              name={`readouts.${index}.name`}
+                              render={({ field }) => (
+                                <VocabularyAutocomplete
+                                  value={field.value ?? ""}
+                                  onChange={field.onChange}
+                                  placeholder="e.g., % Inhibition"
+                                  field="readout_name"
+                                />
+                              )}
                             />
                             {rd && isReservedReadoutName(rd.name) && (
                               <p className="text-[11px] text-destructive">
