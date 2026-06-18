@@ -348,6 +348,7 @@ export function CreateProtocolDialog({
     !createMutation.isPending;
 
   const targetIdsValue = form.watch("target_ids");
+  const protocolTypeValue = form.watch("protocol_type");
   const suggestedName = useMemo(() => {
     const targetNames = (targetIdsValue ?? [])
       .map((id) => (targets ?? []).find((t) => t.id === id)?.name)
@@ -356,9 +357,9 @@ export function CreateProtocolDialog({
     return suggestProtocolName({
       targetNames,
       readoutNames,
-      protocolType: form.watch("protocol_type") || "",
+      protocolType: protocolTypeValue || "",
     });
-  }, [targetIdsValue, readoutValues, targets, form]);
+  }, [targetIdsValue, readoutValues, targets, protocolTypeValue]);
 
   // ---- submit handler ----
 

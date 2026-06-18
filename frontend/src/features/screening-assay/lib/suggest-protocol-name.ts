@@ -5,11 +5,9 @@ export function suggestProtocolName(input: {
   readoutNames: string[];
   protocolType: string;
 }): string {
+  const words = input.protocolType.split("_");
   const typeLabel = input.protocolType
-    ? (() => {
-        const words = input.protocolType.split("_");
-        return [words[0].charAt(0).toUpperCase() + words[0].slice(1), ...words.slice(1)].join(" ");
-      })()
+    ? [words[0].charAt(0).toUpperCase() + words[0].slice(1), ...words.slice(1)].join(" ")
     : "";
   const segments = [
     input.targetNames.filter(Boolean).join(" / "),
