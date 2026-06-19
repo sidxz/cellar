@@ -43,12 +43,6 @@ export function normFacet(s: string): string {
   return s.trim().toLowerCase().split(/\s+/).join(" ");
 }
 
-/** Secondary dedup key for readout names: strips ALL whitespace so that
- *  "% Inhibition" and "%inhibition" hash to the same bucket. */
-function normReadoutDedup(s: string): string {
-  return s.toLowerCase().replace(/\s+/g, "");
-}
-
 function ontologyItems(p: Protocol, slot: string): FacetItem[] {
   const terms = p.ontology_annotations?.[slot] ?? [];
   return terms.map((t) => ({
@@ -79,22 +73,11 @@ export function extractFacetItems(p: Protocol, dim: FacetDimension): FacetItem[]
     case "category":
       raw = p.category?.trim() ? [{ value: normFacet(p.category), label: p.category.trim() }] : [];
       break;
-    case "readout_kind": {
-      // Dedup on whitespace-stripped key so "% Inhibition" and "%inhibition"
-      // collapse to the same bucket; canonical value comes from first occurrence.
-      const rdSeen = new Set<string>();
-      const rdOut: FacetItem[] = [];
-      for (const rd of p.readout_definitions) {
-        if (!rd.name.trim()) continue;
-        const dedupKey = normReadoutDedup(rd.name);
-        if (!rdSeen.has(dedupKey)) {
-          rdSeen.add(dedupKey);
-          rdOut.push({ value: normFacet(rd.name), label: rd.name.trim() });
-        }
-      }
-      raw = rdOut;
+    case "readout_kind":
+      raw = p.readout_definitions
+        .filter((rd) => rd.name.trim())
+        .map((rd) => ({ value: normFacet(rd.name), label: rd.name.trim() }));
       break;
-    }
     default: {
       const slot = ONTOLOGY_SLOTS[dim];
       raw = slot ? ontologyItems(p, slot) : [];

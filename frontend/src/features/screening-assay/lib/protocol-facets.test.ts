@@ -76,7 +76,7 @@ describe("extractFacetItems", () => {
     const p = proto({
       readout_definitions: [
         { name: "% Inhibition" },
-        { name: "%inhibition" },
+        { name: "% inhibition" },
         { name: "IC50" },
       ] as Protocol["readout_definitions"],
     });
