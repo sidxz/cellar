@@ -31,7 +31,6 @@ import {
 import { Separator } from "@/shared/components/ui/separator";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -40,7 +39,7 @@ import { z } from "zod";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
 import { useTargets } from "../hooks/use-targets";
-import { ontologyAnnotationWrites } from "../lib/ontology-annotation-writes";
+import { ontologyAnnotationsPayload } from "../lib/ontology-annotations-payload";
 import {
   VISIBLE_READOUT_DATA_TYPES,
   WELL_CONC_X,
@@ -428,24 +427,12 @@ export function CreateProtocolDialog({
         dose_unit: values.dose_unit,
         readout_definitions,
         condition_definitions: condition_definitions.length > 0 ? condition_definitions : undefined,
+        // Facets persisted atomically with the protocol — one transaction, so a
+        // multi-slot set can't race/drop the way separate post-create PUTs did.
+        ontology_annotations: ontologyAnnotationsPayload(ontologyAnnotations),
       },
       {
         onSuccess: async (protocol) => {
-          if (protocol?.id) {
-            // Persist facets the chemist entered. Best-effort: the protocol
-            // already exists; a failed annotation write is non-fatal (the
-            // PUT endpoint's own error toast surfaces it). The create payload
-            // has no slot for ontology annotations, so we write them here.
-            await Promise.allSettled(
-              ontologyAnnotationWrites(ontologyAnnotations).map((w) =>
-                customInstance({
-                  url: `${API_V1}/protocols/${protocol.id}/ontology-annotations`,
-                  method: "PUT",
-                  data: w,
-                }),
-              ),
-            );
-          }
           if (projectId && protocol?.id) {
             // Non-blocking: the protocol is already created. A failed assignment
             // is surfaced by the mutation's onError toast (recovery hint) rather

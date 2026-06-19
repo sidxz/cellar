@@ -6,7 +6,4 @@
  */
 import type { OntologyTermRequest } from './ontologyTermRequest';
 
-export interface SetOntologyAnnotationRequest {
-  slot: string;
-  terms: OntologyTermRequest[];
-}
+export type CreateProtocolRequestOntologyAnnotationsAnyOf = {[key: string]: OntologyTermRequest[]};

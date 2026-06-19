@@ -612,3 +612,50 @@ class TestProtocolVersioningOntologyAnnotations:
         svc = ProtocolVersioningService()
         new_protocol = svc.create_new_version(protocol)
         assert new_protocol.ontology_annotations == {}
+
+
+# ---------------------------------------------------------------------------
+# Protocol.create — ontology annotations at creation time
+# ---------------------------------------------------------------------------
+
+
+class TestProtocolCreateOntologyAnnotations:
+    """Facets supplied at create must all land on the aggregate in one shot.
+
+    Regression for the create-dialog race where each facet slot was persisted
+    via a separate concurrent PUT, so all but one slot was silently dropped.
+    """
+
+    def test_create_stores_all_supplied_annotation_slots(self):
+        protocol = _make_protocol(
+            ontology_annotations={
+                "organism": [
+                    OntologyTerm(
+                        term_id="free_text:Homo sapiens",
+                        label="Homo sapiens",
+                        ontology_source="free_text",
+                    )
+                ],
+                "assay_format": [
+                    OntologyTerm(
+                        term_id="free_text:biochemical",
+                        label="biochemical",
+                        ontology_source="free_text",
+                    )
+                ],
+                "detection": [
+                    OntologyTerm(
+                        term_id="free_text:fluorescence",
+                        label="fluorescence",
+                        ontology_source="free_text",
+                    )
+                ],
+            }
+        )
+        assert set(protocol.ontology_annotations) == {"organism", "assay_format", "detection"}
+        assert protocol.ontology_annotations["assay_format"][0].label == "biochemical"
+        assert protocol.ontology_annotations["detection"][0].label == "fluorescence"
+
+    def test_create_without_annotations_defaults_empty(self):
+        protocol = _make_protocol()
+        assert protocol.ontology_annotations == {}

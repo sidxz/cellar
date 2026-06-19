@@ -436,6 +436,7 @@ class Protocol(AggregateRoot):
         pos_control_signal: PosControlSignal = PosControlSignal.HIGH,
         readout_definitions: list[ReadoutDefinition] | None = None,
         condition_definitions: list[ConditionDefinition] | None = None,
+        ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
     ) -> Protocol:
         if not readout_definitions:
             raise ValidationError("Protocol must have at least one ReadoutDefinition")
@@ -451,6 +452,7 @@ class Protocol(AggregateRoot):
             pos_control_signal=pos_control_signal,
             readout_definitions=readout_definitions,
             condition_definitions=condition_definitions,
+            ontology_annotations=ontology_annotations,
         )
         protocol.register_event(
             ProtocolCreated(

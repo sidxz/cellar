@@ -42,6 +42,7 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
+from cellar.domain.shared.ontology import OntologyTerm
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -56,6 +57,10 @@ class CreateProtocolCommand(Command):
     pos_control_signal: str = "high"
     readout_definitions: list[dict[str, Any]] = field(default_factory=list)
     condition_definitions: list[dict[str, Any]] = field(default_factory=list)
+    # Facets, keyed by slot name → list of {term_id, label, ontology_source,
+    # uri?}. Persisted as part of the create transaction so the fingerprint is
+    # computed once with facets in place and multi-slot sets can't race.
+    ontology_annotations: dict[str, list[dict]] = field(default_factory=dict)
 
 
 class CreateProtocol:
@@ -146,6 +151,20 @@ class CreateProtocol:
             for cd in input.condition_definitions
         ]
 
+        ontology_annotations = {
+            slot: [
+                OntologyTerm(
+                    term_id=t["term_id"],
+                    label=t["label"],
+                    ontology_source=t["ontology_source"],
+                    uri=t.get("uri"),
+                )
+                for t in terms
+            ]
+            for slot, terms in input.ontology_annotations.items()
+            if terms
+        }
+
         async with self._uow:
             protocol = Protocol.create(
                 workspace_id=input.workspace_id,
@@ -158,6 +177,7 @@ class CreateProtocol:
                 pos_control_signal=PosControlSignal(input.pos_control_signal),
                 readout_definitions=readout_defs,
                 condition_definitions=condition_defs or None,
+                ontology_annotations=ontology_annotations or None,
             )
             await self._repo.save(protocol)
             # Initial direct targets — idempotent, workspace-checked in the repo.

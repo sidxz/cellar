@@ -1,3 +1,4 @@
+import type { OntologyTerm } from "@/shared/components/ontology-search-input";
 import type {
   ClassifyDoseResponseCurveRequest,
   CollectionCoverageResponse,
@@ -571,6 +572,9 @@ export interface CreateProtocolInput {
   pos_control_signal?: PosControlSignal;
   readout_definitions?: CreateReadoutDefinitionInput[];
   condition_definitions?: CreateConditionDefinitionInput[];
+  /** Facets keyed by slot name. Persisted atomically with the protocol so a
+   *  multi-slot set can't race/drop the way separate post-create PUTs did. */
+  ontology_annotations?: Record<string, OntologyTerm[]>;
 }
 
 export interface CreateTargetInput {

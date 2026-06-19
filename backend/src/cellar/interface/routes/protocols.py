@@ -336,6 +336,19 @@ class ConditionGroupsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class OntologyTermRequest(BaseModel):
+    """An ontology-annotation term as it arrives over the wire. Mirrors
+    `OntologyTermResponse` so the facet boundary is symmetric and typed —
+    a malformed term is a clean 422 instead of a KeyError deep in the use
+    case. Routes convert these to plain dicts before building commands so
+    the application layer stays framework-agnostic."""
+
+    term_id: str
+    label: str
+    ontology_source: str
+    uri: str | None = None
+
+
 class CreateProtocolRequest(BaseModel):
     name: str
     description: str | None = None
@@ -346,6 +359,10 @@ class CreateProtocolRequest(BaseModel):
     pos_control_signal: str = "high"
     readout_definitions: list[dict[str, Any]]
     condition_definitions: list[dict[str, Any]] | None = None
+    # Facets supplied at create time, keyed by slot name. Persisted atomically
+    # with the protocol so multi-slot facet sets can't race/drop (the per-slot
+    # PUT endpoint remains for interactive single-slot edits).
+    ontology_annotations: dict[str, list[OntologyTermRequest]] | None = None
 
     # The single target_id field was replaced by target_ids (migration 051);
     # forbid extras so a client still sending it gets a 422 instead of a
@@ -417,6 +434,10 @@ async def create_protocol(
         pos_control_signal=body.pos_control_signal,
         readout_definitions=body.readout_definitions,
         condition_definitions=body.condition_definitions or [],
+        ontology_annotations={
+            slot: [t.model_dump() for t in terms]
+            for slot, terms in (body.ontology_annotations or {}).items()
+        },
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1038,7 +1059,7 @@ async def remove_control_layout(
 
 class SetOntologyAnnotationRequest(BaseModel):
     slot: str
-    terms: list[dict]
+    terms: list[OntologyTermRequest]
 
 
 @router.put(
@@ -1058,7 +1079,7 @@ async def set_ontology_annotation(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
         slot=body.slot,
-        terms=body.terms,
+        terms=[t.model_dump() for t in body.terms],
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)

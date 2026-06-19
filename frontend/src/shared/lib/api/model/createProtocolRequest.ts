@@ -8,6 +8,7 @@ import type { CreateProtocolRequestDescription } from './createProtocolRequestDe
 import type { CreateProtocolRequestCategory } from './createProtocolRequestCategory';
 import type { CreateProtocolRequestReadoutDefinitionsItem } from './createProtocolRequestReadoutDefinitionsItem';
 import type { CreateProtocolRequestConditionDefinitions } from './createProtocolRequestConditionDefinitions';
+import type { CreateProtocolRequestOntologyAnnotations } from './createProtocolRequestOntologyAnnotations';
 
 export interface CreateProtocolRequest {
   name: string;
@@ -19,4 +20,5 @@ export interface CreateProtocolRequest {
   pos_control_signal?: string;
   readout_definitions: CreateProtocolRequestReadoutDefinitionsItem[];
   condition_definitions?: CreateProtocolRequestConditionDefinitions;
+  ontology_annotations?: CreateProtocolRequestOntologyAnnotations;
 }
