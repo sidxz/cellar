@@ -1,13 +1,12 @@
 "use client";
 
 import { Button } from "@/shared/components/ui/button";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/shared/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import type { FacetDimension, FacetGroup, FacetSelections } from "../lib/protocol-facets";
 
@@ -66,17 +65,26 @@ function FacetGroupSection({
         {visible.map((v) => {
           const checked = selected?.has(v.value) ?? false;
           return (
-            // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox is the control; it receives aria-label for accessible name
-            // biome-ignore lint/a11y/useKeyWithClickEvents: <label> wrapping a <button role="checkbox"> is keyboard-accessible via Enter/Space on the button itself
-            <label
+            <button
               key={v.value}
-              className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted"
+              type="button"
+              role="checkbox"
+              aria-checked={checked}
+              aria-label={v.label}
               onClick={() => onToggle(group.dimension, v.value)}
+              className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted"
             >
-              <Checkbox checked={checked} aria-label={v.label} tabIndex={-1} />
-              <span className="flex-1 truncate">{v.label}</span>
+              <span
+                aria-hidden
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ${
+                  checked ? "border-primary bg-primary text-primary-foreground" : "border-input"
+                }`}
+              >
+                {checked && <Check className="h-3 w-3" />}
+              </span>
+              <span className="flex-1 truncate text-left">{v.label}</span>
               <span className="text-xs tabular-nums text-muted-foreground">{v.count}</span>
-            </label>
+            </button>
           );
         })}
         {group.values.length > FACET_VALUE_CAP && (
