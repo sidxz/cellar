@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useProtocolFacets } from "../hooks/use-protocol-facets";
 import type { FacetDimension, FacetSelections, GroupBy } from "../lib/protocol-facets";
 import type { Protocol } from "../types";
@@ -13,7 +13,7 @@ interface ProtocolLibraryViewProps {
 }
 
 export function ProtocolLibraryView({ protocols, onSelect }: ProtocolLibraryViewProps) {
-  const hasRetired = useMemo(() => protocols.some((p) => p.status === "retired"), [protocols]);
+  const hasRetired = protocols.some((p) => p.status === "retired");
   // Default: pre-exclude retired (only when some exist, else no status preset).
   const [selections, setSelections] = useState<FacetSelections>(() =>
     hasRetired ? { status: new Set<string>(["draft", "active"]) } : {},

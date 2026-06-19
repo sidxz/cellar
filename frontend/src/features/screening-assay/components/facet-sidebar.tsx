@@ -64,6 +64,11 @@ function FacetGroupSection({
       <CollapsibleContent className="space-y-0.5">
         {visible.map((v) => {
           const checked = selected?.has(v.value) ?? false;
+          // Whole-row click target: a native <button role="checkbox"> is the ARIA-APG
+          // checkbox pattern here (Enter/Space toggle, full-row affordance). A native
+          // <input type=checkbox> can't host the indicator+label+count layout without a
+          // wrapping <label>, which reintroduces the click-forwarding trap. The
+          // resulting biome useSemanticElements warning is intentional.
           return (
             <button
               key={v.value}
