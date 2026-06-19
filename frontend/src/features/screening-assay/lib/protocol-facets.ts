@@ -116,3 +116,124 @@ export function protocolMatchesSelections(p: Protocol, selections: FacetSelectio
 export function filterProtocols(protocols: Protocol[], selections: FacetSelections): Protocol[] {
   return protocols.filter((p) => protocolMatchesSelections(p, selections));
 }
+
+export interface FacetValue {
+  value: string;
+  label: string;
+  count: number;
+}
+
+export interface FacetGroup {
+  dimension: FacetDimension;
+  label: string;
+  values: FacetValue[];
+}
+
+export interface ProtocolGroup {
+  key: string;
+  label: string;
+  protocols: Protocol[];
+  count: number;
+}
+
+export const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: "target", label: "Target" },
+  { value: "category", label: "Category" },
+  { value: "type", label: "Type" },
+  { value: "assay_format", label: "Assay format" },
+  { value: "status", label: "Status" },
+  { value: "none", label: "None" },
+];
+
+const NONE_KEY = "__none__";
+
+/** Most-frequent label for a value (ties → first seen). */
+function pickLabel(counts: Map<string, number>): string {
+  let best = "";
+  let bestN = -1;
+  for (const [label, n] of counts) {
+    if (n > bestN) {
+      best = label;
+      bestN = n;
+    }
+  }
+  return best;
+}
+
+/** Per-dimension drill-down: each value's count reflects all OTHER facets'
+ *  selections (not its own), the standard faceted-search semantic. */
+export function buildFacetModel(protocols: Protocol[], selections: FacetSelections): FacetGroup[] {
+  const out: FacetGroup[] = [];
+  for (const { dimension, label } of FACET_DIMENSIONS) {
+    const others: FacetSelections = { ...selections };
+    delete others[dimension];
+    const scope = filterProtocols(protocols, others);
+
+    const counts = new Map<string, number>();
+    const labels = new Map<string, Map<string, number>>();
+    for (const p of scope) {
+      for (const item of extractFacetItems(p, dimension)) {
+        counts.set(item.value, (counts.get(item.value) ?? 0) + 1);
+        const lc = labels.get(item.value) ?? new Map<string, number>();
+        lc.set(item.label, (lc.get(item.label) ?? 0) + 1);
+        labels.set(item.value, lc);
+      }
+    }
+    if (counts.size === 0) continue; // hide empty facets
+
+    const values: FacetValue[] = [...counts.entries()]
+      .map(([value, count]) => ({ value, count, label: pickLabel(labels.get(value) ?? new Map()) }))
+      .sort((x, y) => y.count - x.count || x.label.localeCompare(y.label));
+    out.push({ dimension, label, values });
+  }
+  return out;
+}
+
+const GROUP_DIMENSION: Record<Exclude<GroupBy, "none">, FacetDimension> = {
+  target: "target",
+  category: "category",
+  type: "type",
+  assay_format: "assay_format",
+  status: "status",
+};
+
+export function groupProtocols(protocols: Protocol[], groupBy: GroupBy): ProtocolGroup[] {
+  if (groupBy === "none") {
+    return [{ key: "all", label: "All protocols", protocols, count: protocols.length }];
+  }
+  const dim = GROUP_DIMENSION[groupBy];
+  const buckets = new Map<string, { label: string; protocols: Protocol[] }>();
+  for (const p of protocols) {
+    const items = extractFacetItems(p, dim);
+    if (items.length === 0) {
+      const g = buckets.get(NONE_KEY) ?? {
+        label: `No ${FACET_LABEL[dim].toLowerCase()}`,
+        protocols: [],
+      };
+      g.protocols.push(p);
+      buckets.set(NONE_KEY, g);
+      continue;
+    }
+    for (const item of items) {
+      const g = buckets.get(item.value) ?? { label: item.label, protocols: [] };
+      g.protocols.push(p);
+      buckets.set(item.value, g);
+    }
+  }
+  const groups = [...buckets.entries()].map(([key, g]) => ({
+    key,
+    label: g.label,
+    protocols: g.protocols,
+    count: g.protocols.length,
+  }));
+  // count-desc, but the "No X" bucket always pinned last.
+  return groups.sort((a, b) => {
+    if (a.key === NONE_KEY) return 1;
+    if (b.key === NONE_KEY) return -1;
+    return b.count - a.count || a.label.localeCompare(b.label);
+  });
+}
+
+const FACET_LABEL: Record<FacetDimension, string> = Object.fromEntries(
+  FACET_DIMENSIONS.map((f) => [f.dimension, f.label]),
+) as Record<FacetDimension, string>;

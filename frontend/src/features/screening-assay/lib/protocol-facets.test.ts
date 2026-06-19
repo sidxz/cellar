@@ -143,3 +143,58 @@ describe("protocolMatchesSelections / filterProtocols", () => {
     expect(protocolMatchesSelections(a, { status: new Set(["retired"]) })).toBe(false);
   });
 });
+
+import { buildFacetModel, groupProtocols } from "./protocol-facets";
+
+describe("buildFacetModel (drill-down counts)", () => {
+  const a = proto({ id: "a", protocol_type: "biochemical", category: "Enzyme" });
+  const b = proto({ id: "b", protocol_type: "biochemical", category: "enzyme" });
+  const c = proto({ id: "c", protocol_type: "cell_based", category: "Whole Cell" });
+
+  it("hides empty facets and merges casing variants with a frequency-picked label", () => {
+    const model = buildFacetModel([a, b, c], {});
+    const category = model.find((g) => g.dimension === "category");
+    expect(category?.values).toEqual([
+      { value: "enzyme", label: "Enzyme", count: 2 },
+      { value: "whole cell", label: "Whole Cell", count: 1 },
+    ]);
+    // organism/detection/assay_format have no values here → not in the model.
+    expect(model.some((g) => g.dimension === "organism")).toBe(false);
+  });
+
+  it("drill-down: selecting a value in facet F does not collapse F's siblings", () => {
+    const model = buildFacetModel([a, b, c], { type: new Set(["biochemical"]) });
+    // Type facet counts ignore the Type selection (so cell_based still shows).
+    const type = model.find((g) => g.dimension === "type");
+    expect(type?.values).toEqual([
+      { value: "biochemical", label: "Biochemical", count: 2 },
+      { value: "cell_based", label: "Cell-Based", count: 1 },
+    ]);
+    // Category counts DO respect the Type selection (only a,b are biochemical).
+    const category = model.find((g) => g.dimension === "category");
+    expect(category?.values).toEqual([{ value: "enzyme", label: "Enzyme", count: 2 }]);
+  });
+});
+
+describe("groupProtocols", () => {
+  const t1 = { id: "t1", name: "RNAP", target_type: "protein" };
+  const t2 = { id: "t2", name: "InhA", target_type: "protein" };
+  const a = proto({ id: "a", name: "A", targets: [t1] });
+  const b = proto({ id: "b", name: "B", targets: [t1, t2] });
+  const c = proto({ id: "c", name: "C", targets: [] });
+
+  it("multi-valued target duplicates across groups; no-target → its own group last", () => {
+    const groups = groupProtocols([a, b, c], "target");
+    expect(groups.map((g) => [g.label, g.count])).toEqual([
+      ["RNAP", 2], // a, b — count-desc first
+      ["InhA", 1], // b
+      ["No target", 1], // c — pinned last
+    ]);
+  });
+
+  it("none → a single flat group", () => {
+    const groups = groupProtocols([a, b, c], "none");
+    expect(groups).toHaveLength(1);
+    expect(groups[0].protocols).toHaveLength(3);
+  });
+});
