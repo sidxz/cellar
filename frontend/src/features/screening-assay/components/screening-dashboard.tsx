@@ -11,7 +11,7 @@ import { CddImportDialog } from "./cdd-import-dialog";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
 import { CreateTargetDialog } from "./create-target-dialog";
-import { ProtocolList } from "./protocol-list";
+import { ProtocolBrowser } from "./protocol-browser";
 import { TargetList } from "./target-list";
 
 export function ScreeningDashboard() {
@@ -63,7 +63,7 @@ export function ScreeningDashboard() {
         </div>
 
         <TabsContent value="protocols" className="mt-4">
-          <ProtocolList
+          <ProtocolBrowser
             onSelect={(protocolId) => {
               router.push(`/assays/protocols/${protocolId}`);
             }}
