@@ -2,9 +2,11 @@
 
 import { setApiBaseUrl } from "@/shared/lib/api/custom-instance";
 import { type AppConfig, AppConfigProvider, fetchAppConfig } from "@/shared/lib/app-config";
+import { shouldAutoReauth } from "@/shared/lib/auth/auto-reauth";
 import { getSentinelClient } from "@/shared/lib/auth/config";
 import type { SentinelAuthz } from "@sentinel-auth/js";
 import { AuthzProvider } from "@sentinel-auth/nextjs";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -12,6 +14,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const clientRef = useRef<SentinelAuthz | null>(null);
   const configRef = useRef<AppConfig | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +58,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AppConfigProvider config={configRef.current}>
-      <AuthzProvider client={clientRef.current}>{children}</AuthzProvider>
+      <AuthzProvider client={clientRef.current} autoReauth={shouldAutoReauth(pathname)}>
+        {children}
+      </AuthzProvider>
     </AppConfigProvider>
   );
 }

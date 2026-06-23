@@ -1,5 +1,6 @@
 "use client";
 
+import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EmptyState } from "@/shared/components/empty-state";
 import { MemberName } from "@/shared/components/entity-name";
@@ -13,7 +14,16 @@ import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { formatDate } from "@/shared/lib/format-date";
 
 import type { SelectionChangedEvent } from "ag-grid-community";
-import { Check, Eye, EyeOff, Filter, FlaskConical, Pencil, Settings2 } from "lucide-react";
+import {
+  Check,
+  Eye,
+  EyeOff,
+  Filter,
+  FlaskConical,
+  FolderPlus,
+  Pencil,
+  Settings2,
+} from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useSetRunHitCriteria } from "../hooks/use-runs";
@@ -78,6 +88,9 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
   // Non-destructive, view-only bypass of the run's filter — lets a screener peek
   // at every compound without altering the recorded decision or its provenance.
   const [showAll, setShowAll] = useState(false);
+
+  // Collection picker (bulk action on the checkbox selection)
+  const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
 
   // Selection state (checkbox-driven, for multi-compound comparison)
   const [selectedRows, setSelectedRows] = useState<CompoundCurveRow[]>([]);
@@ -193,6 +206,15 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
             </Badge>
           );
         })()}
+        {selectedRows.length > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCollectionDialogOpen(true)}>
+              <FolderPlus className="mr-1.5 h-3.5 w-3.5" />
+              Add to Collection
+            </Button>
+            <span className="text-muted-foreground">{selectedRows.length} selected</span>
+          </div>
+        )}
       </div>
 
       {/* Hit Criteria — a per-run decision. Unset → recommend (never auto-apply);
@@ -427,6 +449,14 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
           onOpenChange={setCriteriaDialogOpen}
         />
       )}
+
+      {/* Collection picker — full flow so the run's selected compounds can seed a
+          brand-new collection or be added to an existing one. */}
+      <CollectionPickerDialog
+        open={collectionDialogOpen}
+        onOpenChange={setCollectionDialogOpen}
+        moleculeIds={selectedRows.map((r) => r.molecule_id)}
+      />
     </div>
   );
 }

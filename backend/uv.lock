@@ -229,7 +229,7 @@ requires-dist = [
     { name = "redis", specifier = ">=5.2.0" },
     { name = "returns", specifier = ">=0.23.0" },
     { name = "scipy", specifier = ">=1.14.0" },
-    { name = "sentinel-auth-sdk", specifier = ">=0.11.0" },
+    { name = "sentinel-auth-sdk", specifier = ">=0.13.1" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
     { name = "structlog", specifier = ">=24.4.0" },
     { name = "temporalio", specifier = ">=1.9.0" },
@@ -2166,7 +2166,7 @@ wheels = [
 
 [[package]]
 name = "sentinel-auth-sdk"
-version = "0.11.0"
+version = "0.13.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -2176,9 +2176,9 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "starlette" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7e/1f/06dfeed2ddd349a65044e1760b92c3ba2e58ef2460144fc3cef53dff888f/sentinel_auth_sdk-0.11.0.tar.gz", hash = "sha256:6fe66bd78120bb64ce5613efd9f1214944ad46424fb83ad2508af0634cd4ed2b", size = 24664, upload-time = "2026-05-30T03:34:10.892Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1a/56/3ea9491e2d5f929ded38f686075d6bc79bc10bcfa24ff29ca5248a4a88c5/sentinel_auth_sdk-0.13.1.tar.gz", hash = "sha256:3bd779e021c15c6e868895f4cabd222532d27f4ff317373728920c69ae2f8181", size = 24704, upload-time = "2026-06-20T13:54:20.098Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/37/bb7fbb55f01afa94c84c419cbdccd16fc3de9e0373f2bfcd5530eff641a4/sentinel_auth_sdk-0.11.0-py3-none-any.whl", hash = "sha256:946c24e3dd8cd99063f4ca88b235cfa0595d62d812ac40c5644126ff5f01b680", size = 21693, upload-time = "2026-05-30T03:34:09.679Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/a5/daf3cb998006f787f2ffc60d8a9346124e9967d50050ed197c90619b584e/sentinel_auth_sdk-0.13.1-py3-none-any.whl", hash = "sha256:7a74354ccea5ea90eaabc76a2810765781d785f0e7fe830600b29c8b51c16dee", size = 21690, upload-time = "2026-06-20T13:54:18.99Z" },
 ]
 
 [[package]]

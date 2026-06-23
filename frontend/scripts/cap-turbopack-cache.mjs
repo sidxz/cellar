@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Pre-`next dev` guard:
-//  1. Refuses to start if another `next dev --turbopack` is already running.
+//  1. Refuses to start if another `next dev --turbopack` for THIS project is
+//     already running (a different repo's dev server has its own cache + port,
+//     so it is harmless and must not block us).
 //  2. Wipes the Turbopack persistent cache if it has grown past LIMIT_GB.
 //
 // Turbopack has no built-in size cap as of Next 16; without this, the cache
@@ -9,12 +11,19 @@
 //
 // Bypass either check with SKIP_DEV_GUARD=1.
 
-import { rmSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { rmSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const CACHE = ".next/dev/cache/turbopack";
 const LIMIT_GB = 3;
 const BYPASS = process.env.SKIP_DEV_GUARD === "1";
+
+// This frontend's root (parent of scripts/). A same-project `next dev` resolves
+// its binary under here, so its command line contains this path — that is how
+// we tell our own instance apart from an unrelated repo's dev server.
+const FRONTEND_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function tryRun(file, args) {
   try {
@@ -28,9 +37,15 @@ function tryRun(file, args) {
 
 if (!BYPASS) {
   const out = tryRun("pgrep", ["-f", "next dev --turbopack"]);
-  if (out) {
-    const list = out.split("\n").join(", ");
-    console.error(`\nAnother 'next dev --turbopack' is already running (pid ${list}).`);
+  const pids = (out || "").split("\n").map((s) => s.trim()).filter(Boolean);
+  // Keep only instances launched from THIS frontend dir. A PID that exits
+  // between pgrep and ps yields "" from tryRun, which fails the includes().
+  const ours = pids.filter((pid) =>
+    (tryRun("ps", ["-o", "command=", "-p", pid]) || "").includes(FRONTEND_DIR),
+  );
+  if (ours.length) {
+    const list = ours.join(", ");
+    console.error(`\nAnother 'next dev --turbopack' for this project is already running (pid ${list}).`);
     console.error("  Stop it:    make stop   (or kill the PIDs above)");
     console.error("  Bypass:     SKIP_DEV_GUARD=1 pnpm dev\n");
     process.exit(1);

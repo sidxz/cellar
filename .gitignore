@@ -66,3 +66,6 @@ CLAUDE.md
 .superpowers/
 
 backend/data/
+
+# Agent git worktrees (transient)
+.claude/worktrees/

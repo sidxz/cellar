@@ -40,10 +40,11 @@ export default function CallbackPage() {
           <div className="w-full max-w-[320px] px-6 md:px-0">
             <div style={{ animation: "auth-enter 0.7s ease-out 0.2s both" }}>
               <AuthzCallback
-                onSuccess={() => router.replace("/")}
+                onSuccess={(_user, returnTo) => router.replace(returnTo ?? "/")}
                 onError={(error) =>
                   router.replace(`/login?error=${encodeURIComponent(error.message)}`)
                 }
+                onSilentReauthFailed={() => router.replace("/login")}
                 loadingComponent={
                   <div>
                     <h2 className="text-sm font-medium text-muted-foreground">Signing in...</h2>
