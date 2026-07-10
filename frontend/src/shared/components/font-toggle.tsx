@@ -1,6 +1,6 @@
 "use client";
 import { Button } from "@/shared/components/ui/button";
-import { useFontFamilyStore } from "@/shared/stores/font-family-store";
+import { useFontFamilyStore } from "@/shared/lib/stores/font-family-store";
 
 export function FontToggle() {
   const font = useFontFamilyStore((s) => s.font);
