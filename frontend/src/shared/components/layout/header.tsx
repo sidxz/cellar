@@ -1,5 +1,6 @@
 "use client";
 
+import { FontToggle } from "@/shared/components/font-toggle";
 import { Button } from "@/shared/components/ui/button";
 import { Bell, Search } from "lucide-react";
 import { Breadcrumbs } from "./breadcrumbs";
@@ -17,6 +18,7 @@ export function Header() {
             <span className="text-xs">&#8984;</span>K
           </kbd>
         </Button>
+        <FontToggle />
         <ThemeToggle />
         <Button variant="ghost" size="icon" className="relative h-8 w-8">
           <Bell className="size-4" />

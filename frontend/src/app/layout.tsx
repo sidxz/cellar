@@ -1,22 +1,29 @@
 import { CommandPalette } from "@/shared/components/layout/command-palette";
 import { AuthProvider } from "@/shared/providers/auth-provider";
+import { FontFamilyProvider } from "@/shared/providers/font-family-provider";
 import { QueryProvider } from "@/shared/providers/query-provider";
 import { ThemeProvider } from "@/shared/providers/theme-provider";
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
-  variable: "--font-sans",
+  variable: "--font-plex-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
 const plexMono = IBM_Plex_Mono({
-  variable: "--font-mono",
+  variable: "--font-plex-mono",
   subsets: ["latin"],
   weight: ["400", "500", "600"],
+});
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -31,15 +38,27 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${plexSans.variable} ${plexMono.variable} font-sans antialiased`}>
+      <head>
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: anti-flash theme/font bootstrap must run before paint
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var g=JSON.parse(localStorage.getItem('ds-font')||'{}');document.documentElement.setAttribute('data-font',(g.state&&g.state.font)||'plex')}catch(e){document.documentElement.setAttribute('data-font','plex')}})()`,
+          }}
+        />
+      </head>
+      <body
+        className={`${plexSans.variable} ${plexMono.variable} ${inter.variable} font-sans antialiased`}
+      >
         <ThemeProvider>
-          <AuthProvider>
-            <QueryProvider>
-              {children}
-              <CommandPalette />
-              <Toaster position="bottom-right" />
-            </QueryProvider>
-          </AuthProvider>
+          <FontFamilyProvider>
+            <AuthProvider>
+              <QueryProvider>
+                {children}
+                <CommandPalette />
+                <Toaster position="bottom-right" />
+              </QueryProvider>
+            </AuthProvider>
+          </FontFamilyProvider>
         </ThemeProvider>
       </body>
     </html>

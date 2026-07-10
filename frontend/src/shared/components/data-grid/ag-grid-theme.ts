@@ -2,7 +2,7 @@ import { themeQuartz } from "ag-grid-community";
 
 /**
  * AG Grid theme that inherits from the app's CSS custom properties.
- * Automatically follows light/dark mode via Tailwind's `.dark` class.
+ * Automatically follows light/dark mode via the `data-theme` attribute.
  */
 export const cellarTheme = themeQuartz.withParams({
   backgroundColor: "var(--background)",
