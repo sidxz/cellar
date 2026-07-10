@@ -110,7 +110,7 @@ export function CampaignList({ projectId }: CampaignListProps) {
               <TableHead>Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Targets</TableHead>
-              <TableHead>Channels</TableHead>
+              <TableHead>Readouts</TableHead>
               <TableHead>Compounds</TableHead>
               <TableHead>Created</TableHead>
               <TableHead>Closed</TableHead>

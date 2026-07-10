@@ -134,7 +134,7 @@ export function PreviewAsPublishedDialog({
               {/* Channels */}
               <section className="space-y-1">
                 <div className="text-xs uppercase text-muted-foreground">
-                  Channels ({doc.channels.length})
+                  Readouts ({doc.channels.length})
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {doc.channels.map((c) => (

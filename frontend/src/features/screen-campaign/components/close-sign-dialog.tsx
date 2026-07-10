@@ -113,9 +113,9 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <div>
               {!hasResults && <p>Campaign has no compound results.</p>}
-              {!hasChannels && <p>Campaign has no channels.</p>}
+              {!hasChannels && <p>Campaign has no readouts.</p>}
               <p className="mt-1 text-xs">
-                Add at least one channel and one compound before closing.
+                Add at least one readout and one compound before closing.
               </p>
             </div>
           </div>
@@ -127,7 +127,7 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground text-xs">
             <span>Compounds</span>
             <span className="text-foreground font-medium">{campaign.results.length}</span>
-            <span>Channels</span>
+            <span>Readouts</span>
             <span className="text-foreground font-medium">{campaign.channels.length}</span>
             <span>Source protocols</span>
             <span className="text-foreground font-medium">{campaign.source_protocols.length}</span>

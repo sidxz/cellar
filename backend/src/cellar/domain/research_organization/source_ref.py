@@ -23,6 +23,31 @@ from cellar.domain.research_organization.enums import CampaignDecision
 from cellar.domain.shared.errors import ValidationError
 
 
+def source_group_key(ref: dict[str, Any]) -> tuple[Any, ...]:
+    """Stable identity for grouping campaign results by their source.
+
+    Two results belong to the same source row iff this key matches. Keyed
+    on ``kind`` plus every discriminating id field (``run_id`` /
+    ``collection_id`` / ``campaign_id`` / ``saved_search_id`` …) and the
+    free-text ``description``. ``ManualRef``/no-id refs share a single
+    ``("manual", (), description)`` bucket.
+
+    Operates on a ``SourceRef.to_dict()`` payload so both the interface DTO
+    and the published-view projection share one definition. List-valued
+    fields (e.g. ``CampaignRef.decision_filter``) are frozen to tuples so
+    the key stays hashable.
+    """
+    kind = ref.get("kind", "manual")
+    ids = tuple(
+        sorted(
+            (k, tuple(v) if isinstance(v, list) else v)
+            for k, v in ref.items()
+            if k not in ("kind", "description")
+        )
+    )
+    return (kind, ids, ref.get("description"))
+
+
 @dataclass(frozen=True)
 class SourceRef:
     """Base class for per-result source attribution. Use concrete subclasses."""

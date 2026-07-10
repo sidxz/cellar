@@ -839,7 +839,7 @@ export function ChannelPopoverForm({
             Cancel
           </Button>
           <Button type="submit" size="sm" disabled={isPending}>
-            {isPending ? "Saving..." : isEdit ? "Update" : "Add Channel"}
+            {isPending ? "Saving..." : isEdit ? "Update" : "Add Readout"}
           </Button>
         </div>
       </div>
@@ -851,11 +851,11 @@ export function ChannelPopoverForm({
         <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete channel "{existing.label}"?</AlertDialogTitle>
+              <AlertDialogTitle>Delete readout "{existing.label}"?</AlertDialogTitle>
               <AlertDialogDescription>
-                This removes the channel and every measurement it produced across all results in
-                this campaign. You can re-add the same readout afterwards, but the new channel will
-                have a fresh id — manual overrides on this channel will not carry over.
+                This removes the readout and every measurement it produced across all results in
+                this campaign. You can re-add the same readout afterwards, but the new one will have
+                a fresh id — manual overrides on it will not carry over.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

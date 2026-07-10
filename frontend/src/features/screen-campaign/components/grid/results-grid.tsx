@@ -8,7 +8,6 @@
  *   - Structure (130) — <StructureThumbnail size={104}>
  *   - per channel:
  *       - Value (120) — formatMeasurementValue + n=replicate_count + inline hit chip + OVR badge
- *       - Class (90, DR only) — curve-class badge
  *       - Curve (150, DR only) — <DoseResponseSparkline>
  *   - Decision (pinned-right, 160) — <DecisionChipCell>
  *
@@ -31,11 +30,7 @@ import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { groupBy } from "@/shared/lib/group-by";
 import { shortId } from "@/shared/lib/utils";
 
-import {
-  CurveClassBadge,
-  DoseResponseSparkline,
-  useProtocolSummaries,
-} from "@/features/screening-assay";
+import { DoseResponseSparkline, useProtocolSummaries } from "@/features/screening-assay";
 import { type CurveClass, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
 
 import { useMoleculesByIds } from "@/features/chemical-registration";
@@ -376,7 +371,7 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
               return (
                 <span
                   className="text-muted-foreground italic"
-                  title="Excluded by hit-criteria filter or channel QC."
+                  title="Excluded by hit-criteria filter or readout QC."
                 >
                   excluded
                 </span>
@@ -400,21 +395,6 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
         });
 
         if (isDR && isFirstForReadout) {
-          groupChildren.push({
-            headerName: "Class",
-            colId: `${ch.id}_class`,
-            width: 90,
-            sortable: false,
-            cellRenderer: (params: ICellRendererParams<RowData>) => {
-              const r = params.data?.result;
-              const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
-              const curve = m?.source_curve_id ? curveMap.get(m.source_curve_id) : null;
-              return (
-                <CurveClassBadge curveClass={(curve?.curve_class as CurveClass | null) ?? null} />
-              );
-            },
-          });
-
           groupChildren.push({
             headerName: "Curve",
             colId: `${ch.id}_curve`,

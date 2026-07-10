@@ -1,7 +1,6 @@
 "use client";
 
 import { TargetChips } from "@/features/screening-assay/components/target-chips";
-import { TagTable } from "@/features/tagging/components/tag-table";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
@@ -46,8 +45,6 @@ interface HeaderStripProps {
   downloadLabel?: string;
   /** Supersede action — only relevant for closed campaigns that aren't yet superseded. */
   onSupersede?: () => void;
-  /** Whether the current user can edit tags on this campaign. */
-  canEditTags?: boolean;
 }
 
 export function HeaderStrip({
@@ -67,7 +64,6 @@ export function HeaderStrip({
   downloadDisabled,
   downloadLabel,
   onSupersede,
-  canEditTags = false,
 }: HeaderStripProps) {
   const channelCount = campaign.channels?.length ?? 0;
   const compoundCount = campaign.results?.length ?? 0;
@@ -101,7 +97,7 @@ export function HeaderStrip({
         <h1 className="text-xl font-semibold">{campaign.name}</h1>
         <CampaignStatusChip status={campaign.status} />
         <Badge variant="outline" className="text-xs">
-          {channelCount} {channelCount === 1 ? "channel" : "channels"}
+          {channelCount} {channelCount === 1 ? "readout" : "readouts"}
         </Badge>
         <Badge variant="outline" className="text-xs">
           {compoundCount} {compoundCount === 1 ? "compound" : "compounds"}
@@ -188,7 +184,6 @@ export function HeaderStrip({
           )}
         </p>
       )}
-      <TagTable entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />
     </header>
   );
 }

@@ -3,9 +3,9 @@
 import { Button } from "@/shared/components/ui/button";
 import { shortId } from "@/shared/lib/utils";
 import { X } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { CampaignResponse } from "../../types";
-import { AddCompoundsPills } from "../add/add-compounds-pills";
+import { type AddCompoundsKind, AddCompoundsPills } from "../add/add-compounds-pills";
 
 // ── Local type ────────────────────────────────────────────────────────────────
 // The orval-generated `CampaignResponseCompoundSourcesItem` is typed as
@@ -149,6 +149,9 @@ export function SourcesSection({
   onRemoveSource,
 }: SourcesSectionProps) {
   const sources = (campaign.compound_sources ?? []) as SourceEntry[];
+  // Open-state for the add-compounds dialogs is lifted here so the
+  // empty-state "Import from Runs" link can open the run dialog too.
+  const [addOpen, setAddOpen] = useState<AddCompoundsKind | null>(null);
 
   // Build a run_id → {protocol_name, run_date} map from the per-measurement
   // snapshots. We pick the first non-empty snapshot seen for each run_id —
@@ -172,16 +175,32 @@ export function SourcesSection({
   return (
     <section className="border-b px-6 py-4">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className={SECTION_HEADING}>Sources</h2>
-        {!readOnly && <AddCompoundsPills campaign={campaign} projectId={projectId} />}
+        <h2 className={SECTION_HEADING}>Source Compounds</h2>
+        {!readOnly && (
+          <AddCompoundsPills
+            campaign={campaign}
+            projectId={projectId}
+            open={addOpen}
+            onOpenChange={setAddOpen}
+          />
+        )}
       </div>
 
       {sources.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {readOnly
-            ? "No compounds were added to this campaign."
-            : "No compounds yet — add via the pills above."}
-        </p>
+        readOnly ? (
+          <p className="text-sm text-muted-foreground">No compounds were added to this campaign.</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No compounds yet — Import from{" "}
+            <button
+              type="button"
+              onClick={() => setAddOpen("run")}
+              className="font-medium text-primary underline underline-offset-2 hover:opacity-80"
+            >
+              Runs
+            </button>
+          </p>
+        )
       ) : (
         <ul className="space-y-1">
           {sources.map((s, i) => {

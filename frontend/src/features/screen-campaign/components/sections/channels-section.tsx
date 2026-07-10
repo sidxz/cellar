@@ -53,6 +53,9 @@ const ADD_PILL =
 
 export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSectionProps) {
   const [addOpen, setAddOpen] = useState(false);
+  // Mirror-protocol open-state is lifted here so the empty-state
+  // "Mirror protocol" link can open the same popover.
+  const [mirrorOpen, setMirrorOpen] = useState(false);
   const channels = (campaign.channels ?? [])
     .slice()
     .sort((a, b) => a.display_order - b.display_order);
@@ -60,21 +63,26 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
   return (
     <section className="border-b px-6 py-4">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className={SECTION_HEADING}>Channels</h2>
+        <h2 className={SECTION_HEADING}>Readouts</h2>
         {!readOnly && (
           <div className="flex items-center gap-1.5">
-            <MirrorProtocolPopover campaignId={campaign.id} projectId={projectId} />
+            <MirrorProtocolPopover
+              campaignId={campaign.id}
+              projectId={projectId}
+              open={mirrorOpen}
+              onOpenChange={setMirrorOpen}
+            />
             <Popover open={addOpen} onOpenChange={setAddOpen}>
               <PopoverTrigger asChild>
                 <button type="button" className={ADD_PILL}>
-                  <Plus className="h-3 w-3" /> Channel
+                  <Plus className="h-3 w-3" /> Readout
                 </button>
               </PopoverTrigger>
               <PopoverContent
                 align="end"
                 className="w-[420px] p-4 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
               >
-                <h4 className="text-sm font-semibold mb-3">Add channel</h4>
+                <h4 className="text-sm font-semibold mb-3">Add readout</h4>
                 <ChannelPopoverForm
                   campaignId={campaign.id}
                   projectId={projectId}
@@ -87,11 +95,22 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
       </div>
 
       {channels.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {readOnly
-            ? "No channels were configured for this campaign."
-            : "No channels yet — add via the pill above."}
-        </p>
+        readOnly ? (
+          <p className="text-sm text-muted-foreground">
+            No readouts were configured for this campaign.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No readouts yet —{" "}
+            <button
+              type="button"
+              onClick={() => setMirrorOpen(true)}
+              className="font-medium text-primary underline underline-offset-2 hover:opacity-80"
+            >
+              Mirror protocol
+            </button>
+          </p>
+        )
       ) : (
         <ul className="space-y-1">
           {channels.map((c) => (
@@ -180,7 +199,7 @@ function ChannelRow({
             align="end"
             className="w-[420px] p-4 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
           >
-            <h4 className="text-sm font-semibold mb-3">Edit channel</h4>
+            <h4 className="text-sm font-semibold mb-3">Edit readout</h4>
             <ChannelPopoverForm
               campaignId={campaign.id}
               projectId={projectId}
@@ -207,12 +226,16 @@ function ChannelRow({
 function MirrorProtocolPopover({
   campaignId,
   projectId,
+  open,
+  onOpenChange,
 }: {
   campaignId: string;
   projectId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const setOpen = onOpenChange;
   const [protocolId, setProtocolId] = useState<string>("");
   const { data: protocols } = useProtocolSummaries([projectId]);
 
@@ -224,12 +247,12 @@ function MirrorProtocolPopover({
         if (created === 0 && skipped === 0) {
           showError("Protocol has no readouts to mirror");
         } else if (created === 0) {
-          showSuccess(`No new channels — ${skipped} already mirrored`);
+          showSuccess(`No new readouts — ${skipped} already mirrored`);
         } else {
           showSuccess(
             skipped > 0
-              ? `Created ${created} channels (${skipped} already existed)`
-              : `Created ${created} channels`,
+              ? `Created ${created} readouts (${skipped} already existed)`
+              : `Created ${created} readouts`,
           );
         }
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
@@ -262,8 +285,9 @@ function MirrorProtocolPopover({
         <div>
           <h4 className="text-sm font-semibold">Mirror protocol</h4>
           <p className="text-xs text-muted-foreground mt-1">
-            Creates one channel per readout. Multi-intercept dose-response readouts emit one channel
-            per intercept (EC50, EC90, …). Existing channels with a matching key are skipped.
+            Adds a readout here for each of the protocol's readouts. Multi-intercept dose-response
+            readouts emit one per intercept (EC50, EC90, …). Matching readouts already present are
+            skipped.
           </p>
         </div>
         <div className="space-y-1">

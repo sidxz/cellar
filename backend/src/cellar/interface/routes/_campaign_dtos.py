@@ -26,7 +26,7 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     SelectionRule,
 )
-from cellar.domain.research_organization.source_ref import ManualRef
+from cellar.domain.research_organization.source_ref import ManualRef, source_group_key
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.domain.shared.target_ref import TargetRef
 from cellar.interface.routes._target_refs import TargetRefResponse
@@ -379,19 +379,17 @@ def _derive_compound_sources(
     """
     from collections import Counter
 
-    groups: dict[tuple[str, str | None], list[dict[str, Any]]] = {}
+    groups: dict[tuple[Any, ...], dict[str, Any]] = {}
+    # Group by the source's full identity (kind + entity id + description),
+    # not just (kind, description) — otherwise two distinct runs/collections
+    # added without a description collapse into a single row.
+    counts: Counter[tuple[Any, ...]] = Counter()
     for r in results:
         ref = r.added_from if r.added_from is not None else ManualRef()
         d = ref.to_dict()
-        key = (d.get("kind", "manual"), d.get("description"))
+        key = source_group_key(d)
         if key not in groups:
             groups[key] = d
-    # Count
-    counts: Counter[tuple[str, str | None]] = Counter()
-    for r in results:
-        ref = r.added_from if r.added_from is not None else ManualRef()
-        d = ref.to_dict()
-        key = (d.get("kind", "manual"), d.get("description"))
         counts[key] += 1
 
     out: list[dict[str, Any]] = []

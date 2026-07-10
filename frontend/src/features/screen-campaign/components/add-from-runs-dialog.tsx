@@ -637,7 +637,7 @@ function ConfigureStep(p: ConfigureStepProps) {
           {/* Channel configs */}
           {p.channelConfigs.length > 0 && (
             <div className="space-y-2">
-              <Label>Channels (one per readout)</Label>
+              <Label>Readouts</Label>
               <div className="space-y-2">
                 {p.channelConfigs.map((c, idx) => (
                   <div

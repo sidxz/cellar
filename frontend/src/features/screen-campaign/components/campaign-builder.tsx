@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useProject } from "@/features/research-organization/hooks/use-projects";
+import { TagTable } from "@/features/tagging/components/tag-table";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
@@ -130,7 +131,6 @@ function CampaignBuilderV2({
         onRefresh={onRefresh}
         onPreview={() => setPreviewOpen(true)}
         onCloseAndSign={() => setCloseSignOpen(true)}
-        canEditTags={canEditTags}
       />
       <SourcesSection
         campaign={campaign}
@@ -154,6 +154,10 @@ function CampaignBuilderV2({
         readOnly={campaign.status !== "draft"}
       />
       <ResultsGridV2 campaign={campaign} filters={filters} readOnly={campaign.status !== "draft"} />
+
+      <section className="border-t px-6 py-4">
+        <TagTable entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />
+      </section>
 
       <PreviewAsPublishedDialog
         campaignId={campaign.id}

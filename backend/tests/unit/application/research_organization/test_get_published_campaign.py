@@ -33,6 +33,7 @@ from cellar.domain.research_organization.enums import (
 from cellar.domain.research_organization.source_ref import (
     CollectionRef,
     ManualRef,
+    RunRef,
 )
 from cellar.domain.shared.errors import (
     AuthorizationError,
@@ -393,6 +394,34 @@ class TestGetPublishedCampaign:
         assert len(sources) == 2
         counts = sorted(s["count"] for s in sources)
         assert counts == [2, 2]
+
+    # ------------------------------------------------------------------
+    # 4b. compound_sources — two different runs, no description → 2 entries
+    #     Reproduces the production case: the add-run wizard records a
+    #     RunRef with description=None, so distinct runs MUST still be
+    #     told apart by run_id, not collapsed under ("run", None).
+    # ------------------------------------------------------------------
+    @pytest.mark.asyncio
+    async def test_compound_sources_two_runs_no_description(self) -> None:
+        auth = fake_auth()
+        run_a = uuid.uuid4()
+        run_b = uuid.uuid4()
+        ref_a = RunRef(run_id=run_a)  # description defaults to None
+        ref_b = RunRef(run_id=run_b)
+        campaign, _ = _make_closed_campaign(auth.workspace_id, n_results=3)
+        campaign.results[0].added_from = ref_a
+        campaign.results[1].added_from = ref_b
+        campaign.results[2].added_from = ref_b
+
+        uc, _ = _build_use_case(campaign)
+        q = _make_query(auth.workspace_id, campaign.id)
+        out = await uc(q, auth=auth)
+
+        sources = out.unwrap()["compound_sources"]
+        assert len(sources) == 2
+        # DAIKON shape nests the entity id under "ref".
+        by_run = {s["ref"].get("run_id"): s["count"] for s in sources}
+        assert by_run == {str(run_a): 1, str(run_b): 2}
 
     # ------------------------------------------------------------------
     # 5. compound_sources — all manual (added_from=None) → single entry

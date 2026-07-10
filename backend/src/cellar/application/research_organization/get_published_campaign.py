@@ -30,7 +30,7 @@ from cellar.domain.research_organization.repository import (
     CollectionRepository,
     ProjectRepository,
 )
-from cellar.domain.research_organization.source_ref import ManualRef
+from cellar.domain.research_organization.source_ref import ManualRef, source_group_key
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import (
     DomainError,
@@ -286,22 +286,20 @@ def _derive_compound_sources(results: list[Any]) -> list[dict[str, Any]]:
     for r in results:
         added_from = getattr(r, "added_from", None)
         if added_from is None or isinstance(added_from, ManualRef):
-            key = ("manual", None, None)
-            if key not in groups:
-                groups[key] = {"kind": "manual", "ref": {}, "description": None, "count": 0}
-            groups[key]["count"] += 1
+            d = {"kind": "manual", "description": None}
         else:
             d = added_from.to_dict()
-            kind = d.get("kind", "unknown")
-            description = d.get("description")
-            # Build a canonical ref dict (everything except kind and description).
-            ref = {k: v for k, v in d.items() if k not in ("kind", "description")}
-            # Freeze ref for use as dict key
-            frozen_ref = tuple(sorted(ref.items()))
-            key = (kind, frozen_ref, description)
-            if key not in groups:
-                groups[key] = {"kind": kind, "ref": ref, "description": description, "count": 0}
-            groups[key]["count"] += 1
+        kind = d.get("kind", "unknown")
+        description = d.get("description")
+        # Canonical ref dict (everything except kind and description).
+        ref = {k: v for k, v in d.items() if k not in ("kind", "description")}
+        # Shared identity key — distinguishes two runs/collections that
+        # differ only by entity id (description=None), and stays hashable
+        # for list-valued refs like CampaignRef.decision_filter.
+        key = source_group_key(d)
+        if key not in groups:
+            groups[key] = {"kind": kind, "ref": ref, "description": description, "count": 0}
+        groups[key]["count"] += 1
 
     return list(groups.values())
 

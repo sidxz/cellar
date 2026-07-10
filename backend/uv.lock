@@ -229,7 +229,7 @@ requires-dist = [
     { name = "redis", specifier = ">=5.2.0" },
     { name = "returns", specifier = ">=0.23.0" },
     { name = "scipy", specifier = ">=1.14.0" },
-    { name = "sentinel-auth-sdk", specifier = ">=0.13.1" },
+    { name = "sentinel-auth-sdk", specifier = ">=0.15.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.36" },
     { name = "structlog", specifier = ">=24.4.0" },
     { name = "temporalio", specifier = ">=1.9.0" },
@@ -2166,7 +2166,7 @@ wheels = [
 
 [[package]]
 name = "sentinel-auth-sdk"
-version = "0.13.1"
+version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -2176,9 +2176,9 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "starlette" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1a/56/3ea9491e2d5f929ded38f686075d6bc79bc10bcfa24ff29ca5248a4a88c5/sentinel_auth_sdk-0.13.1.tar.gz", hash = "sha256:3bd779e021c15c6e868895f4cabd222532d27f4ff317373728920c69ae2f8181", size = 24704, upload-time = "2026-06-20T13:54:20.098Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/62/0e/f62cfbd0570a2dfc5773db149a9e47b6582453f299490ddfe4f16445eca9/sentinel_auth_sdk-0.15.0.tar.gz", hash = "sha256:3fbe1412e2fed91f34f31b1d232e6683913e8066e26ac5db2e584144964c2351", size = 32487, upload-time = "2026-07-10T17:17:07.585Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/a5/daf3cb998006f787f2ffc60d8a9346124e9967d50050ed197c90619b584e/sentinel_auth_sdk-0.13.1-py3-none-any.whl", hash = "sha256:7a74354ccea5ea90eaabc76a2810765781d785f0e7fe830600b29c8b51c16dee", size = 21690, upload-time = "2026-06-20T13:54:18.99Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/af/8350f6b1bb0c9cf14e9094efa12d8f026c5f4deead1745e9159198a0c64a/sentinel_auth_sdk-0.15.0-py3-none-any.whl", hash = "sha256:9358328fd10f15dcf4fc224a103eab5d344813dc84e9a563d016f3742d83e59e", size = 25057, upload-time = "2026-07-10T17:17:06.32Z" },
 ]
 
 [[package]]
