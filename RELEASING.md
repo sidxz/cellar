@@ -50,7 +50,7 @@ frontend is compatible.
 ## Where the version shows up
 
 - **App footer:** `UI v<version>` (sidebar), from the baked image.
-- **About dialog** (user menu → About): UI version + commit + build date, the
+- **About card** (`/settings` → About): UI version + commit + build date, the
   live **API** version (fetched from `GET /version`), and the environment.
 - **Backend `GET /version`:** unauthenticated JSON
   `{name, version, git_sha, build_date, environment}` — handy for `curl`/monitoring.

@@ -20,4 +20,10 @@ describe("font-scale-store", () => {
     useFontScaleStore.getState().reset();
     expect(useFontScaleStore.getState().scale).toBe(FONT_SCALE_DEFAULT);
   });
+
+  it("clamps an out-of-range persisted value on rehydrate", async () => {
+    localStorage.setItem("ds-font-scale", JSON.stringify({ state: { scale: 500 }, version: 0 }));
+    await useFontScaleStore.persist.rehydrate();
+    expect(useFontScaleStore.getState().scale).toBe(120);
+  });
 });

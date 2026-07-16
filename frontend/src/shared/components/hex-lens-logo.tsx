@@ -1,3 +1,5 @@
+"use client";
+
 import { useId } from "react";
 
 /** Brand mark — magnifier whose lens is a benzene ring: chemical search.

@@ -72,7 +72,7 @@ Auth delegated to Sentinel (external, `~/workspace/identity-service/`).
 
 - **To release:** `git tag backend-vX.Y.Z` (or `frontend-vX.Y.Z`) and push it. The namespace picks the component. Bump per Conventional Commits: `fix:`→patch, `feat:`→minor, `feat!:`/`BREAKING CHANGE:`→major.
 - **CI then auto** (`.github/workflows/publish-images.yml`): builds **only** that component, tags the image `X.Y.Z`/`X.Y`/`X`, bakes `APP_VERSION`/`GIT_SHA`/`BUILD_DATE` into it, and publishes a git-cliff changelog as a GitHub Release. Deploy (pull the new tag) is still manual.
-- **Never bump** `pyproject.toml` / `package.json` to release — they're non-authoritative dev fallbacks. Version shows in-app (sidebar footer + user-menu → About) and at `GET /version`. `environment` comes from `APP_ENV`.
+- **Never bump** `pyproject.toml` / `package.json` to release — they're non-authoritative dev fallbacks. Version shows in-app (sidebar footer + /settings → About card) and at `GET /version`. `environment` comes from `APP_ENV`.
 
 ---
 

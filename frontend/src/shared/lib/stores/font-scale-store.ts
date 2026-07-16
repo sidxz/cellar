@@ -27,6 +27,18 @@ export const useFontScaleStore = create<FontScaleState>()(
         set({ scale: Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, scale)) }),
       reset: () => set({ scale: FONT_SCALE_DEFAULT }),
     }),
-    { name: STORAGE_KEY },
+    {
+      name: STORAGE_KEY,
+      merge: (persisted, current) => {
+        const scale = (persisted as Partial<FontScaleState> | undefined)?.scale;
+        return {
+          ...current,
+          scale:
+            typeof scale === "number"
+              ? Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, scale))
+              : current.scale,
+        };
+      },
+    },
   ),
 );
