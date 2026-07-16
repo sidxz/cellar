@@ -4,6 +4,7 @@ import { Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { HexLensLogo } from "@/shared/components/hex-lens-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -15,17 +16,34 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/shared/components/ui/sidebar";
+import { useAuthz } from "@sentinel-auth/nextjs";
 import { AppVersionTag } from "./app-version-tag";
 import { NavMain } from "./nav-main";
-import { WorkspaceSwitcher } from "./workspace-switcher";
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
+  const { user } = useAuthz();
 
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <WorkspaceSwitcher />
+        {/* Static brand block (docustore style) — workspace shown, not switchable */}
+        <div className="flex items-center gap-2 px-2 py-1.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+          <div className="flex size-8 shrink-0 items-center justify-center">
+            <HexLensLogo className="size-8" />
+          </div>
+          <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+            <span
+              className="truncate text-[15px] font-medium tracking-tight text-sidebar-text-active"
+              style={{ fontFamily: "var(--font-overused-grotesk), ui-sans-serif, sans-serif" }}
+            >
+              ChemCellar
+            </span>
+            <span className="truncate text-xs uppercase tracking-widest text-sidebar-text opacity-60">
+              {user?.workspaceSlug ?? ""}
+            </span>
+          </div>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <NavMain />

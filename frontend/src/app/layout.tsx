@@ -37,7 +37,7 @@ const overusedGrotesk = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Cellar",
+  title: "ChemCellar",
   description: "Chemical compound management & screening platform",
 };
 
