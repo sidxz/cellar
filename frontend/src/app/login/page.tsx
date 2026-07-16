@@ -2,6 +2,7 @@
 
 import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
 import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
+import { HexLensLogo } from "@/shared/components/hex-lens-logo";
 import { useAppConfig } from "@/shared/lib/app-config";
 import { useAuthz } from "@sentinel-auth/nextjs";
 import { useRouter } from "next/navigation";
@@ -63,7 +64,10 @@ export default function LoginPage() {
           className="flex flex-col items-end px-8 pt-8"
           style={{ animation: "auth-enter 0.7s ease-out 0.1s both" }}
         >
-          <h1 className="text-lg font-semibold tracking-tight">Cellar</h1>
+          <div className="flex items-center gap-2">
+            <HexLensLogo className="size-6" />
+            <h1 className="text-lg font-semibold tracking-tight">Cellar</h1>
+          </div>
           <a
             href="https://www.chemcellar.com"
             target="_blank"

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .handle { stroke: #0b0b0d; }
+    @media (prefers-color-scheme: dark) { .handle { stroke: #e7e7ea; } }
+  </style>
+  <defs>
+    <linearGradient id="lens" gradientUnits="userSpaceOnUse" x1="7.5" y1="21.5" x2="20.5" y2="6.5">
+      <stop offset="0" stop-color="#37d7fa"/>
+      <stop offset="0.4" stop-color="#4b72fe"/>
+      <stop offset="0.68" stop-color="#ff8df2"/>
+      <stop offset="1" stop-color="#ff8705"/>
+    </linearGradient>
+  </defs>
+  <polygon points="14,6.5 20.5,10.25 20.5,17.75 14,21.5 7.5,17.75 7.5,10.25" fill="none" stroke="url(#lens)" stroke-width="2.4"/>
+  <line class="handle" x1="20.3" y1="17.55" x2="26.1" y2="23.35" stroke-width="3.2"/>
+</svg>
