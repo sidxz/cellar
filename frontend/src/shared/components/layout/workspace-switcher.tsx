@@ -90,17 +90,18 @@ export function WorkspaceSwitcher() {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <div className="flex aspect-square size-8 items-center justify-center">
-                <HexLensLogo className="size-7" />
+              {/* wrapper keeps the svg out of SidebarMenuButton's [&>svg]:size-4 reach */}
+              <div className="flex size-8 shrink-0 items-center justify-center">
+                <HexLensLogo className="size-8" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span
-                  className="truncate text-[15px] font-medium tracking-tight"
+                  className="truncate text-[15px] font-medium tracking-tight text-sidebar-text-active"
                   style={{ fontFamily: "var(--font-overused-grotesk), ui-sans-serif, sans-serif" }}
                 >
                   ChemCellar
                 </span>
-                <span className="truncate text-xs uppercase tracking-widest text-muted-foreground">
+                <span className="truncate text-xs uppercase tracking-widest text-sidebar-text opacity-60">
                   {currentWorkspace}
                 </span>
               </div>
