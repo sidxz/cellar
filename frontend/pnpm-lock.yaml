@@ -15,14 +15,14 @@ importers:
         specifier: 2025.3.4-1.0.0
         version: 2025.3.4-1.0.0
       '@sentinel-auth/js':
-        specifier: ^0.15.0
-        version: 0.15.0
+        specifier: ^0.17.0
+        version: 0.17.0
       '@sentinel-auth/nextjs':
-        specifier: ^0.15.0
-        version: 0.15.0(@sentinel-auth/js@0.15.0)(@sentinel-auth/react@0.15.0(@sentinel-auth/js@0.15.0)(react@19.2.4))(next@16.2.2(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
+        specifier: ^0.17.0
+        version: 0.17.0(@sentinel-auth/js@0.17.0)(@sentinel-auth/react@0.17.0(@sentinel-auth/js@0.17.0)(react@19.2.4))(next@16.2.2(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)
       '@sentinel-auth/react':
-        specifier: ^0.15.0
-        version: 0.15.0(@sentinel-auth/js@0.15.0)(react@19.2.4)
+        specifier: ^0.17.0
+        version: 0.17.0(@sentinel-auth/js@0.17.0)(react@19.2.4)
       '@structflo/daikon-design-tokens':
         specifier: ^1.0.0
         version: 1.0.0
@@ -981,6 +981,10 @@ packages:
   '@mapbox/jsonlint-lines-primitives@2.0.2':
     resolution: {integrity: sha512-rY0o9A5ECsTQRVhv7tL/OyDpGAoUB4tTvLiW1DSzQGq4bvTPhNw1VpSNjDJc5GFZ2XuyOtSWSVN05qOtcD71qQ==}
     engines: {node: '>= 0.6'}
+
+  '@mapbox/jsonlint-lines-primitives@2.0.3':
+    resolution: {integrity: sha512-0SElaV0uMxEnxzBhhX9WTuPyUeMsAN/SS0i16tjuba4/mio63MG9khjC1a0JAiPGXAwvwm4UfHJURCN7nyudQg==}
+    engines: {node: '>= 22'}
 
   '@mapbox/mapbox-gl-supported@1.5.0':
     resolution: {integrity: sha512-/PT1P6DNf7vjEEiPkVIRJkvibbqWtqnyGaBz3nfRdcxclNSnSdaLU5tfAgcD7I8Yt5i+L19s406YLl1koLnLbg==}
@@ -2065,21 +2069,21 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sentinel-auth/js@0.15.0':
-    resolution: {integrity: sha512-5n5/2Ttm9YOutXPksniw/YWT80Uj5UjPgZobHtp2bY2MOWF0Ubxzj7FV3w6HtzHsBf2dmiPl+gsx9PWdB7EBvA==}
+  '@sentinel-auth/js@0.17.0':
+    resolution: {integrity: sha512-sHXo/dBydQJMIZku81x7FAhbeKTFLEzDYssx0O+f2WghtfxkAqSma1ej4jcEdoPynYWvIKaMqX5Ti3GEecDrEg==}
 
-  '@sentinel-auth/nextjs@0.15.0':
-    resolution: {integrity: sha512-e+eY2CkpAM4ZXyx4kAcu9V8L7Tfl6kEHXww+oHkH/8P7YFVIRh3/clonopuCgxkE/vwlkuf4UDd9Pm3fxN/3tA==}
+  '@sentinel-auth/nextjs@0.17.0':
+    resolution: {integrity: sha512-1ux0ezgDBRIlY+MyVBv0VZfvSbKwwmB78QrlrppiJHsXlaa33fdJdPEfrXmtvDuVMi77OldnPAhLYpS6xtPA2w==}
     peerDependencies:
-      '@sentinel-auth/js': ^0.15.0
-      '@sentinel-auth/react': ^0.15.0
+      '@sentinel-auth/js': ^0.17.0
+      '@sentinel-auth/react': ^0.17.0
       next: ^14.0.0 || ^15.0.0 || ^16.0.0
       react: ^18.0.0 || ^19.0.0
 
-  '@sentinel-auth/react@0.15.0':
-    resolution: {integrity: sha512-JZX9aqWA7arx6IBEW4uhLLXIgxkalWMHD9XlHytWMJCiWKQuhL4fIiYXKa03oJ28Aj8vLaHVG83DBybdqhVXnQ==}
+  '@sentinel-auth/react@0.17.0':
+    resolution: {integrity: sha512-gQdXk3Uiav/L76z8i9pruRinCWxI4qYbZaqqwRTZOpaYMS281urgZjK3TkczP2rFePQAs7fJlQRqCYmFaawpUw==}
     peerDependencies:
-      '@sentinel-auth/js': ^0.15.0
+      '@sentinel-auth/js': ^0.17.0
       react: ^18.0.0 || ^19.0.0
 
   '@shikijs/engine-oniguruma@3.23.0':
@@ -6505,6 +6509,8 @@ snapshots:
 
   '@mapbox/jsonlint-lines-primitives@2.0.2': {}
 
+  '@mapbox/jsonlint-lines-primitives@2.0.3': {}
+
   '@mapbox/mapbox-gl-supported@1.5.0(mapbox-gl@1.13.3)':
     dependencies:
       mapbox-gl: 1.13.3
@@ -7673,20 +7679,20 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.60.1':
     optional: true
 
-  '@sentinel-auth/js@0.15.0':
+  '@sentinel-auth/js@0.17.0':
     dependencies:
       jose: 5.10.0
 
-  '@sentinel-auth/nextjs@0.15.0(@sentinel-auth/js@0.15.0)(@sentinel-auth/react@0.15.0(@sentinel-auth/js@0.15.0)(react@19.2.4))(next@16.2.2(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)':
+  '@sentinel-auth/nextjs@0.17.0(@sentinel-auth/js@0.17.0)(@sentinel-auth/react@0.17.0(@sentinel-auth/js@0.17.0)(react@19.2.4))(next@16.2.2(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)':
     dependencies:
-      '@sentinel-auth/js': 0.15.0
-      '@sentinel-auth/react': 0.15.0(@sentinel-auth/js@0.15.0)(react@19.2.4)
+      '@sentinel-auth/js': 0.17.0
+      '@sentinel-auth/react': 0.17.0(@sentinel-auth/js@0.17.0)(react@19.2.4)
       next: 16.2.2(@babel/core@7.29.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       react: 19.2.4
 
-  '@sentinel-auth/react@0.15.0(@sentinel-auth/js@0.15.0)(react@19.2.4)':
+  '@sentinel-auth/react@0.17.0(@sentinel-auth/js@0.17.0)(react@19.2.4)':
     dependencies:
-      '@sentinel-auth/js': 0.15.0
+      '@sentinel-auth/js': 0.17.0
       react: 19.2.4
 
   '@shikijs/engine-oniguruma@3.23.0':
@@ -10218,7 +10224,7 @@ snapshots:
     dependencies:
       '@mapbox/geojson-rewind': 0.5.2
       '@mapbox/geojson-types': 1.0.2
-      '@mapbox/jsonlint-lines-primitives': 2.0.2
+      '@mapbox/jsonlint-lines-primitives': 2.0.3
       '@mapbox/mapbox-gl-supported': 1.5.0(mapbox-gl@1.13.3)
       '@mapbox/point-geometry': 0.1.0
       '@mapbox/tiny-sdf': 1.2.5
