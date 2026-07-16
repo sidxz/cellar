@@ -17,7 +17,6 @@ import {
 } from "@/shared/components/ui/sidebar";
 import { AppVersionTag } from "./app-version-tag";
 import { NavMain } from "./nav-main";
-import { UserMenu } from "./user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
@@ -32,7 +31,6 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <NavMain />
       </SidebarContent>
       <SidebarFooter>
-        <UserMenu />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname === "/settings"} tooltip="Settings">
