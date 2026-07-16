@@ -67,7 +67,7 @@ export default function LoginPage() {
           <div className="flex items-center gap-3">
             <HexLensLogo className="size-12" />
             <h1
-              className="text-lg font-medium tracking-tight"
+              className="text-3xl font-medium tracking-tight"
               style={{ fontFamily: "var(--font-overused-grotesk), ui-sans-serif, sans-serif" }}
             >
               ChemCellar
