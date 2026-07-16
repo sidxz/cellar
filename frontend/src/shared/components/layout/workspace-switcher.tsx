@@ -16,7 +16,7 @@ import {
   useSidebar,
 } from "@/shared/components/ui/sidebar";
 import { useAuthz } from "@sentinel-auth/nextjs";
-import { Check, ChevronsUpDown, FlaskConical } from "lucide-react";
+import { Check, FlaskConical } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 interface WorkspaceOption {
@@ -90,14 +90,15 @@ export function WorkspaceSwitcher() {
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <HexLensLogo className="size-5" />
+              <div className="flex aspect-square size-8 items-center justify-center">
+                <HexLensLogo className="size-7" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">Cellar</span>
-                <span className="truncate text-xs text-muted-foreground">{currentWorkspace}</span>
+                <span className="truncate font-semibold">ChemCellar</span>
+                <span className="truncate text-xs uppercase tracking-wider text-muted-foreground">
+                  {currentWorkspace}
+                </span>
               </div>
-              <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
