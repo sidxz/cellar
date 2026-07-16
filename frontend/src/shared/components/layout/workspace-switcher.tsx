@@ -94,8 +94,13 @@ export function WorkspaceSwitcher() {
                 <HexLensLogo className="size-7" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">ChemCellar</span>
-                <span className="truncate text-xs uppercase tracking-wider text-muted-foreground">
+                <span
+                  className="truncate text-[15px] font-medium tracking-tight"
+                  style={{ fontFamily: "var(--font-overused-grotesk), ui-sans-serif, sans-serif" }}
+                >
+                  ChemCellar
+                </span>
+                <span className="truncate text-xs uppercase tracking-widest text-muted-foreground">
                   {currentWorkspace}
                 </span>
               </div>
