@@ -42,7 +42,7 @@ export default function RootLayout({
         <script
           // biome-ignore lint/security/noDangerouslySetInnerHtml: anti-flash theme/font bootstrap must run before paint
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var g=JSON.parse(localStorage.getItem('ds-font')||'{}');document.documentElement.setAttribute('data-font',(g.state&&g.state.font)||'plex')}catch(e){document.documentElement.setAttribute('data-font','plex')}})()`,
+            __html: `(function(){try{var g=JSON.parse(localStorage.getItem('ds-font')||'{}');document.documentElement.setAttribute('data-font',(g.state&&g.state.font)||'plex')}catch(e){document.documentElement.setAttribute('data-font','plex')}try{var s=JSON.parse(localStorage.getItem('ds-font-scale')||'{}');var sc=s.state&&s.state.scale;if(sc&&sc!==100){document.documentElement.style.fontSize=sc+'%'}}catch(e){}})()`,
           }}
         />
       </head>
