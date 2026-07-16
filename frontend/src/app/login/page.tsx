@@ -64,9 +64,14 @@ export default function LoginPage() {
           className="flex flex-col items-end px-8 pt-8"
           style={{ animation: "auth-enter 0.7s ease-out 0.1s both" }}
         >
-          <div className="flex items-center gap-2">
-            <HexLensLogo className="size-6" />
-            <h1 className="text-lg font-semibold tracking-tight">Cellar</h1>
+          <div className="flex items-center gap-3">
+            <HexLensLogo className="size-12" />
+            <h1
+              className="text-lg font-medium tracking-tight"
+              style={{ fontFamily: "var(--font-overused-grotesk), ui-sans-serif, sans-serif" }}
+            >
+              ChemCellar
+            </h1>
           </div>
           <a
             href="https://www.chemcellar.com"
