@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Header } from "./header";
 
@@ -19,7 +19,16 @@ vi.mock("next/navigation", () => ({
 vi.mock("./theme-toggle", () => ({ ThemeToggle: () => null }));
 vi.mock("./font-size-control", () => ({ FontSizeControl: () => null }));
 
+function openUserMenu() {
+  fireEvent.keyDown(screen.getByRole("button", { name: /account menu/i }), { key: "Enter" });
+}
+
 describe("Header", () => {
+  beforeEach(() => {
+    logoutMock.mockClear();
+    localStorage.clear();
+  });
+
   it("shows the signed-in user's identity", () => {
     render(<Header />);
     expect(screen.getByText("AL")).toBeInTheDocument(); // initials
@@ -27,9 +36,19 @@ describe("Header", () => {
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
   });
 
-  it("signs out via the standalone logout button", () => {
+  it("signs out via the user menu", () => {
     render(<Header />);
-    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    openUserMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /sign out/i }));
+    expect(logoutMock).toHaveBeenCalled();
+  });
+
+  it("Switch workspace forgets the remembered workspace, then logs out", () => {
+    localStorage.setItem("cellar.lastWorkspaceId", "ws-1");
+    render(<Header />);
+    openUserMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /switch workspace/i }));
+    expect(localStorage.getItem("cellar.lastWorkspaceId")).toBeNull();
     expect(logoutMock).toHaveBeenCalled();
   });
 });

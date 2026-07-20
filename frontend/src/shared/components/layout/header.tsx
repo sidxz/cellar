@@ -1,11 +1,20 @@
 "use client";
 
 import { useAuthz } from "@sentinel-auth/nextjs";
-import { LogOut, Search } from "lucide-react";
+import { Building2, ChevronDown, LogOut, Search } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";
 import { Button } from "@/shared/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Separator } from "@/shared/components/ui/separator";
+import { forgetWorkspace } from "@/shared/lib/auth/workspace-memory";
 import { useCommandPaletteStore } from "@/shared/lib/stores/command-palette-store";
 import { Breadcrumbs } from "./breadcrumbs";
 import { FontSizeControl } from "./font-size-control";
@@ -43,25 +52,44 @@ export function Header() {
         <FontSizeControl />
         <ThemeToggle />
         <Separator orientation="vertical" className="mx-1.5 data-[orientation=vertical]:h-5" />
-        <div className="flex items-center gap-2">
-          <Avatar className="size-7 rounded-lg">
-            <AvatarFallback className="rounded-lg text-xs">{initials}</AvatarFallback>
-          </Avatar>
-          <div className="hidden flex-col text-left leading-tight sm:flex">
-            <span className="text-xs font-medium">{user?.name ?? "User"}</span>
-            <span className="text-[10px] text-muted-foreground">{user?.email ?? ""}</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={logout}
-            aria-label="Sign out"
-            title="Sign out"
-          >
-            <LogOut className="size-4" />
-          </Button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-auto gap-2 px-2 py-1">
+              <span className="sr-only">Account menu</span>
+              <Avatar className="size-7 rounded-lg">
+                <AvatarFallback className="rounded-lg text-xs">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="hidden flex-col text-left leading-tight sm:flex">
+                <span className="text-xs font-medium">{user?.name ?? "User"}</span>
+                <span className="text-[10px] text-muted-foreground">{user?.email ?? ""}</span>
+              </div>
+              <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>
+              <p className="truncate text-sm font-medium">{user?.name ?? "User"}</p>
+              <p className="truncate text-xs font-normal text-muted-foreground">
+                {user?.email ?? ""}
+              </p>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                // Forget the remembered workspace so the next sign-in shows the picker.
+                forgetWorkspace();
+                logout();
+              }}
+            >
+              <Building2 />
+              Switch workspace
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onSelect={() => logout()}>
+              <LogOut />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );
