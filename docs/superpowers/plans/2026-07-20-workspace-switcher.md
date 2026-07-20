@@ -493,6 +493,7 @@ Replace the "## Files touched" section body with:
 - **New:** `frontend/src/app/auth/callback/workspace-selector.test.tsx`
 - `frontend/src/app/auth/callback/page.tsx`
 - `frontend/src/shared/components/layout/header.tsx`
+- `frontend/src/shared/components/layout/header.test.tsx` (updated to the menu structure)
 ```
 
 - [ ] **Step 3: Commit spec sync**
