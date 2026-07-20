@@ -252,13 +252,82 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>" -- frontend/src/shared/l
 ### Task 2: Header user menu with "Switch workspace"
 
 **Files:**
+- Modify: `frontend/src/shared/components/layout/header.test.tsx` (exists — currently asserts the standalone logout button)
 - Modify: `frontend/src/shared/components/layout/header.tsx` (full rewrite below; currently 68 lines)
 
 **Interfaces:**
 - Consumes: `forgetWorkspace()` from `@/shared/lib/auth/workspace-memory` (Task 1); shadcn `dropdown-menu` (already at `frontend/src/shared/components/ui/dropdown-menu.tsx`, its `DropdownMenuItem` supports `variant="destructive"`).
 - Produces: nothing consumed later — final chrome change.
 
-- [ ] **Step 1: Rewrite header.tsx**
+- [ ] **Step 1: Update the header test to the new menu structure (RED)**
+
+Replace the entire contents of `frontend/src/shared/components/layout/header.test.tsx` with:
+
+```tsx
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { Header } from "./header";
+
+const logoutMock = vi.fn();
+
+vi.mock("@sentinel-auth/nextjs", () => ({
+  useAuthz: () => ({
+    user: { name: "Ada Lovelace", email: "ada@example.com" },
+    logout: logoutMock,
+  }),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+}));
+
+vi.mock("./theme-toggle", () => ({ ThemeToggle: () => null }));
+vi.mock("./font-size-control", () => ({ FontSizeControl: () => null }));
+
+function openUserMenu() {
+  fireEvent.pointerDown(screen.getByRole("button", { name: /account menu/i }));
+}
+
+describe("Header", () => {
+  beforeEach(() => {
+    logoutMock.mockClear();
+    localStorage.clear();
+  });
+
+  it("shows the signed-in user's identity", () => {
+    render(<Header />);
+    expect(screen.getByText("AL")).toBeInTheDocument(); // initials
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("ada@example.com")).toBeInTheDocument();
+  });
+
+  it("signs out via the user menu", () => {
+    render(<Header />);
+    openUserMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /sign out/i }));
+    expect(logoutMock).toHaveBeenCalled();
+  });
+
+  it("Switch workspace forgets the remembered workspace, then logs out", () => {
+    localStorage.setItem("cellar.lastWorkspaceId", "ws-1");
+    render(<Header />);
+    openUserMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /switch workspace/i }));
+    expect(localStorage.getItem("cellar.lastWorkspaceId")).toBeNull();
+    expect(logoutMock).toHaveBeenCalled();
+  });
+});
+```
+
+Note: Radix menus open on pointerdown. If `fireEvent.pointerDown` does not open the menu under jsdom, use `fireEvent.keyDown(screen.getByRole("button", { name: /account menu/i }), { key: "Enter" })` in `openUserMenu` instead.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pnpm test header` (from `frontend/`)
+Expected: FAIL — no button named /account menu/ and no menuitems yet (old flat cluster still rendered).
+
+- [ ] **Step 3: Rewrite header.tsx (GREEN)**
 
 Replace the entire contents of `frontend/src/shared/components/layout/header.tsx` with:
 
@@ -363,19 +432,24 @@ export function Header() {
 
 What changed vs the old file: the flat avatar + name/email + standalone sign-out icon button cluster became a `DropdownMenu` (trigger keeps the same avatar/name/email look, plus a chevron); menu = name/email label, separator, "Switch workspace" (`forgetWorkspace(); logout();`), destructive "Sign out". Everything else (breadcrumbs, ⌘K search, font size, theme toggle) is untouched.
 
-- [ ] **Step 2: Lint + full test suite**
+- [ ] **Step 4: Run header tests to verify they pass**
+
+Run: `pnpm test header` (from `frontend/`)
+Expected: PASS — 3 tests.
+
+- [ ] **Step 5: Lint + full test suite**
 
 Run: `pnpm lint && pnpm test` (from `frontend/`)
-Expected: both exit 0; full suite green (no test asserts on the old header cluster — verify no failures mention `header`).
+Expected: both exit 0; full suite green.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 cd /Users/sidx/workspace/chem-vault2
-git add frontend/src/shared/components/layout/header.tsx
+git add frontend/src/shared/components/layout/header.tsx frontend/src/shared/components/layout/header.test.tsx
 git commit -m "feat(frontend): header user menu with Switch workspace (daikon parity)
 
-Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>" -- frontend/src/shared/components/layout/header.tsx
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>" -- frontend/src/shared/components/layout/header.tsx frontend/src/shared/components/layout/header.test.tsx
 ```
 
 ---
