@@ -3,10 +3,10 @@
 import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
 import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
 import { HexLensLogo } from "@/shared/components/hex-lens-logo";
-import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { AuthzCallback } from "@sentinel-auth/nextjs";
 import { useRouter } from "next/navigation";
+import { WorkspaceSelector } from "./workspace-selector";
 
 export default function CallbackPage() {
   const router = useRouter();
@@ -63,27 +63,7 @@ export default function CallbackPage() {
                     </div>
                   </div>
                 }
-                workspaceSelector={({ workspaces, onSelect, isLoading: selecting }) => (
-                  <div>
-                    <h2 className="text-sm font-medium text-muted-foreground">
-                      Select workspace to continue
-                    </h2>
-                    <div className="mt-4 space-y-2">
-                      {workspaces.map((ws) => (
-                        <Button
-                          key={ws.id}
-                          variant="outline"
-                          className="w-full justify-start rounded-[11px]"
-                          disabled={selecting}
-                          onClick={() => onSelect(ws.id)}
-                        >
-                          <span className="truncate">{ws.name}</span>
-                          <span className="ml-auto text-xs text-muted-foreground">{ws.role}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                workspaceSelector={(props) => <WorkspaceSelector {...props} />}
               />
             </div>
           </div>
