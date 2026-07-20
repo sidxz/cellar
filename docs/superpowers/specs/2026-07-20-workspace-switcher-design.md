@@ -49,6 +49,10 @@ silent reauth re-mints into the same workspace. This already works in Cellar tod
 - Why not reuse the SDK's `sentinel_workspace_id`: `logout()` wipes it, so it cannot
   carry continuity across login cycles. Surviving logout is the entire feature, and
   "Switch workspace" deletes the key deliberately.
+- The memory is per-browser, not per-user: on a shared machine, the next person to sign
+  in auto-enters the previous user's remembered workspace if they are also a member of
+  it (the mint always runs against the signer-in's own membership, so this is authorized
+  by design). Accepted — daikon parity.
 
 ### 2. Callback picker guard
 
