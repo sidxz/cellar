@@ -1,7 +1,7 @@
 # Workspace Switcher & Login Continuity — Design
 
 **Date:** 2026-07-20
-**Status:** Approved (in-session design review)
+**Status:** Implemented (2026-07-20, chrome-harmonization branch)
 **Scope:** Frontend only. No backend changes, no new dependencies.
 
 ## Problem
@@ -98,5 +98,10 @@ chevron affordance:
 ## Files touched
 
 - **New:** `frontend/src/shared/lib/auth/workspace-memory.ts`
+- **New:** `frontend/src/app/auth/callback/workspace-selector.tsx` (guard extracted to its
+  own file — not inline in `page.tsx` as originally written — so the component test can
+  import it without pulling the whole page)
+- **New:** `frontend/src/app/auth/callback/workspace-selector.test.tsx`
 - `frontend/src/app/auth/callback/page.tsx`
 - `frontend/src/shared/components/layout/header.tsx`
+- `frontend/src/shared/components/layout/header.test.tsx` (updated to the menu structure)
