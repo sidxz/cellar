@@ -1,7 +1,7 @@
 "use client";
 
 import type { AuthzWorkspaceSelectorProps } from "@sentinel-auth/nextjs";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
@@ -16,14 +16,20 @@ export function WorkspaceSelector({
 }: AuthzWorkspaceSelectorProps) {
   const [decision, setDecision] = useState<Decision>({ kind: "pending" });
 
+  // Dev StrictMode re-runs the mount effect before the decision state is visible;
+  // the ref keeps the auto-select mint from firing twice (same pattern as the SDK's
+  // own single-workspace auto-select guard).
+  const autoFiredRef = useRef(false);
+
   // Skip the picker when the remembered workspace is still available —
   // "Switch workspace" in the header menu forgets it and brings the picker back.
   // One-time decision made in an effect: localStorage is client-only, so a
   // useState initializer would cause a hydration mismatch.
   useEffect(() => {
-    if (decision.kind !== "pending" || isLoading) return;
+    if (decision.kind !== "pending" || isLoading || autoFiredRef.current) return;
     const remembered = rememberedWorkspace();
     if (remembered && workspaces.some((ws) => ws.id === remembered)) {
+      autoFiredRef.current = true;
       setDecision({ kind: "auto", id: remembered });
       onSelect(remembered);
     } else {

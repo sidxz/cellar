@@ -22,6 +22,7 @@ describe("WorkspaceSelector", () => {
     const onSelect = vi.fn();
     render(<WorkspaceSelector workspaces={WORKSPACES} onSelect={onSelect} isLoading={false} />);
     expect(onSelect).toHaveBeenCalledWith("ws-2");
+    expect(onSelect).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/entering beta lab/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /alpha lab/i })).not.toBeInTheDocument();
   });
