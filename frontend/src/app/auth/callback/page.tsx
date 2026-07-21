@@ -4,6 +4,7 @@ import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
 import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
 import { HexLensLogo } from "@/shared/components/hex-lens-logo";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { forgetWorkspace } from "@/shared/lib/auth/workspace-memory";
 import { AuthzCallback } from "@sentinel-auth/nextjs";
 import { useRouter } from "next/navigation";
 import { WorkspaceSelector } from "./workspace-selector";
@@ -50,9 +51,12 @@ export default function CallbackPage() {
             <div style={{ animation: "auth-enter 0.7s ease-out 0.2s both" }}>
               <AuthzCallback
                 onSuccess={(_user, returnTo) => router.replace(returnTo ?? "/")}
-                onError={(error) =>
-                  router.replace(`/login?error=${encodeURIComponent(error.message)}`)
-                }
+                onError={(error) => {
+                  // A failed auto-entry must not loop — forget the remembered
+                  // workspace so the next sign-in shows the picker again.
+                  forgetWorkspace();
+                  router.replace(`/login?error=${encodeURIComponent(error.message)}`);
+                }}
                 onSilentReauthFailed={() => router.replace("/login")}
                 loadingComponent={
                   <div>
