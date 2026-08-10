@@ -10,6 +10,8 @@
 
 > Re-confirmed 2026-06-17 during the logging-standardization work (`design-7`): full `tests/api` run reported `3 failed, 333 passed` — the same three `test_molecules.py` failures in section 2 (`test_register_disclosed_molecule` CV-/CC- prefix; `test_tested_molecule_returns_count` and `test_project_scoped_count` surfacing `projects.visibility` UndefinedColumn / `dose_response_curves` drift). The logging work touches no models, migrations, or SQL — unrelated.
 
+> Re-confirmed 2026-08-10 during Task 7 (`GET /api/v1/orgs` Sentinel org-directory route + wiring): full `tests/api` run reported `3 failed, 345 passed` — the identical three `test_molecules.py` failures in section 2, same variants (`test_register_disclosed_molecule` → `'CC-000001'.startswith('CV-')` is `False`; `test_tested_molecule_returns_count` → `dose_response_curves.batch_id` NOT-NULL violation; `test_project_scoped_count` → `projects.visibility` UndefinedColumnError). Confirmed via `git blame` that the raw-SQL seed helpers/assertions in `tests/api/test_molecules.py` predate this task (introduced 2026-05-17, commit `7837b3a4`). Task 7 touches only `interface/dependencies/_core.py`, a new `interface/routes/org_directory.py`, `interface/app.py`, and `tests/api/conftest.py` router/dependency wiring — no models, migrations, or molecule/project/DRC SQL — unrelated.
+
 These failures were **empirically proven pre-existing** — they already fail in the full suite at commit `5554e342` (the `kvt` HEAD before any tagging work began). They are unrelated to the tagging feature and were deliberately left untouched so the tagging branch stays scoped. Recording them here so they're tracked.
 
 ## 1. `tests/integration/test_backfill_bemis_murcko.py` — global NULL-count fragility
