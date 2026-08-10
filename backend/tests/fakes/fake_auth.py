@@ -21,10 +21,14 @@ class FakeAuth:
         role: str = "editor",
         user_id: uuid.UUID | None = None,
         workspace_id: uuid.UUID | None = None,
+        org_id: uuid.UUID | None = None,
+        org_slug: str | None = None,
     ) -> None:
         self._user_id = user_id or uuid.uuid4()
         self._workspace_id = workspace_id or uuid.uuid4()
         self.workspace_role = role
+        self.org_id = org_id
+        self.org_slug = org_slug
 
     @property
     def user_id(self) -> uuid.UUID:
