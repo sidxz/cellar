@@ -215,6 +215,7 @@ class PlateRegistered(DomainEvent):
     format: str
     plate_type: str
     registered_by: uuid.UUID
+    owner_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

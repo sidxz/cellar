@@ -93,6 +93,7 @@ class RegisteredPlate(AggregateRoot):
         *,
         id: uuid.UUID | None = None,
         workspace_id: uuid.UUID,
+        owner_org_id: uuid.UUID | None = None,
         barcode: Barcode,
         plate_label: str,
         format: PlateFormat,
@@ -116,6 +117,7 @@ class RegisteredPlate(AggregateRoot):
             raise ValidationError("plate_label (label) must not be empty")
 
         self.workspace_id = workspace_id
+        self.owner_org_id = owner_org_id
         self.barcode = barcode
         self.plate_label = plate_label.strip()
         self.format = format
@@ -139,6 +141,7 @@ class RegisteredPlate(AggregateRoot):
         cls,
         *,
         workspace_id: uuid.UUID,
+        owner_org_id: uuid.UUID | None = None,
         barcode: Barcode,
         plate_label: str,
         format: PlateFormat,
@@ -153,6 +156,7 @@ class RegisteredPlate(AggregateRoot):
         """Register a new physical plate in the inventory."""
         plate = cls(
             workspace_id=workspace_id,
+            owner_org_id=owner_org_id,
             barcode=barcode,
             plate_label=plate_label,
             format=format,
@@ -173,6 +177,7 @@ class RegisteredPlate(AggregateRoot):
                 format=format.value,
                 plate_type=plate_type.value,
                 registered_by=registered_by,
+                owner_org_id=owner_org_id,
             )
         )
         return plate
@@ -319,6 +324,7 @@ class RegisteredPlate(AggregateRoot):
         format: PlateFormat | None = ...,  # type: ignore[assignment]
         plate_type: PlateType | None = None,
         project_id: uuid.UUID | None = ...,  # type: ignore[assignment]
+        owner_org_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         storage_location_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         template_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         notes: str | None = ...,  # type: ignore[assignment]
@@ -338,6 +344,8 @@ class RegisteredPlate(AggregateRoot):
             self.plate_type = plate_type
         if project_id is not ...:
             self.project_id = project_id
+        if owner_org_id is not ...:
+            self.owner_org_id = owner_org_id
         if storage_location_id is not ...:
             self.storage_location_id = storage_location_id
         if template_id is not ...:

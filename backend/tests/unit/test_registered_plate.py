@@ -155,6 +155,27 @@ class TestMove:
         assert events[0].new_location_id == new_loc
 
 
+class TestOwnerOrgId:
+    def test_register_with_owner_org(self):
+        org_id = uuid.uuid4()
+        plate = _make_plate(owner_org_id=org_id)
+        assert plate.owner_org_id == org_id
+        event = plate.collect_events()[0]
+        assert event.owner_org_id == org_id
+
+    def test_register_without_owner_org_defaults_none(self):
+        plate = _make_plate()
+        assert plate.owner_org_id is None
+
+    def test_update_owner_org_sentinel(self):
+        plate = _make_plate(owner_org_id=uuid.uuid4())
+        original = plate.owner_org_id
+        plate.update(notes="touched")  # sentinel: owner unchanged
+        assert plate.owner_org_id == original
+        plate.update(owner_org_id=None)  # explicit clear
+        assert plate.owner_org_id is None
+
+
 class TestFormatImmutability:
     def test_cannot_change_format_with_mapped_wells(self):
         plate = _make_plate(format=PlateFormat.F96)
