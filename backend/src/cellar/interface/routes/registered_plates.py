@@ -80,6 +80,7 @@ class PlateResponse(BaseModel):
     parent_plate_id: uuid.UUID | None = None
     registered_by: uuid.UUID
     notes: str | None = None
+    owner_org_id: uuid.UUID | None = None
 
     @classmethod
     def from_domain(cls, p: RegisteredPlate) -> PlateResponse:
@@ -102,6 +103,7 @@ class PlateResponse(BaseModel):
             parent_plate_id=p.parent_plate_id,
             registered_by=p.registered_by,
             notes=p.notes,
+            owner_org_id=p.owner_org_id,
         )
 
 
@@ -116,6 +118,7 @@ class RegisterPlateBody(BaseModel):
     template_id: uuid.UUID | None = None
     parent_plate_id: uuid.UUID | None = None
     notes: str | None = None
+    owner_org_id: uuid.UUID | None = None
 
 
 class UpdatePlateBody(BaseModel):
@@ -196,6 +199,7 @@ async def register_plate(
         template_id=body.template_id,
         parent_plate_id=body.parent_plate_id,
         notes=body.notes,
+        owner_org_id=body.owner_org_id,
     )
     plate = result_to_response(await uc(command, auth=auth))
     return PlateResponse.from_domain(plate)
@@ -212,6 +216,7 @@ async def list_plates(
     format: str | None = None,
     storage_location_id: uuid.UUID | None = None,
     project_id: uuid.UUID | None = None,
+    owner_org_id: uuid.UUID | None = None,
     tags: list[uuid.UUID] | None = Query(default=None),
     tag_logic: Literal["any", "all"] = Query(default="any"),
 ) -> list[PlateResponse]:
@@ -225,6 +230,7 @@ async def list_plates(
         format=format,
         storage_location_id=storage_location_id,
         project_id=project_id,
+        owner_org_id=owner_org_id,
         tags=tags,
         tag_logic=tag_logic,
     )

@@ -47,6 +47,7 @@ class RegisterPlateCommand(Command):
     template_id: uuid.UUID | None = None
     parent_plate_id: uuid.UUID | None = None
     notes: str | None = None
+    owner_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -114,6 +115,7 @@ class ListPlatesQuery(Query):
     format: str | None = None
     storage_location_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
+    owner_org_id: uuid.UUID | None = None
     tags: list[uuid.UUID] | None = None
     tag_logic: str = "any"
 
@@ -167,6 +169,9 @@ class RegisterPlate:
 
             plate = RegisteredPlate.register(
                 workspace_id=input.workspace_id,
+                owner_org_id=input.owner_org_id
+                if input.owner_org_id is not None
+                else (auth.org_id if auth else None),
                 barcode=Barcode(value=input.barcode),
                 plate_label=input.plate_label,
                 format=PlateFormat(input.format),
@@ -230,6 +235,7 @@ class ListPlates:
                 format=input.format,
                 storage_location_id=input.storage_location_id,
                 project_id=input.project_id,
+                owner_org_id=input.owner_org_id,
                 tags=input.tags,
                 tag_logic=input.tag_logic,
             )

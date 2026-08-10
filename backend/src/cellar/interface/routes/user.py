@@ -20,6 +20,25 @@ from cellar.interface.error_handlers import result_to_response
 router = APIRouter(prefix="/api/v1/user", tags=["user"])
 
 
+class MeResponse(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    name: str
+    org_id: uuid.UUID | None = None
+    org_slug: str | None = None
+
+
+@router.get("/me", response_model=MeResponse)
+async def me(auth: AuthDep) -> MeResponse:
+    return MeResponse(
+        user_id=auth.user_id,
+        email=getattr(auth, "email", ""),
+        name=getattr(auth, "name", ""),
+        org_id=auth.org_id,
+        org_slug=auth.org_slug,
+    )
+
+
 class PreferencesResponse(BaseModel):
     theme: str = "dark"
     sidebar_collapsed: bool = False

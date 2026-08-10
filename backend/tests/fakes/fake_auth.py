@@ -23,12 +23,16 @@ class FakeAuth:
         workspace_id: uuid.UUID | None = None,
         org_id: uuid.UUID | None = None,
         org_slug: str | None = None,
+        email: str = "test@example.com",
+        name: str = "Test User",
     ) -> None:
         self._user_id = user_id or uuid.uuid4()
         self._workspace_id = workspace_id or uuid.uuid4()
         self.workspace_role = role
         self.org_id = org_id
         self.org_slug = org_slug
+        self.email = email
+        self.name = name
 
     @property
     def user_id(self) -> uuid.UUID:

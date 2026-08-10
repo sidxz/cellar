@@ -33,6 +33,10 @@ from tests.fakes.fake_auth import FakeAuth
 # test module) so conftest never has to import a specific test module.
 ORG_ID = uuid.uuid4()
 
+# The org_id carried by the default `fake_auth` (and therefore `client`) fixture —
+# imported by tests that assert owner_org_id defaults from auth.
+AUTH_ORG_ID = uuid.uuid4()
+
 
 def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     """Build a FastAPI app for testing — no Sentinel middleware, FakeAuth for routes."""
@@ -163,7 +167,7 @@ def user_id() -> uuid.UUID:
 
 @pytest.fixture
 def fake_auth(workspace_id: uuid.UUID, user_id: uuid.UUID) -> FakeAuth:
-    return FakeAuth(role="admin", workspace_id=workspace_id, user_id=user_id)
+    return FakeAuth(role="admin", workspace_id=workspace_id, user_id=user_id, org_id=AUTH_ORG_ID)
 
 
 @pytest.fixture
