@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from cellar.domain.inventory.enums import PlateStatus, PlateType
 from cellar.domain.inventory.registered_plate import RegisteredPlate
@@ -106,6 +106,8 @@ class SQLAlchemyRegisteredPlateRepository(
         format: str | None = None,
         storage_location_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
+        owner_org_id: uuid.UUID | None = None,
+        exclude_owner_org_ids: set[uuid.UUID] | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
     ) -> list[RegisteredPlate]:
@@ -132,6 +134,15 @@ class SQLAlchemyRegisteredPlateRepository(
             stmt = stmt.where(RegisteredPlateModel.storage_location_id == storage_location_id)
         if project_id is not None:
             stmt = stmt.where(RegisteredPlateModel.project_id == project_id)
+        if owner_org_id is not None:
+            stmt = stmt.where(RegisteredPlateModel.owner_org_id == owner_org_id)
+        if exclude_owner_org_ids:
+            stmt = stmt.where(
+                or_(
+                    RegisteredPlateModel.owner_org_id.is_(None),
+                    RegisteredPlateModel.owner_org_id.not_in(exclude_owner_org_ids),
+                )
+            )
         if tags:
             stmt = stmt.where(
                 RegisteredPlateModel.id.in_(
@@ -170,6 +181,7 @@ class SQLAlchemyRegisteredPlateRepository(
             storage_location_id=model.storage_location_id,
             parent_plate_id=model.parent_plate_id,
             project_id=model.project_id,
+            owner_org_id=model.owner_org_id,
             template_id=model.template_id,
             notes=model.notes,
             created_at=model.created_at,
@@ -191,6 +203,7 @@ class SQLAlchemyRegisteredPlateRepository(
             storage_location_id=aggregate.storage_location_id,
             parent_plate_id=aggregate.parent_plate_id,
             project_id=aggregate.project_id,
+            owner_org_id=aggregate.owner_org_id,
             template_id=aggregate.template_id,
             notes=aggregate.notes,
             version=aggregate.version,
@@ -206,5 +219,6 @@ class SQLAlchemyRegisteredPlateRepository(
         model.storage_location_id = aggregate.storage_location_id
         model.parent_plate_id = aggregate.parent_plate_id
         model.project_id = aggregate.project_id
+        model.owner_org_id = aggregate.owner_org_id
         model.template_id = aggregate.template_id
         model.notes = aggregate.notes

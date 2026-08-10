@@ -185,6 +185,8 @@ class RegisteredPlateRepository(Protocol):
         format: str | None = None,
         storage_location_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
+        owner_org_id: uuid.UUID | None = None,
+        exclude_owner_org_ids: set[uuid.UUID] | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
     ) -> list[RegisteredPlate]: ...

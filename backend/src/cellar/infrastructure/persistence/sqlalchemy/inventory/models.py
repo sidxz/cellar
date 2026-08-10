@@ -166,6 +166,7 @@ class RegisteredPlateModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixi
         Uuid, ForeignKey("storage_locations.id")
     )
     project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    owner_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     template_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     parent_plate_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("registered_plates.id")
@@ -179,6 +180,7 @@ class RegisteredPlateModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixi
         Index("ix_reg_plate_type", "workspace_id", "plate_type"),
         Index("ix_reg_plate_location", "storage_location_id"),
         Index("ix_reg_plate_project", "project_id"),
+        Index("ix_reg_plate_owner_org", "workspace_id", "owner_org_id"),
         Index("ix_reg_plate_parent", "parent_plate_id"),
     )
 
