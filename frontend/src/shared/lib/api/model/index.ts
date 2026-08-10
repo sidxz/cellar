@@ -804,6 +804,7 @@ export * from './ontologyTermRequest';
 export * from './ontologyTermRequestUri';
 export * from './ontologyTermResponse';
 export * from './ontologyTermResponseUri';
+export * from './orgDirectoryEntryResponse';
 export * from './organizationResponse';
 export * from './organizationResponseContactEmail';
 export * from './organizationResponseContactName';
