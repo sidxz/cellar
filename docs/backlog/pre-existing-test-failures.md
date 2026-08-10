@@ -46,11 +46,13 @@ All three predate tagging and reference fields/columns the tagging work never to
 
 **Status:** open · **Found:** 2026-06-15 (during the CDD-import batch-identifier-mirror fix on `design-7`) · **Origin:** predates this work
 
-**Failing (4):**
+**Failing (6):**
 - `tests/integration/inventory/test_create_batch_fans_out_mirrors.py::test_create_batch_fans_out_mirrors_from_existing_synonyms`
 - `tests/integration/inventory/test_mirror_cascade_delete.py::TestMirrorCascadeDelete::test_remove_identifier_cascades_to_mirrors`
 - `tests/integration/chemical_registration/test_add_identifier_fans_out_mirrors.py::TestAddIdentifierFansOutMirrors::test_add_identifier_creates_one_mirror_per_existing_batch`
 - `tests/integration/chemical_registration/test_add_identifier_fans_out_mirrors.py::TestAddIdentifierFansOutMirrors::test_add_identifier_no_batches_returns_zero_mirrors`
+- `tests/integration/application/chemical_registration/test_register_molecule_scaffold.py::test_register_molecule_persists_scaffold` *(added to this list 2026-08-10)*
+- `tests/integration/application/chemical_registration/test_register_molecule_scaffold.py::test_register_acyclic_records_empty_scaffold` *(added to this list 2026-08-10)*
 
 All fail with `cellar.domain.shared.errors.NotFoundError: Entity not found` raised from `application/auth.py::require_same_workspace`, *before* any mirror logic runs.
 
@@ -59,6 +61,8 @@ All fail with `cellar.domain.shared.errors.NotFoundError: Entity not found` rais
 **Root cause (confirmed):** commit `bae2a3e1` ("fix(security): enforce workspace tenant guard in every application use case") added `require_same_workspace(auth, input.workspace_id)` to `CreateBatch.__call__` and `AddIdentifier.__call__`. These mirror tests (added earlier in `86c37a74`) pass `auth=editor_auth`, where the `editor_auth` fixture is `FakeAuth(role="editor")` — and `FakeAuth.__init__` defaults `workspace_id` to a **fresh random uuid** (`workspace_id or uuid.uuid4()`) that never matches the `seeded_workspace_and_molecule` workspace. The guard sweep did not update these co-located tests → guard ↔ test-fixture drift. (The new CDD-import mirror tests are unaffected: the Temporal activity calls `CreateBatch` with `auth=None`, the system/worker bypass path.)
 
 **Recommended fix (clean, root-cause):** give the test auth the seeded workspace — e.g. `FakeAuth(role="editor", workspace_id=workspace_id)` in each affected test, or an `editor_auth` fixture derived from `seeded_workspace_and_molecule`. Both the tenant guard and the mirror logic are correct; only the fixtures need to share a workspace id. Left untouched to keep this branch scoped.
+
+> Expanded 2026-08-10 during the S1 org-identity wrap-up verification: full backend suite reported `10 failed, 3612 passed` — 8 failures already documented here (§2 ×3, §4 ×4, §5 ×1) plus two previously-undocumented failures in `tests/integration/application/chemical_registration/test_register_molecule_scaffold.py` (`test_register_molecule_persists_scaffold`, `test_register_acyclic_records_empty_scaffold`), now added to the list above (4 → 6). Empirically proven pre-existing via a fresh `git worktree` checkout of pre-S1 base commit `c111aad1`: both fail identically there (`2 failed`). Same failure mode as this section per inspection — workspace-guard `NotFoundError` from a `FakeAuth` whose random `workspace_id` never matches the seeded workspace; the scaffold tests predate the `bae2a3e1` guard sweep. The S1 work touches no chemical-registration or scaffold code (SDK pin, `AuthContext` protocol, additive `FakeAuth` org params, `OrgDirectory`, org route, FE hook) — unrelated.
 
 ## 5. `tests/unit/cascade/test_fk_coverage.py::test_every_fk_is_categorized` — SAR job FKs uncategorized
 
