@@ -501,6 +501,14 @@ class _AuthShim:
         return "viewer"
 
     @property
+    def org_id(self) -> uuid.UUID | None:
+        return None
+
+    @property
+    def org_slug(self) -> str | None:
+        return None
+
+    @property
     def is_admin(self) -> bool:
         return False
 
