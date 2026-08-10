@@ -28,6 +28,11 @@ from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.dependencies import get_auth
 from tests.fakes.fake_auth import FakeAuth
 
+# Single source of truth for the stubbed Sentinel org-directory entry —
+# imported by tests/api/test_org_directory.py. Lives here (rather than the
+# test module) so conftest never has to import a specific test module.
+ORG_ID = uuid.uuid4()
+
 
 def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     """Build a FastAPI app for testing — no Sentinel middleware, FakeAuth for routes."""
@@ -43,6 +48,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
 
     # Import routes
     from cellar.interface.routes.user import router as user_router
+    from cellar.interface.routes.org_directory import router as org_directory_router
     from cellar.interface.routes.organizations import router as org_router
     from cellar.interface.routes.settings import router as settings_router
     from cellar.interface.routes.vocabularies import router as vocab_router
@@ -92,6 +98,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
 
     app.include_router(user_router)
     app.include_router(org_router)
+    app.include_router(org_directory_router)
     app.include_router(settings_router)
     app.include_router(vocab_router)
     app.include_router(mol_router)
@@ -130,6 +137,16 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
 
     # Override the stable auth wrapper (not the sentinel SDK directly)
     app.dependency_overrides[get_auth] = lambda: fake_auth
+
+    # Stub the Sentinel org directory — never make real HTTP calls in tests.
+    from cellar.infrastructure.sentinel.org_directory import OrgSummary
+    from cellar.interface.dependencies import get_org_directory
+
+    class _StubOrgDirectory:
+        async def list_orgs(self) -> list[OrgSummary]:
+            return [OrgSummary(id=ORG_ID, slug="abbvie", name="AbbVie", is_public=False)]
+
+    app.dependency_overrides[get_org_directory] = lambda: _StubOrgDirectory()
 
     return app
 

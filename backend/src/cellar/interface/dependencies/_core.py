@@ -29,6 +29,8 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_re
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
 from cellar.infrastructure.sentinel.auth import get_sentinel
+from cellar.infrastructure.sentinel.org_directory import OrgDirectory
+from cellar.infrastructure.sentinel.settings import SentinelSettings
 
 __all__ = [
     "AuditServiceDep",
@@ -36,6 +38,7 @@ __all__ = [
     "EventDispatcherDep",
     "FingerprintRegistryDep",
     "GetPreferencesDep",
+    "OrgDirectoryDep",
     "SaltMatcherUoWDep",
     "SessionFactoryDep",
     "UoWDep",
@@ -45,6 +48,7 @@ __all__ = [
     "get_auth",
     "get_container",
     "get_event_dispatcher",
+    "get_org_directory",
     "get_preferences_command",
     "get_preferences_query",
     "get_salt_matcher_uow",
@@ -146,6 +150,25 @@ else:
         # must surface at startup.
         _sentinel = None
         _sentinel_get_auth = _sentinel_not_configured
+
+
+# Sentinel org directory (read-only list of orgs for pickers/labels) — same
+# "configured only if SENTINEL_SERVICE_KEY is set" guard as `_sentinel` above.
+_org_directory: OrgDirectory | None = None
+if _sentinel is not None:
+    _settings = SentinelSettings()
+    _org_directory = OrgDirectory(base_url=_settings.url, service_key=_settings.service_key)
+
+
+def get_org_directory() -> OrgDirectory:
+    if _org_directory is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail="Sentinel auth not configured.")
+    return _org_directory
+
+
+OrgDirectoryDep = Annotated[OrgDirectory, Depends(get_org_directory)]
 
 
 async def get_auth(
