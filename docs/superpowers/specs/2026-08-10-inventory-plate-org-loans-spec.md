@@ -86,7 +86,7 @@ One application-layer `PlateVisibilityService` used by ListPlates / GetPlate / g
 
 ## 6. Org directory (Cellar infrastructure)
 
-`infrastructure/sentinel/OrgDirectory`: fetches `GET /internal/organizations` with the service key, per-process in-memory TTL cache (5 min; Valkey/redis only if cross-process staleness ever matters). Exposed as `GET /api/v1/orgs` → `[{id, slug, name}]` for FE pickers, chart legends, policy admin. Org *names* are never persisted in Cellar tables — always resolved through the directory (ids only in DB).
+`infrastructure/sentinel/OrgDirectory`: fetches `GET /organizations` (internal listener) with the service key, per-process in-memory TTL cache (5 min; Valkey/redis only if cross-process staleness ever matters). Exposed as `GET /api/v1/orgs` → `[{id, slug, name}]` for FE pickers, chart legends, policy admin. Org *names* are never persisted in Cellar tables — always resolved through the directory (ids only in DB).
 
 ## 7. Barcode scan resolution
 
