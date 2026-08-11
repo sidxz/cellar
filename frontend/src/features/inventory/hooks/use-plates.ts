@@ -13,13 +13,12 @@ import type {
   UpdatePlateInput,
   WellMapping,
 } from "../types/plates";
-
-const PLATES_KEY = ["plates"];
+import { PLATES_KEY } from "./query-keys";
 
 const plateHooks = createCrudHooks<RegisteredPlate, RegisterPlateInput, UpdatePlateInput>({
   entityName: "Plate",
   baseUrl: `${API_V1}/plates`,
-  queryKey: PLATES_KEY,
+  queryKey: [...PLATES_KEY],
 });
 
 /** Custom list — supports optional filter params with undefined values, plus tag filtering. */

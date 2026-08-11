@@ -332,16 +332,16 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                     )}
                   </MetaRow>
                   <MetaRow label="Storage Location">
-                    <ResolvedStorageLocation id={plate.storage_location_id} />
+                    <ResolvedStorageLocation id={plate.storage_location_id ?? null} />
                   </MetaRow>
                   <MetaRow label="Project">
-                    <ResolvedProject id={plate.project_id} />
+                    <ResolvedProject id={plate.project_id ?? null} />
                   </MetaRow>
                   <MetaRow label="Template">
-                    <ResolvedTemplate id={plate.template_id} />
+                    <ResolvedTemplate id={plate.template_id ?? null} />
                   </MetaRow>
                   <MetaRow label="Parent Plate">
-                    <ResolvedParentPlate id={plate.parent_plate_id} />
+                    <ResolvedParentPlate id={plate.parent_plate_id ?? null} />
                   </MetaRow>
                   {plate.notes && (
                     <MetaRow label="Notes">
@@ -369,7 +369,10 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                 <CardContent>
                   {wellCount > 0 && plate.well_map ? (
                     <div className="overflow-auto">
-                      <WellMapVisualization wellMap={plate.well_map} format={plate.format} />
+                      <WellMapVisualization
+                        wellMap={plate.well_map as Record<string, WellMapping>}
+                        format={plate.format}
+                      />
                       <p className="mt-3 text-xs text-muted-foreground">
                         Colored wells have compound batches mapped. Hover a well for details.
                       </p>
@@ -427,7 +430,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
           onOpenChange={setWellMapOpen}
           plateId={plateId}
           format={query.data.format}
-          initialWellMap={query.data.well_map}
+          initialWellMap={(query.data.well_map ?? null) as Record<string, WellMapping> | null}
         />
       )}
 

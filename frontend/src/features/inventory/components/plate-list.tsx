@@ -17,10 +17,11 @@ import {
 } from "@/shared/components/ui/select";
 import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { useOrgs } from "@/shared/hooks/use-orgs";
+import { showError } from "@/shared/lib/toast";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { FileUp, FlaskConical, Plus, Settings, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDeletePlate, usePlates } from "../hooks/use-plates";
 import type { PlateStatus, PlateType, RegisteredPlate } from "../types/plates";
 import { plateStatusLabels, plateTypeLabels } from "../types/plates";
@@ -45,12 +46,16 @@ export function PlateList() {
   const [filterOrg, setFilterOrg] = useState<string>(MY_ORG);
   const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
 
-  const { data: me } = useCurrentUser();
+  const { data: me, isError: meFailed } = useCurrentUser();
   const { data: orgs } = useOrgs();
   const orgNameById = useMemo(() => new Map((orgs ?? []).map((o) => [o.id, o.name])), [orgs]);
+  // "My org" needs /me. If /me failed, fall back to un-filtered (All orgs)
+  // rather than gating the list forever behind a query that will never run.
   const ownerOrgId =
     filterOrg === MY_ORG
-      ? (me?.org_id ?? undefined)
+      ? meFailed
+        ? undefined
+        : (me?.org_id ?? undefined)
       : filterOrg === ALL_ORGS
         ? undefined
         : filterOrg;
@@ -69,10 +74,17 @@ export function PlateList() {
       tagLogic: tagFilter.tagLogic,
     },
     // Hold the fetch until /me resolves while "My org" is active — otherwise
-    // the grid flashes all-orgs data during the identity load.
-    { enabled: filterOrg !== MY_ORG || me !== undefined },
+    // the grid flashes all-orgs data during the identity load. A failed /me
+    // still releases the gate (fallback to unfiltered) rather than hanging.
+    { enabled: filterOrg !== MY_ORG || me !== undefined || meFailed },
   );
   const deleteMutation = useDeletePlate();
+
+  useEffect(() => {
+    if (meFailed && filterOrg === MY_ORG) {
+      showError("Could not resolve your organization — showing all orgs");
+    }
+  }, [meFailed, filterOrg]);
 
   const columnDefs = useMemo<ColDef<RegisteredPlate>[]>(
     () => [

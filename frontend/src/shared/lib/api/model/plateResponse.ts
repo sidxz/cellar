@@ -4,7 +4,10 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { PlateFormat } from './plateFormat';
+import type { PlateType } from './plateType';
 import type { PlateResponseWellMap } from './plateResponseWellMap';
+import type { PlateStatus } from './plateStatus';
 import type { PlateResponseStorageLocationId } from './plateResponseStorageLocationId';
 import type { PlateResponseProjectId } from './plateResponseProjectId';
 import type { PlateResponseTemplateId } from './plateResponseTemplateId';
@@ -17,10 +20,10 @@ export interface PlateResponse {
   workspace_id: string;
   barcode: string;
   plate_label: string;
-  format: string;
-  plate_type: string;
+  format: PlateFormat;
+  plate_type: PlateType;
   well_map?: PlateResponseWellMap;
-  status: string;
+  status: PlateStatus;
   storage_location_id?: PlateResponseStorageLocationId;
   project_id?: PlateResponseProjectId;
   template_id?: PlateResponseTemplateId;

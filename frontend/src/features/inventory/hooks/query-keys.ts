@@ -5,3 +5,4 @@
  */
 
 export const BATCHES_KEY = ["batches"];
+export const PLATES_KEY = ["plates"] as const;

@@ -4,12 +4,13 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { LoanConfirmationMode } from './loanConfirmationMode';
 import type { OrgPlatePolicyResponseDefaultDueDays } from './orgPlatePolicyResponseDefaultDueDays';
 
 export interface OrgPlatePolicyResponse {
   org_id: string;
   require_approval: boolean;
-  confirmation: string;
+  confirmation: LoanConfirmationMode;
   default_due_days?: OrgPlatePolicyResponseDefaultDueDays;
   plates_private: boolean;
   version: number;

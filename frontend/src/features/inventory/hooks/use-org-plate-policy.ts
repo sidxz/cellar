@@ -5,6 +5,7 @@ import type { OrgPlatePolicyResponse, SetOrgPlatePolicyBody } from "@/shared/lib
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PLATES_KEY } from "./query-keys";
 
 /** Per-org plate loan/visibility policy. Aliased from the orval-generated type. */
 export type OrgPlatePolicy = OrgPlatePolicyResponse;
@@ -37,6 +38,8 @@ export function useSetOrgPlatePolicy(orgId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: orgPlatePolicyKey(orgId) });
+      // Privacy flips change which plates other users' lists contain.
+      qc.invalidateQueries({ queryKey: PLATES_KEY });
       showSuccess("Org plate policy updated");
     },
   });

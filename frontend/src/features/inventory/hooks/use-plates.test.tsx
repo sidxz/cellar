@@ -14,6 +14,7 @@ vi.mock("@/shared/lib/toast", () => ({
   showSuccess: vi.fn(),
 }));
 
+import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { usePlates } from "./use-plates";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -41,5 +42,34 @@ describe("usePlates", () => {
   it("does not fetch when enabled is false", () => {
     renderHook(() => usePlates({ owner_org_id: "org-1" }, { enabled: false }), { wrapper });
     expect(customInstance).not.toHaveBeenCalled();
+  });
+});
+
+describe("usePlates /me-failure fallback", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("still issues the plates request when /me rejects (list is not gated forever)", async () => {
+    // Mirrors plate-list.tsx's gating: usePlates stays disabled only until /me
+    // settles — success OR error. A rejected /me must release the gate too.
+    customInstance.mockImplementation(async (args: unknown) => {
+      const { url } = args as { url: string };
+      if (url === "/api/v1/user/me") throw new Error("me unavailable");
+      return [];
+    });
+
+    renderHook(
+      () => {
+        const { data: me, isError: meFailed } = useCurrentUser();
+        const ownerOrgId = meFailed ? undefined : (me?.org_id ?? undefined);
+        return usePlates({ owner_org_id: ownerOrgId }, { enabled: me !== undefined || meFailed });
+      },
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(customInstance).toHaveBeenCalledWith(
+        expect.objectContaining({ url: "/api/v1/plates" }),
+      ),
+    );
   });
 });

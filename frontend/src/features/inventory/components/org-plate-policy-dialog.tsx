@@ -19,14 +19,15 @@ import {
 } from "@/shared/components/ui/select";
 import { Switch } from "@/shared/components/ui/switch";
 import { useOrgs } from "@/shared/hooks/use-orgs";
+import { LoanConfirmationMode } from "@/shared/lib/api/model";
 import { useEffect, useState } from "react";
 import { useOrgPlatePolicy, useSetOrgPlatePolicy } from "../hooks/use-org-plate-policy";
 
-const CONFIRMATION_OPTIONS = [
-  { value: "kiosk_scan", label: "Kiosk scan" },
-  { value: "admin_confirm", label: "Admin confirm" },
-  { value: "none", label: "None" },
-] as const;
+const CONFIRMATION_OPTIONS: { value: LoanConfirmationMode; label: string }[] = [
+  { value: LoanConfirmationMode.kiosk_scan, label: "Kiosk scan" },
+  { value: LoanConfirmationMode.admin_confirm, label: "Admin confirm" },
+  { value: LoanConfirmationMode.none, label: "None" },
+];
 
 interface Props {
   open: boolean;
@@ -41,7 +42,9 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
   const setPolicy = useSetOrgPlatePolicy(orgId);
 
   const [requireApproval, setRequireApproval] = useState(false);
-  const [confirmation, setConfirmation] = useState<string>("kiosk_scan");
+  const [confirmation, setConfirmation] = useState<LoanConfirmationMode>(
+    LoanConfirmationMode.kiosk_scan,
+  );
   const [dueDays, setDueDays] = useState("");
   const [platesPrivate, setPlatesPrivate] = useState(false);
 
@@ -55,7 +58,7 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
   const handleOrgChange = (id: string) => {
     setOrgId(id);
     setRequireApproval(false);
-    setConfirmation("kiosk_scan");
+    setConfirmation(LoanConfirmationMode.kiosk_scan);
     setDueDays("");
     setPlatesPrivate(false);
   };
@@ -75,7 +78,7 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
     setPolicy.mutate(
       {
         require_approval: requireApproval,
-        confirmation: confirmation as (typeof CONFIRMATION_OPTIONS)[number]["value"],
+        confirmation,
         default_due_days: dueDays.trim() ? Number(dueDays) : null,
         plates_private: platesPrivate,
       },
@@ -120,7 +123,10 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
 
               <div className="grid gap-2">
                 <Label htmlFor="policy-confirmation">Loan confirmation</Label>
-                <Select value={confirmation} onValueChange={setConfirmation}>
+                <Select
+                  value={confirmation}
+                  onValueChange={(v) => setConfirmation(v as LoanConfirmationMode)}
+                >
                   <SelectTrigger id="policy-confirmation">
                     <SelectValue />
                   </SelectTrigger>

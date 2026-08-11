@@ -1,16 +1,13 @@
-export type PlateType =
-  | "compound_storage"
-  | "mother"
-  | "daughter"
-  | "archive"
-  | "assay"
-  | "dose_response"
-  | "replicate"
-  | "control"
-  | "cherry_pick"
-  | "dilution"
-  | "reformatted"
-  | "pooled";
+import type {
+  PlateStatus as GeneratedPlateStatus,
+  PlateType as GeneratedPlateType,
+  PlateResponse,
+} from "@/shared/lib/api/model";
+
+/** Generated from the backend OpenAPI — do not redefine shapes here (CLAUDE.md). */
+export type RegisteredPlate = PlateResponse;
+export type PlateType = GeneratedPlateType;
+export type PlateStatus = GeneratedPlateStatus;
 
 export const plateTypeLabels: Record<PlateType, string> = {
   compound_storage: "Compound Storage",
@@ -27,8 +24,6 @@ export const plateTypeLabels: Record<PlateType, string> = {
   pooled: "Pooled",
 };
 
-export type PlateStatus = "registered" | "in_use" | "stored" | "depleted" | "disposed";
-
 export const plateStatusLabels: Record<PlateStatus, string> = {
   registered: "Registered",
   in_use: "In Use",
@@ -43,24 +38,6 @@ export interface WellMapping {
   concentration_unit: string | null;
   /** Role of the well — sample / positive_control / negative_control / blank / reference. */
   well_type?: string;
-}
-
-export interface RegisteredPlate {
-  id: string;
-  workspace_id: string;
-  barcode: string;
-  plate_label: string;
-  format: string;
-  plate_type: PlateType;
-  well_map: Record<string, WellMapping> | null;
-  status: PlateStatus;
-  storage_location_id: string | null;
-  project_id: string | null;
-  template_id: string | null;
-  parent_plate_id: string | null;
-  registered_by: string;
-  notes: string | null;
-  owner_org_id?: string | null;
 }
 
 export interface RegisterPlateInput {
