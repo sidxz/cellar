@@ -30,4 +30,11 @@ class PlateVisibilityService:
         self, plate: RegisteredPlate, auth: AuthContext | None, excluded: set[uuid.UUID]
     ) -> bool:
         """False iff plate.owner_org_id in excluded."""
-        return plate.owner_org_id not in excluded
+        return self.can_view_owner(plate.owner_org_id, excluded)
+
+    def can_view_owner(
+        self, owner_org_id: uuid.UUID | None, excluded: set[uuid.UUID]
+    ) -> bool:
+        """Visibility by owner org alone — for org-owned things that aren't
+        plates (plate groups). Same rule: hidden iff owner org is excluded."""
+        return owner_org_id not in excluded

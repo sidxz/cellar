@@ -46,6 +46,15 @@ from cellar.application.inventory.manage_storage import (
     ListStorageLocationsWithCounts,
 )
 from cellar.application.inventory.org_plate_policy import GetOrgPlatePolicy, SetOrgPlatePolicy
+from cellar.application.inventory.plate_groups import (
+    AssignPlatesToGroup,
+    CreatePlateGroup,
+    DeletePlateGroup,
+    GetGroupTree,
+    MovePlateGroup,
+    RemovePlatesFromGroup,
+    UpdatePlateGroup,
+)
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.registered_plates import (
@@ -71,21 +80,25 @@ from ._core import _get_use_case, get_container
 __all__ = [
     "AddBatchIdentifierDep",
     "AliquotSampleDep",
+    "AssignPlatesToGroupDep",
     "BulkAddBatchIdentifiersDep",
     "ChangeStatusDep",
     "ClearQuarantineSampleDep",
     # Inventory
     "CreateBatchDep",
     "CreateImportTemplateDep",
+    "CreatePlateGroupDep",
     "CreateSampleDep",
     "CreateStorageLocationDep",
     "DeleteImportTemplateDep",
     "DeletePlateDep",
+    "DeletePlateGroupDep",
     "DeleteStorageLocationDep",
     "DerivePlateDep",
     "DisposeSampleDep",
     "ExportPlateLayoutDep",
     "GetBatchDep",
+    "GetGroupTreeDep",
     "GetInventorySummaryDep",
     "GetOrgPlatePolicyDep",
     "GetPlateDep",
@@ -105,15 +118,18 @@ __all__ = [
     "ListStorageLocationsDep",
     "ListStorageLocationsWithCountsDep",
     "MapWellsDep",
+    "MovePlateGroupDep",
     "MoveSampleDep",
     "PlateReadModelServiceDep",
     "PlateVisibilityUoWDep",
     "QuarantineSampleDep",
     "RegisterPlateDep",
     "RemoveBatchIdentifierDep",
+    "RemovePlatesFromGroupDep",
     "SetOrgPlatePolicyDep",
     "UpdateBatchDep",
     "UpdatePlateDep",
+    "UpdatePlateGroupDep",
     "UpdateStorageLocationDep",
 ]
 
@@ -200,6 +216,19 @@ def get_plate_visibility_uow(
 
 PlateVisibilityUoWDep = Annotated[
     tuple[PlateVisibilityService, AsyncUnitOfWork], Depends(get_plate_visibility_uow)
+]
+
+# --- Plate Group dependencies ---
+CreatePlateGroupDep = Annotated[CreatePlateGroup, Depends(_get_use_case(CreatePlateGroup))]
+UpdatePlateGroupDep = Annotated[UpdatePlateGroup, Depends(_get_use_case(UpdatePlateGroup))]
+MovePlateGroupDep = Annotated[MovePlateGroup, Depends(_get_use_case(MovePlateGroup))]
+DeletePlateGroupDep = Annotated[DeletePlateGroup, Depends(_get_use_case(DeletePlateGroup))]
+GetGroupTreeDep = Annotated[GetGroupTree, Depends(_get_use_case(GetGroupTree))]
+AssignPlatesToGroupDep = Annotated[
+    AssignPlatesToGroup, Depends(_get_use_case(AssignPlatesToGroup))
+]
+RemovePlatesFromGroupDep = Annotated[
+    RemovePlatesFromGroup, Depends(_get_use_case(RemovePlatesFromGroup))
 ]
 
 # --- Plate-import pipeline dependencies ---

@@ -47,6 +47,15 @@ from cellar.application.inventory.manage_storage import (
     ListStorageLocationsWithCounts,
 )
 from cellar.application.inventory.org_plate_policy import GetOrgPlatePolicy, SetOrgPlatePolicy
+from cellar.application.inventory.plate_groups import (
+    AssignPlatesToGroup,
+    CreatePlateGroup,
+    DeletePlateGroup,
+    GetGroupTree,
+    MovePlateGroup,
+    RemovePlatesFromGroup,
+    UpdatePlateGroup,
+)
 from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.preview_shipment_import import PreviewShipmentImport
 from cellar.application.inventory.sample_requests import (
@@ -111,6 +120,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.inventory_summary_re
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
     SQLAlchemyOrgPlatePolicyRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
+    SQLAlchemyPlateGroupRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
@@ -498,6 +510,79 @@ def register_inventory(container: Container) -> None:
 
     container.define(GetOrgPlatePolicy, _get_org_plate_policy)
     container.define(SetOrgPlatePolicy, _set_org_plate_policy)
+
+    # --- Plate Groups ---
+    def _create_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreatePlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    def _update_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdatePlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    def _move_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return MovePlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    def _delete_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeletePlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    def _get_group_tree(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetGroupTree(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    def _assign_plates_to_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AssignPlatesToGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    def _remove_plates_from_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemovePlatesFromGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    container.define(CreatePlateGroup, _create_plate_group)
+    container.define(UpdatePlateGroup, _update_plate_group)
+    container.define(MovePlateGroup, _move_plate_group)
+    container.define(DeletePlateGroup, _delete_plate_group)
+    container.define(GetGroupTree, _get_group_tree)
+    container.define(AssignPlatesToGroup, _assign_plates_to_group)
+    container.define(RemovePlatesFromGroup, _remove_plates_from_group)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

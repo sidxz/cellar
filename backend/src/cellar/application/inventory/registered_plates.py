@@ -123,6 +123,7 @@ class ListPlatesQuery(Query):
     storage_location_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     owner_org_id: uuid.UUID | None = None
+    group_id: uuid.UUID | None = None
     tags: list[uuid.UUID] | None = None
     tag_logic: str = "any"
 
@@ -269,6 +270,7 @@ class ListPlates:
                 storage_location_id=input.storage_location_id,
                 project_id=input.project_id,
                 owner_org_id=input.owner_org_id,
+                group_id=input.group_id,
                 exclude_owner_org_ids=excluded,
                 tags=input.tags,
                 tag_logic=input.tag_logic,
