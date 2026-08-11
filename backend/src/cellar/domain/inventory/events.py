@@ -279,3 +279,33 @@ class CddPlateImportCompleted(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class CddPlateImportFailed(DomainEvent):
     reason: str
+
+
+# ---------------------------------------------------------------------------
+# Plate group events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupCreated(DomainEvent):
+    name: str
+    owner_org_id: uuid.UUID
+    parent_group_id: uuid.UUID | None
+    created_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupUpdated(DomainEvent):
+    name: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupMoved(DomainEvent):
+    old_parent_group_id: uuid.UUID | None
+    new_parent_group_id: uuid.UUID | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupDeleted(DomainEvent):
+    name: str
+    owner_org_id: uuid.UUID

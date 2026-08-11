@@ -203,3 +203,24 @@ class TestFormatImmutability:
         plate.map_wells({"A1": _wa(batch_id=uuid.uuid4())})
         with pytest.raises(ValidationError, match="format"):
             plate.update(format=PlateFormat.F384)
+
+
+class TestGroupAssignment:
+    def test_assign_and_clear_group(self) -> None:
+        plate = _make_plate()
+        gid = uuid.uuid4()
+        plate.assign_to_group(gid)
+        assert plate.group_id == gid
+        plate.assign_to_group(None)
+        assert plate.group_id is None
+
+    def test_derive_does_not_copy_group(self) -> None:
+        plate = _make_plate()
+        plate.assign_to_group(uuid.uuid4())
+        child = plate.derive(
+            barcode=Barcode(value="CHILD-001"),
+            plate_label="child",
+            plate_type=PlateType.DAUGHTER,
+            registered_by=uuid.uuid4(),
+        )
+        assert child.group_id is None

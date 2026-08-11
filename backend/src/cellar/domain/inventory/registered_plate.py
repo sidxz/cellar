@@ -105,6 +105,7 @@ class RegisteredPlate(AggregateRoot):
         parent_plate_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
         template_id: uuid.UUID | None = None,
+        group_id: uuid.UUID | None = None,
         notes: str | None = None,
         custom_fields: dict[str, Any] | None = None,
         created_at: datetime | None = None,
@@ -129,6 +130,7 @@ class RegisteredPlate(AggregateRoot):
         self.parent_plate_id = parent_plate_id
         self.project_id = project_id
         self.template_id = template_id
+        self.group_id = group_id
         self.notes = notes
         self.custom_fields: dict[str, Any] | None = dict(custom_fields) if custom_fields else None
 
@@ -284,6 +286,12 @@ class RegisteredPlate(AggregateRoot):
                 new_location_id=new_location_id,
             )
         )
+
+    def assign_to_group(self, group_id: uuid.UUID | None) -> None:
+        """Set or clear this plate's group. The plate-org == group-org
+        invariant is enforced by the use case, which holds both aggregates."""
+        self.group_id = group_id
+        self.updated_at = datetime.now(UTC)
 
     # ------------------------------------------------------------------
     # Derive (copy to child plate)
