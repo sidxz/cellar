@@ -29,6 +29,7 @@ export function usePlates(
     status?: string;
     format?: string;
     owner_org_id?: string;
+    group_id?: string;
     tags?: string[];
     tagLogic?: "any" | "all";
   },
@@ -41,6 +42,7 @@ export function usePlates(
   if (params?.status) cleanParams.status = params.status;
   if (params?.format) cleanParams.format = params.format;
   if (params?.owner_org_id) cleanParams.owner_org_id = params.owner_org_id;
+  if (params?.group_id) cleanParams.group_id = params.group_id;
   if (tags) {
     cleanParams.tags = tags;
     cleanParams.tag_logic = params?.tagLogic ?? "any";
