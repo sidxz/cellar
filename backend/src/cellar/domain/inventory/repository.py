@@ -9,6 +9,7 @@ from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.cdd_plate_import import CddPlateImport
 from cellar.domain.inventory.import_template import ImportTemplate
 from cellar.domain.inventory.org_plate_policy import OrgPlatePolicy
+from cellar.domain.inventory.plate_group import PlateGroup
 from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.inventory.sample import Sample
 from cellar.domain.inventory.sample_request import SampleRequest
@@ -187,11 +188,37 @@ class RegisteredPlateRepository(Protocol):
         storage_location_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
         owner_org_id: uuid.UUID | None = None,
+        group_id: uuid.UUID | None = None,
         exclude_owner_org_ids: set[uuid.UUID] | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
     ) -> list[RegisteredPlate]: ...
     async def save(self, aggregate: RegisteredPlate) -> None: ...
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class PlateGroupRepository(Protocol):
+    """Repository for PlateGroup aggregates."""
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> PlateGroup | None: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID, *, owner_org_id: uuid.UUID | None = None
+    ) -> list[PlateGroup]: ...
+    async def find_children(
+        self, workspace_id: uuid.UUID, parent_group_id: uuid.UUID
+    ) -> list[PlateGroup]: ...
+    async def find_by_name(
+        self,
+        workspace_id: uuid.UUID,
+        owner_org_id: uuid.UUID,
+        parent_group_id: uuid.UUID | None,
+        name: str,
+    ) -> PlateGroup | None: ...
+    async def count_plates_by_group(self, workspace_id: uuid.UUID) -> dict[uuid.UUID, int]: ...
+    async def save(self, aggregate: PlateGroup) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
 

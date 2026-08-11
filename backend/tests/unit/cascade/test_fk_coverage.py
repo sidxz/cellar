@@ -114,6 +114,23 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     ("registered_plates", "storage_location_id", "storage_locations"),
 
     # -------------------------------------------------------------------------
+    # Plate groups — org-owned hierarchy (migration 062); same rationale as
+    # storage_locations/registered_plates self-refs above
+    # -------------------------------------------------------------------------
+    # plate_groups.parent_group_id is a self-referential FK for the group
+    # hierarchy (ondelete=RESTRICT — deleting a group with children fails at
+    # the DB level and is surfaced by the delete-group use case, not silently
+    # bypassed). plate_groups is not a Tier-1 admin-deletable entity; lifecycle
+    # is managed via the inventory module, same as storage_locations.parent_id
+    # and registered_plates.parent_plate_id above.
+    ("plate_groups", "parent_group_id", "plate_groups"),
+    # registered_plates.group_id is a nullable plate-to-group membership
+    # reference (ondelete=SET NULL). Deleting a group does not delete its
+    # plates — the DB clears the reference automatically, same rationale as
+    # the storage_locations loose-reference entries above.
+    ("registered_plates", "group_id", "plate_groups"),
+
+    # -------------------------------------------------------------------------
     # registered_plates → runs (screening data link): cross-context soft ref
     # -------------------------------------------------------------------------
     # registered_plates.run_id links a physical plate to a screening run.
