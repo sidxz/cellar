@@ -4,7 +4,20 @@ from __future__ import annotations
 
 import uuid
 
+import sqlalchemy as sa
+from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+async def _policy_row_count(api_app: FastAPI, org_id: uuid.UUID) -> int:
+    engine: AsyncEngine = api_app.state.container[AsyncEngine]
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            sa.text("SELECT count(*) FROM org_plate_policies WHERE org_id = :org_id"),
+            {"org_id": org_id},
+        )
+        return result.scalar_one()
 
 
 def _body(**overrides) -> dict:
@@ -31,13 +44,18 @@ class TestGetOrgPlatePolicy:
         assert data["plates_private"] is False
         assert data["version"] == 1
 
-    async def test_second_get_still_defaults_no_row_created(self, client: AsyncClient) -> None:
+    async def test_second_get_still_defaults_no_row_created(
+        self, client: AsyncClient, api_app: FastAPI
+    ) -> None:
         org_id = uuid.uuid4()
         first = await client.get(f"/api/v1/org-plate-policies/{org_id}")
         second = await client.get(f"/api/v1/org-plate-policies/{org_id}")
         assert first.status_code == 200
         assert second.status_code == 200
         assert second.json() == first.json()
+        # Response equality alone can't catch a silently-persisted default row
+        # (it would serialize identically) — prove absence at the DB level.
+        assert await _policy_row_count(api_app, org_id) == 0
 
 
 class TestSetOrgPlatePolicy:
@@ -48,7 +66,9 @@ class TestSetOrgPlatePolicy:
         )
         assert resp.status_code == 403
 
-    async def test_put_as_admin_flips_plates_private(self, client: AsyncClient) -> None:
+    async def test_put_as_admin_flips_plates_private(
+        self, client: AsyncClient, api_app: FastAPI
+    ) -> None:
         org_id = uuid.uuid4()
         resp = await client.put(
             f"/api/v1/org-plate-policies/{org_id}",
@@ -61,3 +81,5 @@ class TestSetOrgPlatePolicy:
         got = await client.get(f"/api/v1/org-plate-policies/{org_id}")
         assert got.status_code == 200
         assert got.json()["plates_private"] is True
+        # Sanity for the no-hidden-write test's counter: a real PUT DOES create a row.
+        assert await _policy_row_count(api_app, org_id) == 1
