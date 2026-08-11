@@ -14,6 +14,7 @@ from cellar.application.auth import (
     require_same_workspace,
     require_workspace_role,
 )
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.resolve_batch_ref import resolve_batch_ref
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -211,9 +212,15 @@ class RegisterPlate:
 class GetPlate:
     """Retrieve a single registered plate by ID."""
 
-    def __init__(self, uow: UnitOfWork, repo: RegisteredPlateRepository) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: RegisteredPlateRepository,
+        visibility: PlateVisibilityService,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._visibility = visibility
 
     async def __call__(
         self, input: GetPlateQuery, auth: AuthContext | None = None
@@ -224,15 +231,26 @@ class GetPlate:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
             if plate is None:
                 return _not_found(input.plate_id)
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(plate, auth, excluded):
+                # No existence leak — a plate hidden by org policy 404s exactly
+                # like a plate that doesn't exist.
+                return _not_found(input.plate_id)
             return Success(plate)
 
 
 class ListPlates:
     """Search/list registered plates with optional filters."""
 
-    def __init__(self, uow: UnitOfWork, repo: RegisteredPlateRepository) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: RegisteredPlateRepository,
+        visibility: PlateVisibilityService,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._visibility = visibility
 
     async def __call__(
         self, input: ListPlatesQuery, auth: AuthContext | None = None
@@ -240,6 +258,7 @@ class ListPlates:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
             plates = await self._repo.search(
                 input.workspace_id,
                 barcode=input.barcode,
@@ -250,6 +269,7 @@ class ListPlates:
                 storage_location_id=input.storage_location_id,
                 project_id=input.project_id,
                 owner_org_id=input.owner_org_id,
+                exclude_owner_org_ids=excluded,
                 tags=input.tags,
                 tag_logic=input.tag_logic,
             )

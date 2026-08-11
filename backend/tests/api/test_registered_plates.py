@@ -10,7 +10,7 @@ import uuid
 
 from httpx import AsyncClient
 
-from tests.api.conftest import AUTH_ORG_ID
+from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID
 
 
 async def _register(client: AsyncClient, **overrides):
@@ -22,6 +22,16 @@ async def _register(client: AsyncClient, **overrides):
     }
     body.update(overrides)
     return await client.post("/api/v1/plates", json=body)
+
+
+async def _set_plates_private(client: AsyncClient, org_id: uuid.UUID, *, private: bool = True):
+    body = {
+        "require_approval": True,
+        "confirmation": "admin_confirm",
+        "default_due_days": None,
+        "plates_private": private,
+    }
+    return await client.put(f"/api/v1/org-plate-policies/{org_id}", json=body)
 
 
 class TestWellRoles:
@@ -150,3 +160,53 @@ class TestOwnerOrg:
         ids = {p["id"] for p in resp.json()}
         assert reg_a.json()["id"] in ids
         assert reg_b.json()["id"] not in ids
+
+
+class TestPlateVisibility:
+    """Private-org plate exclusion (PlateVisibilityService) — S2 scope."""
+
+    async def test_private_org_excluded_from_list_and_get_for_other_org_caller(
+        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        # `client` is AUTH_ORG_ID — a different org than the plate's owner —
+        # so the now-private plate is excluded from list and 404s on direct GET.
+        listed = await client.get("/api/v1/plates")
+        assert listed.status_code == 200, listed.text
+        assert plate_id not in {p["id"] for p in listed.json()}
+
+        got = await client.get(f"/api/v1/plates/{plate_id}")
+        assert got.status_code == 404, got.text
+
+        # `editor_client_other_org` is OTHER_ORG_ID — the plate's own org —
+        # so it stays visible in both list and direct GET.
+        got_own = await editor_client_other_org.get(f"/api/v1/plates/{plate_id}")
+        assert got_own.status_code == 200, got_own.text
+        assert got_own.json()["id"] == plate_id
+
+        listed_own = await editor_client_other_org.get("/api/v1/plates")
+        assert listed_own.status_code == 200, listed_own.text
+        assert plate_id in {p["id"] for p in listed_own.json()}
+
+    async def test_explicit_owner_org_filter_cannot_disclose_private_org(
+        self, client: AsyncClient
+    ) -> None:
+        """Security-review addition: an explicit ``owner_org_id`` filter for a
+        now-private org must not leak its plates either — the exclusion applies
+        even when the caller names the org directly, not just on the unfiltered
+        list."""
+        reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
+        assert reg.status_code == 201, reg.text
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        resp = await client.get("/api/v1/plates", params={"owner_org_id": str(OTHER_ORG_ID)})
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == []

@@ -37,6 +37,10 @@ ORG_ID = uuid.uuid4()
 # imported by tests that assert owner_org_id defaults from auth.
 AUTH_ORG_ID = uuid.uuid4()
 
+# A second, distinct org id — for cross-org visibility tests (plate_visibility
+# private-org exclusion) where the caller's org must differ from AUTH_ORG_ID.
+OTHER_ORG_ID = uuid.uuid4()
+
 
 def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     """Build a FastAPI app for testing — no Sentinel middleware, FakeAuth for routes."""
@@ -219,6 +223,25 @@ async def editor_client_own_org(
     """
     editor_auth = FakeAuth(
         role="editor", workspace_id=workspace_id, user_id=user_id, org_id=AUTH_ORG_ID
+    )
+    app = _create_test_app(database_url, editor_auth)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    engine = app.state.container[AsyncEngine]
+    await engine.dispose()
+
+
+@pytest.fixture
+async def editor_client_other_org(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID, user_id: uuid.UUID
+) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client scoped to an editor role with a *different* org_id
+    (``OTHER_ORG_ID``) than ``AUTH_ORG_ID`` — the second identity needed for
+    cross-org plate visibility tests (a caller whose org == the plate's owner
+    org, distinct from the default `client`/`editor_client_own_org` org)."""
+    editor_auth = FakeAuth(
+        role="editor", workspace_id=workspace_id, user_id=user_id, org_id=OTHER_ORG_ID
     )
     app = _create_test_app(database_url, editor_auth)
     transport = ASGITransport(app=app)  # type: ignore[arg-type]

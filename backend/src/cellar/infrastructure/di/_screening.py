@@ -15,6 +15,7 @@ from cellar.application.chemical_registration.protocols import StructureProcesso
 from cellar.application.inventory.ensure_batch_exists import EnsureBatchExists
 from cellar.application.inventory.export_plate_layout import ExportPlateLayout
 from cellar.application.inventory.plate_read_model import PlateReadModelService
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.registered_plates import (
     ChangeStatus,
     DeletePlate,
@@ -189,6 +190,9 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
+    SQLAlchemyOrgPlatePolicyRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_read_model_reader import (
     SQLAlchemyPlateReadModelService,
@@ -858,6 +862,14 @@ def register_screening(container: Container) -> None:
 
         return _f
 
+    def _reg_plate_query_with_visibility(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            visibility = PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow))
+            return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow), visibility)
+
+        return _f
+
     def _map_wells(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return MapWells(
@@ -872,8 +884,8 @@ def register_screening(container: Container) -> None:
     container.define(MapWells, _map_wells)
     container.define(ChangeStatus, _reg_plate_cmd(ChangeStatus))
     container.define(DerivePlate, _reg_plate_cmd(DerivePlate))
-    container.define(GetPlate, _reg_plate_query(GetPlate))
-    container.define(ListPlates, _reg_plate_query(ListPlates))
+    container.define(GetPlate, _reg_plate_query_with_visibility(GetPlate))
+    container.define(ListPlates, _reg_plate_query_with_visibility(ListPlates))
     container.define(ListChildren, _reg_plate_query(ListChildren))
 
     def _export_plate_layout(c: Container):
