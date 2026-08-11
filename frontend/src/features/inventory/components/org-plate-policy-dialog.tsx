@@ -50,6 +50,16 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
     if (!open) setOrgId("");
   }, [open]);
 
+  // Reset fields synchronously with the org change, so a Save racing the new
+  // org's policy fetch can never write the previous org's values onto it.
+  const handleOrgChange = (id: string) => {
+    setOrgId(id);
+    setRequireApproval(false);
+    setConfirmation("kiosk_scan");
+    setDueDays("");
+    setPlatesPrivate(false);
+  };
+
   // Prefill the form whenever the selected org's policy loads.
   useEffect(() => {
     if (policy) {
@@ -83,7 +93,7 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="policy-org">Organization</Label>
-            <Select value={orgId} onValueChange={setOrgId}>
+            <Select value={orgId} onValueChange={handleOrgChange}>
               <SelectTrigger id="policy-org">
                 <SelectValue placeholder="Select organization..." />
               </SelectTrigger>
@@ -152,7 +162,7 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!orgId || setPolicy.isPending}>
+          <Button onClick={handleSave} disabled={!orgId || isLoading || setPolicy.isPending}>
             {setPolicy.isPending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>

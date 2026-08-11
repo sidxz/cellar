@@ -23,15 +23,18 @@ const plateHooks = createCrudHooks<RegisteredPlate, RegisterPlateInput, UpdatePl
 });
 
 /** Custom list — supports optional filter params with undefined values, plus tag filtering. */
-export function usePlates(params?: {
-  barcode?: string;
-  plate_type?: string;
-  status?: string;
-  format?: string;
-  owner_org_id?: string;
-  tags?: string[];
-  tagLogic?: "any" | "all";
-}) {
+export function usePlates(
+  params?: {
+    barcode?: string;
+    plate_type?: string;
+    status?: string;
+    format?: string;
+    owner_org_id?: string;
+    tags?: string[];
+    tagLogic?: "any" | "all";
+  },
+  options?: { enabled?: boolean },
+) {
   const tags = params?.tags?.length ? params.tags : null;
   const cleanParams: Record<string, unknown> = {};
   if (params?.barcode) cleanParams.barcode = params.barcode;
@@ -52,6 +55,7 @@ export function usePlates(params?: {
         method: "GET",
         params: Object.keys(cleanParams).length > 0 ? cleanParams : undefined,
       }),
+    enabled: options?.enabled ?? true,
   });
 }
 

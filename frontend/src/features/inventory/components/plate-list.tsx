@@ -59,14 +59,19 @@ export function PlateList() {
     data: plates,
     isLoading,
     error,
-  } = usePlates({
-    plate_type: filterType === "__all__" ? undefined : filterType,
-    status: filterStatus === "__all__" ? undefined : filterStatus,
-    format: filterFormat === "__all__" ? undefined : filterFormat,
-    owner_org_id: ownerOrgId,
-    tags: tagFilter.tagIds,
-    tagLogic: tagFilter.tagLogic,
-  });
+  } = usePlates(
+    {
+      plate_type: filterType === "__all__" ? undefined : filterType,
+      status: filterStatus === "__all__" ? undefined : filterStatus,
+      format: filterFormat === "__all__" ? undefined : filterFormat,
+      owner_org_id: ownerOrgId,
+      tags: tagFilter.tagIds,
+      tagLogic: tagFilter.tagLogic,
+    },
+    // Hold the fetch until /me resolves while "My org" is active — otherwise
+    // the grid flashes all-orgs data during the identity load.
+    { enabled: filterOrg !== MY_ORG || me !== undefined },
+  );
   const deleteMutation = useDeletePlate();
 
   const columnDefs = useMemo<ColDef<RegisteredPlate>[]>(
@@ -125,7 +130,9 @@ export function PlateList() {
         field: "owner_org_id",
         width: 140,
         valueFormatter: (p) =>
-          p.value ? (orgNameById.get(p.value as string) ?? "Unknown org") : "\u2014",
+          p.value
+            ? (orgNameById.get(p.value as string) ?? (orgs ? "Unknown org" : "\u2014"))
+            : "\u2014",
       },
       {
         headerName: "Wells Mapped",
@@ -156,7 +163,7 @@ export function PlateList() {
           ) : null,
       },
     ],
-    [router, orgNameById],
+    [router, orgNameById, orgs],
   );
 
   if (error) {
@@ -268,7 +275,7 @@ export function PlateList() {
       <DataGrid<RegisteredPlate>
         rowData={plates}
         columnDefs={columnDefs}
-        loading={isLoading}
+        loading={isLoading || !plates}
         height="500px"
         suppressFilters
         onRowClick={(plate) => router.push(`/inventory/plates/${plate.id}`)}
