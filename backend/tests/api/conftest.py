@@ -206,6 +206,27 @@ async def editor_client(
 
 
 @pytest.fixture
+async def editor_client_own_org(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID, user_id: uuid.UUID
+) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client scoped to an editor role with a known org_id.
+
+    For the cross-org assignment guard (owner_org_id must match auth.org_id
+    unless admin) — ``editor_client`` deliberately leaves org_id unset, which
+    can't exercise the "same org" branch of that guard.
+    """
+    editor_auth = FakeAuth(
+        role="editor", workspace_id=workspace_id, user_id=user_id, org_id=AUTH_ORG_ID
+    )
+    app = _create_test_app(database_url, editor_auth)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    engine = app.state.container[AsyncEngine]
+    await engine.dispose()
+
+
+@pytest.fixture
 async def viewer_client(
     database_url: str, _run_migrations: None, workspace_id: uuid.UUID, user_id: uuid.UUID
 ) -> AsyncIterator[AsyncClient]:

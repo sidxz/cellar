@@ -113,11 +113,29 @@ class TestOwnerOrg:
         body = resp.json()
         assert body["owner_org_id"] == str(AUTH_ORG_ID)
 
-    async def test_register_explicit_owner_org_overrides_auth(self, client: AsyncClient) -> None:
+    async def test_register_explicit_owner_org_allowed_for_admin(
+        self, client: AsyncClient
+    ) -> None:
+        """`client` is admin-role auth (tests/api/conftest.py) — admins are exempt
+        from the cross-org assignment guard, so an explicit foreign org is allowed."""
         explicit_org = uuid.uuid4()
         resp = await _register(client, owner_org_id=str(explicit_org))
         assert resp.status_code == 201, resp.text
         assert resp.json()["owner_org_id"] == str(explicit_org)
+
+    async def test_register_explicit_same_org_allowed_for_editor(
+        self, editor_client_own_org: AsyncClient
+    ) -> None:
+        resp = await _register(editor_client_own_org, owner_org_id=str(AUTH_ORG_ID))
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["owner_org_id"] == str(AUTH_ORG_ID)
+
+    async def test_register_explicit_foreign_org_forbidden_for_editor(
+        self, editor_client_own_org: AsyncClient
+    ) -> None:
+        foreign_org = uuid.uuid4()
+        resp = await _register(editor_client_own_org, owner_org_id=str(foreign_org))
+        assert resp.status_code == 403, resp.text
 
     async def test_list_filters_by_owner_org(self, client: AsyncClient) -> None:
         org_a = uuid.uuid4()

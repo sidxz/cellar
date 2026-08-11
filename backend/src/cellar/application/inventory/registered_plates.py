@@ -25,7 +25,13 @@ from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
 from cellar.domain.inventory.well_assignment import WellAssignment
 from cellar.domain.shared.enums import PlateFormat
-from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.errors import (
+    AuthorizationError,
+    ConflictError,
+    DomainError,
+    NotFoundError,
+    ValidationError,
+)
 from cellar.domain.shared.value_objects import Barcode
 
 # ---------------------------------------------------------------------------
@@ -158,6 +164,14 @@ class RegisterPlate:
     ) -> Result[RegisteredPlate, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
+
+        if (
+            auth is not None
+            and input.owner_org_id is not None
+            and input.owner_org_id != auth.org_id
+            and not auth.is_admin
+        ):
+            raise AuthorizationError("Cannot assign plates to another organization")
 
         async with self._uow:
             # Barcode uniqueness check
