@@ -164,3 +164,11 @@ VALID_PLATE_TRANSITIONS: dict[PlateStatus, set[PlateStatus]] = {
     PlateStatus.DEPLETED: {PlateStatus.DISPOSED},
     PlateStatus.DISPOSED: set(),
 }
+
+
+class LoanConfirmationMode(StrEnum):
+    """How a plate loan handoff is confirmed, per org policy."""
+
+    KIOSK_SCAN = "kiosk_scan"
+    ADMIN_CONFIRM = "admin_confirm"
+    NONE = "none"

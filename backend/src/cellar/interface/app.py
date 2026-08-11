@@ -272,11 +272,13 @@ def create_app() -> FastAPI:
     app.include_router(shipment_router)
     app.include_router(synth_req_router)
 
+    from cellar.interface.routes.org_plate_policies import router as org_plate_policy_router
     from cellar.interface.routes.plate_templates import router as plate_template_router
     from cellar.interface.routes.registered_plates import router as registered_plates_router
 
     app.include_router(plate_template_router)
     app.include_router(registered_plates_router)
+    app.include_router(org_plate_policy_router)
 
     from cellar.interface.routes.campaigns import router as campaign_router
     from cellar.interface.routes.campaigns_channels import (

@@ -8,6 +8,7 @@ from typing import Protocol, runtime_checkable
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.cdd_plate_import import CddPlateImport
 from cellar.domain.inventory.import_template import ImportTemplate
+from cellar.domain.inventory.org_plate_policy import OrgPlatePolicy
 from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.inventory.sample import Sample
 from cellar.domain.inventory.sample_request import SampleRequest
@@ -204,6 +205,17 @@ class ImportTemplateRepository(Protocol):
     async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[ImportTemplate]: ...
     async def save(self, entity: ImportTemplate) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class OrgPlatePolicyRepository(Protocol):
+    """Repository for OrgPlatePolicy aggregates — keyed by (workspace_id, org_id)."""
+
+    async def find_by_org(
+        self, workspace_id: uuid.UUID, org_id: uuid.UUID
+    ) -> OrgPlatePolicy | None: ...
+    async def list_private_org_ids(self, workspace_id: uuid.UUID) -> set[uuid.UUID]: ...
+    async def save(self, aggregate: OrgPlatePolicy) -> None: ...
 
 
 @runtime_checkable

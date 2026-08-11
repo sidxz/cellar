@@ -46,6 +46,7 @@ from cellar.application.inventory.manage_storage import (
     ListStorageLocations,
     ListStorageLocationsWithCounts,
 )
+from cellar.application.inventory.org_plate_policy import GetOrgPlatePolicy, SetOrgPlatePolicy
 from cellar.application.inventory.preview_shipment_import import PreviewShipmentImport
 from cellar.application.inventory.sample_requests import (
     ApproveSampleRequest,
@@ -106,6 +107,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.import_template_repo
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.inventory_summary_reader import (
     SQLAlchemyInventorySummaryReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
+    SQLAlchemyOrgPlatePolicyRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
@@ -480,6 +484,18 @@ def register_inventory(container: Container) -> None:
         )
 
     container.define(ImportPlateDataService, _import_plate_data_service)
+
+    # --- Org Plate Policies ---
+    def _get_org_plate_policy(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetOrgPlatePolicy(uow, SQLAlchemyOrgPlatePolicyRepository(uow))
+
+    def _set_org_plate_policy(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetOrgPlatePolicy(uow, SQLAlchemyOrgPlatePolicyRepository(uow), c[EventDispatcher])
+
+    container.define(GetOrgPlatePolicy, _get_org_plate_policy)
+    container.define(SetOrgPlatePolicy, _set_org_plate_policy)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

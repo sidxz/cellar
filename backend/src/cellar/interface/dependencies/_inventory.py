@@ -43,6 +43,7 @@ from cellar.application.inventory.manage_storage import (
     ListStorageLocations,
     ListStorageLocationsWithCounts,
 )
+from cellar.application.inventory.org_plate_policy import GetOrgPlatePolicy, SetOrgPlatePolicy
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.registered_plates import (
     ChangeStatus,
@@ -79,6 +80,7 @@ __all__ = [
     "ExportPlateLayoutDep",
     "GetBatchDep",
     "GetInventorySummaryDep",
+    "GetOrgPlatePolicyDep",
     "GetPlateDep",
     "GetSampleDep",
     "GetStorageLocationChildrenDep",
@@ -101,6 +103,7 @@ __all__ = [
     "QuarantineSampleDep",
     "RegisterPlateDep",
     "RemoveBatchIdentifierDep",
+    "SetOrgPlatePolicyDep",
     "UpdateBatchDep",
     "UpdatePlateDep",
     "UpdateStorageLocationDep",
@@ -150,6 +153,8 @@ ListStorageLocationsWithCountsDep = Annotated[
 GetInventorySummaryDep = Annotated[
     GetInventorySummary, Depends(_get_use_case(GetInventorySummary))
 ]
+GetOrgPlatePolicyDep = Annotated[GetOrgPlatePolicy, Depends(_get_use_case(GetOrgPlatePolicy))]
+SetOrgPlatePolicyDep = Annotated[SetOrgPlatePolicy, Depends(_get_use_case(SetOrgPlatePolicy))]
 UpdateStorageLocationDep = Annotated[
     UpdateStorageLocation, Depends(_get_use_case(UpdateStorageLocation))
 ]

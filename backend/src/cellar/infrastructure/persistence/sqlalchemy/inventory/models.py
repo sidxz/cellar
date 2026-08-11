@@ -6,6 +6,7 @@ import uuid
 from datetime import date
 
 from sqlalchemy import (
+    Boolean,
     Date,
     Float,
     ForeignKey,
@@ -182,6 +183,24 @@ class RegisteredPlateModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixi
         Index("ix_reg_plate_project", "project_id"),
         Index("ix_reg_plate_owner_org", "workspace_id", "owner_org_id"),
         Index("ix_reg_plate_parent", "parent_plate_id"),
+    )
+
+
+class OrgPlatePolicyModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """Per-org plate loan/visibility policy within a workspace."""
+
+    __tablename__ = "org_plate_policies"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    require_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    confirmation: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="admin_confirm"
+    )
+    default_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    plates_private: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "org_id", name="uq_org_plate_policy_ws_org"),
     )
 
 
