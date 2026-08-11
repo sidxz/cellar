@@ -16,6 +16,7 @@ from typing import Protocol, runtime_checkable
 from returns.result import Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError
@@ -41,6 +42,7 @@ class TagBrowseReader(Protocol):
         match_all: bool = False,
         types: list[str] | None = None,
         limit: int = 200,
+        excluded_org_ids: set[uuid.UUID] | None = None,
     ) -> list[TaggedEntityRow]: ...
 
 
@@ -54,9 +56,12 @@ class ListTagEntitiesQuery(Query):
 
 
 class ListTagEntities:
-    def __init__(self, uow: UnitOfWork, repo: TagBrowseReader) -> None:
+    def __init__(
+        self, uow: UnitOfWork, repo: TagBrowseReader, visibility: PlateVisibilityService
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._visibility = visibility
 
     async def __call__(
         self, input: ListTagEntitiesQuery, auth: AuthContext | None = None
@@ -64,11 +69,13 @@ class ListTagEntities:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
             rows = await self._repo.find_entities_for_tags(
                 input.workspace_id,
                 input.tag_ids,
                 match_all=input.match_all,
                 types=input.types,
                 limit=input.limit,
+                excluded_org_ids=excluded,
             )
         return Success(rows)

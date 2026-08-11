@@ -2,10 +2,35 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
+from tests.api.conftest import OTHER_ORG_ID
+
 pytestmark = pytest.mark.asyncio
+
+
+async def _register_plate(client: AsyncClient, **overrides):
+    body = {
+        "barcode": f"PLT-{uuid.uuid4().hex[:8]}",
+        "plate_label": "Test Plate",
+        "format": "96",
+        "plate_type": "assay",
+    }
+    body.update(overrides)
+    return await client.post("/api/v1/plates", json=body)
+
+
+async def _set_plates_private(client: AsyncClient, org_id: uuid.UUID, *, private: bool = True):
+    body = {
+        "require_approval": True,
+        "confirmation": "admin_confirm",
+        "default_due_days": None,
+        "plates_private": private,
+    }
+    return await client.put(f"/api/v1/org-plate-policies/{org_id}", json=body)
 
 
 async def test_browse_returns_entities_across_types(client: AsyncClient) -> None:
@@ -103,3 +128,39 @@ async def test_browse_multi_tag_any_and_all(client: AsyncClient) -> None:
     )
     assert all_resp.status_code == 200, all_resp.text
     assert {r["entity_id"] for r in all_resp.json() if r["entity_type"] == "Collection"} == {c1}
+
+
+class TestBrowsePlateVisibility:
+    """Private-org plate exclusion on the tag-browse hydration query (S2 Task 5c)."""
+
+    async def test_tagged_private_plate_excluded_for_foreign_org_visible_for_own_org(
+        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        reg = await _register_plate(client, owner_org_id=str(OTHER_ORG_ID))
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        # The plate's own org tags it (still visible to everyone at this point).
+        tagged = await editor_client_other_org.post(
+            f"/api/v1/plates/{plate_id}/tags", json={"key": "browse-vis"}
+        )
+        assert tagged.status_code == 201, tagged.text
+        tag_id = tagged.json()["id"]
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        # `client` (AUTH_ORG_ID) is now foreign to the plate's org — it must
+        # drop out of the browse results entirely, not render unlabeled.
+        resp = await client.get("/api/v1/tags/entities", params={"tags": [tag_id]})
+        assert resp.status_code == 200, resp.text
+        assert plate_id not in {r["entity_id"] for r in resp.json()}
+
+        # The plate's own org still sees it in the browse.
+        resp_own = await editor_client_other_org.get(
+            "/api/v1/tags/entities", params={"tags": [tag_id]}
+        )
+        assert resp_own.status_code == 200, resp_own.text
+        rows_own = {r["entity_id"]: r for r in resp_own.json()}
+        assert plate_id in rows_own
+        assert rows_own[plate_id]["entity_type"] == "Plate"

@@ -8,6 +8,7 @@ from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.admin.admin_delete_registry import register_admin_delete
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.workspace_config.create_custom_field import CreateCustomField
 from cellar.application.workspace_config.create_data_source import CreateDataSource
 from cellar.application.workspace_config.create_external_api_key import CreateExternalApiKey
@@ -67,6 +68,9 @@ from cellar.application.workspace_config.update_workspace_settings import (
 )
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
+    SQLAlchemyOrgPlatePolicyRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_browse_repository import (
     SQLAlchemyTagBrowseRepository,
 )
@@ -384,7 +388,8 @@ def register_workspace_config(container: Container) -> None:
 
     def _list_tag_entities(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return ListTagEntities(uow, SQLAlchemyTagBrowseRepository(uow))
+        visibility = PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow))
+        return ListTagEntities(uow, SQLAlchemyTagBrowseRepository(uow), visibility)
 
     container.define(ListTagEntities, _list_tag_entities)
 

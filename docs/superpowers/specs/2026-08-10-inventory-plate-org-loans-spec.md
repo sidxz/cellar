@@ -83,6 +83,7 @@ One application-layer `PlateVisibilityService` used by ListPlates / GetPlate / g
 - Plate visible to user U iff: plate's owner org is not private, **or** U's org == owner org, **or** plate has an active loan with `borrower_org_id == U.org`.
 - Private-org check for org-scoped reads (tree/insights for org X): member-only → 403 otherwise.
 - Default list filter everywhere: `owner_org_id == auth.org_id` (plus borrowed-by-us), widenable to "All orgs" (which still applies the privacy rule).
+- Accepted oracle: barcode-uniqueness conflicts (409 on register/derive) can reveal a barcode is taken even by a private plate — inherent to workspace-unique barcodes.
 
 ## 6. Org directory (Cellar infrastructure)
 

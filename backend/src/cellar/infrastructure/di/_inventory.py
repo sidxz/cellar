@@ -47,6 +47,7 @@ from cellar.application.inventory.manage_storage import (
     ListStorageLocationsWithCounts,
 )
 from cellar.application.inventory.org_plate_policy import GetOrgPlatePolicy, SetOrgPlatePolicy
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.preview_shipment_import import PreviewShipmentImport
 from cellar.application.inventory.sample_requests import (
     ApproveSampleRequest,
@@ -479,6 +480,7 @@ def register_inventory(container: Container) -> None:
             plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
             cache=c[ImportFileCache],
+            visibility=PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
             create_run=c[CreateRun],
             bulk_create_readout_data=c[BulkCreateReadoutData],
         )

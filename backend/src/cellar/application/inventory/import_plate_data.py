@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import require_editor, require_workspace_role
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.import_template import ImportTemplate
 from cellar.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
@@ -173,6 +174,7 @@ class ImportPlateDataService:
         plate_repo: RegisteredPlateRepository,
         batch_repo: BatchRepository,
         cache: ImportFileCache,
+        visibility: PlateVisibilityService,
         create_run: CreateRun | None = None,
         bulk_create_readout_data: BulkCreateReadoutData | None = None,
     ) -> None:
@@ -180,6 +182,7 @@ class ImportPlateDataService:
         self._plate_repo = plate_repo
         self._batch_repo = batch_repo
         self._cache = cache
+        self._visibility = visibility
         self._create_run = create_run
         self._bulk_create = bulk_create_readout_data
 
@@ -255,6 +258,7 @@ class ImportPlateDataService:
             )
 
         async with self._uow:
+            excluded = await self._visibility.excluded_org_ids(workspace_id, auth)
             headers, data_rows = cached
             barcode_idx, well_idx = self._find_column_indices(headers, column_mappings)
 
@@ -271,6 +275,12 @@ class ImportPlateDataService:
                         continue
 
                     plate = await self._plate_repo.find_by_barcode(workspace_id, barcode)
+                    if plate is not None and not self._visibility.can_view(plate, auth, excluded):
+                        # A barcode-matched plate hidden by org policy is
+                        # reported exactly like an unmatched barcode — no
+                        # distinct wording that would create an existence
+                        # oracle (S2 Task 5c).
+                        plate = None
                     if plate is None:
                         details.append(
                             ValidationDetail(
@@ -347,6 +357,7 @@ class ImportPlateDataService:
         plate_cache: dict[str, Any] = {}
 
         async with self._uow:
+            excluded = await self._visibility.excluded_org_ids(workspace_id, auth)
             for row_num, row in enumerate(data_rows, start=2):
                 try:
                     barcode = (
@@ -365,9 +376,15 @@ class ImportPlateDataService:
                         continue
 
                     if barcode not in plate_cache:
-                        plate_cache[barcode] = await self._plate_repo.find_by_barcode(
-                            workspace_id, barcode
-                        )
+                        found = await self._plate_repo.find_by_barcode(workspace_id, barcode)
+                        if found is not None and not self._visibility.can_view(
+                            found, auth, excluded
+                        ):
+                            # Same non-oracle treatment as validate() — a
+                            # hidden plate resolves to "not found", not a
+                            # distinct error (S2 Task 5c).
+                            found = None
+                        plate_cache[barcode] = found
                     plate = plate_cache[barcode]
 
                     if plate is None:
