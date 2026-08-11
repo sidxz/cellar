@@ -32,10 +32,15 @@ export const plateStatusLabels: Record<PlateStatus, string> = {
   disposed: "Disposed",
 };
 
+/**
+ * One well's assignment. Field optionality mirrors the generated
+ * `WellEntryModel` so `PlateResponse.well_map` assigns without casts —
+ * `batch_id` is genuinely null/absent for unresolved batch refs (CDD imports).
+ */
 export interface WellMapping {
-  batch_id: string;
-  concentration_value: number | null;
-  concentration_unit: string | null;
+  batch_id?: string | null;
+  concentration_value?: number | null;
+  concentration_unit?: string | null;
   /** Role of the well — sample / positive_control / negative_control / blank / reference. */
   well_type?: string;
 }
