@@ -513,10 +513,11 @@ class DeletePlate:
 
             children = await self._repo.find_children(input.workspace_id, input.plate_id)
             if children:
+                # No count: it would tally children the caller may not see
+                # (private-org daughters), leaking existence through arithmetic.
                 return Failure(
                     ConflictError(
-                        f"Cannot delete plate '{plate.barcode.value}': "
-                        f"it has {len(children)} child plate(s)"
+                        f"Cannot delete plate '{plate.barcode.value}': it has child plates"
                     )
                 )
 

@@ -70,10 +70,10 @@ class PlateResponse(BaseModel):
     workspace_id: uuid.UUID
     barcode: str
     plate_label: str
-    format: str
-    plate_type: str
+    format: PlateFormat
+    plate_type: PlateType
     well_map: dict[str, WellEntryModel] | None = None
-    status: str
+    status: PlateStatus
     storage_location_id: uuid.UUID | None = None
     project_id: uuid.UUID | None = None
     template_id: uuid.UUID | None = None
@@ -89,14 +89,14 @@ class PlateResponse(BaseModel):
             workspace_id=p.workspace_id,
             barcode=p.barcode.value,
             plate_label=p.plate_label,
-            format=p.format.value,
-            plate_type=p.plate_type.value,
+            format=p.format,
+            plate_type=p.plate_type,
             well_map=(
                 {pos: WellEntryModel(**wa.to_dict()) for pos, wa in p.well_map.items()}
                 if p.well_map
                 else None
             ),
-            status=p.status.value,
+            status=p.status,
             storage_location_id=p.storage_location_id,
             project_id=p.project_id,
             template_id=p.template_id,

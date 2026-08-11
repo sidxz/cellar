@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v1/org-plate-policies", tags=["org-plate-policie
 class OrgPlatePolicyResponse(BaseModel):
     org_id: uuid.UUID
     require_approval: bool
-    confirmation: str
+    confirmation: LoanConfirmationMode
     default_due_days: int | None = None
     plates_private: bool
     version: int
@@ -32,7 +32,7 @@ class OrgPlatePolicyResponse(BaseModel):
         return cls(
             org_id=p.org_id,
             require_approval=p.require_approval,
-            confirmation=p.confirmation.value,
+            confirmation=p.confirmation,
             default_due_days=p.default_due_days,
             plates_private=p.plates_private,
             version=p.version,
