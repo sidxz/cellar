@@ -855,13 +855,6 @@ def register_screening(container: Container) -> None:
 
         return _f
 
-    def _reg_plate_query(uc_cls: type):
-        def _f(c: Container):
-            uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow))
-
-        return _f
-
     def _reg_plate_query_with_visibility(uc_cls: type):
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -870,39 +863,48 @@ def register_screening(container: Container) -> None:
 
         return _f
 
+    def _reg_plate_cmd_with_visibility(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            visibility = PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow))
+            return uc_cls(
+                uow, SQLAlchemyRegisteredPlateRepository(uow), c[EventDispatcher], visibility
+            )
+
+        return _f
+
     def _map_wells(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        visibility = PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow))
         return MapWells(
             uow,
             SQLAlchemyRegisteredPlateRepository(uow),
             SQLAlchemyBatchRepository(uow),
             c[EventDispatcher],
+            visibility,
         )
 
     container.define(RegisterPlate, _reg_plate_cmd(RegisterPlate))
-    container.define(UpdatePlate, _reg_plate_cmd(UpdatePlate))
+    container.define(UpdatePlate, _reg_plate_cmd_with_visibility(UpdatePlate))
     container.define(MapWells, _map_wells)
-    container.define(ChangeStatus, _reg_plate_cmd(ChangeStatus))
-    container.define(DerivePlate, _reg_plate_cmd(DerivePlate))
+    container.define(ChangeStatus, _reg_plate_cmd_with_visibility(ChangeStatus))
+    container.define(DerivePlate, _reg_plate_cmd_with_visibility(DerivePlate))
     container.define(GetPlate, _reg_plate_query_with_visibility(GetPlate))
     container.define(ListPlates, _reg_plate_query_with_visibility(ListPlates))
-    container.define(ListChildren, _reg_plate_query(ListChildren))
+    container.define(ListChildren, _reg_plate_query_with_visibility(ListChildren))
 
     def _export_plate_layout(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        visibility = PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow))
         return ExportPlateLayout(
             uow,
             SQLAlchemyRegisteredPlateRepository(uow),
             SQLAlchemyBatchRepository(uow),
+            visibility,
         )
 
     container.define(ExportPlateLayout, _export_plate_layout)
-
-    def _delete_reg_plate(c: Container):
-        uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return DeletePlate(uow, SQLAlchemyRegisteredPlateRepository(uow), c[EventDispatcher])
-
-    container.define(DeletePlate, _delete_reg_plate)
+    container.define(DeletePlate, _reg_plate_cmd_with_visibility(DeletePlate))
 
     # --- Plate Read Model ---
     container.define(

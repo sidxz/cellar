@@ -59,6 +59,7 @@ from cellar.interface.dependencies import (
     ListMoleculesDep,
     MoleculeActivityServiceDep,
     PlateReadModelServiceDep,
+    PlateVisibilityUoWDep,
     RegisterMoleculeDep,
     RemoveIdentifierDep,
     SaltMatcherUoWDep,
@@ -730,11 +731,18 @@ async def list_molecule_plates(
     molecule_id: uuid.UUID,
     auth: AuthDep,
     service: PlateReadModelServiceDep,
+    plate_visibility_uow: PlateVisibilityUoWDep,
 ):
     """List all registered plates containing batches of this molecule."""
     from cellar.interface.routes.registered_plates import MoleculePlateResponse
 
-    entries = await service.find_plates_for_molecule(auth.workspace_id, molecule_id)
+    visibility, visibility_uow = plate_visibility_uow
+    async with visibility_uow:
+        excluded = await visibility.excluded_org_ids(auth.workspace_id, auth)
+
+    entries = await service.find_plates_for_molecule(
+        auth.workspace_id, molecule_id, excluded_org_ids=excluded
+    )
     return [MoleculePlateResponse.from_entry(e) for e in entries]
 
 

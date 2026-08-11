@@ -284,10 +284,12 @@ class UpdatePlate:
         uow: UnitOfWork,
         repo: RegisteredPlateRepository,
         dispatcher: EventDispatcherProtocol,
+        visibility: PlateVisibilityService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._visibility = visibility
 
     async def __call__(
         self, input: UpdatePlateCommand, auth: AuthContext | None = None
@@ -298,6 +300,9 @@ class UpdatePlate:
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
             if plate is None:
+                return _not_found(input.plate_id)
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(plate, auth, excluded):
                 return _not_found(input.plate_id)
 
             # Build kwargs — only include fields that were explicitly provided
@@ -331,11 +336,13 @@ class MapWells:
         repo: RegisteredPlateRepository,
         batch_repo: BatchRepository,
         dispatcher: EventDispatcherProtocol,
+        visibility: PlateVisibilityService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._batch_repo = batch_repo
         self._dispatcher = dispatcher
+        self._visibility = visibility
 
     async def __call__(
         self, input: MapWellsCommand, auth: AuthContext | None = None
@@ -346,6 +353,9 @@ class MapWells:
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
             if plate is None:
+                return _not_found(input.plate_id)
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(plate, auth, excluded):
                 return _not_found(input.plate_id)
 
             # Validate and resolve batch references (accept UUID or batch number)
@@ -389,10 +399,12 @@ class ChangeStatus:
         uow: UnitOfWork,
         repo: RegisteredPlateRepository,
         dispatcher: EventDispatcherProtocol,
+        visibility: PlateVisibilityService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._visibility = visibility
 
     async def __call__(
         self, input: ChangeStatusCommand, auth: AuthContext | None = None
@@ -403,6 +415,9 @@ class ChangeStatus:
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
             if plate is None:
+                return _not_found(input.plate_id)
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(plate, auth, excluded):
                 return _not_found(input.plate_id)
 
             plate.transition_status(PlateStatus(input.new_status))
@@ -422,10 +437,12 @@ class DerivePlate:
         uow: UnitOfWork,
         repo: RegisteredPlateRepository,
         dispatcher: EventDispatcherProtocol,
+        visibility: PlateVisibilityService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._visibility = visibility
 
     async def __call__(
         self, input: DerivePlateCommand, auth: AuthContext | None = None
@@ -438,6 +455,9 @@ class DerivePlate:
                 input.workspace_id, input.parent_plate_id
             )
             if parent is None:
+                return Failure(NotFoundError("RegisteredPlate", str(input.parent_plate_id)))
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(parent, auth, excluded):
                 return Failure(NotFoundError("RegisteredPlate", str(input.parent_plate_id)))
 
             # Barcode uniqueness check for child
@@ -470,10 +490,12 @@ class DeletePlate:
         uow: UnitOfWork,
         repo: RegisteredPlateRepository,
         dispatcher: EventDispatcherProtocol,
+        visibility: PlateVisibilityService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._visibility = visibility
 
     async def __call__(
         self, input: DeletePlateCommand, auth: AuthContext | None = None
@@ -484,6 +506,9 @@ class DeletePlate:
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
             if plate is None:
+                return _not_found(input.plate_id)
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(plate, auth, excluded):
                 return _not_found(input.plate_id)
 
             children = await self._repo.find_children(input.workspace_id, input.plate_id)
@@ -505,9 +530,15 @@ class DeletePlate:
 class ListChildren:
     """List child plates derived from a given parent plate."""
 
-    def __init__(self, uow: UnitOfWork, repo: RegisteredPlateRepository) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: RegisteredPlateRepository,
+        visibility: PlateVisibilityService,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._visibility = visibility
 
     async def __call__(
         self, input: ListChildrenQuery, auth: AuthContext | None = None
@@ -515,5 +546,18 @@ class ListChildren:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
+            parent = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.parent_plate_id
+            )
+            if parent is None:
+                return _not_found(input.parent_plate_id)
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(parent, auth, excluded):
+                # No existence leak — an invisible parent 404s exactly like a
+                # missing one.
+                return _not_found(input.parent_plate_id)
             children = await self._repo.find_children(input.workspace_id, input.parent_plate_id)
-            return Success(children)
+            visible_children = [
+                c for c in children if self._visibility.can_view(c, auth, excluded)
+            ]
+            return Success(visible_children)

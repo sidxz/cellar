@@ -210,3 +210,178 @@ class TestPlateVisibility:
         resp = await client.get("/api/v1/plates", params={"owner_org_id": str(OTHER_ORG_ID)})
         assert resp.status_code == 200, resp.text
         assert resp.json() == []
+
+    # -- Task 5b: children / export / write-path enforcement -----------------
+
+    async def test_children_exclude_private_org_child(
+        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        parent = await _register(client)
+        assert parent.status_code == 201, parent.text
+        parent_id = parent.json()["id"]
+
+        child = await _register(client, parent_plate_id=parent_id, owner_org_id=str(OTHER_ORG_ID))
+        assert child.status_code == 201, child.text
+        child_id = child.json()["id"]
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        # Parent (AUTH_ORG_ID) is visible, but the private-org child must not
+        # appear in its children list.
+        listed = await client.get(f"/api/v1/plates/{parent_id}/children")
+        assert listed.status_code == 200, listed.text
+        assert child_id not in {p["id"] for p in listed.json()}
+
+        # The child's own org still sees it.
+        listed_own = await editor_client_other_org.get(f"/api/v1/plates/{parent_id}/children")
+        assert listed_own.status_code == 200, listed_own.text
+        assert child_id in {p["id"] for p in listed_own.json()}
+
+    async def test_children_of_invisible_parent_404(self, client: AsyncClient) -> None:
+        parent = await _register(client, owner_org_id=str(OTHER_ORG_ID))
+        assert parent.status_code == 201, parent.text
+        parent_id = parent.json()["id"]
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        resp = await client.get(f"/api/v1/plates/{parent_id}/children")
+        assert resp.status_code == 404, resp.text
+
+    async def test_export_private_plate_404_foreign_200_own_org(
+        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        resp = await client.get(f"/api/v1/plates/{plate_id}/export?format=csv")
+        assert resp.status_code == 404, resp.text
+
+        resp_own = await editor_client_other_org.get(
+            f"/api/v1/plates/{plate_id}/export?format=csv"
+        )
+        assert resp_own.status_code == 200, resp_own.text
+
+    async def test_update_and_delete_private_plate_404_foreign_200_own_org(
+        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        patch_foreign = await client.patch(f"/api/v1/plates/{plate_id}", json={"notes": "nope"})
+        assert patch_foreign.status_code == 404, patch_foreign.text
+
+        delete_foreign = await client.delete(f"/api/v1/plates/{plate_id}")
+        assert delete_foreign.status_code == 404, delete_foreign.text
+
+        # Status quo preserved — the plate's own org can still update it.
+        patch_own = await editor_client_other_org.patch(
+            f"/api/v1/plates/{plate_id}", json={"notes": "legit update"}
+        )
+        assert patch_own.status_code == 200, patch_own.text
+        assert patch_own.json()["notes"] == "legit update"
+
+    async def test_map_wells_change_status_derive_404_for_foreign_org(
+        self, client: AsyncClient
+    ) -> None:
+        """MapWells, ChangeStatus, and DerivePlate's parent lookup share the
+        exact fetch-then-can_view guard proven above for update/delete — this
+        exercises each one's own new branch directly."""
+        reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        wells = await client.put(
+            f"/api/v1/plates/{plate_id}/wells",
+            json={"well_map": {"A1": {"well_type": "blank"}}},
+        )
+        assert wells.status_code == 404, wells.text
+
+        status = await client.patch(
+            f"/api/v1/plates/{plate_id}/status", json={"new_status": "in_use"}
+        )
+        assert status.status_code == 404, status.text
+
+        derive = await client.post(
+            f"/api/v1/plates/{plate_id}/derive",
+            json={"barcode": f"PLT-CHILD-{uuid.uuid4().hex[:8]}", "plate_label": "Child"},
+        )
+        assert derive.status_code == 404, derive.text
+
+
+class TestMoleculePlatesVisibility:
+    """Private-org exclusion on GET /molecules/{id}/plates (read-model path)."""
+
+    async def test_molecule_plates_excludes_private_org_plate(
+        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        org = await client.post(
+            "/api/v1/organizations", json={"name": "MolPlateVisOrg", "org_type": "internal"}
+        )
+        assert org.status_code == 201, org.text
+        org_id = org.json()["id"]
+
+        mol = await client.post(
+            "/api/v1/molecules",
+            json={"smiles": "CCO", "name": "ethanol-mp-vis", "originating_org_id": org_id},
+        )
+        assert mol.status_code in (200, 201), mol.text
+        molecule_id = mol.json()["molecule"]["id"]
+
+        batch = await client.post(
+            "/api/v1/batches",
+            json={
+                "molecule_id": molecule_id,
+                "source": "synthesized",
+                "amount_value": 10.0,
+                "amount_unit": "mg",
+            },
+        )
+        assert batch.status_code in (200, 201), batch.text
+        batch_id = batch.json()["batch"]["id"]
+
+        # Private-org plate carrying this molecule's batch.
+        private_plate = await _register(client, owner_org_id=str(OTHER_ORG_ID))
+        assert private_plate.status_code == 201, private_plate.text
+        private_plate_id = private_plate.json()["id"]
+        mapped = await client.put(
+            f"/api/v1/plates/{private_plate_id}/wells",
+            json={"well_map": {"A1": {"batch_id": batch_id}}},
+        )
+        assert mapped.status_code == 200, mapped.text
+
+        # Visible (own-org) plate carrying the same batch — must stay listed.
+        visible_plate = await _register(client)
+        assert visible_plate.status_code == 201, visible_plate.text
+        visible_plate_id = visible_plate.json()["id"]
+        mapped_visible = await client.put(
+            f"/api/v1/plates/{visible_plate_id}/wells",
+            json={"well_map": {"A1": {"batch_id": batch_id}}},
+        )
+        assert mapped_visible.status_code == 200, mapped_visible.text
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        resp = await client.get(f"/api/v1/molecules/{molecule_id}/plates")
+        assert resp.status_code == 200, resp.text
+        plate_ids = {e["plate_id"] for e in resp.json()}
+        assert private_plate_id not in plate_ids
+        assert visible_plate_id in plate_ids
+
+        # The private plate's own org still sees it.
+        resp_own = await editor_client_other_org.get(f"/api/v1/molecules/{molecule_id}/plates")
+        assert resp_own.status_code == 200, resp_own.text
+        assert private_plate_id in {e["plate_id"] for e in resp_own.json()}

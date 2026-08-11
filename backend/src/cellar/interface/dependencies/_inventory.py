@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends
+from lagom import Container
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.inventory.batch_identifiers import (
     AddBatchIdentifier,
@@ -45,6 +47,7 @@ from cellar.application.inventory.manage_storage import (
 )
 from cellar.application.inventory.org_plate_policy import GetOrgPlatePolicy, SetOrgPlatePolicy
 from cellar.application.inventory.plate_read_model import PlateReadModelService
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.registered_plates import (
     ChangeStatus,
     DeletePlate,
@@ -58,8 +61,12 @@ from cellar.application.inventory.registered_plates import (
 )
 from cellar.application.inventory.update_batch import UpdateBatch
 from cellar.application.inventory.update_storage_location import UpdateStorageLocation
+from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
+    SQLAlchemyOrgPlatePolicyRepository,
+)
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
-from ._core import _get_use_case
+from ._core import _get_use_case, get_container
 
 __all__ = [
     "AddBatchIdentifierDep",
@@ -100,6 +107,7 @@ __all__ = [
     "MapWellsDep",
     "MoveSampleDep",
     "PlateReadModelServiceDep",
+    "PlateVisibilityUoWDep",
     "QuarantineSampleDep",
     "RegisterPlateDep",
     "RemoveBatchIdentifierDep",
@@ -173,6 +181,25 @@ DeletePlateDep = Annotated[DeletePlate, Depends(_get_use_case(DeletePlate))]
 ExportPlateLayoutDep = Annotated[ExportPlateLayout, Depends(_get_use_case(ExportPlateLayout))]
 PlateReadModelServiceDep = Annotated[
     PlateReadModelService, Depends(_get_use_case(PlateReadModelService))
+]
+
+
+def get_plate_visibility_uow(
+    container: Annotated[Container, Depends(get_container)],
+) -> tuple[PlateVisibilityService, AsyncUnitOfWork]:
+    """Per-request ``PlateVisibilityService`` paired with its own ``AsyncUnitOfWork``.
+
+    Same shape as ``SaltMatcherUoWDep`` — the service's repo needs an active
+    session, but the read-model callers that need it (e.g. the molecule→plates
+    route) aren't use-case objects that own a uow lifecycle themselves, so the
+    caller enters/exits the uow around the ``excluded_org_ids`` call.
+    """
+    uow = AsyncUnitOfWork(container[async_sessionmaker])
+    return PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)), uow
+
+
+PlateVisibilityUoWDep = Annotated[
+    tuple[PlateVisibilityService, AsyncUnitOfWork], Depends(get_plate_visibility_uow)
 ]
 
 # --- Plate-import pipeline dependencies ---

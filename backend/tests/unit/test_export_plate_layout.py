@@ -14,6 +14,7 @@ from cellar.application.inventory.export_plate_layout import (
     render_csv,
     render_xlsx,
 )
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.domain.inventory.enums import PlateType
 from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.inventory.well_assignment import WellAssignment
@@ -52,6 +53,17 @@ class _FakeBatchRepo:
         return [b for b in self._batches if b.id in ids]
 
 
+class _FakeOrgPlatePolicyRepo:
+    """No private orgs — these tests aren't exercising visibility exclusion."""
+
+    async def list_private_org_ids(self, workspace_id):
+        return set()
+
+
+def _visibility() -> PlateVisibilityService:
+    return PlateVisibilityService(_FakeOrgPlatePolicyRepo())
+
+
 def _plate(ws: uuid.UUID, batch_id: uuid.UUID) -> RegisteredPlate:
     p = RegisteredPlate.register(
         workspace_id=ws,
@@ -85,6 +97,7 @@ class TestExportUseCase:
             _FakeBatchRepo(
                 [_FakeBatch(id=batch_id, batch_number=BatchNumber(value="CC-000001-001"))]
             ),
+            _visibility(),
         )
         result = await uc(
             ExportPlateLayoutQuery(workspace_id=ws, plate_id=plate.id),
@@ -103,7 +116,7 @@ class TestExportUseCase:
 
     async def test_not_found(self):
         ws = uuid.uuid4()
-        uc = ExportPlateLayout(_FakeUow(), _FakePlateRepo(None), _FakeBatchRepo([]))
+        uc = ExportPlateLayout(_FakeUow(), _FakePlateRepo(None), _FakeBatchRepo([]), _visibility())
         result = await uc(
             ExportPlateLayoutQuery(workspace_id=ws, plate_id=uuid.uuid4()),
             auth=FakeAuth(role="viewer", workspace_id=ws),
