@@ -320,6 +320,37 @@ class TestPlateVisibility:
         )
         assert derive.status_code == 404, derive.text
 
+    async def test_derive_from_private_org_plate_inherits_owner_and_stays_private(
+        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        """Derived children inherit the parent's owner_org_id (domain invariant,
+        not a caller choice) — so a daughter of a private org's plate is itself
+        private, invisible to a foreign-org caller."""
+        parent = await _register(client, owner_org_id=str(OTHER_ORG_ID))
+        assert parent.status_code == 201, parent.text
+        parent_id = parent.json()["id"]
+
+        policy = await _set_plates_private(client, OTHER_ORG_ID)
+        assert policy.status_code == 200, policy.text
+
+        # Derive as the plate's own org — the only caller that can see the parent.
+        derive = await editor_client_other_org.post(
+            f"/api/v1/plates/{parent_id}/derive",
+            json={"barcode": f"PLT-CHILD-{uuid.uuid4().hex[:8]}", "plate_label": "Child"},
+        )
+        assert derive.status_code == 201, derive.text
+        child = derive.json()
+        assert child["owner_org_id"] == str(OTHER_ORG_ID)
+        child_id = child["id"]
+
+        # Foreign-org caller cannot see the derived child, same as the parent.
+        got_foreign = await client.get(f"/api/v1/plates/{child_id}")
+        assert got_foreign.status_code == 404, got_foreign.text
+
+        listed_foreign = await client.get("/api/v1/plates")
+        assert listed_foreign.status_code == 200, listed_foreign.text
+        assert child_id not in {p["id"] for p in listed_foreign.json()}
+
 
 class TestMoleculePlatesVisibility:
     """Private-org exclusion on GET /molecules/{id}/plates (read-model path)."""

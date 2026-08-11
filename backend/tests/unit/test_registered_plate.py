@@ -175,6 +175,27 @@ class TestOwnerOrgId:
         plate.update(owner_org_id=None)  # explicit clear
         assert plate.owner_org_id is None
 
+    def test_derive_inherits_parent_owner_org(self):
+        org_id = uuid.uuid4()
+        parent = _make_plate(owner_org_id=org_id)
+        child = parent.derive(
+            barcode=Barcode(value="PLT-CHILD"),
+            plate_label="Child",
+            plate_type=PlateType.DAUGHTER,
+            registered_by=uuid.uuid4(),
+        )
+        assert child.owner_org_id == org_id
+
+    def test_derive_from_public_parent_stays_public(self):
+        parent = _make_plate()
+        child = parent.derive(
+            barcode=Barcode(value="PLT-CHILD2"),
+            plate_label="Child",
+            plate_type=PlateType.DAUGHTER,
+            registered_by=uuid.uuid4(),
+        )
+        assert child.owner_org_id is None
+
 
 class TestFormatImmutability:
     def test_cannot_change_format_with_mapped_wells(self):

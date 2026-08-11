@@ -36,6 +36,7 @@ Verified state: JWTs already carry `oid`/`oslug`/`opub` (`service/src/auth/jwt.p
 - `owner_org_id: UUID | None` — Sentinel org id (external-ref pattern, like `workspace_id`). Nullable; unowned plates behave as public.
 - `group_id: UUID | None` — FK → `plate_groups`, SET NULL on group delete. A plate belongs to ≤1 group (tags cover cross-cutting labels). Invariant: plate's `owner_org_id` must match its group's.
 - Default on registration: `owner_org_id = auth.org_id`.
+- Derived children inherit the parent's owner_org_id (domain invariant — daughters remain the owning org's material regardless of operator).
 
 ### 4.2 `PlateGroup` — new aggregate (the open hierarchy)
 Fields: `id, workspace_id, owner_org_id, name, parent_group_id?, group_type?, description?, created_by, created_at/updated_at/version`.

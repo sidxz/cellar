@@ -298,9 +298,12 @@ class RegisteredPlate(AggregateRoot):
         registered_by: uuid.UUID,
         storage_location_id: uuid.UUID | None = None,
     ) -> RegisteredPlate:
-        """Create a child plate derived from this one, copying the well map."""
+        """Create a child plate derived from this one, copying the well map and
+        owner_org_id. Ownership is a domain invariant, not a caller choice: a
+        daughter of an org's plate is that org's material regardless of operator."""
         child = RegisteredPlate.register(
             workspace_id=self.workspace_id,
+            owner_org_id=self.owner_org_id,
             barcode=barcode,
             plate_label=plate_label,
             format=self.format,
