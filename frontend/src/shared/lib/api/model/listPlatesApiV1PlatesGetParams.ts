@@ -14,6 +14,7 @@ status?: string | null;
 format?: string | null;
 storage_location_id?: string | null;
 project_id?: string | null;
+owner_org_id?: string | null;
 tags?: string[] | null;
 tag_logic?: ListPlatesApiV1PlatesGetTagLogic;
 };

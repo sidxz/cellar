@@ -15,25 +15,45 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { useCurrentUser } from "@/shared/hooks/use-current-user";
+import { useOrgs } from "@/shared/hooks/use-orgs";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { FileUp, FlaskConical, Plus, Trash2 } from "lucide-react";
+import { FileUp, FlaskConical, Plus, Settings, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useDeletePlate, usePlates } from "../hooks/use-plates";
 import type { PlateStatus, PlateType, RegisteredPlate } from "../types/plates";
 import { plateStatusLabels, plateTypeLabels } from "../types/plates";
+import { OrgPlatePolicyDialog } from "./org-plate-policy-dialog";
 import { RegisterPlateDialog } from "./register-plate-dialog";
+
+/** Filter sentinel: scope the plate list to the current user's own org. */
+const MY_ORG = "__mine__";
+/** Filter sentinel: no org scoping — show plates from every org. */
+const ALL_ORGS = "__all__";
 
 const PLATE_FORMATS = ["6", "12", "24", "48", "96", "384", "1536"] as const;
 
 export function PlateList() {
   const router = useRouter();
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [policyOpen, setPolicyOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<RegisteredPlate | null>(null);
   const [filterType, setFilterType] = useState<string>("__all__");
   const [filterStatus, setFilterStatus] = useState<string>("__all__");
   const [filterFormat, setFilterFormat] = useState<string>("__all__");
+  const [filterOrg, setFilterOrg] = useState<string>(MY_ORG);
   const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
+
+  const { data: me } = useCurrentUser();
+  const { data: orgs } = useOrgs();
+  const orgNameById = useMemo(() => new Map((orgs ?? []).map((o) => [o.id, o.name])), [orgs]);
+  const ownerOrgId =
+    filterOrg === MY_ORG
+      ? (me?.org_id ?? undefined)
+      : filterOrg === ALL_ORGS
+        ? undefined
+        : filterOrg;
 
   const {
     data: plates,
@@ -43,6 +63,7 @@ export function PlateList() {
     plate_type: filterType === "__all__" ? undefined : filterType,
     status: filterStatus === "__all__" ? undefined : filterStatus,
     format: filterFormat === "__all__" ? undefined : filterFormat,
+    owner_org_id: ownerOrgId,
     tags: tagFilter.tagIds,
     tagLogic: tagFilter.tagLogic,
   });
@@ -100,6 +121,13 @@ export function PlateList() {
           params.value ? <StatusBadge status={params.value as PlateStatus} /> : null,
       },
       {
+        headerName: "Owner",
+        field: "owner_org_id",
+        width: 140,
+        valueFormatter: (p) =>
+          p.value ? (orgNameById.get(p.value as string) ?? "Unknown org") : "\u2014",
+      },
+      {
         headerName: "Wells Mapped",
         width: 130,
         valueGetter: (p) => {
@@ -128,13 +156,17 @@ export function PlateList() {
           ) : null,
       },
     ],
-    [router],
+    [router, orgNameById],
   );
 
   if (error) {
     return (
       <div>
         <PageHeader title="Plates" subtitle="Manage registered plates and well mappings.">
+          <Button variant="outline" onClick={() => setPolicyOpen(true)}>
+            <Settings className="mr-2 h-4 w-4" />
+            Org Policies
+          </Button>
           <Button variant="outline" onClick={() => router.push("/inventory/plates/import")}>
             <FileUp className="mr-2 h-4 w-4" />
             Import Data
@@ -155,6 +187,10 @@ export function PlateList() {
   return (
     <div>
       <PageHeader title="Plates" subtitle="Manage registered plates and well mappings.">
+        <Button variant="outline" onClick={() => setPolicyOpen(true)}>
+          <Settings className="mr-2 h-4 w-4" />
+          Org Policies
+        </Button>
         <Button variant="outline" onClick={() => router.push("/inventory/plates/import")}>
           <FileUp className="mr-2 h-4 w-4" />
           Import Data
@@ -209,6 +245,23 @@ export function PlateList() {
           </SelectContent>
         </Select>
 
+        <Select value={filterOrg} onValueChange={setFilterOrg}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="My org" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={MY_ORG}>
+              {me?.org_slug ? `My org (${me.org_slug})` : "My org"}
+            </SelectItem>
+            <SelectItem value={ALL_ORGS}>All orgs</SelectItem>
+            {orgs?.map((o) => (
+              <SelectItem key={o.id} value={o.id}>
+                {o.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <TagFilter value={tagFilter} onChange={setTagFilter} />
       </div>
 
@@ -230,6 +283,7 @@ export function PlateList() {
       />
 
       <RegisterPlateDialog open={registerOpen} onOpenChange={setRegisterOpen} />
+      <OrgPlatePolicyDialog open={policyOpen} onOpenChange={setPolicyOpen} />
 
       <ConfirmDeleteDialog
         open={!!deleteTarget}

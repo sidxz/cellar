@@ -60,6 +60,7 @@ export interface RegisteredPlate {
   parent_plate_id: string | null;
   registered_by: string;
   notes: string | null;
+  owner_org_id?: string | null;
 }
 
 export interface RegisterPlateInput {

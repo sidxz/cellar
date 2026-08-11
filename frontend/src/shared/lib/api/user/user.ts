@@ -26,12 +26,105 @@ import type {
 import type {
   HTTPValidationError,
   ListWorkspaceMembersApiV1UserWorkspaceMembersGetParams,
+  MeResponse,
   PreferencesResponse,
   UpdatePreferencesBody,
   WorkspaceMemberResponse
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
+
+
+
+
+/**
+ * @summary Me
+ */
+export const meApiV1UserMeGet = (
+    
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<MeResponse>(
+      {url: `/api/v1/user/me`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getMeApiV1UserMeGetQueryKey = () => {
+    return [
+    `/api/v1/user/me`
+    ] as const;
+    }
+
+    
+export const getMeApiV1UserMeGetQueryOptions = <TData = Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getMeApiV1UserMeGetQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof meApiV1UserMeGet>>> = ({ signal }) => meApiV1UserMeGet(signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type MeApiV1UserMeGetQueryResult = NonNullable<Awaited<ReturnType<typeof meApiV1UserMeGet>>>
+export type MeApiV1UserMeGetQueryError = unknown
+
+
+export function useMeApiV1UserMeGet<TData = Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof meApiV1UserMeGet>>,
+          TError,
+          Awaited<ReturnType<typeof meApiV1UserMeGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useMeApiV1UserMeGet<TData = Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof meApiV1UserMeGet>>,
+          TError,
+          Awaited<ReturnType<typeof meApiV1UserMeGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useMeApiV1UserMeGet<TData = Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Me
+ */
+
+export function useMeApiV1UserMeGet<TData = Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof meApiV1UserMeGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getMeApiV1UserMeGetQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
 
 
 
