@@ -12,6 +12,8 @@ Decisions:
 - ``group_type`` is a free optional string. The UI sources suggestions from
   the ``plate_group_type`` ControlledVocabulary, but membership is not
   domain-validated (no live CV-validation precedent in this codebase).
+- ``RegisteredPlate.derive()`` does NOT copy ``group_id`` — grouping is
+  manual curation, not lineage.
 """
 
 from __future__ import annotations
