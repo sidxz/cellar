@@ -14,6 +14,7 @@ import type { PlateResponseTemplateId } from './plateResponseTemplateId';
 import type { PlateResponseParentPlateId } from './plateResponseParentPlateId';
 import type { PlateResponseNotes } from './plateResponseNotes';
 import type { PlateResponseOwnerOrgId } from './plateResponseOwnerOrgId';
+import type { PlateResponseGroupId } from './plateResponseGroupId';
 
 export interface PlateResponse {
   id: string;
@@ -31,4 +32,5 @@ export interface PlateResponse {
   registered_by: string;
   notes?: PlateResponseNotes;
   owner_org_id?: PlateResponseOwnerOrgId;
+  group_id?: PlateResponseGroupId;
 }
