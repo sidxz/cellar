@@ -104,6 +104,7 @@ export function PlateGroupDashboard() {
         </Select>
         <Button
           data-testid="create-root-group"
+          disabled={orgId === null}
           onClick={() => setDialog({ kind: "create", parentId: null })}
         >
           New group
