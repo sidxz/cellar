@@ -55,7 +55,17 @@ from cellar.application.inventory.plate_groups import (
     RemovePlatesFromGroup,
     UpdatePlateGroup,
 )
-from cellar.application.inventory.plate_loans import GetLoan, ListLoans, RequestPlateLoan
+from cellar.application.inventory.plate_loans import (
+    ApproveLoanItems,
+    CancelLoanItems,
+    ConfirmLoanCheckout,
+    ConfirmLoanReturn,
+    DenyLoanItems,
+    GetLoan,
+    ListLoans,
+    RequestLoanReturn,
+    RequestPlateLoan,
+)
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.registered_plates import (
@@ -81,10 +91,14 @@ from ._core import _get_use_case, get_container
 __all__ = [
     "AddBatchIdentifierDep",
     "AliquotSampleDep",
+    "ApproveLoanItemsDep",
     "AssignPlatesToGroupDep",
     "BulkAddBatchIdentifiersDep",
+    "CancelLoanItemsDep",
     "ChangeStatusDep",
     "ClearQuarantineSampleDep",
+    "ConfirmLoanCheckoutDep",
+    "ConfirmLoanReturnDep",
     # Inventory
     "CreateBatchDep",
     "CreateImportTemplateDep",
@@ -95,6 +109,7 @@ __all__ = [
     "DeletePlateDep",
     "DeletePlateGroupDep",
     "DeleteStorageLocationDep",
+    "DenyLoanItemsDep",
     "DerivePlateDep",
     "DisposeSampleDep",
     "ExportPlateLayoutDep",
@@ -129,6 +144,7 @@ __all__ = [
     "RegisterPlateDep",
     "RemoveBatchIdentifierDep",
     "RemovePlatesFromGroupDep",
+    "RequestLoanReturnDep",
     "RequestPlateLoanDep",
     "SetOrgPlatePolicyDep",
     "UpdateBatchDep",
@@ -239,6 +255,14 @@ RemovePlatesFromGroupDep = Annotated[
 RequestPlateLoanDep = Annotated[RequestPlateLoan, Depends(_get_use_case(RequestPlateLoan))]
 ListLoansDep = Annotated[ListLoans, Depends(_get_use_case(ListLoans))]
 GetLoanDep = Annotated[GetLoan, Depends(_get_use_case(GetLoan))]
+ApproveLoanItemsDep = Annotated[ApproveLoanItems, Depends(_get_use_case(ApproveLoanItems))]
+DenyLoanItemsDep = Annotated[DenyLoanItems, Depends(_get_use_case(DenyLoanItems))]
+ConfirmLoanCheckoutDep = Annotated[
+    ConfirmLoanCheckout, Depends(_get_use_case(ConfirmLoanCheckout))
+]
+RequestLoanReturnDep = Annotated[RequestLoanReturn, Depends(_get_use_case(RequestLoanReturn))]
+ConfirmLoanReturnDep = Annotated[ConfirmLoanReturn, Depends(_get_use_case(ConfirmLoanReturn))]
+CancelLoanItemsDep = Annotated[CancelLoanItems, Depends(_get_use_case(CancelLoanItems))]
 
 # --- Plate-import pipeline dependencies ---
 ImportFileCacheDep = Annotated[ImportFileCache, Depends(_get_use_case(ImportFileCache))]
