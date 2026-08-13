@@ -8,12 +8,25 @@ from datetime import date, timedelta
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from cellar.application.inventory.plate_loans import (
+    ApproveLoanItems,
+    LoanItemsCommand,
+    LoanWithPlates,
+)
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.domain.inventory.enums import LoanItemStatus, LoanStatus
 from cellar.domain.inventory.plate_loan import PlateLoan
+from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
+    SQLAlchemyOrgPlatePolicyRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
     SQLAlchemyPlateLoanRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
+    SQLAlchemyRegisteredPlateRepository,
+)
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from tests.fakes.fake_auth import FakeAuth
 
 OWNER_ORG = uuid.uuid4()
 BORROWER_ORG = uuid.uuid4()
@@ -280,3 +293,47 @@ async def test_wholesale_item_update_persists_and_bumps_version_once(session_fac
         assert ritem.id == item_id
         assert ritem.status == LoanItemStatus.APPROVED
         assert ritem.status_changed_at == expected_status_changed_at
+
+
+# ---------------------------------------------------------------------------
+# (h) full ApproveLoanItems success path with real repos — proves enrichment
+#     runs on a live session (regression: post-uow-block _enrich raised
+#     RuntimeError after commit, turning every successful transition into a 500)
+# ---------------------------------------------------------------------------
+
+
+class _StubDispatcher:
+    async def dispatch_all(self, events) -> None:
+        pass
+
+
+@pytest.mark.integration
+async def test_approve_loan_items_success_path_enriches_inside_uow(session_factory) -> None:
+    ws = uuid.uuid4()
+    loan = _request(ws, plate_ids=[uuid.uuid4()], auto_approved=False)
+    await _save(session_factory, loan)
+
+    uow = AsyncUnitOfWork(session_factory)
+    use_case = ApproveLoanItems(
+        uow,
+        SQLAlchemyPlateLoanRepository(uow),
+        SQLAlchemyRegisteredPlateRepository(uow),
+        SQLAlchemyOrgPlatePolicyRepository(uow),
+        _StubDispatcher(),
+        PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+    )
+    auth = FakeAuth(role="admin", workspace_id=ws)  # admin bypasses org + action checks
+
+    result = await use_case(LoanItemsCommand(workspace_id=ws, loan_id=loan.id), auth=auth)
+
+    enriched = result.unwrap()  # raises if the use case returned Failure
+    assert isinstance(enriched, LoanWithPlates)
+    # No policy row → default ADMIN_CONFIRM → no checkout collapse.
+    assert [i.status for i in enriched.loan.items] == [LoanItemStatus.APPROVED]
+    assert enriched.loan.approved_by == auth.user_id
+
+    async with AsyncUnitOfWork(session_factory) as verify_uow:
+        repo = SQLAlchemyPlateLoanRepository(verify_uow)
+        persisted = await repo.find_by_id_in_workspace(ws, loan.id)
+        assert persisted is not None
+        assert persisted.items[0].status == LoanItemStatus.APPROVED

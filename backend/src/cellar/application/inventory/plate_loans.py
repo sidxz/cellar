@@ -404,9 +404,13 @@ class _LoanItemsUseCase:
 
             await self._repo.save(loan)
             events = await self._uow.commit()
+            # Enrich INSIDE the block — the UoW session closes on exit; a
+            # post-block repo call raises RuntimeError. Post-commit reads on
+            # the still-open session are fine.
+            result = await self._enrich(loan)
 
         await self._dispatcher.dispatch_all(events)
-        return Success(await self._enrich(loan))
+        return Success(result)
 
     # -- hooks (subclasses set these) ------------------------------------
 
