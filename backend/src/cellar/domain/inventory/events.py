@@ -321,3 +321,52 @@ class PlateGroupMembershipChanged(DomainEvent):
     plate_id: uuid.UUID
     old_group_id: uuid.UUID | None
     new_group_id: uuid.UUID | None
+
+
+# ---------------------------------------------------------------------------
+# Plate loan events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanRequested(DomainEvent):
+    owner_org_id: uuid.UUID
+    borrower_org_id: uuid.UUID
+    plate_ids: list[uuid.UUID]
+    requested_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsApproved(DomainEvent):
+    item_ids: list[uuid.UUID]
+    approved_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsDenied(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsCheckedOut(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsReturnRequested(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsReturned(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsCancelled(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanClosed(DomainEvent):
+    pass

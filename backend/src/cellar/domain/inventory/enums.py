@@ -172,3 +172,44 @@ class LoanConfirmationMode(StrEnum):
     KIOSK_SCAN = "kiosk_scan"
     ADMIN_CONFIRM = "admin_confirm"
     NONE = "none"
+
+
+class LoanStatus(StrEnum):
+    """Lifecycle status of a plate loan."""
+
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+class LoanItemStatus(StrEnum):
+    """Status of a plate within a loan."""
+
+    REQUESTED = "requested"
+    APPROVED = "approved"
+    CHECKED_OUT = "checked_out"
+    RETURN_PENDING = "return_pending"
+    RETURNED = "returned"
+    DENIED = "denied"
+    CANCELLED = "cancelled"
+
+
+ACTIVE_LOAN_ITEM_STATUSES: frozenset[LoanItemStatus] = frozenset(
+    {
+        LoanItemStatus.REQUESTED,
+        LoanItemStatus.APPROVED,
+        LoanItemStatus.CHECKED_OUT,
+        LoanItemStatus.RETURN_PENDING,
+    }
+)
+
+# target -> allowed sources (approve-all/deny-all etc. filter by these)
+VALID_LOAN_ITEM_TRANSITIONS: dict[LoanItemStatus, frozenset[LoanItemStatus]] = {
+    LoanItemStatus.APPROVED: frozenset({LoanItemStatus.REQUESTED}),
+    LoanItemStatus.DENIED: frozenset({LoanItemStatus.REQUESTED}),
+    LoanItemStatus.CHECKED_OUT: frozenset({LoanItemStatus.APPROVED}),
+    LoanItemStatus.RETURN_PENDING: frozenset({LoanItemStatus.CHECKED_OUT}),
+    LoanItemStatus.RETURNED: frozenset({LoanItemStatus.RETURN_PENDING}),
+    LoanItemStatus.CANCELLED: frozenset(
+        {LoanItemStatus.REQUESTED, LoanItemStatus.APPROVED}
+    ),
+}
