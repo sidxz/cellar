@@ -134,7 +134,9 @@ class PlateLoan(AggregateRoot):
 
     # -- item verbs -----------------------------------------------------
 
-    def approve_items(self, item_ids: list[uuid.UUID], *, approved_by: uuid.UUID) -> list[LoanItem]:
+    def approve_items(
+        self, item_ids: list[uuid.UUID], *, approved_by: uuid.UUID
+    ) -> list[LoanItem]:
         items = self._transition(item_ids, LoanItemStatus.APPROVED)
         if self.approved_by is None:
             self.approved_by = approved_by
