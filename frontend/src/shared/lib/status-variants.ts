@@ -52,6 +52,14 @@ const STATUS_CATEGORIES: Record<string, StatusCategory> = {
   tombstone: "neutral",
   deprioritized: "neutral",
 
+  // Loan item statuses (Task 10/11). `approved`/`returned`/`cancelled` collide
+  // with keys other domains own, so loan-card colours those + open/closed
+  // locally via StatusBadge's `variant` override.
+  requested: "info",
+  checked_out: "warning",
+  return_pending: "info",
+  denied: "error",
+
   // Info
   undisclosed: "info",
   disclosed: "info",
@@ -62,7 +70,13 @@ const STATUS_CATEGORIES: Record<string, StatusCategory> = {
   development_candidate: "info",
 };
 
-type BadgeVariant = "default" | "secondary" | "destructive" | "outline" | "success" | "warning";
+export type BadgeVariant =
+  | "default"
+  | "secondary"
+  | "destructive"
+  | "outline"
+  | "success"
+  | "warning";
 
 const CATEGORY_TO_VARIANT: Record<StatusCategory, BadgeVariant> = {
   active: "default",

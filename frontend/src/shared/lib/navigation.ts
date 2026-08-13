@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowLeftRight,
   BookOpen,
   Building2,
   ClipboardList,
@@ -56,6 +57,7 @@ export const navigation: NavGroup[] = [
       { title: "Batches & Samples", href: "/inventory", icon: Package },
       { title: "Plates", href: "/inventory/plates", icon: LayoutGrid },
       { title: "Plate Groups", href: "/inventory/plate-groups", icon: FolderTree },
+      { title: "Loans", href: "/inventory/loans", icon: ArrowLeftRight },
       { title: "Sample Requests", href: "/inventory/sample-requests", icon: ClipboardList },
       { title: "Shipments", href: "/inventory/shipments", icon: Truck },
       { title: "Synthesis Requests", href: "/inventory/synthesis-requests", icon: FlaskRound },

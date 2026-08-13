@@ -1,5 +1,6 @@
 import { Badge } from "@/shared/components/ui/badge";
 import {
+  type BadgeVariant,
   formatStatusLabel,
   getPriorityVariant,
   getStatusVariant,
@@ -8,12 +9,15 @@ import {
 interface StatusBadgeProps {
   status: string;
   label?: string;
+  /** Override the global status→variant mapping (e.g. a domain whose status
+   * word collides with a differently-coloured one another domain owns). */
+  variant?: BadgeVariant;
   className?: string;
 }
 
-export function StatusBadge({ status, label, className }: StatusBadgeProps) {
+export function StatusBadge({ status, label, variant, className }: StatusBadgeProps) {
   return (
-    <Badge variant={getStatusVariant(status)} className={className}>
+    <Badge variant={variant ?? getStatusVariant(status)} className={className}>
       {label ?? formatStatusLabel(status)}
     </Badge>
   );
