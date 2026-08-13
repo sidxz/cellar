@@ -22,6 +22,7 @@ from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from cellar.application.auth import LOAN_APPROVE_ACTION
 from cellar.infrastructure.di.container import create_container
 from cellar.infrastructure.persistence.settings import DatabaseSettings
 from cellar.interface.error_handlers import register_error_handlers
@@ -97,6 +98,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     from cellar.interface.routes.umap_cluster import router as umap_cluster_router
     from cellar.interface.routes.org_plate_policies import router as org_plate_policy_router
     from cellar.interface.routes.plate_groups import router as plate_group_router
+    from cellar.interface.routes.plate_loans import router as plate_loan_router
     from cellar.interface.routes.registered_plates import router as registered_plates_router
     from cellar.interface.routes.plate_import import router as plate_import_router
     from cellar.interface.routes.tags import router as tags_router
@@ -120,6 +122,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(plate_group_router)
     app.include_router(plate_import_router)
     app.include_router(org_plate_policy_router)
+    app.include_router(plate_loan_router)
     app.include_router(project_router)
     app.include_router(favorites_router)
     app.include_router(collection_router)
@@ -229,6 +232,52 @@ async def editor_client_own_org(
         role="editor", workspace_id=workspace_id, user_id=user_id, org_id=AUTH_ORG_ID
     )
     app = _create_test_app(database_url, editor_auth)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    engine = app.state.container[AsyncEngine]
+    await engine.dispose()
+
+
+@pytest.fixture
+async def approver_client_own_org(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID, user_id: uuid.UUID
+) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client scoped to an editor role with a known org_id
+    (``AUTH_ORG_ID``) and the ``cellar:approve_loan`` RBAC action granted —
+    the "owner-org editor WITH action" identity for plate-loan authority
+    tests (mirrors ``editor_client_own_org`` exactly, plus the grant)."""
+    approver_auth = FakeAuth(
+        role="editor",
+        workspace_id=workspace_id,
+        user_id=user_id,
+        org_id=AUTH_ORG_ID,
+        granted_actions={LOAN_APPROVE_ACTION},
+    )
+    app = _create_test_app(database_url, approver_auth)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    engine = app.state.container[AsyncEngine]
+    await engine.dispose()
+
+
+@pytest.fixture
+async def denied_editor_client_own_org(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID, user_id: uuid.UUID
+) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client scoped to an editor role with a known org_id
+    (``AUTH_ORG_ID``) and NO RBAC actions granted — proves the action-denial
+    branch (the default ``FakeAuth(granted_actions=None)`` used by
+    ``editor_client_own_org`` is permissive, so it can't exercise this path)."""
+    denied_auth = FakeAuth(
+        role="editor",
+        workspace_id=workspace_id,
+        user_id=user_id,
+        org_id=AUTH_ORG_ID,
+        granted_actions=set(),
+    )
+    app = _create_test_app(database_url, denied_auth)
     transport = ASGITransport(app=app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
