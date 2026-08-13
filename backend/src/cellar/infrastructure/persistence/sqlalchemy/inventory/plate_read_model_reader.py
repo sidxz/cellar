@@ -26,17 +26,21 @@ class SQLAlchemyPlateReadModelService:
         workspace_id: uuid.UUID,
         molecule_id: uuid.UUID,
         excluded_org_ids: set[uuid.UUID] | None = None,
+        include_plate_ids: set[uuid.UUID] | None = None,
     ) -> list[MoleculePlateEntry]:
         """Find all registered plates containing batches of this molecule.
 
         ``excluded_org_ids`` mirrors the NULL-preserving exclusion clause used
         by ``RegisteredPlateRepository.search`` — a plate with no owner org is
         never excluded, only plates explicitly owned by a private foreign org.
-        The clause is only added when the set is non-empty: SQLAlchemy's
-        expanding bindparam renders an empty ``IN`` as a typeless
-        ``CAST(NULL AS INTEGER)`` placeholder subquery, which Postgres refuses
-        to compare against a ``uuid`` column (``operator does not exist: uuid
-        = integer``) even though the subquery returns no rows.
+        ``include_plate_ids`` (spec §5 loan clause) re-admits plates on active
+        loan to the caller's org even when their owner org is excluded — same
+        shape as that method's ``include_plate_ids`` arm. Both clauses are
+        only added when their set is non-empty: SQLAlchemy's expanding
+        bindparam renders an empty ``IN`` as a typeless ``CAST(NULL AS
+        INTEGER)`` placeholder subquery, which Postgres refuses to compare
+        against a ``uuid`` column (``operator does not exist: uuid =
+        integer``) even though the subquery returns no rows.
         """
         base_sql = """
             SELECT
@@ -60,12 +64,16 @@ class SQLAlchemyPlateReadModelService:
         params: dict[str, object] = {"workspace_id": workspace_id, "molecule_id": molecule_id}
 
         if excluded_org_ids:
-            sql = text(
-                base_sql
-                + " AND (rp.owner_org_id IS NULL OR rp.owner_org_id NOT IN :excluded_org_ids)"
-                + " ORDER BY rp.barcode, well_entry.key"
-            ).bindparams(bindparam("excluded_org_ids", expanding=True))
+            clause = "rp.owner_org_id IS NULL OR rp.owner_org_id NOT IN :excluded_org_ids"
+            bind_params = [bindparam("excluded_org_ids", expanding=True)]
             params["excluded_org_ids"] = list(excluded_org_ids)
+            if include_plate_ids:
+                clause += " OR rp.id IN :include_plate_ids"
+                bind_params.append(bindparam("include_plate_ids", expanding=True))
+                params["include_plate_ids"] = list(include_plate_ids)
+            sql = text(
+                base_sql + f" AND ({clause})" + " ORDER BY rp.barcode, well_entry.key"
+            ).bindparams(*bind_params)
         else:
             sql = text(base_sql + " ORDER BY rp.barcode, well_entry.key")
 

@@ -233,7 +233,8 @@ class GetPlate:
             if plate is None:
                 return _not_found(input.plate_id)
             excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
-            if not self._visibility.can_view(plate, auth, excluded):
+            borrowed = await self._visibility.borrowed_plate_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(plate, auth, excluded, borrowed):
                 # No existence leak — a plate hidden by org policy 404s exactly
                 # like a plate that doesn't exist.
                 return _not_found(input.plate_id)
@@ -260,6 +261,7 @@ class ListPlates:
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            borrowed = await self._visibility.borrowed_plate_ids(input.workspace_id, auth)
             plates = await self._repo.search(
                 input.workspace_id,
                 barcode=input.barcode,
@@ -272,6 +274,7 @@ class ListPlates:
                 owner_org_id=input.owner_org_id,
                 group_id=input.group_id,
                 exclude_owner_org_ids=excluded,
+                include_plate_ids=borrowed,
                 tags=input.tags,
                 tag_logic=input.tag_logic,
             )
@@ -555,12 +558,13 @@ class ListChildren:
             if parent is None:
                 return _not_found(input.parent_plate_id)
             excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
-            if not self._visibility.can_view(parent, auth, excluded):
+            borrowed = await self._visibility.borrowed_plate_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(parent, auth, excluded, borrowed):
                 # No existence leak — an invisible parent 404s exactly like a
                 # missing one.
                 return _not_found(input.parent_plate_id)
             children = await self._repo.find_children(input.workspace_id, input.parent_plate_id)
             visible_children = [
-                c for c in children if self._visibility.can_view(c, auth, excluded)
+                c for c in children if self._visibility.can_view(c, auth, excluded, borrowed)
             ]
             return Success(visible_children)

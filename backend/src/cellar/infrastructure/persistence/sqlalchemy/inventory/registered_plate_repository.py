@@ -122,6 +122,7 @@ class SQLAlchemyRegisteredPlateRepository(
         owner_org_id: uuid.UUID | None = None,
         group_id: uuid.UUID | None = None,
         exclude_owner_org_ids: set[uuid.UUID] | None = None,
+        include_plate_ids: set[uuid.UUID] | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
     ) -> list[RegisteredPlate]:
@@ -153,12 +154,19 @@ class SQLAlchemyRegisteredPlateRepository(
         if group_id is not None:
             stmt = stmt.where(RegisteredPlateModel.group_id == group_id)
         if exclude_owner_org_ids:
-            stmt = stmt.where(
-                or_(
-                    RegisteredPlateModel.owner_org_id.is_(None),
-                    RegisteredPlateModel.owner_org_id.not_in(exclude_owner_org_ids),
-                )
-            )
+            # spec §5 loan clause: a plate whose owner org is excluded is
+            # still visible if it's on active loan to the caller (borrowed
+            # plates re-admitted via `id IN include_plate_ids`). Only add
+            # that arm when the set is non-empty — same empty-IN gotcha as
+            # the exclusion set itself (SQLAlchemy's expanding bindparam
+            # renders an empty IN in a way Postgres refuses against uuid).
+            exclusion_terms = [
+                RegisteredPlateModel.owner_org_id.is_(None),
+                RegisteredPlateModel.owner_org_id.not_in(exclude_owner_org_ids),
+            ]
+            if include_plate_ids:
+                exclusion_terms.append(RegisteredPlateModel.id.in_(include_plate_ids))
+            stmt = stmt.where(or_(*exclusion_terms))
         if tags:
             stmt = stmt.where(
                 RegisteredPlateModel.id.in_(

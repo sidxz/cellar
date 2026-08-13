@@ -84,6 +84,9 @@ from cellar.application.inventory.update_storage_location import UpdateStorageLo
 from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
     SQLAlchemyOrgPlatePolicyRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
+    SQLAlchemyPlateLoanRepository,
+)
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 from ._core import _get_use_case, get_container
@@ -228,10 +231,17 @@ def get_plate_visibility_uow(
     Same shape as ``SaltMatcherUoWDep`` — the service's repo needs an active
     session, but the read-model callers that need it (e.g. the molecule→plates
     route) aren't use-case objects that own a uow lifecycle themselves, so the
-    caller enters/exits the uow around the ``excluded_org_ids`` call.
+    caller enters/exits the uow around the ``excluded_org_ids``/
+    ``borrowed_plate_ids`` calls. Wired with the loan repo so that route can
+    apply the spec §5 loan clause too.
     """
     uow = AsyncUnitOfWork(container[async_sessionmaker])
-    return PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)), uow
+    return (
+        PlateVisibilityService(
+            SQLAlchemyOrgPlatePolicyRepository(uow), SQLAlchemyPlateLoanRepository(uow)
+        ),
+        uow,
+    )
 
 
 PlateVisibilityUoWDep = Annotated[

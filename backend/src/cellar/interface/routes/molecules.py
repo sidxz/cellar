@@ -739,9 +739,10 @@ async def list_molecule_plates(
     visibility, visibility_uow = plate_visibility_uow
     async with visibility_uow:
         excluded = await visibility.excluded_org_ids(auth.workspace_id, auth)
+        borrowed = await visibility.borrowed_plate_ids(auth.workspace_id, auth)
 
     entries = await service.find_plates_for_molecule(
-        auth.workspace_id, molecule_id, excluded_org_ids=excluded
+        auth.workspace_id, molecule_id, excluded_org_ids=excluded, include_plate_ids=borrowed
     )
     return [MoleculePlateResponse.from_entry(e) for e in entries]
 

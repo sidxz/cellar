@@ -194,6 +194,7 @@ class RegisteredPlateRepository(Protocol):
         owner_org_id: uuid.UUID | None = None,
         group_id: uuid.UUID | None = None,
         exclude_owner_org_ids: set[uuid.UUID] | None = None,
+        include_plate_ids: set[uuid.UUID] | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
     ) -> list[RegisteredPlate]: ...
