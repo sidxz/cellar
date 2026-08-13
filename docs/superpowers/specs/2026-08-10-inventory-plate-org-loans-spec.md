@@ -166,3 +166,17 @@ One idempotent script (re-runnable, natural-key skips), args: legacy DSN, worksp
 | S6 | Migration | Script + dry-run against legacy dump + cutover runbook |
 
 Pre-existing drift noted during exploration (NOT this spec's scope, backlogged): `RegisteredPlate.custom_fields` never persisted; `cdd_plate_sync.cdd_statistics` column absent from ORM.
+
+---
+
+## S4 sync note (2026-08-13) — shipped reality vs. this spec
+
+S4 (loans) shipped per §14. Five recorded deviations, all deliberate:
+
+1. **Action name:** the approval RBAC action is `cellar:approve_loan` (house `cellar:<verb>` registry convention in `SERVICE_ACTIONS`), not §4.3's `inventory.plate_loans.approve` notation. It was also the FIRST runtime `check_action` call in the codebase — nothing else checked actions before S4.
+2. **Batch-shaped item events:** `PlateLoanItemsApproved{item_ids}` etc., matching the batch API verbs — not per-item events as §4.3's singular names suggest.
+3. **Borrowed-plate visibility is READ-only:** §5's "plate has an active loan with borrower_org == U.org" clause is enforced on GetPlate/ListPlates/ListChildren/molecule→plates read model. Write paths, export, and tag surfaces keep strict S2 privacy — borrowers see, owners modify.
+4. **Admin bypasses the action check too** (not just the org check as §4.3 says) — prevents the ungranted-action deadlock: no Sentinel grants of `cellar:approve_loan` exist until an operator assigns them, so admins are the only approvers initially.
+5. **Default list filter does NOT yet include "plus borrowed-by-us"** (§5): the plates list's "My org" default sends `owner_org_id=mine`, which ANDs against the borrowed carve-out — borrowed foreign plates appear under "All orgs" only. S5 intake item.
+
+Operator notes: `cellar:approve_loan` registers with Sentinel at backend startup; grant it to at least one owner-org editor per org (until then only workspace admins can approve). The first non-admin approval in prod is the first live RoleClient round-trip (fail-closed on Sentinel outage). Kiosk confirmation mode behaves like admin_confirm until S5's kiosk endpoints.
