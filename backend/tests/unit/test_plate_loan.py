@@ -111,3 +111,12 @@ class TestTransitions:
         loan.approve_items([a], approved_by=USER)
         assert loan.eligible_item_ids(LoanItemStatus.APPROVED) == [b]
         assert loan.eligible_item_ids(LoanItemStatus.CHECKED_OUT) == [a]
+
+    def test_duplicate_item_ids_deduped(self) -> None:
+        loan = _loan(1)
+        item_id = loan.items[0].id
+        loan.clear_events()
+        items = loan.approve_items([item_id, item_id], approved_by=USER)
+        assert [i.id for i in items] == [item_id]
+        (event,) = loan.collect_events()
+        assert event.item_ids == [item_id]

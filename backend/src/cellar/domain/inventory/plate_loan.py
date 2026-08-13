@@ -31,10 +31,6 @@ from cellar.domain.inventory.events import (
 from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.errors import ValidationError
 
-_TERMINAL = frozenset(
-    {LoanItemStatus.RETURNED, LoanItemStatus.DENIED, LoanItemStatus.CANCELLED}
-)
-
 
 class LoanItem(Entity):
     """One plate's membership in a loan."""
@@ -189,6 +185,9 @@ class PlateLoan(AggregateRoot):
     ) -> list[LoanItem]:
         if not item_ids:
             raise ValidationError("No loan items given")
+        # Dedupe preserving order — callers legitimately union "checked +
+        # all-eligible" lists; duplicates would double-append into events.
+        item_ids = list(dict.fromkeys(item_ids))
         by_id = {i.id: i for i in self._items}
         sources = VALID_LOAN_ITEM_TRANSITIONS[target]
         items: list[LoanItem] = []
@@ -221,7 +220,7 @@ class PlateLoan(AggregateRoot):
 
     def _refresh_status(self) -> None:
         if self.status == LoanStatus.OPEN and all(
-            i.status in _TERMINAL for i in self._items
+            i.status not in ACTIVE_LOAN_ITEM_STATUSES for i in self._items
         ):
             self.status = LoanStatus.CLOSED
             self.closed_at = datetime.now(UTC)
