@@ -195,7 +195,7 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
 /** Every loan this plate has appeared in, newest first (API orders desc). Shows
  * the plate's OWN item status within each loan, coloured like the loan dashboard. */
 function LoanHistoryCard({ plateId }: { plateId: string }) {
-  const { data: loans } = useLoans({ plate_id: plateId });
+  const { data: loans, isLoading } = useLoans({ plate_id: plateId });
   const { data: orgs } = useOrgs();
   const orgNameById = useMemo(() => new Map((orgs ?? []).map((o) => [o.id, o.name])), [orgs]);
 
@@ -225,6 +225,8 @@ function LoanHistoryCard({ plateId }: { plateId: string }) {
               );
             })}
           </ul>
+        ) : isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading...</p>
         ) : (
           <p className="text-sm text-muted-foreground">Never loaned.</p>
         )}

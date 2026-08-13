@@ -23,7 +23,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { FileUp, FlaskConical, Plus, Settings, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { buildCustodyMap, useLoans } from "../hooks/use-plate-loans";
+import { LOAN_VARIANT, buildCustodyMap, useLoans } from "../hooks/use-plate-loans";
 import { useDeletePlate, usePlates } from "../hooks/use-plates";
 import type { PlateStatus, PlateType, RegisteredPlate } from "../types/plates";
 import { plateStatusLabels, plateTypeLabels } from "../types/plates";
@@ -148,7 +148,8 @@ export function PlateList() {
         sortable: false,
         filter: false,
         // One chip per plate currently out on an active loan: who holds it and
-        // when it's due, coloured by the loan-item status (global map, per spec).
+        // when it's due, coloured by the loan-item status (LOAN_VARIANT, same
+        // as the loan dashboard and plate-detail history).
         cellRenderer: ({ data }: { data: RegisteredPlate | undefined }) => {
           const custody = data && custodyByPlate.get(data.id);
           if (!custody) return null;
@@ -156,7 +157,13 @@ export function PlateList() {
           const label = custody.loan.due_date
             ? `${borrower} · due ${formatDate(custody.loan.due_date)}`
             : borrower;
-          return <StatusBadge status={custody.item.status} label={label} />;
+          return (
+            <StatusBadge
+              status={custody.item.status}
+              label={label}
+              variant={LOAN_VARIANT[custody.item.status]}
+            />
+          );
         },
       },
       {

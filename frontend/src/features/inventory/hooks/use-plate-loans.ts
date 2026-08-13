@@ -154,9 +154,8 @@ export function buildCustodyMap(
 /** Loan-domain colours for status words the global map either lacks (open/
  * closed) or owns with a differently-meaning colour (approved=success,
  * returned/cancelled=error). Undefined → StatusBadge falls back to the map.
- * Shared by the loan dashboard cards and the plate-detail loan-history card so
- * the same item status never renders two colours across surfaces. The custody
- * chip on the plates list deliberately uses the global map instead (spec). */
+ * Shared by every loan surface (dashboard cards, plate-detail loan history,
+ * plate-list custody chip) so the same status never renders two colours. */
 export const LOAN_VARIANT: Record<string, BadgeVariant> = {
   open: "default",
   closed: "outline",
