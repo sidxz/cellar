@@ -8,6 +8,7 @@ import {
   LoanStatus,
   type RequestLoanBody,
 } from "@/shared/lib/api/model";
+import type { BadgeVariant } from "@/shared/lib/status-variants";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LOANS_KEY, PLATES_KEY } from "./query-keys";
@@ -149,3 +150,17 @@ export function buildCustodyMap(
   }
   return map;
 }
+
+/** Loan-domain colours for status words the global map either lacks (open/
+ * closed) or owns with a differently-meaning colour (approved=success,
+ * returned/cancelled=error). Undefined → StatusBadge falls back to the map.
+ * Shared by the loan dashboard cards and the plate-detail loan-history card so
+ * the same item status never renders two colours across surfaces. The custody
+ * chip on the plates list deliberately uses the global map instead (spec). */
+export const LOAN_VARIANT: Record<string, BadgeVariant> = {
+  open: "default",
+  closed: "outline",
+  approved: "default",
+  returned: "success",
+  cancelled: "outline",
+};

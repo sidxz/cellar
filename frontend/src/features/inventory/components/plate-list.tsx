@@ -17,11 +17,13 @@ import {
 } from "@/shared/components/ui/select";
 import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { useOrgs } from "@/shared/hooks/use-orgs";
+import { formatDate } from "@/shared/lib/format-date";
 import { showError } from "@/shared/lib/toast";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { FileUp, FlaskConical, Plus, Settings, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { buildCustodyMap, useLoans } from "../hooks/use-plate-loans";
 import { useDeletePlate, usePlates } from "../hooks/use-plates";
 import type { PlateStatus, PlateType, RegisteredPlate } from "../types/plates";
 import { plateStatusLabels, plateTypeLabels } from "../types/plates";
@@ -49,6 +51,9 @@ export function PlateList() {
   const { data: me, isError: meFailed } = useCurrentUser();
   const { data: orgs } = useOrgs();
   const orgNameById = useMemo(() => new Map((orgs ?? []).map((o) => [o.id, o.name])), [orgs]);
+  // Open loans → plate_id custody lookup, for the "Custody" column chip.
+  const { data: openLoans } = useLoans({ status: "open" });
+  const custodyByPlate = useMemo(() => buildCustodyMap(openLoans ?? []), [openLoans]);
   // "My org" needs /me. If /me failed, fall back to un-filtered (All orgs)
   // rather than gating the list forever behind a query that will never run.
   const ownerOrgId =
@@ -138,6 +143,23 @@ export function PlateList() {
           params.value ? <StatusBadge status={params.value as PlateStatus} /> : null,
       },
       {
+        headerName: "Custody",
+        width: 220,
+        sortable: false,
+        filter: false,
+        // One chip per plate currently out on an active loan: who holds it and
+        // when it's due, coloured by the loan-item status (global map, per spec).
+        cellRenderer: ({ data }: { data: RegisteredPlate | undefined }) => {
+          const custody = data && custodyByPlate.get(data.id);
+          if (!custody) return null;
+          const borrower = orgNameById.get(custody.loan.borrower_org_id) ?? "Unknown org";
+          const label = custody.loan.due_date
+            ? `${borrower} · due ${formatDate(custody.loan.due_date)}`
+            : borrower;
+          return <StatusBadge status={custody.item.status} label={label} />;
+        },
+      },
+      {
         headerName: "Owner",
         field: "owner_org_id",
         width: 140,
@@ -175,7 +197,7 @@ export function PlateList() {
           ) : null,
       },
     ],
-    [router, orgNameById, orgs],
+    [router, orgNameById, orgs, custodyByPlate],
   );
 
   if (error) {

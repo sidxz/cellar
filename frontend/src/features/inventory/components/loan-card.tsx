@@ -13,10 +13,10 @@ import {
 } from "@/shared/components/ui/table";
 import { useOrgs } from "@/shared/hooks/use-orgs";
 import type { MeResponse } from "@/shared/lib/api/model";
-import type { BadgeVariant } from "@/shared/lib/status-variants";
 import { ArrowRight } from "lucide-react";
 import { useState } from "react";
 import {
+  LOAN_VARIANT,
   LoanItemStatus,
   LoanStatus,
   type LoanVerb,
@@ -46,17 +46,6 @@ const VERB_LABELS: Record<LoanVerb, string> = {
 
 const OWNER_VERBS: LoanVerb[] = ["approve", "deny", "confirm-out", "confirm-in"];
 const BORROWER_VERBS: LoanVerb[] = ["request-return", "cancel"];
-
-/** Loan-domain colours for status words the global map either lacks (open/
- * closed) or owns with a differently-meaning colour (approved=success,
- * returned/cancelled=error). Undefined → StatusBadge falls back to the map. */
-const LOAN_VARIANT: Record<string, BadgeVariant> = {
-  open: "default",
-  closed: "outline",
-  approved: "default",
-  returned: "success",
-  cancelled: "outline",
-};
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);

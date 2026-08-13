@@ -35,13 +35,16 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useOrgs } from "@/shared/hooks/use-orgs";
+import { formatDate } from "@/shared/lib/format-date";
 import { showError } from "@/shared/lib/toast";
 import { cn } from "@/shared/lib/utils";
 import { useAuthzHasRole } from "@sentinel-auth/nextjs";
 import { Copy, Download, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { LOAN_VARIANT, useLoans } from "../hooks/use-plate-loans";
 import { useChangeStatus, useDerivePlate, usePlate, usePlateChildren } from "../hooks/use-plates";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import { downloadPlateLayout } from "../lib/download-plate-layout";
@@ -182,6 +185,51 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
       <span className="w-40 shrink-0 text-sm text-muted-foreground">{label}</span>
       <span className="text-sm">{children}</span>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Loan history
+// ---------------------------------------------------------------------------
+
+/** Every loan this plate has appeared in, newest first (API orders desc). Shows
+ * the plate's OWN item status within each loan, coloured like the loan dashboard. */
+function LoanHistoryCard({ plateId }: { plateId: string }) {
+  const { data: loans } = useLoans({ plate_id: plateId });
+  const { data: orgs } = useOrgs();
+  const orgNameById = useMemo(() => new Map((orgs ?? []).map((o) => [o.id, o.name])), [orgs]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Loan History</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loans && loans.length > 0 ? (
+          <ul className="space-y-2">
+            {loans.map((loan) => {
+              const item = loan.items.find((i) => i.plate_id === plateId);
+              return (
+                <li key={loan.id} className="flex flex-wrap items-center gap-3 text-sm">
+                  <span>{orgNameById.get(loan.borrower_org_id) ?? "Unknown org"}</span>
+                  {item ? (
+                    <StatusBadge status={item.status} variant={LOAN_VARIANT[item.status]} />
+                  ) : null}
+                  <span className="text-muted-foreground">
+                    requested {formatDate(loan.created_at)}
+                  </span>
+                  {loan.due_date ? (
+                    <span className="text-muted-foreground">due {formatDate(loan.due_date)}</span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Never loaned.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -404,6 +452,9 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                   </CardContent>
                 </Card>
               )}
+
+              {/* Loan history */}
+              <LoanHistoryCard plateId={plateId} />
 
               {/* Attachments */}
               <Card>
