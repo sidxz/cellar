@@ -21,6 +21,13 @@ describe("formatDate", () => {
   it("returns empty string for undefined", () => {
     expect(formatDate(undefined)).toBe("");
   });
+
+  it("renders a date-only string on its own calendar day in any timezone", () => {
+    // Regression: new Date("2026-07-01") is UTC midnight, which local-time
+    // formatting rendered as "Jun 30, 2026" west of UTC (loan due-date chips).
+    expect(formatDate("2026-07-01")).toMatch(/Jul\s+1,\s+2026/);
+    expect(formatDate("2026-08-27")).toMatch(/Aug\s+27,\s+2026/);
+  });
 });
 
 describe("formatDateTime", () => {

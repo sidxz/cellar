@@ -1,7 +1,10 @@
 function toDate(input: string | Date | null | undefined): Date | null {
   if (input == null) return null;
   if (input instanceof Date) return input;
-  const d = new Date(input);
+  // A bare YYYY-MM-DD is a calendar date, not an instant: anchor it at LOCAL
+  // midnight so formatting never shifts the day. new Date("2026-07-01") is UTC
+  // midnight, which a local-time formatter renders as Jun 30 west of UTC.
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(input) ? new Date(`${input}T00:00:00`) : new Date(input);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -73,13 +76,8 @@ export function formatRelativeDate(input: string | Date | null | undefined): str
  * arithmetic doesn't drift across the UTC boundary.
  */
 export function formatRelativeDay(input: string | Date | null | undefined): string {
-  if (input == null) return "";
-  // Anchor a bare date string at local midnight; pass Date / full timestamps through.
-  const d =
-    typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)
-      ? new Date(`${input}T00:00:00`)
-      : toDate(input);
-  if (!d || Number.isNaN(d.getTime())) return "";
+  const d = toDate(input);
+  if (!d) return "";
 
   const startOfDay = new Date(d);
   startOfDay.setHours(0, 0, 0, 0);
