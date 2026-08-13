@@ -48,7 +48,8 @@ const OWNER_VERBS: LoanVerb[] = ["approve", "deny", "confirm-out", "confirm-in"]
 const BORROWER_VERBS: LoanVerb[] = ["request-return", "cancel"];
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  // Local calendar day, not UTC day — past-due calculation must match input dates.
+  return new Date().toLocaleDateString("en-CA");
 }
 
 export interface LoanCardProps {
