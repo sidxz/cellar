@@ -10,6 +10,7 @@ from cellar.domain.inventory.cdd_plate_import import CddPlateImport
 from cellar.domain.inventory.import_template import ImportTemplate
 from cellar.domain.inventory.org_plate_policy import OrgPlatePolicy
 from cellar.domain.inventory.plate_group import PlateGroup
+from cellar.domain.inventory.plate_loan import PlateLoan
 from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.inventory.sample import Sample
 from cellar.domain.inventory.sample_request import SampleRequest
@@ -164,6 +165,9 @@ class RegisteredPlateRepository(Protocol):
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> RegisteredPlate | None: ...
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[RegisteredPlate]: ...
     async def find_by_barcode(
         self, workspace_id: uuid.UUID, barcode: str
     ) -> RegisteredPlate | None: ...
@@ -220,6 +224,33 @@ class PlateGroupRepository(Protocol):
     async def count_plates_by_group(self, workspace_id: uuid.UUID) -> dict[uuid.UUID, int]: ...
     async def save(self, aggregate: PlateGroup) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class PlateLoanRepository(Protocol):
+    """Repository for PlateLoan aggregates (items loaded eagerly)."""
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> PlateLoan | None: ...
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        owner_org_id: uuid.UUID | None = None,
+        borrower_org_id: uuid.UUID | None = None,
+        requested_by: uuid.UUID | None = None,
+        plate_id: uuid.UUID | None = None,
+        overdue: bool = False,
+    ) -> list[PlateLoan]: ...
+    async def active_plate_ids(
+        self, workspace_id: uuid.UUID, plate_ids: list[uuid.UUID]
+    ) -> set[uuid.UUID]: ...
+    async def borrowed_plate_ids(
+        self, workspace_id: uuid.UUID, borrower_org_id: uuid.UUID
+    ) -> set[uuid.UUID]: ...
+    async def save(self, aggregate: PlateLoan) -> None: ...
 
 
 @runtime_checkable

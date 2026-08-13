@@ -38,6 +38,19 @@ class SQLAlchemyRegisteredPlateRepository(
     # Custom queries
     # ------------------------------------------------------------------
 
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[RegisteredPlate]:
+        """Bulk-fetch plates by IDs, scoped to workspace."""
+        if not ids:
+            return []
+        stmt = select(RegisteredPlateModel).where(
+            RegisteredPlateModel.workspace_id == workspace_id,
+            RegisteredPlateModel.id.in_(ids),
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
+
     async def find_by_barcode(
         self, workspace_id: uuid.UUID, barcode: str
     ) -> RegisteredPlate | None:

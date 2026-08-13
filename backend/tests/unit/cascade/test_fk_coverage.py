@@ -32,6 +32,7 @@ import cellar.infrastructure.persistence.sqlalchemy.inventory.shipment_models  #
 import cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
@@ -189,6 +190,22 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # Shipments are not a Tier-1 admin-deletable entity; lifecycle managed by
     # the inventory module. No cascade rule needed.
     ("shipment_items", "shipment_id", "shipments"),
+
+    # -------------------------------------------------------------------------
+    # plate_loan_items → plate_loans: owned, ORM + DB cascade handles it
+    # -------------------------------------------------------------------------
+    # plate_loan_items.loan_id has ondelete=CASCADE at the DB level (migration
+    # 063, fk_loan_items_loan) and cascade="all, delete-orphan" on the ORM
+    # relationship. plate_loans is not a Tier-1 admin-deletable entity;
+    # lifecycle is managed via the loan use cases, not the admin-delete
+    # pathway — same rationale as shipment_items.shipment_id above. No Tier-2
+    # rule needed — the DB engine cascades automatically.
+    #
+    # plate_loan_items.plate_id is deliberately NOT a declared FK (loose
+    # reference to registered_plates, migration 063) — loan history must
+    # survive plate deletion. With no FK declared it never appears in
+    # _collect_all_fks(), so there is nothing to categorize for it.
+    ("plate_loan_items", "loan_id", "plate_loans"),
 
     # -------------------------------------------------------------------------
     # batches → salt_catalog: SET NULL on salt entry delete
