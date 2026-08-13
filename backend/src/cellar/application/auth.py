@@ -80,8 +80,9 @@ async def require_loan_authority(auth: AuthContext | None, owner_org_id: uuid.UU
     Otherwise: editor in the OWNER org holding the cellar:approve_loan
     RBAC action — the first runtime check_action call in this codebase.
     """
+    require_authenticated(auth)
     require_editor(auth)
-    assert auth is not None  # require_editor raised otherwise
+    assert auth is not None  # require_authenticated raised otherwise
     if auth.is_admin:
         return
     if auth.org_id != owner_org_id:

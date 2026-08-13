@@ -118,6 +118,10 @@ class TestRequireSameUser:
 
 
 class TestRequireLoanAuthority:
+    async def test_none_auth_forbidden(self) -> None:
+        with pytest.raises(AuthorizationError):
+            await require_loan_authority(None, uuid.uuid4())
+
     async def test_admin_bypasses_org_and_action(self) -> None:
         auth = FakeAuth(role="admin", org_id=uuid.uuid4(), granted_actions=set())
         await require_loan_authority(auth, uuid.uuid4())  # no raise
