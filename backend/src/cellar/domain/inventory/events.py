@@ -309,3 +309,15 @@ class PlateGroupMoved(DomainEvent):
 class PlateGroupDeleted(DomainEvent):
     name: str
     owner_org_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupMembershipChanged(DomainEvent):
+    """A plate was assigned to / removed from / moved between groups.
+
+    User decision 2026-08-13: grouping IS audited — this was the one
+    un-audited mutation class on a 21-CFR-tracked aggregate."""
+
+    plate_id: uuid.UUID
+    old_group_id: uuid.UUID | None
+    new_group_id: uuid.UUID | None

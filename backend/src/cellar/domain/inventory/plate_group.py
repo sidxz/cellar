@@ -13,7 +13,7 @@ Decisions:
   the ``plate_group_type`` ControlledVocabulary, but membership is not
   domain-validated (no live CV-validation precedent in this codebase).
 - ``RegisteredPlate.derive()`` does NOT copy ``group_id`` — grouping is
-  manual curation, not lineage.
+  manual curation, not lineage. Membership changes emit ``PlateGroupMembershipChanged`` (audited — user decision 2026-08-13).
 """
 
 from __future__ import annotations

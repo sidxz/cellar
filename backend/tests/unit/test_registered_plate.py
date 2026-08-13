@@ -7,6 +7,7 @@ import pytest
 from cellar.domain.inventory.enums import PlateStatus, PlateType
 from cellar.domain.inventory.events import (
     PlateDisposed,
+    PlateGroupMembershipChanged,
     PlateMoved,
     PlateRegistered,
     PlateStatusChanged,
@@ -224,3 +225,20 @@ class TestGroupAssignment:
             registered_by=uuid.uuid4(),
         )
         assert child.group_id is None
+
+    def test_assign_to_group_emits_membership_event(self) -> None:
+        plate = _make_plate()
+        plate.clear_events()
+        gid = uuid.uuid4()
+        plate.assign_to_group(gid)
+        events = plate.collect_events()
+        assert len(events) == 1
+        assert isinstance(events[0], PlateGroupMembershipChanged)
+        assert events[0].plate_id == plate.id
+        assert events[0].old_group_id is None
+        assert events[0].new_group_id == gid
+        plate.clear_events()
+        plate.assign_to_group(None)
+        (cleared,) = plate.collect_events()
+        assert cleared.old_group_id == gid
+        assert cleared.new_group_id is None

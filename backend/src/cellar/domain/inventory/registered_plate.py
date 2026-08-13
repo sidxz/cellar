@@ -14,6 +14,7 @@ from cellar.domain.inventory.enums import (
 )
 from cellar.domain.inventory.events import (
     PlateDisposed,
+    PlateGroupMembershipChanged,
     PlateMoved,
     PlateRegistered,
     PlateStatusChanged,
@@ -290,8 +291,19 @@ class RegisteredPlate(AggregateRoot):
     def assign_to_group(self, group_id: uuid.UUID | None) -> None:
         """Set or clear this plate's group. The plate-org == group-org
         invariant is enforced by the use case, which holds both aggregates."""
+        old = self.group_id
         self.group_id = group_id
         self.updated_at = datetime.now(UTC)
+        self.register_event(
+            PlateGroupMembershipChanged(
+                aggregate_id=self.id,
+                aggregate_type="RegisteredPlate",
+                workspace_id=self.workspace_id,
+                plate_id=self.id,
+                old_group_id=old,
+                new_group_id=group_id,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Derive (copy to child plate)
