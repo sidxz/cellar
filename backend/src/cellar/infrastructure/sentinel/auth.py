@@ -26,6 +26,7 @@ SERVICE_ACTIONS = [
     },
     {"action": "cellar:manage_markush", "description": "Manage Markush definitions"},
     {"action": "cellar:search_markush", "description": "Search Markush library"},
+    {"action": "cellar:approve_loan", "description": "Approve and manage plate loan requests"},
 ]
 
 

@@ -515,3 +515,6 @@ class _AuthShim:
     def has_role(self, minimum_role: str) -> bool:
         _order = {"viewer": 0, "editor": 1, "admin": 2}
         return _order.get(self.workspace_role, 0) >= _order.get(minimum_role, 0)
+
+    async def check_action(self, action: str) -> bool:
+        return False  # exports never check fine-grained actions

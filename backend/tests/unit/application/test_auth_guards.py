@@ -7,9 +7,11 @@ import uuid
 import pytest
 
 from cellar.application.auth import (
+    LOAN_APPROVE_ACTION,
     AuthContext,
     require_admin,
     require_editor,
+    require_loan_authority,
     require_same_user,
     require_same_workspace,
     require_workspace_role,
@@ -113,3 +115,31 @@ class TestRequireSameUser:
         other_uid = uuid.uuid4()
         with pytest.raises(AuthorizationError):
             require_same_user(FakeAuth(user_id=uid), other_uid)
+
+
+class TestRequireLoanAuthority:
+    async def test_admin_bypasses_org_and_action(self) -> None:
+        auth = FakeAuth(role="admin", org_id=uuid.uuid4(), granted_actions=set())
+        await require_loan_authority(auth, uuid.uuid4())  # no raise
+
+    async def test_owner_org_member_with_action_passes(self) -> None:
+        org = uuid.uuid4()
+        auth = FakeAuth(role="editor", org_id=org, granted_actions={LOAN_APPROVE_ACTION})
+        await require_loan_authority(auth, org)
+
+    async def test_owner_org_member_without_action_forbidden(self) -> None:
+        org = uuid.uuid4()
+        auth = FakeAuth(role="editor", org_id=org, granted_actions=set())
+        with pytest.raises(AuthorizationError):
+            await require_loan_authority(auth, org)
+
+    async def test_foreign_org_member_forbidden_even_with_action(self) -> None:
+        auth = FakeAuth(role="editor", org_id=uuid.uuid4(), granted_actions={LOAN_APPROVE_ACTION})
+        with pytest.raises(AuthorizationError):
+            await require_loan_authority(auth, uuid.uuid4())
+
+    async def test_viewer_forbidden(self) -> None:
+        org = uuid.uuid4()
+        auth = FakeAuth(role="viewer", org_id=org, granted_actions={LOAN_APPROVE_ACTION})
+        with pytest.raises(AuthorizationError):
+            await require_loan_authority(auth, org)

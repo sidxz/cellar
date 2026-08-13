@@ -38,6 +38,10 @@ class AuthContext(Protocol):
 
     def has_role(self, minimum_role: str) -> bool: ...
 
+    async def check_action(self, action: str) -> bool:
+        """Check a fine-grained RBAC action grant (Sentinel SDK dedupes per request)."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Guards — raise AuthorizationError on failure
@@ -63,6 +67,27 @@ def require_editor(auth: AuthContext | None) -> None:
 def require_admin(auth: AuthContext | None) -> None:
     """Shorthand: require at least admin role."""
     require_workspace_role(auth, "admin")
+
+
+LOAN_APPROVE_ACTION = "cellar:approve_loan"
+
+
+async def require_loan_authority(auth: AuthContext | None, owner_org_id: uuid.UUID) -> None:
+    """Owner-side loan verbs (approve/deny/confirm-out/confirm-in).
+
+    Admin/owner bypasses everything (also dodges the ungranted-action
+    deadlock — no Sentinel grants exist until an operator assigns them).
+    Otherwise: editor in the OWNER org holding the cellar:approve_loan
+    RBAC action — the first runtime check_action call in this codebase.
+    """
+    require_editor(auth)
+    assert auth is not None  # require_editor raised otherwise
+    if auth.is_admin:
+        return
+    if auth.org_id != owner_org_id:
+        raise AuthorizationError("Only the owner organization can manage this loan")
+    if not await auth.check_action(LOAN_APPROVE_ACTION):
+        raise AuthorizationError("Missing loan approval permission")
 
 
 def require_authenticated(auth: AuthContext | None) -> None:

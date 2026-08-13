@@ -23,6 +23,7 @@ class FakeAuth:
         workspace_id: uuid.UUID | None = None,
         org_id: uuid.UUID | None = None,
         org_slug: str | None = None,
+        granted_actions: set[str] | None = None,
         email: str = "test@example.com",
         name: str = "Test User",
     ) -> None:
@@ -31,6 +32,7 @@ class FakeAuth:
         self.workspace_role = role
         self.org_id = org_id
         self.org_slug = org_slug
+        self._granted_actions = granted_actions
         self.email = email
         self.name = name
 
@@ -54,3 +56,8 @@ class FakeAuth:
         return _ROLE_HIERARCHY.get(self.workspace_role, -1) >= _ROLE_HIERARCHY.get(
             minimum_role, 99
         )
+
+    async def check_action(self, action: str) -> bool:
+        # None = permissive default (legacy fixtures never think about actions);
+        # pass an explicit set to test denial paths.
+        return True if self._granted_actions is None else action in self._granted_actions
