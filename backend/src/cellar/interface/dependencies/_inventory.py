@@ -55,6 +55,7 @@ from cellar.application.inventory.plate_groups import (
     RemovePlatesFromGroup,
     UpdatePlateGroup,
 )
+from cellar.application.inventory.plate_loans import GetLoan, ListLoans, RequestPlateLoan
 from cellar.application.inventory.plate_read_model import PlateReadModelService
 from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.registered_plates import (
@@ -100,6 +101,7 @@ __all__ = [
     "GetBatchDep",
     "GetGroupTreeDep",
     "GetInventorySummaryDep",
+    "GetLoanDep",
     "GetOrgPlatePolicyDep",
     "GetPlateDep",
     "GetSampleDep",
@@ -112,6 +114,7 @@ __all__ = [
     "ListBatchesGlobalDep",
     "ListChildrenDep",
     "ListImportTemplatesDep",
+    "ListLoansDep",
     "ListPlatesDep",
     "ListSamplesByBatchDep",
     "ListSamplesGlobalDep",
@@ -126,6 +129,7 @@ __all__ = [
     "RegisterPlateDep",
     "RemoveBatchIdentifierDep",
     "RemovePlatesFromGroupDep",
+    "RequestPlateLoanDep",
     "SetOrgPlatePolicyDep",
     "UpdateBatchDep",
     "UpdatePlateDep",
@@ -230,6 +234,11 @@ AssignPlatesToGroupDep = Annotated[
 RemovePlatesFromGroupDep = Annotated[
     RemovePlatesFromGroup, Depends(_get_use_case(RemovePlatesFromGroup))
 ]
+
+# --- Plate Loan dependencies ---
+RequestPlateLoanDep = Annotated[RequestPlateLoan, Depends(_get_use_case(RequestPlateLoan))]
+ListLoansDep = Annotated[ListLoans, Depends(_get_use_case(ListLoans))]
+GetLoanDep = Annotated[GetLoan, Depends(_get_use_case(GetLoan))]
 
 # --- Plate-import pipeline dependencies ---
 ImportFileCacheDep = Annotated[ImportFileCache, Depends(_get_use_case(ImportFileCache))]

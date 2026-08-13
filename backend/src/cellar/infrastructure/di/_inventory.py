@@ -56,6 +56,7 @@ from cellar.application.inventory.plate_groups import (
     RemovePlatesFromGroup,
     UpdatePlateGroup,
 )
+from cellar.application.inventory.plate_loans import GetLoan, ListLoans, RequestPlateLoan
 from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.preview_shipment_import import PreviewShipmentImport
 from cellar.application.inventory.sample_requests import (
@@ -123,6 +124,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_rep
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
     SQLAlchemyPlateGroupRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
+    SQLAlchemyPlateLoanRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
@@ -583,6 +587,41 @@ def register_inventory(container: Container) -> None:
     container.define(GetGroupTree, _get_group_tree)
     container.define(AssignPlatesToGroup, _assign_plates_to_group)
     container.define(RemovePlatesFromGroup, _remove_plates_from_group)
+
+    # --- Plate Loans ---
+    def _request_plate_loan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RequestPlateLoan(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyPlateGroupRepository(uow),
+            SQLAlchemyOrgPlatePolicyRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    def _list_loans(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListLoans(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    def _get_loan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetLoan(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        )
+
+    container.define(RequestPlateLoan, _request_plate_loan)
+    container.define(ListLoans, _list_loans)
+    container.define(GetLoan, _get_loan)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(
