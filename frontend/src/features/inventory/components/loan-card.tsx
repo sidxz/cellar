@@ -81,10 +81,11 @@ export function LoanCard({ loan, context, me }: LoanCardProps) {
       return next;
     });
 
-  const canApprove = !!me?.org_id && me.org_id === loan.owner_org_id;
-  const canBorrow = !!me?.org_id && me.org_id === loan.borrower_org_id;
-  const showOwner = context === "approvals" || (context === "all" && canApprove);
-  const showBorrower = context === "mine" || (context === "all" && canBorrow);
+  // Locked UX: exactly two verb arms — owner verbs on Approvals, borrower
+  // verbs on My requests. The All tab is read-only. Server enforces authority;
+  // admin visibility gap tracked in docs/backlog/loan-approvals-admin-visibility.md.
+  const showOwner = context === "approvals";
+  const showBorrower = context === "mine";
   const verbs = [...(showOwner ? OWNER_VERBS : []), ...(showBorrower ? BORROWER_VERBS : [])];
 
   const overdue = loan.status === LoanStatus.open && !!loan.due_date && loan.due_date < todayISO();
