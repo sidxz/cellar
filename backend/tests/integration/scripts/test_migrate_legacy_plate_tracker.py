@@ -202,8 +202,8 @@ async def test_apply_group_tree_and_assign_is_idempotent(session_factory):
             matched, _ = await match_plates(legacy, plate_repo=plate_repo, cdd_repo=cdd_repo,
                                             workspace_id=ws, cdd_vault_id=VAULT)
             specs = plan_group_tree(legacy, {})
-            key_to_group = await apply_group_tree(specs, group_repo=group_repo, workspace_id=ws,
-                                                  owner_org_id=org, actor_id=org)
+            key_to_group, _ = await apply_group_tree(specs, group_repo=group_repo, workspace_id=ws,
+                                                     owner_org_id=org, actor_id=org)
             await assign_plates_to_groups(legacy, key_to_group, matched,
                                           plate_repo=plate_repo, workspace_id=ws)
             await uow.commit()
@@ -317,6 +317,7 @@ async def test_run_migration_end_to_end_summary(session_factory, tmp_path):
         report_dir=tmp_path, dry_run=False,
     )
     assert summary2["loans_created"] == 0   # all plates already active → skipped
+    assert summary2["groups_created"] == 0  # groups already exist → none re-created
     async with session_factory() as s:
         n_plates = (await s.execute(sa.text(
             "SELECT count(*) FROM registered_plates WHERE workspace_id=:ws AND owner_org_id=:o"),

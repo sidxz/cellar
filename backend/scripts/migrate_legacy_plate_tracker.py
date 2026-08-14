@@ -77,6 +77,7 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import 
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.controlled_vocabulary_repository import (  # noqa: E501
     SQLAlchemyControlledVocabularyRepository,
 )
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 logger = structlog.get_logger(__name__)
 
@@ -454,6 +455,7 @@ _GROUP_TYPE_VOCAB = "plate_group_type"
 
 async def apply_group_tree(specs, *, group_repo, workspace_id, owner_org_id, actor_id):
     key_to_group: dict[str, uuid.UUID] = {}
+    created = 0
     for g in specs:
         parent_id = key_to_group.get(g.parent_key) if g.parent_key else None
         existing = await group_repo.find_by_name(workspace_id, owner_org_id, parent_id, g.name)
@@ -471,7 +473,8 @@ async def apply_group_tree(specs, *, group_repo, workspace_id, owner_org_id, act
         )
         await group_repo.save(group)
         key_to_group[g.key] = group.id
-    return key_to_group
+        created += 1
+    return key_to_group, created
 
 
 async def assign_plates_to_groups(
@@ -503,11 +506,15 @@ async def seed_group_type_vocab(legacy, *, cv_repo, workspace_id, actor_id) -> N
         vocab = ControlledVocabulary.create(
             workspace_id=workspace_id, name=_GROUP_TYPE_VOCAB, terms=values, created_by=actor_id
         )
-    else:
-        for v in values:
-            if v not in vocab.terms:
-                vocab.add_term(v)
-    await cv_repo.save(vocab)
+        await cv_repo.save(vocab)
+        return
+    changed = False
+    for v in values:
+        if v not in vocab.terms:
+            vocab.add_term(v)
+            changed = True
+    if changed:
+        await cv_repo.save(vocab)
 
 
 @dataclass(frozen=True)
@@ -626,8 +633,6 @@ async def run_migration(
     report_dir,
     dry_run,
 ) -> dict:
-    from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-
     account_email = build_account_email_map(legacy.accounts)
     account_names = {
         a.uin: f"{a.first_name or ''} {a.last_name or ''}".strip() for a in legacy.accounts
@@ -682,14 +687,13 @@ async def run_migration(
             legacy, cv_repo=cv_repo, workspace_id=workspace_id, actor_id=actor_id
         )
         specs = plan_group_tree(legacy, account_names)
-        key_to_group = await apply_group_tree(
+        key_to_group, summary["groups_created"] = await apply_group_tree(
             specs,
             group_repo=group_repo,
             workspace_id=workspace_id,
             owner_org_id=internal_org_id,
             actor_id=actor_id,
         )
-        summary["groups_created"] = len(key_to_group)
         summary["plates_grouped"] = await assign_plates_to_groups(
             legacy, key_to_group, matched, plate_repo=plate_repo, workspace_id=workspace_id
         )
