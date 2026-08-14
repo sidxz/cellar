@@ -93,6 +93,14 @@ async def resolve_barcode(repo, workspace_id, raw: str) -> RegisteredPlate | Non
 # cellar.infrastructure.persistence.settings.DatabaseSettings().database_url  (reads DATABASE_URL)
 # cellar.infrastructure.persistence.unit_of_work.AsyncUnitOfWork(session_factory)
 # cellar.domain.workspace_config.controlled_vocabulary.ControlledVocabulary.create(*, workspace_id, name, terms=None, created_by); .add_term(term)
+
+# Tagging (apply legacy:inactive to a plate — key/value tag):
+# cellar.domain.workspace_config.tagging.tag.TagName(key: str, value: str | None = None)  # frozen pydantic; "legacy:inactive" == key="legacy", value="inactive"
+SQLAlchemyTagRepository(uow).get_or_create(workspace_id, name: TagName, created_by) -> Tag   # Tag.id; idempotent (on-conflict)
+RegisteredPlateTagLinkRepository(uow).add(workspace_id, entity_id, tag_id, assigned_by) -> bool  # idempotent; True iff newly linked
+# imports: from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import SQLAlchemyTagRepository
+#          from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import RegisteredPlateTagLinkRepository
+#          from cellar.domain.workspace_config.tagging.tag import TagName
 ```
 
 ---
@@ -607,20 +615,26 @@ git commit -m "feat(scripts): legacy plate matching via cdd_plate_sync then barc
 - Test: `backend/tests/integration/scripts/test_migrate_legacy_plate_tracker.py`
 
 **Interfaces:**
-- Consumes: `match_plates` output, `map_plate_type`, `map_plate_status`, `SQLAlchemyRegisteredPlateRepository`.
-- Produces: `_set_plate_status(plate, target: PlateStatus) -> None` (guarded, multi-hop, idempotent); `async def apply_plate_ownership(legacy, matched, *, plate_repo, uow, workspace_id, internal_org_id) -> dict[str, int]` (sets owner_org_id + plate_type + status on each matched plate); `async def backfill_null_owner(session, *, workspace_id, internal_org_id) -> int` (bulk SQL). Applies the `legacy:inactive` tag is **out of scope here** (tags need the tag repo; record it in the returned stats as `inactive_needs_tag` and note in the report — the plan keeps this task to the plate aggregate; tagging is a follow-up bullet in Task 7's report).
+- Consumes: `match_plates` output, `map_plate_type`, `map_plate_status`, `SQLAlchemyRegisteredPlateRepository`, `SQLAlchemyTagRepository`, `RegisteredPlateTagLinkRepository`, `TagName`.
+- Produces: `_set_plate_status(plate, target: PlateStatus) -> None` (guarded, multi-hop, idempotent); `async def apply_plate_ownership(legacy, matched, *, plate_repo, tag_repo, plate_tag_link_repo, uow, workspace_id, internal_org_id, actor_id) -> dict[str, int]` (sets owner_org_id + plate_type + status on each matched plate, AND applies the `legacy:inactive` key/value tag to `Inactive→depleted` plates — tag created once via `tag_repo.get_or_create(ws, TagName(key="legacy", value="inactive"), ...)`, linked idempotently via `plate_tag_link_repo.add`); `async def backfill_null_owner(session, *, workspace_id, internal_org_id) -> int` (bulk SQL).
 
 - [ ] **Step 1: write the failing integration test** (append)
 
 ```python
 from cellar.domain.inventory.enums import PlateStatus, PlateType
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
+    RegisteredPlateTagLinkRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import (
+    SQLAlchemyTagRepository,
+)
 from scripts.migrate_legacy_plate_tracker import (
     apply_plate_ownership, backfill_null_owner,
 )
 
 
 @pytest.mark.asyncio
-async def test_apply_ownership_sets_owner_type_status_and_is_idempotent(session_factory):
+async def test_apply_ownership_sets_owner_type_status_tags_inactive_and_is_idempotent(session_factory):
     ws = uuid.uuid4()
     org = uuid.uuid4()
     active = uuid.uuid4()
@@ -638,21 +652,31 @@ async def test_apply_ownership_sets_owner_type_status_and_is_idempotent(session_
         async with uow:
             plate_repo = SQLAlchemyRegisteredPlateRepository(uow)
             cdd_repo = CddPlateSyncRepository(uow)
+            tag_repo = SQLAlchemyTagRepository(uow)
+            link_repo = RegisteredPlateTagLinkRepository(uow)
             matched, _ = await match_plates(legacy, plate_repo=plate_repo, cdd_repo=cdd_repo,
                                             workspace_id=ws, cdd_vault_id=VAULT)
-            await apply_plate_ownership(legacy, matched, plate_repo=plate_repo, uow=uow,
-                                        workspace_id=ws, internal_org_id=org)
+            await apply_plate_ownership(
+                legacy, matched, plate_repo=plate_repo, tag_repo=tag_repo,
+                plate_tag_link_repo=link_repo, uow=uow, workspace_id=ws,
+                internal_org_id=org, actor_id=org)
             await uow.commit()
     async with session_factory() as s:
         rows = (await s.execute(sa.text(
             "SELECT id, owner_org_id, plate_type, status FROM registered_plates "
             "WHERE id IN (:a, :b)"), {"a": active, "b": inactive})).mappings().all()
-    by_id = {r["id"]: r for r in rows}
+        by_id = {r["id"]: r for r in rows}
+        tagged = (await s.execute(sa.text(
+            "SELECT rpt.registered_plate_id FROM registered_plate_tags rpt "
+            "JOIN tags t ON t.id = rpt.tag_id "
+            "WHERE t.workspace_id = :ws AND t.normalized_key = 'legacy' "
+            "AND t.normalized_value = 'inactive'"), {"ws": ws})).scalars().all()
     assert by_id[active]["owner_org_id"] == org
     assert by_id[active]["plate_type"] == PlateType.MOTHER.value
     assert by_id[active]["status"] == PlateStatus.STORED.value
     assert by_id[inactive]["plate_type"] == PlateType.COMPOUND_STORAGE.value
     assert by_id[inactive]["status"] == PlateStatus.DEPLETED.value   # registered→stored→depleted
+    assert tagged == [inactive]   # legacy:inactive tagged once (idempotent), active untouched
 
 
 @pytest.mark.asyncio
@@ -685,6 +709,7 @@ Expected: FAIL (ImportError).
 ```python
 import sqlalchemy as sa
 from cellar.domain.inventory.enums import VALID_PLATE_TRANSITIONS
+from cellar.domain.workspace_config.tagging.tag import TagName
 
 
 def _set_plate_status(plate, target: PlateStatus) -> None:
@@ -703,9 +728,10 @@ def _set_plate_status(plate, target: PlateStatus) -> None:
     raise ValueError(f"cannot reach {target} from {plate.status} for plate {plate.id}")
 
 
-async def apply_plate_ownership(legacy, matched, *, plate_repo, uow,
-                                workspace_id, internal_org_id) -> dict[str, int]:
-    stats = {"classified": 0, "skipped_unmapped": 0, "inactive_needs_tag": 0}
+async def apply_plate_ownership(legacy, matched, *, plate_repo, tag_repo, plate_tag_link_repo,
+                                uow, workspace_id, internal_org_id, actor_id) -> dict[str, int]:
+    stats = {"classified": 0, "skipped_unmapped": 0, "inactive_tagged": 0}
+    inactive_tag_id: uuid.UUID | None = None   # created lazily, once
     by_legacy_id = {p.plate_id: p for p in legacy.plates}
     for legacy_id, cellar_id in matched.items():
         p = by_legacy_id[legacy_id]
@@ -730,7 +756,13 @@ async def apply_plate_ownership(legacy, matched, *, plate_repo, uow,
             await plate_repo.save(plate)
             stats["classified"] += 1
         if "legacy:inactive" in tags:
-            stats["inactive_needs_tag"] += 1
+            if inactive_tag_id is None:
+                tag = await tag_repo.get_or_create(
+                    workspace_id, TagName(key="legacy", value="inactive"), created_by=actor_id)
+                inactive_tag_id = tag.id
+            if await plate_tag_link_repo.add(workspace_id, cellar_id, inactive_tag_id,
+                                             assigned_by=actor_id):
+                stats["inactive_tagged"] += 1
     return stats
 
 
@@ -744,7 +776,7 @@ async def backfill_null_owner(session, *, workspace_id, internal_org_id) -> int:
     return result.rowcount or 0
 ```
 
-Note: the `legacy:inactive` tag is counted but not written here (tagging needs the tag repo/use case; the count surfaces in Task 7's report as a manual follow-up so this task stays a clean plate-aggregate change). If the reviewer prefers, wiring `TagRepository.get_or_create` is a small add — but keep it out of the red-green cycle for this task.
+Note: `_set_plate_status` uses only the guarded `transition_status` — `stored` is one hop from `registered`; `depleted` needs `registered→stored→depleted`. The `legacy:inactive` tag (key=`legacy`, value=`inactive`) is created once (lazy) via `tag_repo.get_or_create` and linked idempotently via `plate_tag_link_repo.add` (on-conflict-do-nothing); a second run duplicates neither the tag nor the link. `backfill_null_owner` is the one raw-SQL write (per Global Constraints), scoped to `workspace_id AND owner_org_id IS NULL`.
 
 - [ ] **Step 4: run, verify pass**
 
@@ -1224,6 +1256,12 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_reposito
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
     SQLAlchemyPlateLoanRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
+    RegisteredPlateTagLinkRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import (
+    SQLAlchemyTagRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.controlled_vocabulary_repository import (
     SQLAlchemyControlledVocabularyRepository,
 )
@@ -1253,6 +1291,8 @@ async def run_migration(session_factory, legacy, *, workspace_id, internal_org_i
         group_repo = SQLAlchemyPlateGroupRepository(uow)
         loan_repo = SQLAlchemyPlateLoanRepository(uow)
         cv_repo = SQLAlchemyControlledVocabularyRepository(uow)
+        tag_repo = SQLAlchemyTagRepository(uow)
+        plate_tag_link_repo = RegisteredPlateTagLinkRepository(uow)
 
         # Phase 0: NULL-owner backfill (S2-deferred)
         summary["owner_backfilled"] = await backfill_null_owner(
@@ -1265,12 +1305,13 @@ async def run_migration(session_factory, legacy, *, workspace_id, internal_org_i
         summary["plates_matched"] = len(matched)
         summary["unmatched_plates"] = len(unmatched)
 
-        # Phase 2: ownership + classification
+        # Phase 2: ownership + classification (+ legacy:inactive tag)
         own = await apply_plate_ownership(
-            legacy, matched, plate_repo=plate_repo, uow=uow,
-            workspace_id=workspace_id, internal_org_id=internal_org_id)
+            legacy, matched, plate_repo=plate_repo, tag_repo=tag_repo,
+            plate_tag_link_repo=plate_tag_link_repo, uow=uow, workspace_id=workspace_id,
+            internal_org_id=internal_org_id, actor_id=actor_id)
         summary["plates_classified"] = own["classified"]
-        summary["inactive_needs_tag"] = own["inactive_needs_tag"]
+        summary["inactive_tagged"] = own["inactive_tagged"]
 
         # Phase 3: groups + CV + assignment
         await seed_group_type_vocab(legacy, cv_repo=cv_repo,
@@ -1373,10 +1414,9 @@ Cutover runbook:
      Resolve unmatched_plates.csv (barcode/cdd gaps) and
      unresolved_requesters.csv (add to user_map.csv) until acceptable.
   5. Real run (no --dry-run). Re-run is safe (idempotent) if interrupted.
-  6. Spot-check in the UI: plate owners, the group tree, the ~15 open loans.
-  7. Apply the `legacy:inactive` tag to depleted plates if summary
-     inactive_needs_tag > 0 (manual, via the tags UI — see Task 4 note).
-  8. Announce cutover.
+  6. Spot-check in the UI: plate owners, the group tree, the ~15 open loans,
+     and the `legacy:inactive` tag on depleted plates (summary inactive_tagged).
+  7. Announce cutover.
 """
 ```
 
@@ -1401,11 +1441,11 @@ git commit -m "feat(scripts): migration orchestration, reports, dry-run + cutove
 2. **Real dry-run against the legacy dump** (per the memory verify-rig recipe): restore `~/workspace/legacy/intranet/sacnet_prod.sql` into a local MySQL, point `--legacy-dsn` at it, target the dev workspace/org, `--dry-run`. Confirm the SUMMARY is sane (≈15 libraries→root groups, 78 set groups, matched-plate count, ≈15 loans) and both report CSVs look right.
 3. **`docs/implementation-status.md`** — check off S6.
 4. **Issue sidxz/cellar#71** — comment S6 shipped with the pushed range.
-5. **Spec S6 sync note** — append to `docs/superpowers/specs/2026-08-10-inventory-plate-org-loans-spec.md` recording deviations (AVAIL→stored; plate_role has no MASTER_TWIN; TRANSACTION_PLATE is open-only current-state; pymysql dep; loans same-org + self-approved; `legacy:inactive` tagging deferred to a manual post-step).
+5. **Spec S6 sync note** — append to `docs/superpowers/specs/2026-08-10-inventory-plate-org-loans-spec.md` recording deviations (AVAIL→stored; plate_role has no MASTER_TWIN; TRANSACTION_PLATE is open-only current-state; pymysql dep; loans same-org + self-approved; `legacy:inactive` tag applied automatically in Task 4).
 6. **Memory** — update `project_plate_tracker_port.md`: S6 shipped; note the alembic-env root-cause fix (5 tables) landed first.
 
 ## Self-review notes (author)
 
 - **Spec §12 coverage:** §12.1 plate matching → Task 3; §12.2 ownership → Task 4; §12.3 groups/CV/description → Task 5; §12.4 role/status maps → Task 2 (with the two documented corrections); §12.5 open checkouts → Task 6; §12.6 closed-history-excluded → enforced at read time (Task 1) + Global Constraints; §12.7 reports + runbook → Task 7. S2-deferred ownership backfill → Task 4.
 - **Type consistency:** `matched: dict[int→uuid]`, `key_to_group: dict[str→uuid]`, `LoanItemStatus` targets, and repo/aggregate signatures are used identically across tasks.
-- **Known simplification:** the `legacy:inactive` tag is counted, not written, inside the aggregate phase (kept out of the red-green cycle); Task 7 runbook step 7 + the report make it an explicit manual follow-up. Wiring `TagRepository.get_or_create` into Task 4 is a reasonable reviewer upgrade if they want it automated.
+- **`legacy:inactive` tag is applied automatically** in Task 4 (`tag_repo.get_or_create` + `plate_tag_link_repo.add`, both idempotent) — no manual post-step. The one deliberate raw-SQL write is `backfill_null_owner` (Global Constraints allow it; matches alembic backfill precedent).
