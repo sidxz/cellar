@@ -634,6 +634,7 @@ async def run_migration(
     }
     summary: dict[str, int] = {}
     report_dir = Path(report_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
 
     uow = AsyncUnitOfWork(session_factory)
     async with uow:

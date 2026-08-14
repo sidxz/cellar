@@ -309,3 +309,24 @@ async def test_run_migration_end_to_end_summary(session_factory, tmp_path):
     assert summary["loans_created"] == 1
     assert summary["unmatched_plates"] == 0
     assert (tmp_path / "unmatched_plates.csv").exists()
+
+    # Full-pipeline idempotency: a 2nd run makes no new writes (runbook "re-run is safe").
+    summary2 = await run_migration(
+        session_factory, legacy, workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={"ann@x.org": requester}, actor_id=org,
+        report_dir=tmp_path, dry_run=False,
+    )
+    assert summary2["loans_created"] == 0   # all plates already active → skipped
+    async with session_factory() as s:
+        n_plates = (await s.execute(sa.text(
+            "SELECT count(*) FROM registered_plates WHERE workspace_id=:ws AND owner_org_id=:o"),
+            {"ws": ws, "o": org})).scalar_one()
+        n_groups = (await s.execute(sa.text(
+            "SELECT count(*) FROM plate_groups WHERE workspace_id=:ws AND owner_org_id=:o"),
+            {"ws": ws, "o": org})).scalar_one()
+        n_loans = (await s.execute(sa.text(
+            "SELECT count(*) FROM plate_loans WHERE workspace_id=:ws"), {"ws": ws})).scalar_one()
+        n_items = (await s.execute(sa.text(
+            "SELECT count(*) FROM plate_loan_items li JOIN plate_loans l ON l.id = li.loan_id "
+            "WHERE l.workspace_id=:ws"), {"ws": ws})).scalar_one()
+    assert (n_plates, n_groups, n_loans, n_items) == (1, 2, 1, 1)   # no duplication across 2 runs
