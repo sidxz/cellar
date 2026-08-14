@@ -435,7 +435,9 @@ class GetGroupTree:
                 # Spec §5: org-scoped reads of a private org are member-only.
                 raise AuthorizationError("This organization's plates are private")
             groups = await self._repo.find_by_workspace(input.workspace_id, owner_org_id=org_id)
-            counts = await self._repo.count_plates_by_group(input.workspace_id)
+            counts = await self._repo.count_plates_by_group(
+                input.workspace_id, owner_org_id=org_id
+            )
             return Success(GroupTree(org_id=org_id, roots=build_tree(groups, counts)))
 
 

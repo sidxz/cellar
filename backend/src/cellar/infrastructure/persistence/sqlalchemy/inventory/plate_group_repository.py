@@ -68,7 +68,9 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
             return None
         return self._to_domain_tracked(model)
 
-    async def count_plates_by_group(self, workspace_id: uuid.UUID) -> dict[uuid.UUID, int]:
+    async def count_plates_by_group(
+        self, workspace_id: uuid.UUID, owner_org_id: uuid.UUID | None = None
+    ) -> dict[uuid.UUID, int]:
         stmt = (
             select(RegisteredPlateModel.group_id, func.count())
             .where(
@@ -77,6 +79,8 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
             )
             .group_by(RegisteredPlateModel.group_id)
         )
+        if owner_org_id is not None:
+            stmt = stmt.where(RegisteredPlateModel.owner_org_id == owner_org_id)
         result = await self._session.execute(stmt)
         return {row[0]: row[1] for row in result.all()}
 

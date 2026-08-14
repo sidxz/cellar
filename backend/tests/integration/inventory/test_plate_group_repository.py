@@ -117,6 +117,50 @@ async def test_plate_group_id_round_trip_and_counts(session_factory) -> None:
 
 
 @pytest.mark.integration
+async def test_count_plates_by_group_scoped_to_org(session_factory) -> None:
+    ws = uuid.uuid4()
+    org_a = uuid.uuid4()
+    org_b = uuid.uuid4()
+    group_a = PlateGroup.create(workspace_id=ws, owner_org_id=org_a, name="A", created_by=USER)
+    group_b = PlateGroup.create(workspace_id=ws, owner_org_id=org_b, name="B", created_by=USER)
+    plate_a = RegisteredPlate.register(
+        workspace_id=ws,
+        owner_org_id=org_a,
+        barcode=Barcode(value=f"PG-{uuid.uuid4().hex[:8]}"),
+        plate_label="pa",
+        format=PlateFormat.F96,
+        plate_type=PlateType.ASSAY,
+        registered_by=USER,
+    )
+    plate_a.assign_to_group(group_a.id)
+    plate_b = RegisteredPlate.register(
+        workspace_id=ws,
+        owner_org_id=org_b,
+        barcode=Barcode(value=f"PG-{uuid.uuid4().hex[:8]}"),
+        plate_label="pb",
+        format=PlateFormat.F96,
+        plate_type=PlateType.ASSAY,
+        registered_by=USER,
+    )
+    plate_b.assign_to_group(group_b.id)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await SQLAlchemyPlateGroupRepository(uow).save(group_a)
+        await SQLAlchemyPlateGroupRepository(uow).save(group_b)
+        await SQLAlchemyRegisteredPlateRepository(uow).save(plate_a)
+        await SQLAlchemyRegisteredPlateRepository(uow).save(plate_b)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyPlateGroupRepository(uow)
+        scoped = await repo.count_plates_by_group(ws, owner_org_id=org_a)
+        assert scoped == {group_a.id: 1}
+        assert group_b.id not in scoped
+
+        unscoped = await repo.count_plates_by_group(ws)
+        assert unscoped == {group_a.id: 1, group_b.id: 1}
+
+
+@pytest.mark.integration
 async def test_group_delete_sets_plate_group_null(session_factory) -> None:
     ws = uuid.uuid4()
     g = PlateGroup.create(workspace_id=ws, owner_org_id=ORG, name="Doomed", created_by=USER)
