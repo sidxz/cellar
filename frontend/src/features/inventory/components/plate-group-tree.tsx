@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CustomNodeElementProps, RawNodeDatum } from "react-d3-tree";
 import type { PlateGroupNode, PlateGroupTree } from "../hooks/use-plate-groups";
+import { groupTypeColor, legendEntries, truncateLabel } from "./plate-group-tree-utils";
 
 // react-d3-tree touches window/d3 at module scope — client-only.
 const Tree = dynamic(() => import("react-d3-tree"), { ssr: false });
@@ -54,6 +55,11 @@ export function PlateGroupTreeView({ tree, selectedId, onSelect }: PlateGroupTre
   // user merely clicks a node to select it.
   const nodesById = useMemo(() => indexNodes(tree.roots), [tree]);
 
+  // Legend only earns its space when there's more than one distinct color on
+  // the canvas (a lone type, or an all-untyped tree, both render as a single
+  // uniform color — nothing to key against).
+  const legend = useMemo(() => legendEntries(tree.roots), [tree]);
+
   // react-d3-tree wants exactly one root; wrap multiple roots in a synthetic
   // org node (clickable-noop) so a forest still renders.
   const data = useMemo<GroupDatum>(
@@ -80,30 +86,55 @@ export function PlateGroupTreeView({ tree, selectedId, onSelect }: PlateGroupTre
     const attrs = nodeDatum.attributes as unknown as GroupDatum["attributes"];
     const isSynthetic = attrs.id === "__root__";
     const isSelected = attrs.id === selectedId;
+
+    // isSynthetic is never selected (the "__root__" wrapper is never handed
+    // to onSelect below), so the stroke ring only ever activates on real nodes.
+    const handleSelect = () => {
+      if (isSynthetic) return;
+      const node = nodesById.get(attrs.id);
+      if (node) onSelect(node);
+    };
+
     return (
       <g>
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: SVG nodes on a d3 pan/zoom canvas are click-only; keyboard interaction is deferred to the S5 dataviz/interaction pass. */}
         <circle
           r={10}
-          className={isSelected ? "fill-primary stroke-border" : "fill-muted stroke-border"}
+          className={`${isSynthetic ? "fill-muted " : ""}${isSelected ? "stroke-primary" : "stroke-border"}`}
+          style={isSynthetic ? undefined : { fill: groupTypeColor(attrs.group_type) }}
+          strokeWidth={isSelected ? 3 : 1}
+          role="button"
+          tabIndex={0}
           onClick={(e) => {
             e.stopPropagation();
             toggleNode();
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleNode();
+            }
+          }}
           data-testid={`tree-toggle-${attrs.id}`}
         />
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: SVG nodes on a d3 pan/zoom canvas are click-only; keyboard interaction is deferred to the S5 dataviz/interaction pass. */}
+        {/* No role="button" here: biome's useSemanticElements flags role+children
+            on a non-void element (its only fix, a real <button>, isn't valid SVG).
+            tabIndex + onClick/onKeyDown still make it fully keyboard-operable. */}
         <g
           className="cursor-pointer"
-          onClick={() => {
-            if (isSynthetic) return;
-            const node = nodesById.get(attrs.id);
-            if (node) onSelect(node);
+          tabIndex={0}
+          onClick={handleSelect}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleSelect();
+            }
           }}
           data-testid={`tree-node-${attrs.id}`}
         >
+          <title>{nodeDatum.name}</title>
           <text x={16} dy={-2} className="fill-foreground text-sm font-medium" strokeWidth={0}>
-            {nodeDatum.name}
+            {truncateLabel(nodeDatum.name)}
           </text>
           <text x={16} dy={14} className="fill-muted-foreground text-xs" strokeWidth={0}>
             {attrs.plate_count} plate{attrs.plate_count === 1 ? "" : "s"}
@@ -115,22 +146,37 @@ export function PlateGroupTreeView({ tree, selectedId, onSelect }: PlateGroupTre
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="h-[calc(100vh-12rem)] min-h-[420px] w-full rounded-md border bg-card"
-      data-testid="plate-group-tree"
-    >
-      <Tree
-        data={data}
-        orientation="horizontal"
-        translate={translate}
-        collapsible
-        zoomable
-        separation={{ siblings: 0.6, nonSiblings: 0.8 }}
-        nodeSize={{ x: 260, y: 56 }}
-        renderCustomNodeElement={renderNode}
-        pathFunc="step"
-      />
+    <div className="space-y-2">
+      {legend.length > 1 && (
+        <div className="flex flex-wrap gap-3" data-testid="plate-group-tree-legend">
+          {legend.map((entry) => (
+            <span
+              key={entry.label}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+            >
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: entry.color }} />
+              {entry.label}
+            </span>
+          ))}
+        </div>
+      )}
+      <div
+        ref={containerRef}
+        className="h-[calc(100vh-12rem)] min-h-[420px] w-full rounded-md border bg-card"
+        data-testid="plate-group-tree"
+      >
+        <Tree
+          data={data}
+          orientation="horizontal"
+          translate={translate}
+          collapsible
+          zoomable
+          separation={{ siblings: 0.6, nonSiblings: 0.8 }}
+          nodeSize={{ x: 260, y: 56 }}
+          renderCustomNodeElement={renderNode}
+          pathFunc="step"
+        />
+      </div>
     </div>
   );
 }
