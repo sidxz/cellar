@@ -198,9 +198,12 @@ async def test_apply_group_tree_and_assign_is_idempotent(session_factory):
             await uow.commit()
     async with session_factory() as s:
         groups = (await s.execute(sa.text(
-            "SELECT name, parent_group_id FROM plate_groups WHERE workspace_id = :ws "
+            "SELECT id, name, parent_group_id FROM plate_groups WHERE workspace_id = :ws "
             "AND owner_org_id = :o ORDER BY name"), {"ws": ws, "o": org})).mappings().all()
         assert [g["name"] for g in groups] == ["Lib Z", "Set One"]   # unique ws → no dupes/contamination
+        by_name = {g["name"]: g for g in groups}
+        assert by_name["Lib Z"]["parent_group_id"] is None                       # library root
+        assert by_name["Set One"]["parent_group_id"] == by_name["Lib Z"]["id"]   # set nested under its library
         grp = (await s.execute(sa.text("SELECT group_id FROM registered_plates WHERE id = :id"),
                                {"id": plate})).scalar_one()
-        assert grp is not None
+        assert grp == by_name["Set One"]["id"]                                    # plate assigned to its set's group
