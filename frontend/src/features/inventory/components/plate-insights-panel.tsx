@@ -5,6 +5,11 @@ import { CHART_AXIS, CHART_COLORS } from "@/shared/lib/chart-colors";
 import { Plot } from "@/shared/lib/plotly";
 import { cn } from "@/shared/lib/utils";
 import { usePlateInsights } from "../hooks/use-plate-insights";
+import { truncateLabel } from "./plate-group-tree-utils";
+
+/** Horizontal-bar y-axis categories get a shorter cap than the tree's node
+ * labels — the fixed 140px margin (below) has less room than the tree canvas. */
+const CHART_LABEL_MAX = 24;
 
 const plotConfig = { displayModeBar: false, responsive: true };
 const plotStyle = { width: "100%", height: "350px" };
@@ -177,9 +182,10 @@ export function PlateInsightsPanel({ orgId }: PlateInsightsPanelProps) {
                 type: "bar",
                 orientation: "h",
                 x: topLocations.map((l) => l.count),
-                y: topLocations.map((l) => l.name),
+                y: topLocations.map((l) => truncateLabel(l.name, CHART_LABEL_MAX)),
+                customdata: topLocations.map((l) => l.name),
+                hovertemplate: "%{customdata}: %{x}<extra></extra>",
                 marker: { color: CHART_COLORS.neutral },
-                hoverinfo: "x+y",
               },
             ]}
             layout={baseLayout({
@@ -201,9 +207,10 @@ export function PlateInsightsPanel({ orgId }: PlateInsightsPanelProps) {
                 type: "bar",
                 orientation: "h",
                 x: topGroups.map((g) => g.count),
-                y: topGroups.map((g) => g.name),
+                y: topGroups.map((g) => truncateLabel(g.name, CHART_LABEL_MAX)),
+                customdata: topGroups.map((g) => g.name),
+                hovertemplate: "%{customdata}: %{x}<extra></extra>",
                 marker: { color: CHART_COLORS.primaryLight },
-                hoverinfo: "x+y",
               },
             ]}
             layout={baseLayout({

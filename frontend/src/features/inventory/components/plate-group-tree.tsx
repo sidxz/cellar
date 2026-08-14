@@ -146,9 +146,9 @@ export function PlateGroupTreeView({ tree, selectedId, onSelect }: PlateGroupTre
   };
 
   return (
-    <div className="space-y-2">
+    <div className="flex h-[calc(100vh-12rem)] min-h-[420px] flex-col gap-2">
       {legend.length > 1 && (
-        <div className="flex flex-wrap gap-3" data-testid="plate-group-tree-legend">
+        <div className="flex shrink-0 flex-wrap gap-3" data-testid="plate-group-tree-legend">
           {legend.map((entry) => (
             <span
               key={entry.label}
@@ -162,7 +162,7 @@ export function PlateGroupTreeView({ tree, selectedId, onSelect }: PlateGroupTre
       )}
       <div
         ref={containerRef}
-        className="h-[calc(100vh-12rem)] min-h-[420px] w-full rounded-md border bg-card"
+        className="flex-1 min-h-0 w-full rounded-md border bg-card"
         data-testid="plate-group-tree"
       >
         <Tree

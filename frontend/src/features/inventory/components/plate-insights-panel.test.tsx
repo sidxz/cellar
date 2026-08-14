@@ -6,8 +6,14 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlateInsightsPanel } from "./plate-insights-panel";
 
+// Capture Plot props rather than render Plotly — lets tests assert on the
+// trace objects (e.g. truncated labels / customdata) without a real chart.
+const plotCalls: Array<{ data: Array<Record<string, unknown>> }> = [];
 vi.mock("@/shared/lib/plotly", () => ({
-  Plot: (_p: unknown) => <div data-testid="plot" />,
+  Plot: (p: { data: Array<Record<string, unknown>> }) => {
+    plotCalls.push(p);
+    return <div data-testid="plot" />;
+  },
 }));
 
 vi.mock("@/shared/lib/api/custom-instance", () => ({
@@ -61,7 +67,10 @@ function setup(orgId: string | undefined, response: PlateInsightsResponse = FIXT
 }
 
 describe("PlateInsightsPanel", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    plotCalls.length = 0;
+  });
 
   it("renders the three stat tiles, overdue styled destructive when > 0", async () => {
     setup("org-1");
@@ -85,5 +94,30 @@ describe("PlateInsightsPanel", () => {
   it("does not fetch when orgId is undefined", () => {
     setup(undefined);
     expect(customInstance).not.toHaveBeenCalled();
+  });
+
+  it("truncates long horizontal-bar labels to 24 chars, keeps full name in customdata for hover", async () => {
+    const longName = "sac1-hit_collection-NaOAc_384well_extra_long";
+    setup("org-1", {
+      ...FIXTURE,
+      by_location: [{ name: longName, count: 9 }],
+      group_sizes: [{ group_id: "grp-9", name: longName, count: 9 }],
+    });
+    await screen.findByText("42");
+
+    const expectedTick = `${longName.slice(0, 23)}…`;
+    const hovertemplate = "%{customdata}: %{x}<extra></extra>";
+
+    // plotCalls order matches render order: status, type, loan activity,
+    // storage occupancy (by_location), top groups (group_sizes).
+    const locationTrace = plotCalls[3].data[0];
+    expect(locationTrace.y).toEqual([expectedTick]);
+    expect(locationTrace.customdata).toEqual([longName]);
+    expect(locationTrace.hovertemplate).toBe(hovertemplate);
+
+    const groupTrace = plotCalls[4].data[0];
+    expect(groupTrace.y).toEqual([expectedTick]);
+    expect(groupTrace.customdata).toEqual([longName]);
+    expect(groupTrace.hovertemplate).toBe(hovertemplate);
   });
 });
