@@ -608,20 +608,45 @@ class TestMyOrgFilterIncludesBorrowed:
         self, client, editor_client_own_org
     ) -> None:
         plate = await self._borrow_foreign_plate(client, editor_client_own_org)
-        resp = await editor_client_own_org.get(
-            "/api/v1/plates", params={"owner_org_id": str(AUTH_ORG_ID)}
-        )
-        assert resp.status_code == 200
-        assert plate["id"] in [p["id"] for p in resp.json()]
+        # OTHER org goes private AFTER the loan exists (mirrors
+        # TestBorrowedPlateVisibility — RequestPlateLoan's plate resolution
+        # doesn't apply the borrowed carve-out, so a private owner org at
+        # request time would 404 before the plate is ever borrowed). With
+        # OTHER now excluded, the plate only survives if BOTH the
+        # owner-scope OR-arm and the exclusion AND-arm's borrowed carve-out
+        # admit it — not just the OR-arm, which is all the un-excluded case
+        # exercises.
+        await _set_policy(client, OTHER_ORG_ID, plates_private=True)
+        try:
+            resp = await editor_client_own_org.get(
+                "/api/v1/plates", params={"owner_org_id": str(AUTH_ORG_ID)}
+            )
+            assert resp.status_code == 200
+            assert plate["id"] in [p["id"] for p in resp.json()]
+        finally:
+            await _set_policy(client, OTHER_ORG_ID, plates_private=False)
 
     async def test_explicit_foreign_org_filter_not_widened(
         self, client, editor_client_own_org
     ) -> None:
-        # Borrowed plate owned by OTHER org must NOT leak into a browse of a
-        # third org, and filtering the OWNER org itself needs no widening.
+        # A random third org gets no widening — the borrowed carve-out only
+        # ever re-admits via the plate's actual owner, so it stays hidden.
+        # Filtering the OWNER org itself (OTHER, now private) needs no
+        # widening either: the plain owner_org_id match already selects it,
+        # and the privacy carve-out (exclusion AND-arm's borrowed re-admit)
+        # keeps it visible despite OTHER being excluded — asserted below.
         plate = await self._borrow_foreign_plate(client, editor_client_own_org)
-        third = uuid.uuid4()
-        resp = await editor_client_own_org.get(
-            "/api/v1/plates", params={"owner_org_id": str(third)}
-        )
-        assert plate["id"] not in [p["id"] for p in resp.json()]
+        await _set_policy(client, OTHER_ORG_ID, plates_private=True)
+        try:
+            third = uuid.uuid4()
+            resp = await editor_client_own_org.get(
+                "/api/v1/plates", params={"owner_org_id": str(third)}
+            )
+            assert plate["id"] not in [p["id"] for p in resp.json()]
+
+            resp = await editor_client_own_org.get(
+                "/api/v1/plates", params={"owner_org_id": str(OTHER_ORG_ID)}
+            )
+            assert plate["id"] in [p["id"] for p in resp.json()]
+        finally:
+            await _set_policy(client, OTHER_ORG_ID, plates_private=False)
