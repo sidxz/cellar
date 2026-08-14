@@ -63,11 +63,11 @@ interface CreateDeviceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (created: CreatedKioskDevice) => void;
+  create: ReturnType<typeof useCreateKioskDevice>;
 }
 
-function CreateDeviceDialog({ open, onOpenChange, onCreated }: CreateDeviceDialogProps) {
+function CreateDeviceDialog({ open, onOpenChange, onCreated, create }: CreateDeviceDialogProps) {
   const { data: orgs } = useOrgs();
-  const create = useCreateKioskDevice();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -309,6 +309,7 @@ export function KioskDeviceAdmin() {
 
   const { data: devices, isLoading } = useKioskDevices();
   const { data: orgs } = useOrgs();
+  const create = useCreateKioskDevice();
 
   const orgName = (id: string) => orgs?.find((o) => o.id === id)?.name ?? "Unknown org";
 
@@ -332,9 +333,22 @@ export function KioskDeviceAdmin() {
         )}
       </div>
 
-      <CreateDeviceDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={setIssued} />
+      <CreateDeviceDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={setIssued}
+        create={create}
+      />
 
-      <TokenRevealDialog issued={issued} onClose={() => setIssued(null)} />
+      <TokenRevealDialog
+        issued={issued}
+        onClose={() => {
+          setIssued(null);
+          // Defense-in-depth: drop the plaintext token out of the mutation
+          // cache too, not just local state, once the reveal dialog closes.
+          create.reset();
+        }}
+      />
 
       <RevokeDialog device={revoking} onOpenChange={(open) => !open && setRevoking(null)} />
     </>

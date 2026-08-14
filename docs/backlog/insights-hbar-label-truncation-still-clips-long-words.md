@@ -22,3 +22,10 @@ would hit it for a sufficiently long location name.
 against the margin dynamically (canvas `measureText`) instead of a fixed character count. Left
 as-is for this task since 24 chars / 140px margin were the task's explicit numbers — flagging for
 a follow-up decision rather than unilaterally changing a prescribed value.
+
+**Related collision risk:** truncation to a fixed character cap is also a dedupe hazard — two
+distinct names sharing their first 23 chars (e.g. two `sac1-hit_collection-...` groups differing
+only after char 23) truncate to the identical y-category string, and Plotly merges them into a
+single row instead of rendering two bars. Whichever fix direction is taken (measureText or a
+shorter cap) must also dedupe the resulting labels (e.g. suffix a discriminator like " (2)" or a
+count) rather than assume truncation stays collision-free.

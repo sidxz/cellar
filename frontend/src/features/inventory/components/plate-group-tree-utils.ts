@@ -18,7 +18,7 @@ export function truncateLabel(name: string, max: number = MAX_NODE_LABEL): strin
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
 }
 
-/** Distinct group types present in the tree (first-seen order) for the legend. */
+/** Distinct group types present in the tree (deterministic depth-first order) for the legend. */
 export function legendEntries(roots: PlateGroupNode[]): { label: string; color: string }[] {
   const seen = new Set<string>();
   let hasUntyped = false;
