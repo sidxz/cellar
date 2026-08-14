@@ -123,6 +123,7 @@ class SQLAlchemyRegisteredPlateRepository(
         group_id: uuid.UUID | None = None,
         exclude_owner_org_ids: set[uuid.UUID] | None = None,
         include_plate_ids: set[uuid.UUID] | None = None,
+        owner_scope_plate_ids: set[uuid.UUID] | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
     ) -> list[RegisteredPlate]:
@@ -150,7 +151,13 @@ class SQLAlchemyRegisteredPlateRepository(
         if project_id is not None:
             stmt = stmt.where(RegisteredPlateModel.project_id == project_id)
         if owner_org_id is not None:
-            stmt = stmt.where(RegisteredPlateModel.owner_org_id == owner_org_id)
+            owner_terms = [RegisteredPlateModel.owner_org_id == owner_org_id]
+            # spec §5 "plus borrowed-by-us": when the caller filters by their
+            # OWN org, plates actively borrowed by that org count as mine.
+            # Truthy-guard mirrors the exclusion block's empty-IN gotcha.
+            if owner_scope_plate_ids:
+                owner_terms.append(RegisteredPlateModel.id.in_(owner_scope_plate_ids))
+            stmt = stmt.where(or_(*owner_terms))
         if group_id is not None:
             stmt = stmt.where(RegisteredPlateModel.group_id == group_id)
         if exclude_owner_org_ids:

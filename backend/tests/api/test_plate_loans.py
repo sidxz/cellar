@@ -591,3 +591,37 @@ class TestBorrowedPlateVisibility:
             assert resp.status_code == 404
         finally:
             await _set_policy(client, OTHER_ORG_ID, plates_private=False)
+
+
+class TestMyOrgFilterIncludesBorrowed:
+    """Spec §5 'plus borrowed-by-us' — S4 deviation #5 closure."""
+
+    async def _borrow_foreign_plate(self, client, editor_client_own_org) -> dict:
+        # Admin registers a plate owned by OTHER org; AUTH-org editor borrows it.
+        plate = await _mk_plate(
+            client, f"BR-{uuid.uuid4().hex[:8]}", owner_org_id=str(OTHER_ORG_ID)
+        )
+        await _mk_loan(editor_client_own_org, plate_ids=[plate["id"]])
+        return plate
+
+    async def test_my_org_filter_includes_borrowed_foreign_plate(
+        self, client, editor_client_own_org
+    ) -> None:
+        plate = await self._borrow_foreign_plate(client, editor_client_own_org)
+        resp = await editor_client_own_org.get(
+            "/api/v1/plates", params={"owner_org_id": str(AUTH_ORG_ID)}
+        )
+        assert resp.status_code == 200
+        assert plate["id"] in [p["id"] for p in resp.json()]
+
+    async def test_explicit_foreign_org_filter_not_widened(
+        self, client, editor_client_own_org
+    ) -> None:
+        # Borrowed plate owned by OTHER org must NOT leak into a browse of a
+        # third org, and filtering the OWNER org itself needs no widening.
+        plate = await self._borrow_foreign_plate(client, editor_client_own_org)
+        third = uuid.uuid4()
+        resp = await editor_client_own_org.get(
+            "/api/v1/plates", params={"owner_org_id": str(third)}
+        )
+        assert plate["id"] not in [p["id"] for p in resp.json()]

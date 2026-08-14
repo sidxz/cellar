@@ -262,6 +262,13 @@ class ListPlates:
         async with self._uow:
             excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
             borrowed = await self._visibility.borrowed_plate_ids(input.workspace_id, auth)
+            owner_scope = (
+                borrowed
+                if auth is not None
+                and input.owner_org_id is not None
+                and input.owner_org_id == auth.org_id
+                else None
+            )
             plates = await self._repo.search(
                 input.workspace_id,
                 barcode=input.barcode,
@@ -275,6 +282,7 @@ class ListPlates:
                 group_id=input.group_id,
                 exclude_owner_org_ids=excluded,
                 include_plate_ids=borrowed,
+                owner_scope_plate_ids=owner_scope,
                 tags=input.tags,
                 tag_logic=input.tag_logic,
             )
