@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 import pytest
 import sqlalchemy as sa
@@ -219,17 +220,19 @@ async def test_apply_group_tree_and_assign_is_idempotent(session_factory):
 async def test_apply_loan_reaches_target_states_and_is_idempotent(session_factory):
     ws = uuid.uuid4()
     org = uuid.uuid4()
-    p_out = uuid.uuid4(); p_req = uuid.uuid4(); p_ret = uuid.uuid4()
+    p_out = uuid.uuid4(); p_req = uuid.uuid4(); p_ret = uuid.uuid4(); p_appr = uuid.uuid4()
     async with session_factory() as s:
-        for pid, bc in [(p_out, "900040"), (p_req, "900041"), (p_ret, "900042")]:
+        for pid, bc in [(p_out, "900040"), (p_req, "900041"), (p_ret, "900042"),
+                        (p_appr, "900043")]:
             await _seed_plate(s, plate_id=pid, barcode=bc, ws=ws, owner_org_id=org)
         await s.commit()
     requester = uuid.uuid4()
     spec = LoanSpec(transaction_id=1, requester_user_id=requester,
-                    due_date=__import__("datetime").date(2024, 1, 18), items=[
+                    due_date=date(2024, 1, 18), items=[
         LoanItemSpec(p_out, LoanItemStatus.CHECKED_OUT),
         LoanItemSpec(p_req, LoanItemStatus.REQUESTED),
         LoanItemSpec(p_ret, LoanItemStatus.RETURN_PENDING),
+        LoanItemSpec(p_appr, LoanItemStatus.APPROVED),
     ])
     created_flags = []
     for _ in range(2):
@@ -242,8 +245,33 @@ async def test_apply_loan_reaches_target_states_and_is_idempotent(session_factor
     assert created_flags == [True, False]   # 2nd run skips (active plates already loaned)
     async with session_factory() as s:
         statuses = dict((await s.execute(sa.text(
-            "SELECT plate_id, status FROM plate_loan_items WHERE plate_id IN (:a,:b,:c)"),
-            {"a": p_out, "b": p_req, "c": p_ret})).all())
+            "SELECT plate_id, status FROM plate_loan_items WHERE plate_id IN (:a,:b,:c,:d)"),
+            {"a": p_out, "b": p_req, "c": p_ret, "d": p_appr})).all())
     assert statuses[p_out] == LoanItemStatus.CHECKED_OUT.value
     assert statuses[p_req] == LoanItemStatus.REQUESTED.value
     assert statuses[p_ret] == LoanItemStatus.RETURN_PENDING.value
+    assert statuses[p_appr] == LoanItemStatus.APPROVED.value
+
+
+@pytest.mark.asyncio
+async def test_apply_loan_skips_already_active_plate_in_partial_overlap(session_factory):
+    ws = uuid.uuid4(); org = uuid.uuid4()
+    p1 = uuid.uuid4(); p2 = uuid.uuid4()
+    async with session_factory() as s:
+        for pid, bc in [(p1, "900045"), (p2, "900046")]:
+            await _seed_plate(s, plate_id=pid, barcode=bc, ws=ws, owner_org_id=org)
+        await s.commit()
+    requester = uuid.uuid4()
+    spec1 = LoanSpec(1, requester, date(2024, 1, 18), [LoanItemSpec(p1, LoanItemStatus.CHECKED_OUT)])
+    spec2 = LoanSpec(2, requester, date(2024, 1, 18),
+                     [LoanItemSpec(p1, LoanItemStatus.CHECKED_OUT), LoanItemSpec(p2, LoanItemStatus.REQUESTED)])
+    async with AsyncUnitOfWork(session_factory) as uow:
+        loan_repo = SQLAlchemyPlateLoanRepository(uow)
+        assert await apply_loan(spec1, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is True
+        assert await apply_loan(spec2, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is True
+        await uow.commit()
+    async with session_factory() as s:
+        counts = dict((await s.execute(sa.text(
+            "SELECT plate_id, count(*) FROM plate_loan_items WHERE plate_id IN (:a, :b) GROUP BY plate_id"),
+            {"a": p1, "b": p2})).all())
+    assert counts[p1] == 1 and counts[p2] == 1   # p1 not double-loaned; p2 loaned once

@@ -445,27 +445,33 @@ def plan_loans(legacy, matched, account_email, user_map):
 
 
 async def apply_loan(spec, *, loan_repo, workspace_id, internal_org_id) -> bool:
-    plate_ids = [i.cellar_plate_id for i in spec.items]
-    already = await loan_repo.active_plate_ids(workspace_id, plate_ids)
-    if set(plate_ids) <= already:          # every plate already in an active loan → idempotent skip
+    already = await loan_repo.active_plate_ids(
+        workspace_id, [i.cellar_plate_id for i in spec.items])
+    fresh = [i for i in spec.items if i.cellar_plate_id not in already]
+    if not fresh:  # every plate already in an active loan → idempotent skip
         return False
-    # Create with all items REQUESTED, then drive subsets forward via the aggregate.
     loan = PlateLoan.request(
         workspace_id=workspace_id, owner_org_id=internal_org_id,
         borrower_org_id=internal_org_id, requested_by=spec.requester_user_id,
-        plate_ids=plate_ids, auto_approved=False, due_date=spec.due_date,
-        notes="Migrated from legacy plate-tracker",
+        plate_ids=[i.cellar_plate_id for i in fresh], auto_approved=False,
+        due_date=spec.due_date, notes="Migrated from legacy plate-tracker",
     )
     item_by_plate = {it.plate_id: it for it in loan.items}
-    target_by_plate = {i.cellar_plate_id: i.target for i in spec.items}
-    ids = lambda *ts: [item_by_plate[pid].id for pid, t in target_by_plate.items() if t in ts]
-    # REQUESTED items: leave as-is. Others: approve then push to their target.
-    fwd = ids(LoanItemStatus.CHECKED_OUT, LoanItemStatus.RETURN_PENDING)
-    if fwd:
-        loan.approve_items(fwd, approved_by=spec.requester_user_id)   # legacy authorized_by is NULL → self-approve
-        loan.confirm_checkout(fwd)
-    ret = ids(LoanItemStatus.RETURN_PENDING)
-    if ret:
-        loan.request_return(ret)
+    target_by_plate = {i.cellar_plate_id: i.target for i in fresh}
+
+    def ids(*targets):
+        return [item_by_plate[pid].id for pid, t in target_by_plate.items() if t in targets]
+
+    # Items stay REQUESTED unless a later status is targeted. Approve everything
+    # past REQUESTED first, then advance the checkout/return subsets.
+    to_approve = ids(LoanItemStatus.APPROVED, LoanItemStatus.CHECKED_OUT, LoanItemStatus.RETURN_PENDING)
+    if to_approve:
+        loan.approve_items(to_approve, approved_by=spec.requester_user_id)  # legacy authorized_by is NULL → self-approve
+    to_checkout = ids(LoanItemStatus.CHECKED_OUT, LoanItemStatus.RETURN_PENDING)
+    if to_checkout:
+        loan.confirm_checkout(to_checkout)
+    to_return = ids(LoanItemStatus.RETURN_PENDING)
+    if to_return:
+        loan.request_return(to_return)
     await loan_repo.save(loan)
     return True
