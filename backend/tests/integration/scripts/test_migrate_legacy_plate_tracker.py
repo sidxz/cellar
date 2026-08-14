@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 import sqlalchemy as sa
+from scripts.migrate_legacy_plate_tracker import LegacyData, LegacyPlate, match_plates
 
 from cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_sync_repository import (
     CddPlateSyncRepository,
@@ -12,8 +13,6 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_rep
     SQLAlchemyRegisteredPlateRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-
-from scripts.migrate_legacy_plate_tracker import LegacyData, LegacyPlate, match_plates
 
 VAULT = "1"
 REGISTRAR = uuid.uuid4()
@@ -46,15 +45,19 @@ async def test_match_plates_cdd_then_barcode_then_unmatched(session_factory):
     ws = uuid.uuid4()
     cdd_plate = uuid.uuid4()
     bc_plate = uuid.uuid4()
+    fallback = uuid.uuid4()
     async with session_factory() as s:
         await _seed_plate(s, plate_id=cdd_plate, barcode="900001", ws=ws, cdd_plate_id=555)
         await _seed_plate(s, plate_id=bc_plate, barcode="000042", ws=ws)  # matched by pad-left
+        # cdd_plate_id present but NO sync row → must fall through to barcode
+        await _seed_plate(s, plate_id=fallback, barcode="900002", ws=ws)
         await s.commit()
 
     legacy = LegacyData(plates=[
         LegacyPlate(1, 555, "irrelevant", "P1", "Active", "MASTER", None),   # cdd hit
-        LegacyPlate(2, None, "42", "P2", "Active", "MASTER", None),          # barcode hit → pad to 000042
+        LegacyPlate(2, None, "42", "P2", "Active", "MASTER", None),          # barcode hit → 000042
         LegacyPlate(3, 999, "no-such", "P3", "Active", "MASTER", None),      # unmatched
+        LegacyPlate(4, 777, "900002", "P4", "Active", "MASTER", None),       # cdd miss → barcode
     ])
     uow = AsyncUnitOfWork(session_factory)
     async with uow:
@@ -66,5 +69,10 @@ async def test_match_plates_cdd_then_barcode_then_unmatched(session_factory):
         )
     assert matched[1] == cdd_plate
     assert matched[2] == bc_plate
+    assert matched[4] == fallback  # cdd_plate_id=777 has no sync row → barcode fallback
     assert 3 not in matched
-    assert [u.legacy_plate_id for u in unmatched] == [3]
+    assert len(unmatched) == 1
+    assert unmatched[0].legacy_plate_id == 3
+    assert unmatched[0].plate_barcode == "no-such"
+    assert unmatched[0].cdd_plate_id == 999
+    assert unmatched[0].reason  # non-empty
