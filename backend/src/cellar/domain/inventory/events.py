@@ -370,3 +370,21 @@ class PlateLoanItemsCancelled(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class PlateLoanClosed(DomainEvent):
     pass
+
+
+# ---------------------------------------------------------------------------
+# Kiosk device events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class KioskDeviceCreated(DomainEvent):
+    org_id: uuid.UUID
+    name: str
+    created_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class KioskDeviceRevoked(DomainEvent):
+    org_id: uuid.UUID
+    name: str
