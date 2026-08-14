@@ -1,16 +1,48 @@
-"""Migrate the legacy plate-tracker (MySQL) into Cellar. See Task 7 for the runbook."""
+"""Migrate the legacy plate-tracker (MySQL) into Cellar inventory plates.
+
+Idempotent + re-runnable. Reads the legacy DB once (pymysql), then, in one
+transaction: backfills NULL plate owners, matches legacy plates to Cellar
+plates (cdd_plate_sync → barcode), sets ownership/type/status, builds the
+PlateGroup tree, and recreates the OPEN checkouts as PlateLoans. Closed
+history is NOT migrated (stays in the read-only legacy DB).
+
+Usage (from backend/):
+    uv run python scripts/migrate_legacy_plate_tracker.py \\
+        --legacy-dsn mysql://user:pass@host:3306/sacnet_prod \\
+        --workspace-id <ws-uuid> --internal-org-id <org-uuid> \\
+        --cdd-vault-id <vault> --actor-id <sentinel-user-uuid> \\
+        --user-map user_map.csv --report-dir ./reports [--dry-run]
+
+Cutover runbook:
+  1. Grant `cellar:approve_loan` is NOT needed (migrated loans bypass approval).
+  2. Freeze the legacy plate-tracker (read-only announcement).
+  3. Build user_map.csv: for each distinct OPEN-transaction requester email,
+     look up the Sentinel user id (admin UI → Users) → `email,user_id` rows.
+     (No service-key email→user lookup exists, so this step is manual.)
+  4. Dry-run: add --dry-run; review MIGRATION SUMMARY + reports/*.csv.
+     Resolve unmatched_plates.csv (barcode/cdd gaps) and
+     unresolved_requesters.csv (add to user_map.csv) until acceptable.
+  5. Real run (no --dry-run). Re-run is safe (idempotent) if interrupted.
+  6. Spot-check in the UI: plate owners, the group tree, the ~15 open loans,
+     and the `legacy:inactive` tag on depleted plates (summary inactive_tagged).
+  7. Announce cutover.
+"""
+
 from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from urllib.parse import urlparse
 
 import pymysql
 import sqlalchemy as sa
 import structlog
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from cellar.application.inventory.barcode_resolution import resolve_barcode
 from cellar.domain.inventory.enums import (
@@ -23,6 +55,28 @@ from cellar.domain.inventory.plate_group import PlateGroup
 from cellar.domain.inventory.plate_loan import PlateLoan
 from cellar.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
 from cellar.domain.workspace_config.tagging.tag import TagName
+from cellar.infrastructure.persistence.settings import DatabaseSettings
+from cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_sync_repository import (
+    CddPlateSyncRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
+    SQLAlchemyPlateGroupRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
+    SQLAlchemyPlateLoanRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
+    SQLAlchemyRegisteredPlateRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
+    RegisteredPlateTagLinkRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import (
+    SQLAlchemyTagRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.controlled_vocabulary_repository import (  # noqa: E501
+    SQLAlchemyControlledVocabularyRepository,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -47,8 +101,8 @@ class LegacySet:
 
 @dataclass(frozen=True)
 class LegacySetParent:
-    set_id: int      # child
-    parent_id: int   # parent
+    set_id: int  # child
+    parent_id: int  # parent
 
 
 @dataclass(frozen=True)
@@ -72,7 +126,7 @@ class LegacyPlate:
 class LegacyTransaction:
     transaction_id: int
     t_status: str
-    scientist: int          # requester UIN
+    scientist: int  # requester UIN
     last_activity_date: datetime
 
 
@@ -94,17 +148,22 @@ class LegacyAccount:
 
 
 _PLATE_TYPE_BY_ROLE = {
-    "MASTER": PlateType.MOTHER, "SCREENING": PlateType.ASSAY,
-    "HIT_COLLECTION": PlateType.CHERRY_PICK, "VENDOR": PlateType.COMPOUND_STORAGE,
+    "MASTER": PlateType.MOTHER,
+    "SCREENING": PlateType.ASSAY,
+    "HIT_COLLECTION": PlateType.CHERRY_PICK,
+    "VENDOR": PlateType.COMPOUND_STORAGE,
 }
 _PLATE_STATUS = {
-    "Active": (PlateStatus.STORED, []), "AVAIL": (PlateStatus.STORED, []),
+    "Active": (PlateStatus.STORED, []),
+    "AVAIL": (PlateStatus.STORED, []),
     "Inactive": (PlateStatus.DEPLETED, ["legacy:inactive"]),
 }
 _LOAN_ITEM_STATUS = {
-    "COUT_REQ": LoanItemStatus.REQUESTED, "COUT_WSCAN": LoanItemStatus.APPROVED,
+    "COUT_REQ": LoanItemStatus.REQUESTED,
+    "COUT_WSCAN": LoanItemStatus.APPROVED,
     "ASSIGNED": LoanItemStatus.CHECKED_OUT,
-    "CIN_REQ": LoanItemStatus.RETURN_PENDING, "CIN_WSCAN": LoanItemStatus.RETURN_PENDING,
+    "CIN_REQ": LoanItemStatus.RETURN_PENDING,
+    "CIN_WSCAN": LoanItemStatus.RETURN_PENDING,
 }
 _DUE_DAYS = 14
 
@@ -178,32 +237,44 @@ def read_legacy(dsn: str) -> LegacyData:
     `dsn` = mysql://user:pass@host:port/dbname."""
     u = urlparse(dsn)
     conn = pymysql.connect(
-        host=u.hostname, port=u.port or 3306, user=u.username,
-        password=u.password or "", database=u.path.lstrip("/"),
-        charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor,
+        host=u.hostname,
+        port=u.port or 3306,
+        user=u.username,
+        password=u.password or "",
+        database=u.path.lstrip("/"),
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
     )
     try:
         d = LegacyData()
         with conn.cursor() as cur:
             cur.execute(f"SELECT library_id, library_name, library_type FROM {_P}LIBRARY")
             d.libraries = [LegacyLibrary(**r) for r in cur.fetchall()]
-            cur.execute(f"SELECT set_id, set_type, set_name, set_state, scientist, "
-                        f"generating_conditions, library_id FROM {_P}SET")
+            cur.execute(
+                f"SELECT set_id, set_type, set_name, set_state, scientist, "
+                f"generating_conditions, library_id FROM {_P}SET"
+            )
             d.sets = [LegacySet(**r) for r in cur.fetchall()]
             cur.execute(f"SELECT set_id, parent_id FROM {_P}SET_PARENT")
             d.set_parents = [LegacySetParent(**r) for r in cur.fetchall()]
             cur.execute(f"SELECT set_id, plate_id FROM {_P}SET_PLATE")
             d.set_plates = [LegacySetPlate(**r) for r in cur.fetchall()]
-            cur.execute(f"SELECT plate_id, cdd_plate_id, plate_barcode, plate_name, "
-                        f"plate_status, plate_role, library_id FROM {_P}PLATE")
+            cur.execute(
+                f"SELECT plate_id, cdd_plate_id, plate_barcode, plate_name, "
+                f"plate_status, plate_role, library_id FROM {_P}PLATE"
+            )
             d.plates = [LegacyPlate(**r) for r in cur.fetchall()]
-            cur.execute(f"SELECT transaction_id, t_status, scientist, last_activity_date "
-                        f"FROM {_P}TRANSACTIONS WHERE t_status = 'OPEN'")
+            cur.execute(
+                f"SELECT transaction_id, t_status, scientist, last_activity_date "
+                f"FROM {_P}TRANSACTIONS WHERE t_status = 'OPEN'"
+            )
             d.transactions = [LegacyTransaction(**r) for r in cur.fetchall()]
             cur.execute(f"SELECT plate_id, p_status, transaction_id FROM {_P}TRANSACTION_PLATE")
             d.transaction_plates = [LegacyTransactionPlate(**r) for r in cur.fetchall()]
-            cur.execute("SELECT UIN AS uin, netid, email, alt_email, "
-                        "firstName AS first_name, lastName AS last_name FROM account")
+            cur.execute(
+                "SELECT UIN AS uin, netid, email, alt_email, "
+                "firstName AS first_name, lastName AS last_name FROM account"
+            )
             d.accounts = [LegacyAccount(**r) for r in cur.fetchall()]
         return d
     finally:
@@ -225,13 +296,20 @@ async def match_plates(legacy, *, plate_repo, cdd_repo, workspace_id, cdd_vault_
         cellar_id = None
         if p.cdd_plate_id is not None:
             cellar_id = await cdd_repo.find_plate_id_by_cdd_plate_id(
-                workspace_id, cdd_vault_id, p.cdd_plate_id)
+                workspace_id, cdd_vault_id, p.cdd_plate_id
+            )
         if cellar_id is None:
             hit = await resolve_barcode(plate_repo, workspace_id, p.plate_barcode)
             cellar_id = hit.id if hit is not None else None
         if cellar_id is None:
-            unmatched.append(UnmatchedPlate(p.plate_id, p.plate_barcode, p.cdd_plate_id,
-                                            "no cdd_plate_sync row and no barcode match"))
+            unmatched.append(
+                UnmatchedPlate(
+                    p.plate_id,
+                    p.plate_barcode,
+                    p.cdd_plate_id,
+                    "no cdd_plate_sync row and no barcode match",
+                )
+            )
         else:
             matched[p.plate_id] = cellar_id
     return matched, unmatched
@@ -246,17 +324,30 @@ def _set_plate_status(plate, target: PlateStatus) -> None:
         plate.transition_status(target)
         return
     # DEPLETED is unreachable in one hop from REGISTERED — go via STORED.
-    if target == PlateStatus.DEPLETED and PlateStatus.STORED in VALID_PLATE_TRANSITIONS[plate.status]:
+    if (
+        target == PlateStatus.DEPLETED
+        and PlateStatus.STORED in VALID_PLATE_TRANSITIONS[plate.status]
+    ):
         plate.transition_status(PlateStatus.STORED)
         plate.transition_status(PlateStatus.DEPLETED)
         return
     raise ValueError(f"cannot reach {target} from {plate.status} for plate {plate.id}")
 
 
-async def apply_plate_ownership(legacy, matched, *, plate_repo, tag_repo, plate_tag_link_repo,
-                                uow, workspace_id, internal_org_id, actor_id) -> dict[str, int]:
+async def apply_plate_ownership(
+    legacy,
+    matched,
+    *,
+    plate_repo,
+    tag_repo,
+    plate_tag_link_repo,
+    uow,
+    workspace_id,
+    internal_org_id,
+    actor_id,
+) -> dict[str, int]:
     stats = {"classified": 0, "skipped_unmapped": 0, "inactive_tagged": 0}
-    inactive_tag_id: uuid.UUID | None = None   # created lazily, once
+    inactive_tag_id: uuid.UUID | None = None  # created lazily, once
     by_legacy_id = {p.plate_id: p for p in legacy.plates}
     for legacy_id, cellar_id in matched.items():
         p = by_legacy_id[legacy_id]
@@ -283,10 +374,12 @@ async def apply_plate_ownership(legacy, matched, *, plate_repo, tag_repo, plate_
         if "legacy:inactive" in tags:
             if inactive_tag_id is None:
                 tag = await tag_repo.get_or_create(
-                    workspace_id, TagName(key="legacy", value="inactive"), created_by=actor_id)
+                    workspace_id, TagName(key="legacy", value="inactive"), created_by=actor_id
+                )
                 inactive_tag_id = tag.id
-            if await plate_tag_link_repo.add(workspace_id, cellar_id, inactive_tag_id,
-                                             assigned_by=actor_id):
+            if await plate_tag_link_repo.add(
+                workspace_id, cellar_id, inactive_tag_id, assigned_by=actor_id
+            ):
                 stats["inactive_tagged"] += 1
     return stats
 
@@ -294,10 +387,13 @@ async def apply_plate_ownership(legacy, matched, *, plate_repo, tag_repo, plate_
 async def backfill_null_owner(session, *, workspace_id, internal_org_id) -> int:
     """S2-deferred backfill: every NULL-owner plate in this workspace -> internal org.
     Bulk SQL (matches alembic backfill precedent 042/021); bumps version for OCC safety."""
-    result = await session.execute(sa.text(
-        "UPDATE registered_plates SET owner_org_id = :org, version = version + 1, "
-        "updated_at = now() WHERE workspace_id = :ws AND owner_org_id IS NULL"
-    ), {"org": internal_org_id, "ws": workspace_id})
+    result = await session.execute(
+        sa.text(
+            "UPDATE registered_plates SET owner_org_id = :org, version = version + 1, "
+            "updated_at = now() WHERE workspace_id = :ws AND owner_org_id IS NULL"
+        ),
+        {"org": internal_org_id, "ws": workspace_id},
+    )
     return result.rowcount or 0
 
 
@@ -322,8 +418,15 @@ def plan_group_tree(legacy, account_names: dict[int, str]) -> list[GroupSpec]:
             parent_key = f"lib:{s.library_id}"
         else:
             parent_key = None
-        specs.append(GroupSpec(f"set:{s.set_id}", s.set_name, s.set_type,
-                               compose_set_description(s, account_names), parent_key))
+        specs.append(
+            GroupSpec(
+                f"set:{s.set_id}",
+                s.set_name,
+                s.set_type,
+                compose_set_description(s, account_names),
+                parent_key,
+            )
+        )
     # topological order: roots first, then nodes whose parent already emitted
     ordered: list[GroupSpec] = []
     emitted: set[str] = set()
@@ -333,11 +436,13 @@ def plan_group_tree(legacy, account_names: dict[int, str]) -> list[GroupSpec]:
         rest = []
         for g in pending:
             if g.parent_key is None or g.parent_key in emitted:
-                ordered.append(g); emitted.add(g.key); progressed = True
+                ordered.append(g)
+                emitted.add(g.key)
+                progressed = True
             else:
                 rest.append(g)
         pending = rest
-        if not progressed:   # broken parent ref (shouldn't happen) — emit as roots
+        if not progressed:  # broken parent ref (shouldn't happen) — emit as roots
             for g in pending:
                 ordered.append(GroupSpec(g.key, g.name, g.group_type, g.description, None))
             break
@@ -356,16 +461,22 @@ async def apply_group_tree(specs, *, group_repo, workspace_id, owner_org_id, act
             key_to_group[g.key] = existing.id
             continue
         group = PlateGroup.create(
-            workspace_id=workspace_id, owner_org_id=owner_org_id, name=g.name,
-            created_by=actor_id, parent_group_id=parent_id,
-            group_type=g.group_type, description=g.description,
+            workspace_id=workspace_id,
+            owner_org_id=owner_org_id,
+            name=g.name,
+            created_by=actor_id,
+            parent_group_id=parent_id,
+            group_type=g.group_type,
+            description=g.description,
         )
         await group_repo.save(group)
         key_to_group[g.key] = group.id
     return key_to_group
 
 
-async def assign_plates_to_groups(legacy, key_to_group, matched, *, plate_repo, workspace_id) -> int:
+async def assign_plates_to_groups(
+    legacy, key_to_group, matched, *, plate_repo, workspace_id
+) -> int:
     n = 0
     for sp in legacy.set_plates:
         group_id = key_to_group.get(f"set:{sp.set_id}")
@@ -373,7 +484,9 @@ async def assign_plates_to_groups(legacy, key_to_group, matched, *, plate_repo, 
         if group_id is None or cellar_id is None:
             continue
         plate = await plate_repo.find_by_id_in_workspace(workspace_id, cellar_id)
-        if plate is None or plate.group_id == group_id:   # guard: no-op if unchanged (avoids event spam)
+        if (
+            plate is None or plate.group_id == group_id
+        ):  # guard: no-op if unchanged (avoids event spam)
             continue
         plate.assign_to_group(group_id)
         await plate_repo.save(plate)
@@ -387,8 +500,9 @@ async def seed_group_type_vocab(legacy, *, cv_repo, workspace_id, actor_id) -> N
         return
     vocab = await cv_repo.find_by_name(workspace_id, _GROUP_TYPE_VOCAB)
     if vocab is None:
-        vocab = ControlledVocabulary.create(workspace_id=workspace_id, name=_GROUP_TYPE_VOCAB,
-                                             terms=values, created_by=actor_id)
+        vocab = ControlledVocabulary.create(
+            workspace_id=workspace_id, name=_GROUP_TYPE_VOCAB, terms=values, created_by=actor_id
+        )
     else:
         for v in values:
             if v not in vocab.terms:
@@ -424,37 +538,48 @@ def plan_loans(legacy, matched, account_email, user_map):
     tps_by_txn: dict[int, list] = {}
     for tp in legacy.transaction_plates:
         tps_by_txn.setdefault(tp.transaction_id, []).append(tp)
-    for txn in legacy.transactions:              # already filtered to OPEN at read time
+    for txn in legacy.transactions:  # already filtered to OPEN at read time
         email = account_email.get(txn.scientist)
         user_id = user_map.get(email) if email else None
         if user_id is None:
-            unresolved.append(UnresolvedRequester(
-                txn.transaction_id, txn.scientist, email,
-                "no email" if not email else "email not in --user-map"))
+            unresolved.append(
+                UnresolvedRequester(
+                    txn.transaction_id,
+                    txn.scientist,
+                    email,
+                    "no email" if not email else "email not in --user-map",
+                )
+            )
             continue
         items: list[LoanItemSpec] = []
         for tp in tps_by_txn.get(txn.transaction_id, []):
             cellar_id = matched.get(tp.plate_id)
             if cellar_id is None:
-                continue                          # unmatched plate — skip item (reported in Task 3)
+                continue  # unmatched plate — skip item (reported in Task 3)
             items.append(LoanItemSpec(cellar_id, map_loan_item_status(tp.p_status)))
         if items:
-            specs.append(LoanSpec(txn.transaction_id, user_id,
-                                  due_date_from(txn.last_activity_date), items))
+            specs.append(
+                LoanSpec(txn.transaction_id, user_id, due_date_from(txn.last_activity_date), items)
+            )
     return specs, unresolved
 
 
 async def apply_loan(spec, *, loan_repo, workspace_id, internal_org_id) -> bool:
     already = await loan_repo.active_plate_ids(
-        workspace_id, [i.cellar_plate_id for i in spec.items])
+        workspace_id, [i.cellar_plate_id for i in spec.items]
+    )
     fresh = [i for i in spec.items if i.cellar_plate_id not in already]
     if not fresh:  # every plate already in an active loan → idempotent skip
         return False
     loan = PlateLoan.request(
-        workspace_id=workspace_id, owner_org_id=internal_org_id,
-        borrower_org_id=internal_org_id, requested_by=spec.requester_user_id,
-        plate_ids=[i.cellar_plate_id for i in fresh], auto_approved=False,
-        due_date=spec.due_date, notes="Migrated from legacy plate-tracker",
+        workspace_id=workspace_id,
+        owner_org_id=internal_org_id,
+        borrower_org_id=internal_org_id,
+        requested_by=spec.requester_user_id,
+        plate_ids=[i.cellar_plate_id for i in fresh],
+        auto_approved=False,
+        due_date=spec.due_date,
+        notes="Migrated from legacy plate-tracker",
     )
     item_by_plate = {it.plate_id: it for it in loan.items}
     target_by_plate = {i.cellar_plate_id: i.target for i in fresh}
@@ -464,9 +589,13 @@ async def apply_loan(spec, *, loan_repo, workspace_id, internal_org_id) -> bool:
 
     # Items stay REQUESTED unless a later status is targeted. Approve everything
     # past REQUESTED first, then advance the checkout/return subsets.
-    to_approve = ids(LoanItemStatus.APPROVED, LoanItemStatus.CHECKED_OUT, LoanItemStatus.RETURN_PENDING)
+    to_approve = ids(
+        LoanItemStatus.APPROVED, LoanItemStatus.CHECKED_OUT, LoanItemStatus.RETURN_PENDING
+    )
     if to_approve:
-        loan.approve_items(to_approve, approved_by=spec.requester_user_id)  # legacy authorized_by is NULL → self-approve
+        loan.approve_items(
+            to_approve, approved_by=spec.requester_user_id
+        )  # legacy authorized_by is NULL → self-approve
     to_checkout = ids(LoanItemStatus.CHECKED_OUT, LoanItemStatus.RETURN_PENDING)
     if to_checkout:
         loan.confirm_checkout(to_checkout)
@@ -475,3 +604,171 @@ async def apply_loan(spec, *, loan_repo, workspace_id, internal_org_id) -> bool:
         loan.request_return(to_return)
     await loan_repo.save(loan)
     return True
+
+
+def _write_csv(path: Path, rows: list, header: list[str]) -> None:
+    with path.open("w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for r in rows:
+            w.writerow([getattr(r, h) for h in header])
+
+
+async def run_migration(
+    session_factory,
+    legacy,
+    *,
+    workspace_id,
+    internal_org_id,
+    cdd_vault_id,
+    user_map,
+    actor_id,
+    report_dir,
+    dry_run,
+) -> dict:
+    from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+
+    account_email = build_account_email_map(legacy.accounts)
+    account_names = {
+        a.uin: f"{a.first_name or ''} {a.last_name or ''}".strip() for a in legacy.accounts
+    }
+    summary: dict[str, int] = {}
+    report_dir = Path(report_dir)
+
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        plate_repo = SQLAlchemyRegisteredPlateRepository(uow)
+        cdd_repo = CddPlateSyncRepository(uow)
+        group_repo = SQLAlchemyPlateGroupRepository(uow)
+        loan_repo = SQLAlchemyPlateLoanRepository(uow)
+        cv_repo = SQLAlchemyControlledVocabularyRepository(uow)
+        tag_repo = SQLAlchemyTagRepository(uow)
+        plate_tag_link_repo = RegisteredPlateTagLinkRepository(uow)
+
+        # Phase 0: NULL-owner backfill (S2-deferred)
+        summary["owner_backfilled"] = await backfill_null_owner(
+            uow.session, workspace_id=workspace_id, internal_org_id=internal_org_id
+        )
+
+        # Phase 1: match
+        matched, unmatched = await match_plates(
+            legacy,
+            plate_repo=plate_repo,
+            cdd_repo=cdd_repo,
+            workspace_id=workspace_id,
+            cdd_vault_id=cdd_vault_id,
+        )
+        summary["plates_matched"] = len(matched)
+        summary["unmatched_plates"] = len(unmatched)
+
+        # Phase 2: ownership + classification (+ legacy:inactive tag)
+        own = await apply_plate_ownership(
+            legacy,
+            matched,
+            plate_repo=plate_repo,
+            tag_repo=tag_repo,
+            plate_tag_link_repo=plate_tag_link_repo,
+            uow=uow,
+            workspace_id=workspace_id,
+            internal_org_id=internal_org_id,
+            actor_id=actor_id,
+        )
+        summary["plates_classified"] = own["classified"]
+        summary["inactive_tagged"] = own["inactive_tagged"]
+
+        # Phase 3: groups + CV + assignment
+        await seed_group_type_vocab(
+            legacy, cv_repo=cv_repo, workspace_id=workspace_id, actor_id=actor_id
+        )
+        specs = plan_group_tree(legacy, account_names)
+        key_to_group = await apply_group_tree(
+            specs,
+            group_repo=group_repo,
+            workspace_id=workspace_id,
+            owner_org_id=internal_org_id,
+            actor_id=actor_id,
+        )
+        summary["groups_created"] = len(key_to_group)
+        summary["plates_grouped"] = await assign_plates_to_groups(
+            legacy, key_to_group, matched, plate_repo=plate_repo, workspace_id=workspace_id
+        )
+
+        # Phase 4: loans
+        loan_specs, unresolved = plan_loans(legacy, matched, account_email, user_map)
+        created = 0
+        for ls in loan_specs:
+            if await apply_loan(
+                ls, loan_repo=loan_repo, workspace_id=workspace_id, internal_org_id=internal_org_id
+            ):
+                created += 1
+        summary["loans_created"] = created
+        summary["unresolved_requesters"] = len(unresolved)
+
+        if dry_run:
+            await uow.rollback()
+            logger.info("dry_run_rolled_back", **summary)
+        else:
+            await uow.commit()  # events discarded — no side-effect dispatch
+
+    _write_csv(
+        report_dir / "unmatched_plates.csv",
+        unmatched,
+        ["legacy_plate_id", "plate_barcode", "cdd_plate_id", "reason"],
+    )
+    _write_csv(
+        report_dir / "unresolved_requesters.csv",
+        unresolved,
+        ["transaction_id", "scientist_uin", "email", "reason"],
+    )
+    logger.info("migration_done", dry_run=dry_run, **summary)
+    return summary
+
+
+async def _main() -> None:
+    p = argparse.ArgumentParser(description="Migrate legacy plate-tracker into Cellar.")
+    p.add_argument("--legacy-dsn", required=True, help="mysql://user:pass@host:port/db")
+    p.add_argument("--workspace-id", type=uuid.UUID, required=True)
+    p.add_argument("--internal-org-id", type=uuid.UUID, required=True)
+    p.add_argument(
+        "--cdd-vault-id", required=True, help="cdd_plate_sync.cdd_vault_id for legacy plates"
+    )
+    p.add_argument(
+        "--actor-id",
+        type=uuid.UUID,
+        required=True,
+        help="Sentinel user id running the migration (group/CV created_by)",
+    )
+    p.add_argument("--user-map", type=Path, default=None, help="CSV email,sentinel_user_id")
+    p.add_argument("--report-dir", type=Path, default=Path("."))
+    p.add_argument("--dry-run", action="store_true")
+    args = p.parse_args()
+
+    user_map: dict[str, uuid.UUID] = {}
+    if args.user_map:
+        with args.user_map.open() as f:
+            for row in csv.reader(f):
+                if len(row) >= 2 and "@" in row[0]:
+                    user_map[row[0].strip()] = uuid.UUID(row[1].strip())
+
+    legacy = read_legacy(args.legacy_dsn)
+    engine = create_async_engine(DatabaseSettings().database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        summary = await run_migration(
+            session_factory,
+            legacy,
+            workspace_id=args.workspace_id,
+            internal_org_id=args.internal_org_id,
+            cdd_vault_id=args.cdd_vault_id,
+            user_map=user_map,
+            actor_id=args.actor_id,
+            report_dir=args.report_dir,
+            dry_run=args.dry_run,
+        )
+        print("MIGRATION SUMMARY:", summary)
+    finally:
+        await engine.dispose()
+
+
+if __name__ == "__main__":
+    asyncio.run(_main())

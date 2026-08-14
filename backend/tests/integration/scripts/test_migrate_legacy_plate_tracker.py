@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 import sqlalchemy as sa
 from scripts.migrate_legacy_plate_tracker import (
+    LegacyAccount,
     LegacyData,
     LegacyLibrary,
     LegacyPlate,
     LegacySet,
     LegacySetPlate,
+    LegacyTransaction,
+    LegacyTransactionPlate,
     LoanItemSpec,
     LoanSpec,
     apply_group_tree,
@@ -20,6 +23,7 @@ from scripts.migrate_legacy_plate_tracker import (
     backfill_null_owner,
     match_plates,
     plan_group_tree,
+    run_migration,
 )
 
 from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
@@ -275,3 +279,33 @@ async def test_apply_loan_skips_already_active_plate_in_partial_overlap(session_
             "SELECT plate_id, count(*) FROM plate_loan_items WHERE plate_id IN (:a, :b) GROUP BY plate_id"),
             {"a": p1, "b": p2})).all())
     assert counts[p1] == 1 and counts[p2] == 1   # p1 not double-loaned; p2 loaned once
+
+
+@pytest.mark.asyncio
+async def test_run_migration_end_to_end_summary(session_factory, tmp_path):
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    plate = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=plate, barcode="900050", ws=ws, cdd_plate_id=301)
+        await s.commit()
+    requester = uuid.uuid4()
+    legacy = LegacyData(
+        libraries=[LegacyLibrary(10, "Lib E2E", "SacchettiniLibrary")],
+        sets=[LegacySet(1, "SCREENING", "Set E2E", "Dry", 42, None, 10)],
+        set_plates=[LegacySetPlate(set_id=1, plate_id=99)],
+        plates=[LegacyPlate(99, 301, "x", "P", "Active", "MASTER", None)],
+        transactions=[LegacyTransaction(1, "OPEN", 42, datetime(2024, 1, 4))],
+        transaction_plates=[LegacyTransactionPlate(99, "ASSIGNED", 1)],
+        accounts=[LegacyAccount(42, "ann", "ann@x.org", None, "Ann", "Lee")],
+    )
+    summary = await run_migration(
+        session_factory, legacy, workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={"ann@x.org": requester}, actor_id=org,
+        report_dir=tmp_path, dry_run=False,
+    )
+    assert summary["plates_matched"] == 1
+    assert summary["groups_created"] == 2   # library root + set
+    assert summary["loans_created"] == 1
+    assert summary["unmatched_plates"] == 0
+    assert (tmp_path / "unmatched_plates.csv").exists()
