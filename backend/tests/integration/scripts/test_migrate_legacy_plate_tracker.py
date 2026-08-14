@@ -4,13 +4,26 @@ import uuid
 
 import pytest
 import sqlalchemy as sa
-from scripts.migrate_legacy_plate_tracker import LegacyData, LegacyPlate, match_plates
+from scripts.migrate_legacy_plate_tracker import (
+    LegacyData,
+    LegacyPlate,
+    apply_plate_ownership,
+    backfill_null_owner,
+    match_plates,
+)
 
+from cellar.domain.inventory.enums import PlateStatus, PlateType
 from cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_sync_repository import (
     CddPlateSyncRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
+    RegisteredPlateTagLinkRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_repository import (
+    SQLAlchemyTagRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
@@ -76,3 +89,69 @@ async def test_match_plates_cdd_then_barcode_then_unmatched(session_factory):
     assert unmatched[0].plate_barcode == "no-such"
     assert unmatched[0].cdd_plate_id == 999
     assert unmatched[0].reason  # non-empty
+
+
+@pytest.mark.asyncio
+async def test_apply_ownership_sets_owner_type_status_tags_inactive_and_is_idempotent(session_factory):
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    active = uuid.uuid4()
+    inactive = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=active, barcode="900010", ws=ws, cdd_plate_id=101)
+        await _seed_plate(s, plate_id=inactive, barcode="900011", ws=ws, cdd_plate_id=102)
+        await s.commit()
+    legacy = LegacyData(plates=[
+        LegacyPlate(1, 101, "x", "P1", "Active", "MASTER", None),
+        LegacyPlate(2, 102, "y", "P2", "Inactive", "VENDOR", None),
+    ])
+    for _ in range(2):  # idempotent: run twice
+        uow = AsyncUnitOfWork(session_factory)
+        async with uow:
+            plate_repo = SQLAlchemyRegisteredPlateRepository(uow)
+            cdd_repo = CddPlateSyncRepository(uow)
+            tag_repo = SQLAlchemyTagRepository(uow)
+            link_repo = RegisteredPlateTagLinkRepository(uow)
+            matched, _ = await match_plates(legacy, plate_repo=plate_repo, cdd_repo=cdd_repo,
+                                            workspace_id=ws, cdd_vault_id=VAULT)
+            await apply_plate_ownership(
+                legacy, matched, plate_repo=plate_repo, tag_repo=tag_repo,
+                plate_tag_link_repo=link_repo, uow=uow, workspace_id=ws,
+                internal_org_id=org, actor_id=org)
+            await uow.commit()
+    async with session_factory() as s:
+        rows = (await s.execute(sa.text(
+            "SELECT id, owner_org_id, plate_type, status FROM registered_plates "
+            "WHERE id IN (:a, :b)"), {"a": active, "b": inactive})).mappings().all()
+        by_id = {r["id"]: r for r in rows}
+        tagged = (await s.execute(sa.text(
+            "SELECT rpt.registered_plate_id FROM registered_plate_tags rpt "
+            "JOIN tags t ON t.id = rpt.tag_id "
+            "WHERE t.workspace_id = :ws AND t.normalized_key = 'legacy' "
+            "AND t.normalized_value = 'inactive'"), {"ws": ws})).scalars().all()
+    assert by_id[active]["owner_org_id"] == org
+    assert by_id[active]["plate_type"] == PlateType.MOTHER.value
+    assert by_id[active]["status"] == PlateStatus.STORED.value
+    assert by_id[inactive]["plate_type"] == PlateType.COMPOUND_STORAGE.value
+    assert by_id[inactive]["status"] == PlateStatus.DEPLETED.value   # registered→stored→depleted
+    assert tagged == [inactive]   # legacy:inactive tagged once (idempotent), active untouched
+
+
+@pytest.mark.asyncio
+async def test_backfill_null_owner_only_touches_nulls(session_factory):
+    ws = uuid.uuid4()          # unique ws → backfill count is deterministic
+    org = uuid.uuid4()
+    orphan = uuid.uuid4()
+    owned = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=orphan, barcode="900020", ws=ws)   # owner NULL
+        await _seed_plate(s, plate_id=owned, barcode="900021", ws=ws, owner_org_id=uuid.uuid4())
+        await s.commit()
+    async with session_factory() as s:
+        n = await backfill_null_owner(s, workspace_id=ws, internal_org_id=org)
+        await s.commit()
+    assert n == 1   # only the orphan (ws is unique to this test)
+    async with session_factory() as s:
+        got = (await s.execute(sa.text(
+            "SELECT owner_org_id FROM registered_plates WHERE id = :id"), {"id": orphan})).scalar_one()
+    assert got == org

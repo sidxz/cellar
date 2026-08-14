@@ -9,10 +9,17 @@ from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
 import pymysql
+import sqlalchemy as sa
 import structlog
 
 from cellar.application.inventory.barcode_resolution import resolve_barcode
-from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
+from cellar.domain.inventory.enums import (
+    VALID_PLATE_TRANSITIONS,
+    LoanItemStatus,
+    PlateStatus,
+    PlateType,
+)
+from cellar.domain.workspace_config.tagging.tag import TagName
 
 logger = structlog.get_logger(__name__)
 
@@ -225,3 +232,67 @@ async def match_plates(legacy, *, plate_repo, cdd_repo, workspace_id, cdd_vault_
         else:
             matched[p.plate_id] = cellar_id
     return matched, unmatched
+
+
+def _set_plate_status(plate, target: PlateStatus) -> None:
+    """Drive plate.status to `target` through valid transitions; idempotent.
+    Only STORED and DEPLETED are ever requested here."""
+    if plate.status == target:
+        return
+    if target in VALID_PLATE_TRANSITIONS[plate.status]:
+        plate.transition_status(target)
+        return
+    # DEPLETED is unreachable in one hop from REGISTERED — go via STORED.
+    if target == PlateStatus.DEPLETED and PlateStatus.STORED in VALID_PLATE_TRANSITIONS[plate.status]:
+        plate.transition_status(PlateStatus.STORED)
+        plate.transition_status(PlateStatus.DEPLETED)
+        return
+    raise ValueError(f"cannot reach {target} from {plate.status} for plate {plate.id}")
+
+
+async def apply_plate_ownership(legacy, matched, *, plate_repo, tag_repo, plate_tag_link_repo,
+                                uow, workspace_id, internal_org_id, actor_id) -> dict[str, int]:
+    stats = {"classified": 0, "skipped_unmapped": 0, "inactive_tagged": 0}
+    inactive_tag_id: uuid.UUID | None = None   # created lazily, once
+    by_legacy_id = {p.plate_id: p for p in legacy.plates}
+    for legacy_id, cellar_id in matched.items():
+        p = by_legacy_id[legacy_id]
+        try:
+            ptype = map_plate_type(p.plate_role)
+            pstatus, tags = map_plate_status(p.plate_status)
+        except ValueError as e:
+            logger.warning("legacy_plate_unmapped", legacy_plate_id=legacy_id, error=str(e))
+            stats["skipped_unmapped"] += 1
+            continue
+        plate = await plate_repo.find_by_id_in_workspace(workspace_id, cellar_id)
+        if plate is None:
+            continue
+        changed = False
+        if plate.owner_org_id != internal_org_id or plate.plate_type != ptype:
+            plate.update(owner_org_id=internal_org_id, plate_type=ptype)
+            changed = True
+        if plate.status != pstatus:
+            _set_plate_status(plate, pstatus)
+            changed = True
+        if changed:
+            await plate_repo.save(plate)
+            stats["classified"] += 1
+        if "legacy:inactive" in tags:
+            if inactive_tag_id is None:
+                tag = await tag_repo.get_or_create(
+                    workspace_id, TagName(key="legacy", value="inactive"), created_by=actor_id)
+                inactive_tag_id = tag.id
+            if await plate_tag_link_repo.add(workspace_id, cellar_id, inactive_tag_id,
+                                             assigned_by=actor_id):
+                stats["inactive_tagged"] += 1
+    return stats
+
+
+async def backfill_null_owner(session, *, workspace_id, internal_org_id) -> int:
+    """S2-deferred backfill: every NULL-owner plate in this workspace -> internal org.
+    Bulk SQL (matches alembic backfill precedent 042/021); bumps version for OCC safety."""
+    result = await session.execute(sa.text(
+        "UPDATE registered_plates SET owner_org_id = :org, version = version + 1, "
+        "updated_at = now() WHERE workspace_id = :ws AND owner_org_id IS NULL"
+    ), {"org": internal_org_id, "ws": workspace_id})
+    return result.rowcount or 0
