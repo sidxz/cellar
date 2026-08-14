@@ -5,11 +5,13 @@ import argparse
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from urllib.parse import urlparse
 
 import pymysql
 import structlog
+
+from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
 
 logger = structlog.get_logger(__name__)
 
@@ -78,6 +80,59 @@ class LegacyAccount:
     alt_email: str | None
     first_name: str | None
     last_name: str | None
+
+
+_PLATE_TYPE_BY_ROLE = {
+    "MASTER": PlateType.MOTHER, "SCREENING": PlateType.ASSAY,
+    "HIT_COLLECTION": PlateType.CHERRY_PICK, "VENDOR": PlateType.COMPOUND_STORAGE,
+}
+_PLATE_STATUS = {
+    "Active": (PlateStatus.STORED, []), "AVAIL": (PlateStatus.STORED, []),
+    "Inactive": (PlateStatus.DEPLETED, ["legacy:inactive"]),
+}
+_LOAN_ITEM_STATUS = {
+    "COUT_REQ": LoanItemStatus.REQUESTED, "COUT_WSCAN": LoanItemStatus.APPROVED,
+    "ASSIGNED": LoanItemStatus.CHECKED_OUT,
+    "CIN_REQ": LoanItemStatus.RETURN_PENDING, "CIN_WSCAN": LoanItemStatus.RETURN_PENDING,
+}
+_DUE_DAYS = 14
+
+
+def map_plate_type(role: str) -> PlateType:
+    try:
+        return _PLATE_TYPE_BY_ROLE[role]
+    except KeyError:
+        raise ValueError(f"unknown legacy plate_role: {role!r}") from None
+
+
+def map_plate_status(status: str) -> tuple[PlateStatus, list[str]]:
+    try:
+        target, tags = _PLATE_STATUS[status]
+    except KeyError:
+        raise ValueError(f"unknown legacy plate_status: {status!r}") from None
+    return target, list(tags)
+
+
+def map_loan_item_status(p_status: str) -> LoanItemStatus:
+    try:
+        return _LOAN_ITEM_STATUS[p_status]
+    except KeyError:
+        raise ValueError(f"unknown legacy p_status: {p_status!r}") from None
+
+
+def due_date_from(last_activity: datetime) -> date:
+    return (last_activity + timedelta(days=_DUE_DAYS)).date()
+
+
+def compose_set_description(s: LegacySet, account_names: dict[int, str]) -> str | None:
+    parts: list[str] = []
+    if s.set_state:
+        parts.append(f"State: {s.set_state}")
+    if s.scientist and s.scientist in account_names:
+        parts.append(f"Scientist: {account_names[s.scientist]}")
+    if s.generating_conditions:
+        parts.append(s.generating_conditions)
+    return "\n".join(parts) if parts else None
 
 
 @dataclass
