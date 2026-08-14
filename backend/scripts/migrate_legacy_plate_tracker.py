@@ -5,7 +5,7 @@ import argparse
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
 import pymysql

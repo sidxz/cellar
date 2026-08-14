@@ -54,12 +54,25 @@ def test_map_plate_status_unknown_raises():
         map_plate_status("Frozen")
 
 
+def test_map_plate_status_returns_a_fresh_tag_list_each_call():
+    first = map_plate_status("Inactive")[1]
+    first.append("mutated")
+    assert map_plate_status("Inactive")[1] == ["legacy:inactive"]
+
+
 @pytest.mark.parametrize("p,expected", [
     ("COUT_REQ", LoanItemStatus.REQUESTED), ("ASSIGNED", LoanItemStatus.CHECKED_OUT),
     ("CIN_REQ", LoanItemStatus.RETURN_PENDING),
+    ("COUT_WSCAN", LoanItemStatus.APPROVED),
+    ("CIN_WSCAN", LoanItemStatus.RETURN_PENDING),
 ])
 def test_map_loan_item_status(p, expected):
     assert map_loan_item_status(p) == expected
+
+
+def test_map_loan_item_status_unknown_raises():
+    with pytest.raises(ValueError):
+        map_loan_item_status("BOGUS")
 
 
 def test_due_date_is_last_activity_plus_14_days():
