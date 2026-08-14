@@ -416,3 +416,45 @@ class TestMoleculePlatesVisibility:
         resp_own = await editor_client_other_org.get(f"/api/v1/molecules/{molecule_id}/plates")
         assert resp_own.status_code == 200, resp_own.text
         assert private_plate_id in {e["plate_id"] for e in resp_own.json()}
+
+
+class TestCoverageGaps:
+    """Closes docs/backlog/plate-response-coverage-gaps.md (S3 triage)."""
+
+    async def test_delete_plate_with_children_conflicts_then_ok(self, client: AsyncClient) -> None:
+        parent = await _register(client)
+        assert parent.status_code == 201, parent.text
+        parent_json = parent.json()
+        parent_id = parent_json["id"]
+
+        resp = await client.post(
+            f"/api/v1/plates/{parent_id}/derive",
+            json={"barcode": f"CG-{uuid.uuid4().hex[:8]}", "plate_label": "Daughter"},
+        )
+        assert resp.status_code == 201, resp.text
+        child_id = resp.json()["id"]
+
+        resp = await client.delete(f"/api/v1/plates/{parent_id}")
+        assert resp.status_code == 409
+        # DomainError bodies carry the text on "message", not "detail" (that
+        # key is only populated when the error opts into a separate detail).
+        message = resp.json()["message"]
+        # The message must NOT count children (count was a visibility oracle;
+        # the pre-S3 wording was "...it has {len(children)} child plate(s)").
+        # Strip the plate's own barcode first — it's a random hex suffix and
+        # legitimately contains digits unrelated to any child count.
+        without_barcode = message.replace(parent_json["barcode"], "")
+        assert not any(ch.isdigit() for ch in without_barcode), message
+
+        assert (await client.delete(f"/api/v1/plates/{child_id}")).status_code == 204
+        assert (await client.delete(f"/api/v1/plates/{parent_id}")).status_code == 204
+
+    async def test_plate_response_enum_fields_serialize_as_wire_values(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await _register(client)
+        assert resp.status_code == 201, resp.text
+        plate = resp.json()
+        assert plate["format"] == "96"
+        assert plate["plate_type"] == "assay"
+        assert plate["status"] == "registered"

@@ -10,6 +10,7 @@ from datetime import date, timedelta
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from cellar.application.auth import LOAN_APPROVE_ACTION
 from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID, _create_test_app
 from tests.fakes.fake_auth import FakeAuth
 
@@ -231,10 +232,12 @@ class TestAuthorityMatrix:
     ) -> None:
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
         loan = await _mk_loan(client, plate_ids=[plate["id"]])
+        me = (await approver_client_own_org.get("/api/v1/user/me")).json()
         resp = await approver_client_own_org.post(
             f"/api/v1/plate-loans/{loan['id']}/items:approve", json={}
         )
         assert resp.status_code == 200, resp.text
+        assert resp.json()["approved_by"] == me["user_id"]
 
     async def test_approve_as_owner_org_editor_without_action_forbidden(
         self, client: AsyncClient, denied_editor_client_own_org: AsyncClient
@@ -247,15 +250,26 @@ class TestAuthorityMatrix:
         assert resp.status_code == 403
 
     async def test_approve_as_borrower_org_editor_wrong_org_forbidden(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+        self, client: AsyncClient, database_url: str, workspace_id: uuid.UUID
     ) -> None:
-        # owner = AUTH_ORG (via `client`), borrower = OTHER_ORG (requester's org)
+        # owner = AUTH_ORG (via `client`), borrower = OTHER_ORG (requester's org).
+        # Grant the approve action explicitly — editor_client_other_org's
+        # default `granted_actions=None` is permissive, which would let this
+        # 403 pass even if the org guard were silently dropped. Granting the
+        # action proves the org check is what rejects, and that it runs
+        # before (not masked by) the action grant.
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
-        loan = await _mk_loan(editor_client_other_org, plate_ids=[plate["id"]])
-        resp = await editor_client_other_org.post(
-            f"/api/v1/plate-loans/{loan['id']}/items:approve", json={}
-        )
-        assert resp.status_code == 403
+        async with _client_as(
+            database_url,
+            workspace_id,
+            org_id=OTHER_ORG_ID,
+            granted_actions={LOAN_APPROVE_ACTION},
+        ) as other_org_approver:
+            loan = await _mk_loan(other_org_approver, plate_ids=[plate["id"]])
+            resp = await other_org_approver.post(
+                f"/api/v1/plate-loans/{loan['id']}/items:approve", json={}
+            )
+            assert resp.status_code == 403
 
     async def test_deny_wrong_org_forbidden(
         self, client: AsyncClient, editor_client_other_org: AsyncClient
@@ -462,6 +476,10 @@ class TestFilters:
         assert loan["id"] in [loan_["id"] for loan_ in resp.json()]
         resp = await client.get("/api/v1/plate-loans", params={"status": "closed"})
         assert loan["id"] not in [loan_["id"] for loan_ in resp.json()]
+
+    async def test_list_loans_rejects_unknown_status(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/v1/plate-loans", params={"status": "opne"})
+        assert resp.status_code == 422  # was: silently zero rows
 
     async def test_overdue_filter(self, client: AsyncClient) -> None:
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")

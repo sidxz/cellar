@@ -82,6 +82,13 @@ class TestTransitions:
         assert isinstance(events[0], PlateLoanItemsApproved)
         assert isinstance(events[-1], PlateLoanClosed)
 
+    def test_approved_by_first_approver_wins(self) -> None:
+        loan = _loan(2)  # two REQUESTED items
+        first, second = uuid.uuid4(), uuid.uuid4()
+        loan.approve_items([loan.items[0].id], approved_by=first)
+        loan.approve_items([loan.items[1].id], approved_by=second)
+        assert loan.approved_by == first
+
     def test_deny_and_cancel_close_when_all_terminal(self) -> None:
         loan = _loan(2)
         a, b = (i.id for i in loan.items)

@@ -158,7 +158,7 @@ async def request_plate_loan(
 async def list_loans(
     auth: AuthDep,
     uc: ListLoansDep,
-    status: str | None = None,
+    status: LoanStatus | None = None,
     owner_org_id: uuid.UUID | None = None,
     borrower_org_id: uuid.UUID | None = None,
     mine: bool = False,
@@ -168,7 +168,7 @@ async def list_loans(
     """List loans visible to the caller, with optional filters."""
     query = ListLoansQuery(
         workspace_id=auth.workspace_id,
-        status=status,
+        status=status.value if status is not None else None,
         owner_org_id=owner_org_id,
         borrower_org_id=borrower_org_id,
         requested_by=auth.user_id if mine else None,
