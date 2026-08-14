@@ -196,7 +196,10 @@ def create_app() -> FastAPI:
     # Auth middleware — validates IdP + Sentinel authz tokens
     sentinel.protect(
         app,
-        exclude_paths=["/health", "/version", "/docs", "/openapi.json"],
+        # /api/v1/kiosk uses X-Kiosk-Token device auth (spec §10). SDK match is
+        # exact-or-prefix-with-slash-boundary, so /api/v1/kiosk-devices (admin,
+        # session-authed) is NOT excluded.
+        exclude_paths=["/health", "/version", "/docs", "/openapi.json", "/api/v1/kiosk"],
     )
 
     # CORS — added last so it runs first (LIFO)
@@ -272,6 +275,7 @@ def create_app() -> FastAPI:
     app.include_router(shipment_router)
     app.include_router(synth_req_router)
 
+    from cellar.interface.routes.kiosk import router as kiosk_router
     from cellar.interface.routes.kiosk_devices import router as kiosk_device_router
     from cellar.interface.routes.org_plate_policies import router as org_plate_policy_router
     from cellar.interface.routes.plate_groups import router as plate_group_router
@@ -285,6 +289,7 @@ def create_app() -> FastAPI:
     app.include_router(org_plate_policy_router)
     app.include_router(plate_loan_router)
     app.include_router(kiosk_device_router)
+    app.include_router(kiosk_router)
 
     from cellar.interface.routes.campaigns import router as campaign_router
     from cellar.interface.routes.campaigns_channels import (

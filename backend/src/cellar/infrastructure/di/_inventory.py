@@ -31,6 +31,7 @@ from cellar.application.inventory.import_templates import (
     ListImportTemplates,
 )
 from cellar.application.inventory.inventory_summary_reader import InventorySummaryReader
+from cellar.application.inventory.kiosk import ConfirmScan, ResolveScan
 from cellar.application.inventory.kiosk_devices import (
     CreateKioskDevice,
     ListKioskDevices,
@@ -731,6 +732,28 @@ def register_inventory(container: Container) -> None:
     container.define(CreateKioskDevice, _create_kiosk_device)
     container.define(ListKioskDevices, _list_kiosk_devices)
     container.define(RevokeKioskDevice, _revoke_kiosk_device)
+
+    # --- Kiosk scan/confirm ---
+    def _resolve_scan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResolveScan(
+            uow,
+            SQLAlchemyKioskDeviceRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyPlateLoanRepository(uow),
+        )
+
+    def _confirm_scan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ConfirmScan(
+            uow,
+            SQLAlchemyKioskDeviceRepository(uow),
+            SQLAlchemyPlateLoanRepository(uow),
+            c[EventDispatcher],
+        )
+
+    container.define(ResolveScan, _resolve_scan)
+    container.define(ConfirmScan, _confirm_scan)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

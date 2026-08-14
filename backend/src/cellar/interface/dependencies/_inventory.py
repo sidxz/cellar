@@ -30,6 +30,7 @@ from cellar.application.inventory.import_templates import (
     DeleteImportTemplate,
     ListImportTemplates,
 )
+from cellar.application.inventory.kiosk import ConfirmScan, ResolveScan
 from cellar.application.inventory.kiosk_devices import (
     CreateKioskDevice,
     ListKioskDevices,
@@ -107,6 +108,7 @@ __all__ = [
     "ClearQuarantineSampleDep",
     "ConfirmLoanCheckoutDep",
     "ConfirmLoanReturnDep",
+    "ConfirmScanDep",
     # Inventory
     "CreateBatchDep",
     "CreateImportTemplateDep",
@@ -156,6 +158,7 @@ __all__ = [
     "RemovePlatesFromGroupDep",
     "RequestLoanReturnDep",
     "RequestPlateLoanDep",
+    "ResolveScanDep",
     "RevokeKioskDeviceDep",
     "SetOrgPlatePolicyDep",
     "UpdateBatchDep",
@@ -286,6 +289,10 @@ CancelLoanItemsDep = Annotated[CancelLoanItems, Depends(_get_use_case(CancelLoan
 CreateKioskDeviceDep = Annotated[CreateKioskDevice, Depends(_get_use_case(CreateKioskDevice))]
 ListKioskDevicesDep = Annotated[ListKioskDevices, Depends(_get_use_case(ListKioskDevices))]
 RevokeKioskDeviceDep = Annotated[RevokeKioskDevice, Depends(_get_use_case(RevokeKioskDevice))]
+
+# --- Kiosk scan/confirm dependencies ---
+ResolveScanDep = Annotated[ResolveScan, Depends(_get_use_case(ResolveScan))]
+ConfirmScanDep = Annotated[ConfirmScan, Depends(_get_use_case(ConfirmScan))]
 
 # --- Plate-import pipeline dependencies ---
 ImportFileCacheDep = Annotated[ImportFileCache, Depends(_get_use_case(ImportFileCache))]
