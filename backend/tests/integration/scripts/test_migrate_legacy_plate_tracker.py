@@ -10,7 +10,10 @@ from scripts.migrate_legacy_plate_tracker import (
     LegacyPlate,
     LegacySet,
     LegacySetPlate,
+    LoanItemSpec,
+    LoanSpec,
     apply_group_tree,
+    apply_loan,
     apply_plate_ownership,
     assign_plates_to_groups,
     backfill_null_owner,
@@ -18,12 +21,15 @@ from scripts.migrate_legacy_plate_tracker import (
     plan_group_tree,
 )
 
-from cellar.domain.inventory.enums import PlateStatus, PlateType
+from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
 from cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_sync_repository import (
     CddPlateSyncRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
     SQLAlchemyPlateGroupRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
+    SQLAlchemyPlateLoanRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
@@ -207,3 +213,37 @@ async def test_apply_group_tree_and_assign_is_idempotent(session_factory):
         grp = (await s.execute(sa.text("SELECT group_id FROM registered_plates WHERE id = :id"),
                                {"id": plate})).scalar_one()
         assert grp == by_name["Set One"]["id"]                                    # plate assigned to its set's group
+
+
+@pytest.mark.asyncio
+async def test_apply_loan_reaches_target_states_and_is_idempotent(session_factory):
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    p_out = uuid.uuid4(); p_req = uuid.uuid4(); p_ret = uuid.uuid4()
+    async with session_factory() as s:
+        for pid, bc in [(p_out, "900040"), (p_req, "900041"), (p_ret, "900042")]:
+            await _seed_plate(s, plate_id=pid, barcode=bc, ws=ws, owner_org_id=org)
+        await s.commit()
+    requester = uuid.uuid4()
+    spec = LoanSpec(transaction_id=1, requester_user_id=requester,
+                    due_date=__import__("datetime").date(2024, 1, 18), items=[
+        LoanItemSpec(p_out, LoanItemStatus.CHECKED_OUT),
+        LoanItemSpec(p_req, LoanItemStatus.REQUESTED),
+        LoanItemSpec(p_ret, LoanItemStatus.RETURN_PENDING),
+    ])
+    created_flags = []
+    for _ in range(2):
+        uow = AsyncUnitOfWork(session_factory)
+        async with uow:
+            loan_repo = SQLAlchemyPlateLoanRepository(uow)
+            created_flags.append(await apply_loan(spec, loan_repo=loan_repo, workspace_id=ws,
+                                                  internal_org_id=org))
+            await uow.commit()
+    assert created_flags == [True, False]   # 2nd run skips (active plates already loaned)
+    async with session_factory() as s:
+        statuses = dict((await s.execute(sa.text(
+            "SELECT plate_id, status FROM plate_loan_items WHERE plate_id IN (:a,:b,:c)"),
+            {"a": p_out, "b": p_req, "c": p_ret})).all())
+    assert statuses[p_out] == LoanItemStatus.CHECKED_OUT.value
+    assert statuses[p_req] == LoanItemStatus.REQUESTED.value
+    assert statuses[p_ret] == LoanItemStatus.RETURN_PENDING.value

@@ -20,6 +20,7 @@ from cellar.domain.inventory.enums import (
     PlateType,
 )
 from cellar.domain.inventory.plate_group import PlateGroup
+from cellar.domain.inventory.plate_loan import PlateLoan
 from cellar.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
 from cellar.domain.workspace_config.tagging.tag import TagName
 
@@ -393,3 +394,78 @@ async def seed_group_type_vocab(legacy, *, cv_repo, workspace_id, actor_id) -> N
             if v not in vocab.terms:
                 vocab.add_term(v)
     await cv_repo.save(vocab)
+
+
+@dataclass(frozen=True)
+class LoanItemSpec:
+    cellar_plate_id: uuid.UUID
+    target: LoanItemStatus
+
+
+@dataclass(frozen=True)
+class LoanSpec:
+    transaction_id: int
+    requester_user_id: uuid.UUID
+    due_date: date
+    items: list[LoanItemSpec]
+
+
+@dataclass(frozen=True)
+class UnresolvedRequester:
+    transaction_id: int
+    scientist_uin: int
+    email: str | None
+    reason: str
+
+
+def plan_loans(legacy, matched, account_email, user_map):
+    specs: list[LoanSpec] = []
+    unresolved: list[UnresolvedRequester] = []
+    tps_by_txn: dict[int, list] = {}
+    for tp in legacy.transaction_plates:
+        tps_by_txn.setdefault(tp.transaction_id, []).append(tp)
+    for txn in legacy.transactions:              # already filtered to OPEN at read time
+        email = account_email.get(txn.scientist)
+        user_id = user_map.get(email) if email else None
+        if user_id is None:
+            unresolved.append(UnresolvedRequester(
+                txn.transaction_id, txn.scientist, email,
+                "no email" if not email else "email not in --user-map"))
+            continue
+        items: list[LoanItemSpec] = []
+        for tp in tps_by_txn.get(txn.transaction_id, []):
+            cellar_id = matched.get(tp.plate_id)
+            if cellar_id is None:
+                continue                          # unmatched plate — skip item (reported in Task 3)
+            items.append(LoanItemSpec(cellar_id, map_loan_item_status(tp.p_status)))
+        if items:
+            specs.append(LoanSpec(txn.transaction_id, user_id,
+                                  due_date_from(txn.last_activity_date), items))
+    return specs, unresolved
+
+
+async def apply_loan(spec, *, loan_repo, workspace_id, internal_org_id) -> bool:
+    plate_ids = [i.cellar_plate_id for i in spec.items]
+    already = await loan_repo.active_plate_ids(workspace_id, plate_ids)
+    if set(plate_ids) <= already:          # every plate already in an active loan → idempotent skip
+        return False
+    # Create with all items REQUESTED, then drive subsets forward via the aggregate.
+    loan = PlateLoan.request(
+        workspace_id=workspace_id, owner_org_id=internal_org_id,
+        borrower_org_id=internal_org_id, requested_by=spec.requester_user_id,
+        plate_ids=plate_ids, auto_approved=False, due_date=spec.due_date,
+        notes="Migrated from legacy plate-tracker",
+    )
+    item_by_plate = {it.plate_id: it for it in loan.items}
+    target_by_plate = {i.cellar_plate_id: i.target for i in spec.items}
+    ids = lambda *ts: [item_by_plate[pid].id for pid, t in target_by_plate.items() if t in ts]
+    # REQUESTED items: leave as-is. Others: approve then push to their target.
+    fwd = ids(LoanItemStatus.CHECKED_OUT, LoanItemStatus.RETURN_PENDING)
+    if fwd:
+        loan.approve_items(fwd, approved_by=spec.requester_user_id)   # legacy authorized_by is NULL → self-approve
+        loan.confirm_checkout(fwd)
+    ret = ids(LoanItemStatus.RETURN_PENDING)
+    if ret:
+        loan.request_return(ret)
+    await loan_repo.save(loan)
+    return True

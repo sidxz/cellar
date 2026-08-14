@@ -5,8 +5,10 @@ from datetime import date, datetime
 import pytest
 from scripts.migrate_legacy_plate_tracker import (
     LegacyAccount, LegacyData, LegacyLibrary, LegacySet, LegacySetParent,
+    LegacyTransaction, LegacyTransactionPlate,
     build_account_email_map, compose_set_description, due_date_from,
     map_loan_item_status, map_plate_status, map_plate_type, plan_group_tree,
+    plan_loans,
 )
 
 from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
@@ -106,3 +108,29 @@ def test_plan_group_tree_roots_by_library_and_nests_sets():
     # parents precede children
     order = [g.key for g in specs]
     assert order.index("lib:10") < order.index("set:1") < order.index("set:2")
+
+
+def test_plan_loans_resolves_requester_maps_states_and_reports_unresolved():
+    import uuid as _uuid
+    p_ok = _uuid.uuid4()
+    legacy = LegacyData(
+        transactions=[
+            LegacyTransaction(1, "OPEN", 42, datetime(2024, 1, 4)),
+            LegacyTransaction(2, "OPEN", 77, datetime(2024, 2, 1)),  # requester has no email
+        ],
+        transaction_plates=[
+            LegacyTransactionPlate(plate_id=10, p_status="ASSIGNED", transaction_id=1),
+            LegacyTransactionPlate(plate_id=11, p_status="COUT_REQ", transaction_id=1),
+            LegacyTransactionPlate(plate_id=12, p_status="CIN_REQ", transaction_id=2),
+        ],
+    )
+    matched = {10: p_ok, 11: _uuid.uuid4(), 12: _uuid.uuid4()}
+    account_email = {42: "ann@x.org"}   # 77 absent
+    user_map = {"ann@x.org": _uuid.uuid4()}
+    specs, unresolved = plan_loans(legacy, matched, account_email, user_map)
+    assert len(specs) == 1 and specs[0].transaction_id == 1
+    assert specs[0].due_date.isoformat() == "2024-01-18"
+    targets = {i.cellar_plate_id: i.target for i in specs[0].items}
+    assert targets[p_ok] == LoanItemStatus.CHECKED_OUT
+    assert list(targets.values()).count(LoanItemStatus.REQUESTED) == 1
+    assert [u.transaction_id for u in unresolved] == [2]
