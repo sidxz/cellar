@@ -33,6 +33,7 @@ import cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_mod
 import cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.kiosk_device_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401

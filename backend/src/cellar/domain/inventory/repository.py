@@ -8,6 +8,7 @@ from typing import Protocol, runtime_checkable
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.cdd_plate_import import CddPlateImport
 from cellar.domain.inventory.import_template import ImportTemplate
+from cellar.domain.inventory.kiosk_device import KioskDevice
 from cellar.domain.inventory.org_plate_policy import OrgPlatePolicy
 from cellar.domain.inventory.plate_group import PlateGroup
 from cellar.domain.inventory.plate_loan import PlateLoan
@@ -292,3 +293,24 @@ class CddPlateImportRepository(Protocol):
     ) -> CddPlateImport | None: ...
     async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[CddPlateImport]: ...
     async def save(self, aggregate: CddPlateImport) -> None: ...
+
+
+@runtime_checkable
+class KioskDeviceRepository(Protocol):
+    """Repository for KioskDevice aggregates.
+
+    ``find_active_by_token_hash`` is deliberately workspace-unscoped — the
+    token IS the identity (unique index) — and returns only active rows.
+    ``touch_last_seen`` is a direct UPDATE that does NOT bump ``version``
+    (telemetry, not domain state — avoids optimistic conflicts between
+    rapid scans).
+    """
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> KioskDevice | None: ...
+    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[KioskDevice]: ...
+    async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> KioskDevice | None: ...
+    async def find_active_by_token_hash(self, token_hash: str) -> KioskDevice | None: ...
+    async def touch_last_seen(self, device_id: uuid.UUID) -> None: ...
+    async def save(self, aggregate: KioskDevice) -> None: ...
