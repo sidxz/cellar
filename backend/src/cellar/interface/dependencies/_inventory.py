@@ -30,6 +30,11 @@ from cellar.application.inventory.import_templates import (
     DeleteImportTemplate,
     ListImportTemplates,
 )
+from cellar.application.inventory.kiosk_devices import (
+    CreateKioskDevice,
+    ListKioskDevices,
+    RevokeKioskDevice,
+)
 from cellar.application.inventory.list_batches_global import ListBatchesGlobal
 from cellar.application.inventory.list_samples_global import ListSamplesGlobal
 from cellar.application.inventory.manage_sample import (
@@ -105,6 +110,7 @@ __all__ = [
     # Inventory
     "CreateBatchDep",
     "CreateImportTemplateDep",
+    "CreateKioskDeviceDep",
     "CreatePlateGroupDep",
     "CreateSampleDep",
     "CreateStorageLocationDep",
@@ -132,6 +138,7 @@ __all__ = [
     "ListBatchesGlobalDep",
     "ListChildrenDep",
     "ListImportTemplatesDep",
+    "ListKioskDevicesDep",
     "ListLoansDep",
     "ListPlatesDep",
     "ListSamplesByBatchDep",
@@ -149,6 +156,7 @@ __all__ = [
     "RemovePlatesFromGroupDep",
     "RequestLoanReturnDep",
     "RequestPlateLoanDep",
+    "RevokeKioskDeviceDep",
     "SetOrgPlatePolicyDep",
     "UpdateBatchDep",
     "UpdatePlateDep",
@@ -273,6 +281,11 @@ ConfirmLoanCheckoutDep = Annotated[
 RequestLoanReturnDep = Annotated[RequestLoanReturn, Depends(_get_use_case(RequestLoanReturn))]
 ConfirmLoanReturnDep = Annotated[ConfirmLoanReturn, Depends(_get_use_case(ConfirmLoanReturn))]
 CancelLoanItemsDep = Annotated[CancelLoanItems, Depends(_get_use_case(CancelLoanItems))]
+
+# --- Kiosk Device dependencies ---
+CreateKioskDeviceDep = Annotated[CreateKioskDevice, Depends(_get_use_case(CreateKioskDevice))]
+ListKioskDevicesDep = Annotated[ListKioskDevices, Depends(_get_use_case(ListKioskDevices))]
+RevokeKioskDeviceDep = Annotated[RevokeKioskDevice, Depends(_get_use_case(RevokeKioskDevice))]
 
 # --- Plate-import pipeline dependencies ---
 ImportFileCacheDep = Annotated[ImportFileCache, Depends(_get_use_case(ImportFileCache))]

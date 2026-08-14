@@ -31,6 +31,11 @@ from cellar.application.inventory.import_templates import (
     ListImportTemplates,
 )
 from cellar.application.inventory.inventory_summary_reader import InventorySummaryReader
+from cellar.application.inventory.kiosk_devices import (
+    CreateKioskDevice,
+    ListKioskDevices,
+    RevokeKioskDevice,
+)
 from cellar.application.inventory.list_batches_global import ListBatchesGlobal
 from cellar.application.inventory.list_samples_global import ListSamplesGlobal
 from cellar.application.inventory.manage_sample import (
@@ -128,6 +133,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.import_template_repo
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.inventory_summary_reader import (
     SQLAlchemyInventorySummaryReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.kiosk_device_repository import (
+    SQLAlchemyKioskDeviceRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
     SQLAlchemyOrgPlatePolicyRepository,
@@ -706,6 +714,23 @@ def register_inventory(container: Container) -> None:
     container.define(RequestLoanReturn, _request_loan_return)
     container.define(ConfirmLoanReturn, _confirm_loan_return)
     container.define(CancelLoanItems, _cancel_loan_items)
+
+    # --- Kiosk Devices ---
+    def _create_kiosk_device(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateKioskDevice(uow, SQLAlchemyKioskDeviceRepository(uow), c[EventDispatcher])
+
+    def _list_kiosk_devices(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListKioskDevices(uow, SQLAlchemyKioskDeviceRepository(uow))
+
+    def _revoke_kiosk_device(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RevokeKioskDevice(uow, SQLAlchemyKioskDeviceRepository(uow), c[EventDispatcher])
+
+    container.define(CreateKioskDevice, _create_kiosk_device)
+    container.define(ListKioskDevices, _list_kiosk_devices)
+    container.define(RevokeKioskDevice, _revoke_kiosk_device)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(
