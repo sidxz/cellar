@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import pymysql
 import structlog
 
+from cellar.application.inventory.barcode_resolution import resolve_barcode
 from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
 
 logger = structlog.get_logger(__name__)
@@ -197,3 +198,30 @@ def read_legacy(dsn: str) -> LegacyData:
         return d
     finally:
         conn.close()
+
+
+@dataclass(frozen=True)
+class UnmatchedPlate:
+    legacy_plate_id: int
+    plate_barcode: str
+    cdd_plate_id: int | None
+    reason: str
+
+
+async def match_plates(legacy, *, plate_repo, cdd_repo, workspace_id, cdd_vault_id):
+    matched: dict[int, uuid.UUID] = {}
+    unmatched: list[UnmatchedPlate] = []
+    for p in legacy.plates:
+        cellar_id = None
+        if p.cdd_plate_id is not None:
+            cellar_id = await cdd_repo.find_plate_id_by_cdd_plate_id(
+                workspace_id, cdd_vault_id, p.cdd_plate_id)
+        if cellar_id is None:
+            hit = await resolve_barcode(plate_repo, workspace_id, p.plate_barcode)
+            cellar_id = hit.id if hit is not None else None
+        if cellar_id is None:
+            unmatched.append(UnmatchedPlate(p.plate_id, p.plate_barcode, p.cdd_plate_id,
+                                            "no cdd_plate_sync row and no barcode match"))
+        else:
+            matched[p.plate_id] = cellar_id
+    return matched, unmatched
