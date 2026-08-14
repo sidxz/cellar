@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pytest
+from scripts.migrate_legacy_plate_tracker import (
+    LegacyAccount, LegacyData, LegacyLibrary, LegacySet, LegacySetParent,
+    build_account_email_map, compose_set_description, due_date_from,
+    map_loan_item_status, map_plate_status, map_plate_type, plan_group_tree,
+)
 
 from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
-from scripts.migrate_legacy_plate_tracker import (
-    LegacyAccount, LegacySet, build_account_email_map, compose_set_description,
-    due_date_from, map_loan_item_status, map_plate_status, map_plate_type,
-)
 
 
 def _acct(uin: int, netid: str, email: str | None, alt: str | None = None) -> LegacyAccount:
@@ -84,3 +85,24 @@ def test_compose_set_description_includes_state_scientist_conditions():
                   scientist=42, generating_conditions="DMSO 10mM", library_id=None)
     out = compose_set_description(s, {42: "Ann Lee"})
     assert "Solubilized" in out and "Ann Lee" in out and "DMSO 10mM" in out
+
+
+def test_plan_group_tree_roots_by_library_and_nests_sets():
+    legacy = LegacyData(
+        libraries=[LegacyLibrary(10, "Lib A", "SacchettiniLibrary")],
+        sets=[
+            LegacySet(1, "MASTER_TWIN", "Parent Set", "Dry", None, None, 10),
+            LegacySet(2, "SCREENING", "Child Set", "Solubilized", None, None, 10),
+            LegacySet(3, "VENDOR", "Orphan Set", None, None, None, None),  # no library
+        ],
+        set_parents=[LegacySetParent(set_id=2, parent_id=1)],  # set2 child of set1
+    )
+    specs = plan_group_tree(legacy, {})
+    by_key = {g.key: g for g in specs}
+    assert by_key["lib:10"].parent_key is None and by_key["lib:10"].name == "Lib A"
+    assert by_key["set:1"].parent_key == "lib:10"       # top-level set → library root
+    assert by_key["set:2"].parent_key == "set:1"        # nested via SET_PARENT
+    assert by_key["set:3"].parent_key is None           # orphan set → its own root
+    # parents precede children
+    order = [g.key for g in specs]
+    assert order.index("lib:10") < order.index("set:1") < order.index("set:2")

@@ -6,15 +6,24 @@ import pytest
 import sqlalchemy as sa
 from scripts.migrate_legacy_plate_tracker import (
     LegacyData,
+    LegacyLibrary,
     LegacyPlate,
+    LegacySet,
+    LegacySetPlate,
+    apply_group_tree,
     apply_plate_ownership,
+    assign_plates_to_groups,
     backfill_null_owner,
     match_plates,
+    plan_group_tree,
 )
 
 from cellar.domain.inventory.enums import PlateStatus, PlateType
 from cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_sync_repository import (
     CddPlateSyncRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
+    SQLAlchemyPlateGroupRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
@@ -155,3 +164,43 @@ async def test_backfill_null_owner_only_touches_nulls(session_factory):
         got = (await s.execute(sa.text(
             "SELECT owner_org_id FROM registered_plates WHERE id = :id"), {"id": orphan})).scalar_one()
     assert got == org
+
+
+@pytest.mark.asyncio
+async def test_apply_group_tree_and_assign_is_idempotent(session_factory):
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    plate = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=plate, barcode="900030", ws=ws, cdd_plate_id=201,
+                          owner_org_id=org)
+        await s.commit()
+    legacy = LegacyData(
+        libraries=[LegacyLibrary(10, "Lib Z", "SacchettiniLibrary")],
+        sets=[LegacySet(1, "SCREENING", "Set One", "Dry", None, None, 10)],
+        set_parents=[],
+        set_plates=[LegacySetPlate(set_id=1, plate_id=99)],  # legacy plate 99 → cellar `plate`
+        plates=[LegacyPlate(99, 201, "x", "P", "Active", "MASTER", None)],
+    )
+    for _ in range(2):
+        uow = AsyncUnitOfWork(session_factory)
+        async with uow:
+            plate_repo = SQLAlchemyRegisteredPlateRepository(uow)
+            cdd_repo = CddPlateSyncRepository(uow)
+            group_repo = SQLAlchemyPlateGroupRepository(uow)
+            matched, _ = await match_plates(legacy, plate_repo=plate_repo, cdd_repo=cdd_repo,
+                                            workspace_id=ws, cdd_vault_id=VAULT)
+            specs = plan_group_tree(legacy, {})
+            key_to_group = await apply_group_tree(specs, group_repo=group_repo, workspace_id=ws,
+                                                  owner_org_id=org, actor_id=org)
+            await assign_plates_to_groups(legacy, key_to_group, matched,
+                                          plate_repo=plate_repo, workspace_id=ws)
+            await uow.commit()
+    async with session_factory() as s:
+        groups = (await s.execute(sa.text(
+            "SELECT name, parent_group_id FROM plate_groups WHERE workspace_id = :ws "
+            "AND owner_org_id = :o ORDER BY name"), {"ws": ws, "o": org})).mappings().all()
+        assert [g["name"] for g in groups] == ["Lib Z", "Set One"]   # unique ws → no dupes/contamination
+        grp = (await s.execute(sa.text("SELECT group_id FROM registered_plates WHERE id = :id"),
+                               {"id": plate})).scalar_one()
+        assert grp is not None

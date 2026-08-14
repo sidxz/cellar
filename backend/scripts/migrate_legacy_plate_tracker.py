@@ -19,6 +19,8 @@ from cellar.domain.inventory.enums import (
     PlateStatus,
     PlateType,
 )
+from cellar.domain.inventory.plate_group import PlateGroup
+from cellar.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
 from cellar.domain.workspace_config.tagging.tag import TagName
 
 logger = structlog.get_logger(__name__)
@@ -296,3 +298,98 @@ async def backfill_null_owner(session, *, workspace_id, internal_org_id) -> int:
         "updated_at = now() WHERE workspace_id = :ws AND owner_org_id IS NULL"
     ), {"org": internal_org_id, "ws": workspace_id})
     return result.rowcount or 0
+
+
+@dataclass(frozen=True)
+class GroupSpec:
+    key: str
+    name: str
+    group_type: str | None
+    description: str | None
+    parent_key: str | None
+
+
+def plan_group_tree(legacy, account_names: dict[int, str]) -> list[GroupSpec]:
+    specs: list[GroupSpec] = []
+    for lib in legacy.libraries:
+        specs.append(GroupSpec(f"lib:{lib.library_id}", lib.library_name, None, None, None))
+    child_to_parent = {sp.set_id: sp.parent_id for sp in legacy.set_parents}
+    for s in legacy.sets:
+        if s.set_id in child_to_parent:
+            parent_key = f"set:{child_to_parent[s.set_id]}"
+        elif s.library_id is not None:
+            parent_key = f"lib:{s.library_id}"
+        else:
+            parent_key = None
+        specs.append(GroupSpec(f"set:{s.set_id}", s.set_name, s.set_type,
+                               compose_set_description(s, account_names), parent_key))
+    # topological order: roots first, then nodes whose parent already emitted
+    ordered: list[GroupSpec] = []
+    emitted: set[str] = set()
+    pending = list(specs)
+    while pending:
+        progressed = False
+        rest = []
+        for g in pending:
+            if g.parent_key is None or g.parent_key in emitted:
+                ordered.append(g); emitted.add(g.key); progressed = True
+            else:
+                rest.append(g)
+        pending = rest
+        if not progressed:   # broken parent ref (shouldn't happen) — emit as roots
+            for g in pending:
+                ordered.append(GroupSpec(g.key, g.name, g.group_type, g.description, None))
+            break
+    return ordered
+
+
+_GROUP_TYPE_VOCAB = "plate_group_type"
+
+
+async def apply_group_tree(specs, *, group_repo, workspace_id, owner_org_id, actor_id):
+    key_to_group: dict[str, uuid.UUID] = {}
+    for g in specs:
+        parent_id = key_to_group.get(g.parent_key) if g.parent_key else None
+        existing = await group_repo.find_by_name(workspace_id, owner_org_id, parent_id, g.name)
+        if existing is not None:
+            key_to_group[g.key] = existing.id
+            continue
+        group = PlateGroup.create(
+            workspace_id=workspace_id, owner_org_id=owner_org_id, name=g.name,
+            created_by=actor_id, parent_group_id=parent_id,
+            group_type=g.group_type, description=g.description,
+        )
+        await group_repo.save(group)
+        key_to_group[g.key] = group.id
+    return key_to_group
+
+
+async def assign_plates_to_groups(legacy, key_to_group, matched, *, plate_repo, workspace_id) -> int:
+    n = 0
+    for sp in legacy.set_plates:
+        group_id = key_to_group.get(f"set:{sp.set_id}")
+        cellar_id = matched.get(sp.plate_id)
+        if group_id is None or cellar_id is None:
+            continue
+        plate = await plate_repo.find_by_id_in_workspace(workspace_id, cellar_id)
+        if plate is None or plate.group_id == group_id:   # guard: no-op if unchanged (avoids event spam)
+            continue
+        plate.assign_to_group(group_id)
+        await plate_repo.save(plate)
+        n += 1
+    return n
+
+
+async def seed_group_type_vocab(legacy, *, cv_repo, workspace_id, actor_id) -> None:
+    values = sorted({s.set_type for s in legacy.sets if s.set_type})
+    if not values:
+        return
+    vocab = await cv_repo.find_by_name(workspace_id, _GROUP_TYPE_VOCAB)
+    if vocab is None:
+        vocab = ControlledVocabulary.create(workspace_id=workspace_id, name=_GROUP_TYPE_VOCAB,
+                                             terms=values, created_by=actor_id)
+    else:
+        for v in values:
+            if v not in vocab.terms:
+                vocab.add_term(v)
+    await cv_repo.save(vocab)
