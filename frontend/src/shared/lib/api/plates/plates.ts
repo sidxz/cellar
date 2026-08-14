@@ -27,9 +27,11 @@ import type {
   ChangeStatusBody,
   DerivePlateBody,
   ExportPlateLayoutApiV1PlatesPlateIdExportGetParams,
+  GetPlateInsightsApiV1PlatesInsightsGetParams,
   HTTPValidationError,
   ListPlatesApiV1PlatesGetParams,
   MapWellsBody,
+  PlateInsightsResponse,
   PlateResponse,
   RegisterPlateBody,
   UpdatePlateBody
@@ -188,6 +190,100 @@ export function useListPlatesApiV1PlatesGet<TData = Awaited<ReturnType<typeof li
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListPlatesApiV1PlatesGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Org-scoped plate/loan insight counts for the dashboard (spec §9, §11).
+ * @summary Get Plate Insights
+ */
+export const getPlateInsightsApiV1PlatesInsightsGet = (
+    params?: GetPlateInsightsApiV1PlatesInsightsGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<PlateInsightsResponse>(
+      {url: `/api/v1/plates/insights`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getGetPlateInsightsApiV1PlatesInsightsGetQueryKey = (params?: GetPlateInsightsApiV1PlatesInsightsGetParams,) => {
+    return [
+    `/api/v1/plates/insights`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getGetPlateInsightsApiV1PlatesInsightsGetQueryOptions = <TData = Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError = HTTPValidationError>(params?: GetPlateInsightsApiV1PlatesInsightsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlateInsightsApiV1PlatesInsightsGetQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>> = ({ signal }) => getPlateInsightsApiV1PlatesInsightsGet(params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPlateInsightsApiV1PlatesInsightsGetQueryResult = NonNullable<Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>>
+export type GetPlateInsightsApiV1PlatesInsightsGetQueryError = HTTPValidationError
+
+
+export function useGetPlateInsightsApiV1PlatesInsightsGet<TData = Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError = HTTPValidationError>(
+ params: undefined |  GetPlateInsightsApiV1PlatesInsightsGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>,
+          TError,
+          Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPlateInsightsApiV1PlatesInsightsGet<TData = Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError = HTTPValidationError>(
+ params?: GetPlateInsightsApiV1PlatesInsightsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>,
+          TError,
+          Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPlateInsightsApiV1PlatesInsightsGet<TData = Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError = HTTPValidationError>(
+ params?: GetPlateInsightsApiV1PlatesInsightsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Plate Insights
+ */
+
+export function useGetPlateInsightsApiV1PlatesInsightsGet<TData = Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError = HTTPValidationError>(
+ params?: GetPlateInsightsApiV1PlatesInsightsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateInsightsApiV1PlatesInsightsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPlateInsightsApiV1PlatesInsightsGetQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
