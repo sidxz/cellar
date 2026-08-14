@@ -180,3 +180,21 @@ S4 (loans) shipped per §14. Five recorded deviations, all deliberate:
 5. **Default list filter does NOT yet include "plus borrowed-by-us"** (§5): the plates list's "My org" default sends `owner_org_id=mine`, which ANDs against the borrowed carve-out — borrowed foreign plates appear under "All orgs" only. S5 intake item.
 
 Operator notes: `cellar:approve_loan` registers with Sentinel at backend startup; grant it to at least one owner-org editor per org (until then only workspace admins can approve). The first non-admin approval in prod is the first live RoleClient round-trip (fail-closed on Sentinel outage). Kiosk confirmation mode behaves like admin_confirm until S5's kiosk endpoints.
+
+---
+
+## S5 sync note (2026-08-13) — shipped reality vs. this spec
+
+S5 (kiosk + insights, §14) shipped, plus the S5 intake batch (deviation #5 closure: "My org" now includes borrowed-by-us; admin approvals visibility; tree count scoping; tree polish). Recorded decisions/deviations:
+
+1. **Kiosk auth failures are 403** (`AuthorizationError`), not 401 — the house error map has no 401; the kiosk page treats any non-2xx as auth failure.
+2. **Kiosk confirm ignores the owner org's `confirmation` mode** — the device is org-issued authority; policy modes shape the UI flow (§4.3 collapse rules), not the device's capability.
+3. **Kiosk-driven transitions reuse the S4 batch loan events with no actor field** (parity with admin confirm). Device attribution = `kiosk_devices.last_seen_at` + request logs.
+4. **Org-directory name resolution on scan is display-only best-effort** — a Sentinel outage yields `borrower_org_name: null`, never a blocked handout. Caveat: an UNCONFIGURED Sentinel (no service key) 503s the scan at the dependency layer — unreachable in any deployment where the backend boots with Sentinel at all.
+5. **`GET /plates/insights` returns ALL location/group rows**; the FE slices top 10 (spec §9's read model shape otherwise as written; buckets are 12 zero-filled ISO weeks, oldest first).
+6. **The "plate dashboard (new page)" of §11 is the existing plate-groups page** grown a tabbed Insights panel — one dashboard, not a second route.
+7. **orval regen was batched per contiguous backend batch** (two regens: after the /me+status-enum batch, after the kiosk/insights batch) rather than per-change — always before the first FE consumer.
+8. **First live `cellar:approve_loan` check_action remains unexercised against deployed Sentinel** — the runtime rig stubs auth, and Sentinel's /authz/resolve requires a live human IdP session; the first real non-admin approval in prod is still the first live RoleClient round-trip (fail-closed).
+9. §11's plate-detail CODE128 barcode render remains UNSCHEDULED (not in §14-S5/S6) — parked so it rides with S6 polish or later, not silently dropped.
+
+Operator notes: run migration 064 on deploy (kiosk_devices). Kiosk devices are minted in Admin → Kiosk Devices (token shown once; revoke invalidates immediately). The kiosk web page itself stays user-built against §10's contract (`X-Kiosk-Token` header; scan → confirm two-step). Before S6 runs any alembic autogenerate: fix docs/backlog/alembic-env-missing-inventory-model-imports.md (two import lines) — autogenerate would otherwise propose dropping the loan tables.
