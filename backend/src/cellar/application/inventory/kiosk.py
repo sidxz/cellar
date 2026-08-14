@@ -113,7 +113,7 @@ class ResolveScan:
             )
             if hit is None:
                 return Failure(
-                    ConflictError(f"No pending kiosk action for plate '{plate.barcode}'")
+                    ConflictError(f"No pending kiosk action for plate '{plate.barcode.value}'")
                 )
             loan, item = hit
             await self._device_repo.touch_last_seen(device.id)

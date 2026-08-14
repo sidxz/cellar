@@ -159,6 +159,11 @@ class TestKioskScan:
             headers={"X-Kiosk-Token": setup["token"]},
         )
         assert resp.status_code == 409, resp.text
+        message = resp.json()["message"]
+        # Regression guard: message must render the plain barcode string, not
+        # the Barcode VO's raw Pydantic repr (`value='...'`) — see kiosk.py.
+        assert idle_plate["barcode"] in message
+        assert "value=" not in message
 
 
 class TestKioskConfirm:
