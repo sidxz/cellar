@@ -35,6 +35,8 @@ import cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_mod
 import cellar.infrastructure.persistence.sqlalchemy.inventory.shipment_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.kiosk_device_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.tagging.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.user_preferences  # noqa: F401
@@ -42,6 +44,9 @@ import cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_model 
 import cellar.infrastructure.persistence.sqlalchemy.sar_analysis.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.sar_analysis.umap_job_model  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.sar_analysis.sar_activity_projection_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.export.export_job_model  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.personalization.models  # noqa: F401
 
 target_metadata = Base.metadata
 

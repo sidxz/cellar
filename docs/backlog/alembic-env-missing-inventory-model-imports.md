@@ -1,14 +1,57 @@
-# `alembic/env.py` metadata-import block is missing two inventory model modules
+# `alembic/env.py` metadata-import block was incomplete → autogenerate proposed dropping real tables
 
-**Found:** 2026-08-13, during S5 Task 6 (KioskDevice persistence — migration 064).
+**Found:** 2026-08-13 (S5 Task 6, KioskDevice). **Resolved (table-drop class):** 2026-08-14, S6-first.
 
-**Root cause:** `backend/alembic/env.py` has an explicit "Import all SA models so Base.metadata includes their tables" block used as the target metadata for `alembic revision --autogenerate`. Two inventory model modules that own real, migrated tables are missing from it:
+## Root cause
 
-- `cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_models` (`PlateLoanModel`, `LoanItemModel` — migration 063)
-- `cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_models` (migration referenced by `cdd_plate_import_repository.py`)
+`backend/alembic/env.py` explicitly imports every SA model module so `Base.metadata`
+(the `--autogenerate` target) includes their tables. The block was missing modules that
+own real, migrated tables. Any missing module → its live table has no match in
+`target_metadata` → autogenerate proposes `DROP TABLE` for it. Accepted without review =
+real data loss.
 
-Both modules *are* correctly registered in `backend/tests/unit/cascade/test_fk_coverage.py`'s equivalent import block (which is how the gap was noticed while adding the same pattern for `kiosk_device_models` in Task 6) — so `Base.metadata` is fully populated for that test, but not for Alembic's own autogenerate target.
+The original report named 2 inventory tables. The real defect was broader: the import
+block was simply incomplete. Running autogenerate at head surfaced **five** missing
+modules (eight tables), not two:
 
-**Impact:** harmless today (nobody has run `alembic revision --autogenerate` since 063 landed), but live: the next autogenerate run will see `plate_loans`, `plate_loan_items`, and the cdd-plate-import table in the live DB with no matching SQLAlchemy table in `target_metadata`, and will propose `DROP TABLE` migrations for all three. If accepted without review, that's real data loss.
+- `inventory.plate_loan_models` — `plate_loans`, `plate_loan_items` (migration 063)
+- `inventory.cdd_plate_import_models` — `cdd_plate_imports`
+- `export.export_job_model` — `export_jobs`
+- `personalization.models` — `favorites`
+- `sar_analysis.sar_activity_projection_models` — `sar_activity_projections`, `sar_activity_values`
 
-**Fix direction:** add the two missing `import cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_models  # noqa: F401` / `...cdd_plate_import_models  # noqa: F401` lines to `alembic/env.py`'s inventory block, then run `alembic revision --autogenerate -m check` once against a DB at head and confirm the generated diff is empty (or only contains the known `WorkspaceIdMixin` index-declaration drift already present for other tables — see `ix_kiosk_devices_ws_org` composite-covers-workspace_id precedent set in migration 064). Task 6 deliberately did **not** fix this inline (out of scope, unrelated to the kiosk work) but did register `kiosk_device_models` correctly in both `alembic/env.py` and `test_fk_coverage.py` so the new table doesn't repeat the gap.
+## Fix applied
+
+Added all five `import … # noqa: F401` lines to `alembic/env.py`. Verified against a DB at
+head (064): `alembic revision --autogenerate` now emits **zero `op.drop_table`**.
+
+## Residual: autogenerate is still NOT clean (pre-existing, separate issue)
+
+Even with every table modeled, autogenerate at 064 still emits drift it **cannot** produce
+from ORM metadata, because SQLAlchemy can't model raw-SQL DDL. Snapshot (2026-08-14):
+
+| op | n | what |
+|----|---|------|
+| `drop_index` | 40 | raw-SQL indexes: pg_trgm, RDKit bfp, partial-unique (`uq_loan_items_active_plate`, `uq_plate_groups_ws_org_parent_name`, `uq_readout_data_wellless`), async-job cache indexes |
+| `create_index` | 40 | `ix_<table>_workspace_id` — `WorkspaceIdMixin` declares a single-col index the migrations instead cover with composites (the `ix_kiosk_devices_ws_org` precedent, migration 064) |
+| `alter_column` | 28 | mostly `created_at`/`updated_at` NOT-NULL (`TimestampMixin` server_default vs. DB) |
+| `drop_column` | 4 | `molecules.morgan_bfp`/`fcfp_bfp` (RDKit bfp type), `cdd_plate_sync.cdd_statistics` (see `cdd-plate-sync-orm-column-drift.md`) |
+| `create_foreign_key` | 3 | model-declared FKs the DB column lacks a constraint for |
+
+None are table drops, but `drop_index`/`drop_column` would still destroy real objects.
+
+**Rule for every migration author (incl. S6): never blindly apply autogenerate output —
+hand-write migrations, or diff and prune.** Autogenerate is a hint, not a source of truth,
+while this drift stands.
+
+**Upgrade path (not scheduled):** add an `include_object` / `include_name` hook to
+`env.py` that excludes objects SQLAlchemy can't own (functional/partial/GIN indexes, bfp
+columns), and reconcile the `WorkspaceIdMixin` single-col-vs-composite and `TimestampMixin`
+nullability drift with real migrations. That makes autogenerate trustworthy again. Larger
+task, its own session.
+
+## Note on `test_fk_coverage.py`
+
+Its model-import block has the **same** three gaps (`export`, `personalization`,
+`sar_activity_projection`), so those tables' FK cascades go unchecked by that test — a
+latent, separate coverage gap, not addressed here.
