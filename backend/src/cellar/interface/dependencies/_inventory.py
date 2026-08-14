@@ -20,6 +20,7 @@ from cellar.application.inventory.delete_storage_location import DeleteStorageLo
 from cellar.application.inventory.export_plate_layout import ExportPlateLayout
 from cellar.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from cellar.application.inventory.get_inventory_summary import GetInventorySummary
+from cellar.application.inventory.get_plate_insights import GetPlateInsights
 from cellar.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from cellar.application.inventory.import_plate_data import (
     ImportFileCache,
@@ -130,6 +131,7 @@ __all__ = [
     "GetLoanDep",
     "GetOrgPlatePolicyDep",
     "GetPlateDep",
+    "GetPlateInsightsDep",
     "GetSampleDep",
     "GetStorageLocationChildrenDep",
     # Plate-import pipeline
@@ -211,6 +213,7 @@ ListStorageLocationsWithCountsDep = Annotated[
 GetInventorySummaryDep = Annotated[
     GetInventorySummary, Depends(_get_use_case(GetInventorySummary))
 ]
+GetPlateInsightsDep = Annotated[GetPlateInsights, Depends(_get_use_case(GetPlateInsights))]
 GetOrgPlatePolicyDep = Annotated[GetOrgPlatePolicy, Depends(_get_use_case(GetOrgPlatePolicy))]
 SetOrgPlatePolicyDep = Annotated[SetOrgPlatePolicy, Depends(_get_use_case(SetOrgPlatePolicy))]
 UpdateStorageLocationDep = Annotated[

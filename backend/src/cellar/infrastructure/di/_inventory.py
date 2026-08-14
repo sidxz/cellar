@@ -20,6 +20,7 @@ from cellar.application.inventory.delete_storage_location import DeleteStorageLo
 from cellar.application.inventory.ensure_batch_exists import EnsureBatchExists
 from cellar.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from cellar.application.inventory.get_inventory_summary import GetInventorySummary
+from cellar.application.inventory.get_plate_insights import GetPlateInsights
 from cellar.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from cellar.application.inventory.import_plate_data import (
     ImportFileCache,
@@ -62,6 +63,7 @@ from cellar.application.inventory.plate_groups import (
     RemovePlatesFromGroup,
     UpdatePlateGroup,
 )
+from cellar.application.inventory.plate_insights_reader import PlateInsightsReader
 from cellar.application.inventory.plate_loans import (
     ApproveLoanItems,
     CancelLoanItems,
@@ -143,6 +145,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_rep
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
     SQLAlchemyPlateGroupRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_insights_reader import (
+    SQLAlchemyPlateInsightsReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
     SQLAlchemyPlateLoanRepository,
@@ -715,6 +720,22 @@ def register_inventory(container: Container) -> None:
     container.define(RequestLoanReturn, _request_loan_return)
     container.define(ConfirmLoanReturn, _confirm_loan_return)
     container.define(CancelLoanItems, _cancel_loan_items)
+
+    # --- Plate Insights (read model) ---
+    container.define(
+        PlateInsightsReader,
+        lambda c: SQLAlchemyPlateInsightsReader(c[async_sessionmaker]),
+    )
+
+    def _get_plate_insights(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetPlateInsights(
+            uow,
+            PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+            c[PlateInsightsReader],
+        )
+
+    container.define(GetPlateInsights, _get_plate_insights)
 
     # --- Kiosk Devices ---
     def _create_kiosk_device(c: Container):

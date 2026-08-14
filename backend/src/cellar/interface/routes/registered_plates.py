@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Query
@@ -14,6 +15,8 @@ from cellar.application.inventory.export_plate_layout import (
     render_csv,
     render_xlsx,
 )
+from cellar.application.inventory.get_plate_insights import GetPlateInsightsQuery
+from cellar.application.inventory.plate_insights_reader import PlateInsightsData
 from cellar.application.inventory.plate_read_model import (
     MoleculePlateEntry,
 )
@@ -39,6 +42,7 @@ from cellar.interface.dependencies import (
     DerivePlateDep,
     ExportPlateLayoutDep,
     GetPlateDep,
+    GetPlateInsightsDep,
     ListChildrenDep,
     ListPlatesDep,
     MapWellsDep,
@@ -176,6 +180,66 @@ class MoleculePlateResponse(BaseModel):
         )
 
 
+class CountBucketResponse(BaseModel):
+    key: str
+    count: int
+
+
+class LocationCountResponse(BaseModel):
+    location_id: uuid.UUID | None = None
+    name: str
+    count: int
+
+
+class GroupSizeResponse(BaseModel):
+    group_id: uuid.UUID
+    name: str
+    count: int
+
+
+class WeeklyLoanActivityResponse(BaseModel):
+    week_start: date
+    requested: int
+    returned: int
+
+
+class PlateInsightsResponse(BaseModel):
+    org_id: uuid.UUID
+    total_plates: int
+    open_loans: int
+    overdue_count: int
+    by_status: list[CountBucketResponse]
+    by_type: list[CountBucketResponse]
+    by_location: list[LocationCountResponse]
+    group_sizes: list[GroupSizeResponse]
+    loan_activity_weekly: list[WeeklyLoanActivityResponse]
+
+    @classmethod
+    def from_data(cls, org_id: uuid.UUID, data: PlateInsightsData) -> PlateInsightsResponse:
+        return cls(
+            org_id=org_id,
+            total_plates=data.total_plates,
+            open_loans=data.open_loans,
+            overdue_count=data.overdue_count,
+            by_status=[CountBucketResponse(key=b.key, count=b.count) for b in data.by_status],
+            by_type=[CountBucketResponse(key=b.key, count=b.count) for b in data.by_type],
+            by_location=[
+                LocationCountResponse(location_id=loc.location_id, name=loc.name, count=loc.count)
+                for loc in data.by_location
+            ],
+            group_sizes=[
+                GroupSizeResponse(group_id=g.group_id, name=g.name, count=g.count)
+                for g in data.group_sizes
+            ],
+            loan_activity_weekly=[
+                WeeklyLoanActivityResponse(
+                    week_start=w.week_start, requested=w.requested, returned=w.returned
+                )
+                for w in data.loan_activity_weekly
+            ],
+        )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -240,6 +304,16 @@ async def list_plates(
     )
     plates = result_to_response(await uc(query, auth=auth))
     return [PlateResponse.from_domain(p) for p in plates]
+
+
+@router.get("/insights", response_model=PlateInsightsResponse)
+async def get_plate_insights(
+    auth: AuthDep, uc: GetPlateInsightsDep, org_id: uuid.UUID | None = None
+) -> PlateInsightsResponse:
+    """Org-scoped plate/loan insight counts for the dashboard (spec §9, §11)."""
+    query = GetPlateInsightsQuery(workspace_id=auth.workspace_id, org_id=org_id)
+    resolved_org, data = result_to_response(await uc(query, auth=auth))
+    return PlateInsightsResponse.from_data(resolved_org, data)
 
 
 @router.get("/{plate_id}", response_model=PlateResponse)
