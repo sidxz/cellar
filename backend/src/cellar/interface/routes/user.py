@@ -26,6 +26,8 @@ class MeResponse(BaseModel):
     name: str
     org_id: uuid.UUID | None = None
     org_slug: str | None = None
+    workspace_role: str
+    is_admin: bool
 
 
 @router.get("/me", response_model=MeResponse)
@@ -36,6 +38,8 @@ async def me(auth: AuthDep) -> MeResponse:
         name=getattr(auth, "name", ""),
         org_id=auth.org_id,
         org_slug=auth.org_slug,
+        workspace_role=auth.workspace_role,
+        is_admin=auth.is_admin,
     )
 
 

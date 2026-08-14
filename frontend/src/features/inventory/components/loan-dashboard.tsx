@@ -8,10 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui
 import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import type { MeResponse } from "@/shared/lib/api/model";
+import { showError } from "@/shared/lib/toast";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useState } from "react";
-import { type PlateLoan, useLoans } from "../hooks/use-plate-loans";
+import { useEffect, useState } from "react";
+import { LoanStatus, type PlateLoan, useLoans } from "../hooks/use-plate-loans";
 import { LoanCard } from "./loan-card";
 import { RequestLoanDialog } from "./request-loan-dialog";
 
@@ -43,14 +44,23 @@ function LoanList({
 }
 
 export function LoanDashboard() {
-  const { data: me } = useCurrentUser();
+  const { data: me, isError: meFailed } = useCurrentUser();
+  const isAdmin = me?.is_admin === true;
   const orgId = me?.org_id ?? undefined;
+  const showApprovals = isAdmin || !!orgId;
   const [tab, setTab] = useHashTab("mine");
   const [overdue, setOverdue] = useState(false);
   const [requestOpen, setRequestOpen] = useState(false);
 
+  useEffect(() => {
+    if (meFailed) showError("Could not load your identity — the Approvals tab is unavailable.");
+  }, [meFailed]);
+
   const mine = useLoans({ mine: true });
-  const approvals = useLoans({ status: "open", owner_org_id: orgId }, { enabled: !!orgId });
+  const approvals = useLoans(
+    { status: LoanStatus.open, owner_org_id: isAdmin ? undefined : orgId },
+    { enabled: showApprovals },
+  );
   const all = useLoans({ overdue: overdue || undefined });
 
   return (
@@ -65,7 +75,7 @@ export function LoanDashboard() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="mine">My requests</TabsTrigger>
-          {orgId ? <TabsTrigger value="approvals">Approvals</TabsTrigger> : null}
+          {showApprovals ? <TabsTrigger value="approvals">Approvals</TabsTrigger> : null}
           <TabsTrigger value="all">All</TabsTrigger>
         </TabsList>
 
@@ -73,7 +83,7 @@ export function LoanDashboard() {
           <LoanList query={mine} context="mine" me={me} />
         </TabsContent>
 
-        {orgId ? (
+        {showApprovals ? (
           <TabsContent value="approvals" className="mt-4">
             <LoanList query={approvals} context="approvals" me={me} />
           </TabsContent>

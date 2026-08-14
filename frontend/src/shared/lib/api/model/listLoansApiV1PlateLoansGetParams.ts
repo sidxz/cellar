@@ -4,9 +4,10 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { LoanStatus } from './loanStatus';
 
 export type ListLoansApiV1PlateLoansGetParams = {
-status?: string | null;
+status?: LoanStatus | null;
 owner_org_id?: string | null;
 borrower_org_id?: string | null;
 mine?: boolean;

@@ -18,7 +18,7 @@ export type PlateLoanItem = LoanItemResponse;
 export { LoanItemStatus, LoanStatus };
 
 export type LoanFilters = {
-  status?: string;
+  status?: LoanStatus;
   mine?: boolean;
   owner_org_id?: string;
   borrower_org_id?: string;

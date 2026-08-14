@@ -13,4 +13,6 @@ export interface MeResponse {
   name: string;
   org_id?: MeResponseOrgId;
   org_slug?: MeResponseOrgSlug;
+  workspace_role: string;
+  is_admin: boolean;
 }

@@ -72,9 +72,12 @@ export function LoanCard({ loan, context, me }: LoanCardProps) {
     });
 
   // Locked UX: exactly two verb arms — owner verbs on Approvals, borrower
-  // verbs on My requests. The All tab is read-only. Server enforces authority;
-  // admin visibility gap tracked in docs/backlog/loan-approvals-admin-visibility.md.
-  const showOwner = context === "approvals";
+  // verbs on My requests. The All tab is read-only. Server enforces authority
+  // (require_loan_authority); this is a visibility mirror of that rule so
+  // workspace admins outside the owner org also see the buttons they're
+  // allowed to press.
+  const canApprove = !!me && (me.is_admin === true || me.org_id === loan.owner_org_id);
+  const showOwner = context === "approvals" && canApprove;
   const showBorrower = context === "mine";
   const verbs = [...(showOwner ? OWNER_VERBS : []), ...(showBorrower ? BORROWER_VERBS : [])];
 
