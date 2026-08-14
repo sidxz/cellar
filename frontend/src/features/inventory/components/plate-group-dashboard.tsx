@@ -10,7 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useCurrentUser } from "@/shared/hooks/use-current-user";
+import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { useOrgs } from "@/shared/hooks/use-orgs";
 import { showError } from "@/shared/lib/toast";
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +27,7 @@ import { MovePlateGroupDialog } from "./move-plate-group-dialog";
 import { PlateGroupDetails } from "./plate-group-details";
 import { PlateGroupDialog } from "./plate-group-dialog";
 import { PlateGroupTreeView } from "./plate-group-tree";
+import { PlateInsightsPanel } from "./plate-insights-panel";
 
 /** Which management dialog is open, and its create-mode parent. */
 type DialogState =
@@ -41,6 +44,7 @@ export function PlateGroupDashboard() {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [selected, setSelected] = useState<PlateGroupNode | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [tab, setTab] = useHashTab("hierarchy");
   const deleteGroup = useDeletePlateGroup();
   const removePlates = useRemovePlatesFromGroup();
   const closeDialog = (open: boolean) => {
@@ -102,57 +106,72 @@ export function PlateGroupDashboard() {
             ))}
           </SelectContent>
         </Select>
-        <Button
-          data-testid="create-root-group"
-          disabled={orgId === null}
-          onClick={() => setDialog({ kind: "create", parentId: null })}
-        >
-          New group
-        </Button>
-      </PageHeader>
-
-      {error ? (
-        <p className="text-sm text-destructive">
-          {error instanceof Error ? error.message : "Failed to load groups"}
-        </p>
-      ) : isLoading || orgId === null ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : !tree || tree.roots.length === 0 ? (
-        <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-dashed">
-          <p className="text-sm text-muted-foreground">No groups yet for this organization.</p>
+        {tab === "hierarchy" ? (
           <Button
-            data-testid="create-root-group-empty"
+            data-testid="create-root-group"
+            disabled={orgId === null}
             onClick={() => setDialog({ kind: "create", parentId: null })}
           >
-            Create group
+            New group
           </Button>
-        </div>
-      ) : (
-        <div className="flex gap-4">
-          <div className="min-w-0 flex-1">
-            <PlateGroupTreeView
-              tree={tree}
-              selectedId={selectedNode?.id ?? null}
-              onSelect={setSelected}
-            />
-          </div>
-          {selectedNode ? (
-            <aside className="w-96 shrink-0 rounded-md border bg-card">
-              <PlateGroupDetails
-                node={selectedNode}
-                onAddChild={() => setDialog({ kind: "create", parentId: selectedNode.id })}
-                onAddPlates={() => setDialog({ kind: "assign" })}
-                onEdit={() => setDialog({ kind: "edit" })}
-                onMove={() => setDialog({ kind: "move" })}
-                onDelete={() => setDialog({ kind: "delete" })}
-                onRemovePlates={(ids) =>
-                  removePlates.mutate({ groupId: selectedNode.id, plateIds: ids })
-                }
-              />
-            </aside>
-          ) : null}
-        </div>
-      )}
+        ) : null}
+      </PageHeader>
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>
+          <TabsTrigger value="insights">Insights</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="hierarchy" className="mt-4">
+          {error ? (
+            <p className="text-sm text-destructive">
+              {error instanceof Error ? error.message : "Failed to load groups"}
+            </p>
+          ) : isLoading || orgId === null ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : !tree || tree.roots.length === 0 ? (
+            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-md border border-dashed">
+              <p className="text-sm text-muted-foreground">No groups yet for this organization.</p>
+              <Button
+                data-testid="create-root-group-empty"
+                onClick={() => setDialog({ kind: "create", parentId: null })}
+              >
+                Create group
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-4">
+              <div className="min-w-0 flex-1">
+                <PlateGroupTreeView
+                  tree={tree}
+                  selectedId={selectedNode?.id ?? null}
+                  onSelect={setSelected}
+                />
+              </div>
+              {selectedNode ? (
+                <aside className="w-96 shrink-0 rounded-md border bg-card">
+                  <PlateGroupDetails
+                    node={selectedNode}
+                    onAddChild={() => setDialog({ kind: "create", parentId: selectedNode.id })}
+                    onAddPlates={() => setDialog({ kind: "assign" })}
+                    onEdit={() => setDialog({ kind: "edit" })}
+                    onMove={() => setDialog({ kind: "move" })}
+                    onDelete={() => setDialog({ kind: "delete" })}
+                    onRemovePlates={(ids) =>
+                      removePlates.mutate({ groupId: selectedNode.id, plateIds: ids })
+                    }
+                  />
+                </aside>
+              ) : null}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="insights" className="mt-4">
+          <PlateInsightsPanel orgId={orgId ?? undefined} />
+        </TabsContent>
+      </Tabs>
 
       <PlateGroupDialog
         open={dialog?.kind === "create" || dialog?.kind === "edit"}
