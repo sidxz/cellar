@@ -24,7 +24,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { formatDateTime } from "@/shared/lib/format-date";
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import { Pencil } from "lucide-react";
 import { useState } from "react";
 import {

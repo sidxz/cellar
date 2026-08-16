@@ -32,7 +32,7 @@ vi.mock("../hooks/use-refit-dose-response", () => ({
 
 // Auth hook is only used for the editor's authorId. Tests don't need a real
 // session; an empty string flows through without breaking the local draft state.
-vi.mock("@sentinel-auth/nextjs", () => ({
+vi.mock("@duar-auth/nextjs", () => ({
   useAuthz: () => ({ user: { userId: "test-user" } }),
 }));
 

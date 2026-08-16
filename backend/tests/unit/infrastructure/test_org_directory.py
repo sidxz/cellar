@@ -1,4 +1,4 @@
-"""OrgDirectory — Sentinel internal org list with a per-process TTL cache."""
+"""OrgDirectory — Duar internal org list with a per-process TTL cache."""
 
 import time
 import uuid
@@ -6,7 +6,7 @@ import uuid
 import httpx
 import pytest
 
-from cellar.infrastructure.sentinel.org_directory import OrgDirectory, OrgSummary
+from cellar.infrastructure.duar.org_directory import OrgDirectory, OrgSummary
 
 ORGS = [
     {"id": str(uuid.uuid4()), "slug": "abbvie", "name": "AbbVie", "is_public": False, "enabled": True},
@@ -27,7 +27,7 @@ def _transport(calls: list) -> httpx.MockTransport:
 @pytest.mark.asyncio
 async def test_lists_and_maps_orgs():
     calls: list = []
-    directory = OrgDirectory("http://sentinel", "svc-key", transport=_transport(calls))
+    directory = OrgDirectory("http://duar", "svc-key", transport=_transport(calls))
     orgs = await directory.list_orgs()
     assert orgs == [
         OrgSummary(id=uuid.UUID(ORGS[0]["id"]), slug="abbvie", name="AbbVie", is_public=False),
@@ -38,7 +38,7 @@ async def test_lists_and_maps_orgs():
 @pytest.mark.asyncio
 async def test_caches_within_ttl():
     calls: list = []
-    directory = OrgDirectory("http://sentinel", "svc-key", ttl_seconds=300, transport=_transport(calls))
+    directory = OrgDirectory("http://duar", "svc-key", ttl_seconds=300, transport=_transport(calls))
     await directory.list_orgs()
     await directory.list_orgs()
     assert len(calls) == 1
@@ -47,11 +47,11 @@ async def test_caches_within_ttl():
 @pytest.mark.asyncio
 async def test_refetches_after_ttl(monkeypatch):
     calls: list = []
-    directory = OrgDirectory("http://sentinel", "svc-key", ttl_seconds=300, transport=_transport(calls))
+    directory = OrgDirectory("http://duar", "svc-key", ttl_seconds=300, transport=_transport(calls))
     await directory.list_orgs()
     baseline = time.monotonic()
     monkeypatch.setattr(
-        "cellar.infrastructure.sentinel.org_directory.time.monotonic",
+        "cellar.infrastructure.duar.org_directory.time.monotonic",
         lambda: baseline + 400.0,
     )
     await directory.list_orgs()
@@ -63,6 +63,6 @@ async def test_error_raises():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503)
 
-    directory = OrgDirectory("http://sentinel", "svc-key", transport=httpx.MockTransport(handler))
+    directory = OrgDirectory("http://duar", "svc-key", transport=httpx.MockTransport(handler))
     with pytest.raises(httpx.HTTPStatusError):
         await directory.list_orgs()

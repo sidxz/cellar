@@ -24,7 +24,7 @@ import { Label } from "@/shared/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import {
   Activity,
   AlertTriangle,

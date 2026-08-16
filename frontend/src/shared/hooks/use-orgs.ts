@@ -6,7 +6,7 @@ import { customInstance } from "@/shared/lib/api/custom-instance";
 import { useQuery } from "@tanstack/react-query";
 
 /**
- * Sentinel org directory entry from `GET /api/v1/orgs`.
+ * Duar org directory entry from `GET /api/v1/orgs`.
  *
  * Aliased from the orval-generated type.
  */

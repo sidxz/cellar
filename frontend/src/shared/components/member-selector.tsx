@@ -12,7 +12,7 @@ interface MemberSelectorProps {
 }
 
 /**
- * Searchable member selector — lists workspace members from Sentinel.
+ * Searchable member selector — lists workspace members from Duar.
  * Returns the user_id (UUID) of the selected member.
  */
 export function MemberSelector({

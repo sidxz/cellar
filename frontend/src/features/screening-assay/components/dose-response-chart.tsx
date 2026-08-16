@@ -16,7 +16,7 @@ import {
 import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { cn } from "@/shared/lib/utils";
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, ImageIcon, Redo2, RotateCcw, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

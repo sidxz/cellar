@@ -6,13 +6,13 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 
-# Set sentinel env before any cellar imports — allows module-level get_sentinel() to succeed.
-# Must NOT use .env files (cross-contamination between DatabaseSettings and SentinelSettings).
-os.environ["SENTINEL_SERVICE_KEY"] = "test-key-for-api-tests"
-os.environ["SENTINEL_URL"] = "https://sentinel.example.com"
-os.environ["SENTINEL_SERVICE_NAME"] = "cellar"
-# Required since Sentinel 0.11.0 (authz mode) — get_sentinel() raises ValueError without it.
-os.environ["SENTINEL_IDP_AUDIENCE"] = "test-audience.apps.googleusercontent.com"
+# Set duar env before any cellar imports — allows module-level get_duar() to succeed.
+# Must NOT use .env files (cross-contamination between DatabaseSettings and DuarSettings).
+os.environ["DUAR_SERVICE_KEY"] = "test-key-for-api-tests"
+os.environ["DUAR_URL"] = "https://duar.example.com"
+os.environ["DUAR_SERVICE_NAME"] = "cellar"
+# Required since Duar 0.11.0 (authz mode) — get_duar() raises ValueError without it.
+os.environ["DUAR_IDP_AUDIENCE"] = "test-audience.apps.googleusercontent.com"
 # Disable Temporal so the DI container binds NullExportOrchestrator (and the other Null
 # orchestrators) without needing a running Temporal server.
 os.environ["TEMPORAL_DISABLED"] = "1"
@@ -29,7 +29,7 @@ from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.dependencies import get_auth
 from tests.fakes.fake_auth import FakeAuth
 
-# Single source of truth for the stubbed Sentinel org-directory entry —
+# Single source of truth for the stubbed Duar org-directory entry —
 # imported by tests/api/test_org_directory.py. Lives here (rather than the
 # test module) so conftest never has to import a specific test module.
 ORG_ID = uuid.uuid4()
@@ -44,7 +44,7 @@ OTHER_ORG_ID = uuid.uuid4()
 
 
 def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
-    """Build a FastAPI app for testing — no Sentinel middleware, FakeAuth for routes."""
+    """Build a FastAPI app for testing — no Duar middleware, FakeAuth for routes."""
     app = FastAPI()
 
     # DI container pointed at test DB — _env_file=None avoids loading .env
@@ -159,8 +159,8 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     # Override the stable auth wrapper (not the sentinel SDK directly)
     app.dependency_overrides[get_auth] = lambda: fake_auth
 
-    # Stub the Sentinel org directory — never make real HTTP calls in tests.
-    from cellar.infrastructure.sentinel.org_directory import OrgSummary
+    # Stub the Duar org directory — never make real HTTP calls in tests.
+    from cellar.infrastructure.duar.org_directory import OrgSummary
     from cellar.interface.dependencies import get_org_directory
 
     class _StubOrgDirectory:

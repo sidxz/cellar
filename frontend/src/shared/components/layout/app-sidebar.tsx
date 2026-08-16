@@ -16,7 +16,7 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/shared/components/ui/sidebar";
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import { AppVersionTag } from "./app-version-tag";
 import { NavMain } from "./nav-main";
 

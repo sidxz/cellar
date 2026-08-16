@@ -1,4 +1,4 @@
-"""Sentinel org directory (read-only) — distinct from provenance /organizations."""
+"""Duar org directory (read-only) — distinct from provenance /organizations."""
 
 from __future__ import annotations
 

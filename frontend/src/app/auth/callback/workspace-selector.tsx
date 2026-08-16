@@ -1,6 +1,6 @@
 "use client";
 
-import type { AuthzWorkspaceSelectorProps } from "@sentinel-auth/nextjs";
+import type { AuthzWorkspaceSelectorProps } from "@duar-auth/nextjs";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";

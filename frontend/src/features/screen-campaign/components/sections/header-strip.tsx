@@ -27,7 +27,7 @@ interface HeaderStripProps {
   // ── Closed-mode metadata + actions (optional; surfaced when !isDraft) ────────
   /** ISO timestamp from `campaign.closed_at` (when status is closed/superseded). */
   closedAt?: string | null;
-  /** UUID from `campaign.closed_by`. Name resolution via Sentinel is a known
+  /** UUID from `campaign.closed_by`. Name resolution via Duar is a known
    *  follow-up (A2); show the first 8 chars as a stable placeholder. */
   closedBy?: string | null;
   /** UUID from `campaign.signature_id`. Per the no-UUID rule we show a slice. */
@@ -68,7 +68,7 @@ export function HeaderStrip({
   const channelCount = campaign.channels?.length ?? 0;
   const compoundCount = campaign.results?.length ?? 0;
 
-  // Closed-metadata muted line. Resolves closed_by (Sentinel UUID) to the
+  // Closed-metadata muted line. Resolves closed_by (Duar UUID) to the
   // member's display name via <MemberName />; the e-signature UUID is hidden
   // from the visible header and surfaced only via a hover tooltip so it
   // stays auditable without polluting the chemist's reading line.

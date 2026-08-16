@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { GitMerge, Pencil, Tag as TagIcon, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";

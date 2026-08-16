@@ -11,7 +11,7 @@
  * preserved and triggered from the HeaderStrip Supersede action.
  */
 
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { useState } from "react";
 
 import { TagTable } from "@/features/tagging/components/tag-table";

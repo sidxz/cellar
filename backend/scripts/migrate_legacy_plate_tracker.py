@@ -17,7 +17,7 @@ Cutover runbook:
   1. Grant `cellar:approve_loan` is NOT needed (migrated loans bypass approval).
   2. Freeze the legacy plate-tracker (read-only announcement).
   3. Build user_map.csv: for each distinct OPEN-transaction requester email,
-     look up the Sentinel user id (admin UI → Users) → `email,user_id` rows.
+     look up the Duar user id (admin UI → Users) → `email,user_id` rows.
      (No service-key email→user lookup exists, so this step is manual.)
   4. Dry-run: add --dry-run; review MIGRATION SUMMARY + reports/*.csv.
      Resolve unmatched_plates.csv (barcode/cdd gaps) and
@@ -741,9 +741,9 @@ async def _main() -> None:
         "--actor-id",
         type=uuid.UUID,
         required=True,
-        help="Sentinel user id running the migration (group/CV created_by)",
+        help="Duar user id running the migration (group/CV created_by)",
     )
-    p.add_argument("--user-map", type=Path, default=None, help="CSV email,sentinel_user_id")
+    p.add_argument("--user-map", type=Path, default=None, help="CSV email,duar_user_id")
     p.add_argument("--report-dir", type=Path, default=Path("."))
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()

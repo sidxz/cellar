@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CollectionDetail } from "./collection-detail";
 
-// Stub Next.js + Sentinel + every downstream hook so we exercise ONLY the
+// Stub Next.js + Duar + every downstream hook so we exercise ONLY the
 // frozen-button gating logic in CollectionDetail itself.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -11,7 +11,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock("@sentinel-auth/nextjs", () => ({
+vi.mock("@duar-auth/nextjs", () => ({
   useAuthzHasRole: () => false,
 }));
 

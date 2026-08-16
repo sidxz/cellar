@@ -1,6 +1,6 @@
-"""Kiosk endpoints — X-Kiosk-Token authed, excluded from Sentinel middleware.
+"""Kiosk endpoints — X-Kiosk-Token authed, excluded from Duar middleware.
 
-The org directory is display-data only: a Sentinel outage must never block
+The org directory is display-data only: a Duar outage must never block
 a physical handout, so name resolution is best-effort.
 """
 

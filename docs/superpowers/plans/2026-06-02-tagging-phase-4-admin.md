@@ -863,7 +863,7 @@ async def delete_tag(
 - [ ] **Step 4: Verify the wiring**
 
 Run: `uv run python -c "import cellar.infrastructure.di._workspace_config"` → exit 0.
-Run: `env SENTINEL_SERVICE_KEY=test SENTINEL_URL=https://sentinel.example.com SENTINEL_SERVICE_NAME=cellar TEMPORAL_DISABLED=1 uv run python -c "import cellar.interface.routes.tags as t; print(len(t.router.routes))"` → `4` (GET + PATCH + POST-merge + DELETE).
+Run: `env DUAR_SERVICE_KEY=test DUAR_URL=https://duar.example.com DUAR_SERVICE_NAME=cellar TEMPORAL_DISABLED=1 uv run python -c "import cellar.interface.routes.tags as t; print(len(t.router.routes))"` → `4` (GET + PATCH + POST-merge + DELETE).
 
 - [ ] **Step 5: Commit**
 

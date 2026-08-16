@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Spec-sync deviations locked here (record in the spec file in Task 13):** (1) the approval action is **`cellar:approve_loan`** (house `cellar:<verb>` registry convention in `infrastructure/sentinel/auth.py::SERVICE_ACTIONS`), not the spec's `inventory.plate_loans.approve` notation; (2) item events are **batch-shaped** (`PlateLoanItemsApproved{item_ids}` etc.) matching the batch API verbs, not per-item; (3) borrowed-plate visibility (spec §5 "plate has an active loan with borrower_org_id == U.org") is wired into **read surfaces only** (GetPlate/ListPlates/ListChildren/molecule-plates read model) — borrowers can see, not modify; write/export/tag surfaces keep strict S2 privacy; (4) `is_admin` bypasses the action check too (not just the org check) — prevents the ungranted-action deadlock since no Sentinel grants exist yet.
+- **Spec-sync deviations locked here (record in the spec file in Task 13):** (1) the approval action is **`cellar:approve_loan`** (house `cellar:<verb>` registry convention in `infrastructure/duar/auth.py::SERVICE_ACTIONS`), not the spec's `inventory.plate_loans.approve` notation; (2) item events are **batch-shaped** (`PlateLoanItemsApproved{item_ids}` etc.) matching the batch API verbs, not per-item; (3) borrowed-plate visibility (spec §5 "plate has an active loan with borrower_org_id == U.org") is wired into **read surfaces only** (GetPlate/ListPlates/ListChildren/molecule-plates read model) — borrowers can see, not modify; write/export/tag surfaces keep strict S2 privacy; (4) `is_admin` bypasses the action check too (not just the org check) — prevents the ungranted-action deadlock since no Sentinel grants exist yet.
 - **Authority rule (owner-side verbs approve/deny/confirm-out/confirm-in):** `auth.is_admin` OR (`auth.org_id == loan.owner_org_id` AND `await auth.check_action("cellar:approve_loan")`). Borrower-side verbs (request-return, cancel): editor AND (`auth.org_id == loan.borrower_org_id` OR `auth.is_admin`).
 - **Visibility:** loans hidden==missing 404 when `owner_org_id ∈ excluded` UNLESS `auth.org_id == borrower_org_id`. All plate resolution in RequestPlateLoan applies the S2 excluded set (hidden plate == missing plate; barcode misses and hidden plates report identically — no existence oracle).
 - **Policy collapse (owner org's policy, get-or-default):** `require_approval=false` → items created APPROVED; `confirmation=none` → APPROVED auto-advances to CHECKED_OUT and RETURN_PENDING auto-advances to RETURNED, in the same command; `default_due_days` fills a missing `due_date` (None stays None). `kiosk_scan` behaves like `admin_confirm` until S5 (kiosk endpoints) — the confirm verbs work for authorized users either way.
@@ -708,12 +708,12 @@ git commit -m "feat(persistence): plate_loans + items (migration 063), loan repo
 
 **Files:**
 - Modify: `backend/src/cellar/application/auth.py` (`check_action` on the protocol + `require_loan_authority`)
-- Modify: `backend/src/cellar/infrastructure/sentinel/auth.py` (`SERVICE_ACTIONS` entry)
+- Modify: `backend/src/cellar/infrastructure/duar/auth.py` (`SERVICE_ACTIONS` entry)
 - Modify: `backend/tests/fakes/fake_auth.py` (`granted_actions` + async `check_action`)
 - Test: `backend/tests/unit/test_auth_guards.py` (extend the existing guard test file — find it; if guards are tested elsewhere, e.g. `tests/unit/application/test_auth.py`, use that file)
 
 **Interfaces:**
-- Consumes: SDK `RequestAuth.check_action(action: str) -> bool` (async, per-request-deduped — verified present in sentinel_auth 0.20).
+- Consumes: SDK `RequestAuth.check_action(action: str) -> bool` (async, per-request-deduped — verified present in duar_auth 0.20).
 - Produces: `AuthContext` protocol gains `async def check_action(self, action: str) -> bool: ...`; new guard `async def require_loan_authority(auth, owner_org_id)` (owner-side verbs) and constant `LOAN_APPROVE_ACTION = "cellar:approve_loan"` (exported from `application/auth.py` — the action string lives with the guard, not per-use-case); `FakeAuth(granted_actions={"cellar:approve_loan"})` in tests. Task 6 consumes the guard.
 
 - [ ] **Step 1: Failing tests** (in the guard test file):
@@ -776,7 +776,7 @@ async def require_loan_authority(
         raise AuthorizationError("Missing loan approval permission")
 ```
 
-In `infrastructure/sentinel/auth.py`, append to `SERVICE_ACTIONS`:
+In `infrastructure/duar/auth.py`, append to `SERVICE_ACTIONS`:
 
 ```python
     {"action": "cellar:approve_loan", "description": "Approve and manage plate loan requests"},
@@ -798,7 +798,7 @@ In `tests/fakes/fake_auth.py`, add ctor kwarg `granted_actions: set[str] | None 
 - [ ] **Step 4: Commit.**
 
 ```bash
-git commit -m "feat(auth): cellar:approve_loan action + require_loan_authority (first runtime check_action)" -- backend/src/cellar/application/auth.py backend/src/cellar/infrastructure/sentinel/auth.py backend/tests/fakes/fake_auth.py backend/tests/unit
+git commit -m "feat(auth): cellar:approve_loan action + require_loan_authority (first runtime check_action)" -- backend/src/cellar/application/auth.py backend/src/cellar/infrastructure/duar/auth.py backend/tests/fakes/fake_auth.py backend/tests/unit
 ```
 
 (Adjust the tests pathspec to the actual guard-test file touched.)

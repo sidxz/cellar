@@ -28,9 +28,9 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_re
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
-from cellar.infrastructure.sentinel.auth import get_sentinel
-from cellar.infrastructure.sentinel.org_directory import OrgDirectory
-from cellar.infrastructure.sentinel.settings import SentinelSettings
+from cellar.infrastructure.duar.auth import get_duar
+from cellar.infrastructure.duar.org_directory import OrgDirectory
+from cellar.infrastructure.duar.settings import DuarSettings
 
 __all__ = [
     "AuditServiceDep",
@@ -118,45 +118,45 @@ def get_preferences_command(
     return container[UpdatePreferences]
 
 
-# Sentinel auth dependency — stable wrapper so dependency_overrides work in tests.
-# Lazy init: don't crash at import time if Sentinel env vars aren't set.
-# Uses a reject-all stub when Sentinel is unavailable so auth is never bypassed.
+# Duar auth dependency — stable wrapper so dependency_overrides work in tests.
+# Lazy init: don't crash at import time if Duar env vars aren't set.
+# Uses a reject-all stub when Duar is unavailable so auth is never bypassed.
 
 
-async def _sentinel_not_configured() -> None:
-    """Stub dependency that rejects all requests when Sentinel is not configured."""
+async def _duar_not_configured() -> None:
+    """Stub dependency that rejects all requests when Duar is not configured."""
     from fastapi import HTTPException
 
     raise HTTPException(
         status_code=503,
-        detail="Sentinel auth not configured. Set SENTINEL_URL and SENTINEL_SERVICE_KEY.",
+        detail="Duar auth not configured. Set DUAR_URL and DUAR_SERVICE_KEY.",
     )
 
 
-# Sentinel is "configured" only when SENTINEL_SERVICE_KEY is explicitly set —
+# Duar is "configured" only when DUAR_SERVICE_KEY is explicitly set —
 # the pydantic-settings default ("") is a missing-config signal, not a usable
 # service key. The URL has a localhost default so dev still works; if you want
 # prod fail-fast on missing URL too, set it explicitly in the deployment env.
-_sentinel: object | None = None
-if not os.environ.get("SENTINEL_SERVICE_KEY"):
-    _sentinel_get_auth = _sentinel_not_configured
+_duar: object | None = None
+if not os.environ.get("DUAR_SERVICE_KEY"):
+    _duar_get_auth = _duar_not_configured
 else:
     try:
-        _sentinel = get_sentinel()
-        _sentinel_get_auth = _sentinel.get_auth
+        _duar = get_duar()
+        _duar_get_auth = _duar.get_auth
     except (ValueError, ValidationError):
-        # Sentinel env vars malformed — fall back to a reject-all stub. Any
+        # Duar env vars malformed — fall back to a reject-all stub. Any
         # other exception (import error, network, etc.) is a real bug and
         # must surface at startup.
-        _sentinel = None
-        _sentinel_get_auth = _sentinel_not_configured
+        _duar = None
+        _duar_get_auth = _duar_not_configured
 
 
-# Sentinel org directory (read-only list of orgs for pickers/labels) — same
-# "configured only if SENTINEL_SERVICE_KEY is set" guard as `_sentinel` above.
+# Duar org directory (read-only list of orgs for pickers/labels) — same
+# "configured only if DUAR_SERVICE_KEY is set" guard as `_duar` above.
 _org_directory: OrgDirectory | None = None
-if _sentinel is not None:
-    _settings = SentinelSettings()
+if _duar is not None:
+    _settings = DuarSettings()
     _org_directory = OrgDirectory(base_url=_settings.url, service_key=_settings.service_key)
 
 
@@ -164,7 +164,7 @@ def get_org_directory() -> OrgDirectory:
     if _org_directory is None:
         from fastapi import HTTPException
 
-        raise HTTPException(status_code=503, detail="Sentinel auth not configured.")
+        raise HTTPException(status_code=503, detail="Duar auth not configured.")
     return _org_directory
 
 
@@ -173,7 +173,7 @@ OrgDirectoryDep = Annotated[OrgDirectory, Depends(get_org_directory)]
 
 async def get_auth(
     request: Request,
-    auth: Annotated[Any, Depends(_sentinel_get_auth)],
+    auth: Annotated[Any, Depends(_duar_get_auth)],
 ) -> Any:
     """Stable auth dependency wrapper — overridable via dependency_overrides.
 

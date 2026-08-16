@@ -26,7 +26,7 @@ Net-new in this spec: **org ownership (from Sentinel), loan/checkout workflow wi
 
 Verified state: JWTs already carry `oid`/`oslug`/`opub` (`service/src/auth/jwt.py:55-57,127-129`); Python SDK 0.19.0 (already pinned by Cellar) decodes and discards them; no service-key org endpoints exist.
 
-1. **SDK:** add `org_id: UUID | None`, `org_slug: str | None`, `org_is_public: bool` to `AuthenticatedUser` (`sdk/src/sentinel_auth/types.py`); populate from claims in `middleware.py` and `authz_middleware.py`. Purely additive.
+1. **SDK:** add `org_id: UUID | None`, `org_slug: str | None`, `org_is_public: bool` to `AuthenticatedUser` (`sdk/src/duar_auth/types.py`); populate from claims in `middleware.py` and `authz_middleware.py`. Purely additive.
 2. **Service:** new internal (service-key) endpoint on `INTERNAL_ROUTERS`: `GET /organizations` → `[{id, slug, name, is_public, enabled}]` (enabled only, unless `?include_disabled=1`). Nothing else moves off the admin listener.
 3. Release as 0.20.0 (unified versioning); Cellar bumps pin.
 
@@ -88,7 +88,7 @@ One application-layer `PlateVisibilityService` used by ListPlates / GetPlate / g
 
 ## 6. Org directory (Cellar infrastructure)
 
-`infrastructure/sentinel/OrgDirectory`: fetches `GET /organizations` (internal listener) with the service key, per-process in-memory TTL cache (5 min; Valkey/redis only if cross-process staleness ever matters). Exposed as `GET /api/v1/orgs` → `[{id, slug, name}]` for FE pickers, chart legends, policy admin. Org *names* are never persisted in Cellar tables — always resolved through the directory (ids only in DB).
+`infrastructure/duar/OrgDirectory`: fetches `GET /organizations` (internal listener) with the service key, per-process in-memory TTL cache (5 min; Valkey/redis only if cross-process staleness ever matters). Exposed as `GET /api/v1/orgs` → `[{id, slug, name}]` for FE pickers, chart legends, policy admin. Org *names* are never persisted in Cellar tables — always resolved through the directory (ids only in DB).
 
 ## 7. Barcode scan resolution
 

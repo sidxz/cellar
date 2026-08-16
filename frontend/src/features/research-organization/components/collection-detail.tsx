@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { useSelectionSet } from "@/shared/hooks/use-selection-set";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { ChevronDown, Download, Pencil, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";

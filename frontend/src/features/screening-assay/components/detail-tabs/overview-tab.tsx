@@ -7,7 +7,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { formatDate } from "@/shared/lib/format-date";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { Beaker, Clock, FlaskConical, Target } from "lucide-react";
 import { useState } from "react";
 import { useProtocolCollectionCoverage } from "../../hooks/use-protocol-collection-coverage";

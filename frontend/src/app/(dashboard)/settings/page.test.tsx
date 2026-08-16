@@ -28,7 +28,7 @@ function renderPage() {
   const config = {
     apiUrl: "",
     appUrl: "",
-    sentinelUrl: "",
+    duarUrl: "",
     idpProvider: "google",
     googleClientId: "",
     entraIdClientId: "",

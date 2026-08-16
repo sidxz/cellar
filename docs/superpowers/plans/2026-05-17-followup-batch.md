@@ -69,7 +69,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-vi.mock("@sentinel-auth/nextjs", () => ({
+vi.mock("@duar-auth/nextjs", () => ({
   useAuthzHasRole: () => false,
 }));
 

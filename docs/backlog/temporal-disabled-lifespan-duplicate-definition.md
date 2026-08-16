@@ -31,7 +31,7 @@ real Temporal server happens to be reachable — but the "local dev without Temp
 `_export.py`'s own comment describes as supported is currently broken.
 
 **Worked around (not fixed) for Task 10's regen:** booted via `make dev-be` (sources the real
-root `.env` — real Sentinel URL + service key + no `TEMPORAL_DISABLED` — a real Temporal server
+root `.env` — real Duar URL + service key + no `TEMPORAL_DISABLED` — a real Temporal server
 was already up on `:7233` in this dev environment) instead of a hand-rolled script that set
 `TEMPORAL_DISABLED=1`. Out of scope for an FE task to fix backend DI wiring inline.
 

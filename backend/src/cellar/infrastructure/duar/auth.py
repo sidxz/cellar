@@ -1,12 +1,12 @@
-"""Sentinel auth integration — SDK initialization and FastAPI wiring."""
+"""Duar auth integration — SDK initialization and FastAPI wiring."""
 
 from __future__ import annotations
 
-from sentinel_auth import Sentinel
+from duar_auth import Duar
 
-from cellar.infrastructure.sentinel.settings import SentinelSettings
+from cellar.infrastructure.duar.settings import DuarSettings
 
-# Service actions registered with Sentinel on startup.
+# Service actions registered with Duar on startup.
 # These correspond to RBAC permissions that can be granted to roles.
 SERVICE_ACTIONS = [
     {"action": "cellar:register", "description": "Register molecules and batches"},
@@ -30,19 +30,19 @@ SERVICE_ACTIONS = [
 ]
 
 
-def create_sentinel(settings: SentinelSettings | None = None) -> Sentinel:
-    """Create and configure a new Sentinel instance.
+def create_duar(settings: DuarSettings | None = None) -> Duar:
+    """Create and configure a new Duar instance.
 
     The returned object provides:
-    - ``sentinel.lifespan`` — FastAPI lifespan (fetches keys, registers actions)
-    - ``sentinel.protect(app)`` — adds auth middleware
-    - ``sentinel.get_auth`` — FastAPI dependency returning ``RequestAuth``
-    - ``sentinel.require_user`` — FastAPI dependency returning ``AuthenticatedUser``
+    - ``duar.lifespan`` — FastAPI lifespan (fetches keys, registers actions)
+    - ``duar.protect(app)`` — adds auth middleware
+    - ``duar.get_auth`` — FastAPI dependency returning ``RequestAuth``
+    - ``duar.require_user`` — FastAPI dependency returning ``AuthenticatedUser``
     """
     if settings is None:
-        settings = SentinelSettings()
+        settings = DuarSettings()
 
-    return Sentinel(
+    return Duar(
         base_url=settings.url,
         service_name=settings.service_name,
         service_key=settings.service_key,
@@ -55,10 +55,10 @@ def create_sentinel(settings: SentinelSettings | None = None) -> Sentinel:
     )
 
 
-def get_sentinel(settings: SentinelSettings | None = None) -> Sentinel:
-    """Create and return a new Sentinel instance.
+def get_duar(settings: DuarSettings | None = None) -> Duar:
+    """Create and return a new Duar instance.
 
     The caller (``create_app`` in ``app.py``) is expected to call this once
     during application startup and hold the reference.
     """
-    return create_sentinel(settings)
+    return create_duar(settings)

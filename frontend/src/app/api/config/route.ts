@@ -16,7 +16,7 @@ export function GET() {
   return Response.json({
     apiUrl: process.env.APP_API_URL ?? "http://localhost:8000",
     appUrl: process.env.APP_URL ?? "http://localhost:3000",
-    sentinelUrl: process.env.APP_SENTINEL_URL ?? "http://localhost:9003",
+    duarUrl: process.env.APP_DUAR_URL ?? "http://localhost:9003",
     idpProvider: process.env.APP_IDP_PROVIDER ?? "google",
     googleClientId: process.env.APP_GOOGLE_CLIENT_ID ?? "",
     entraIdClientId: process.env.APP_ENTRA_ID_CLIENT_ID ?? "",

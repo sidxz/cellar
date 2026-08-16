@@ -1,4 +1,4 @@
-"""Org directory — reads Sentinel's internal org list for pickers/labels.
+"""Org directory — reads Duar's internal org list for pickers/labels.
 
 Org *identity* arrives on every request via JWT claims; this service only
 supplies the workspace-wide org list (names/slugs) for UI purposes.

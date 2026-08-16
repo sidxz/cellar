@@ -7,7 +7,7 @@ import { MemberName } from "@/shared/components/entity-name";
 import { PageHeader } from "@/shared/components/page-header";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { FolderOpen, GitMerge, Plus, User } from "lucide-react";
 import { useRouter } from "next/navigation";

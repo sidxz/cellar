@@ -9,8 +9,8 @@ import type { NextRequest } from "next/server";
  * HTTP headers). Route protection is handled client-side via AuthzGuard
  * in the dashboard layout.
  *
- * Once @sentinel-auth/nextjs supports HttpOnly cookie storage (BFF pattern),
- * this can be upgraded to createSentinelAuthzMiddleware for server-side
+ * Once @duar-auth/nextjs supports HttpOnly cookie storage (BFF pattern),
+ * this can be upgraded to createDuarAuthzMiddleware for server-side
  * token validation. See: https://github.com/sidxz/Sentinel/issues/14
  */
 export function middleware(request: NextRequest) {

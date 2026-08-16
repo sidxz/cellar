@@ -229,12 +229,12 @@ class GetPublishedCampaign:
 
 def _serialize_campaign(campaign: Any, project: Any | None) -> dict[str, Any]:
     """Serialize the campaign header, embedding the already-resolved project (or None)."""
-    # TODO Sentinel-resolved user name: closed_by is a UUID; name resolution requires Sentinel.
+    # TODO Duar-resolved user name: closed_by is a UUID; name resolution requires Duar.
     closed_by_dict: dict[str, Any] | None = None
     if campaign.closed_by is not None:
         closed_by_dict = {
             "id": str(campaign.closed_by),
-            "name": None,  # TODO Sentinel-resolved user name
+            "name": None,  # TODO Duar-resolved user name
         }
 
     # TODO audit signature: load from AuditCompliance context when SignatureService lands.

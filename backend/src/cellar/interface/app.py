@@ -1,4 +1,4 @@
-"""FastAPI application factory with Sentinel auth, DI container, and error handlers."""
+"""FastAPI application factory with Duar auth, DI container, and error handlers."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from cellar.infrastructure.di.container import create_container
 from cellar.infrastructure.logging import configure_logging
-from cellar.infrastructure.sentinel.auth import get_sentinel
+from cellar.infrastructure.duar.auth import get_duar
 from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.middleware.request_context import RequestContextMiddleware
 from cellar.version import build_info
@@ -18,11 +18,11 @@ from cellar.version import build_info
 
 def create_app() -> FastAPI:
     """Build the FastAPI application with auth, CORS, DI, and error handling."""
-    sentinel = get_sentinel()
+    duar = get_duar()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        """App lifespan — initialize container, register Sentinel actions, cleanup."""
+        """App lifespan — initialize container, register Duar actions, cleanup."""
         # Structured logging (reads LOG_LEVEL / LOG_FORMAT / LOG_LEVEL_OVERRIDES)
         configure_logging()
 
@@ -166,8 +166,8 @@ def create_app() -> FastAPI:
         container.define(SarActivityProjectionOrchestrator, Singleton(lambda: activity_proj_orch))
         container.define(UmapClusterOrchestrator, Singleton(lambda: umap_orch))
 
-        # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
-        async with sentinel.lifespan(app):
+        # Delegate to Duar's lifespan (registers service actions, fetches JWKS)
+        async with duar.lifespan(app):
             yield
 
         # Cleanup: close httpx client used by vault integration
@@ -193,8 +193,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Auth middleware — validates IdP + Sentinel authz tokens
-    sentinel.protect(
+    # Auth middleware — validates IdP + Duar authz tokens
+    duar.protect(
         app,
         # /api/v1/kiosk uses X-Kiosk-Token device auth (spec §10). SDK match is
         # exact-or-prefix-with-slash-boundary, so /api/v1/kiosk-devices (admin,

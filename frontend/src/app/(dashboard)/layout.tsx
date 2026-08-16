@@ -5,7 +5,7 @@ import { Header } from "@/shared/components/layout/header";
 import { SidebarInset, SidebarProvider } from "@/shared/components/ui/sidebar";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { usePreferencesSync } from "@/shared/hooks/use-preferences-sync";
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 

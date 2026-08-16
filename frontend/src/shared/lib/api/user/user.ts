@@ -285,7 +285,7 @@ export const useUpdatePreferencesApiV1UserPreferencesPatch = <TError = HTTPValid
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * List members of the current workspace. Proxies to Sentinel.
+ * List members of the current workspace. Proxies to Duar.
  * @summary List Workspace Members
  */
 export const listWorkspaceMembersApiV1UserWorkspaceMembersGet = (

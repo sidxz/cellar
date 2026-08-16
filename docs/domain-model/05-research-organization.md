@@ -4,7 +4,7 @@
 
 Supporting subdomain for organizing research work — projects as logical groupings, compound collections for curation, saved searches for reproducible queries, and the electronic lab notebook for documenting experimental activities.
 
-**Depends on:** Chemical Registration (molecule references), Screening & Assay (protocol/run references), Inventory (batch references), Workspace Config (Organization), Sentinel Auth (project access via entity ACLs)
+**Depends on:** Chemical Registration (molecule references), Screening & Assay (protocol/run references), Inventory (batch references), Workspace Config (Organization), Duar Auth (project access via entity ACLs)
 **Depended on by:** Audit
 
 ---
@@ -21,12 +21,12 @@ A logical grouping of related research work within a workspace — e.g., "EGFR I
 
 **References (by ID):** Workspace (workspace_id)
 
-**Access control:** Project access is managed via Sentinel's entity ACLs, not in Cellar. Each Project is registered as a resource in Sentinel (`service: "cellar", resource_type: "project"`). Cellar calls `auth.can("project", project_id, "view")` at query time.
+**Access control:** Project access is managed via Duar's entity ACLs, not in Cellar. Each Project is registered as a resource in Duar (`service: "cellar", resource_type: "project"`). Cellar calls `auth.can("project", project_id, "view")` at query time.
 
 | Property | Type | Description |
 |----------|------|-------------|
 | id | UUID | |
-| workspace_id | UUID | FK → Sentinel workspace |
+| workspace_id | UUID | FK → Duar workspace |
 | name | string | |
 | description | text? | |
 | status | enum | `active`, `archived` |
@@ -82,7 +82,7 @@ Stored query parameters for reproducible data retrieval. Has an independent life
 | Property | Type | Description |
 |----------|------|-------------|
 | id | UUID | |
-| workspace_id | UUID | FK → Sentinel workspace |
+| workspace_id | UUID | FK → Duar workspace |
 | name | string | |
 | project_id | UUID? | FK → Project |
 | query | jsonb | Search criteria (structure, properties, activity ranges) |
@@ -101,7 +101,7 @@ Unstructured documentation of research activities, linked to structured data acr
 | Property | Type | Description |
 |----------|------|-------------|
 | id | UUID | |
-| workspace_id | UUID | FK → Sentinel workspace |
+| workspace_id | UUID | FK → Duar workspace |
 | project_id | UUID | FK → Project |
 | title | string | |
 | body | richtext/json | Structured content (text, tables, images, embeds) |
@@ -160,7 +160,7 @@ Full design spec: `docs/superpowers/specs/2026-05-10-screen-campaign-design.md`
 | Property | Type | Description |
 |----------|------|-------------|
 | id | UUID | |
-| workspace_id | UUID | FK → Sentinel workspace |
+| workspace_id | UUID | FK → Duar workspace |
 | project_id | UUID | FK → Project |
 | name | string | Human-readable campaign name |
 | description | text? | Optional free-text description |

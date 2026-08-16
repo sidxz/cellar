@@ -1129,7 +1129,7 @@ GetTagsForEntityDep = Annotated[GetTagsForEntity, Depends(_get_use_case(GetTagsF
 
 - [ ] **Step 4: Verify imports**
 
-Run: `env SENTINEL_SERVICE_KEY=test SENTINEL_URL=https://sentinel.example.com SENTINEL_SERVICE_NAME=cellar TEMPORAL_DISABLED=1 uv run python -c "import cellar.interface.dependencies._workspace_config as m; print(m.AssignTagDep is not None)"`
+Run: `env DUAR_SERVICE_KEY=test DUAR_URL=https://duar.example.com DUAR_SERVICE_NAME=cellar TEMPORAL_DISABLED=1 uv run python -c "import cellar.interface.dependencies._workspace_config as m; print(m.AssignTagDep is not None)"`
 Expected: prints `True`. (Interface imports transitively pull in the Sentinel SDK, which reads these env vars at import time — the same vars `tests/api/conftest.py` sets before importing cellar.)
 
 - [ ] **Step 5: Commit**
@@ -1379,7 +1379,7 @@ In `backend/tests/api/conftest.py`, inside `_create_test_app`, add the imports a
 
 - [ ] **Step 4: Verify the app builds with the new routes**
 
-Run: `env SENTINEL_SERVICE_KEY=test SENTINEL_URL=https://sentinel.example.com SENTINEL_SERVICE_NAME=cellar TEMPORAL_DISABLED=1 uv run python -c "import cellar.interface.routes.tags as t; print(t.router.prefix, t.assignment_router.prefix, sorted(t._ENTITY_COLLECTIONS))"`
+Run: `env DUAR_SERVICE_KEY=test DUAR_URL=https://duar.example.com DUAR_SERVICE_NAME=cellar TEMPORAL_DISABLED=1 uv run python -c "import cellar.interface.routes.tags as t; print(t.router.prefix, t.assignment_router.prefix, sorted(t._ENTITY_COLLECTIONS))"`
 Expected: `/api/v1/tags /api/v1 ['collections', 'molecules', 'projects', 'protocols']`. (Sentinel env needed because the routes module imports interface dependencies.)
 
 - [ ] **Step 5: Commit**

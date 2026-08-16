@@ -1,4 +1,4 @@
-"""060 — owner_org_id on registered_plates (Sentinel org ownership)
+"""060 — owner_org_id on registered_plates (Duar org ownership)
 
 Revision ID: 060_add_owner_org_to_plates
 Revises: 059_protocol_fingerprint

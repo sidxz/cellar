@@ -1,4 +1,4 @@
-"""API tests for /api/v1/kiosk — X-Kiosk-Token device auth, no Sentinel session."""
+"""API tests for /api/v1/kiosk — X-Kiosk-Token device auth, no Duar session."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import uuid
 from fastapi import FastAPI
 from httpx import AsyncClient
 
-from cellar.infrastructure.sentinel.org_directory import OrgSummary
+from cellar.infrastructure.duar.org_directory import OrgSummary
 from cellar.interface.dependencies import get_org_directory
 from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID
 

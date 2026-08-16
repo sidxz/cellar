@@ -39,7 +39,7 @@ import { useOrgs } from "@/shared/hooks/use-orgs";
 import { formatDate } from "@/shared/lib/format-date";
 import { showError } from "@/shared/lib/toast";
 import { cn } from "@/shared/lib/utils";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { Copy, Download, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

@@ -4,7 +4,7 @@ import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
 import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
 import { HexLensLogo } from "@/shared/components/hex-lens-logo";
 import { useAppConfig } from "@/shared/lib/app-config";
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 

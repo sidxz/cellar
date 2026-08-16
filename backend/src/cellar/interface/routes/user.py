@@ -94,7 +94,7 @@ async def update_preferences(
 
 
 # ---------------------------------------------------------------------------
-# Workspace members (proxy to Sentinel)
+# Workspace members (proxy to Duar)
 # ---------------------------------------------------------------------------
 
 
@@ -110,7 +110,7 @@ class WorkspaceMemberResponse(BaseModel):
 async def list_workspace_members(
     auth: AuthDep, q: str | None = None
 ) -> list[WorkspaceMemberResponse]:
-    """List members of the current workspace. Proxies to Sentinel."""
+    """List members of the current workspace. Proxies to Duar."""
     if q:
         members = await auth.search_workspace_members(q, limit=20)
     else:

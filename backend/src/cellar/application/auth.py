@@ -1,7 +1,7 @@
 """Application-layer auth context protocol and guards.
 
 The ``AuthContext`` protocol defines what the application layer needs from auth
-without depending on Sentinel SDK types. Infrastructure adapts ``RequestAuth``
+without depending on Duar SDK types. Infrastructure adapts ``RequestAuth``
 to satisfy this protocol (structural subtyping).
 """
 
@@ -16,7 +16,7 @@ from cellar.domain.shared.errors import AuthorizationError, NotFoundError
 
 @runtime_checkable
 class AuthContext(Protocol):
-    """Auth context available to use cases. Satisfied by Sentinel's RequestAuth."""
+    """Auth context available to use cases. Satisfied by Duar's RequestAuth."""
 
     @property
     def user_id(self) -> uuid.UUID: ...
@@ -39,7 +39,7 @@ class AuthContext(Protocol):
     def has_role(self, minimum_role: str) -> bool: ...
 
     async def check_action(self, action: str) -> bool:
-        """Check a fine-grained RBAC action grant (Sentinel SDK dedupes per request)."""
+        """Check a fine-grained RBAC action grant (Duar SDK dedupes per request)."""
         ...
 
 
@@ -76,7 +76,7 @@ async def require_loan_authority(auth: AuthContext | None, owner_org_id: uuid.UU
     """Owner-side loan verbs (approve/deny/confirm-out/confirm-in).
 
     Admin/owner bypasses everything (also dodges the ungranted-action
-    deadlock — no Sentinel grants exist until an operator assigns them).
+    deadlock — no Duar grants exist until an operator assigns them).
     Otherwise: editor in the OWNER org holding the cellar:approve_loan
     RBAC action — the first runtime check_action call in this codebase.
     """

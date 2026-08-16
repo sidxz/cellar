@@ -1,8 +1,8 @@
 // Custom fetch instance for orval-generated API client.
 // Base URL set at runtime via setApiBaseUrl() from AppConfig.
-// Auth tokens injected from the shared Sentinel SDK singleton.
+// Auth tokens injected from the shared Duar SDK singleton.
 
-import { getSentinelClient } from "@/shared/lib/auth/config";
+import { getDuarClient } from "@/shared/lib/auth/config";
 
 let _baseUrl = "http://localhost:8000";
 
@@ -52,13 +52,13 @@ export function getApiBaseUrl() {
 }
 
 /**
- * Sentinel auth headers for direct `fetch` calls that bypass `customInstance`
+ * Duar auth headers for direct `fetch` calls that bypass `customInstance`
  * (file uploads, binary downloads). Returns `{}` on the server or when the
  * client isn't authenticated. Centralized so the same `isAuthenticated` guard
  * is applied everywhere instead of being re-derived per call site.
  */
 export function getAuthHeaders(): Record<string, string> {
-  const client = typeof window !== "undefined" ? getSentinelClient() : null;
+  const client = typeof window !== "undefined" ? getDuarClient() : null;
   return client?.isAuthenticated ? client.getHeaders() : {};
 }
 

@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Lock, Plus, Trash2, Unlock } from "lucide-react";
 import { useState } from "react";

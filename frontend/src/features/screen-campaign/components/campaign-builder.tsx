@@ -13,7 +13,7 @@
  * with the same primitives DetailShell uses (Skeleton, AlertCircle, ArrowLeft).
  */
 
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";

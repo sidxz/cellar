@@ -5,7 +5,7 @@ import { Header } from "./header";
 
 const logoutMock = vi.fn();
 
-vi.mock("@sentinel-auth/nextjs", () => ({
+vi.mock("@duar-auth/nextjs", () => ({
   useAuthz: () => ({
     user: { name: "Ada Lovelace", email: "ada@example.com" },
     logout: logoutMock,

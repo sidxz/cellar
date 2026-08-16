@@ -20,7 +20,7 @@ dependencies = [
     "lagom>=2.7.0",
     "returns>=0.23.0",
     # Auth
-    "sentinel-auth-sdk>=0.20.0",
+    "duar-auth>=1.0.0",
     "pyjwt[crypto]>=2.10.0",
     "httpx>=0.28.0",
     # Chemistry

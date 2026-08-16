@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import { Building2, ChevronDown, LogOut, Search } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";

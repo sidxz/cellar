@@ -3,8 +3,8 @@ import {
   AuthzLocalStorageStore,
   type IdpConfig,
   IdpConfigs,
-  SentinelAuthz,
-} from "@sentinel-auth/js";
+  DuarAuthz,
+} from "@duar-auth/js";
 
 function buildIdps(config: AppConfig): Record<string, IdpConfig> {
   const idps: Record<string, IdpConfig> = {};
@@ -17,24 +17,24 @@ function buildIdps(config: AppConfig): Record<string, IdpConfig> {
   return idps;
 }
 
-let _client: SentinelAuthz | null = null;
+let _client: DuarAuthz | null = null;
 
 /**
- * Create (or return cached) SentinelAuthz client.
+ * Create (or return cached) DuarAuthz client.
  * Accepts runtime AppConfig so no process.env is read at module load.
  */
-export function getSentinelClient(config?: AppConfig): SentinelAuthz {
+export function getDuarClient(config?: AppConfig): DuarAuthz {
   if (!_client) {
-    const sentinelUrl = config?.sentinelUrl ?? "http://localhost:9003";
+    const duarUrl = config?.duarUrl ?? "http://localhost:9003";
     const appUrl = config?.appUrl ?? "http://localhost:3000";
 
-    _client = new SentinelAuthz({
-      sentinelUrl,
+    _client = new DuarAuthz({
+      duarUrl,
       idps: config ? buildIdps(config) : {},
       redirectUri: `${appUrl}/auth/callback`,
-      // Required since Sentinel 0.11.0: the browser no longer mints authz tokens
+      // Required since Duar 0.11.0: the browser no longer mints authz tokens
       // directly. It POSTs to this same-origin backend route, which forwards to
-      // Sentinel's /authz/resolve with the service key. See app/api/auth/mint.
+      // Duar's /authz/resolve with the service key. See app/api/auth/mint.
       mintEndpoint: "/api/auth/mint",
       storage: typeof window !== "undefined" ? new AuthzLocalStorageStore() : undefined,
       autoRefresh: true,

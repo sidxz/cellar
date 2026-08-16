@@ -28,7 +28,7 @@ Domain -> Application -> Infrastructure -> Interface layers.
 Domain events for side effects (audit, notifications, async processing).
 Optimistic concurrency (version column) on all aggregates.
 Audit trail is append-only (21 CFR Part 11 alignment).
-Auth delegated to Sentinel (external, `~/workspace/identity-service/`).
+Auth delegated to Duar (external, `~/workspace/identity-service/`).
 
 ### Layer Rules
 
@@ -50,7 +50,7 @@ Auth delegated to Sentinel (external, `~/workspace/identity-service/`).
 | 05 | Research Organization | Project, Collection, ELNEntry, SavedSearch | 1-2 |
 | 06 | Audit & Compliance | AuditOperation (append-only) | 0 |
 | 07 | Workspace Config | Organization, WorkspaceSettings, ControlledVocabulary | 1 |
-| 08 | Sentinel Auth | External — User, Workspace, Roles, Permissions | External |
+| 08 | Duar Auth | External — User, Workspace, Roles, Permissions | External |
 | 11 | Formulation & Drug Product | Formulation, FormulationBatch, StabilityStudy | 2 |
 
 ---
@@ -102,7 +102,7 @@ cellar2/
         messaging/
         temporal/
         di/
-        sentinel/
+        duar/
       interface/
     tests/
       unit/ integration/ api/

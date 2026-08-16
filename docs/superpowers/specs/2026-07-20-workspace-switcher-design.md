@@ -13,7 +13,7 @@ memory-only, so the switcher could never list workspaces nor re-mint a token.
 Separately, multi-workspace users see the workspace picker on every interactive login,
 even when they always work in the same workspace.
 
-daikon-gen3 solves both on the same Sentinel SDK (`@sentinel-auth/*` 0.15.0, dual-token
+daikon-gen3 solves both on the same Sentinel SDK (`@duar-auth/*` 0.15.0, dual-token
 authz mode). We adopt its pattern unchanged.
 
 ## What we adopt — and what we deliberately don't

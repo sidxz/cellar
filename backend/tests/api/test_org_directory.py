@@ -1,4 +1,4 @@
-"""GET /api/v1/orgs returns the Sentinel org directory (id/slug/name only)."""
+"""GET /api/v1/orgs returns the Duar org directory (id/slug/name only)."""
 
 from __future__ import annotations
 
