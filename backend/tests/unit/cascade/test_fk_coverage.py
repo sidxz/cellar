@@ -116,6 +116,15 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     ("registered_plates", "storage_location_id", "storage_locations"),
 
     # -------------------------------------------------------------------------
+    # plate_groups → storage_locations: SET NULL by design (migration 067)
+    # -------------------------------------------------------------------------
+    # plate_groups.storage_location_id is a nullable loose location reference,
+    # ondelete=SET NULL. A deleted location just un-places the group; nothing
+    # to cascade — same rationale as the samples/batches/registered_plates
+    # storage_location_id entries above.
+    ("plate_groups", "storage_location_id", "storage_locations"),
+
+    # -------------------------------------------------------------------------
     # Plate groups — org-owned hierarchy (migration 062); same rationale as
     # storage_locations/registered_plates self-refs above
     # -------------------------------------------------------------------------
