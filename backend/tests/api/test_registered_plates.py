@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 
 from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID
@@ -472,3 +474,59 @@ class TestCoverageGaps:
         assert plate["format"] == "96"
         assert plate["plate_type"] == "assay"
         assert plate["status"] == "registered"
+
+
+class TestAuditActor:
+    @pytest.fixture(autouse=True)
+    def _wire_audit_catch_all(self, api_app: FastAPI) -> None:
+        """The shared test app never wires the audit catch-all handler (only
+        production's ``create_app()`` lifespan does) — every other API test
+        exercises audit via explicit ``record()`` calls, not this handler.
+        Wire it here, scoped to this class, since this is the one test that
+        needs the catch-all path itself under test.
+        """
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from cellar.domain.shared.events import DomainEvent
+        from cellar.infrastructure.messaging.audit_event_handler import AuditEventHandler
+        from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+
+        container = api_app.state.container
+        container[EventDispatcher].register(
+            DomainEvent, AuditEventHandler(container[async_sessionmaker])
+        )
+
+    @pytest.fixture(autouse=True)
+    def _bind_actor_context(self, api_app: FastAPI, fake_auth) -> None:
+        """The shared ``get_auth`` override (``tests/api/conftest.py``) returns
+        ``fake_auth`` directly, bypassing the real ``get_auth`` wrapper — so it
+        never calls ``set_current_actor``. Reproduce that one side effect here
+        so this test exercises the real request → ContextVar → audit path.
+        """
+        from cellar.application.shared.actor_context import set_current_actor
+        from cellar.interface.dependencies import get_auth
+
+        async def _fake_get_auth():
+            # Must be async: FastAPI runs sync dependencies in a threadpool
+            # (a copied context), so a plain `def` here would set the
+            # ContextVar on a copy that never propagates back to the
+            # request's own task.
+            set_current_actor(fake_auth.user_id)
+            return fake_auth
+
+        api_app.dependency_overrides[get_auth] = _fake_get_auth
+
+    async def test_plate_registration_audit_row_names_the_caller(
+        self, client: AsyncClient, api_app: FastAPI, user_id: uuid.UUID
+    ) -> None:
+        reg = await _register(client)
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        audit = await client.get(
+            "/api/v1/audit", params={"entity_type": "RegisteredPlate", "entity_id": plate_id}
+        )
+        assert audit.status_code == 200, audit.text
+        rows = audit.json()["items"]
+        assert rows, "expected at least one audit row for the registered plate"
+        assert {r["performed_by"] for r in rows} == {str(user_id)}
