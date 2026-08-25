@@ -698,6 +698,57 @@ class TestOwnerLends:
         # default policy: approval required
         assert [i["status"] for i in loan["items"]] == ["requested"]
 
+    async def test_owner_editor_cancels_own_initiated_loan(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        """Ruling R7 (final review I3): the owner org can retract a mis-lend
+        before the borrower has physically received the plates."""
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")  # owner = AUTH_ORG
+        loan = await _mk_loan(
+            editor_client_own_org, plate_ids=[plate["id"]], borrower_org_id=str(OTHER_ORG_ID)
+        )
+        resp = await editor_client_own_org.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:cancel", json={}
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert [i["status"] for i in body["items"]] == ["cancelled"]
+        assert body["status"] == "closed"
+
+    async def test_unrelated_org_editor_cannot_cancel_owner_initiated_loan(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        database_url: str,
+        workspace_id: uuid.UUID,
+    ) -> None:
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")  # owner = AUTH_ORG
+        loan = await _mk_loan(
+            editor_client_own_org, plate_ids=[plate["id"]], borrower_org_id=str(OTHER_ORG_ID)
+        )
+        async with _client_as(database_url, workspace_id, org_id=uuid.uuid4()) as unrelated:
+            resp = await unrelated.post(
+                f"/api/v1/plate-loans/{loan['id']}/items:cancel", json={}
+            )
+            # hidden == missing: unrelated is neither owner (AUTH_ORG) nor
+            # borrower (OTHER_ORG), so the loan is invisible to it before
+            # _authorize ever runs (same invariant as
+            # test_non_owner_editor_cannot_lend_foreign_plate above).
+            assert resp.status_code == 404, resp.text
+
+    async def test_owner_org_editor_without_approve_action_cannot_cancel(
+        self, client: AsyncClient, denied_editor_client_own_org: AsyncClient
+    ) -> None:
+        """The fallback's own failure must still surface — an owner-org
+        editor who is visibly not the borrower AND lacks cellar:approve_loan
+        gets a real 403, not a silently-swallowed pass."""
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")  # owner = AUTH_ORG
+        loan = await _mk_loan(client, plate_ids=[plate["id"]], borrower_org_id=str(OTHER_ORG_ID))
+        resp = await denied_editor_client_own_org.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:cancel", json={}
+        )
+        assert resp.status_code == 403, resp.text
+
 
 class TestMyOrgFilterIncludesBorrowed:
     """Spec §5 'plus borrowed-by-us' — S4 deviation #5 closure."""

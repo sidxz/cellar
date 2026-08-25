@@ -548,12 +548,25 @@ class ConfirmLoanReturn(_LoanItemsUseCase):
 
 
 class CancelLoanItems(_LoanItemsUseCase):
-    """Borrower cancels items still REQUESTED or APPROVED (not yet checked out)."""
+    """Borrower cancels items still REQUESTED or APPROVED (not yet checked out).
+
+    Ruling R7 (final review I3): the owner org may retract items it hasn't
+    handed over yet too — a mis-lend (wrong borrower_org_id on an
+    owner-initiated loan, ruling R6) needs an undo verb, and the owner
+    already has the authority to *approve* those same items. Try borrower
+    authority first (the common case); on failure, fall back to owner loan
+    authority (admin bypass, org match, cellar:approve_loan) rather than
+    granting both unconditionally, so an unrelated org still gets a single
+    clean 403.
+    """
 
     _target = LoanItemStatus.CANCELLED
 
     async def _authorize(self, auth: AuthContext | None, loan: PlateLoan) -> None:
-        await _require_borrower_authority(auth, loan)
+        try:
+            await _require_borrower_authority(auth, loan)
+        except AuthorizationError:
+            await require_loan_authority(auth, loan.owner_org_id)
 
     def _apply(self, loan: PlateLoan, item_ids: list[uuid.UUID], auth: AuthContext | None) -> None:
         loan.cancel_items(item_ids)
