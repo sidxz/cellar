@@ -30,6 +30,7 @@ from cellar.domain.inventory.plate_group import PlateGroup
 from cellar.domain.inventory.repository import (
     PlateGroupRepository,
     RegisteredPlateRepository,
+    StorageLocationRepository,
 )
 from cellar.domain.shared.errors import (
     AuthorizationError,
@@ -191,6 +192,10 @@ def _not_found(group_id: uuid.UUID) -> Failure:
     return Failure(NotFoundError("PlateGroup", str(group_id)))
 
 
+def _location_not_found(location_id: uuid.UUID) -> Failure:
+    return Failure(NotFoundError("StorageLocation", str(location_id)))
+
+
 # ---------------------------------------------------------------------------
 # Use cases
 # ---------------------------------------------------------------------------
@@ -205,11 +210,13 @@ class CreatePlateGroup:
         repo: PlateGroupRepository,
         dispatcher: EventDispatcherProtocol,
         visibility: PlateVisibilityService,
+        location_repo: StorageLocationRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._visibility = visibility
+        self._location_repo = location_repo
 
     async def __call__(
         self, input: CreatePlateGroupCommand, auth: AuthContext | None = None
@@ -256,6 +263,13 @@ class CreatePlateGroup:
                     ConflictError(f"A group named '{input.name.strip()}' already exists here")
                 )
 
+            if input.storage_location_id is not None:
+                location = await self._location_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.storage_location_id
+                )
+                if location is None:
+                    return _location_not_found(input.storage_location_id)
+
             group = PlateGroup.create(
                 workspace_id=input.workspace_id,
                 owner_org_id=owner_org_id,
@@ -287,11 +301,13 @@ class UpdatePlateGroup:
         repo: PlateGroupRepository,
         dispatcher: EventDispatcherProtocol,
         visibility: PlateVisibilityService,
+        location_repo: StorageLocationRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._visibility = visibility
+        self._location_repo = location_repo
 
     async def __call__(
         self, input: UpdatePlateGroupCommand, auth: AuthContext | None = None
@@ -318,6 +334,13 @@ class UpdatePlateGroup:
                             f"A group named '{input.name.strip()}' already exists here"
                         )
                     )
+
+            if input.storage_location_id is not UNSET and input.storage_location_id is not None:
+                location = await self._location_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.storage_location_id
+                )
+                if location is None:
+                    return _location_not_found(input.storage_location_id)
 
             kwargs: dict = {}
             if input.name is not None:

@@ -548,6 +548,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyPlateGroupRepository(uow),
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyStorageLocationRepository(uow),
         )
 
     def _update_plate_group(c: Container):
@@ -557,6 +558,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyPlateGroupRepository(uow),
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyStorageLocationRepository(uow),
         )
 
     def _move_plate_group(c: Container):

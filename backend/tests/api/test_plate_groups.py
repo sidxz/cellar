@@ -29,6 +29,12 @@ async def _mk_plate(client: AsyncClient, barcode: str, **overrides) -> dict:
     return resp.json()
 
 
+async def _mk_location(client: AsyncClient, name: str) -> dict:
+    resp = await client.post("/api/v1/storage-locations", json={"name": name, "type": "site"})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 class TestCreate:
     async def test_create_defaults_to_caller_org(self, client: AsyncClient) -> None:
         g = await _mk_group(client, f"G-{uuid.uuid4().hex[:6]}")
@@ -269,6 +275,40 @@ class TestMetadata:
             json={"name": f"Bad-{uuid.uuid4().hex[:6]}", "initial_volume_ul": -1},
         )
         assert resp.status_code == 422, resp.text
+
+    async def test_create_with_nonexistent_storage_location_404s(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.post(
+            "/api/v1/plate-groups",
+            json={
+                "name": f"Loc-{uuid.uuid4().hex[:6]}",
+                "storage_location_id": str(uuid.uuid4()),
+            },
+        )
+        assert resp.status_code == 404, resp.text
+
+    async def test_patch_with_nonexistent_storage_location_404s(
+        self, client: AsyncClient
+    ) -> None:
+        g = await _mk_group(client, f"Meta-{uuid.uuid4().hex[:6]}")
+        resp = await client.patch(
+            f"/api/v1/plate-groups/{g['id']}",
+            json={"storage_location_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 404, resp.text
+
+    async def test_create_with_real_storage_location_round_trips(
+        self, client: AsyncClient
+    ) -> None:
+        loc = await _mk_location(client, f"Room-{uuid.uuid4().hex[:6]}")
+        g = await _mk_group(
+            client, f"Loc-{uuid.uuid4().hex[:6]}", storage_location_id=loc["id"]
+        )
+        assert g["storage_location_id"] == loc["id"]
+        tree = (await client.get("/api/v1/plate-groups/tree")).json()
+        node = next(r for r in tree["roots"] if r["id"] == g["id"])
+        assert node["storage_location_id"] == loc["id"]
 
     async def test_tree_plate_format_single_and_mixed(self, client: AsyncClient) -> None:
         single = await _mk_group(client, f"Single-{uuid.uuid4().hex[:6]}")

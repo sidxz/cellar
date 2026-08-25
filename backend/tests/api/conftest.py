@@ -122,6 +122,7 @@ def _create_test_app(
     from cellar.interface.routes.kiosk_devices import router as kiosk_device_router
     from cellar.interface.routes.org_plate_policies import router as org_plate_policy_router
     from cellar.interface.routes.plate_groups import router as plate_group_router
+    from cellar.interface.routes.storage import router as storage_router
     from cellar.interface.routes.plate_loans import router as plate_loan_router
     from cellar.interface.routes.registered_plates import router as registered_plates_router
     from cellar.interface.routes.plate_import import router as plate_import_router
@@ -144,6 +145,7 @@ def _create_test_app(
     app.include_router(plate_template_router)
     app.include_router(registered_plates_router)
     app.include_router(plate_group_router)
+    app.include_router(storage_router)
     app.include_router(plate_import_router)
     app.include_router(org_plate_policy_router)
     app.include_router(plate_loan_router)
