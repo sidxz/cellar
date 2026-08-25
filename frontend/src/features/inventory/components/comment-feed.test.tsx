@@ -91,3 +91,32 @@ describe("CommentFeed", () => {
     await waitFor(() => expect(textarea.value).toBe(""));
   });
 });
+
+describe("CommentFeed loan-context link (I2)", () => {
+  const commentWithLoan = [
+    {
+      id: "c3",
+      target_type: "plate_group",
+      target_id: "g1",
+      body: "0.5 uL for NadE",
+      author_name: "Jane Doe",
+      created_at: "2026-08-25T12:00:00Z",
+      loan_id: "loan-1",
+    },
+  ];
+
+  it("shows the 'in loan' link when the feed's own scope is not that loan", async () => {
+    mocked.mockImplementation(async () => commentWithLoan);
+    setup({ scope: { targetType: "plate_group", targetId: "g1" } });
+    await waitFor(() => expect(screen.getByText("0.5 uL for NadE")).toBeInTheDocument());
+    const link = screen.getByRole("link", { name: "in loan" });
+    expect(link).toHaveAttribute("href", "/inventory/loans#all");
+  });
+
+  it("hides the link when the entry is shown on that loan's own feed", async () => {
+    mocked.mockImplementation(async () => commentWithLoan);
+    setup({ scope: { loanId: "loan-1" } });
+    await waitFor(() => expect(screen.getByText("0.5 uL for NadE")).toBeInTheDocument());
+    expect(screen.queryByRole("link", { name: "in loan" })).not.toBeInTheDocument();
+  });
+});
