@@ -320,7 +320,7 @@ async def test_approve_loan_items_success_path_enriches_inside_uow(session_facto
         SQLAlchemyRegisteredPlateRepository(uow),
         SQLAlchemyOrgPlatePolicyRepository(uow),
         _StubDispatcher(),
-        PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow)),
+        PlateVisibilityService(),
     )
     auth = FakeAuth(role="admin", workspace_id=ws)  # admin bypasses org + action checks
 

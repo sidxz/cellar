@@ -172,6 +172,7 @@ from cellar.application.screening.sync_targets import SyncFreshness, SyncTargets
 from cellar.application.screening.target_source import TargetSource
 from cellar.application.screening.update_run import UpdateRun
 from cellar.application.shared.molecule_resolver import MoleculeResolver
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.parsers import TabularParser
 from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
@@ -190,9 +191,6 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
-    SQLAlchemyOrgPlatePolicyRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
     SQLAlchemyPlateLoanRepository,
@@ -867,20 +865,18 @@ def register_screening(container: Container) -> None:
 
         return _f
 
-    def _plate_visibility(uow: AsyncUnitOfWork) -> PlateVisibilityService:
+    def _plate_visibility(c: Container, uow: AsyncUnitOfWork) -> PlateVisibilityService:
         # Loan repo wired uniformly across this section (Task 7 / spec §5):
         # only GetPlate/ListPlates/ListChildren actually consume a borrowed
         # set, but the arg is inert for the write paths below (they never
         # call borrowed_plate_ids or pass a non-default `borrowed` to
         # can_view) — one shape for the whole section beats a special case.
-        return PlateVisibilityService(
-            SQLAlchemyOrgPlatePolicyRepository(uow), SQLAlchemyPlateLoanRepository(uow)
-        )
+        return PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow))
 
     def _reg_plate_query_with_visibility(uc_cls: type):
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            visibility = _plate_visibility(uow)
+            visibility = _plate_visibility(c, uow)
             return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow), visibility)
 
         return _f
@@ -888,7 +884,7 @@ def register_screening(container: Container) -> None:
     def _reg_plate_cmd_with_visibility(uc_cls: type):
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            visibility = _plate_visibility(uow)
+            visibility = _plate_visibility(c, uow)
             return uc_cls(
                 uow, SQLAlchemyRegisteredPlateRepository(uow), c[EventDispatcher], visibility
             )
@@ -897,7 +893,7 @@ def register_screening(container: Container) -> None:
 
     def _map_wells(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        visibility = _plate_visibility(uow)
+        visibility = _plate_visibility(c, uow)
         return MapWells(
             uow,
             SQLAlchemyRegisteredPlateRepository(uow),
@@ -917,7 +913,7 @@ def register_screening(container: Container) -> None:
 
     def _export_plate_layout(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        visibility = _plate_visibility(uow)
+        visibility = _plate_visibility(c, uow)
         return ExportPlateLayout(
             uow,
             SQLAlchemyRegisteredPlateRepository(uow),

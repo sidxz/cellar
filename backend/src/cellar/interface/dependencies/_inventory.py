@@ -88,9 +88,7 @@ from cellar.application.inventory.registered_plates import (
 )
 from cellar.application.inventory.update_batch import UpdateBatch
 from cellar.application.inventory.update_storage_location import UpdateStorageLocation
-from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
-    SQLAlchemyOrgPlatePolicyRepository,
-)
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
     SQLAlchemyPlateLoanRepository,
 )
@@ -251,9 +249,7 @@ def get_plate_visibility_uow(
     """
     uow = AsyncUnitOfWork(container[async_sessionmaker])
     return (
-        PlateVisibilityService(
-            SQLAlchemyOrgPlatePolicyRepository(uow), SQLAlchemyPlateLoanRepository(uow)
-        ),
+        PlateVisibilityService(container[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
         uow,
     )
 

@@ -12,9 +12,12 @@ from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
 from cellar.domain.shared.secret_provider import SecretProvider
+from cellar.infrastructure.duar.org_directory import OrgDirectory
+from cellar.infrastructure.duar.settings import DuarSettings
 from cellar.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.database import create_engine, create_session_factory
@@ -96,3 +99,20 @@ def register_core(container: Container, db_settings: DatabaseSettings | None = N
 
     # --- Temporal ---
     container.define(TemporalSettings, Singleton(TemporalSettings))
+
+    # Org directory port (strict plate visibility, spec 2026-08-25 §3) —
+    # guarded so create_container(overrides={OrgDirectoryPort: stub}) can
+    # pre-register a stub for API tests. Lazy: DuarSettings is only read on
+    # first resolve, so workers/tests that never resolve it need no env.
+    # ponytail: routes still use the module singleton in
+    # interface/dependencies/_core.py (its own 5-min cache); unify if the
+    # double fetch ever matters.
+    if OrgDirectoryPort not in container.defined_types:
+        container.define(
+            OrgDirectoryPort,
+            Singleton(
+                lambda: OrgDirectory(
+                    base_url=DuarSettings().url, service_key=DuarSettings().service_key
+                )
+            ),
+        )
