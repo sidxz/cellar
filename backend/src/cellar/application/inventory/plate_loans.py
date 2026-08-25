@@ -643,6 +643,12 @@ class RequestLoanReturn(_LoanItemsUseCase):
         returning = {i.plate_id for i in loan.items if i.id in set(item_ids)}
         plates = await self._plate_repo.find_by_ids(loan.workspace_id, sorted(returning))
         required = {p.group_id for p in plates if p.group_id is not None}
+        provided_ids = {c.group_id for c in input.comments}
+        extra = provided_ids - required
+        if extra:
+            return ValidationError(
+                "comments may only name groups of the plates being returned"
+            )
         provided = {c.group_id for c in input.comments if c.body.strip()}
         missing = required - provided
         if missing:

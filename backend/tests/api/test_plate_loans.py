@@ -909,3 +909,73 @@ class TestReturnComments:
             f"/api/v1/plate-loans/{loan['id']}/items:approve", json={"comments": []}
         )
         assert resp.status_code == 422, resp.text
+
+    async def test_foreign_group_comment_rejected_and_not_written(
+        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        """C1 regression: a comments[] entry naming a group outside the
+        returning plates — here, a group belonging to a foreign org — must be
+        rejected before anything is written, never smuggled onto that org's
+        feed."""
+        loan, g1, g2, _ = await self._checked_out_loan_with_groups(client)
+        g_foreign = await _mk_group(
+            client, f"FOREIGN-{uuid.uuid4().hex[:6]}", owner_org_id=str(OTHER_ORG_ID)
+        )
+        resp = await client.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:request-return",
+            json={
+                "comments": [
+                    {"group_id": g1["id"], "body": "ok"},
+                    {"group_id": g2["id"], "body": "ok"},
+                    {"group_id": g_foreign["id"], "body": "SMUGGLED"},
+                ]
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        # nothing moved
+        got = (await client.get(f"/api/v1/plate-loans/{loan['id']}")).json()
+        assert {i["status"] for i in got["items"]} == {"checked_out"}
+        # and nothing was written to the foreign org's own group feed
+        feed = await editor_client_other_org.get(
+            "/api/v1/comments",
+            params={"target_type": "plate_group", "target_id": g_foreign["id"]},
+        )
+        assert feed.status_code == 200, feed.text
+        assert feed.json() == []
+
+    async def test_nonexistent_group_comment_rejected(self, client: AsyncClient) -> None:
+        """C1 regression: a comments[] entry naming a group id that does not
+        exist at all must be rejected, not silently persisted."""
+        loan, g1, g2, _ = await self._checked_out_loan_with_groups(client)
+        resp = await client.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:request-return",
+            json={
+                "comments": [
+                    {"group_id": g1["id"], "body": "ok"},
+                    {"group_id": g2["id"], "body": "ok"},
+                    {"group_id": str(uuid.uuid4()), "body": "ORPHAN"},
+                ]
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        got = (await client.get(f"/api/v1/plate-loans/{loan['id']}")).json()
+        assert {i["status"] for i in got["items"]} == {"checked_out"}
+
+    async def test_plate_comment_for_plate_not_in_loan_rejected(
+        self, client: AsyncClient
+    ) -> None:
+        loan, g1, g2, _p1 = await self._checked_out_loan_with_groups(client)
+        outsider = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        resp = await client.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:request-return",
+            json={
+                "comments": [
+                    {"group_id": g1["id"], "body": "ok"},
+                    {"group_id": g2["id"], "body": "ok"},
+                ],
+                "plate_comments": [{"plate_id": outsider["id"], "body": "not part of loan"}],
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        got = (await client.get(f"/api/v1/plate-loans/{loan['id']}")).json()
+        assert {i["status"] for i in got["items"]} == {"checked_out"}
