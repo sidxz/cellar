@@ -640,6 +640,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyPlateLoanRepository(uow),
             SQLAlchemyRegisteredPlateRepository(uow),
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
         )
 
     def _get_loan(c: Container):
@@ -649,6 +650,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyPlateLoanRepository(uow),
             SQLAlchemyRegisteredPlateRepository(uow),
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
         )
 
     container.define(RequestPlateLoan, _request_plate_loan)
@@ -665,6 +667,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyOrgPlatePolicyRepository(uow),
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
         )
 
     def _deny_loan_items(c: Container):
@@ -676,6 +679,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyOrgPlatePolicyRepository(uow),
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
         )
 
     def _confirm_loan_checkout(c: Container):
@@ -687,6 +691,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyOrgPlatePolicyRepository(uow),
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
         )
 
     def _request_loan_return(c: Container):
@@ -698,6 +703,8 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyOrgPlatePolicyRepository(uow),
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
+            SQLAlchemyCommentRepository(uow),
         )
 
     def _confirm_loan_return(c: Container):
@@ -709,6 +716,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyOrgPlatePolicyRepository(uow),
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
         )
 
     def _cancel_loan_items(c: Container):
@@ -720,6 +728,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyOrgPlatePolicyRepository(uow),
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
         )
 
     container.define(ApproveLoanItems, _approve_loan_items)

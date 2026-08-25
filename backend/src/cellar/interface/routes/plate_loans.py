@@ -10,9 +10,12 @@ from pydantic import BaseModel
 
 from cellar.application.inventory.plate_loans import (
     GetLoanQuery,
+    GroupComment,
     ListLoansQuery,
     LoanItemsCommand,
     LoanWithPlates,
+    PlateComment,
+    RequestLoanReturnCommand,
     RequestPlateLoanCommand,
 )
 from cellar.domain.inventory.enums import LoanItemStatus, LoanStatus
@@ -45,6 +48,8 @@ class LoanItemResponse(BaseModel):
     plate_label: str
     status: LoanItemStatus
     status_changed_at: datetime
+    group_id: uuid.UUID | None = None
+    group_name: str | None = None
 
 
 class LoanResponse(BaseModel):
@@ -71,23 +76,26 @@ class LoanResponse(BaseModel):
         from the map (deleted after the loan closed) falls back to
         placeholders instead of failing the response."""
         loan = dto.loan
-        items = [
-            LoanItemResponse(
-                id=item.id,
-                plate_id=item.plate_id,
-                barcode=(
-                    dto.plates[item.plate_id].barcode.value
-                    if item.plate_id in dto.plates
-                    else "(deleted plate)"
-                ),
-                plate_label=(
-                    dto.plates[item.plate_id].plate_label if item.plate_id in dto.plates else ""
-                ),
-                status=item.status,
-                status_changed_at=item.status_changed_at,
+        items = []
+        for item in loan.items:
+            plate = dto.plates.get(item.plate_id)
+            group = (
+                dto.groups.get(plate.group_id)
+                if plate is not None and plate.group_id
+                else None
             )
-            for item in loan.items
-        ]
+            items.append(
+                LoanItemResponse(
+                    id=item.id,
+                    plate_id=item.plate_id,
+                    barcode=plate.barcode.value if plate is not None else "(deleted plate)",
+                    plate_label=plate.plate_label if plate is not None else "",
+                    status=item.status,
+                    status_changed_at=item.status_changed_at,
+                    group_id=group.id if group is not None else None,
+                    group_name=group.name if group is not None else None,
+                )
+            )
         return cls(
             id=loan.id,
             workspace_id=loan.workspace_id,
@@ -120,6 +128,25 @@ class LoanItemsBody(BaseModel):
     item_ids: list[uuid.UUID] | None = None
 
     model_config = {"extra": "forbid"}
+
+
+class GroupCommentBody(BaseModel):
+    group_id: uuid.UUID
+    body: str
+
+    model_config = {"extra": "forbid"}
+
+
+class PlateCommentBody(BaseModel):
+    plate_id: uuid.UUID
+    body: str
+
+    model_config = {"extra": "forbid"}
+
+
+class RequestReturnBody(LoanItemsBody):
+    comments: list[GroupCommentBody] = []
+    plate_comments: list[PlateCommentBody] = []
 
 
 # ---------------------------------------------------------------------------
@@ -227,11 +254,16 @@ async def confirm_loan_checkout(
 
 @router.post("/{loan_id}/items:request-return", response_model=LoanResponse)
 async def request_loan_return(
-    loan_id: uuid.UUID, body: LoanItemsBody, auth: AuthDep, uc: RequestLoanReturnDep
+    loan_id: uuid.UUID, body: RequestReturnBody, auth: AuthDep, uc: RequestLoanReturnDep
 ) -> LoanResponse:
-    """Borrower requests to return CHECKED_OUT items."""
-    command = LoanItemsCommand(
-        workspace_id=auth.workspace_id, loan_id=loan_id, item_ids=body.item_ids
+    """Borrower requests to return CHECKED_OUT items. Spec §7.3: one non-empty
+    comment is required per distinct group among the returning plates."""
+    command = RequestLoanReturnCommand(
+        workspace_id=auth.workspace_id,
+        loan_id=loan_id,
+        item_ids=body.item_ids,
+        comments=tuple(GroupComment(c.group_id, c.body) for c in body.comments),
+        plate_comments=tuple(PlateComment(p.plate_id, p.body) for p in body.plate_comments),
     )
     dto = result_to_response(await uc(command, auth=auth))
     return LoanResponse.from_dto(dto)

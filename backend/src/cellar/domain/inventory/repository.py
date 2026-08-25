@@ -213,6 +213,9 @@ class PlateGroupRepository(Protocol):
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> PlateGroup | None: ...
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[PlateGroup]: ...
     async def find_by_workspace(
         self, workspace_id: uuid.UUID, *, owner_org_id: uuid.UUID | None = None
     ) -> list[PlateGroup]: ...

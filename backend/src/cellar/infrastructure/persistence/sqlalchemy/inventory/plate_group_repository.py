@@ -33,6 +33,15 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
+    async def find_by_ids(self, workspace_id: uuid.UUID, ids: list[uuid.UUID]) -> list[PlateGroup]:
+        if not ids:
+            return []
+        stmt = select(PlateGroupModel).where(
+            PlateGroupModel.workspace_id == workspace_id, PlateGroupModel.id.in_(ids)
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
     async def find_children(
         self, workspace_id: uuid.UUID, parent_group_id: uuid.UUID
     ) -> list[PlateGroup]:

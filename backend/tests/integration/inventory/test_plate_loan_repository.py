@@ -19,6 +19,9 @@ from cellar.domain.inventory.plate_loan import PlateLoan
 from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
     SQLAlchemyOrgPlatePolicyRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
+    SQLAlchemyPlateGroupRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
     SQLAlchemyPlateLoanRepository,
 )
@@ -321,6 +324,7 @@ async def test_approve_loan_items_success_path_enriches_inside_uow(session_facto
         SQLAlchemyOrgPlatePolicyRepository(uow),
         _StubDispatcher(),
         PlateVisibilityService(),
+        SQLAlchemyPlateGroupRepository(uow),
     )
     auth = FakeAuth(role="admin", workspace_id=ws)  # admin bypasses org + action checks
 

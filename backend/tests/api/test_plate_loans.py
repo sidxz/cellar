@@ -797,3 +797,115 @@ class TestMyOrgFilterIncludesBorrowed:
             "/api/v1/plates", params={"owner_org_id": str(OTHER_ORG_ID)}
         )
         assert plate["id"] in [p["id"] for p in resp.json()]
+
+
+class TestReturnComments:
+    """Spec §7.3: one non-empty comment per distinct group among the returning plates."""
+
+    async def _checked_out_loan_with_groups(
+        self, client: AsyncClient
+    ) -> tuple[dict, dict, dict, dict]:
+        await _set_policy(client, AUTH_ORG_ID, require_approval=False, confirmation="none")
+        g1 = await _mk_group(client, f"G1-{uuid.uuid4().hex[:6]}")
+        g2 = await _mk_group(client, f"G2-{uuid.uuid4().hex[:6]}")
+        p1 = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        p2 = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        p3 = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")  # ungrouped
+        for gid, pid in ((g1["id"], p1["id"]), (g2["id"], p2["id"])):
+            r = await client.post(f"/api/v1/plate-groups/{gid}/plates", json={"plate_ids": [pid]})
+            assert r.status_code == 204, r.text
+        loan = await _mk_loan(client, plate_ids=[p1["id"], p2["id"], p3["id"]])
+        assert {i["status"] for i in loan["items"]} == {"checked_out"}
+        return loan, g1, g2, p1
+
+    async def test_items_expose_group(self, client: AsyncClient) -> None:
+        loan, g1, _g2, p1 = await self._checked_out_loan_with_groups(client)
+        by_plate = {i["plate_id"]: i for i in loan["items"]}
+        assert by_plate[p1["id"]]["group_id"] == g1["id"]
+        assert by_plate[p1["id"]]["group_name"] == g1["name"]
+        assert sum(1 for i in loan["items"] if i["group_id"] is None) == 1
+
+    async def test_missing_group_comment_422_names_groups(self, client: AsyncClient) -> None:
+        loan, g1, g2, _ = await self._checked_out_loan_with_groups(client)
+        resp = await client.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:request-return",
+            json={"comments": [{"group_id": g1["id"], "body": "0.5 uL for NadE"}]},
+        )
+        assert resp.status_code == 422, resp.text
+        assert g2["name"] in resp.text and g1["name"] not in resp.text
+        # nothing moved
+        got = (await client.get(f"/api/v1/plate-loans/{loan['id']}")).json()
+        assert {i["status"] for i in got["items"]} == {"checked_out"}
+
+    async def test_blank_comment_counts_as_missing(self, client: AsyncClient) -> None:
+        loan, g1, g2, _ = await self._checked_out_loan_with_groups(client)
+        resp = await client.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:request-return",
+            json={
+                "comments": [
+                    {"group_id": g1["id"], "body": "  "},
+                    {"group_id": g2["id"], "body": "ok"},
+                ]
+            },
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_comments_written_in_loan_context(self, client: AsyncClient) -> None:
+        loan, g1, g2, p1 = await self._checked_out_loan_with_groups(client)
+        resp = await client.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:request-return",
+            json={
+                "comments": [
+                    {"group_id": g1["id"], "body": "0.5 uL for NadE"},
+                    {"group_id": g2["id"], "body": "untouched"},
+                ],
+                "plate_comments": [
+                    {"plate_id": p1["id"], "body": "removed 12.5 uL from each well"}
+                ],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        # confirmation=none collapses request-return straight to returned
+        assert {i["status"] for i in resp.json()["items"]} == {"returned"}
+        feed = (await client.get("/api/v1/comments", params={"loan_id": loan["id"]})).json()
+        assert sorted(c["body"] for c in feed) == [
+            "0.5 uL for NadE",
+            "removed 12.5 uL from each well",
+            "untouched",
+        ]
+        g1_feed = (
+            await client.get(
+                "/api/v1/comments",
+                params={"target_type": "plate_group", "target_id": g1["id"]},
+            )
+        ).json()
+        assert [c["body"] for c in g1_feed] == ["0.5 uL for NadE"]
+        assert g1_feed[0]["loan_id"] == loan["id"]
+
+    async def test_partial_return_only_requires_groups_of_returning_items(
+        self, client: AsyncClient
+    ) -> None:
+        loan, g1, _g2, p1 = await self._checked_out_loan_with_groups(client)
+        item_p1 = next(i["id"] for i in loan["items"] if i["plate_id"] == p1["id"])
+        resp = await client.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:request-return",
+            json={"item_ids": [item_p1], "comments": [{"group_id": g1["id"], "body": "done"}]},
+        )
+        assert resp.status_code == 200, resp.text
+
+    async def test_ungrouped_plates_need_no_comment(self, client: AsyncClient) -> None:
+        await _set_policy(client, AUTH_ORG_ID, require_approval=False, confirmation="none")
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        loan = await _mk_loan(client, plate_ids=[plate["id"]])
+        resp = await client.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:request-return", json={}
+        )
+        assert resp.status_code == 200, resp.text
+
+    async def test_unknown_field_still_forbidden_on_other_verbs(self, client: AsyncClient) -> None:
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        loan = await _mk_loan(client, plate_ids=[plate["id"]])
+        resp = await client.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:approve", json={"comments": []}
+        )
+        assert resp.status_code == 422, resp.text
