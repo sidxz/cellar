@@ -213,3 +213,11 @@ VALID_LOAN_ITEM_TRANSITIONS: dict[LoanItemStatus, frozenset[LoanItemStatus]] = {
         {LoanItemStatus.REQUESTED, LoanItemStatus.APPROVED}
     ),
 }
+
+
+class CommentTarget(StrEnum):
+    """What a plate-tracking comment is attached to (spec 2026-08-25 §7)."""
+
+    PLATE_LOAN = "plate_loan"
+    PLATE_GROUP = "plate_group"
+    PLATE = "plate"

@@ -34,6 +34,7 @@ import cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_
 import cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.kiosk_device_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.comment_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
@@ -216,6 +217,8 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # survive plate deletion. With no FK declared it never appears in
     # _collect_all_fks(), so there is nothing to categorize for it.
     ("plate_loan_items", "loan_id", "plate_loans"),
+    # SET NULL by design — a deleted loan detaches its comments
+    ("plate_comments", "loan_id", "plate_loans"),
 
     # -------------------------------------------------------------------------
     # batches → salt_catalog: SET NULL on salt entry delete

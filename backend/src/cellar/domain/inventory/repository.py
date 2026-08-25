@@ -7,6 +7,8 @@ from typing import Protocol, runtime_checkable
 
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.cdd_plate_import import CddPlateImport
+from cellar.domain.inventory.comment import Comment
+from cellar.domain.inventory.enums import CommentTarget
 from cellar.domain.inventory.import_template import ImportTemplate
 from cellar.domain.inventory.kiosk_device import KioskDevice
 from cellar.domain.inventory.org_plate_policy import OrgPlatePolicy
@@ -316,3 +318,16 @@ class KioskDeviceRepository(Protocol):
     async def find_active_by_token_hash(self, token_hash: str) -> KioskDevice | None: ...
     async def touch_last_seen(self, device_id: uuid.UUID) -> None: ...
     async def save(self, aggregate: KioskDevice) -> None: ...
+
+
+@runtime_checkable
+class CommentRepository(Protocol):
+    """Append-only comments on loans / groups / plates (spec 2026-08-25 §7)."""
+
+    async def list_for_target(
+        self, workspace_id: uuid.UUID, target_type: CommentTarget, target_id: uuid.UUID
+    ) -> list[Comment]: ...
+    async def list_for_loan(
+        self, workspace_id: uuid.UUID, loan_id: uuid.UUID
+    ) -> list[Comment]: ...
+    async def save(self, aggregate: Comment) -> None: ...

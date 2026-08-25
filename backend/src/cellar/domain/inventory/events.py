@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from cellar.domain.inventory.enums import CommentTarget
 from cellar.domain.shared.events import DomainEvent
 
 # ---------------------------------------------------------------------------
@@ -388,3 +389,19 @@ class KioskDeviceCreated(DomainEvent):
 class KioskDeviceRevoked(DomainEvent):
     org_id: uuid.UUID
     name: str
+
+
+# ---------------------------------------------------------------------------
+# Comment events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommentAdded(DomainEvent):
+    """A comment was appended to a loan / group / plate. ``user_id`` feeds the
+    audit catch-all's actor attribution (None for migrated legacy authors)."""
+
+    target_type: CommentTarget
+    target_id: uuid.UUID
+    loan_id: uuid.UUID | None
+    user_id: uuid.UUID | None
