@@ -948,6 +948,7 @@ Claude-Session: https://claude.ai/code/session_01HeExFT5oQrec5VbwQafNfu" -- back
 - Modify: `frontend/src/features/inventory/components/plate-list.tsx:236-240, 294-310`
 - Modify: `frontend/src/features/inventory/components/plate-group-dashboard.tsx:89-107`
 - Modify: `frontend/src/features/audit/components/audit-list.tsx:17-27`
+- Modify: `frontend/src/features/inventory/components/request-loan-dialog.tsx` (Lend-to select, Task 8 backend)
 
 **Interfaces:**
 - Consumes: `useCurrentUser()` → `me.is_admin: boolean` (already served by `/api/v1/user/me`).
@@ -998,10 +999,16 @@ In `audit-list.tsx` extend `ENTITY_TYPE_OPTIONS` (values are the backend `aggreg
 ```
 (insert after the `run` entry).
 
+- [ ] **Step 5b: "Lend to" select on the loan request dialog (Task 8 backend)**
+
+In `request-loan-dialog.tsx` add state `const [borrowerOrgId, setBorrowerOrgId] = useState<string>("");` and read `const { data: orgs } = useOrgs();` (`@/shared/hooks/use-orgs`). Render, above the due-date field, a labeled `<Select>` "Borrower organization" whose first item is `<SelectItem value="">My organization (self-checkout)</SelectItem>` — if the shadcn Select rejects an empty value in this repo, use the sentinel `"__mine__"` — followed by one item per org from `orgs` **except** the caller's own (`orgId` prop). In `handleSubmit`, when a foreign org is selected add `body.borrower_org_id = borrowerOrgId`. Change the primary button label to `Lend` when a foreign org is selected, else keep `Request`. Reset `borrowerOrgId` when the dialog closes (the existing reset effect). `RequestLoanBody.borrower_org_id` exists after Step 1's regen (or add the optional field to the generated `requestLoanBody.ts` by hand if regen was impossible, and say so).
+
+Add one test to `request-loan-dialog.test.tsx` following its existing mocking style: selecting a foreign org and submitting sends `borrower_org_id` in the POST body; the default submission sends none.
+
 - [ ] **Step 6: Type-check, lint, test**
 
 Run from `frontend/`:
-`/Users/sidx/Library/pnpm/pnpm tsc --noEmit && /Users/sidx/Library/pnpm/pnpm biome check src/features/inventory/components/org-plate-policy-dialog.tsx src/features/inventory/components/org-plate-policy-dialog.test.tsx src/features/inventory/hooks/use-org-plate-policy.test.tsx src/features/inventory/components/plate-list.tsx src/features/inventory/components/plate-group-dashboard.tsx src/features/audit/components/audit-list.tsx; echo "biome exit=$?" && /Users/sidx/Library/pnpm/pnpm vitest run src/features/inventory src/features/audit`
+`/Users/sidx/Library/pnpm/pnpm tsc --noEmit && /Users/sidx/Library/pnpm/pnpm biome check src/features/inventory/components/org-plate-policy-dialog.tsx src/features/inventory/components/org-plate-policy-dialog.test.tsx src/features/inventory/hooks/use-org-plate-policy.test.tsx src/features/inventory/components/plate-list.tsx src/features/inventory/components/plate-group-dashboard.tsx src/features/audit/components/audit-list.tsx src/features/inventory/components/request-loan-dialog.tsx src/features/inventory/components/request-loan-dialog.test.tsx; echo "biome exit=$?" && /Users/sidx/Library/pnpm/pnpm vitest run src/features/inventory src/features/audit`
 Expected: tsc clean, `biome exit=0` (repo-wide `pnpm lint` is red on main for pre-existing reasons — judge only the touched files, by exit code), tests PASS.
 
 - [ ] **Step 7: Commit**
@@ -1010,7 +1017,7 @@ Expected: tsc clean, `biome exit=0` (repo-wide `pnpm lint` is red on main for pr
 git commit -m "feat(frontend): org selectors and Org Policies are admin-only; drop the plates-private switch; audit filter knows plates/groups/loans
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01HeExFT5oQrec5VbwQafNfu" -- frontend/src/shared/lib/api/model/orgPlatePolicyResponse.ts frontend/src/shared/lib/api/model/setOrgPlatePolicyBody.ts frontend/src/features/inventory/components/org-plate-policy-dialog.tsx frontend/src/features/inventory/components/org-plate-policy-dialog.test.tsx frontend/src/features/inventory/hooks/use-org-plate-policy.test.tsx frontend/src/features/inventory/components/plate-list.tsx frontend/src/features/inventory/components/plate-group-dashboard.tsx frontend/src/features/audit/components/audit-list.tsx
+Claude-Session: https://claude.ai/code/session_01HeExFT5oQrec5VbwQafNfu" -- frontend/src/shared/lib/api/model/orgPlatePolicyResponse.ts frontend/src/shared/lib/api/model/setOrgPlatePolicyBody.ts frontend/src/features/inventory/components/org-plate-policy-dialog.tsx frontend/src/features/inventory/components/org-plate-policy-dialog.test.tsx frontend/src/features/inventory/hooks/use-org-plate-policy.test.tsx frontend/src/features/inventory/components/plate-list.tsx frontend/src/features/inventory/components/plate-group-dashboard.tsx frontend/src/features/audit/components/audit-list.tsx frontend/src/features/inventory/components/request-loan-dialog.tsx frontend/src/features/inventory/components/request-loan-dialog.test.tsx frontend/src/shared/lib/api/model/requestLoanBody.ts
 ```
 (If the orval regen touched other generated files, include them in the pathspec only when the diff is the additive/no-op kind CLAUDE.md describes; otherwise revert them.)
 
@@ -1057,3 +1064,183 @@ Then post a progress comment on the tracking issue (from the repo root):
 ```bash
 gh issue comment 71 --body "S7 (plate tracker revamp, spec 2026-08-25) shipped: strict org visibility with admin bypass, plates_private removed (migration 066), audit catch-all now attributes the calling user. Commits: $(git log --oneline -6 --format='%h %s' | sed 's/^/- /' | tr '\n' ' ')"
 ```
+
+---
+
+### Task 8: Owner-initiated lending (`borrower_org_id` on the loan request) — **execute right after Task 3, before Task 4**
+
+Added 2026-08-25 (ledger Ruling R6, confirmed by the user): under strict visibility a non-admin cannot request a loan on a plate it cannot see, so cross-org loans are created by the **owner** org ("lend to X"). Same-org self-checkout is unchanged.
+
+**Files:**
+- Modify: `backend/src/cellar/application/inventory/plate_loans.py:53-61` (command), `:108-127` (constructor), `:129-141` (borrower derivation), `:229-250` (post-resolution guard + approval)
+- Modify: `backend/src/cellar/interface/routes/plate_loans.py:108-115` (`RequestLoanBody`), `:137-145` (command construction)
+- Modify: `backend/src/cellar/infrastructure/di/_inventory.py` (the `RequestPlateLoan(...)` factory — pass `c[OrgDirectoryPort]`)
+- Modify: `backend/tests/api/test_plate_loans.py` (new class `TestOwnerLends`)
+
+**Interfaces:**
+- Consumes: `OrgDirectoryPort` (`cellar.application.shared.org_directory`), `PlateLoan.request(auto_approved=...)`, `PlateLoan.approve_items(item_ids, *, approved_by)`, `PlateLoan.eligible_item_ids(target)`, `PlateLoan.confirm_checkout(item_ids)`.
+- Produces: `POST /api/v1/plate-loans` accepts optional `borrower_org_id`; semantics below. Task 6 adds the FE select that sends it.
+
+Semantics (spec §3 addendum):
+1. `borrower_org_id` omitted or equal to the caller's org → today's behaviour (borrower-initiated request; items `requested`, or `approved`/`checked_out` per the owner policy collapse).
+2. `borrower_org_id` ≠ caller's org → **owner-initiated lend**: allowed only if the caller is a workspace admin or every requested plate is owned by the caller's org (non-admin foreign plates are already hidden → 404 by the existing resolution); the borrower org must exist in the org directory (else 422 `Unknown borrower organization`); the loan starts `requested` and is immediately approved by the caller (`approve_items(..., approved_by=requested_by)` → `approved_by` set, `PlateLoanItemsApproved` emitted); if the owner policy's `confirmation` is `none`, items go straight to `checked_out` (same collapse as self-serve).
+
+- [ ] **Step 1: Write the failing API tests**
+
+Append to `backend/tests/api/test_plate_loans.py` (after `TestOwnershipOrg`; `_mk_plate`, `_mk_loan`, `_set_policy`, `_client_as`, `AUTH_ORG_ID`, `OTHER_ORG_ID`, `ORG_ID` already exist in the module — import `ORG_ID` from `tests.api.conftest` if it isn't imported yet):
+
+```python
+class TestOwnerLends:
+    """Ruling R6: cross-org loans are created by the owner org."""
+
+    async def test_owner_editor_lends_to_other_org_items_approved(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient, user_id: uuid.UUID
+    ) -> None:
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")  # owner = AUTH_ORG
+        loan = await _mk_loan(
+            editor_client_own_org, plate_ids=[plate["id"]], borrower_org_id=str(OTHER_ORG_ID)
+        )
+        assert loan["owner_org_id"] == str(AUTH_ORG_ID)
+        assert loan["borrower_org_id"] == str(OTHER_ORG_ID)
+        assert [i["status"] for i in loan["items"]] == ["approved"]
+        assert loan["approved_by"] == str(user_id)
+
+    async def test_lend_with_confirmation_none_checks_out(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        await _set_policy(client, AUTH_ORG_ID, require_approval=True, confirmation="none")
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        loan = await _mk_loan(
+            editor_client_own_org, plate_ids=[plate["id"]], borrower_org_id=str(OTHER_ORG_ID)
+        )
+        assert [i["status"] for i in loan["items"]] == ["checked_out"]
+
+    async def test_lend_to_unknown_org_rejected(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        resp = await editor_client_own_org.post(
+            "/api/v1/plate-loans",
+            json={"plate_ids": [plate["id"]], "borrower_org_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 422, resp.text
+        assert "Unknown borrower organization" in resp.text
+
+    async def test_non_owner_editor_cannot_lend_foreign_plate(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        plate = await _mk_plate(
+            client, f"PL-{uuid.uuid4().hex[:8]}", owner_org_id=str(OTHER_ORG_ID)
+        )
+        resp = await editor_client_own_org.post(
+            "/api/v1/plate-loans",
+            json={"plate_ids": [plate["id"]], "borrower_org_id": str(ORG_ID)},
+        )
+        assert resp.status_code == 404, resp.text  # hidden == missing
+
+    async def test_admin_can_lend_any_orgs_plate(self, client: AsyncClient) -> None:
+        plate = await _mk_plate(
+            client, f"PL-{uuid.uuid4().hex[:8]}", owner_org_id=str(OTHER_ORG_ID)
+        )
+        loan = await _mk_loan(client, plate_ids=[plate["id"]], borrower_org_id=str(ORG_ID))
+        assert loan["owner_org_id"] == str(OTHER_ORG_ID)
+        assert loan["borrower_org_id"] == str(ORG_ID)
+        assert [i["status"] for i in loan["items"]] == ["approved"]
+
+    async def test_borrower_org_id_equal_to_own_org_is_a_plain_request(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        loan = await _mk_loan(
+            editor_client_own_org, plate_ids=[plate["id"]], borrower_org_id=str(AUTH_ORG_ID)
+        )
+        assert loan["borrower_org_id"] == str(AUTH_ORG_ID)
+        assert [i["status"] for i in loan["items"]] == ["requested"]  # default policy: approval required
+```
+
+Run: `DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/api/test_plate_loans.py -q -k TestOwnerLends`
+Expected: FAIL — `422` from `extra: "forbid"` on `borrower_org_id` for every test.
+
+- [ ] **Step 2: Command + constructor**
+
+In `backend/src/cellar/application/inventory/plate_loans.py` add `borrower_org_id: uuid.UUID | None = None` to `RequestPlateLoanCommand` (after `group_id`), add `from cellar.application.shared.org_directory import OrgDirectoryPort` to the imports, and give `RequestPlateLoan.__init__` a new **last** parameter `org_directory: OrgDirectoryPort` stored as `self._org_directory`.
+
+- [ ] **Step 3: Borrower derivation + owner-lend guard + approval**
+
+Replace lines 133-135 (the `borrower_org_id = auth.org_id …` block) with:
+
+```python
+        caller_org_id = auth.org_id if auth is not None else None
+        if caller_org_id is None:
+            return Failure(ValidationError("Caller has no organization — loans require an org"))
+        borrower_org_id = input.borrower_org_id or caller_org_id
+        owner_initiated = borrower_org_id != caller_org_id
+```
+
+After `owner_org_id = owner_org_ids.pop()` (inside the `async with self._uow:` block) insert:
+
+```python
+            if owner_initiated:
+                # Ruling R6: lending is an owner-org (or admin) act. Non-admin
+                # callers only ever reach here with their own org's plates
+                # (foreign plates are hidden → 404 above), so this guard is
+                # the admin-vs-owner line, not a visibility check.
+                if not (auth is not None and (auth.is_admin or owner_org_id == caller_org_id)):
+                    raise AuthorizationError("Only the owner organization can lend its plates")
+                known = {o.id for o in await self._org_directory.list_orgs()}
+                if borrower_org_id not in known:
+                    return Failure(ValidationError("Unknown borrower organization"))
+```
+
+Replace the block from `loan = PlateLoan.request(` through the self-serve `loan.confirm_checkout(...)` with:
+
+```python
+            loan = PlateLoan.request(
+                workspace_id=input.workspace_id,
+                owner_org_id=owner_org_id,
+                borrower_org_id=borrower_org_id,
+                requested_by=input.requested_by,
+                plate_ids=[p.id for p in plates],
+                auto_approved=not policy.require_approval and not owner_initiated,
+                due_date=due,
+                notes=input.notes,
+            )
+            if owner_initiated:
+                # The owner is lending: it approves its own loan on creation.
+                loan.approve_items(
+                    loan.eligible_item_ids(LoanItemStatus.APPROVED), approved_by=input.requested_by
+                )
+            if policy.confirmation == LoanConfirmationMode.NONE and (
+                owner_initiated or not policy.require_approval
+            ):
+                # No separate checkout confirmation step, so approved items
+                # go straight to checked-out (self-serve and owner-lend alike).
+                loan.confirm_checkout(loan.eligible_item_ids(LoanItemStatus.CHECKED_OUT))
+```
+
+(`AuthorizationError` is in `cellar.domain.shared.errors`; import it if the module doesn't already.)
+
+- [ ] **Step 4: Route + DI**
+
+`interface/routes/plate_loans.py`: add `borrower_org_id: uuid.UUID | None = None` to `RequestLoanBody` (after `group_id`) and `borrower_org_id=body.borrower_org_id,` to the `RequestPlateLoanCommand(...)` construction.
+
+`infrastructure/di/_inventory.py`: in the factory that builds `RequestPlateLoan(...)`, pass `c[OrgDirectoryPort]` as the new last argument (`OrgDirectoryPort` is already imported there since Task 2).
+
+- [ ] **Step 5: Run + lint**
+
+Run: `DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/api/test_plate_loans.py tests/api/test_kiosk.py -q && uv run ruff check src/cellar/application/inventory/plate_loans.py src/cellar/interface/routes/plate_loans.py src/cellar/infrastructure/di/_inventory.py tests/api/test_plate_loans.py`
+Expected: all PASS (the six new tests + every existing loan/kiosk test), ruff clean.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git commit -m "feat(inventory): owner-initiated lending — borrower_org_id on loan requests (auto-approved by the lender)
+
+Under strict visibility a borrower can't see foreign plates, so cross-org
+loans are created by the owner org (or an admin) naming the borrower.
+Borrower must exist in the org directory; same-org requests unchanged.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HeExFT5oQrec5VbwQafNfu" -- backend/src/cellar/application/inventory/plate_loans.py backend/src/cellar/interface/routes/plate_loans.py backend/src/cellar/infrastructure/di/_inventory.py backend/tests/api/test_plate_loans.py
+```
+

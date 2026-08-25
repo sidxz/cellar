@@ -51,6 +51,10 @@ async def excluded_org_ids(self, workspace_id, auth) -> set[UUID]:
 - **Delete `plates_private`**: `OrgPlatePolicy` field, `org_plate_policies.plates_private` column (migration **066**), `OrgPlatePolicyRepository.list_private_org_ids`, DTO/body field, FE switch, and the "private-org" test fixtures. `OrgPlatePolicy` keeps `require_approval` / `confirmation` / `default_due_days`.
 - FE: the org `<Select>` on Plates list, Plate Groups, Insights, and the `ALL_ORGS` filter option render **only when `me.is_admin`**; non-admins are pinned to `me.org_id`. Loans "All" tab stays (already filtered by `_loan_visible`).
 
+### 3.1 Owner-initiated lending (added 2026-08-25, user decision)
+
+Strict visibility means a borrower org cannot see — and therefore cannot request — another org's plates. Cross-org loans are created by the **owner** org: `POST /api/v1/plate-loans` gains optional `borrower_org_id`. Omitted or equal to the caller's org → the existing borrower-initiated request. Different → an owner-initiated lend: allowed only when the caller is a workspace admin or every requested plate belongs to the caller's org; the borrower org must exist in the org directory (422 otherwise); items are approved on creation by the lender (`approved_by` = caller, `PlateLoanItemsApproved` emitted) and, when the owner policy's confirmation mode is `none`, go straight to `checked_out`. FE: the loan request dialog gets a "Borrower organization" select (default = my organization / self-checkout) and the primary button reads **Lend** when a foreign org is chosen. Borrower-initiated requests of hidden plates by barcode were rejected (barcode-probing oracle).
+
 ## 4. Audit actor (S7)
 
 Root cause: `DomainEvent` has no `user_id`; `AuditRecordingService.handle_event` reads `getattr(event, "user_id", UUID(int=0))` and hardcodes `ActorType.SYSTEM`.
