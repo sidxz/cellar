@@ -10,6 +10,7 @@ import type { TargetResponseUniprotId } from './targetResponseUniprotId';
 import type { TargetResponseNcbiGeneId } from './targetResponseNcbiGeneId';
 import type { TargetResponseDescription } from './targetResponseDescription';
 import type { TargetResponseTargetClass } from './targetResponseTargetClass';
+import type { TargetResponseChemblId } from './targetResponseChemblId';
 
 export interface TargetResponse {
   id: string;
@@ -22,4 +23,5 @@ export interface TargetResponse {
   ncbi_gene_id?: TargetResponseNcbiGeneId;
   description?: TargetResponseDescription;
   target_class?: TargetResponseTargetClass;
+  chembl_id?: TargetResponseChemblId;
 }

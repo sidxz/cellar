@@ -29,6 +29,7 @@ function renderPage() {
     apiUrl: "",
     appUrl: "",
     duarUrl: "",
+    protCellarUrl: "",
     idpProvider: "google",
     googleClientId: "",
     entraIdClientId: "",

@@ -24,12 +24,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  CreateTargetRequest,
   HTTPValidationError,
   ListTargetsApiV1TargetsGetParams,
   PaginatedResponseTargetResponse,
   TargetResponse,
-  UpdateTargetRequest
+  TargetSyncReportResponse
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
@@ -38,70 +37,6 @@ import { customInstance } from '.././custom-instance';
 
 
 /**
- * @summary Create Target
- */
-export const createTargetApiV1TargetsPost = (
-    createTargetRequest: CreateTargetRequest,
- signal?: AbortSignal
-) => {
-      
-      
-      return customInstance<TargetResponse>(
-      {url: `/api/v1/targets`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: createTargetRequest, signal
-    },
-      );
-    }
-  
-
-
-export const getCreateTargetApiV1TargetsPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTargetApiV1TargetsPost>>, TError,{data: CreateTargetRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof createTargetApiV1TargetsPost>>, TError,{data: CreateTargetRequest}, TContext> => {
-
-const mutationKey = ['createTargetApiV1TargetsPost'];
-const {mutation: mutationOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }};
-
-      
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTargetApiV1TargetsPost>>, {data: CreateTargetRequest}> = (props) => {
-          const {data} = props ?? {};
-
-          return  createTargetApiV1TargetsPost(data,)
-        }
-
-        
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type CreateTargetApiV1TargetsPostMutationResult = NonNullable<Awaited<ReturnType<typeof createTargetApiV1TargetsPost>>>
-    export type CreateTargetApiV1TargetsPostMutationBody = CreateTargetRequest
-    export type CreateTargetApiV1TargetsPostMutationError = HTTPValidationError
-
-    /**
- * @summary Create Target
- */
-export const useCreateTargetApiV1TargetsPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTargetApiV1TargetsPost>>, TError,{data: CreateTargetRequest}, TContext>, }
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof createTargetApiV1TargetsPost>>,
-        TError,
-        {data: CreateTargetRequest},
-        TContext
-      > => {
-
-      const mutationOptions = getCreateTargetApiV1TargetsPostMutationOptions(options);
-
-      return useMutation(mutationOptions, queryClient);
-    }
-    /**
  * @summary List Targets
  */
 export const listTargetsApiV1TargetsGet = (
@@ -195,6 +130,69 @@ export function useListTargetsApiV1TargetsGet<TData = Awaited<ReturnType<typeof 
 
 
 /**
+ * Admin: pull the full target catalog from prot-cellar into the local mirror.
+ * @summary Sync Targets
+ */
+export const syncTargetsApiV1TargetsSyncPost = (
+    
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<TargetSyncReportResponse>(
+      {url: `/api/v1/targets/sync`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getSyncTargetsApiV1TargetsSyncPostMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncTargetsApiV1TargetsSyncPost>>, TError,void, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof syncTargetsApiV1TargetsSyncPost>>, TError,void, TContext> => {
+
+const mutationKey = ['syncTargetsApiV1TargetsSyncPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncTargetsApiV1TargetsSyncPost>>, void> = () => {
+          
+
+          return  syncTargetsApiV1TargetsSyncPost()
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncTargetsApiV1TargetsSyncPostMutationResult = NonNullable<Awaited<ReturnType<typeof syncTargetsApiV1TargetsSyncPost>>>
+    
+    export type SyncTargetsApiV1TargetsSyncPostMutationError = unknown
+
+    /**
+ * @summary Sync Targets
+ */
+export const useSyncTargetsApiV1TargetsSyncPost = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncTargetsApiV1TargetsSyncPost>>, TError,void, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof syncTargetsApiV1TargetsSyncPost>>,
+        TError,
+        void,
+        TContext
+      > => {
+
+      const mutationOptions = getSyncTargetsApiV1TargetsSyncPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
  * @summary Get Target
  */
 export const getTargetApiV1TargetsTargetIdGet = (
@@ -286,129 +284,3 @@ export function useGetTargetApiV1TargetsTargetIdGet<TData = Awaited<ReturnType<t
 
 
 
-/**
- * @summary Update Target
- */
-export const updateTargetApiV1TargetsTargetIdPatch = (
-    targetId: string,
-    updateTargetRequest: UpdateTargetRequest,
- ) => {
-      
-      
-      return customInstance<TargetResponse>(
-      {url: `/api/v1/targets/${targetId}`, method: 'PATCH',
-      headers: {'Content-Type': 'application/json', },
-      data: updateTargetRequest
-    },
-      );
-    }
-  
-
-
-export const getUpdateTargetApiV1TargetsTargetIdPatchMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTargetApiV1TargetsTargetIdPatch>>, TError,{targetId: string;data: UpdateTargetRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof updateTargetApiV1TargetsTargetIdPatch>>, TError,{targetId: string;data: UpdateTargetRequest}, TContext> => {
-
-const mutationKey = ['updateTargetApiV1TargetsTargetIdPatch'];
-const {mutation: mutationOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }};
-
-      
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateTargetApiV1TargetsTargetIdPatch>>, {targetId: string;data: UpdateTargetRequest}> = (props) => {
-          const {targetId,data} = props ?? {};
-
-          return  updateTargetApiV1TargetsTargetIdPatch(targetId,data,)
-        }
-
-        
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateTargetApiV1TargetsTargetIdPatchMutationResult = NonNullable<Awaited<ReturnType<typeof updateTargetApiV1TargetsTargetIdPatch>>>
-    export type UpdateTargetApiV1TargetsTargetIdPatchMutationBody = UpdateTargetRequest
-    export type UpdateTargetApiV1TargetsTargetIdPatchMutationError = HTTPValidationError
-
-    /**
- * @summary Update Target
- */
-export const useUpdateTargetApiV1TargetsTargetIdPatch = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTargetApiV1TargetsTargetIdPatch>>, TError,{targetId: string;data: UpdateTargetRequest}, TContext>, }
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof updateTargetApiV1TargetsTargetIdPatch>>,
-        TError,
-        {targetId: string;data: UpdateTargetRequest},
-        TContext
-      > => {
-
-      const mutationOptions = getUpdateTargetApiV1TargetsTargetIdPatchMutationOptions(options);
-
-      return useMutation(mutationOptions, queryClient);
-    }
-    /**
- * @summary Delete Target
- */
-export const deleteTargetApiV1TargetsTargetIdDelete = (
-    targetId: string,
- ) => {
-      
-      
-      return customInstance<void>(
-      {url: `/api/v1/targets/${targetId}`, method: 'DELETE'
-    },
-      );
-    }
-  
-
-
-export const getDeleteTargetApiV1TargetsTargetIdDeleteMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTargetApiV1TargetsTargetIdDelete>>, TError,{targetId: string}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof deleteTargetApiV1TargetsTargetIdDelete>>, TError,{targetId: string}, TContext> => {
-
-const mutationKey = ['deleteTargetApiV1TargetsTargetIdDelete'];
-const {mutation: mutationOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }};
-
-      
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTargetApiV1TargetsTargetIdDelete>>, {targetId: string}> = (props) => {
-          const {targetId} = props ?? {};
-
-          return  deleteTargetApiV1TargetsTargetIdDelete(targetId,)
-        }
-
-        
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteTargetApiV1TargetsTargetIdDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTargetApiV1TargetsTargetIdDelete>>>
-    
-    export type DeleteTargetApiV1TargetsTargetIdDeleteMutationError = HTTPValidationError
-
-    /**
- * @summary Delete Target
- */
-export const useDeleteTargetApiV1TargetsTargetIdDelete = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTargetApiV1TargetsTargetIdDelete>>, TError,{targetId: string}, TContext>, }
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteTargetApiV1TargetsTargetIdDelete>>,
-        TError,
-        {targetId: string},
-        TContext
-      > => {
-
-      const mutationOptions = getDeleteTargetApiV1TargetsTargetIdDeleteMutationOptions(options);
-
-      return useMutation(mutationOptions, queryClient);
-    }
-    
