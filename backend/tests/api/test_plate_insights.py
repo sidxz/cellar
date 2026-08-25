@@ -44,16 +44,6 @@ async def _mk_loan(client: AsyncClient, **body) -> dict:
     return resp.json()
 
 
-async def _set_plates_private(client: AsyncClient, org_id, *, private: bool = True):
-    body = {
-        "require_approval": True,
-        "confirmation": "admin_confirm",
-        "default_due_days": None,
-        "plates_private": private,
-    }
-    return await client.put(f"/api/v1/org-plate-policies/{org_id}", json=body)
-
-
 @asynccontextmanager
 async def _client_as(
     database_url: str, workspace_id: uuid.UUID, **auth_kwargs
@@ -100,22 +90,22 @@ class TestOrgScoping:
 
 
 class TestPrivateOrg:
-    async def test_private_org_forbidden_for_non_members_member_ok(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    async def test_foreign_org_insights_forbidden_for_editor_ok_for_admin_and_member(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
         await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}", owner_org_id=str(OTHER_ORG_ID))
-        assert (await _set_plates_private(client, OTHER_ORG_ID)).status_code == 200
-        try:
-            # Non-member (admin included — S2 semantics: no admin bypass) -> 403
-            resp = await client.get(f"/api/v1/plates/insights?org_id={OTHER_ORG_ID}")
-            assert resp.status_code == 403
-            # Member still sees it
-            resp = await editor_client_other_org.get(
-                f"/api/v1/plates/insights?org_id={OTHER_ORG_ID}"
-            )
-            assert resp.status_code == 200
-        finally:
-            await _set_plates_private(client, OTHER_ORG_ID, private=False)
+        # Editor of another org -> 403
+        resp = await editor_client_own_org.get(f"/api/v1/plates/insights?org_id={OTHER_ORG_ID}")
+        assert resp.status_code == 403
+        # Workspace admin -> bypass
+        resp = await client.get(f"/api/v1/plates/insights?org_id={OTHER_ORG_ID}")
+        assert resp.status_code == 200
+        # Member still sees it
+        resp = await editor_client_other_org.get(f"/api/v1/plates/insights?org_id={OTHER_ORG_ID}")
+        assert resp.status_code == 200
 
 
 class TestOrglessCaller:

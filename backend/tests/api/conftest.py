@@ -23,7 +23,9 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cellar.application.auth import LOAN_APPROVE_ACTION
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.infrastructure.di.container import create_container
+from cellar.infrastructure.duar.org_directory import OrgSummary
 from cellar.infrastructure.persistence.settings import DatabaseSettings
 from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.dependencies import get_auth
@@ -43,6 +45,22 @@ AUTH_ORG_ID = uuid.uuid4()
 OTHER_ORG_ID = uuid.uuid4()
 
 
+class _StubOrgDirectory:
+    """Static Duar org directory — every org id the API tests use, so the
+    strict visibility rule ("every other org is excluded") sees all of them.
+    Never makes HTTP calls."""
+
+    async def list_orgs(self) -> list[OrgSummary]:
+        return [
+            OrgSummary(id=ORG_ID, slug="abbvie", name="AbbVie", is_public=False),
+            OrgSummary(id=AUTH_ORG_ID, slug="tamu", name="TAMU", is_public=False),
+            OrgSummary(id=OTHER_ORG_ID, slug="partner", name="Partner", is_public=False),
+        ]
+
+
+STUB_ORG_DIRECTORY = _StubOrgDirectory()
+
+
 def _create_test_app(
     database_url: str, fake_auth: FakeAuth, overrides: Mapping[type, object] | None = None
 ) -> FastAPI:
@@ -51,7 +69,9 @@ def _create_test_app(
 
     # DI container pointed at test DB — _env_file=None avoids loading .env
     db_settings = DatabaseSettings(database_url=database_url, _env_file=None)  # type: ignore[call-arg]
-    container = create_container(db_settings, overrides=overrides)
+    container = create_container(
+        db_settings, overrides={OrgDirectoryPort: STUB_ORG_DIRECTORY, **(overrides or {})}
+    )
     app.state.container = container
 
     # Error handlers (so DomainError → proper HTTP status)
@@ -161,15 +181,10 @@ def _create_test_app(
     # Override the stable auth wrapper (not the sentinel SDK directly)
     app.dependency_overrides[get_auth] = lambda: fake_auth
 
-    # Stub the Duar org directory — never make real HTTP calls in tests.
-    from cellar.infrastructure.duar.org_directory import OrgSummary
+    # Stub the Duar org directory for the /api/v1/orgs route too.
     from cellar.interface.dependencies import get_org_directory
 
-    class _StubOrgDirectory:
-        async def list_orgs(self) -> list[OrgSummary]:
-            return [OrgSummary(id=ORG_ID, slug="abbvie", name="AbbVie", is_public=False)]
-
-    app.dependency_overrides[get_org_directory] = lambda: _StubOrgDirectory()
+    app.dependency_overrides[get_org_directory] = lambda: STUB_ORG_DIRECTORY
 
     return app
 

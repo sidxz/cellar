@@ -29,16 +29,6 @@ async def _mk_plate(client: AsyncClient, barcode: str, **overrides) -> dict:
     return resp.json()
 
 
-async def _set_plates_private(client: AsyncClient, org_id, *, private: bool = True):
-    body = {
-        "require_approval": True,
-        "confirmation": "admin_confirm",
-        "default_due_days": None,
-        "plates_private": private,
-    }
-    return await client.put(f"/api/v1/org-plate-policies/{org_id}", json=body)
-
-
 class TestCreate:
     async def test_create_defaults_to_caller_org(self, client: AsyncClient) -> None:
         g = await _mk_group(client, f"G-{uuid.uuid4().hex[:6]}")
@@ -165,24 +155,24 @@ class TestTree:
         assert theirs["name"] in names
         assert mine["name"] not in names
 
-    async def test_private_org_tree_forbidden_for_non_members(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    async def test_foreign_org_tree_forbidden_for_editor_ok_for_admin_and_member(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
-        await _mk_group(
-            client, f"Priv-{uuid.uuid4().hex[:6]}", owner_org_id=str(OTHER_ORG_ID)
+        await _mk_group(client, f"Frn-{uuid.uuid4().hex[:6]}", owner_org_id=str(OTHER_ORG_ID))
+        # Editor of another org -> 403 (org existence is public, contents are not)
+        resp = await editor_client_own_org.get(f"/api/v1/plate-groups/tree?org_id={OTHER_ORG_ID}")
+        assert resp.status_code == 403
+        # Workspace admin -> bypass
+        resp = await client.get(f"/api/v1/plate-groups/tree?org_id={OTHER_ORG_ID}")
+        assert resp.status_code == 200
+        # Member still sees it
+        resp = await editor_client_other_org.get(
+            f"/api/v1/plate-groups/tree?org_id={OTHER_ORG_ID}"
         )
-        assert (await _set_plates_private(client, OTHER_ORG_ID)).status_code == 200
-        try:
-            # Non-member (admin included — S2 semantics: no admin bypass) -> 403
-            resp = await client.get(f"/api/v1/plate-groups/tree?org_id={OTHER_ORG_ID}")
-            assert resp.status_code == 403
-            # Member still sees it
-            resp = await editor_client_other_org.get(
-                f"/api/v1/plate-groups/tree?org_id={OTHER_ORG_ID}"
-            )
-            assert resp.status_code == 200
-        finally:
-            await _set_plates_private(client, OTHER_ORG_ID, private=False)
+        assert resp.status_code == 200
 
 
 class TestAssignRemove:
@@ -231,18 +221,12 @@ class TestAssignRemove:
         self, client: AsyncClient, editor_client_own_org: AsyncClient
     ) -> None:
         g = await _mk_group(
-            client, f"Priv-{uuid.uuid4().hex[:6]}", owner_org_id=str(OTHER_ORG_ID)
+            client, f"Frn-{uuid.uuid4().hex[:6]}", owner_org_id=str(OTHER_ORG_ID)
         )
-        assert (await _set_plates_private(client, OTHER_ORG_ID)).status_code == 200
-        try:
-            # AUTH_ORG editor: private foreign group is indistinguishable from missing.
-            resp = await editor_client_own_org.patch(
-                f"/api/v1/plate-groups/{g['id']}", json={"name": "nope"}
-            )
-            assert resp.status_code == 404
-            resp = await editor_client_own_org.request(
-                "DELETE", f"/api/v1/plate-groups/{g['id']}"
-            )
-            assert resp.status_code == 404
-        finally:
-            await _set_plates_private(client, OTHER_ORG_ID, private=False)
+        # AUTH_ORG editor: foreign-org group is indistinguishable from missing.
+        resp = await editor_client_own_org.patch(
+            f"/api/v1/plate-groups/{g['id']}", json={"name": "nope"}
+        )
+        assert resp.status_code == 404
+        resp = await editor_client_own_org.request("DELETE", f"/api/v1/plate-groups/{g['id']}")
+        assert resp.status_code == 404

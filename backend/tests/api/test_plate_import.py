@@ -23,16 +23,6 @@ async def _register_plate(client: AsyncClient, **overrides):
     return await client.post("/api/v1/plates", json=body)
 
 
-async def _set_plates_private(client: AsyncClient, org_id: uuid.UUID, *, private: bool = True):
-    body = {
-        "require_approval": True,
-        "confirmation": "admin_confirm",
-        "default_due_days": None,
-        "plates_private": private,
-    }
-    return await client.put(f"/api/v1/org-plate-policies/{org_id}", json=body)
-
-
 async def _preview(client: AsyncClient, barcodes: list[str]) -> str:
     """Upload a minimal one-column CSV and return the cached file_id."""
     csv_bytes = ("Barcode\n" + "\n".join(barcodes) + "\n").encode()
@@ -49,20 +39,17 @@ _MAPPINGS = {"Barcode": "plate_barcode"}
 
 class TestImportBarcodeVisibility:
     async def test_validate_hidden_plate_reports_same_shape_as_true_miss_for_foreign_org(
-        self, client: AsyncClient
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
     ) -> None:
         reg = await _register_plate(client, owner_org_id=str(OTHER_ORG_ID))
         assert reg.status_code == 201, reg.text
         private_barcode = reg.json()["barcode"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
         missing_barcode = f"PLT-NOPE-{uuid.uuid4().hex[:8]}"
 
-        # `client` is AUTH_ORG_ID — foreign to the plate's OTHER_ORG_ID owner.
-        file_id = await _preview(client, [private_barcode, missing_barcode])
-        resp = await client.post(
+        # `editor_client_own_org` is AUTH_ORG_ID — foreign to the plate's OTHER_ORG_ID owner.
+        file_id = await _preview(editor_client_own_org, [private_barcode, missing_barcode])
+        resp = await editor_client_own_org.post(
             "/api/v1/plates/import/validate",
             json={"file_id": file_id, "column_mappings": _MAPPINGS},
         )
@@ -87,9 +74,6 @@ class TestImportBarcodeVisibility:
         reg = await _register_plate(client, owner_org_id=str(OTHER_ORG_ID))
         assert reg.status_code == 201, reg.text
         private_barcode = reg.json()["barcode"]
-
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
 
         # Preview + validate must go through the SAME client — the import
         # file cache is per-app (per DI container), not shared across clients.

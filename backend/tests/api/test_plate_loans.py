@@ -76,6 +76,21 @@ async def _client_as(
     await app.state.container[AsyncEngine].dispose()
 
 
+async def _mk_loan_as_org(
+    database_url: str, workspace_id: uuid.UUID, org_id: uuid.UUID, **body
+) -> dict:
+    """Create a loan with ``borrower_org_id == org_id``.
+
+    RequestPlateLoan derives ``borrower_org_id`` from the caller's own org and
+    (strict-by-default) can only resolve plates the caller can see — so a
+    non-admin editor in ``org_id`` can't request a loan on a plate owned by a
+    different org. An ad-hoc admin scoped to ``org_id`` bypasses visibility
+    (sees the plate) while still supplying the right ``borrower_org_id``.
+    """
+    async with _client_as(database_url, workspace_id, org_id=org_id, role="admin") as admin_as_org:
+        return await _mk_loan(admin_as_org, **body)
+
+
 class TestColonPathRouting:
     """Dedicated probe (plan Step 1): fail loud and early if FastAPI/Starlette
     can't route a literal colon in a path segment, before trusting it across
@@ -259,33 +274,49 @@ class TestAuthorityMatrix:
         # action proves the org check is what rejects, and that it runs
         # before (not masked by) the action grant.
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        loan = await _mk_loan_as_org(
+            database_url, workspace_id, OTHER_ORG_ID, plate_ids=[plate["id"]]
+        )
         async with _client_as(
             database_url,
             workspace_id,
             org_id=OTHER_ORG_ID,
             granted_actions={LOAN_APPROVE_ACTION},
         ) as other_org_approver:
-            loan = await _mk_loan(other_org_approver, plate_ids=[plate["id"]])
             resp = await other_org_approver.post(
                 f"/api/v1/plate-loans/{loan['id']}/items:approve", json={}
             )
             assert resp.status_code == 403
 
     async def test_deny_wrong_org_forbidden(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+        self,
+        client: AsyncClient,
+        editor_client_other_org: AsyncClient,
+        database_url: str,
+        workspace_id: uuid.UUID,
     ) -> None:
+        # owner = AUTH_ORG (via `client`), borrower = OTHER_ORG.
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
-        loan = await _mk_loan(editor_client_other_org, plate_ids=[plate["id"]])
+        loan = await _mk_loan_as_org(
+            database_url, workspace_id, OTHER_ORG_ID, plate_ids=[plate["id"]]
+        )
         resp = await editor_client_other_org.post(
             f"/api/v1/plate-loans/{loan['id']}/items:deny", json={}
         )
         assert resp.status_code == 403
 
     async def test_confirm_out_wrong_org_forbidden(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+        self,
+        client: AsyncClient,
+        editor_client_other_org: AsyncClient,
+        database_url: str,
+        workspace_id: uuid.UUID,
     ) -> None:
+        # owner = AUTH_ORG (via `client`), borrower = OTHER_ORG.
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
-        loan = await _mk_loan(editor_client_other_org, plate_ids=[plate["id"]])
+        loan = await _mk_loan_as_org(
+            database_url, workspace_id, OTHER_ORG_ID, plate_ids=[plate["id"]]
+        )
         assert (
             await client.post(f"/api/v1/plate-loans/{loan['id']}/items:approve", json={})
         ).status_code == 200
@@ -295,10 +326,17 @@ class TestAuthorityMatrix:
         assert resp.status_code == 403
 
     async def test_confirm_in_wrong_org_forbidden(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+        self,
+        client: AsyncClient,
+        editor_client_other_org: AsyncClient,
+        database_url: str,
+        workspace_id: uuid.UUID,
     ) -> None:
+        # owner = AUTH_ORG (via `client`), borrower = OTHER_ORG.
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
-        loan = await _mk_loan(editor_client_other_org, plate_ids=[plate["id"]])
+        loan = await _mk_loan_as_org(
+            database_url, workspace_id, OTHER_ORG_ID, plate_ids=[plate["id"]]
+        )
         assert (
             await client.post(f"/api/v1/plate-loans/{loan['id']}/items:approve", json={})
         ).status_code == 200
@@ -316,10 +354,17 @@ class TestAuthorityMatrix:
         assert resp.status_code == 403
 
     async def test_request_return_as_borrower_org_editor(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+        self,
+        client: AsyncClient,
+        editor_client_other_org: AsyncClient,
+        database_url: str,
+        workspace_id: uuid.UUID,
     ) -> None:
+        # owner = AUTH_ORG (via `client`), borrower = OTHER_ORG.
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
-        loan = await _mk_loan(editor_client_other_org, plate_ids=[plate["id"]])
+        loan = await _mk_loan_as_org(
+            database_url, workspace_id, OTHER_ORG_ID, plate_ids=[plate["id"]]
+        )
         assert (
             await client.post(f"/api/v1/plate-loans/{loan['id']}/items:approve", json={})
         ).status_code == 200
@@ -336,10 +381,14 @@ class TestAuthorityMatrix:
         client: AsyncClient,
         editor_client_other_org: AsyncClient,
         editor_client_own_org: AsyncClient,
+        database_url: str,
+        workspace_id: uuid.UUID,
     ) -> None:
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
         # borrower = OTHER_ORG
-        loan = await _mk_loan(editor_client_other_org, plate_ids=[plate["id"]])
+        loan = await _mk_loan_as_org(
+            database_url, workspace_id, OTHER_ORG_ID, plate_ids=[plate["id"]]
+        )
         assert (
             await client.post(f"/api/v1/plate-loans/{loan['id']}/items:approve", json={})
         ).status_code == 200
@@ -506,7 +555,7 @@ class TestFilters:
 
 
 class TestLoanVisibility:
-    async def test_private_owner_org_loan_visibility(
+    async def test_foreign_owner_org_loan_visibility(
         self,
         client: AsyncClient,
         editor_client_own_org: AsyncClient,
@@ -514,29 +563,28 @@ class TestLoanVisibility:
         database_url: str,
         workspace_id: uuid.UUID,
     ) -> None:
-        # owner = OTHER_ORG, borrower = AUTH_ORG
+        # owner = OTHER_ORG, borrower = AUTH_ORG. Admin (own org == AUTH_ORG)
+        # requests the loan — a non-admin AUTH_ORG editor can't see a plate it
+        # doesn't yet borrow, so it can't be the one to request it.
         plate = await _mk_plate(editor_client_other_org, f"PL-{uuid.uuid4().hex[:8]}")
-        loan = await _mk_loan(editor_client_own_org, plate_ids=[plate["id"]])
-        await _set_policy(client, OTHER_ORG_ID, plates_private=True)
-        try:
-            # A genuinely unrelated third org — neither owner nor borrower.
-            async with _client_as(database_url, workspace_id, org_id=uuid.uuid4()) as unrelated:
-                resp = await unrelated.get(f"/api/v1/plate-loans/{loan['id']}")
-                assert resp.status_code == 404
-                listed = await unrelated.get("/api/v1/plate-loans")
-                assert loan["id"] not in [loan_["id"] for loan_ in listed.json()]
+        loan = await _mk_loan(client, plate_ids=[plate["id"]])
 
-            resp = await editor_client_own_org.get(f"/api/v1/plate-loans/{loan['id']}")
-            assert resp.status_code == 200
-            listed = await editor_client_own_org.get("/api/v1/plate-loans")
-            assert loan["id"] in [loan_["id"] for loan_ in listed.json()]
+        # A genuinely unrelated third org — neither owner nor borrower.
+        async with _client_as(database_url, workspace_id, org_id=uuid.uuid4()) as unrelated:
+            resp = await unrelated.get(f"/api/v1/plate-loans/{loan['id']}")
+            assert resp.status_code == 404
+            listed = await unrelated.get("/api/v1/plate-loans")
+            assert loan["id"] not in [loan_["id"] for loan_ in listed.json()]
 
-            resp = await editor_client_other_org.get(f"/api/v1/plate-loans/{loan['id']}")
-            assert resp.status_code == 200
-            listed = await editor_client_other_org.get("/api/v1/plate-loans")
-            assert loan["id"] in [loan_["id"] for loan_ in listed.json()]
-        finally:
-            await _set_policy(client, OTHER_ORG_ID, plates_private=False)
+        resp = await editor_client_own_org.get(f"/api/v1/plate-loans/{loan['id']}")
+        assert resp.status_code == 200
+        listed = await editor_client_own_org.get("/api/v1/plate-loans")
+        assert loan["id"] in [loan_["id"] for loan_ in listed.json()]
+
+        resp = await editor_client_other_org.get(f"/api/v1/plate-loans/{loan['id']}")
+        assert resp.status_code == 200
+        listed = await editor_client_other_org.get("/api/v1/plate-loans")
+        assert loan["id"] in [loan_["id"] for loan_ in listed.json()]
 
 
 class TestBorrowedPlateVisibility:
@@ -548,105 +596,85 @@ class TestBorrowedPlateVisibility:
     ) -> None:
         loaned = await _mk_plate(editor_client_other_org, f"PL-{uuid.uuid4().hex[:8]}")
         never_loaned = await _mk_plate(editor_client_other_org, f"PL-{uuid.uuid4().hex[:8]}")
-        # Request the loan while the org is still visible — RequestPlateLoan's
-        # plate resolution doesn't apply the borrowed carve-out (Task 7's
-        # deliberate write-path narrowing), so a caller can't request a loan
-        # on a plate it can't already see. Privacy flips on AFTER, proving
-        # the carve-out keeps the now-borrowed plate visible regardless.
+        # Admin requests the loan (bypasses visibility entirely) — both plates
+        # are OTHER_ORG's and strict-by-default already excludes them from
+        # AUTH_ORG's editor; the borrowed carve-out is what re-admits `loaned`.
         loan = await _mk_loan(client, plate_ids=[loaned["id"]])  # borrower = AUTH_ORG
 
-        await _set_policy(client, OTHER_ORG_ID, plates_private=True)
-        try:
-            resp = await editor_client_own_org.get(f"/api/v1/plates/{never_loaned['id']}")
-            assert resp.status_code == 404
+        resp = await editor_client_own_org.get(f"/api/v1/plates/{never_loaned['id']}")
+        assert resp.status_code == 404
 
-            resp = await editor_client_own_org.get(f"/api/v1/plates/{loaned['id']}")
-            assert resp.status_code == 200, resp.text
-            listed = await editor_client_own_org.get("/api/v1/plates")
-            listed_ids = [p["id"] for p in listed.json()]
-            assert loaned["id"] in listed_ids
-            assert never_loaned["id"] not in listed_ids
+        resp = await editor_client_own_org.get(f"/api/v1/plates/{loaned['id']}")
+        assert resp.status_code == 200, resp.text
+        listed = await editor_client_own_org.get("/api/v1/plates")
+        listed_ids = [p["id"] for p in listed.json()]
+        assert loaned["id"] in listed_ids
+        assert never_loaned["id"] not in listed_ids
 
-            assert (
-                await client.post(f"/api/v1/plate-loans/{loan['id']}/items:approve", json={})
-            ).status_code == 200
-            assert (
-                await client.post(f"/api/v1/plate-loans/{loan['id']}/items:confirm-out", json={})
-            ).status_code == 200
-            assert (
-                await client.post(
-                    f"/api/v1/plate-loans/{loan['id']}/items:request-return", json={}
-                )
-            ).status_code == 200
-            closing = await client.post(
-                f"/api/v1/plate-loans/{loan['id']}/items:confirm-in", json={}
-            )
-            assert closing.status_code == 200
-            assert closing.json()["status"] == "closed"
+        assert (
+            await client.post(f"/api/v1/plate-loans/{loan['id']}/items:approve", json={})
+        ).status_code == 200
+        assert (
+            await client.post(f"/api/v1/plate-loans/{loan['id']}/items:confirm-out", json={})
+        ).status_code == 200
+        assert (
+            await client.post(f"/api/v1/plate-loans/{loan['id']}/items:request-return", json={})
+        ).status_code == 200
+        closing = await client.post(f"/api/v1/plate-loans/{loan['id']}/items:confirm-in", json={})
+        assert closing.status_code == 200
+        assert closing.json()["status"] == "closed"
 
-            resp = await editor_client_own_org.get(f"/api/v1/plates/{loaned['id']}")
-            assert resp.status_code == 404
+        resp = await editor_client_own_org.get(f"/api/v1/plates/{loaned['id']}")
+        assert resp.status_code == 404
 
-            resp = await editor_client_own_org.get(f"/api/v1/plates/{never_loaned['id']}")
-            assert resp.status_code == 404
-        finally:
-            await _set_policy(client, OTHER_ORG_ID, plates_private=False)
+        resp = await editor_client_own_org.get(f"/api/v1/plates/{never_loaned['id']}")
+        assert resp.status_code == 404
 
 
 class TestMyOrgFilterIncludesBorrowed:
     """Spec §5 'plus borrowed-by-us' — S4 deviation #5 closure."""
 
     async def _borrow_foreign_plate(self, client, editor_client_own_org) -> dict:
-        # Admin registers a plate owned by OTHER org; AUTH-org editor borrows it.
+        # Admin registers a plate owned by OTHER org, then requests the loan
+        # itself (admin's own org == AUTH_ORG == borrower) — a non-admin
+        # AUTH-org editor can't see OTHER's plate to borrow it directly.
         plate = await _mk_plate(
             client, f"BR-{uuid.uuid4().hex[:8]}", owner_org_id=str(OTHER_ORG_ID)
         )
-        await _mk_loan(editor_client_own_org, plate_ids=[plate["id"]])
+        await _mk_loan(client, plate_ids=[plate["id"]])
         return plate
 
     async def test_my_org_filter_includes_borrowed_foreign_plate(
         self, client, editor_client_own_org
     ) -> None:
         plate = await self._borrow_foreign_plate(client, editor_client_own_org)
-        # OTHER org goes private AFTER the loan exists (mirrors
-        # TestBorrowedPlateVisibility — RequestPlateLoan's plate resolution
-        # doesn't apply the borrowed carve-out, so a private owner org at
-        # request time would 404 before the plate is ever borrowed). With
-        # OTHER now excluded, the plate only survives if BOTH the
-        # owner-scope OR-arm and the exclusion AND-arm's borrowed carve-out
-        # admit it — not just the OR-arm, which is all the un-excluded case
-        # exercises.
-        await _set_policy(client, OTHER_ORG_ID, plates_private=True)
-        try:
-            resp = await editor_client_own_org.get(
-                "/api/v1/plates", params={"owner_org_id": str(AUTH_ORG_ID)}
-            )
-            assert resp.status_code == 200
-            assert plate["id"] in [p["id"] for p in resp.json()]
-        finally:
-            await _set_policy(client, OTHER_ORG_ID, plates_private=False)
+        # OTHER is excluded from AUTH_ORG's editor by strict-by-default (no
+        # policy needed). The plate only survives if BOTH the owner-scope
+        # OR-arm and the exclusion AND-arm's borrowed carve-out admit it —
+        # not just the OR-arm, which is all the un-excluded case exercises.
+        resp = await editor_client_own_org.get(
+            "/api/v1/plates", params={"owner_org_id": str(AUTH_ORG_ID)}
+        )
+        assert resp.status_code == 200
+        assert plate["id"] in [p["id"] for p in resp.json()]
 
     async def test_explicit_foreign_org_filter_not_widened(
         self, client, editor_client_own_org
     ) -> None:
         # A random third org gets no widening — the borrowed carve-out only
         # ever re-admits via the plate's actual owner, so it stays hidden.
-        # Filtering the OWNER org itself (OTHER, now private) needs no
-        # widening either: the plain owner_org_id match already selects it,
-        # and the privacy carve-out (exclusion AND-arm's borrowed re-admit)
-        # keeps it visible despite OTHER being excluded — asserted below.
+        # Filtering the OWNER org itself (OTHER, excluded by strict-by-default)
+        # needs no widening either: the plain owner_org_id match already
+        # selects it, and the exclusion AND-arm's borrowed re-admit keeps it
+        # visible despite OTHER being excluded — asserted below.
         plate = await self._borrow_foreign_plate(client, editor_client_own_org)
-        await _set_policy(client, OTHER_ORG_ID, plates_private=True)
-        try:
-            third = uuid.uuid4()
-            resp = await editor_client_own_org.get(
-                "/api/v1/plates", params={"owner_org_id": str(third)}
-            )
-            assert plate["id"] not in [p["id"] for p in resp.json()]
+        third = uuid.uuid4()
+        resp = await editor_client_own_org.get(
+            "/api/v1/plates", params={"owner_org_id": str(third)}
+        )
+        assert plate["id"] not in [p["id"] for p in resp.json()]
 
-            resp = await editor_client_own_org.get(
-                "/api/v1/plates", params={"owner_org_id": str(OTHER_ORG_ID)}
-            )
-            assert plate["id"] in [p["id"] for p in resp.json()]
-        finally:
-            await _set_policy(client, OTHER_ORG_ID, plates_private=False)
+        resp = await editor_client_own_org.get(
+            "/api/v1/plates", params={"owner_org_id": str(OTHER_ORG_ID)}
+        )
+        assert plate["id"] in [p["id"] for p in resp.json()]
