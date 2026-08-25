@@ -1,6 +1,6 @@
 # Spec: Plate Tracker Revamp — Strict Org Visibility, Legacy-Parity Tree, Comments, Kiosk Page, Full Data Cutover
 
-**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`)
+**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7 + S8 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`)
 **Contexts touched:** Inventory (03), Audit & Compliance (06), Workspace Config (07)
 **Builds on:** `2026-08-10-inventory-plate-org-loans-spec.md` (S1–S6, shipped). Sessions here continue the numbering: **S7–S12**.
 
@@ -204,4 +204,13 @@ Emails/notifications · volume-reduction editor (never persisted in legacy) · v
 - Test-harness deviations: `test_children_exclude_foreign_org_child` restructured stricter (children listing gates on parent visibility); hidden-plate tests use `editor_client_own_org`; the stub org directory now lists `abbvie`/`tamu`/`partner`.
 - Environment: `DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock` is required for testcontainers on this Mac; lint gates are scoped to touched files because repo-wide `pnpm lint`/ruff are red on `main` (backlog).
 - Full backend suite at the end of S7: 3873 passed / 11 failed, all pre-existing (`docs/backlog/preexisting-test-lint-failures-main.md`, now also listing `test_molecules.py`).
+
+## S8 sync note (2026-08-25) — shipped reality vs. §5/§6
+
+- Measurements are `float` / SQLAlchemy `Float` (inventory convention — `batches.amount_value`, `samples.concentration_value`), not the `Numeric(10,2)` written in §5 (ruling R8). Limits as specified: state ≤ 50, scientist ≤ 200, volume/concentration/compound_count ≥ 0; blank strings → NULL.
+- `plate_format` is derived per tree node from `array_agg(DISTINCT registered_plates.format)` (`plate_formats_by_group`, org-scoped like the count query) via `derive_format` (`None` / single value / `"mixed"`); `created_at` is exposed on group + tree-node responses. Migration **067** (`067_plate_group_metadata`, FK `fk_plate_groups_storage_location` ON DELETE SET NULL).
+- `plate_group_state` vocabulary: seeded by the legacy migration script (generalized `seed_vocab`); a fresh workspace relies on the FE fallback `["Dry", "Solubilized", "Retired"]` until an admin creates the vocabulary.
+- Tree: root selection lives in the dashboard header (`localStorage` key `plate-groups.root.<orgId>`, try/catch), the tree view takes a single `root`; cards are a `<foreignObject>` `PlateGroupCard` (type-colored header with fixed dark text; unknown types use the hash palette); the viewport overflow was fixed by recalibrating the fixed offset to `16.25rem` (ruling R9; backlog `plate-groups-tree-viewport-overflow-baseline.md` closed and deleted) rather than a flex-slot refactor; browser-verified scroll overflow 0 at 1600×900.
+- `RequestLoanDialog` gained `initialGroupId` so a card's "Request loan" opens in group mode pre-selected.
+- Suites at the end of S8: backend 3896 passed / 11 pre-existing failures; frontend 1029/1029; tsc clean.
 
