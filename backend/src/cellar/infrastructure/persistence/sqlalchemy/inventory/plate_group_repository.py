@@ -102,6 +102,12 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
             parent_group_id=model.parent_group_id,
             group_type=model.group_type,
             description=model.description,
+            state=model.state,
+            storage_location_id=model.storage_location_id,
+            initial_volume_ul=model.initial_volume_ul,
+            initial_concentration_mm=model.initial_concentration_mm,
+            compound_count=model.compound_count,
+            scientist=model.scientist,
             created_by=model.created_by,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -117,6 +123,12 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
             parent_group_id=aggregate.parent_group_id,
             group_type=aggregate.group_type,
             description=aggregate.description,
+            state=aggregate.state,
+            storage_location_id=aggregate.storage_location_id,
+            initial_volume_ul=aggregate.initial_volume_ul,
+            initial_concentration_mm=aggregate.initial_concentration_mm,
+            compound_count=aggregate.compound_count,
+            scientist=aggregate.scientist,
             created_by=aggregate.created_by,
             version=aggregate.version,
         )
@@ -127,3 +139,9 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
         model.parent_group_id = aggregate.parent_group_id
         model.group_type = aggregate.group_type
         model.description = aggregate.description
+        model.state = aggregate.state
+        model.storage_location_id = aggregate.storage_location_id
+        model.initial_volume_ul = aggregate.initial_volume_ul
+        model.initial_concentration_mm = aggregate.initial_concentration_mm
+        model.compound_count = aggregate.compound_count
+        model.scientist = aggregate.scientist

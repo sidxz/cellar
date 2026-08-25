@@ -15,6 +15,9 @@ Decisions:
 - ``RegisteredPlate.derive()`` does NOT copy ``group_id`` — grouping is
   manual curation, not lineage. Membership changes emit
   ``PlateGroupMembershipChanged`` (audited — user decision 2026-08-13).
+- Legacy-set metadata (state, location, initial vol/conc, compound count,
+  scientist) lives on the group as optional fields (spec 2026-08-25 §5);
+  ``plate_format`` is derived from member plates, never stored.
 """
 
 from __future__ import annotations
@@ -32,6 +35,8 @@ from cellar.domain.shared.errors import ValidationError
 
 MAX_NAME_LEN = 300
 MAX_GROUP_TYPE_LEN = 100
+MAX_STATE_LEN = 50
+MAX_SCIENTIST_LEN = 200
 
 
 def _validated_name(name: str) -> str:
@@ -56,6 +61,24 @@ def _validated_group_type(group_type: str | None) -> str | None:
     return cleaned
 
 
+def _validated_text(value: str | None, *, max_len: int, label: str) -> str | None:
+    """Strip; empty → None; enforce a max length (same stance as group_type)."""
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > max_len:
+        raise ValidationError(f"{label} must be at most {max_len} characters")
+    return cleaned
+
+
+def _non_negative(value: float | int | None, *, label: str) -> float | int | None:
+    if value is not None and (isinstance(value, bool) or value < 0):
+        raise ValidationError(f"{label} must be >= 0")
+    return value
+
+
 class PlateGroup(AggregateRoot):
     """An org-owned node in the plate-organization hierarchy."""
 
@@ -69,6 +92,12 @@ class PlateGroup(AggregateRoot):
         parent_group_id: uuid.UUID | None = None,
         group_type: str | None = None,
         description: str | None = None,
+        state: str | None = None,
+        storage_location_id: uuid.UUID | None = None,
+        initial_volume_ul: float | None = None,
+        initial_concentration_mm: float | None = None,
+        compound_count: int | None = None,
+        scientist: str | None = None,
         created_by: uuid.UUID,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -81,6 +110,14 @@ class PlateGroup(AggregateRoot):
         self.parent_group_id = parent_group_id
         self.group_type = _validated_group_type(group_type)
         self.description = description
+        self.state = _validated_text(state, max_len=MAX_STATE_LEN, label="state")
+        self.storage_location_id = storage_location_id
+        self.initial_volume_ul = _non_negative(initial_volume_ul, label="initial_volume_ul")
+        self.initial_concentration_mm = _non_negative(
+            initial_concentration_mm, label="initial_concentration_mm"
+        )
+        self.compound_count = _non_negative(compound_count, label="compound_count")
+        self.scientist = _validated_text(scientist, max_len=MAX_SCIENTIST_LEN, label="scientist")
         self.created_by = created_by
 
     @classmethod
@@ -94,6 +131,12 @@ class PlateGroup(AggregateRoot):
         parent_group_id: uuid.UUID | None = None,
         group_type: str | None = None,
         description: str | None = None,
+        state: str | None = None,
+        storage_location_id: uuid.UUID | None = None,
+        initial_volume_ul: float | None = None,
+        initial_concentration_mm: float | None = None,
+        compound_count: int | None = None,
+        scientist: str | None = None,
     ) -> PlateGroup:
         group = cls(
             workspace_id=workspace_id,
@@ -102,6 +145,12 @@ class PlateGroup(AggregateRoot):
             parent_group_id=parent_group_id,
             group_type=group_type,
             description=description,
+            state=state,
+            storage_location_id=storage_location_id,
+            initial_volume_ul=initial_volume_ul,
+            initial_concentration_mm=initial_concentration_mm,
+            compound_count=compound_count,
+            scientist=scientist,
             created_by=created_by,
         )
         group.register_event(
@@ -123,6 +172,12 @@ class PlateGroup(AggregateRoot):
         name: str | None = None,
         group_type: str | None = ...,  # type: ignore[assignment]
         description: str | None = ...,  # type: ignore[assignment]
+        state: str | None = ...,  # type: ignore[assignment]
+        storage_location_id: uuid.UUID | None = ...,  # type: ignore[assignment]
+        initial_volume_ul: float | None = ...,  # type: ignore[assignment]
+        initial_concentration_mm: float | None = ...,  # type: ignore[assignment]
+        compound_count: int | None = ...,  # type: ignore[assignment]
+        scientist: str | None = ...,  # type: ignore[assignment]
     ) -> None:
         """Update mutable fields. Uses sentinel ``...`` for optional nullable fields."""
         if name is not None:
@@ -131,6 +186,22 @@ class PlateGroup(AggregateRoot):
             self.group_type = _validated_group_type(group_type)
         if description is not ...:
             self.description = description
+        if state is not ...:
+            self.state = _validated_text(state, max_len=MAX_STATE_LEN, label="state")
+        if storage_location_id is not ...:
+            self.storage_location_id = storage_location_id
+        if initial_volume_ul is not ...:
+            self.initial_volume_ul = _non_negative(initial_volume_ul, label="initial_volume_ul")
+        if initial_concentration_mm is not ...:
+            self.initial_concentration_mm = _non_negative(
+                initial_concentration_mm, label="initial_concentration_mm"
+            )
+        if compound_count is not ...:
+            self.compound_count = _non_negative(compound_count, label="compound_count")
+        if scientist is not ...:
+            self.scientist = _validated_text(
+                scientist, max_len=MAX_SCIENTIST_LEN, label="scientist"
+            )
         self.updated_at = datetime.now(UTC)
         self.register_event(
             PlateGroupUpdated(

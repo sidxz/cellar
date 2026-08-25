@@ -219,6 +219,14 @@ class PlateGroupModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     )
     group_type: Mapped[str | None] = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(Text)
+    state: Mapped[str | None] = mapped_column(String(50))
+    storage_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("storage_locations.id", ondelete="SET NULL")
+    )
+    initial_volume_ul: Mapped[float | None] = mapped_column(Float)
+    initial_concentration_mm: Mapped[float | None] = mapped_column(Float)
+    compound_count: Mapped[int | None] = mapped_column(Integer)
+    scientist: Mapped[str | None] = mapped_column(String(200))
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
 
     # uq_plate_groups_ws_org_parent_name is NOT declared here — it's a raw-SQL
