@@ -230,3 +230,56 @@ class TestAssignRemove:
         assert resp.status_code == 404
         resp = await editor_client_own_org.request("DELETE", f"/api/v1/plate-groups/{g['id']}")
         assert resp.status_code == 404
+
+
+class TestMetadata:
+    async def test_create_round_trips_metadata_into_tree(self, client: AsyncClient) -> None:
+        g = await _mk_group(
+            client,
+            f"Meta-{uuid.uuid4().hex[:6]}",
+            state="Solubilized",
+            initial_volume_ul=55.0,
+            initial_concentration_mm=10.0,
+            compound_count=17606,
+            scientist="Jane Doe",
+        )
+        assert g["state"] == "Solubilized"
+        assert g["compound_count"] == 17606
+        assert g["created_at"]
+        tree = (await client.get("/api/v1/plate-groups/tree")).json()
+        node = next(r for r in tree["roots"] if r["id"] == g["id"])
+        assert node["scientist"] == "Jane Doe"
+        assert node["initial_volume_ul"] == 55.0
+        assert node["plate_format"] is None
+
+    async def test_patch_partial_keeps_others_and_null_clears(self, client: AsyncClient) -> None:
+        g = await _mk_group(client, f"Meta-{uuid.uuid4().hex[:6]}", state="Dry", scientist="Jane")
+        resp = await client.patch(f"/api/v1/plate-groups/{g['id']}", json={"state": "Retired"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["state"] == "Retired"
+        assert resp.json()["scientist"] == "Jane"
+        resp = await client.patch(f"/api/v1/plate-groups/{g['id']}", json={"scientist": None})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["scientist"] is None
+        assert resp.json()["state"] == "Retired"
+
+    async def test_negative_measurement_rejected(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/plate-groups",
+            json={"name": f"Bad-{uuid.uuid4().hex[:6]}", "initial_volume_ul": -1},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_tree_plate_format_single_and_mixed(self, client: AsyncClient) -> None:
+        single = await _mk_group(client, f"Single-{uuid.uuid4().hex[:6]}")
+        mixed = await _mk_group(client, f"Mixed-{uuid.uuid4().hex[:6]}")
+        p1 = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}", format="96")
+        p2 = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}", format="96")
+        p3 = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}", format="384")
+        for gid, ids in ((single["id"], [p1["id"]]), (mixed["id"], [p2["id"], p3["id"]])):
+            r = await client.post(f"/api/v1/plate-groups/{gid}/plates", json={"plate_ids": ids})
+            assert r.status_code == 204, r.text
+        tree = (await client.get("/api/v1/plate-groups/tree")).json()
+        by_id = {r["id"]: r for r in tree["roots"]}
+        assert by_id[single["id"]]["plate_format"] == "96"
+        assert by_id[mixed["id"]]["plate_format"] == "mixed"

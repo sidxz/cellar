@@ -53,6 +53,12 @@ class CreatePlateGroupCommand(Command):
     parent_group_id: uuid.UUID | None = None
     group_type: str | None = None
     description: str | None = None
+    state: str | None = None
+    storage_location_id: uuid.UUID | None = None
+    initial_volume_ul: float | None = None
+    initial_concentration_mm: float | None = None
+    compound_count: int | None = None
+    scientist: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -62,6 +68,12 @@ class UpdatePlateGroupCommand(Command):
     name: str | None = None
     group_type: str | None | object = UNSET
     description: str | None | object = UNSET
+    state: str | None | object = UNSET
+    storage_location_id: uuid.UUID | None | object = UNSET
+    initial_volume_ul: float | None | object = UNSET
+    initial_concentration_mm: float | None | object = UNSET
+    compound_count: int | None | object = UNSET
+    scientist: str | None | object = UNSET
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -102,10 +114,23 @@ class GetGroupTreeQuery(Query):
 # ---------------------------------------------------------------------------
 
 
+MIXED_FORMAT = "mixed"
+
+
+def derive_format(formats: list[str]) -> str | None:
+    """Group-level plate format derived from member plates (spec §5): none →
+    None, one distinct value → it, several → "mixed"."""
+    distinct = sorted(set(formats))
+    if not distinct:
+        return None
+    return distinct[0] if len(distinct) == 1 else MIXED_FORMAT
+
+
 @dataclass
 class GroupTreeNode:
     group: PlateGroup
     plate_count: int
+    plate_format: str | None = None
     children: list[GroupTreeNode] = field(default_factory=list)
 
 
@@ -116,11 +141,21 @@ class GroupTree:
 
 
 def build_tree(
-    groups: list[PlateGroup], counts: dict[uuid.UUID, int]
+    groups: list[PlateGroup],
+    counts: dict[uuid.UUID, int],
+    formats: dict[uuid.UUID, list[str]] | None = None,
 ) -> list[GroupTreeNode]:
     """Assemble nested nodes from a flat fetch. A node whose parent isn't in
     the fetched set is promoted to root (defensive — never crash the page)."""
-    nodes = {g.id: GroupTreeNode(group=g, plate_count=counts.get(g.id, 0)) for g in groups}
+    fmts = formats or {}
+    nodes = {
+        g.id: GroupTreeNode(
+            group=g,
+            plate_count=counts.get(g.id, 0),
+            plate_format=derive_format(fmts.get(g.id, [])),
+        )
+        for g in groups
+    }
     roots: list[GroupTreeNode] = []
     for g in groups:
         node = nodes[g.id]
@@ -229,6 +264,12 @@ class CreatePlateGroup:
                 parent_group_id=input.parent_group_id,
                 group_type=input.group_type,
                 description=input.description,
+                state=input.state,
+                storage_location_id=input.storage_location_id,
+                initial_volume_ul=input.initial_volume_ul,
+                initial_concentration_mm=input.initial_concentration_mm,
+                compound_count=input.compound_count,
+                scientist=input.scientist,
             )
             await self._repo.save(group)
             events = await self._uow.commit()
@@ -281,10 +322,19 @@ class UpdatePlateGroup:
             kwargs: dict = {}
             if input.name is not None:
                 kwargs["name"] = input.name
-            if input.group_type is not UNSET:
-                kwargs["group_type"] = input.group_type
-            if input.description is not UNSET:
-                kwargs["description"] = input.description
+            for key in (
+                "group_type",
+                "description",
+                "state",
+                "storage_location_id",
+                "initial_volume_ul",
+                "initial_concentration_mm",
+                "compound_count",
+                "scientist",
+            ):
+                value = getattr(input, key)
+                if value is not UNSET:
+                    kwargs[key] = value
             group.update(**kwargs)
 
             await self._repo.save(group)
@@ -438,7 +488,12 @@ class GetGroupTree:
             counts = await self._repo.count_plates_by_group(
                 input.workspace_id, owner_org_id=org_id
             )
-            return Success(GroupTree(org_id=org_id, roots=build_tree(groups, counts)))
+            formats = await self._repo.plate_formats_by_group(
+                input.workspace_id, owner_org_id=org_id
+            )
+            return Success(
+                GroupTree(org_id=org_id, roots=build_tree(groups, counts, formats))
+            )
 
 
 class AssignPlatesToGroup:

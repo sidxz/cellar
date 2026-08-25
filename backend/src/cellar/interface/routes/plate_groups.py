@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -43,6 +44,13 @@ class PlateGroupResponse(BaseModel):
     parent_group_id: uuid.UUID | None = None
     group_type: str | None = None
     description: str | None = None
+    state: str | None = None
+    storage_location_id: uuid.UUID | None = None
+    initial_volume_ul: float | None = None
+    initial_concentration_mm: float | None = None
+    compound_count: int | None = None
+    scientist: str | None = None
+    created_at: datetime
     created_by: uuid.UUID
     version: int
 
@@ -56,6 +64,13 @@ class PlateGroupResponse(BaseModel):
             parent_group_id=g.parent_group_id,
             group_type=g.group_type,
             description=g.description,
+            state=g.state,
+            storage_location_id=g.storage_location_id,
+            initial_volume_ul=g.initial_volume_ul,
+            initial_concentration_mm=g.initial_concentration_mm,
+            compound_count=g.compound_count,
+            scientist=g.scientist,
+            created_at=g.created_at,
             created_by=g.created_by,
             version=g.version,
         )
@@ -66,9 +81,17 @@ class GroupTreeNodeResponse(BaseModel):
     name: str
     group_type: str | None = None
     description: str | None = None
+    state: str | None = None
+    storage_location_id: uuid.UUID | None = None
+    initial_volume_ul: float | None = None
+    initial_concentration_mm: float | None = None
+    compound_count: int | None = None
+    scientist: str | None = None
+    created_at: datetime
     parent_group_id: uuid.UUID | None = None
     owner_org_id: uuid.UUID
     plate_count: int
+    plate_format: str | None = None
     created_by: uuid.UUID
     version: int
     children: list[GroupTreeNodeResponse] = []
@@ -80,9 +103,17 @@ class GroupTreeNodeResponse(BaseModel):
             name=n.group.name,
             group_type=n.group.group_type,
             description=n.group.description,
+            state=n.group.state,
+            storage_location_id=n.group.storage_location_id,
+            initial_volume_ul=n.group.initial_volume_ul,
+            initial_concentration_mm=n.group.initial_concentration_mm,
+            compound_count=n.group.compound_count,
+            scientist=n.group.scientist,
+            created_at=n.group.created_at,
             parent_group_id=n.group.parent_group_id,
             owner_org_id=n.group.owner_org_id,
             plate_count=n.plate_count,
+            plate_format=n.plate_format,
             created_by=n.group.created_by,
             version=n.group.version,
             children=[cls.from_node(c) for c in n.children],
@@ -107,6 +138,12 @@ class CreatePlateGroupBody(BaseModel):
     parent_group_id: uuid.UUID | None = None
     group_type: str | None = None
     description: str | None = None
+    state: str | None = None
+    storage_location_id: uuid.UUID | None = None
+    initial_volume_ul: float | None = None
+    initial_concentration_mm: float | None = None
+    compound_count: int | None = None
+    scientist: str | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -115,6 +152,12 @@ class UpdatePlateGroupBody(BaseModel):
     name: str | None = None
     group_type: str | None = None
     description: str | None = None
+    state: str | None = None
+    storage_location_id: uuid.UUID | None = None
+    initial_volume_ul: float | None = None
+    initial_concentration_mm: float | None = None
+    compound_count: int | None = None
+    scientist: str | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -144,6 +187,12 @@ async def create_plate_group(
         parent_group_id=body.parent_group_id,
         group_type=body.group_type,
         description=body.description,
+        state=body.state,
+        storage_location_id=body.storage_location_id,
+        initial_volume_ul=body.initial_volume_ul,
+        initial_concentration_mm=body.initial_concentration_mm,
+        compound_count=body.compound_count,
+        scientist=body.scientist,
     )
     group = result_to_response(await uc(command, auth=auth))
     return PlateGroupResponse.from_domain(group)
@@ -171,6 +220,16 @@ async def update_plate_group(
         name=body.name if "name" in provided else None,
         group_type=body.group_type if "group_type" in provided else UNSET,
         description=body.description if "description" in provided else UNSET,
+        state=body.state if "state" in provided else UNSET,
+        storage_location_id=(
+            body.storage_location_id if "storage_location_id" in provided else UNSET
+        ),
+        initial_volume_ul=body.initial_volume_ul if "initial_volume_ul" in provided else UNSET,
+        initial_concentration_mm=(
+            body.initial_concentration_mm if "initial_concentration_mm" in provided else UNSET
+        ),
+        compound_count=body.compound_count if "compound_count" in provided else UNSET,
+        scientist=body.scientist if "scientist" in provided else UNSET,
     )
     group = result_to_response(await uc(command, auth=auth))
     return PlateGroupResponse.from_domain(group)

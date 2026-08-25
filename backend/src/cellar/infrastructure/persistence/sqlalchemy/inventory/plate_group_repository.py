@@ -84,6 +84,26 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
         result = await self._session.execute(stmt)
         return {row[0]: row[1] for row in result.all()}
 
+    async def plate_formats_by_group(
+        self, workspace_id: uuid.UUID, owner_org_id: uuid.UUID | None = None
+    ) -> dict[uuid.UUID, list[str]]:
+        """Distinct plate formats per group — the tree derives "96"/"384"/"mixed"."""
+        stmt = (
+            select(
+                RegisteredPlateModel.group_id,
+                func.array_agg(func.distinct(RegisteredPlateModel.format)),
+            )
+            .where(
+                RegisteredPlateModel.workspace_id == workspace_id,
+                RegisteredPlateModel.group_id.is_not(None),
+            )
+            .group_by(RegisteredPlateModel.group_id)
+        )
+        if owner_org_id is not None:
+            stmt = stmt.where(RegisteredPlateModel.owner_org_id == owner_org_id)
+        result = await self._session.execute(stmt)
+        return {row[0]: [str(f) for f in row[1]] for row in result.all()}
+
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         model = await self._session.get(PlateGroupModel, id)
         if model is not None and model.workspace_id == workspace_id:
