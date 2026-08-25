@@ -4,19 +4,37 @@ from datetime import date, datetime
 
 import pytest
 from scripts.migrate_legacy_plate_tracker import (
-    LegacyAccount, LegacyData, LegacyLibrary, LegacySet, LegacySetParent,
-    LegacyTransaction, LegacyTransactionPlate,
-    build_account_email_map, compose_set_description, due_date_from,
-    map_loan_item_status, map_plate_status, map_plate_type, plan_group_tree,
+    LegacyAccount,
+    LegacyData,
+    LegacyLibrary,
+    LegacyLocation,
+    LegacyPlate,
+    LegacySet,
+    LegacySetParent,
+    LegacyTransaction,
+    LegacyTransactionPlate,
+    LocationSpec,
+    build_account_email_map,
+    compose_set_description,
+    due_date_from,
+    format_for_plate,
+    full_name,
+    map_loan_item_status,
+    map_plate_status,
+    map_plate_type,
+    open_transactions,
+    plan_group_tree,
     plan_loans,
+    plan_locations,
 )
 
 from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
+from cellar.domain.shared.enums import PlateFormat
 
 
 def _acct(uin: int, netid: str, email: str | None, alt: str | None = None) -> LegacyAccount:
     return LegacyAccount(uin=uin, netid=netid, email=email, alt_email=alt,
-                         first_name="F", last_name="L")
+                         first_name=None, last_name=None)
 
 
 def test_build_account_email_map_uses_email_and_skips_placeholders():
@@ -86,7 +104,8 @@ def test_compose_set_description_includes_state_scientist_conditions():
     s = LegacySet(set_id=1, set_type="SCREENING", set_name="S", set_state="Solubilized",
                   scientist=42, generating_conditions="DMSO 10mM", library_id=None)
     out = compose_set_description(s, {42: "Ann Lee"})
-    assert "Solubilized" in out and "Ann Lee" in out and "DMSO 10mM" in out
+    assert "Solubilized" not in out and "Ann Lee" not in out
+    assert "DMSO 10mM" in out
 
 
 def test_plan_group_tree_roots_by_library_and_nests_sets():
@@ -134,3 +153,79 @@ def test_plan_loans_resolves_requester_maps_states_and_reports_unresolved():
     assert targets[p_ok] == LoanItemStatus.CHECKED_OUT
     assert list(targets.values()).count(LoanItemStatus.REQUESTED) == 1
     assert [u.transaction_id for u in unresolved] == [2]
+
+
+def test_format_for_plate_prefers_plate_then_set_then_96() -> None:
+    formats = {2501: -1, 2507: 96, 2509: 384}
+    p384 = LegacyPlate(1, None, "000001", "P1", "Active", "MASTER", 10, 2509)
+    pinv = LegacyPlate(2, None, "000002", "P2", "Active", "MASTER", 10, 2501)
+    pnone = LegacyPlate(3, None, "000003", "P3", "Active", "MASTER", 10, None)
+    s384 = LegacySet(1, "MASTER_TWIN", "S", "Dry", None, None, 10, 2509)
+    assert format_for_plate(p384, None, formats) is PlateFormat.F384
+    assert format_for_plate(pinv, s384, formats) is PlateFormat.F384
+    assert format_for_plate(pinv, None, formats) is PlateFormat.F96
+    assert format_for_plate(pnone, None, formats) is PlateFormat.F96
+
+
+def test_full_name_falls_back_to_netid_then_uin() -> None:
+    assert full_name(_acct(1, "jdoe", "j@x.org")) == "jdoe"
+    assert full_name(LegacyAccount(2, "", None, None, " Jane ", "Doe")) == "Jane Doe"
+    assert full_name(LegacyAccount(3, "", None, None, None, None)) == "UIN 3"
+
+
+def test_plan_locations_skips_unknown_and_dedupes() -> None:
+    legacy = LegacyData(
+        locations=[
+            LegacyLocation(100001, "1148", "4"),
+            LegacyLocation(100002, "1148", "4"),
+            LegacyLocation(100003, "UNKNOWN", "UNKNOWN"),
+            LegacyLocation(100004, "1203", "3"),
+        ]
+    )
+    specs, alias = plan_locations(legacy)
+    assert [(s.room_no, s.freezer) for s in specs] == [("1148", "4"), ("1203", "3")]
+    assert alias == {100002: 100001}
+    assert specs[0] == LocationSpec(100001, "1148", "4")
+
+
+def test_open_transactions_filters_closed() -> None:
+    now = datetime(2026, 8, 1)
+    legacy = LegacyData(
+        transactions=[
+            LegacyTransaction(5001, "OPEN", 1, now),
+            LegacyTransaction(5002, "CLOSED", 1, now),
+        ]
+    )
+    assert [t.transaction_id for t in open_transactions(legacy)] == [5001]
+
+
+def test_compose_set_description_no_longer_folds_state_and_scientist() -> None:
+    s = LegacySet(
+        1, "VENDOR", "sac1-vendor-X", "Solubilized", 7, "Compounds selected by T.", 10,
+        2507, 100001, 0.0, 10.0, 17606, "file.sdf", "Purchased from Asinex",
+    )
+    desc = compose_set_description(s, {7: "Jane Doe"})
+    assert desc is not None
+    assert "Solubilized" not in desc and "Jane" not in desc
+    assert "Compounds selected by T." in desc
+    assert "file.sdf" in desc and "Purchased from Asinex" in desc
+
+
+def test_plan_group_tree_carries_metadata() -> None:
+    legacy = LegacyData(
+        libraries=[LegacyLibrary(10, "Lib A", "SacchettiniLibrary")],
+        sets=[
+            LegacySet(
+                1, "VENDOR", "sac1-vendor-X", "Solubilized", 7, None, 10,
+                2507, 100001, 55.0, 10.0, 17606, None, None,
+            )
+        ],
+    )
+    specs = plan_group_tree(legacy, {7: "Jane Doe"})
+    vendor = next(g for g in specs if g.key == "set:1")
+    assert (vendor.state, vendor.location_id, vendor.initial_volume_ul) == (
+        "Solubilized", 100001, 55.0,
+    )
+    assert (vendor.initial_concentration_mm, vendor.compound_count, vendor.scientist) == (
+        10.0, 17606, "Jane Doe",
+    )

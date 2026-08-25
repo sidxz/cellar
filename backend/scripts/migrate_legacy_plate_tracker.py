@@ -34,8 +34,8 @@ import argparse
 import asyncio
 import csv
 import uuid
-from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from dataclasses import dataclass, field, replace
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -53,6 +53,7 @@ from cellar.domain.inventory.enums import (
 )
 from cellar.domain.inventory.plate_group import PlateGroup
 from cellar.domain.inventory.plate_loan import PlateLoan
+from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
 from cellar.domain.workspace_config.tagging.tag import TagName
 from cellar.infrastructure.persistence.settings import DatabaseSettings
@@ -98,6 +99,13 @@ class LegacySet:
     scientist: int | None
     generating_conditions: str | None
     library_id: int | None
+    plate_format_id: int | None = None
+    set_location_id: int | None = None
+    initial_volume: float | None = None
+    initial_concentration: float | None = None
+    no_of_compounds: int | None = None
+    compound_file: str | None = None
+    comments: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,6 +129,7 @@ class LegacyPlate:
     plate_status: str
     plate_role: str
     library_id: int | None
+    plate_format_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -146,6 +155,39 @@ class LegacyAccount:
     alt_email: str | None
     first_name: str | None
     last_name: str | None
+
+
+@dataclass(frozen=True)
+class LegacyLocation:
+    location_id: int
+    room_no: str
+    freezer: str
+
+
+@dataclass(frozen=True)
+class LegacyPlateFormat:
+    plate_format_id: int
+    plate_format_name: str
+    no_of_wells: int
+
+
+@dataclass(frozen=True)
+class LegacyActivity:
+    act_id: int
+    act_type: str
+    transaction_id: int | None
+    plate_id: int | None
+    set_id: int | None
+    comments: str
+    scientist: int
+    act_date: datetime
+
+
+@dataclass(frozen=True)
+class LocationSpec:
+    location_id: int
+    room_no: str
+    freezer: str
 
 
 _PLATE_TYPE_BY_ROLE = {
@@ -196,14 +238,59 @@ def due_date_from(last_activity: datetime) -> date:
 
 
 def compose_set_description(s: LegacySet, account_names: dict[int, str]) -> str | None:
+    """State and scientist now live on GroupSpec/PlateGroup as first-class fields
+    (see plan_group_tree) — the description folds only free-text content.
+    `account_names` is unused here; kept so callers don't change."""
     parts: list[str] = []
-    if s.set_state:
-        parts.append(f"State: {s.set_state}")
-    if s.scientist and s.scientist in account_names:
-        parts.append(f"Scientist: {account_names[s.scientist]}")
     if s.generating_conditions:
         parts.append(s.generating_conditions)
+    if s.compound_file:
+        parts.append(f"Compound file: {s.compound_file}")
+    if s.comments:
+        parts.append(s.comments)
     return "\n".join(parts) if parts else None
+
+
+_WELLS_TO_FORMAT = {96: PlateFormat.F96, 384: PlateFormat.F384}
+
+
+def format_for_plate(
+    plate: LegacyPlate, set_for_plate: LegacySet | None, formats: dict[int, int]
+) -> PlateFormat:
+    """Plate's own format, else its set's, else 96-well (109 legacy plates carry
+    the 'Invalid Plate Format' sentinel, wells = -1)."""
+    for fid in (plate.plate_format_id, set_for_plate.plate_format_id if set_for_plate else None):
+        fmt = _WELLS_TO_FORMAT.get(formats.get(fid, -1)) if fid is not None else None
+        if fmt is not None:
+            return fmt
+    return PlateFormat.F96
+
+
+def full_name(a: LegacyAccount) -> str:
+    name = f"{(a.first_name or '').strip()} {(a.last_name or '').strip()}".strip()
+    return name or a.netid or f"UIN {a.uin}"
+
+
+def open_transactions(legacy: LegacyData) -> list[LegacyTransaction]:
+    return [t for t in legacy.transactions if t.t_status == "OPEN"]
+
+
+def plan_locations(legacy: LegacyData) -> tuple[list[LocationSpec], dict[int, int]]:
+    """Distinct (room, freezer) pairs; UNKNOWN/UNKNOWN is 'no location'.
+    Returns the specs plus an alias map duplicate-id → kept-id."""
+    seen: dict[tuple[str, str], int] = {}
+    specs: list[LocationSpec] = []
+    alias: dict[int, int] = {}
+    for loc in legacy.locations:
+        key = (loc.room_no.strip(), loc.freezer.strip())
+        if key == ("UNKNOWN", "UNKNOWN"):
+            continue
+        if key in seen:
+            alias[loc.location_id] = seen[key]
+            continue
+        seen[key] = loc.location_id
+        specs.append(LocationSpec(loc.location_id, key[0], key[1]))
+    return specs, alias
 
 
 @dataclass
@@ -216,6 +303,9 @@ class LegacyData:
     transactions: list[LegacyTransaction] = field(default_factory=list)
     transaction_plates: list[LegacyTransactionPlate] = field(default_factory=list)
     accounts: list[LegacyAccount] = field(default_factory=list)
+    locations: list[LegacyLocation] = field(default_factory=list)
+    plate_formats: list[LegacyPlateFormat] = field(default_factory=list)
+    activities: list[LegacyActivity] = field(default_factory=list)
 
 
 _P = "APPS_PLATE_TRACKER_"  # table prefix
@@ -231,6 +321,17 @@ def build_account_email_map(accounts: list[LegacyAccount]) -> dict[int, str]:
                 out[a.uin] = candidate
                 break
     return out
+
+
+def _row_to_set(r: dict) -> LegacySet:
+    """MySQL DECIMAL columns arrive as decimal.Decimal — coerce to float/int."""
+    r = dict(r)
+    for key in ("initial_volume", "initial_concentration"):
+        if r.get(key) is not None:
+            r[key] = float(r[key])
+    if r.get("no_of_compounds") is not None:
+        r["no_of_compounds"] = int(r["no_of_compounds"])
+    return LegacySet(**r)
 
 
 def read_legacy(dsn: str) -> LegacyData:
@@ -253,23 +354,30 @@ def read_legacy(dsn: str) -> LegacyData:
             d.libraries = [LegacyLibrary(**r) for r in cur.fetchall()]
             cur.execute(
                 f"SELECT set_id, set_type, set_name, set_state, scientist, "
-                f"generating_conditions, library_id FROM {_P}SET"
+                f"generating_conditions, library_id, plate_format_id, "
+                f"set_location_id, initial_volume, initial_concentration, "
+                f"no_of_compounds, compound_file, comments FROM {_P}SET"
             )
-            d.sets = [LegacySet(**r) for r in cur.fetchall()]
+            d.sets = [_row_to_set(r) for r in cur.fetchall()]
             cur.execute(f"SELECT set_id, parent_id FROM {_P}SET_PARENT")
             d.set_parents = [LegacySetParent(**r) for r in cur.fetchall()]
             cur.execute(f"SELECT set_id, plate_id FROM {_P}SET_PLATE")
             d.set_plates = [LegacySetPlate(**r) for r in cur.fetchall()]
             cur.execute(
                 f"SELECT plate_id, cdd_plate_id, plate_barcode, plate_name, "
-                f"plate_status, plate_role, library_id FROM {_P}PLATE"
+                f"plate_status, plate_role, library_id, plate_format_id FROM {_P}PLATE"
             )
             d.plates = [LegacyPlate(**r) for r in cur.fetchall()]
             cur.execute(
                 f"SELECT transaction_id, t_status, scientist, last_activity_date "
-                f"FROM {_P}TRANSACTIONS WHERE t_status = 'OPEN'"
+                f"FROM {_P}TRANSACTIONS"
             )
-            d.transactions = [LegacyTransaction(**r) for r in cur.fetchall()]
+            d.transactions = [
+                LegacyTransaction(
+                    **{**r, "last_activity_date": r["last_activity_date"].replace(tzinfo=UTC)}
+                )
+                for r in cur.fetchall()
+            ]
             cur.execute(f"SELECT plate_id, p_status, transaction_id FROM {_P}TRANSACTION_PLATE")
             d.transaction_plates = [LegacyTransactionPlate(**r) for r in cur.fetchall()]
             cur.execute(
@@ -277,6 +385,27 @@ def read_legacy(dsn: str) -> LegacyData:
                 "firstName AS first_name, lastName AS last_name FROM account"
             )
             d.accounts = [LegacyAccount(**r) for r in cur.fetchall()]
+            cur.execute(f"SELECT location_id, room_no, freezer FROM {_P}LOCATION")
+            d.locations = [LegacyLocation(**r) for r in cur.fetchall()]
+            cur.execute(
+                f"SELECT plate_format_id, plate_format_name, no_of_wells "
+                f"FROM {_P}PLATE_FORMAT"
+            )
+            d.plate_formats = [LegacyPlateFormat(**r) for r in cur.fetchall()]
+            cur.execute(
+                f"SELECT act_id, act_type, transaction_id, plate_id, set_id, "
+                f"comments, scientist, act_date FROM {_P}ACTIVITY_LOG"
+            )
+            d.activities = [
+                LegacyActivity(
+                    **{
+                        **r,
+                        "comments": r["comments"] or "",
+                        "act_date": r["act_date"].replace(tzinfo=UTC),
+                    }
+                )
+                for r in cur.fetchall()
+            ]
         return d
     finally:
         conn.close()
@@ -405,6 +534,12 @@ class GroupSpec:
     group_type: str | None
     description: str | None
     parent_key: str | None
+    state: str | None = None
+    location_id: int | None = None
+    initial_volume_ul: float | None = None
+    initial_concentration_mm: float | None = None
+    compound_count: int | None = None
+    scientist: str | None = None
 
 
 def plan_group_tree(legacy, account_names: dict[int, str]) -> list[GroupSpec]:
@@ -426,6 +561,12 @@ def plan_group_tree(legacy, account_names: dict[int, str]) -> list[GroupSpec]:
                 s.set_type,
                 compose_set_description(s, account_names),
                 parent_key,
+                state=s.set_state or None,
+                location_id=s.set_location_id,
+                initial_volume_ul=s.initial_volume,
+                initial_concentration_mm=s.initial_concentration,
+                compound_count=s.no_of_compounds,
+                scientist=account_names.get(s.scientist) if s.scientist else None,
             )
         )
     # topological order: roots first, then nodes whose parent already emitted
@@ -445,7 +586,7 @@ def plan_group_tree(legacy, account_names: dict[int, str]) -> list[GroupSpec]:
         pending = rest
         if not progressed:  # broken parent ref (shouldn't happen) — emit as roots
             for g in pending:
-                ordered.append(GroupSpec(g.key, g.name, g.group_type, g.description, None))
+                ordered.append(replace(g, parent_key=None))
             break
     return ordered
 
@@ -454,14 +595,39 @@ _GROUP_TYPE_VOCAB = "plate_group_type"
 _GROUP_STATE_VOCAB = "plate_group_state"
 
 
-async def apply_group_tree(specs, *, group_repo, workspace_id, owner_org_id, actor_id):
+async def apply_group_tree(
+    specs, *, group_repo, workspace_id, owner_org_id, actor_id,
+    location_ids: dict[int, uuid.UUID] | None = None,
+):
     key_to_group: dict[str, uuid.UUID] = {}
     created = 0
+    location_ids = location_ids or {}
     for g in specs:
         parent_id = key_to_group.get(g.parent_key) if g.parent_key else None
+        storage_location_id = (
+            location_ids.get(g.location_id) if g.location_id is not None else None
+        )
         existing = await group_repo.find_by_name(workspace_id, owner_org_id, parent_id, g.name)
         if existing is not None:
             key_to_group[g.key] = existing.id
+            current = (
+                existing.state, existing.storage_location_id, existing.initial_volume_ul,
+                existing.initial_concentration_mm, existing.compound_count, existing.scientist,
+            )
+            target = (
+                g.state, storage_location_id, g.initial_volume_ul,
+                g.initial_concentration_mm, g.compound_count, g.scientist,
+            )
+            if current != target:
+                existing.update(
+                    state=g.state,
+                    storage_location_id=storage_location_id,
+                    initial_volume_ul=g.initial_volume_ul,
+                    initial_concentration_mm=g.initial_concentration_mm,
+                    compound_count=g.compound_count,
+                    scientist=g.scientist,
+                )
+                await group_repo.save(existing)
             continue
         group = PlateGroup.create(
             workspace_id=workspace_id,
@@ -471,6 +637,12 @@ async def apply_group_tree(specs, *, group_repo, workspace_id, owner_org_id, act
             parent_group_id=parent_id,
             group_type=g.group_type,
             description=g.description,
+            state=g.state,
+            storage_location_id=storage_location_id,
+            initial_volume_ul=g.initial_volume_ul,
+            initial_concentration_mm=g.initial_concentration_mm,
+            compound_count=g.compound_count,
+            scientist=g.scientist,
         )
         await group_repo.save(group)
         key_to_group[g.key] = group.id
@@ -558,7 +730,7 @@ def plan_loans(legacy, matched, account_email, user_map):
     tps_by_txn: dict[int, list] = {}
     for tp in legacy.transaction_plates:
         tps_by_txn.setdefault(tp.transaction_id, []).append(tp)
-    for txn in legacy.transactions:  # already filtered to OPEN at read time
+    for txn in legacy.transactions:  # caller passes only OPEN transactions
         email = account_email.get(txn.scientist)
         user_id = user_map.get(email) if email else None
         if user_id is None:
@@ -647,9 +819,7 @@ async def run_migration(
     dry_run,
 ) -> dict:
     account_email = build_account_email_map(legacy.accounts)
-    account_names = {
-        a.uin: f"{a.first_name or ''} {a.last_name or ''}".strip() for a in legacy.accounts
-    }
+    account_names = {a.uin: full_name(a) for a in legacy.accounts}
     summary: dict[str, int] = {}
     report_dir = Path(report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -711,8 +881,12 @@ async def run_migration(
             legacy, key_to_group, matched, plate_repo=plate_repo, workspace_id=workspace_id
         )
 
-        # Phase 4: loans
-        loan_specs, unresolved = plan_loans(legacy, matched, account_email, user_map)
+        # Phase 4: loans — read_legacy now reads ALL transactions (not just OPEN),
+        # so filter here to keep open-loan behaviour unchanged.
+        loan_specs, unresolved = plan_loans(
+            replace(legacy, transactions=open_transactions(legacy)),
+            matched, account_email, user_map,
+        )
         created = 0
         for ls in loan_specs:
             if await apply_loan(
