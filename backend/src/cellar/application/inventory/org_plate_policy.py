@@ -36,7 +36,6 @@ class SetOrgPlatePolicyCommand(Command):
     require_approval: bool
     confirmation: str
     default_due_days: int | None
-    plates_private: bool
 
 
 class GetOrgPlatePolicy:
@@ -92,7 +91,6 @@ class SetOrgPlatePolicy:
                 require_approval=input.require_approval,
                 confirmation=LoanConfirmationMode(input.confirmation),
                 default_due_days=input.default_due_days,
-                plates_private=input.plates_private,
             )
 
             await self._repo.save(policy)

@@ -40,7 +40,6 @@ async def _set_policy(client: AsyncClient, org_id, **fields) -> dict:
         "require_approval": True,
         "confirmation": "admin_confirm",
         "default_due_days": None,
-        "plates_private": False,
         **fields,
     }
     resp = await client.put(f"/api/v1/org-plate-policies/{org_id}", json=body)

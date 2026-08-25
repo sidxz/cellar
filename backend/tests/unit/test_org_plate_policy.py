@@ -20,15 +20,14 @@ class TestCreateDefault:
         assert policy.require_approval is True
         assert policy.confirmation == LoanConfirmationMode.ADMIN_CONFIRM
         assert policy.default_due_days == 14
-        assert policy.plates_private is False
         assert policy.version == 1
 
 
 class TestUpdate:
-    def test_update_flips_plates_private_and_emits_event(self) -> None:
+    def test_update_emits_event(self) -> None:
         policy = OrgPlatePolicy.create_default(workspace_id=uuid.uuid4(), org_id=uuid.uuid4())
-        policy.update(plates_private=True)
-        assert policy.plates_private is True
+        policy.update(require_approval=False)
+        assert policy.require_approval is False
 
         events = policy.collect_events()
         assert len(events) == 1
@@ -45,7 +44,6 @@ class TestUpdate:
         assert policy.require_approval is False
         assert policy.confirmation == LoanConfirmationMode.KIOSK_SCAN
         assert policy.default_due_days == 30
-        assert policy.plates_private is False  # unchanged
 
     def test_default_due_days_none_allowed(self) -> None:
         policy = OrgPlatePolicy.create_default(workspace_id=uuid.uuid4(), org_id=uuid.uuid4())

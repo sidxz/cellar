@@ -34,14 +34,6 @@ class SQLAlchemyOrgPlatePolicyRepository(
             return None
         return self._to_domain_tracked(model)
 
-    async def list_private_org_ids(self, workspace_id: uuid.UUID) -> set[uuid.UUID]:
-        stmt = select(OrgPlatePolicyModel.org_id).where(
-            OrgPlatePolicyModel.workspace_id == workspace_id,
-            OrgPlatePolicyModel.plates_private.is_(True),
-        )
-        result = await self._session.execute(stmt)
-        return set(result.scalars().all())
-
     def _to_domain(self, model: OrgPlatePolicyModel) -> OrgPlatePolicy:
         return OrgPlatePolicy(
             id=model.id,
@@ -50,7 +42,6 @@ class SQLAlchemyOrgPlatePolicyRepository(
             require_approval=model.require_approval,
             confirmation=LoanConfirmationMode(model.confirmation),
             default_due_days=model.default_due_days,
-            plates_private=model.plates_private,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -64,7 +55,6 @@ class SQLAlchemyOrgPlatePolicyRepository(
             require_approval=aggregate.require_approval,
             confirmation=aggregate.confirmation.value,
             default_due_days=aggregate.default_due_days,
-            plates_private=aggregate.plates_private,
             version=aggregate.version,
         )
 
@@ -72,4 +62,3 @@ class SQLAlchemyOrgPlatePolicyRepository(
         model.require_approval = aggregate.require_approval
         model.confirmation = aggregate.confirmation.value
         model.default_due_days = aggregate.default_due_days
-        model.plates_private = aggregate.plates_private

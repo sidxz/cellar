@@ -1,4 +1,4 @@
-"""OrgPlatePolicy aggregate — per-org plate loan/visibility policy within a workspace.
+"""OrgPlatePolicy aggregate — per-org plate loan policy within a workspace.
 
 Identity: composite ``(workspace_id, org_id)`` — unlike ``WorkspaceSettings``,
 ``id`` is a regular generated surrogate key, not the scoping key itself, since
@@ -19,7 +19,7 @@ DEFAULT_DUE_DAYS = 14
 
 
 class OrgPlatePolicy(AggregateRoot):
-    """Per-org policy for plate loan approval/confirmation and visibility."""
+    """Per-org policy for plate loan approval/confirmation."""
 
     def __init__(
         self,
@@ -30,7 +30,6 @@ class OrgPlatePolicy(AggregateRoot):
         require_approval: bool = True,
         confirmation: LoanConfirmationMode = LoanConfirmationMode.ADMIN_CONFIRM,
         default_due_days: int | None = DEFAULT_DUE_DAYS,
-        plates_private: bool = False,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -41,7 +40,6 @@ class OrgPlatePolicy(AggregateRoot):
         self.require_approval = require_approval
         self.confirmation = confirmation
         self.default_due_days = default_due_days
-        self.plates_private = plates_private
 
     @classmethod
     def create_default(cls, *, workspace_id: uuid.UUID, org_id: uuid.UUID) -> OrgPlatePolicy:
@@ -51,7 +49,7 @@ class OrgPlatePolicy(AggregateRoot):
     def update(self, **fields: object) -> None:
         """Set fields present in ``fields``, validate, and emit ``OrgPlatePolicySet``.
 
-        Accepted keys: require_approval, confirmation, default_due_days, plates_private.
+        Accepted keys: require_approval, confirmation, default_due_days.
         """
         if "default_due_days" in fields:
             days = fields["default_due_days"]
@@ -60,7 +58,7 @@ class OrgPlatePolicy(AggregateRoot):
             ):
                 raise ValidationError(f"default_due_days must be None or >= 1 (got: {days!r})")
 
-        for key in ("require_approval", "confirmation", "default_due_days", "plates_private"):
+        for key in ("require_approval", "confirmation", "default_due_days"):
             if key in fields:
                 setattr(self, key, fields[key])
 

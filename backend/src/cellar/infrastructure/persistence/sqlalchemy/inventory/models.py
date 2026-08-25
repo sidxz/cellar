@@ -191,7 +191,7 @@ class RegisteredPlateModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixi
 
 
 class OrgPlatePolicyModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
-    """Per-org plate loan/visibility policy within a workspace."""
+    """Per-org plate loan policy within a workspace."""
 
     __tablename__ = "org_plate_policies"
 
@@ -201,7 +201,6 @@ class OrgPlatePolicyModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin
         String(20), nullable=False, server_default="admin_confirm"
     )
     default_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    plates_private: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "org_id", name="uq_org_plate_policy_ws_org"),

@@ -25,7 +25,6 @@ def _body(**overrides) -> dict:
         "require_approval": True,
         "confirmation": "admin_confirm",
         "default_due_days": 14,
-        "plates_private": False,
     }
     body.update(overrides)
     return body
@@ -41,7 +40,6 @@ class TestGetOrgPlatePolicy:
         assert data["require_approval"] is True
         assert data["confirmation"] == "admin_confirm"
         assert data["default_due_days"] == 14
-        assert data["plates_private"] is False
         assert data["version"] == 1
 
     async def test_second_get_still_defaults_no_row_created(
@@ -74,7 +72,6 @@ class TestSetOrgPlatePolicy:
             require_approval=False,
             confirmation="none",
             default_due_days=30,
-            plates_private=True,
         )
         resp = await client.put(f"/api/v1/org-plate-policies/{org_id}", json=body)
         assert resp.status_code == 200, resp.text
@@ -82,7 +79,6 @@ class TestSetOrgPlatePolicy:
         assert data["require_approval"] is False
         assert data["confirmation"] == "none"
         assert data["default_due_days"] == 30
-        assert data["plates_private"] is True
         assert data["version"] == 1  # first PUT is an INSERT
 
         got = await client.get(f"/api/v1/org-plate-policies/{org_id}")
@@ -91,6 +87,12 @@ class TestSetOrgPlatePolicy:
         assert fetched["require_approval"] is False
         assert fetched["confirmation"] == "none"
         assert fetched["default_due_days"] == 30
-        assert fetched["plates_private"] is True
         # Sanity for the no-hidden-write test's counter: a real PUT DOES create a row.
         assert await _policy_row_count(api_app, org_id) == 1
+
+    async def test_put_rejects_removed_plates_private_field(self, client: AsyncClient) -> None:
+        """The toggle is gone (spec 2026-08-25 §3); extra=forbid keeps stale clients honest."""
+        resp = await client.put(
+            f"/api/v1/org-plate-policies/{uuid.uuid4()}", json=_body(plates_private=True)
+        )
+        assert resp.status_code == 422, resp.text
