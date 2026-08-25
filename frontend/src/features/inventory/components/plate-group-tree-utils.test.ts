@@ -14,6 +14,7 @@ function node(over: Partial<PlateGroupNode> = {}): PlateGroupNode {
     owner_org_id: "org-1",
     plate_count: 0,
     created_by: "user-1",
+    created_at: "2026-01-01T00:00:00Z",
     version: 1,
     ...over,
   };

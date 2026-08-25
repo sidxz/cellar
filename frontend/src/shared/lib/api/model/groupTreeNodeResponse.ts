@@ -6,16 +6,31 @@
  */
 import type { GroupTreeNodeResponseGroupType } from './groupTreeNodeResponseGroupType';
 import type { GroupTreeNodeResponseDescription } from './groupTreeNodeResponseDescription';
+import type { GroupTreeNodeResponseState } from './groupTreeNodeResponseState';
+import type { GroupTreeNodeResponseStorageLocationId } from './groupTreeNodeResponseStorageLocationId';
+import type { GroupTreeNodeResponseInitialVolumeUl } from './groupTreeNodeResponseInitialVolumeUl';
+import type { GroupTreeNodeResponseInitialConcentrationMm } from './groupTreeNodeResponseInitialConcentrationMm';
+import type { GroupTreeNodeResponseCompoundCount } from './groupTreeNodeResponseCompoundCount';
+import type { GroupTreeNodeResponseScientist } from './groupTreeNodeResponseScientist';
 import type { GroupTreeNodeResponseParentGroupId } from './groupTreeNodeResponseParentGroupId';
+import type { GroupTreeNodeResponsePlateFormat } from './groupTreeNodeResponsePlateFormat';
 
 export interface GroupTreeNodeResponse {
   id: string;
   name: string;
   group_type?: GroupTreeNodeResponseGroupType;
   description?: GroupTreeNodeResponseDescription;
+  state?: GroupTreeNodeResponseState;
+  storage_location_id?: GroupTreeNodeResponseStorageLocationId;
+  initial_volume_ul?: GroupTreeNodeResponseInitialVolumeUl;
+  initial_concentration_mm?: GroupTreeNodeResponseInitialConcentrationMm;
+  compound_count?: GroupTreeNodeResponseCompoundCount;
+  scientist?: GroupTreeNodeResponseScientist;
+  created_at: string;
   parent_group_id?: GroupTreeNodeResponseParentGroupId;
   owner_org_id: string;
   plate_count: number;
+  plate_format?: GroupTreeNodeResponsePlateFormat;
   created_by: string;
   version: number;
   children?: GroupTreeNodeResponse[];

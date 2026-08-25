@@ -7,6 +7,12 @@
 import type { PlateGroupResponseParentGroupId } from './plateGroupResponseParentGroupId';
 import type { PlateGroupResponseGroupType } from './plateGroupResponseGroupType';
 import type { PlateGroupResponseDescription } from './plateGroupResponseDescription';
+import type { PlateGroupResponseState } from './plateGroupResponseState';
+import type { PlateGroupResponseStorageLocationId } from './plateGroupResponseStorageLocationId';
+import type { PlateGroupResponseInitialVolumeUl } from './plateGroupResponseInitialVolumeUl';
+import type { PlateGroupResponseInitialConcentrationMm } from './plateGroupResponseInitialConcentrationMm';
+import type { PlateGroupResponseCompoundCount } from './plateGroupResponseCompoundCount';
+import type { PlateGroupResponseScientist } from './plateGroupResponseScientist';
 
 export interface PlateGroupResponse {
   id: string;
@@ -16,6 +22,13 @@ export interface PlateGroupResponse {
   parent_group_id?: PlateGroupResponseParentGroupId;
   group_type?: PlateGroupResponseGroupType;
   description?: PlateGroupResponseDescription;
+  state?: PlateGroupResponseState;
+  storage_location_id?: PlateGroupResponseStorageLocationId;
+  initial_volume_ul?: PlateGroupResponseInitialVolumeUl;
+  initial_concentration_mm?: PlateGroupResponseInitialConcentrationMm;
+  compound_count?: PlateGroupResponseCompoundCount;
+  scientist?: PlateGroupResponseScientist;
+  created_at: string;
   created_by: string;
   version: number;
 }

@@ -28,12 +28,23 @@ const node: PlateGroupNode = {
   created_by: "u1",
   version: 1,
   children: [],
+  state: "Solubilized",
+  storage_location_id: "loc-1",
+  initial_volume_ul: 55,
+  initial_concentration_mm: 10,
+  compound_count: 17606,
+  scientist: "Jane Doe",
+  plate_format: "96",
+  created_at: "2026-08-25T10:00:00Z",
 };
 
 function setup(props: Partial<Parameters<typeof PlateGroupDetails>[0]> = {}) {
   mocked.mockImplementation((opts: { url: string }) => {
     if (opts.url.includes("/orgs")) {
       return Promise.resolve([{ id: "org1", slug: "acme", name: "Acme Labs" }]);
+    }
+    if (opts.url.includes("/storage-locations")) {
+      return Promise.resolve([{ id: "loc-1", name: "Room 1148 / Freezer 4" }]);
     }
     return Promise.resolve([
       { id: "p1", barcode: "000123", plate_label: "Plate 123", group_id: "g1" },
@@ -68,5 +79,15 @@ describe("PlateGroupDetails", () => {
     setup({ onEdit });
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(onEdit).toHaveBeenCalled();
+  });
+
+  it("renders the metadata rows", async () => {
+    setup();
+    expect(await screen.findByText("Room 1148 / Freezer 4")).toBeInTheDocument();
+    expect(screen.getByText("Solubilized")).toBeInTheDocument();
+    expect(screen.getByText("Jane Doe")).toBeInTheDocument();
+    expect(screen.getByText("55 µL · 10 mM")).toBeInTheDocument();
+    expect(screen.getByText("17,606")).toBeInTheDocument();
+    expect(screen.getByText("96-well")).toBeInTheDocument();
   });
 });
