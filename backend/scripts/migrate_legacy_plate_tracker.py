@@ -451,6 +451,7 @@ def plan_group_tree(legacy, account_names: dict[int, str]) -> list[GroupSpec]:
 
 
 _GROUP_TYPE_VOCAB = "plate_group_type"
+_GROUP_STATE_VOCAB = "plate_group_state"
 
 
 async def apply_group_tree(specs, *, group_repo, workspace_id, owner_org_id, actor_id):
@@ -497,14 +498,14 @@ async def assign_plates_to_groups(
     return n
 
 
-async def seed_group_type_vocab(legacy, *, cv_repo, workspace_id, actor_id) -> None:
-    values = sorted({s.set_type for s in legacy.sets if s.set_type})
+async def seed_vocab(*, cv_repo, workspace_id, actor_id, name: str, values: list[str]) -> None:
+    """Create the vocabulary or add any missing terms (idempotent)."""
     if not values:
         return
-    vocab = await cv_repo.find_by_name(workspace_id, _GROUP_TYPE_VOCAB)
+    vocab = await cv_repo.find_by_name(workspace_id, name)
     if vocab is None:
         vocab = ControlledVocabulary.create(
-            workspace_id=workspace_id, name=_GROUP_TYPE_VOCAB, terms=values, created_by=actor_id
+            workspace_id=workspace_id, name=name, terms=values, created_by=actor_id
         )
         await cv_repo.save(vocab)
         return
@@ -515,6 +516,18 @@ async def seed_group_type_vocab(legacy, *, cv_repo, workspace_id, actor_id) -> N
             changed = True
     if changed:
         await cv_repo.save(vocab)
+
+
+async def seed_group_type_vocab(legacy, *, cv_repo, workspace_id, actor_id) -> None:
+    await seed_vocab(
+        cv_repo=cv_repo, workspace_id=workspace_id, actor_id=actor_id,
+        name=_GROUP_TYPE_VOCAB, values=sorted({s.set_type for s in legacy.sets if s.set_type}),
+    )
+    await seed_vocab(
+        cv_repo=cv_repo, workspace_id=workspace_id, actor_id=actor_id,
+        name=_GROUP_STATE_VOCAB,
+        values=sorted({s.set_state for s in legacy.sets if getattr(s, "set_state", None)}),
+    )
 
 
 @dataclass(frozen=True)
