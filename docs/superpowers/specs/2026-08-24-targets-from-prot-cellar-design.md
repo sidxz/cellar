@@ -1,7 +1,7 @@
 # Targets sourced from prot-cellar — design
 
 **Date:** 2026-08-24
-**Status:** approved in chat, pending spec review
+**Status:** shipped on `feat/targets-from-prot-cellar` (see "Shipped — deviations" at the end)
 **Workspace in scope:** saclab-dev (`442df0cf-e618-4938-a089-80ae2f1e43e7`)
 
 ## 1. Problem
@@ -126,3 +126,15 @@ Expected in saclab-dev: `NadD → remapped (4 run links)`, 5 dropped (2 protocol
 - Mirroring protein-level fields (uniprot, gene, sequence).
 - Push/webhook from prot-cellar (its ADR defers cross-service events).
 - Prod deployment config for prot-cellar (none exists yet); `PROT_CELLAR_URL` / `APP_PROT_CELLAR_URL` are documented in `.env.example` only.
+
+## Shipped — deviations (2026-08-24, branch `feat/targets-from-prot-cellar`)
+
+- **503, not 502**, when prot-cellar is unreachable/5xx — reuses the existing `ServiceUnavailableError` → 503 mapping; prot-cellar 401/403 → existing `AuthorizationError` → 403. No new error classes.
+- `SyncReport` has no `pages` field (the port returns a flat list).
+- Freshness is marked **on attempt**, not on success — a failing or 403-ing prot-cellar is not re-hit within the TTL by viewers' list calls.
+- No `upsert_many` / `find_all_by_workspace` on the repository — the existing `save` (get-or-add + update in place) and `find_by_workspace(limit=None)` suffice.
+- A same-id row in a *different* workspace surfaces as a 403 from `EntityRepository.save`'s workspace guard rather than "skip + log" (cannot happen while both apps share Duar workspace ids).
+- `TargetSource` stub seam for API tests = `create_container(overrides={TargetSource: stub})` (Lagom raises on duplicate `define`).
+- Frontend `useTargets` follows the cursor to the end (server default page is 50; the picker must see the whole catalog). `useTarget(id)` was dropped — no consumer.
+- `require_same_workspace` raises `NotFoundError` (anti-enumeration), so a foreign-workspace sync request is a 404, not 403.
+- Cutover on saclab-dev executed 2026-08-24: NadD remapped (4 run links), 5 demo targets dropped (2 protocol links). The script's first `--apply` hit a transaction bug (planning auto-begins; fixed in `c54c1c8b`, regression test added).
