@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { PlateGroupNode } from "../hooks/use-plate-groups";
 import {
   MAX_NODE_LABEL,
+  formatLabel,
   groupTypeColor,
   legendEntries,
+  stateColor,
   truncateLabel,
 } from "./plate-group-tree-utils";
 
@@ -21,16 +23,36 @@ function node(over: Partial<PlateGroupNode> = {}): PlateGroupNode {
 }
 
 describe("groupTypeColor", () => {
-  it("is stable across calls for the same input", () => {
-    expect(groupTypeColor("vendor")).toBe(groupTypeColor("vendor"));
+  it("uses the legacy palette for the four known types, case-insensitively", () => {
+    expect(groupTypeColor("vendor")).toBe("#FFBD50");
+    expect(groupTypeColor("VENDOR")).toBe("#FFBD50");
+    expect(groupTypeColor("screening")).toBe("#8F7EB5");
+    expect(groupTypeColor("master_twin")).toBe("#C3D9E4");
+    expect(groupTypeColor("hit_collection")).toBe("#E27D60");
   });
-
-  it("differs for different group types", () => {
-    expect(groupTypeColor("vendor")).not.toBe(groupTypeColor("screening"));
+  it("is stable and distinct for unknown types", () => {
+    expect(groupTypeColor("custom")).toBe(groupTypeColor("custom"));
+    expect(groupTypeColor("custom")).not.toBe(groupTypeColor("other"));
   });
-
   it("returns the neutral color for an untyped (empty) group", () => {
     expect(groupTypeColor("")).toBe("#707372");
+  });
+});
+
+describe("stateColor", () => {
+  it("maps legacy states and falls back to neutral", () => {
+    expect(stateColor("Solubilized")).toBe("#7AB648");
+    expect(stateColor("dry")).toBe("#99D2F2");
+    expect(stateColor("Retired")).toBe("#707372");
+    expect(stateColor(null)).toBe("#707372");
+  });
+});
+
+describe("formatLabel", () => {
+  it("renders well counts and mixed", () => {
+    expect(formatLabel("96")).toBe("96-well");
+    expect(formatLabel("mixed")).toBe("mixed formats");
+    expect(formatLabel(null)).toBeNull();
   });
 });
 
@@ -54,50 +76,26 @@ describe("truncateLabel", () => {
 });
 
 describe("legendEntries", () => {
-  it("dedupes repeated group types across roots and children", () => {
+  it("lists distinct states and types present, dedupes, and appends unset/untyped", () => {
     const roots = [
-      node({ id: "1", group_type: "vendor" }),
+      node({ id: "1", group_type: "vendor", state: "Solubilized" }),
       node({
         id: "2",
         group_type: "vendor",
-        children: [node({ id: "2a", group_type: "screening" })],
+        state: "Dry",
+        children: [node({ id: "2a", group_type: "screening", state: null })],
       }),
     ];
-    const entries = legendEntries(roots);
-    const vendorEntries = entries.filter((e) => e.label === "vendor");
-    expect(vendorEntries).toHaveLength(1);
-    expect(entries.some((e) => e.label === "screening")).toBe(true);
-    expect(entries).toHaveLength(2);
+    const { states, types } = legendEntries(roots);
+    expect(types.map((t) => t.label)).toEqual(["vendor", "screening"]);
+    expect(states.map((s) => s.label)).toEqual(["Solubilized", "Dry", "unset"]);
+    expect(types.find((t) => t.label === "vendor")?.color).toBe("#FFBD50");
   });
-
-  it("omits the untyped entry when every group is typed", () => {
-    const roots = [node({ id: "1", group_type: "vendor" })];
-    const entries = legendEntries(roots);
-    expect(entries.some((e) => e.label === "untyped")).toBe(false);
-  });
-
-  it("appends a single untyped entry when an untyped group exists, regardless of how many", () => {
-    const roots = [
-      node({ id: "1", group_type: "vendor" }),
-      node({ id: "2", group_type: "" }),
-      node({ id: "3", group_type: undefined }),
-    ];
-    const entries = legendEntries(roots);
-    const untyped = entries.filter((e) => e.label === "untyped");
-    expect(untyped).toHaveLength(1);
-    expect(entries.at(-1)).toEqual({ label: "untyped", color: "#707372" });
-  });
-
-  it("returns a single entry (no untyped) when the whole tree is one type", () => {
-    const roots = [
-      node({ id: "1", group_type: "vendor" }),
-      node({ id: "2", group_type: "vendor", children: [node({ id: "2a", group_type: "vendor" })] }),
-    ];
-    expect(legendEntries(roots)).toHaveLength(1);
-  });
-
-  it("returns a single untyped entry when nothing is typed", () => {
-    const roots = [node({ id: "1", group_type: "" }), node({ id: "2", group_type: null })];
-    expect(legendEntries(roots)).toEqual([{ label: "untyped", color: "#707372" }]);
+  it("omits unset when every group has a state and untyped when every group is typed", () => {
+    const { states, types } = legendEntries([
+      node({ id: "1", group_type: "vendor", state: "Dry" }),
+    ]);
+    expect(states.some((s) => s.label === "unset")).toBe(false);
+    expect(types.some((t) => t.label === "untyped")).toBe(false);
   });
 });

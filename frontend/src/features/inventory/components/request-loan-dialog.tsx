@@ -71,9 +71,16 @@ export interface RequestLoanDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Borrower org whose plate-group tree is offered in group mode. */
   orgId: string | undefined;
+  /** Group to preselect in "From group" mode, e.g. opened from a tree card. */
+  initialGroupId?: string;
 }
 
-export function RequestLoanDialog({ open, onOpenChange, orgId }: RequestLoanDialogProps) {
+export function RequestLoanDialog({
+  open,
+  onOpenChange,
+  orgId,
+  initialGroupId,
+}: RequestLoanDialogProps) {
   const [mode, setMode] = useState<Mode>("group");
   const [groupId, setGroupId] = useState("");
   const [paste, setPaste] = useState("");
@@ -93,14 +100,14 @@ export function RequestLoanDialog({ open, onOpenChange, orgId }: RequestLoanDial
   useEffect(() => {
     if (!open) return;
     setMode("group");
-    setGroupId("");
+    setGroupId(initialGroupId ?? "");
     setPaste("");
     setCsvBarcodes([]);
     setCsvName("");
     setBorrowerOrgId(MY_ORG);
     setDueDate("");
     setNotes("");
-  }, [open]);
+  }, [open, initialGroupId]);
 
   const groupOptions = useMemo(() => {
     const out: GroupOption[] = [];

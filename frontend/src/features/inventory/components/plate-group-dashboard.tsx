@@ -27,7 +27,9 @@ import { MovePlateGroupDialog } from "./move-plate-group-dialog";
 import { PlateGroupDetails } from "./plate-group-details";
 import { PlateGroupDialog } from "./plate-group-dialog";
 import { PlateGroupTreeView } from "./plate-group-tree";
+import { ROOT_STORAGE_KEY } from "./plate-group-tree-utils";
 import { PlateInsightsPanel } from "./plate-insights-panel";
+import { RequestLoanDialog } from "./request-loan-dialog";
 
 /** Which management dialog is open, and its create-mode parent. */
 type DialogState =
@@ -45,6 +47,8 @@ export function PlateGroupDashboard() {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [selected, setSelected] = useState<PlateGroupNode | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [rootId, setRootId] = useState<string | null>(null);
+  const [loanGroup, setLoanGroup] = useState<PlateGroupNode | null>(null);
   const [tab, setTab] = useHashTab("hierarchy");
   const deleteGroup = useDeletePlateGroup();
   const removePlates = useRemovePlatesFromGroup();
@@ -85,15 +89,58 @@ export function PlateGroupDashboard() {
     return find(tree.roots);
   }, [tree, selected]);
 
+  const roots = tree?.roots ?? [];
+
+  // (Re)select the root when the org or the tree changes: remember the last
+  // root per org (localStorage), falling back to the first root.
+  useEffect(() => {
+    if (!orgId || roots.length === 0) return;
+    if (rootId && roots.some((r) => r.id === rootId)) return;
+    let remembered: string | null = null;
+    try {
+      remembered = window.localStorage.getItem(ROOT_STORAGE_KEY(orgId));
+    } catch {
+      remembered = null;
+    }
+    const next = roots.find((r) => r.id === remembered)?.id ?? roots[0].id;
+    setRootId(next);
+  }, [orgId, roots, rootId]);
+
+  const selectRoot = (id: string) => {
+    setRootId(id);
+    setSelected(null);
+    try {
+      if (orgId) window.localStorage.setItem(ROOT_STORAGE_KEY(orgId), id);
+    } catch {
+      /* storage unavailable — selection is per-session only */
+    }
+  };
+  const rootNode = roots.find((r) => r.id === rootId) ?? null;
+
   return (
     <div className="flex flex-col gap-4 p-6">
       <PageHeader title="Plate Groups" subtitle="Org-owned hierarchy for organizing plates">
+        {roots.length > 0 ? (
+          <Select value={rootId ?? ""} onValueChange={selectRoot}>
+            <SelectTrigger className="w-64" aria-label="Root group" data-testid="root-group-select">
+              <SelectValue placeholder="Root group" />
+            </SelectTrigger>
+            <SelectContent>
+              {roots.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.name} ({r.plate_count})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
         {isAdmin ? (
           <Select
             value={orgId ?? ""}
             onValueChange={(v) => {
               setOrgId(v);
               setSelected(null);
+              setRootId(null);
             }}
           >
             <SelectTrigger className="w-56" aria-label="Organization">
@@ -146,11 +193,14 @@ export function PlateGroupDashboard() {
           ) : (
             <div className="flex gap-4">
               <div className="min-w-0 flex-1">
-                <PlateGroupTreeView
-                  tree={tree}
-                  selectedId={selectedNode?.id ?? null}
-                  onSelect={setSelected}
-                />
+                {rootNode ? (
+                  <PlateGroupTreeView
+                    root={rootNode}
+                    selectedId={selectedNode?.id ?? null}
+                    onSelect={setSelected}
+                    onRequestLoan={(n) => setLoanGroup(n)}
+                  />
+                ) : null}
               </div>
               {selectedNode ? (
                 <aside className="w-96 shrink-0 rounded-md border bg-card">
@@ -182,6 +232,14 @@ export function PlateGroupDashboard() {
         orgId={orgId ?? ""}
         parentGroupId={dialog?.kind === "create" ? dialog.parentId : null}
         group={dialog?.kind === "edit" ? selectedNode : null}
+      />
+      <RequestLoanDialog
+        open={loanGroup !== null}
+        onOpenChange={(o) => {
+          if (!o) setLoanGroup(null);
+        }}
+        orgId={orgId ?? undefined}
+        initialGroupId={loanGroup?.id}
       />
       {selectedNode && tree ? (
         <>
