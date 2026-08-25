@@ -14,6 +14,7 @@ from cellar.application.inventory.batch_identifiers import (
     RemoveBatchIdentifier,
 )
 from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
+from cellar.application.inventory.comments import AddComment, ListComments
 from cellar.application.inventory.create_batch import CreateBatch
 from cellar.application.inventory.create_sample import CreateSample
 from cellar.application.inventory.delete_storage_location import DeleteStorageLocation
@@ -98,6 +99,7 @@ from ._core import _get_use_case, get_container
 
 __all__ = [
     "AddBatchIdentifierDep",
+    "AddCommentDep",
     "AliquotSampleDep",
     "ApproveLoanItemsDep",
     "AssignPlatesToGroupDep",
@@ -139,6 +141,7 @@ __all__ = [
     "ListBatchesByMoleculeDep",
     "ListBatchesGlobalDep",
     "ListChildrenDep",
+    "ListCommentsDep",
     "ListImportTemplatesDep",
     "ListKioskDevicesDep",
     "ListLoansDep",
@@ -288,6 +291,10 @@ CancelLoanItemsDep = Annotated[CancelLoanItems, Depends(_get_use_case(CancelLoan
 CreateKioskDeviceDep = Annotated[CreateKioskDevice, Depends(_get_use_case(CreateKioskDevice))]
 ListKioskDevicesDep = Annotated[ListKioskDevices, Depends(_get_use_case(ListKioskDevices))]
 RevokeKioskDeviceDep = Annotated[RevokeKioskDevice, Depends(_get_use_case(RevokeKioskDevice))]
+
+# --- Comment dependencies ---
+AddCommentDep = Annotated[AddComment, Depends(_get_use_case(AddComment))]
+ListCommentsDep = Annotated[ListComments, Depends(_get_use_case(ListComments))]
 
 # --- Kiosk scan/confirm dependencies ---
 ResolveScanDep = Annotated[ResolveScan, Depends(_get_use_case(ResolveScan))]

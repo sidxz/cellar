@@ -14,6 +14,7 @@ from cellar.application.inventory.batch_identifiers import (
     RemoveBatchIdentifier,
 )
 from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
+from cellar.application.inventory.comments import AddComment, ListComments, TargetRepos
 from cellar.application.inventory.create_batch import CreateBatch
 from cellar.application.inventory.create_sample import CreateSample
 from cellar.application.inventory.delete_storage_location import DeleteStorageLocation
@@ -131,6 +132,9 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.comment_repository import (
+    SQLAlchemyCommentRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.import_template_repository import (
     SQLAlchemyImportTemplateRepository,
@@ -779,6 +783,31 @@ def register_inventory(container: Container) -> None:
 
     container.define(ResolveScan, _resolve_scan)
     container.define(ConfirmScan, _confirm_scan)
+
+    # --- Comments ---
+    def _comment_target_repos(uow: AsyncUnitOfWork) -> TargetRepos:
+        return TargetRepos(
+            plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            group_repo=SQLAlchemyPlateGroupRepository(uow),
+            loan_repo=SQLAlchemyPlateLoanRepository(uow),
+        )
+
+    def _add_comment(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddComment(
+            uow, SQLAlchemyCommentRepository(uow), _comment_target_repos(uow), c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+        )
+
+    def _list_comments(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListComments(
+            uow, SQLAlchemyCommentRepository(uow), _comment_target_repos(uow),
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+        )
+
+    container.define(AddComment, _add_comment)
+    container.define(ListComments, _list_comments)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(
