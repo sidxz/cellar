@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Backend commands run from `backend/` with `uv run …`; frontend commands run from `frontend/` with the full pnpm path `/Users/sidx/Library/pnpm/pnpm` (bare `pnpm` is broken on this machine).
+- Backend commands run from `backend/` with `uv run …`; any `pytest` run that touches `tests/api` or `tests/integration` needs `DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock` in the environment (Docker Desktop exposes no `/var/run/docker.sock` on this Mac; testcontainers errors with `Invalid response from docker daemon: key "ApiVersion"` without it); frontend commands run from `frontend/` with the full pnpm path `/Users/sidx/Library/pnpm/pnpm` (bare `pnpm` is broken on this machine).
 - Layer rules (CLAUDE.md): Application never imports Infrastructure/Interface. The new port lives in `application/shared/`; the Duar adapter stays in `infrastructure/duar/`.
 - Commit with explicit pathspecs: `git commit -m "…" -- <paths>`; `git add <new files>` first for untracked files. Every commit message ends with the two trailer lines shown in Task 1 Step 6.
 - Hidden == 404 for plate/loan reads; 403 for org-scoped reads (tree, insights) of a foreign org. Do not change those status codes.
