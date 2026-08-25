@@ -12,16 +12,17 @@ export const TARGETS_KEY = ["targets"];
 async function fetchAllTargets(): Promise<Target[]> {
   const items: Target[] = [];
   let cursor: string | null = null;
-  do {
-    const page: PaginatedResponse<Target> = await customInstance({
+  for (let page = 0; page < 50; page++) {
+    const result: PaginatedResponse<Target> = await customInstance({
       url: `${API_V1}/targets`,
       method: "GET",
       params: { limit: 200, ...(cursor ? { cursor } : {}) },
     });
-    items.push(...page.items);
-    cursor = page.next_cursor;
-  } while (cursor);
-  return items;
+    items.push(...result.items);
+    cursor = result.next_cursor;
+    if (!cursor) return items;
+  }
+  throw new Error("targets: cursor pagination did not terminate after 50 pages");
 }
 
 export function useTargets() {

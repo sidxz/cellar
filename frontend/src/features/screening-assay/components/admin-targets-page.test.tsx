@@ -71,7 +71,15 @@ describe("AdminTargetsPage", () => {
 
   it("sync button surfaces the backend error message", async () => {
     syncResult = async () => {
-      throw new Error("API error: 403 — prot-cellar refused the request (403): editor required");
+      // Mirrors custom-instance.ts's detail rule (a string `body.detail` becomes
+      // `API error: <status> — <detail>`) rather than hand-writing the message,
+      // so this test breaks if that coupling ever drifts.
+      const body = {
+        error: "AuthorizationError",
+        message: "prot-cellar refused the request: editor role required",
+        detail: "(403) editor required. Target reads in prot-cellar require the editor role.",
+      };
+      throw new Error(`API error: 403 — ${body.detail}`);
     };
     renderPage();
     await screen.findByText("NadD");
