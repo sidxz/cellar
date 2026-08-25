@@ -116,11 +116,12 @@ describe("KioskScreen", () => {
     expect(barcodeInput).toHaveFocus();
   });
 
-  it("shows the server detail on a 409 and clears it after 5s", async () => {
+  it("shows the server detail on a 409 (Cellar's {error, message} shape) and clears it after 5s", async () => {
     window.localStorage.setItem(KIOSK_TOKEN_KEY, "abc");
     mockCustomInstance.mockRejectedValueOnce(
-      new ApiError("API error: 409 — No pending kiosk action for plate '1'", 409, {
-        detail: "No pending kiosk action for plate '1'",
+      new ApiError("API error: 409", 409, {
+        error: "ConflictError",
+        message: "No pending kiosk action for plate '1'",
       }),
     );
 
@@ -139,6 +140,21 @@ describe("KioskScreen", () => {
     });
 
     expect(screen.queryByTestId("kiosk-result")).not.toBeInTheDocument();
+  });
+
+  it("still shows the detail on a validation-style {detail} body", async () => {
+    window.localStorage.setItem(KIOSK_TOKEN_KEY, "abc");
+    mockCustomInstance.mockRejectedValueOnce(
+      new ApiError("API error: 422", 422, { detail: "barcode: field required" }),
+    );
+
+    render(<KioskScreen />);
+    submitBarcode("1");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("kiosk-result")).toBeInTheDocument();
+    });
+    expect(screen.getByText("barcode: field required")).toBeInTheDocument();
   });
 
   it("forgets the token and shows the token form again on a 403", async () => {

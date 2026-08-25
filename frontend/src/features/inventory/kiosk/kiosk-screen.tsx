@@ -23,8 +23,16 @@ const ERROR_MS = 5000;
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 404) return "Plate not recognized for this device's organization";
-    const detail = (err.body as { detail?: unknown } | undefined)?.detail;
-    if (typeof detail === "string") return detail;
+    // Cellar's DomainError handler serializes `{ error, message }`; only
+    // FastAPI's own validation errors use `{ detail }`. Check both.
+    const b = err.body as { message?: unknown; detail?: unknown } | undefined;
+    const text =
+      typeof b?.message === "string"
+        ? b.message
+        : typeof b?.detail === "string"
+          ? b.detail
+          : undefined;
+    if (text) return text;
   }
   return "Scan failed — try again";
 }
