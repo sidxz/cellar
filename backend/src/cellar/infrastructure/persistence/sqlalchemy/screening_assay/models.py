@@ -75,7 +75,8 @@ protocol_targets = Table(
         "target_id",
         Uuid(as_uuid=True),
         # RESTRICT: a referenced target must not be silently stripped from its
-        # protocols by a delete — DeleteTarget 409s first (migration 053).
+        # protocols (migration 053). Moot in practice — targets are a
+        # read-only mirror now and are never deleted locally (see sync_targets).
         ForeignKey("targets.id", ondelete="RESTRICT"),
         primary_key=True,
     ),

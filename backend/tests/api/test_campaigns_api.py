@@ -130,14 +130,6 @@ async def _create_campaign_with_molecules(
 _create_draft_campaign = _create_campaign_with_molecules
 
 
-async def _make_target(client: AsyncClient, name: str) -> str:
-    resp = await client.post(
-        "/api/v1/targets", json={"name": name, "target_type": "single_protein"}
-    )
-    assert resp.status_code in (200, 201), resp.text
-    return resp.json()["id"]
-
-
 async def _make_published_protocol(client: AsyncClient) -> str:
     resp = await client.post(
         "/api/v1/protocols",
@@ -170,6 +162,7 @@ async def _make_run_with_target(client: AsyncClient, protocol_id: str, target_id
 async def _seed_campaign_with_target(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
+    make_target,
 ) -> tuple[str, str, str]:
     """Seed a campaign whose single measurement references a run carrying a target.
 
@@ -182,7 +175,7 @@ async def _seed_campaign_with_target(
     Returns ``(project_id, campaign_id, target_name)``.
     """
     target_name = f"InhA-{uuid.uuid4().hex[:8]}"
-    target_id = await _make_target(client, target_name)
+    target_id = await make_target(target_name)
     protocol_id = await _make_published_protocol(client)
     run_id = await _make_run_with_target(client, protocol_id, target_id)
 
@@ -678,9 +671,10 @@ class TestCampaignTargets:
         self,
         client: AsyncClient,
         session_factory: async_sessionmaker[AsyncSession],
+        make_target,
     ) -> None:
         project_id, campaign_id, target_name = await _seed_campaign_with_target(
-            client, session_factory
+            client, session_factory, make_target
         )
         resp = await client.get("/api/v1/campaigns", params={"project_id": project_id})
         assert resp.status_code == 200, resp.text
@@ -691,9 +685,10 @@ class TestCampaignTargets:
         self,
         client: AsyncClient,
         session_factory: async_sessionmaker[AsyncSession],
+        make_target,
     ) -> None:
         _project_id, campaign_id, target_name = await _seed_campaign_with_target(
-            client, session_factory
+            client, session_factory, make_target
         )
         resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
         assert resp.status_code == 200, resp.text
@@ -703,9 +698,10 @@ class TestCampaignTargets:
         self,
         client: AsyncClient,
         session_factory: async_sessionmaker[AsyncSession],
+        make_target,
     ) -> None:
         project_id, campaign_id, _ = await _seed_campaign_with_target(
-            client, session_factory
+            client, session_factory, make_target
         )
         listed = (await client.get("/api/v1/campaigns", params={"project_id": project_id})).json()[
             "items"

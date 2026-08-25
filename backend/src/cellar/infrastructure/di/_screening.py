@@ -36,14 +36,13 @@ from cellar.application.screening.create_dose_response import CreateDoseResponse
 from cellar.application.screening.create_protocol import CreateProtocol
 from cellar.application.screening.create_readout_data import CreateReadoutData
 from cellar.application.screening.create_run import CreateRun
-from cellar.application.screening.create_target import CreateTarget
 from cellar.application.screening.cross_protocol_resolver import CrossProtocolResolver
 from cellar.application.screening.delete_compound_flag import DeleteCompoundFlag
 from cellar.application.screening.delete_run import DeleteRun
-from cellar.application.screening.delete_target import DeleteTarget
 from cellar.application.screening.dose_response_enriched_reader import (
     DoseResponseEnrichedReader,
 )
+from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.application.screening.get_collection_gap import (
     GetProtocolCollectionGap,
@@ -58,9 +57,7 @@ from cellar.application.screening.get_dose_response_curves_batch import (
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
 from cellar.application.screening.get_plate_map import GetPlateMap
-from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
-from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.get_protocol_activity import GetProtocolActivitySummary
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
 from cellar.application.screening.get_readout_data import ListReadoutDataByRun
@@ -77,6 +74,7 @@ from cellar.application.screening.import_summary_file import ImportSummaryFile
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
 from cellar.application.screening.list_protocol_summaries import ListProtocolSummaries
+from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
 from cellar.application.screening.lock_protocol import (
@@ -170,7 +168,6 @@ from cellar.application.screening.set_run_hit_criteria import (
     SetRunHitCriteria,
 )
 from cellar.application.screening.update_run import UpdateRun
-from cellar.application.screening.update_target import UpdateTarget
 from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.parsers import TabularParser
 from cellar.domain.audit_compliance.repository import AuditRepository
@@ -354,13 +351,6 @@ def register_screening(container: Container) -> None:
     container.define(RemoveControlLayout, _protocol_cmd(RemoveControlLayout))
 
     # --- Targets ---
-    def _target_cmd(uc_cls: type):
-        def _f(c: Container):
-            uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyTargetRepository(uow), c[EventDispatcher])
-
-        return _f
-
     def _target_query(uc_cls: type):
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -368,9 +358,6 @@ def register_screening(container: Container) -> None:
 
         return _f
 
-    container.define(CreateTarget, _target_cmd(CreateTarget))
-    container.define(UpdateTarget, _target_cmd(UpdateTarget))
-    container.define(DeleteTarget, _target_cmd(DeleteTarget))
     container.define(GetTarget, _target_query(GetTarget))
     container.define(ListTargets, _target_query(ListTargets))
 

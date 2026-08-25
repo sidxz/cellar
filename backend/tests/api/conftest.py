@@ -209,6 +209,34 @@ async def client(api_app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 
 @pytest.fixture
+def make_target(api_app: FastAPI, workspace_id: uuid.UUID):
+    """Seed a mirror target row directly (there is no create route — prot-cellar owns targets).
+
+    Returns ``async (name, *, target_type="single_protein") -> str`` (the new id).
+    """
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import TargetModel
+
+    async def _make(name: str, *, target_type: str = "single_protein") -> str:
+        tid = uuid.uuid4()
+        factory = api_app.state.container[async_sessionmaker]
+        async with factory() as session, session.begin():
+            session.add(
+                TargetModel(
+                    id=tid,
+                    workspace_id=workspace_id,
+                    name=name,
+                    target_type=target_type,
+                    source_version=1,
+                )
+            )
+        return str(tid)
+
+    return _make
+
+
+@pytest.fixture
 async def editor_client(
     database_url: str, _run_migrations: None, workspace_id: uuid.UUID, user_id: uuid.UUID
 ) -> AsyncIterator[AsyncClient]:

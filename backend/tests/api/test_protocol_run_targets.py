@@ -10,14 +10,6 @@ from httpx import AsyncClient
 pytestmark = pytest.mark.asyncio
 
 
-async def _make_target(client: AsyncClient, name: str) -> str:
-    resp = await client.post(
-        "/api/v1/targets", json={"name": name, "target_type": "single_protein"}
-    )
-    assert resp.status_code in (200, 201), resp.text
-    return resp.json()["id"]
-
-
 async def _make_protocol(client: AsyncClient, *, target_ids: list[str] | None = None) -> str:
     resp = await client.post(
         "/api/v1/protocols",
@@ -25,9 +17,7 @@ async def _make_protocol(client: AsyncClient, *, target_ids: list[str] | None = 
             "name": "TargetProto",
             "protocol_type": "biochemical",
             "target_ids": target_ids or [],
-            "readout_definitions": [
-                {"name": "IC50", "data_type": "numeric", "display_order": 0}
-            ],
+            "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
         },
     )
     assert resp.status_code in (200, 201), resp.text
@@ -47,8 +37,8 @@ async def _make_run(client: AsyncClient, protocol_id: str, **extra) -> str:
 
 
 class TestProtocolTargets:
-    async def test_create_with_direct_targets(self, client: AsyncClient) -> None:
-        t3 = await _make_target(client, "Pks13")
+    async def test_create_with_direct_targets(self, client: AsyncClient, make_target) -> None:
+        t3 = await make_target("Pks13")
 
         # The 201 body itself must carry the just-linked targets (mutation
         # responses match GET).
@@ -82,9 +72,9 @@ class TestProtocolTargets:
         assert by_id[t3]["is_direct"] is True
         assert by_id[t3]["run_count"] == 0
 
-    async def test_add_remove_direct_target(self, client: AsyncClient) -> None:
+    async def test_add_remove_direct_target(self, client: AsyncClient, make_target) -> None:
         pid = await _make_protocol(client)
-        t1 = await _make_target(client, "NadD")
+        t1 = await make_target("NadD")
 
         add = await client.post(f"/api/v1/protocols/{pid}/targets/{t1}")
         assert add.status_code == 204, add.text
@@ -98,10 +88,12 @@ class TestProtocolTargets:
 
 
 class TestRunTargetRollup:
-    async def test_run_target_rolls_up_and_auto_prunes(self, client: AsyncClient) -> None:
-        t1 = await _make_target(client, "NadD")
-        t2 = await _make_target(client, "PptT")
-        t3 = await _make_target(client, "Pks13")
+    async def test_run_target_rolls_up_and_auto_prunes(
+        self, client: AsyncClient, make_target
+    ) -> None:
+        t1 = await make_target("NadD")
+        t2 = await make_target("PptT")
+        t3 = await make_target("Pks13")
         pid = await _make_protocol(client, target_ids=[t3])
         await _publish(client, pid)
         r1 = await _make_run(client, pid)
@@ -132,8 +124,8 @@ class TestRunTargetRollup:
         # Direct target survives.
         assert t3 in rich
 
-    async def test_create_run_with_targets(self, client: AsyncClient) -> None:
-        t1 = await _make_target(client, "NadD")
+    async def test_create_run_with_targets(self, client: AsyncClient, make_target) -> None:
+        t1 = await make_target("NadD")
         pid = await _make_protocol(client)
         await _publish(client, pid)
         rid = await _make_run(client, pid, target_ids=[t1])
@@ -146,8 +138,8 @@ class TestRunTargetRollup:
         assert started.status_code in (200, 201), started.text
         assert [t["id"] for t in started.json()["targets"]] == [t1]
 
-    async def test_locked_run_rejects_target_edit(self, client: AsyncClient) -> None:
-        t1 = await _make_target(client, "NadD")
+    async def test_locked_run_rejects_target_edit(self, client: AsyncClient, make_target) -> None:
+        t1 = await make_target("NadD")
         pid = await _make_protocol(client)
         await _publish(client, pid)
         rid = await _make_run(client, pid)
@@ -158,9 +150,7 @@ class TestRunTargetRollup:
             200,
             201,
         )
-        locked = await client.post(
-            f"/api/v1/runs/{rid}/lock", json={"reason": "qc freeze"}
-        )
+        locked = await client.post(f"/api/v1/runs/{rid}/lock", json={"reason": "qc freeze"})
         assert locked.status_code in (200, 201), locked.text
 
         rejected = await client.post(f"/api/v1/runs/{rid}/targets/{t1}")
@@ -213,10 +203,12 @@ class TestUnknownTarget404:
         )
         assert resp.status_code == 404, resp.text
 
-    async def test_remove_unlinked_target_is_idempotent_204(self, client: AsyncClient) -> None:
+    async def test_remove_unlinked_target_is_idempotent_204(
+        self, client: AsyncClient, make_target
+    ) -> None:
         # DELETE of a never-linked (but real) target stays idempotent.
         pid = await _make_protocol(client)
-        t1 = await _make_target(client, "NadD")
+        t1 = await make_target("NadD")
         resp = await client.delete(f"/api/v1/protocols/{pid}/targets/{t1}")
         assert resp.status_code == 204, resp.text
 
@@ -224,16 +216,18 @@ class TestUnknownTarget404:
 class TestRemovedTargetIdField:
     """The pre-051 scalar target_id field must 422, not silently no-op."""
 
-    async def test_patch_with_removed_target_id_422(self, client: AsyncClient) -> None:
+    async def test_patch_with_removed_target_id_422(
+        self, client: AsyncClient, make_target
+    ) -> None:
         pid = await _make_protocol(client)
-        t1 = await _make_target(client, "NadD")
-        resp = await client.patch(
-            f"/api/v1/protocols/{pid}", json={"target_id": t1}
-        )
+        t1 = await make_target("NadD")
+        resp = await client.patch(f"/api/v1/protocols/{pid}", json={"target_id": t1})
         assert resp.status_code == 422, resp.text
 
-    async def test_create_with_removed_target_id_422(self, client: AsyncClient) -> None:
-        t1 = await _make_target(client, "NadD")
+    async def test_create_with_removed_target_id_422(
+        self, client: AsyncClient, make_target
+    ) -> None:
+        t1 = await make_target("NadD")
         resp = await client.post(
             "/api/v1/protocols",
             json={
@@ -254,40 +248,3 @@ class TestTargetsOfUnknownProtocol:
         not 200 []."""
         resp = await client.get(f"/api/v1/protocols/{uuid.uuid4()}/targets")
         assert resp.status_code == 404, resp.text
-
-
-class TestDeleteTargetGuard:
-    """Deleting an in-use target must 409 — never silently strip links."""
-
-    async def test_delete_in_use_target_409(self, client: AsyncClient) -> None:
-        t1 = await _make_target(client, "InUseTarget")
-        pid = await _make_protocol(client, target_ids=[t1])
-
-        resp = await client.delete(f"/api/v1/targets/{t1}")
-        assert resp.status_code == 409, resp.text
-        assert "in use" in resp.json()["message"]
-
-        # Link survives.
-        rich = await client.get(f"/api/v1/protocols/{pid}/targets")
-        assert [t["id"] for t in rich.json()] == [t1]
-
-        # Unlink, then the delete goes through.
-        rm = await client.delete(f"/api/v1/protocols/{pid}/targets/{t1}")
-        assert rm.status_code == 204, rm.text
-        resp = await client.delete(f"/api/v1/targets/{t1}")
-        assert resp.status_code in (200, 204), resp.text
-
-    async def test_delete_run_referenced_target_409(self, client: AsyncClient) -> None:
-        t1 = await _make_target(client, "RunRefTarget")
-        pid = await _make_protocol(client)
-        await _publish(client, pid)
-        rid = await _make_run(client, pid, target_ids=[t1])
-
-        resp = await client.delete(f"/api/v1/targets/{t1}")
-        assert resp.status_code == 409, resp.text
-
-        assert (
-            await client.delete(f"/api/v1/runs/{rid}/targets/{t1}")
-        ).status_code == 204
-        resp = await client.delete(f"/api/v1/targets/{t1}")
-        assert resp.status_code in (200, 204), resp.text

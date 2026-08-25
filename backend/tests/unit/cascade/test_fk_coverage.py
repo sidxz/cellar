@@ -283,11 +283,12 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # -------------------------------------------------------------------------
     # protocol_targets / run_targets have ondelete=RESTRICT on target_id ->
     # targets (migration 053): a referenced target cannot be deleted, so links
-    # are never silently stripped — DeleteTarget 409s first with reference
-    # counts (verified by test_target_links). `targets` is a reference entity,
-    # not a Tier-1 admin-deletable aggregate. The protocol_id/run_id owner
-    # sides are ondelete=CASCADE: deleting a protocol/run drops its own link
-    # rows at the DB engine, which is intentional for pure association rows.
+    # are never silently stripped. Moot in practice — targets are a read-only
+    # mirror of prot-cellar and are never deleted locally (see sync_targets).
+    # `targets` is a reference entity, not a Tier-1 admin-deletable aggregate.
+    # The protocol_id/run_id owner sides are ondelete=CASCADE: deleting a
+    # protocol/run drops its own link rows at the DB engine, which is
+    # intentional for pure association rows.
     ("protocol_targets", "target_id", "targets"),
     ("run_targets", "target_id", "targets"),
 
