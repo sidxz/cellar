@@ -53,15 +53,15 @@ class _FakeBatchRepo:
         return [b for b in self._batches if b.id in ids]
 
 
-class _FakeOrgPlatePolicyRepo:
-    """No private orgs — these tests aren't exercising visibility exclusion."""
+class _FakeOrgDirectory:
+    """No orgs — these tests aren't exercising visibility exclusion."""
 
-    async def list_private_org_ids(self, workspace_id):
-        return set()
+    async def list_orgs(self):
+        return []
 
 
 def _visibility() -> PlateVisibilityService:
-    return PlateVisibilityService(_FakeOrgPlatePolicyRepo())
+    return PlateVisibilityService(_FakeOrgDirectory())
 
 
 def _plate(ws: uuid.UUID, batch_id: uuid.UUID) -> RegisteredPlate:
