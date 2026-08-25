@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cellar.application.inventory.plate_groups import (
     AssignPlatesToGroupCommand,
@@ -140,9 +140,9 @@ class CreatePlateGroupBody(BaseModel):
     description: str | None = None
     state: str | None = None
     storage_location_id: uuid.UUID | None = None
-    initial_volume_ul: float | None = None
-    initial_concentration_mm: float | None = None
-    compound_count: int | None = None
+    initial_volume_ul: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    initial_concentration_mm: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    compound_count: int | None = Field(default=None, ge=0)
     scientist: str | None = None
 
     model_config = {"extra": "forbid"}
@@ -154,9 +154,9 @@ class UpdatePlateGroupBody(BaseModel):
     description: str | None = None
     state: str | None = None
     storage_location_id: uuid.UUID | None = None
-    initial_volume_ul: float | None = None
-    initial_concentration_mm: float | None = None
-    compound_count: int | None = None
+    initial_volume_ul: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    initial_concentration_mm: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    compound_count: int | None = Field(default=None, ge=0)
     scientist: str | None = None
 
     model_config = {"extra": "forbid"}

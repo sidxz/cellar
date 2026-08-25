@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from httpx import AsyncClient
@@ -273,6 +274,16 @@ class TestMetadata:
         resp = await client.post(
             "/api/v1/plate-groups",
             json={"name": f"Bad-{uuid.uuid4().hex[:6]}", "initial_volume_ul": -1},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_nan_measurement_rejected(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/plate-groups",
+            content=json.dumps(
+                {"name": f"Bad-{uuid.uuid4().hex[:6]}", "initial_volume_ul": float("nan")}
+            ),
+            headers={"Content-Type": "application/json"},
         )
         assert resp.status_code == 422, resp.text
 

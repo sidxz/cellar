@@ -6,9 +6,12 @@ and a ``result_to_response`` helper for the railway pattern.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from returns.result import Failure, Result, Success
 
@@ -59,8 +62,26 @@ def _error_to_body(error: DomainError) -> dict[str, Any]:
     return body
 
 
+def _sanitize_non_finite(value: Any) -> Any:
+    """Replace NaN/Infinity floats with their str repr, recursively.
+
+    A rejected-as-invalid NaN/Infinity is echoed back in Pydantic's
+    validation error ("input": nan) so the client can see what it sent.
+    Starlette's JSONResponse renders with allow_nan=False, so leaving a raw
+    non-finite float in the body would crash the *error* response itself.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _sanitize_non_finite(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_non_finite(v) for v in value]
+    return value
+
+
 def register_error_handlers(app: FastAPI) -> None:
-    """Install a global handler that converts DomainError to JSON responses."""
+    """Install global handlers that convert DomainError / validation failures
+    to JSON responses."""
 
     @app.exception_handler(DomainError)
     async def _domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
@@ -72,6 +93,15 @@ def register_error_handlers(app: FastAPI) -> None:
             status_code=status,
             content=_error_to_body(exc),
             headers=headers,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content=_sanitize_non_finite(jsonable_encoder({"detail": exc.errors()})),
         )
 
 
