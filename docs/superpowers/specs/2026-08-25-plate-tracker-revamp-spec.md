@@ -1,6 +1,6 @@
 # Spec: Plate Tracker Revamp — Strict Org Visibility, Legacy-Parity Tree, Comments, Kiosk Page, Full Data Cutover
 
-**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7 + S8 + S9 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`)
+**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7–S10 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`)
 **Contexts touched:** Inventory (03), Audit & Compliance (06), Workspace Config (07)
 **Builds on:** `2026-08-10-inventory-plate-org-loans-spec.md` (S1–S6, shipped). Sessions here continue the numbering: **S7–S12**.
 
@@ -226,4 +226,11 @@ Emails/notifications · volume-reduction editor (never persisted in legacy) · v
 - FE: `CommentFeed` (`scope` = target or loan context, `composerTarget` decides where a new comment posts) on the loan card (collapsible, lists the loan context, posts to the loan), the group side panel and the plate detail; `RequestReturnDialog` gates submission on one non-blank note per group and sends optional per-plate notes; `useLoanItemsAction` invalidates the comments query.
 - Review follow-ups (fix wave `ee7acea3..4394c473`): `comments[].group_id` / `plate_comments[].plate_id` must belong to the plates being returned (422 otherwise — closes a comment-smuggling hole onto hidden groups); the loan card fetches comments only when its panel is opened; feed entries from another loan's context link to `/inventory/loans#all` (ruling R19 — the loans page has tab hashes, no per-loan anchor); security-surface tests pin the borrowed carve-out expiring on loan close, third-org 404s, group-in-loan validation and the audit actor on `CommentAdded`.
 - Suites at the end of S9: backend 3927 passed / 11 pre-existing failures; frontend 1045/1045; tsc clean. Browser E2E (request → approve → confirm-out → return with notes) passed.
+
+## S10 sync note (2026-08-25) — shipped reality vs. §8
+
+- `frontend/src/app/kiosk/page.tsx` → `features/inventory/kiosk/kiosk-screen.tsx` (+ `kiosk-api.ts`): token form → `localStorage["kiosk.token"]`; scan → confirm in one step; green result 3 s / red 5 s; 403 forgets the token; 404 copy "Plate not recognized for this device's organization".
+- `/kiosk` was added to the Duar auto-reauth exclusion list (`shared/lib/auth/auto-reauth.ts`) so a session-less kiosk browser is never bounced to the IdP.
+- Error copy reads Cellar's `{error, message}` body (the domain-error handler shape) and falls back to `{detail}` for validation errors — the spec's assumption of `detail` was wrong for 409s.
+- Not built (as specified): a post-scan loan status table. Browser-verified live (checkout, 404, 403, 409 paths).
 
