@@ -31,6 +31,7 @@ import {
 } from "../hooks/use-plate-loans";
 import { useLoanItemsAction } from "../hooks/use-plate-loans";
 import { CommentFeed } from "./comment-feed";
+import { RequestReturnDialog } from "./request-return-dialog";
 
 /** Item statuses each verb may act on — the single source of truth for which
  * items are "eligible" for a verb, mirrored from the server state machine. */
@@ -70,6 +71,8 @@ export function LoanCard({ loan, context, me }: LoanCardProps) {
   const { data: orgs } = useOrgs();
   const action = useLoanItemsAction();
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  // Non-null while the request-return dialog is up; holds the item ids it was opened for.
+  const [returnTargets, setReturnTargets] = useState<string[] | null>(null);
   const { data: comments } = useComments({ loanId: loan.id });
   const canWrite = canEdit(me);
 
@@ -97,6 +100,12 @@ export function LoanCard({ loan, context, me }: LoanCardProps) {
     const eligible = loan.items.filter((i) => VERB_SOURCES[verb].includes(i.status));
     const targets = checked.size ? eligible.filter((i) => checked.has(i.id)) : eligible;
     if (targets.length === 0) return;
+    if (verb === "request-return") {
+      // Comments are mandatory per group — collect them in a dialog rather
+      // than firing the mutation straight away.
+      setReturnTargets(targets.map((i) => i.id));
+      return;
+    }
     action.mutate(
       { loanId: loan.id, verb, itemIds: targets.map((i) => i.id) },
       { onSuccess: () => setChecked(new Set()) },
@@ -192,6 +201,18 @@ export function LoanCard({ loan, context, me }: LoanCardProps) {
           />
         </CollapsibleContent>
       </Collapsible>
+
+      <RequestReturnDialog
+        open={returnTargets !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setReturnTargets(null);
+            setChecked(new Set());
+          }
+        }}
+        loan={loan}
+        itemIds={returnTargets ?? []}
+      />
     </div>
   );
 }

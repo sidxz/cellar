@@ -28,7 +28,8 @@ import type {
   ListLoansApiV1PlateLoansGetParams,
   LoanItemsBody,
   LoanResponse,
-  RequestLoanBody
+  RequestLoanBody,
+  RequestReturnBody
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
@@ -487,12 +488,13 @@ export const useConfirmLoanCheckoutApiV1PlateLoansLoanIdItemsConfirmOutPost = <T
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Borrower requests to return CHECKED_OUT items.
+ * Borrower requests to return CHECKED_OUT items. Spec §7.3: one non-empty
+comment is required per distinct group among the returning plates.
  * @summary Request Loan Return
  */
 export const requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost = (
     loanId: string,
-    loanItemsBody: LoanItemsBody,
+    requestReturnBody: RequestReturnBody,
  signal?: AbortSignal
 ) => {
       
@@ -500,7 +502,7 @@ export const requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost = (
       return customInstance<LoanResponse>(
       {url: `/api/v1/plate-loans/${loanId}/items:request-return`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: loanItemsBody, signal
+      data: requestReturnBody, signal
     },
       );
     }
@@ -508,8 +510,8 @@ export const requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost = (
 
 
 export const getRequestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>, TError,{loanId: string;data: LoanItemsBody}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>, TError,{loanId: string;data: LoanItemsBody}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>, TError,{loanId: string;data: RequestReturnBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>, TError,{loanId: string;data: RequestReturnBody}, TContext> => {
 
 const mutationKey = ['requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost'];
 const {mutation: mutationOptions} = options ?
@@ -521,7 +523,7 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>, {loanId: string;data: LoanItemsBody}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>, {loanId: string;data: RequestReturnBody}> = (props) => {
           const {loanId,data} = props ?? {};
 
           return  requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost(loanId,data,)
@@ -533,18 +535,18 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type RequestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPostMutationResult = NonNullable<Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>>
-    export type RequestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPostMutationBody = LoanItemsBody
+    export type RequestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPostMutationBody = RequestReturnBody
     export type RequestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPostMutationError = HTTPValidationError
 
     /**
  * @summary Request Loan Return
  */
 export const useRequestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>, TError,{loanId: string;data: LoanItemsBody}, TContext>, }
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>, TError,{loanId: string;data: RequestReturnBody}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof requestLoanReturnApiV1PlateLoansLoanIdItemsRequestReturnPost>>,
         TError,
-        {loanId: string;data: LoanItemsBody},
+        {loanId: string;data: RequestReturnBody},
         TContext
       > => {
 

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -99,5 +99,51 @@ describe("LoanCard admin visibility (approvals tab owner verbs)", () => {
       { wrapper },
     );
     expect(screen.getByRole("button", { name: /approve/i })).toBeInTheDocument();
+  });
+});
+
+describe("LoanCard borrower request-return flow", () => {
+  it("opens the RequestReturnDialog instead of posting immediately", () => {
+    const loan = {
+      ...baseLoan,
+      items: [
+        {
+          id: "i1",
+          plate_id: "p1",
+          barcode: "BC-1",
+          plate_label: "Plate 1",
+          status: "checked_out",
+          status_changed_at: "2026-08-13T00:00:00Z",
+          group_id: "g1",
+          group_name: "Vendor A",
+        },
+      ],
+    } as unknown as PlateLoan;
+
+    render(
+      <LoanCard
+        loan={loan}
+        context="mine"
+        me={
+          {
+            user_id: "u1",
+            email: "",
+            name: "",
+            org_id: "org-B",
+            is_admin: false,
+            workspace_role: "editor",
+          } as MeResponse
+        }
+      />,
+      { wrapper },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /request return \(1\)/i }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText(/vendor a \(bc-1\)/i)).toBeInTheDocument();
+    expect(customInstance).not.toHaveBeenCalledWith(
+      expect.objectContaining({ url: expect.stringMatching(/items:request-return$/) }),
+    );
   });
 });
