@@ -43,7 +43,7 @@ describe("stateColor", () => {
   it("maps legacy states and falls back to neutral", () => {
     expect(stateColor("Solubilized")).toBe("#7AB648");
     expect(stateColor("dry")).toBe("#99D2F2");
-    expect(stateColor("Retired")).toBe("#707372");
+    expect(stateColor("Retired")).toBe("#94a3b8");
     expect(stateColor(null)).toBe("#707372");
   });
 });

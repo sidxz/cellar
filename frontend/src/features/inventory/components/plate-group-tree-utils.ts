@@ -13,6 +13,7 @@ export const TYPE_COLORS: Record<string, string> = {
 export const STATE_COLORS: Record<string, string> = {
   solubilized: "#7AB648",
   dry: "#99D2F2",
+  retired: "#94a3b8",
 };
 
 export const ROOT_STORAGE_KEY = (orgId: string) => `plate-groups.root.${orgId}`;
