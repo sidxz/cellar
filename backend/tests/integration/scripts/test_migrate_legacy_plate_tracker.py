@@ -10,17 +10,22 @@ from scripts.migrate_legacy_plate_tracker import (
     LegacyData,
     LegacyLibrary,
     LegacyPlate,
+    LegacyPlateFormat,
     LegacySet,
     LegacySetPlate,
     LegacyTransaction,
     LegacyTransactionPlate,
     LoanItemSpec,
     LoanSpec,
+    LocationSpec,
+    UnmatchedPlate,
     apply_group_tree,
     apply_loan,
+    apply_locations,
     apply_plate_ownership,
     assign_plates_to_groups,
     backfill_null_owner,
+    create_missing_plates,
     match_plates,
     plan_group_tree,
     run_migration,
@@ -38,6 +43,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repositor
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.storage_location_repository import (
+    SQLAlchemyStorageLocationRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
     RegisteredPlateTagLinkRepository,
@@ -134,11 +142,13 @@ async def test_apply_ownership_sets_owner_type_status_tags_inactive_and_is_idemp
             link_repo = RegisteredPlateTagLinkRepository(uow)
             matched, _ = await match_plates(legacy, plate_repo=plate_repo, cdd_repo=cdd_repo,
                                             workspace_id=ws, cdd_vault_id=VAULT)
-            await apply_plate_ownership(
+            stats, conflicts = await apply_plate_ownership(
                 legacy, matched, plate_repo=plate_repo, tag_repo=tag_repo,
                 plate_tag_link_repo=link_repo, uow=uow, workspace_id=ws,
                 internal_org_id=org, actor_id=org)
             await uow.commit()
+    assert stats["status_conflicts"] == 0
+    assert conflicts == []
     async with session_factory() as s:
         rows = (await s.execute(sa.text(
             "SELECT id, owner_org_id, plate_type, status FROM registered_plates "
@@ -155,6 +165,124 @@ async def test_apply_ownership_sets_owner_type_status_tags_inactive_and_is_idemp
     assert by_id[inactive]["plate_type"] == PlateType.COMPOUND_STORAGE.value
     assert by_id[inactive]["status"] == PlateStatus.DEPLETED.value   # registered→stored→depleted
     assert tagged == [inactive]   # legacy:inactive tagged once (idempotent), active untouched
+
+
+@pytest.mark.integration
+async def test_apply_plate_ownership_tolerates_status_conflict(session_factory) -> None:
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    plate = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=plate, barcode="900012", ws=ws, cdd_plate_id=103)
+        await s.execute(sa.text(
+            "UPDATE registered_plates SET status = 'disposed' WHERE id = :id"), {"id": plate})
+        await s.commit()
+    legacy = LegacyData(plates=[LegacyPlate(1, 103, "z", "P1", "Active", "MASTER", None)])
+    async with AsyncUnitOfWork(session_factory) as uow:
+        plate_repo = SQLAlchemyRegisteredPlateRepository(uow)
+        cdd_repo = CddPlateSyncRepository(uow)
+        tag_repo = SQLAlchemyTagRepository(uow)
+        link_repo = RegisteredPlateTagLinkRepository(uow)
+        matched, _ = await match_plates(legacy, plate_repo=plate_repo, cdd_repo=cdd_repo,
+                                        workspace_id=ws, cdd_vault_id=VAULT)
+        stats, conflicts = await apply_plate_ownership(
+            legacy, matched, plate_repo=plate_repo, tag_repo=tag_repo,
+            plate_tag_link_repo=link_repo, uow=uow, workspace_id=ws,
+            internal_org_id=org, actor_id=org)
+        await uow.commit()
+    assert stats["status_conflicts"] == 1
+    assert conflicts[0].legacy_plate_id == 1
+    assert conflicts[0].plate_barcode == "z"
+    assert conflicts[0].current_status == PlateStatus.DISPOSED.value
+    assert conflicts[0].target_status == PlateStatus.STORED.value
+    async with session_factory() as s:
+        status = (await s.execute(sa.text(
+            "SELECT status FROM registered_plates WHERE id = :id"), {"id": plate})).scalar_one()
+    assert status == PlateStatus.DISPOSED.value  # unchanged — conflict recorded, not forced
+
+
+@pytest.mark.integration
+async def test_apply_locations_builds_chain_and_is_idempotent(session_factory) -> None:
+    ws = uuid.uuid4()
+    specs = [LocationSpec(100001, "1148", "4"), LocationSpec(100004, "1203", "3")]
+    alias = {100002: 100001}
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyStorageLocationRepository(uow)
+        ids, created = await apply_locations(
+            specs, alias, location_repo=repo, workspace_id=ws,
+            site_name="TAMU", building_name="ILSB",
+        )
+        await uow.commit()
+    assert created == 1 + 1 + 2 + 2  # site, building, 2 rooms, 2 freezers
+    assert ids[100001] == ids[100002] and ids[100004] != ids[100001]
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyStorageLocationRepository(uow)
+        ids2, created2 = await apply_locations(
+            specs, alias, location_repo=repo, workspace_id=ws,
+            site_name="TAMU", building_name="ILSB",
+        )
+    assert created2 == 0 and ids2 == ids
+    async with session_factory() as s:
+        rows = (await s.execute(sa.text(
+            "SELECT name, type FROM storage_locations WHERE workspace_id = :ws ORDER BY name"
+        ), {"ws": ws})).all()
+    assert ("Freezer 4", "freezer") in rows
+    assert ("Room 1148", "room") in rows
+    assert ("TAMU", "site") in rows
+
+
+@pytest.mark.integration
+async def test_create_missing_plates_creates_with_format_location_and_cdd_sync(
+    session_factory,
+) -> None:
+    ws, org, actor = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    legacy = LegacyData(
+        plate_formats=[
+            LegacyPlateFormat(2501, "Invalid Plate Format", -1),
+            LegacyPlateFormat(2509, "384-well", 384),
+        ],
+        sets=[
+            LegacySet(
+                1, "SCREENING", "sac1-screening-1", "Solubilized", None, None, 10, 2509, 100001
+            )
+        ],
+        set_plates=[LegacySetPlate(1, 1), LegacySetPlate(1, 2)],
+        plates=[
+            LegacyPlate(1, 4242, "000001", "SAC1-1", "Active", "SCREENING", 10, 2509),
+            LegacyPlate(2, None, "000002", "SAC1-2", "Inactive", "MASTER", 10, 2501),
+            LegacyPlate(3, None, "000003", "SAC1-3", "Active", "BOGUS_ROLE", 10, None),
+        ],
+    )
+    unmatched = [
+        UnmatchedPlate(p.plate_id, p.plate_barcode, p.cdd_plate_id, "no match")
+        for p in legacy.plates
+    ]
+    freezer = uuid.uuid4()
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await uow.session.execute(sa.text(
+            "INSERT INTO storage_locations (id, workspace_id, name, type, version) "
+            "VALUES (:id, :ws, 'Freezer 4', 'freezer', 1)"
+        ), {"id": freezer, "ws": ws})
+        created_ids, created, still_unmatched = await create_missing_plates(
+            legacy, unmatched, plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            cdd_repo=CddPlateSyncRepository(uow), workspace_id=ws, internal_org_id=org,
+            actor_id=actor, cdd_vault_id=VAULT, location_ids={100001: freezer},
+        )
+        await uow.commit()
+    assert set(created_ids) == {1, 2}
+    assert [c.legacy_plate_id for c in still_unmatched] == [3]
+    assert {(c.plate_barcode, c.format) for c in created} == {("000001", "384"), ("000002", "384")}
+    async with session_factory() as s:
+        rows = (await s.execute(sa.text(
+            "SELECT barcode, plate_label, format, plate_type, owner_org_id, storage_location_id "
+            "FROM registered_plates WHERE workspace_id = :ws ORDER BY barcode"
+        ), {"ws": ws})).all()
+        sync = (await s.execute(sa.text(
+            "SELECT cdd_plate_id, plate_id FROM cdd_plate_sync WHERE workspace_id = :ws"
+        ), {"ws": ws})).all()
+    assert rows[0] == ("000001", "SAC1-1", "384", "assay", org, freezer)
+    assert rows[1][2] == "384"  # invalid own format → set's 384
+    assert sync == [(4242, created_ids[1])]
 
 
 @pytest.mark.asyncio

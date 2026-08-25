@@ -1,17 +1,22 @@
 """Migrate the legacy plate-tracker (MySQL) into Cellar inventory plates.
 
 Idempotent + re-runnable. Reads the legacy DB once (pymysql), then, in one
-transaction: backfills NULL plate owners, matches legacy plates to Cellar
-plates (cdd_plate_sync → barcode), sets ownership/type/status, builds the
-PlateGroup tree, and recreates the OPEN checkouts as PlateLoans. Closed
-history is NOT migrated (stays in the read-only legacy DB).
+transaction: backfills NULL plate owners, builds the Site → Building → Room →
+Freezer StorageLocation tree, matches legacy plates to Cellar plates
+(cdd_plate_sync → barcode) and registers whatever doesn't match (+ a
+cdd_plate_sync row when the legacy row carries a CDD plate id), sets
+ownership/type/status (tolerating plates whose current status can't reach the
+legacy target — recorded, not fatal), builds the PlateGroup tree, and
+recreates the OPEN checkouts as PlateLoans. Closed history is NOT migrated
+(stays in the read-only legacy DB).
 
 Usage (from backend/):
     uv run python scripts/migrate_legacy_plate_tracker.py \\
         --legacy-dsn mysql://user:pass@host:3306/sacnet_prod \\
         --workspace-id <ws-uuid> --internal-org-id <org-uuid> \\
         --cdd-vault-id <vault> --actor-id <sentinel-user-uuid> \\
-        --user-map user_map.csv --report-dir ./reports [--dry-run]
+        --user-map user_map.csv --report-dir ./reports \\
+        [--site-name TAMU] [--building-name Main] [--dry-run]
 
 Cutover runbook:
   1. Grant `cellar:approve_loan` is NOT needed (migrated loans bypass approval).
@@ -20,12 +25,21 @@ Cutover runbook:
      look up the Duar user id (admin UI → Users) → `email,user_id` rows.
      (No service-key email→user lookup exists, so this step is manual.)
   4. Dry-run: add --dry-run; review MIGRATION SUMMARY + reports/*.csv.
-     Resolve unmatched_plates.csv (barcode/cdd gaps) and
+     Resolve unmatched_plates.csv (plates registered under neither a cdd
+     plate id nor a barcode — check plate_role/plate_format for typos) and
      unresolved_requesters.csv (add to user_map.csv) until acceptable.
   5. Real run (no --dry-run). Re-run is safe (idempotent) if interrupted.
-  6. Spot-check in the UI: plate owners, the group tree, the ~15 open loans,
-     and the `legacy:inactive` tag on depleted plates (summary inactive_tagged).
+  6. Spot-check in the UI: plate owners, the storage location tree under
+     --site-name/--building-name, the group tree, the ~15 open loans, the
+     `legacy:inactive` tag on depleted plates (summary inactive_tagged), and
+     status_conflicts.csv (plates whose Cellar status couldn't reach the
+     legacy-mapped target — usually already `disposed`; resolve by hand).
   7. Announce cutover.
+
+Summary counters: owner_backfilled, locations_created, plates_matched,
+plates_created, cdd_sync_rows, unmatched_plates, plates_classified,
+inactive_tagged, status_conflicts, groups_created, plates_grouped,
+loans_created, unresolved_requesters.
 """
 
 from __future__ import annotations
@@ -50,10 +64,14 @@ from cellar.domain.inventory.enums import (
     LoanItemStatus,
     PlateStatus,
     PlateType,
+    StorageLocationType,
 )
 from cellar.domain.inventory.plate_group import PlateGroup
 from cellar.domain.inventory.plate_loan import PlateLoan
+from cellar.domain.inventory.registered_plate import RegisteredPlate
+from cellar.domain.inventory.storage_location import StorageLocation
 from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.value_objects import Barcode
 from cellar.domain.workspace_config.controlled_vocabulary import ControlledVocabulary
 from cellar.domain.workspace_config.tagging.tag import TagName
 from cellar.infrastructure.persistence.settings import DatabaseSettings
@@ -68,6 +86,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repositor
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.storage_location_repository import (
+    SQLAlchemyStorageLocationRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
     RegisteredPlateTagLinkRepository,
@@ -293,6 +314,62 @@ def plan_locations(legacy: LegacyData) -> tuple[list[LocationSpec], dict[int, in
     return specs, alias
 
 
+async def _find_child_by_name(location_repo, workspace_id, parent_id, name, loc_type):
+    kids = await location_repo.find_children(workspace_id, parent_id) if parent_id else [
+        loc for loc in await location_repo.find_by_workspace(workspace_id) if loc.parent_id is None
+    ]
+    return next((k for k in kids if k.name == name and k.type == loc_type), None)
+
+
+async def _ensure_location(location_repo, *, workspace_id, name, loc_type, parent, counter):
+    existing = await _find_child_by_name(
+        location_repo, workspace_id, parent.id if parent else None, name, loc_type
+    )
+    if existing is not None:
+        return existing
+    loc = StorageLocation.create(
+        workspace_id=workspace_id, name=name, type=loc_type,
+        parent_id=parent.id if parent else None, parent_type=parent.type if parent else None,
+    )
+    await location_repo.save(loc)
+    counter["created"] += 1
+    return loc
+
+
+async def apply_locations(
+    specs, alias, *, location_repo, workspace_id, site_name, building_name
+) -> tuple[dict[int, uuid.UUID], int]:
+    """Site → Building → Room {room_no} → Freezer {freezer}; idempotent by name under parent."""
+    counter = {"created": 0}
+    site = await _ensure_location(
+        location_repo, workspace_id=workspace_id, name=site_name,
+        loc_type=StorageLocationType.SITE, parent=None, counter=counter,
+    )
+    building = await _ensure_location(
+        location_repo, workspace_id=workspace_id, name=building_name,
+        loc_type=StorageLocationType.BUILDING, parent=site, counter=counter,
+    )
+    ids: dict[int, uuid.UUID] = {}
+    rooms: dict[str, StorageLocation] = {}
+    for spec in specs:
+        room = rooms.get(spec.room_no)
+        if room is None:
+            room = await _ensure_location(
+                location_repo, workspace_id=workspace_id, name=f"Room {spec.room_no}",
+                loc_type=StorageLocationType.ROOM, parent=building, counter=counter,
+            )
+            rooms[spec.room_no] = room
+        freezer = await _ensure_location(
+            location_repo, workspace_id=workspace_id, name=f"Freezer {spec.freezer}",
+            loc_type=StorageLocationType.FREEZER, parent=room, counter=counter,
+        )
+        ids[spec.location_id] = freezer.id
+    for dup, kept in alias.items():
+        if kept in ids:
+            ids[dup] = ids[kept]
+    return ids, counter["created"]
+
+
 @dataclass
 class LegacyData:
     libraries: list[LegacyLibrary] = field(default_factory=list)
@@ -445,14 +522,74 @@ async def match_plates(legacy, *, plate_repo, cdd_repo, workspace_id, cdd_vault_
     return matched, unmatched
 
 
-def _set_plate_status(plate, target: PlateStatus) -> None:
+@dataclass(frozen=True)
+class CreatedPlate:
+    legacy_plate_id: int
+    plate_barcode: str
+    format: str
+    plate_type: str
+
+
+async def create_missing_plates(
+    legacy, unmatched, *, plate_repo, cdd_repo, workspace_id, internal_org_id, actor_id,
+    cdd_vault_id, location_ids,
+) -> tuple[dict[int, uuid.UUID], list[CreatedPlate], list[UnmatchedPlate]]:
+    """Register every legacy plate Cellar doesn't have. Format from the plate, else its set,
+    else 96; storage location = its set's freezer; cdd_plate_sync row when the legacy row
+    carries a CDD plate id so a later CDD import merges instead of duplicating."""
+    plates_by_id = {p.plate_id: p for p in legacy.plates}
+    sets_by_id = {s.set_id: s for s in legacy.sets}
+    set_of_plate = {sp.plate_id: sets_by_id.get(sp.set_id) for sp in legacy.set_plates}
+    formats = {f.plate_format_id: f.no_of_wells for f in legacy.plate_formats}
+    created_ids: dict[int, uuid.UUID] = {}
+    created: list[CreatedPlate] = []
+    still: list[UnmatchedPlate] = []
+    sync: list[tuple[int, uuid.UUID]] = []
+    for um in unmatched:
+        p = plates_by_id.get(um.legacy_plate_id)
+        if p is None:
+            still.append(um)
+            continue
+        try:
+            plate_type = map_plate_type(p.plate_role)
+        except ValueError as exc:
+            still.append(UnmatchedPlate(p.plate_id, p.plate_barcode, p.cdd_plate_id, str(exc)))
+            continue
+        s = set_of_plate.get(p.plate_id)
+        fmt = format_for_plate(p, s, formats)
+        storage_location_id = (
+            location_ids.get(s.set_location_id) if s and s.set_location_id else None
+        )
+        plate = RegisteredPlate.register(
+            workspace_id=workspace_id,
+            owner_org_id=internal_org_id,
+            barcode=Barcode(value=p.plate_barcode),
+            plate_label=p.plate_name,
+            format=fmt,
+            plate_type=plate_type,
+            registered_by=actor_id,
+            storage_location_id=storage_location_id,
+        )
+        await plate_repo.save(plate)
+        created_ids[p.plate_id] = plate.id
+        created.append(CreatedPlate(p.plate_id, p.plate_barcode, fmt.value, plate_type.value))
+        if p.cdd_plate_id is not None:
+            sync.append((p.cdd_plate_id, plate.id))
+    if sync:
+        await cdd_repo.bulk_upsert(workspace_id, cdd_vault_id, sync)
+    return created_ids, created, still
+
+
+def _set_plate_status(plate, target: PlateStatus) -> bool:
     """Drive plate.status to `target` through valid transitions; idempotent.
-    Only STORED and DEPLETED are ever requested here."""
+    Only STORED and DEPLETED are ever requested here. Returns False (no-op)
+    when `target` is unreachable from the plate's current status instead of
+    raising — the caller records a StatusConflict and keeps going."""
     if plate.status == target:
-        return
+        return True
     if target in VALID_PLATE_TRANSITIONS[plate.status]:
         plate.transition_status(target)
-        return
+        return True
     # DEPLETED is unreachable in one hop from REGISTERED — go via STORED.
     if (
         target == PlateStatus.DEPLETED
@@ -460,8 +597,16 @@ def _set_plate_status(plate, target: PlateStatus) -> None:
     ):
         plate.transition_status(PlateStatus.STORED)
         plate.transition_status(PlateStatus.DEPLETED)
-        return
-    raise ValueError(f"cannot reach {target} from {plate.status} for plate {plate.id}")
+        return True
+    return False
+
+
+@dataclass(frozen=True)
+class StatusConflict:
+    legacy_plate_id: int
+    plate_barcode: str
+    current_status: str
+    target_status: str
 
 
 async def apply_plate_ownership(
@@ -475,8 +620,11 @@ async def apply_plate_ownership(
     workspace_id,
     internal_org_id,
     actor_id,
-) -> dict[str, int]:
-    stats = {"classified": 0, "skipped_unmapped": 0, "inactive_tagged": 0}
+) -> tuple[dict[str, int], list[StatusConflict]]:
+    stats = {
+        "classified": 0, "skipped_unmapped": 0, "inactive_tagged": 0, "status_conflicts": 0,
+    }
+    conflicts: list[StatusConflict] = []
     inactive_tag_id: uuid.UUID | None = None  # created lazily, once
     by_legacy_id = {p.plate_id: p for p in legacy.plates}
     for legacy_id, cellar_id in matched.items():
@@ -496,8 +644,18 @@ async def apply_plate_ownership(
             plate.update(owner_org_id=internal_org_id, plate_type=ptype)
             changed = True
         if plate.status != pstatus:
-            _set_plate_status(plate, pstatus)
-            changed = True
+            current_status = plate.status
+            if _set_plate_status(plate, pstatus):
+                changed = True
+            else:
+                logger.warning(
+                    "legacy_plate_status_conflict", legacy_plate_id=legacy_id,
+                    current_status=current_status.value, target_status=pstatus.value,
+                )
+                stats["status_conflicts"] += 1
+                conflicts.append(
+                    StatusConflict(legacy_id, p.plate_barcode, current_status.value, pstatus.value)
+                )
         if changed:
             await plate_repo.save(plate)
             stats["classified"] += 1
@@ -511,7 +669,7 @@ async def apply_plate_ownership(
                 workspace_id, cellar_id, inactive_tag_id, assigned_by=actor_id
             ):
                 stats["inactive_tagged"] += 1
-    return stats
+    return stats, conflicts
 
 
 async def backfill_null_owner(session, *, workspace_id, internal_org_id) -> int:
@@ -817,6 +975,8 @@ async def run_migration(
     actor_id,
     report_dir,
     dry_run,
+    site_name: str = "TAMU",
+    building_name: str = "Main",
 ) -> dict:
     account_email = build_account_email_map(legacy.accounts)
     account_names = {a.uin: full_name(a) for a in legacy.accounts}
@@ -833,13 +993,21 @@ async def run_migration(
         cv_repo = SQLAlchemyControlledVocabularyRepository(uow)
         tag_repo = SQLAlchemyTagRepository(uow)
         plate_tag_link_repo = RegisteredPlateTagLinkRepository(uow)
+        location_repo = SQLAlchemyStorageLocationRepository(uow)
 
         # Phase 0: NULL-owner backfill (S2-deferred)
         summary["owner_backfilled"] = await backfill_null_owner(
             uow.session, workspace_id=workspace_id, internal_org_id=internal_org_id
         )
 
-        # Phase 1: match
+        # Phase 1: storage locations (Site → Building → Room → Freezer)
+        location_specs, location_alias = plan_locations(legacy)
+        location_ids, summary["locations_created"] = await apply_locations(
+            location_specs, location_alias, location_repo=location_repo,
+            workspace_id=workspace_id, site_name=site_name, building_name=building_name,
+        )
+
+        # Phase 2: match, then register whatever Cellar doesn't already have
         matched, unmatched = await match_plates(
             legacy,
             plate_repo=plate_repo,
@@ -847,11 +1015,23 @@ async def run_migration(
             workspace_id=workspace_id,
             cdd_vault_id=cdd_vault_id,
         )
+        created_ids, created, still_unmatched = await create_missing_plates(
+            legacy, unmatched, plate_repo=plate_repo, cdd_repo=cdd_repo,
+            workspace_id=workspace_id, internal_org_id=internal_org_id, actor_id=actor_id,
+            cdd_vault_id=cdd_vault_id, location_ids=location_ids,
+        )
+        matched = {**matched, **created_ids}
+        plates_by_id = {p.plate_id: p for p in legacy.plates}
         summary["plates_matched"] = len(matched)
-        summary["unmatched_plates"] = len(unmatched)
+        summary["plates_created"] = len(created)
+        summary["cdd_sync_rows"] = sum(
+            1 for c in created if plates_by_id[c.legacy_plate_id].cdd_plate_id is not None
+        )
+        summary["unmatched_plates"] = len(still_unmatched)
+        await uow.session.flush()  # created plate rows must be visible to tag-link checks below
 
-        # Phase 2: ownership + classification (+ legacy:inactive tag)
-        own = await apply_plate_ownership(
+        # Phase 3: ownership + classification (+ legacy:inactive tag)
+        own, conflicts = await apply_plate_ownership(
             legacy,
             matched,
             plate_repo=plate_repo,
@@ -864,8 +1044,9 @@ async def run_migration(
         )
         summary["plates_classified"] = own["classified"]
         summary["inactive_tagged"] = own["inactive_tagged"]
+        summary["status_conflicts"] = own["status_conflicts"]
 
-        # Phase 3: groups + CV + assignment
+        # Phase 4: groups + CV + assignment
         await seed_group_type_vocab(
             legacy, cv_repo=cv_repo, workspace_id=workspace_id, actor_id=actor_id
         )
@@ -876,24 +1057,25 @@ async def run_migration(
             workspace_id=workspace_id,
             owner_org_id=internal_org_id,
             actor_id=actor_id,
+            location_ids=location_ids,
         )
         summary["plates_grouped"] = await assign_plates_to_groups(
             legacy, key_to_group, matched, plate_repo=plate_repo, workspace_id=workspace_id
         )
 
-        # Phase 4: loans — read_legacy now reads ALL transactions (not just OPEN),
+        # Phase 5: loans — read_legacy now reads ALL transactions (not just OPEN),
         # so filter here to keep open-loan behaviour unchanged.
         loan_specs, unresolved = plan_loans(
             replace(legacy, transactions=open_transactions(legacy)),
             matched, account_email, user_map,
         )
-        created = 0
+        loans_created = 0
         for ls in loan_specs:
             if await apply_loan(
                 ls, loan_repo=loan_repo, workspace_id=workspace_id, internal_org_id=internal_org_id
             ):
-                created += 1
-        summary["loans_created"] = created
+                loans_created += 1
+        summary["loans_created"] = loans_created
         summary["unresolved_requesters"] = len(unresolved)
 
         if dry_run:
@@ -904,8 +1086,18 @@ async def run_migration(
 
     _write_csv(
         report_dir / "unmatched_plates.csv",
-        unmatched,
+        still_unmatched,
         ["legacy_plate_id", "plate_barcode", "cdd_plate_id", "reason"],
+    )
+    _write_csv(
+        report_dir / "created_plates.csv",
+        created,
+        ["legacy_plate_id", "plate_barcode", "format", "plate_type"],
+    )
+    _write_csv(
+        report_dir / "status_conflicts.csv",
+        conflicts,
+        ["legacy_plate_id", "plate_barcode", "current_status", "target_status"],
     )
     _write_csv(
         report_dir / "unresolved_requesters.csv",
@@ -932,6 +1124,10 @@ async def _main() -> None:
     )
     p.add_argument("--user-map", type=Path, default=None, help="CSV email,duar_user_id")
     p.add_argument("--report-dir", type=Path, default=Path("."))
+    p.add_argument("--site-name", default="TAMU", help="Root StorageLocation (type=site) name")
+    p.add_argument(
+        "--building-name", default="Main", help="StorageLocation (type=building) under --site-name"
+    )
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
@@ -956,6 +1152,8 @@ async def _main() -> None:
             actor_id=args.actor_id,
             report_dir=args.report_dir,
             dry_run=args.dry_run,
+            site_name=args.site_name,
+            building_name=args.building_name,
         )
         print("MIGRATION SUMMARY:", summary)
     finally:
