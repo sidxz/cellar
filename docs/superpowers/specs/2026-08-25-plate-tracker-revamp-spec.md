@@ -1,6 +1,6 @@
 # Spec: Plate Tracker Revamp — Strict Org Visibility, Legacy-Parity Tree, Comments, Kiosk Page, Full Data Cutover
 
-**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7 + S8 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`)
+**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7 + S8 + S9 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`)
 **Contexts touched:** Inventory (03), Audit & Compliance (06), Workspace Config (07)
 **Builds on:** `2026-08-10-inventory-plate-org-loans-spec.md` (S1–S6, shipped). Sessions here continue the numbering: **S7–S12**.
 
@@ -214,4 +214,15 @@ Emails/notifications · volume-reduction editor (never persisted in legacy) · v
 - `RequestLoanDialog` gained `initialGroupId` so a card's "Request loan" opens in group mode pre-selected.
 - Review follow-ups (fix wave `1e1dc585..d5c90b3f`): `storage_location_id` on group create/update is validated against the workspace (404 when missing; the identical pre-existing gap on plates is `docs/backlog/plate-storage-location-unvalidated.md`); `Retired` has its own swatch (`#94a3b8`); numeric body fields reject NaN/±Inf (`allow_inf_nan=False`) and an app-wide `RequestValidationError` handler now sanitizes non-finite floats before echoing (FastAPI's default 500'd on them); `pickRoot`, the card and the loan-dialog preselect are unit-tested; the viewport backlog item is reopened as "stopgap applied, flex-slot refactor still open".
 - Suites at the end of S8: backend 3896 passed / 11 pre-existing failures; frontend 1029/1029; tsc clean.
+
+## S9 sync note (2026-08-25) — shipped reality vs. §7
+
+- `Comment` keeps a `version` column (never bumped) so it rides the generic `SQLAlchemyRepository` (ruling R13). Migration **068** `plate_comments`; `loan_id` FK ON DELETE SET NULL; `target_id` has no FK (polymorphic, same stance as `plate_loan_items.plate_id`).
+- A comment posted directly on a loan is stored with `loan_id = target_id`, so the loan feed (`?loan_id=`) lists loan, group and plate comments made in that loan's context in one query.
+- `POST /plate-loans/{id}/items:request-return` has its own `RequestReturnBody` (`item_ids?`, `comments[{group_id, body}]`, `plate_comments[{plate_id, body}]`); the other five verbs keep the shared `extra=forbid` body (R14). Enforcement lives in `_LoanItemsUseCase._validate` (before the state change) and the comments are written in `_after_save` inside the same unit of work (R16). Ungrouped plates need no comment, so existing clients sending `{}` keep working.
+- `LoanItemResponse` gained `group_id`/`group_name` (R15) through one batched `enrich_loans(plate_repo, group_repo)` shared by `GetLoan`, `ListLoans` and every verb — a borrower cannot browse the owner's tree under strict visibility, so the loan itself carries the labels the return dialog needs.
+- Plate-target comment reads AND writes use the borrowed carve-out (R17) — the documented exception to `plate_visibility.py`'s write narrowing; group and loan targets use `can_view_owner` / `_loan_visible`.
+- `AuthContext` gained `name`/`email` (implementers swept: `FakeAuth`, export `_AuthShim`); `/me` reads them directly.
+- FE: `CommentFeed` (`scope` = target or loan context, `composerTarget` decides where a new comment posts) on the loan card (collapsible, lists the loan context, posts to the loan), the group side panel and the plate detail; `RequestReturnDialog` gates submission on one non-blank note per group and sends optional per-plate notes; `useLoanItemsAction` invalidates the comments query.
+- Suites at the end of S9: backend 3927 passed / 11 pre-existing failures; frontend 1045/1045; tsc clean. Browser E2E (request → approve → confirm-out → return with notes) passed.
 
