@@ -6,10 +6,12 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID, _create_test_app
+from tests.api.conftest import AUTH_ORG_ID, ORG_ID, OTHER_ORG_ID, _create_test_app
 from tests.fakes.fake_auth import FakeAuth
 
 
@@ -220,3 +222,128 @@ class TestVisibility:
                 viewer_client, target_type="plate", target_id=plate["id"], body="y"
             )
             assert resp.status_code == 403
+
+
+class TestBorrowedCarveOutBoundaries:
+    """I3(b): the borrowed carve-out is bounded to plates currently on an
+    ACTIVE loan to the caller's own org — it must expire when the loan is
+    cancelled, and never extend to a plate loaned to a *different* org."""
+
+    async def test_borrowed_carve_out_expires_when_loan_cancelled(
+        self, editor_client_own_org: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        # OTHER org lends to AUTH org (owner-initiated). Default policy
+        # (confirmation=admin_confirm) leaves items APPROVED, not
+        # checked_out — CANCELLED is only a valid transition from
+        # requested/approved, so this is what makes cancellation reachable.
+        plate = await _mk_plate(editor_client_other_org, f"PL-{uuid.uuid4().hex[:8]}")
+        loan = await _mk_loan(
+            editor_client_other_org, plate_ids=[plate["id"]], borrower_org_id=str(AUTH_ORG_ID)
+        )
+        assert {i["status"] for i in loan["items"]} == {"approved"}
+        # Sanity: the carve-out is live before cancellation.
+        resp = await _post(
+            editor_client_own_org, target_type="plate", target_id=plate["id"], body="pre-cancel"
+        )
+        assert resp.status_code == 201, resp.text
+
+        # The lender (owner org) cancels the loan — editor_client_other_org
+        # is permissive-by-default (no explicit granted_actions), so it
+        # already carries the approve action needed for the owner-authority
+        # fallback in CancelLoanItems.
+        cancel = await editor_client_other_org.post(
+            f"/api/v1/plate-loans/{loan['id']}/items:cancel", json={}
+        )
+        assert cancel.status_code == 200, cancel.text
+
+        resp = await _post(
+            editor_client_own_org, target_type="plate", target_id=plate["id"], body="post-cancel"
+        )
+        assert resp.status_code == 404, resp.text
+
+    async def test_plate_in_another_orgs_loan_still_404(
+        self, editor_client_own_org: AsyncClient, editor_client_other_org: AsyncClient
+    ) -> None:
+        # OTHER org lends to a THIRD org (ORG_ID) — AUTH_ORG_ID is neither
+        # the owner nor the borrower, so the borrowed carve-out must not
+        # apply to it.
+        plate = await _mk_plate(editor_client_other_org, f"PL-{uuid.uuid4().hex[:8]}")
+        await _mk_loan(
+            editor_client_other_org, plate_ids=[plate["id"]], borrower_org_id=str(ORG_ID)
+        )
+        resp = await _post(
+            editor_client_own_org, target_type="plate", target_id=plate["id"], body="x"
+        )
+        assert resp.status_code == 404, resp.text
+
+
+class TestLoanContainsGroupTarget:
+    """I3(c): _loan_contains_target for a group target — a group the caller
+    can see but that isn't among the loan's plates' groups is 422, not 404
+    (visibility already passed; containment is what fails)."""
+
+    async def test_visible_unrelated_group_422(self, editor_client_own_org: AsyncClient) -> None:
+        g = await _mk_group(editor_client_own_org, f"G-{uuid.uuid4().hex[:6]}")
+        plate = await _mk_plate(editor_client_own_org, f"PL-{uuid.uuid4().hex[:8]}")
+        loan = await _mk_loan(editor_client_own_org, plate_ids=[plate["id"]])
+        resp = await _post(
+            editor_client_own_org,
+            target_type="plate_group",
+            target_id=g["id"],
+            loan_id=loan["id"],
+            body="x",
+        )
+        assert resp.status_code == 422, resp.text
+
+
+class TestAuditActor:
+    """I3(d): CommentAdded reaches the audit catch-all with the posting
+    user as actor. Harness copied from
+    ``tests/api/test_registered_plates.py::TestAuditActor``."""
+
+    @pytest.fixture(autouse=True)
+    def _wire_audit_catch_all(self, api_app: FastAPI) -> None:
+        """The shared test app never wires the audit catch-all handler (only
+        production's ``create_app()`` lifespan does)."""
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from cellar.domain.shared.events import DomainEvent
+        from cellar.infrastructure.messaging.audit_event_handler import AuditEventHandler
+        from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+
+        container = api_app.state.container
+        container[EventDispatcher].register(
+            DomainEvent, AuditEventHandler(container[async_sessionmaker])
+        )
+
+    @pytest.fixture(autouse=True)
+    def _bind_actor_context(self, api_app: FastAPI, fake_auth) -> None:
+        """Reproduce ``get_auth``'s ``set_current_actor`` side effect, which
+        the shared test override (``tests/api/conftest.py``) bypasses."""
+        from cellar.application.shared.actor_context import set_current_actor
+        from cellar.interface.dependencies import get_auth
+
+        async def _fake_get_auth():
+            # Must be async — FastAPI runs sync dependencies in a threadpool
+            # (a copied context), so a plain `def` here would set the
+            # ContextVar on a copy that never propagates back to this task.
+            set_current_actor(fake_auth.user_id)
+            return fake_auth
+
+        api_app.dependency_overrides[get_auth] = _fake_get_auth
+
+    async def test_comment_audit_row_names_the_caller(
+        self, client: AsyncClient, user_id: uuid.UUID
+    ) -> None:
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        resp = await _post(client, target_type="plate", target_id=plate["id"], body="audited")
+        assert resp.status_code == 201, resp.text
+        comment_id = resp.json()["id"]
+
+        audit = await client.get(
+            "/api/v1/audit", params={"entity_type": "Comment", "entity_id": comment_id}
+        )
+        assert audit.status_code == 200, audit.text
+        rows = audit.json()["items"]
+        assert rows, "expected at least one audit row for the comment"
+        assert {r["performed_by"] for r in rows} == {str(user_id)}
