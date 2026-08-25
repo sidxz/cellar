@@ -108,6 +108,23 @@ def _print_plan(actions: list[Action]) -> None:
         )
 
 
+async def run_remap(
+    factory: async_sessionmaker[AsyncSession], workspace_id: uuid.UUID, *, apply: bool
+) -> list[Action]:
+    """Plan in one session; apply in a fresh transaction-scoped session.
+
+    Planning runs SELECTs, which auto-begin a transaction on that session —
+    so the apply step must not call ``session.begin()`` on the same session
+    (SQLAlchemy raises "A transaction is already begun").
+    """
+    async with factory() as session:
+        actions = await plan_remap(session, workspace_id)
+    if apply and actions:
+        async with factory.begin() as session:
+            await apply_remap(session, actions)
+    return actions
+
+
 async def _main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--workspace-id", type=uuid.UUID, required=True)
@@ -116,15 +133,12 @@ async def _main() -> None:
 
     engine = create_async_engine(DatabaseSettings().database_url, pool_pre_ping=True)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    async with factory() as session:
-        actions = await plan_remap(session, args.workspace_id)
-        _print_plan(actions)
-        if args.apply and actions:
-            async with session.begin():
-                await apply_remap(session, actions)
-            print(f"applied {len(actions)} action(s)")
-        elif actions:
-            print("dry run — re-run with --apply to execute")
+    actions = await run_remap(factory, args.workspace_id, apply=args.apply)
+    _print_plan(actions)
+    if args.apply and actions:
+        print(f"applied {len(actions)} action(s)")
+    elif actions:
+        print("dry run — re-run with --apply to execute")
     await engine.dispose()
 
 

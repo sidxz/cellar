@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 import sqlalchemy as sa
-from scripts.remap_targets_to_prot_cellar import Action, apply_remap, plan_remap
+from scripts.remap_targets_to_prot_cellar import Action, apply_remap, plan_remap, run_remap
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 pytestmark = pytest.mark.asyncio
@@ -101,6 +101,45 @@ async def test_plan_then_apply(session_factory: async_sessionmaker[AsyncSession]
         )
 
     # cleanup (session_factory rows are committed; keep the shared test DB tidy)
+    async with session_factory() as session, session.begin():
+        await session.execute(sa.text("DELETE FROM runs WHERE id=:r"), {"r": ids["run"]})
+        await session.execute(sa.text("DELETE FROM protocols WHERE id=:p"), {"p": ids["proto"]})
+        await session.execute(sa.text("DELETE FROM targets WHERE workspace_id=:ws"), {"ws": ws})
+
+
+async def test_run_remap_entrypoint_dry_run_then_apply(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The CLI path: plan + apply through ``run_remap`` on ONE factory.
+
+    Regression for the first saclab-dev run — planning auto-begins a
+    transaction, so applying via ``session.begin()`` on the same session raised
+    "A transaction is already begun on this Session".
+    """
+    ws = uuid.uuid4()
+    async with session_factory() as session, session.begin():
+        ids = await _seed(session, ws)
+
+    dry = await run_remap(session_factory, ws, apply=False)
+    assert {a.kind for a in dry} == {"remap", "drop"}
+    async with session_factory() as session:
+        assert (
+            await _count(session, "SELECT count(*) FROM targets WHERE workspace_id=:ws", ws=ws)
+            == 3
+        )
+
+    applied = await run_remap(session_factory, ws, apply=True)
+    assert applied == dry
+    async with session_factory() as session:
+        assert (
+            await _count(session, "SELECT count(*) FROM targets WHERE workspace_id=:ws", ws=ws)
+            == 1
+        )
+        assert (
+            await _count(session, "SELECT count(*) FROM run_targets WHERE run_id=:r", r=ids["run"])
+            == 1
+        )
+
     async with session_factory() as session, session.begin():
         await session.execute(sa.text("DELETE FROM runs WHERE id=:r"), {"r": ids["run"]})
         await session.execute(sa.text("DELETE FROM protocols WHERE id=:p"), {"p": ids["proto"]})
