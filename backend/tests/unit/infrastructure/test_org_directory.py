@@ -59,6 +59,34 @@ async def test_refetches_after_ttl(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_include_disabled_sends_query_param():
+    calls: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=ORGS)
+
+    directory = OrgDirectory(
+        "http://duar", "svc-key", transport=httpx.MockTransport(handler), include_disabled=True
+    )
+    await directory.list_orgs()
+    assert calls[0].url.params["include_disabled"] == "true"
+
+
+@pytest.mark.asyncio
+async def test_default_omits_include_disabled_param():
+    calls: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=ORGS)
+
+    directory = OrgDirectory("http://duar", "svc-key", transport=httpx.MockTransport(handler))
+    await directory.list_orgs()
+    assert "include_disabled" not in calls[0].url.params
+
+
+@pytest.mark.asyncio
 async def test_error_raises():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503)

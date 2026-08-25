@@ -112,7 +112,13 @@ def register_core(container: Container, db_settings: DatabaseSettings | None = N
             OrgDirectoryPort,
             Singleton(
                 lambda: OrgDirectory(
-                    base_url=DuarSettings().url, service_key=DuarSettings().service_key
+                    base_url=DuarSettings().url,
+                    service_key=DuarSettings().service_key,
+                    # C1: visibility exclusion must not drop orgs Duar admins
+                    # disable mid-collaboration — see plate_visibility.py.
+                    # The /api/v1/orgs picker instance (interface/dependencies/
+                    # _core.py) intentionally keeps the enabled-only default.
+                    include_disabled=True,
                 )
             ),
         )
