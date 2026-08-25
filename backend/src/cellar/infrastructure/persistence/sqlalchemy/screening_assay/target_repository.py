@@ -68,6 +68,8 @@ class SQLAlchemyTargetRepository(EntityRepository[Target, TargetModel]):
             description=model.description,
             target_class=model.target_class,
             sequence=model.sequence,
+            chembl_id=model.chembl_id,
+            source_version=model.source_version,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -85,6 +87,8 @@ class SQLAlchemyTargetRepository(EntityRepository[Target, TargetModel]):
             description=entity.description,
             target_class=entity.target_class,
             sequence=entity.sequence,
+            chembl_id=entity.chembl_id,
+            source_version=entity.source_version,
         )
 
     def _update_model(self, model: TargetModel, entity: Target) -> None:
@@ -97,3 +101,5 @@ class SQLAlchemyTargetRepository(EntityRepository[Target, TargetModel]):
         model.description = entity.description
         model.target_class = entity.target_class
         model.sequence = entity.sequence
+        model.chembl_id = entity.chembl_id
+        model.source_version = entity.source_version

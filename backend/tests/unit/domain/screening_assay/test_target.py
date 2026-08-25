@@ -113,3 +113,41 @@ class TestTargetUpdate:
         target.update(name="New Name")
         assert target.organism == "Homo sapiens"
         assert target.description == "A kinase"
+
+
+class TestTargetMirror:
+    def test_from_mirror_uses_supplied_id_and_stores_source_fields(
+        self, workspace_id: uuid.UUID
+    ) -> None:
+        tid = uuid.uuid4()
+        t = Target.from_mirror(
+            id=tid,
+            workspace_id=workspace_id,
+            name="  NadD ",
+            target_type=TargetType.SINGLE_PROTEIN,
+            organism="Mycobacterium tuberculosis",
+            chembl_id="CHEMBL4630874",
+            source_version=3,
+        )
+        assert t.id == tid
+        assert t.name == "NadD"
+        assert t.organism == "Mycobacterium tuberculosis"
+        assert t.chembl_id == "CHEMBL4630874"
+        assert t.source_version == 3
+
+    def test_from_mirror_rejects_blank_name(self, workspace_id: uuid.UUID) -> None:
+        with pytest.raises(ValidationError):
+            Target.from_mirror(
+                id=uuid.uuid4(),
+                workspace_id=workspace_id,
+                name="  ",
+                target_type=TargetType.DOMAIN,
+                organism=None,
+                chembl_id=None,
+                source_version=1,
+            )
+
+    def test_new_enum_values_exist(self) -> None:
+        assert TargetType("domain") is TargetType.DOMAIN
+        assert TargetType("protein_protein_interaction") is TargetType.PROTEIN_PROTEIN_INTERACTION
+        assert TargetType("unknown") is TargetType.UNKNOWN

@@ -147,6 +147,11 @@ class TargetModel(Base, EntityModelMixin, WorkspaceIdMixin):
     description: Mapped[str | None] = mapped_column(Text)
     target_class: Mapped[str | None] = mapped_column(String(100))
     sequence: Mapped[str | None] = mapped_column(Text)
+    # Mirror of prot-cellar (spec 2026-08-24): the source's ChEMBL id and its
+    # ``version`` counter — the change signal for re-sync. NULL = a legacy
+    # locally-created row (only the cutover script should ever see one).
+    chembl_id: Mapped[str | None] = mapped_column(String(30))
+    source_version: Mapped[int | None] = mapped_column(Integer)
 
     __table_args__ = (Index("ix_target_ws_name", "workspace_id", "name"),)
 

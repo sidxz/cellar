@@ -42,6 +42,9 @@ class Target(Entity):
 
     Invariants:
         - name cannot be empty
+        - mirror rows carry the prot-cellar id and ``source_version`` (the
+          source's optimistic-concurrency counter, used as the change signal
+          on re-sync)
     """
 
     def __init__(
@@ -58,6 +61,8 @@ class Target(Entity):
         description: str | None = None,
         target_class: str | None = None,
         sequence: str | None = None,
+        chembl_id: str | None = None,
+        source_version: int | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -76,6 +81,8 @@ class Target(Entity):
         self.description = description
         self.target_class = target_class
         self.sequence = sequence
+        self.chembl_id = chembl_id
+        self.source_version = source_version
 
     # ------------------------------------------------------------------
     # Factory method
@@ -107,6 +114,33 @@ class Target(Entity):
             description=description,
             target_class=target_class,
             sequence=sequence,
+        )
+
+    @classmethod
+    def from_mirror(
+        cls,
+        *,
+        id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        name: str,
+        target_type: TargetType,
+        organism: str | None,
+        chembl_id: str | None,
+        source_version: int,
+    ) -> Target:
+        """Build the local mirror row for a prot-cellar target.
+
+        ``id`` is prot-cellar's target id — identical on both sides so link
+        tables (``protocol_targets`` / ``run_targets``) need no translation.
+        """
+        return cls(
+            id=id,
+            workspace_id=workspace_id,
+            name=name,
+            target_type=target_type,
+            organism=organism,
+            chembl_id=chembl_id,
+            source_version=source_version,
         )
 
     # ------------------------------------------------------------------
