@@ -24,6 +24,7 @@ from cellar.application.inventory.barcode_resolution import resolve_barcode
 from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.enums import LoanConfirmationMode, LoanItemStatus
@@ -56,6 +57,7 @@ class RequestPlateLoanCommand(Command):
     plate_ids: list[uuid.UUID] | None = None
     barcodes: list[str] | None = None
     group_id: uuid.UUID | None = None
+    borrower_org_id: uuid.UUID | None = None
     due_date: date | None = None
     notes: str | None = None
 
@@ -117,6 +119,7 @@ class RequestPlateLoan:
         policy_repo: OrgPlatePolicyRepository,
         dispatcher: EventDispatcherProtocol,
         visibility: PlateVisibilityService,
+        org_directory: OrgDirectoryPort,
     ) -> None:
         self._uow = uow
         self._loan_repo = loan_repo
@@ -125,6 +128,7 @@ class RequestPlateLoan:
         self._policy_repo = policy_repo
         self._dispatcher = dispatcher
         self._visibility = visibility
+        self._org_directory = org_directory
 
     async def __call__(
         self, input: RequestPlateLoanCommand, auth: AuthContext | None = None
@@ -132,9 +136,11 @@ class RequestPlateLoan:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
 
-        borrower_org_id = auth.org_id if auth is not None else None
-        if borrower_org_id is None:
+        caller_org_id = auth.org_id if auth is not None else None
+        if caller_org_id is None:
             return Failure(ValidationError("Caller has no organization — loans require an org"))
+        borrower_org_id = input.borrower_org_id or caller_org_id
+        owner_initiated = borrower_org_id != caller_org_id
 
         # Empty lists count as "not provided" — a mode with nothing in it
         # is the same as omitting it, and this sidesteps a would-be empty
@@ -209,6 +215,17 @@ class RequestPlateLoan:
                 return Failure(ValidationError("Plates span multiple organizations"))
             owner_org_id = owner_org_ids.pop()
 
+            if owner_initiated:
+                # Ruling R6: lending is an owner-org (or admin) act. Non-admin
+                # callers only ever reach here with their own org's plates
+                # (foreign plates are hidden → 404 above), so this guard is
+                # the admin-vs-owner line, not a visibility check.
+                if not (auth is not None and (auth.is_admin or owner_org_id == caller_org_id)):
+                    raise AuthorizationError("Only the owner organization can lend its plates")
+                known = {o.id for o in await self._org_directory.list_orgs()}
+                if borrower_org_id not in known:
+                    return Failure(ValidationError("Unknown borrower organization"))
+
             active = await self._loan_repo.active_plate_ids(
                 input.workspace_id, [p.id for p in plates]
             )
@@ -235,13 +252,20 @@ class RequestPlateLoan:
                 borrower_org_id=borrower_org_id,
                 requested_by=input.requested_by,
                 plate_ids=[p.id for p in plates],
-                auto_approved=not policy.require_approval,
+                auto_approved=not policy.require_approval and not owner_initiated,
                 due_date=due,
                 notes=input.notes,
             )
-            if not policy.require_approval and policy.confirmation == LoanConfirmationMode.NONE:
-                # Full self-serve: no approval step and no separate
-                # checkout confirmation, so items go straight to checked-out.
+            if owner_initiated:
+                # The owner is lending: it approves its own loan on creation.
+                loan.approve_items(
+                    loan.eligible_item_ids(LoanItemStatus.APPROVED), approved_by=input.requested_by
+                )
+            if policy.confirmation == LoanConfirmationMode.NONE and (
+                owner_initiated or not policy.require_approval
+            ):
+                # No separate checkout confirmation step, so approved items
+                # go straight to checked-out (self-serve and owner-lend alike).
                 loan.confirm_checkout(loan.eligible_item_ids(LoanItemStatus.CHECKED_OUT))
 
             await self._loan_repo.save(loan)

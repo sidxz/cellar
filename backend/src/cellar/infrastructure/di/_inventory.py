@@ -624,6 +624,7 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyOrgPlatePolicyRepository(uow),
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
+            c[OrgDirectoryPort],
         )
 
     def _list_loans(c: Container):

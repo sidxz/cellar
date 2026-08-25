@@ -109,6 +109,7 @@ class RequestLoanBody(BaseModel):
     plate_ids: list[uuid.UUID] | None = None
     barcodes: list[str] | None = None
     group_id: uuid.UUID | None = None
+    borrower_org_id: uuid.UUID | None = None
     due_date: date | None = None
     notes: str | None = None
 
@@ -140,6 +141,7 @@ async def request_plate_loan(
         plate_ids=body.plate_ids,
         barcodes=body.barcodes,
         group_id=body.group_id,
+        borrower_org_id=body.borrower_org_id,
         due_date=body.due_date,
         notes=body.notes,
     )

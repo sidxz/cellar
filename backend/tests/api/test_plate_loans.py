@@ -11,7 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cellar.application.auth import LOAN_APPROVE_ACTION
-from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID, _create_test_app
+from tests.api.conftest import AUTH_ORG_ID, ORG_ID, OTHER_ORG_ID, _create_test_app
 from tests.fakes.fake_auth import FakeAuth
 
 
@@ -629,6 +629,75 @@ class TestBorrowedPlateVisibility:
 
         resp = await editor_client_own_org.get(f"/api/v1/plates/{never_loaned['id']}")
         assert resp.status_code == 404
+
+
+class TestOwnerLends:
+    """Ruling R6: cross-org loans are created by the owner org."""
+
+    async def test_owner_editor_lends_to_other_org_items_approved(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient, user_id: uuid.UUID
+    ) -> None:
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")  # owner = AUTH_ORG
+        loan = await _mk_loan(
+            editor_client_own_org, plate_ids=[plate["id"]], borrower_org_id=str(OTHER_ORG_ID)
+        )
+        assert loan["owner_org_id"] == str(AUTH_ORG_ID)
+        assert loan["borrower_org_id"] == str(OTHER_ORG_ID)
+        assert [i["status"] for i in loan["items"]] == ["approved"]
+        assert loan["approved_by"] == str(user_id)
+
+    async def test_lend_with_confirmation_none_checks_out(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        await _set_policy(client, AUTH_ORG_ID, require_approval=True, confirmation="none")
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        loan = await _mk_loan(
+            editor_client_own_org, plate_ids=[plate["id"]], borrower_org_id=str(OTHER_ORG_ID)
+        )
+        assert [i["status"] for i in loan["items"]] == ["checked_out"]
+
+    async def test_lend_to_unknown_org_rejected(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        resp = await editor_client_own_org.post(
+            "/api/v1/plate-loans",
+            json={"plate_ids": [plate["id"]], "borrower_org_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 422, resp.text
+        assert "Unknown borrower organization" in resp.text
+
+    async def test_non_owner_editor_cannot_lend_foreign_plate(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        plate = await _mk_plate(
+            client, f"PL-{uuid.uuid4().hex[:8]}", owner_org_id=str(OTHER_ORG_ID)
+        )
+        resp = await editor_client_own_org.post(
+            "/api/v1/plate-loans",
+            json={"plate_ids": [plate["id"]], "borrower_org_id": str(ORG_ID)},
+        )
+        assert resp.status_code == 404, resp.text  # hidden == missing
+
+    async def test_admin_can_lend_any_orgs_plate(self, client: AsyncClient) -> None:
+        plate = await _mk_plate(
+            client, f"PL-{uuid.uuid4().hex[:8]}", owner_org_id=str(OTHER_ORG_ID)
+        )
+        loan = await _mk_loan(client, plate_ids=[plate["id"]], borrower_org_id=str(ORG_ID))
+        assert loan["owner_org_id"] == str(OTHER_ORG_ID)
+        assert loan["borrower_org_id"] == str(ORG_ID)
+        assert [i["status"] for i in loan["items"]] == ["approved"]
+
+    async def test_borrower_org_id_equal_to_own_org_is_a_plain_request(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        loan = await _mk_loan(
+            editor_client_own_org, plate_ids=[plate["id"]], borrower_org_id=str(AUTH_ORG_ID)
+        )
+        assert loan["borrower_org_id"] == str(AUTH_ORG_ID)
+        # default policy: approval required
+        assert [i["status"] for i in loan["items"]] == ["requested"]
 
 
 class TestMyOrgFilterIncludesBorrowed:
