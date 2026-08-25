@@ -19,6 +19,8 @@
 - NULL `owner_org_id` plates stay visible to everyone (unchanged).
 - Never loosen a hidden-plate assertion to make a test pass; switch the *caller* to a non-admin fixture instead.
 - `docs/` is gitignored; the spec and plan files are force-added (`git add -f`).
+- Lint gates are scoped to the files a task touches: `uv run ruff check <changed files>` and `/Users/sidx/Library/pnpm/pnpm biome check <changed files>` must exit 0. Never run ruff/biome `--fix`/`--write` repo-wide — `pnpm lint` and repo-wide ruff are red on `main` for pre-existing reasons (`docs/backlog/preexisting-test-lint-failures-main.md`).
+- Tests failing in the BASE baseline (`.superpowers/sdd/2026-08-25-s7-strict-visibility-audit-actor/baseline-*.txt`) are pre-existing: do not fix or adjust them; report them.
 
 ---
 
@@ -418,7 +420,7 @@ Change its four callers from `visibility = _plate_visibility(uow)` to `visibilit
 Run: `grep -rn 'PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository' src tests`
 Expected: no output.
 
-Run: `uv run ruff check src tests && uv run python -c "from cellar.infrastructure.di.container import create_container; from cellar.infrastructure.persistence.settings import DatabaseSettings; from cellar.application.shared.org_directory import OrgDirectoryPort; c = create_container(DatabaseSettings(database_url='postgresql+asyncpg://u:p@localhost:5432/x', _env_file=None)); print(OrgDirectoryPort in c.defined_types)"`
+Run: `uv run ruff check src/cellar/infrastructure/di src/cellar/infrastructure/temporal/activities/plate_registration.py src/cellar/interface/dependencies/_inventory.py tests/integration/inventory/test_plate_loan_repository.py && uv run python -c "from cellar.infrastructure.di.container import create_container; from cellar.infrastructure.persistence.settings import DatabaseSettings; from cellar.application.shared.org_directory import OrgDirectoryPort; c = create_container(DatabaseSettings(database_url='postgresql+asyncpg://u:p@localhost:5432/x', _env_file=None)); print(OrgDirectoryPort in c.defined_types)"`
 Expected: ruff clean; prints `True`.
 
 Run: `uv run pytest tests/unit -q`
@@ -536,7 +538,7 @@ Expected: PASS (Tasks 1-2 already made the rule live).
 
 Apply this rule, verbatim, to the tests listed in Step 4:
 
-1. Delete the module-level `_set_plates_private` helper (in `test_registered_plates.py`, `test_plate_groups.py`, `test_plate_insights.py`, `test_plate_import.py`, `test_tag_browse.py`, `test_tags.py`). In `test_plate_loans.py` keep `_set_policy` but delete its `"plates_private": False,` line.
+1. Delete the module-level `_set_plates_private` helper (in `test_registered_plates.py`, `test_plate_groups.py`, `test_plate_insights.py`, `test_plate_import.py`, `test_tag_browse.py`, `test_tags.py`). In `test_plate_loans.py` keep `_set_policy` **unchanged** (its `"plates_private": False,` line stays until Task 4 removes the field — the PUT body still requires it).
 2. Delete every `await _set_plates_private(...)` / `_set_policy(client, OTHER_ORG_ID, plates_private=True)` call, the `assert policy.status_code == 200` that follows it, and the `try:`/`finally:` that only existed to reset the flag (dedent the body).
 3. Every request that asserted **hidden** (404 / 403 / "not in list") through `client` (admin) now goes through `editor_client_own_org` (add the fixture to the test signature). Setup calls that *create* things via `client` are unchanged — admins may register into any org.
 4. Every request that asserted **visible for the owner org** through `editor_client_other_org` is unchanged.
@@ -615,7 +617,7 @@ Run: `uv run pytest tests/api/test_registered_plates.py tests/api/test_plate_gro
 Expected: all PASS. (`test_org_plate_policies.py` still passes here — the field is deleted in Task 4.)
 
 Run: `grep -rn 'plates_private' tests/api | grep -v test_org_plate_policies.py`
-Expected: no output.
+Expected: exactly one hit — `test_plate_loans.py` line `"plates_private": False,` inside `_set_policy` (Task 4 removes it).
 
 - [ ] **Step 5: Commit**
 
@@ -643,6 +645,7 @@ Claude-Session: https://claude.ai/code/session_01HeExFT5oQrec5VbwQafNfu" -- back
 - Modify: `backend/src/cellar/interface/routes/org_plate_policies.py:1, 27, 37, 46, 75`
 - Modify: `backend/tests/unit/test_org_plate_policy.py:23, 28-35, 48`
 - Modify: `backend/tests/api/test_org_plate_policies.py:28, 44, 77, 85, 94`
+- Modify: `backend/tests/api/test_plate_loans.py:43` (delete `"plates_private": False,` from `_set_policy`)
 
 **Interfaces:**
 - Produces: `OrgPlatePolicy(require_approval, confirmation, default_due_days)` only; `SetOrgPlatePolicyBody` has three fields and still `extra: "forbid"` (so a client still sending `plates_private` gets 422).
@@ -662,6 +665,8 @@ Claude-Session: https://claude.ai/code/session_01HeExFT5oQrec5VbwQafNfu" -- back
         assert isinstance(events[0], OrgPlatePolicySet)
         assert events[0].org_id == policy.org_id
 ```
+
+`backend/tests/api/test_plate_loans.py`: delete the `"plates_private": False,` line from `_set_policy` (line 43).
 
 `backend/tests/api/test_org_plate_policies.py`: delete `"plates_private": False,` from `_body` (line 28), `plates_private=True,` (line 77), and the three `assert data["plates_private"] …` / `assert fetched["plates_private"] …` lines (44, 85, 94). Add to `TestSetOrgPlatePolicy`:
 
@@ -730,7 +735,7 @@ def downgrade() -> None:
 
 - [ ] **Step 4: Run the affected suites**
 
-Run: `uv run ruff check src tests && uv run pytest tests/unit/test_org_plate_policy.py tests/api/test_org_plate_policies.py tests/api/test_plate_loans.py tests/api/test_kiosk.py -q`
+Run: `uv run ruff check <the files you changed> && uv run pytest tests/unit/test_org_plate_policy.py tests/api/test_org_plate_policies.py tests/api/test_plate_loans.py tests/api/test_kiosk.py -q`
 Expected: ruff clean; all PASS (the API suite runs migrations up to head 066 against the testcontainer).
 
 - [ ] **Step 5: Commit**
@@ -742,7 +747,7 @@ git commit -m "feat(inventory)!: drop OrgPlatePolicy.plates_private — visibili
 PUT /org-plate-policies/{org_id} no longer accepts plates_private (422).
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01HeExFT5oQrec5VbwQafNfu" -- backend/alembic/versions/066_drop_plates_private.py backend/src/cellar/domain/inventory/org_plate_policy.py backend/src/cellar/domain/inventory/repository.py backend/src/cellar/infrastructure/persistence/sqlalchemy/inventory/org_plate_policy_repository.py backend/src/cellar/infrastructure/persistence/sqlalchemy/inventory/models.py backend/src/cellar/application/inventory/org_plate_policy.py backend/src/cellar/interface/routes/org_plate_policies.py backend/tests/unit/test_org_plate_policy.py backend/tests/api/test_org_plate_policies.py
+Claude-Session: https://claude.ai/code/session_01HeExFT5oQrec5VbwQafNfu" -- backend/alembic/versions/066_drop_plates_private.py backend/src/cellar/domain/inventory/org_plate_policy.py backend/src/cellar/domain/inventory/repository.py backend/src/cellar/infrastructure/persistence/sqlalchemy/inventory/org_plate_policy_repository.py backend/src/cellar/infrastructure/persistence/sqlalchemy/inventory/models.py backend/src/cellar/application/inventory/org_plate_policy.py backend/src/cellar/interface/routes/org_plate_policies.py backend/tests/unit/test_org_plate_policy.py backend/tests/api/test_org_plate_policies.py backend/tests/api/test_plate_loans.py
 ```
 
 ---
@@ -890,7 +895,7 @@ def current_actor() -> uuid.UUID | None:
 
 - [ ] **Step 4: Run the tests + an API-level proof**
 
-Run: `uv run pytest tests/unit/application/audit -q && uv run ruff check src tests`
+Run: `uv run pytest tests/unit/application/audit -q && uv run ruff check src/cellar/application/shared/actor_context.py src/cellar/interface/dependencies/_core.py src/cellar/application/audit/audit_recording_service.py tests/unit/application/audit/test_audit_recording_service.py`
 Expected: PASS, ruff clean.
 
 Append to `backend/tests/api/test_registered_plates.py` (class `TestVisibility` or a new `TestAudit` class at the end of the file):
@@ -996,8 +1001,8 @@ In `audit-list.tsx` extend `ENTITY_TYPE_OPTIONS` (values are the backend `aggreg
 - [ ] **Step 6: Type-check, lint, test**
 
 Run from `frontend/`:
-`/Users/sidx/Library/pnpm/pnpm tsc --noEmit && /Users/sidx/Library/pnpm/pnpm lint; echo "lint exit=$?" && /Users/sidx/Library/pnpm/pnpm vitest run src/features/inventory src/features/audit`
-Expected: tsc clean, `lint exit=0`, tests PASS. (Lint is biome; judge by the exit code, not by scanning output.)
+`/Users/sidx/Library/pnpm/pnpm tsc --noEmit && /Users/sidx/Library/pnpm/pnpm biome check src/features/inventory/components/org-plate-policy-dialog.tsx src/features/inventory/components/org-plate-policy-dialog.test.tsx src/features/inventory/hooks/use-org-plate-policy.test.tsx src/features/inventory/components/plate-list.tsx src/features/inventory/components/plate-group-dashboard.tsx src/features/audit/components/audit-list.tsx; echo "biome exit=$?" && /Users/sidx/Library/pnpm/pnpm vitest run src/features/inventory src/features/audit`
+Expected: tsc clean, `biome exit=0` (repo-wide `pnpm lint` is red on main for pre-existing reasons — judge only the touched files, by exit code), tests PASS.
 
 - [ ] **Step 7: Commit**
 
