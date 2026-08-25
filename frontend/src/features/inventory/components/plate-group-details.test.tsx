@@ -46,6 +46,19 @@ function setup(props: Partial<Parameters<typeof PlateGroupDetails>[0]> = {}) {
     if (opts.url.includes("/storage-locations")) {
       return Promise.resolve([{ id: "loc-1", name: "Room 1148 / Freezer 4" }]);
     }
+    if (opts.url.includes("/user/me")) {
+      return Promise.resolve({
+        user_id: "u1",
+        email: "",
+        name: "",
+        org_id: "org1",
+        is_admin: false,
+        workspace_role: "editor",
+      });
+    }
+    if (opts.url.includes("/comments")) {
+      return Promise.resolve([]);
+    }
     return Promise.resolve([
       { id: "p1", barcode: "000123", plate_label: "Plate 123", group_id: "g1" },
     ]);

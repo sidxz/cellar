@@ -4,6 +4,11 @@ import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shared/components/ui/collapsible";
+import {
   Table,
   TableBody,
   TableCell,
@@ -11,10 +16,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { canEdit } from "@/shared/hooks/use-current-user";
 import { useOrgs } from "@/shared/hooks/use-orgs";
 import type { MeResponse } from "@/shared/lib/api/model";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { useComments } from "../hooks/use-comments";
 import {
   LOAN_VARIANT,
   LoanItemStatus,
@@ -23,6 +30,7 @@ import {
   type PlateLoan,
 } from "../hooks/use-plate-loans";
 import { useLoanItemsAction } from "../hooks/use-plate-loans";
+import { CommentFeed } from "./comment-feed";
 
 /** Item statuses each verb may act on — the single source of truth for which
  * items are "eligible" for a verb, mirrored from the server state machine. */
@@ -62,6 +70,8 @@ export function LoanCard({ loan, context, me }: LoanCardProps) {
   const { data: orgs } = useOrgs();
   const action = useLoanItemsAction();
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const { data: comments } = useComments({ loanId: loan.id });
+  const canWrite = canEdit(me);
 
   const orgName = (id: string) => orgs?.find((o) => o.id === id)?.name ?? "Unknown org";
   const toggle = (id: string) =>
@@ -168,6 +178,20 @@ export function LoanCard({ loan, context, me }: LoanCardProps) {
           })}
         </div>
       ) : null}
+
+      <Collapsible className="mt-3">
+        <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ChevronDown className="h-4 w-4" />
+          Comments ({comments?.length ?? 0})
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <CommentFeed
+            scope={{ loanId: loan.id }}
+            composerTarget={{ targetType: "plate_loan", targetId: loan.id }}
+            canWrite={canWrite}
+          />
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

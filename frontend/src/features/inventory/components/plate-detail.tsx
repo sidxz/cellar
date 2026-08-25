@@ -50,6 +50,7 @@ import { useStorageLocations } from "../hooks/use-storage-locations";
 import { downloadPlateLayout } from "../lib/download-plate-layout";
 import type { PlateType, WellMapping } from "../types/plates";
 import { plateTypeLabels } from "../types/plates";
+import { CommentFeed } from "./comment-feed";
 import { WellMappingDialog } from "./well-mapping-dialog";
 
 // ---------------------------------------------------------------------------
@@ -457,6 +458,19 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
 
               {/* Loan history */}
               <LoanHistoryCard plateId={plateId} />
+
+              {/* Comments */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Comments</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CommentFeed
+                    scope={{ targetType: "plate", targetId: plateId }}
+                    canWrite={canEditTags}
+                  />
+                </CardContent>
+              </Card>
 
               {/* Attachments */}
               <Card>

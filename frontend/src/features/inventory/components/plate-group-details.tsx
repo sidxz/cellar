@@ -2,12 +2,14 @@
 
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { useOrgs } from "@/shared/hooks/use-orgs";
 import { formatDate } from "@/shared/lib/format-date";
 import { useMemo } from "react";
 import type { PlateGroupNode } from "../hooks/use-plate-groups";
 import { usePlates } from "../hooks/use-plates";
 import { useStorageLocations } from "../hooks/use-storage-locations";
+import { CommentFeed } from "./comment-feed";
 
 /** "55 µL · 10 mM" — omits either half when absent. Exported for the group dashboard. */
 export function formatInitial(
@@ -45,6 +47,7 @@ export function PlateGroupDetails({
     [orgs, node.owner_org_id],
   );
   const { data: plates, isLoading: platesLoading } = usePlates({ group_id: node.id });
+  const canWrite = useCanEdit();
   const { data: locations } = useStorageLocations();
   const locationName = node.storage_location_id
     ? (locations?.find((l) => l.id === node.storage_location_id)?.name ?? "…")
@@ -156,6 +159,11 @@ export function PlateGroupDetails({
             ))}
           </ul>
         )}
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-medium">Comments</h3>
+        <CommentFeed scope={{ targetType: "plate_group", targetId: node.id }} canWrite={canWrite} />
       </div>
     </div>
   );
