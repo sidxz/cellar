@@ -4,6 +4,7 @@ import {
   BookOpen,
   Building2,
   ClipboardList,
+  Crosshair,
   Database,
   DatabaseZap,
   FileText,
@@ -104,6 +105,7 @@ export const navigation: NavGroup[] = [
         children: [
           { title: "Organizations", href: "/admin/organizations", icon: Building2 },
           { title: "Data Sources", href: "/admin/data-sources", icon: Database },
+          { title: "Targets", href: "/admin/targets", icon: Crosshair },
           { title: "API Keys", href: "/admin/api-keys", icon: KeyRound },
           { title: "Kiosk Devices", href: "/admin/kiosk-devices", icon: ScanLine },
           { title: "Settings", href: "/admin/settings", icon: Settings },

@@ -15,9 +15,6 @@ beforeAll(() => {
   }
 });
 
-// Mock the whole hooks module so both useTargets (the picker) and
-// useCreateTarget (used by the embedded CreateTargetDialog) are covered —
-// this also avoids needing a QueryClientProvider for the mutation hook.
 vi.mock("../hooks/use-targets", () => ({
   useTargets: () => ({
     data: [
@@ -25,7 +22,6 @@ vi.mock("../hooks/use-targets", () => ({
       { id: "t-2", name: "BRAF", target_type: "single_protein" },
     ],
   }),
-  useCreateTarget: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // The trigger sets role="combobox" (mirrors SearchableSelect), so it is
@@ -53,8 +49,8 @@ describe("TargetMultiSelect", () => {
     expect(screen.getByPlaceholderText(/search targets/i)).toBeInTheDocument();
     expect(screen.getByText("EGFR")).toBeInTheDocument();
     expect(screen.getByText("BRAF")).toBeInTheDocument();
-    // The inline create affordance is offered too.
-    expect(screen.getByText(/create target/i)).toBeInTheDocument();
+    // The inline "Manage in Prot-Cellar" affordance is offered too.
+    expect(screen.getByText(/manage in prot-cellar/i)).toBeInTheDocument();
   });
 
   it("selecting a target adds its id via onChange", () => {
@@ -88,5 +84,21 @@ describe("TargetMultiSelect", () => {
     // Each selected target renders a removable chip with an aria-labelled button.
     fireEvent.click(screen.getByRole("button", { name: /remove egfr/i }));
     expect(onChange).toHaveBeenCalledWith(["t-2"]);
+  });
+
+  it("'Manage in Prot-Cellar' opens the catalog in a new tab", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<TargetMultiSelect value={[]} onChange={vi.fn()} />);
+    openPopover();
+    const item = screen
+      .getByText(/manage in prot-cellar/i)
+      .closest("[data-slot='command-item']") as HTMLElement;
+    fireEvent.click(item);
+    expect(open).toHaveBeenCalledWith(
+      "http://localhost:3001/targets",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
   });
 });
