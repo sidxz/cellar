@@ -1,6 +1,6 @@
 # Spec: Plate Tracker Revamp — Strict Org Visibility, Legacy-Parity Tree, Comments, Kiosk Page, Full Data Cutover
 
-**Date:** 2026-08-25 · **Status:** DRAFT — awaiting user review
+**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`)
 **Contexts touched:** Inventory (03), Audit & Compliance (06), Workspace Config (07)
 **Builds on:** `2026-08-10-inventory-plate-org-loans-spec.md` (S1–S6, shipped). Sessions here continue the numbering: **S7–S12**.
 
@@ -191,3 +191,16 @@ Emails/notifications · volume-reduction editor (never persisted in legacy) · v
 | **S10** | `/kiosk` page | — |
 | **S11** | migration v2 (storage, plate creation + `cdd_plate_sync`, group metadata, closed history, comments, reports) + unit tests | — |
 | **S12** | dry-run + real cutover on saclab-dev, docs/memory/issue updates | — |
+
+## S7 sync note (2026-08-25) — shipped reality vs. §3/§3.1/§4
+
+- Excluded set is computed from `OrgDirectoryPort` (`application/shared/org_directory.py`, satisfied by the Duar `OrgDirectory`) resolved via the Lagom container (`register_core`, guarded so `create_container(overrides={OrgDirectoryPort: stub})` wins in tests); the `/api/v1/orgs` route still uses the interface-layer `OrgDirectory` singleton — two instances, two 5-min caches (ponytail-marked in `infrastructure/di/_core.py`).
+- `PlateVisibilityService()` with no directory is legal for `auth=None`/admin callers (Temporal worker, admin-only integration test) and raises `RuntimeError` otherwise; a directory HTTP failure propagates as a 500 rather than the 503 written in §3 — still fail-closed.
+- Migration 066 drops `plates_private`; `PUT /org-plate-policies/{org}` returns 422 if a client still sends it (regression test).
+- **§3.1 owner-initiated lending shipped in the same session** (`borrower_org_id` on `POST /plate-loans`; borrower validated against the directory; auto-approved by the lender; FE "Borrower organization" select + **Lend** button). Cross-org loan test scaffolding uses an admin scoped to the borrower org where a `requested` loan is needed.
+- Audit actor precedence: `event.user_id` (non-nil) → request `current_actor()` (ContextVar set in `get_auth`) → nil/SYSTEM. Kiosk and worker paths stay SYSTEM by design. The API test app does not subscribe the audit catch-all; `TestAuditActor` wires it with class-scoped fixtures, and a ContextVar-setting dependency override must be `async def` (sync deps run on a threadpool Context copy).
+- FE: org selectors on Plates / Plate Groups (+Insights) and the Org Policies button render only for `me.is_admin` (gated in both the error-state and normal renders of the plate list); audit filter gained `RegisteredPlate` / `PlateGroup` / `PlateLoan`.
+- Test-harness deviations: `test_children_exclude_foreign_org_child` restructured stricter (children listing gates on parent visibility); hidden-plate tests use `editor_client_own_org`; the stub org directory now lists `abbvie`/`tamu`/`partner`.
+- Environment: `DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock` is required for testcontainers on this Mac; lint gates are scoped to touched files because repo-wide `pnpm lint`/ruff are red on `main` (backlog).
+- Full backend suite at the end of S7: 3873 passed / 11 failed, all pre-existing (`docs/backlog/preexisting-test-lint-failures-main.md`, now also listing `test_molecules.py`).
+
