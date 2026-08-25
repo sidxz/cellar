@@ -34,7 +34,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
-/** Admin dialog to view/edit a single org's plate loan & visibility policy. */
+/** Admin dialog to view/edit a single org's plate loan policy. */
 export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
   const { data: orgs } = useOrgs();
   const [orgId, setOrgId] = useState("");
@@ -46,7 +46,6 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
     LoanConfirmationMode.kiosk_scan,
   );
   const [dueDays, setDueDays] = useState("");
-  const [platesPrivate, setPlatesPrivate] = useState(false);
 
   // Reset the picker each time the dialog is reopened.
   useEffect(() => {
@@ -60,7 +59,6 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
     setRequireApproval(false);
     setConfirmation(LoanConfirmationMode.kiosk_scan);
     setDueDays("");
-    setPlatesPrivate(false);
   };
 
   // Prefill the form whenever the selected org's policy loads.
@@ -69,7 +67,6 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
       setRequireApproval(policy.require_approval);
       setConfirmation(policy.confirmation);
       setDueDays(policy.default_due_days != null ? String(policy.default_due_days) : "");
-      setPlatesPrivate(policy.plates_private);
     }
   }, [policy]);
 
@@ -80,7 +77,6 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
         require_approval: requireApproval,
         confirmation,
         default_due_days: dueDays.trim() ? Number(dueDays) : null,
-        plates_private: platesPrivate,
       },
       { onSuccess: () => onOpenChange(false) },
     );
@@ -150,15 +146,6 @@ export function OrgPlatePolicyDialog({ open, onOpenChange }: Props) {
                   onChange={(e) => setDueDays(e.target.value)}
                   placeholder="No default"
                 />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="policy-plates-private"
-                  checked={platesPrivate}
-                  onCheckedChange={setPlatesPrivate}
-                />
-                <Label htmlFor="policy-plates-private">Plates private to org</Label>
               </div>
             </>
           )}

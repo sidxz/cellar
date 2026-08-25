@@ -11,5 +11,4 @@ export interface SetOrgPlatePolicyBody {
   require_approval: boolean;
   confirmation: LoanConfirmationMode;
   default_due_days: SetOrgPlatePolicyBodyDefaultDueDays;
-  plates_private: boolean;
 }

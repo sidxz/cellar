@@ -40,6 +40,7 @@ type DialogState =
 
 export function PlateGroupDashboard() {
   const { data: me, isError: meFailed } = useCurrentUser();
+  const isAdmin = me?.is_admin === true;
   const { data: orgs } = useOrgs();
   const [orgId, setOrgId] = useState<string | null>(null);
   const [selected, setSelected] = useState<PlateGroupNode | null>(null);
@@ -87,25 +88,27 @@ export function PlateGroupDashboard() {
   return (
     <div className="flex flex-col gap-4 p-6">
       <PageHeader title="Plate Groups" subtitle="Org-owned hierarchy for organizing plates">
-        <Select
-          value={orgId ?? ""}
-          onValueChange={(v) => {
-            setOrgId(v);
-            setSelected(null);
-          }}
-        >
-          <SelectTrigger className="w-56" aria-label="Organization">
-            <SelectValue placeholder="Organization" />
-          </SelectTrigger>
-          <SelectContent>
-            {(orgs ?? []).map((o) => (
-              <SelectItem key={o.id} value={o.id}>
-                {o.name}
-                {me?.org_id === o.id ? " (my org)" : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {isAdmin ? (
+          <Select
+            value={orgId ?? ""}
+            onValueChange={(v) => {
+              setOrgId(v);
+              setSelected(null);
+            }}
+          >
+            <SelectTrigger className="w-56" aria-label="Organization">
+              <SelectValue placeholder="Organization" />
+            </SelectTrigger>
+            <SelectContent>
+              {(orgs ?? []).map((o) => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.name}
+                  {me?.org_id === o.id ? " (my org)" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
         {tab === "hierarchy" ? (
           <Button
             data-testid="create-root-group"

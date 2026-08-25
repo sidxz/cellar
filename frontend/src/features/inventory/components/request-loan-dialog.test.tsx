@@ -40,6 +40,12 @@ function setup() {
   mocked.mockReset();
   mockedSaveText.mockReset();
   mocked.mockImplementation((opts: { url: string; method: string }) => {
+    if (opts.url === "/api/v1/orgs") {
+      return Promise.resolve([
+        { id: "org1", slug: "org1", name: "Org One" },
+        { id: "org2", slug: "org2", name: "Org Two" },
+      ]);
+    }
     if (opts.method === "GET") return Promise.resolve({ roots: [] }); // group tree
     return Promise.resolve({ id: "loan1", items: [] }); // POST request-loan
   });
@@ -73,6 +79,36 @@ describe("RequestLoanDialog", () => {
         }),
       ),
     );
+  });
+
+  it("sends borrower_org_id only when a foreign org is selected, and the button reads Lend", async () => {
+    setup();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /paste/i }));
+    fireEvent.change(screen.getByPlaceholderText(/one barcode per line/i), {
+      target: { value: "005261\n" },
+    });
+
+    // Default: self-checkout — no borrower_org_id, button reads "Request loan".
+    fireEvent.click(screen.getByRole("button", { name: /request loan/i }));
+    await waitFor(() => expect(mocked).toHaveBeenCalled());
+    const defaultCall = mocked.mock.calls.find(
+      ([opts]) => (opts as { url: string }).url === "/api/v1/plate-loans",
+    );
+    expect(defaultCall?.[0]).not.toHaveProperty("data.borrower_org_id");
+
+    // Pick a foreign org — borrower_org_id is sent, button reads "Lend".
+    fireEvent.click(await screen.findByLabelText(/borrower organization/i));
+    fireEvent.click(await screen.findByRole("option", { name: "Org Two" }));
+    const lendButton = screen.getByRole("button", { name: "Lend" });
+    fireEvent.click(lendButton);
+    await waitFor(() => {
+      const lendCall = mocked.mock.calls
+        .filter(([opts]) => (opts as { url: string }).url === "/api/v1/plate-loans")
+        .at(-1);
+      expect(lendCall?.[0]).toEqual(
+        expect.objectContaining({ data: expect.objectContaining({ borrower_org_id: "org2" }) }),
+      );
+    });
   });
 
   it("download-template button saves a Barcode-headed CSV", () => {

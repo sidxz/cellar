@@ -19,6 +19,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useOrgs } from "@/shared/hooks/use-orgs";
 import { saveText } from "@/shared/lib/api/download";
 import type { RequestLoanBody } from "@/shared/lib/api/model";
 import { parseCsvRows } from "@/shared/lib/parse-csv";
@@ -29,6 +30,9 @@ import { usePlateGroupTree } from "../hooks/use-plate-groups";
 import { useRequestLoan } from "../hooks/use-plate-loans";
 
 type Mode = "group" | "paste" | "csv";
+
+/** Sentinel for "no borrower selected" — self-checkout onto the caller's own org. */
+const MY_ORG = "__mine__";
 
 const TEMPLATE = "Barcode\n005261\n003251\n";
 
@@ -75,9 +79,14 @@ export function RequestLoanDialog({ open, onOpenChange, orgId }: RequestLoanDial
   const [paste, setPaste] = useState("");
   const [csvBarcodes, setCsvBarcodes] = useState<string[]>([]);
   const [csvName, setCsvName] = useState("");
+  const [borrowerOrgId, setBorrowerOrgId] = useState<string>(MY_ORG);
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
   const request = useRequestLoan();
+
+  const { data: orgs } = useOrgs();
+  const borrowerOptions = useMemo(() => (orgs ?? []).filter((o) => o.id !== orgId), [orgs, orgId]);
+  const isLending = borrowerOrgId !== MY_ORG;
 
   const { data: tree } = usePlateGroupTree(orgId, { enabled: open && !!orgId });
 
@@ -88,6 +97,7 @@ export function RequestLoanDialog({ open, onOpenChange, orgId }: RequestLoanDial
     setPaste("");
     setCsvBarcodes([]);
     setCsvName("");
+    setBorrowerOrgId(MY_ORG);
     setDueDate("");
     setNotes("");
   }, [open]);
@@ -113,6 +123,7 @@ export function RequestLoanDialog({ open, onOpenChange, orgId }: RequestLoanDial
     const body: RequestLoanBody = {};
     if (mode === "group") body.group_id = groupId;
     else body.barcodes = barcodes;
+    if (isLending) body.borrower_org_id = borrowerOrgId;
     if (dueDate) body.due_date = dueDate;
     if (notes.trim()) body.notes = notes.trim();
     request.mutate(body, { onSuccess: () => onOpenChange(false) });
@@ -188,6 +199,22 @@ export function RequestLoanDialog({ open, onOpenChange, orgId }: RequestLoanDial
         </Tabs>
 
         <div className="flex flex-col gap-2">
+          <Label htmlFor="loan-borrower">Borrower organization</Label>
+          <Select value={borrowerOrgId} onValueChange={setBorrowerOrgId}>
+            <SelectTrigger id="loan-borrower">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={MY_ORG}>My organization (self-checkout)</SelectItem>
+              {borrowerOptions.map((o) => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
           <Label htmlFor="loan-due">Due date (optional)</Label>
           <Input
             id="loan-due"
@@ -215,7 +242,7 @@ export function RequestLoanDialog({ open, onOpenChange, orgId }: RequestLoanDial
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={request.isPending || !hasInput}>
-            Request loan
+            {isLending ? "Lend" : "Request loan"}
           </Button>
         </DialogFooter>
       </DialogContent>

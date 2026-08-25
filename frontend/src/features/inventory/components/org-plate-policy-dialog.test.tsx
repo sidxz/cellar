@@ -8,7 +8,6 @@ const policyA = {
   require_approval: true,
   confirmation: "admin_confirm",
   default_due_days: 14,
-  plates_private: true,
   version: 1,
 };
 

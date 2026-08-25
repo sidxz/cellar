@@ -12,6 +12,5 @@ export interface OrgPlatePolicyResponse {
   require_approval: boolean;
   confirmation: LoanConfirmationMode;
   default_due_days?: OrgPlatePolicyResponseDefaultDueDays;
-  plates_private: boolean;
   version: number;
 }

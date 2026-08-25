@@ -32,7 +32,7 @@ import { RegisterPlateDialog } from "./register-plate-dialog";
 
 /** Filter sentinel: scope the plate list to the current user's own org. */
 const MY_ORG = "__mine__";
-/** Filter sentinel: no org scoping — show plates from every org. */
+/** Filter sentinel: no org scoping — show plates from every org (admin-only selector). */
 const ALL_ORGS = "__all__";
 
 const PLATE_FORMATS = ["6", "12", "24", "48", "96", "384", "1536"] as const;
@@ -49,6 +49,7 @@ export function PlateList() {
   const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
 
   const { data: me, isError: meFailed } = useCurrentUser();
+  const isAdmin = me?.is_admin === true;
   const { data: orgs } = useOrgs();
   const orgNameById = useMemo(() => new Map((orgs ?? []).map((o) => [o.id, o.name])), [orgs]);
   // Open loans → plate_id custody lookup, for the "Custody" column chip.
@@ -211,10 +212,12 @@ export function PlateList() {
     return (
       <div>
         <PageHeader title="Plates" subtitle="Manage registered plates and well mappings.">
-          <Button variant="outline" onClick={() => setPolicyOpen(true)}>
-            <Settings className="mr-2 h-4 w-4" />
-            Org Policies
-          </Button>
+          {isAdmin ? (
+            <Button variant="outline" onClick={() => setPolicyOpen(true)}>
+              <Settings className="mr-2 h-4 w-4" />
+              Org Policies
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={() => router.push("/inventory/plates/import")}>
             <FileUp className="mr-2 h-4 w-4" />
             Import Data
@@ -293,22 +296,24 @@ export function PlateList() {
           </SelectContent>
         </Select>
 
-        <Select value={filterOrg} onValueChange={setFilterOrg}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="My org" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={MY_ORG}>
-              {me?.org_slug ? `My org (${me.org_slug})` : "My org"}
-            </SelectItem>
-            <SelectItem value={ALL_ORGS}>All orgs</SelectItem>
-            {orgs?.map((o) => (
-              <SelectItem key={o.id} value={o.id}>
-                {o.name}
+        {isAdmin ? (
+          <Select value={filterOrg} onValueChange={setFilterOrg}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="My org" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={MY_ORG}>
+                {me?.org_slug ? `My org (${me.org_slug})` : "My org"}
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              <SelectItem value={ALL_ORGS}>All orgs</SelectItem>
+              {orgs?.map((o) => (
+                <SelectItem key={o.id} value={o.id}>
+                  {o.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
 
         <TagFilter value={tagFilter} onChange={setTagFilter} />
       </div>

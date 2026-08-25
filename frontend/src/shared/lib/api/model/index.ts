@@ -1103,6 +1103,7 @@ export * from './representativeDto';
 export * from './repreviewRunFileRequest';
 export * from './requestLoanBody';
 export * from './requestLoanBodyBarcodes';
+export * from './requestLoanBodyBorrowerOrgId';
 export * from './requestLoanBodyDueDate';
 export * from './requestLoanBodyGroupId';
 export * from './requestLoanBodyNotes';
