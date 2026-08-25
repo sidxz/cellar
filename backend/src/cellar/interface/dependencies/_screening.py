@@ -114,6 +114,7 @@ from cellar.application.screening.set_run_hit_criteria import (
     ResetRunHitCriteria,
     SetRunHitCriteria,
 )
+from cellar.application.screening.sync_targets import SyncTargetsFromProtCellar
 from cellar.application.screening.update_run import UpdateRun
 
 from ._core import _get_use_case
@@ -206,6 +207,7 @@ __all__ = [
     "SetRunHitCriteriaDep",
     "SetUpRunPlateDep",
     "StartRunDep",
+    "SyncTargetsDep",
     "UnlockProtocolDep",
     "UnlockRunDep",
     "UpdateConditionDefinitionDep",
@@ -290,6 +292,9 @@ RemoveControlLayoutDep = Annotated[
 ]
 GetTargetDep = Annotated[GetTarget, Depends(_get_use_case(GetTarget))]
 ListTargetsDep = Annotated[ListTargets, Depends(_get_use_case(ListTargets))]
+SyncTargetsDep = Annotated[
+    SyncTargetsFromProtCellar, Depends(_get_use_case(SyncTargetsFromProtCellar))
+]
 ConditionGroupingServiceDep = Annotated[
     ConditionGroupingService, Depends(_get_use_case(ConditionGroupingService))
 ]

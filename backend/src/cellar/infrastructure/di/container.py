@@ -11,7 +11,9 @@ Usage::
 
 from __future__ import annotations
 
-from lagom import Container
+from collections.abc import Mapping
+
+from lagom import Container, Singleton
 
 from cellar.infrastructure.di._admin import register_admin
 from cellar.infrastructure.di._attachment import register_attachment
@@ -31,9 +33,21 @@ from cellar.infrastructure.di._workspace_config import register_workspace_config
 from cellar.infrastructure.persistence.settings import DatabaseSettings
 
 
-def create_container(db_settings: DatabaseSettings | None = None) -> Container:
-    """Build and return the fully-wired DI container."""
+def create_container(
+    db_settings: DatabaseSettings | None = None,
+    *,
+    overrides: Mapping[type, object] | None = None,
+) -> Container:
+    """Build and return the fully-wired DI container.
+
+    ``overrides`` pre-registers ready-made instances (tests stub external
+    adapters such as ``TargetSource`` here). Registrars that provide a
+    swappable external adapter must guard with ``if X not in
+    container.defined_types`` — Lagom raises on a duplicate ``define``.
+    """
     container = Container()
+    for dep_type, instance in (overrides or {}).items():
+        container.define(dep_type, Singleton(_constant(instance)))
 
     register_core(container, db_settings)
     register_admin(container)
@@ -52,3 +66,9 @@ def create_container(db_settings: DatabaseSettings | None = None) -> Container:
     register_sar_analysis(container)
 
     return container
+
+
+def _constant(value: object):
+    # A zero-arg resolver. (A `lambda value=value: value` would have ONE
+    # parameter and Lagom would pass the container into it.)
+    return lambda: value

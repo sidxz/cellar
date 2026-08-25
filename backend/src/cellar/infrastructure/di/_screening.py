@@ -5,6 +5,7 @@ primitives, plate map, fit curves, ontology search/annotations, import run reado
 
 from __future__ import annotations
 
+import httpx
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -167,6 +168,8 @@ from cellar.application.screening.set_run_hit_criteria import (
     ResetRunHitCriteria,
     SetRunHitCriteria,
 )
+from cellar.application.screening.sync_targets import SyncFreshness, SyncTargetsFromProtCellar
+from cellar.application.screening.target_source import TargetSource
 from cellar.application.screening.update_run import UpdateRun
 from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.parsers import TabularParser
@@ -246,6 +249,8 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_reposit
     SQLAlchemyTargetRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.prot_cellar.settings import ProtCellarSettings
+from cellar.infrastructure.prot_cellar.target_source import HttpTargetSource
 
 
 def register_screening(container: Container) -> None:
@@ -350,16 +355,33 @@ def register_screening(container: Container) -> None:
     container.define(SetControlLayout, _set_control_layout)
     container.define(RemoveControlLayout, _protocol_cmd(RemoveControlLayout))
 
-    # --- Targets ---
-    def _target_query(uc_cls: type):
-        def _f(c: Container):
-            uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyTargetRepository(uow))
+    # --- Targets (read-only mirror of prot-cellar) ---
+    # TargetSource is guarded so create_container(overrides={TargetSource: stub})
+    # can pre-register an in-memory source for API tests.
+    if TargetSource not in container.defined_types:
+        container.define(
+            TargetSource,
+            Singleton(lambda c: HttpTargetSource(c[httpx.AsyncClient], ProtCellarSettings())),
+        )
+    container.define(SyncFreshness, Singleton(SyncFreshness))
 
-        return _f
+    def _sync_targets(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SyncTargetsFromProtCellar(
+            uow, SQLAlchemyTargetRepository(uow), c[TargetSource], c[SyncFreshness]
+        )
 
-    container.define(GetTarget, _target_query(GetTarget))
-    container.define(ListTargets, _target_query(ListTargets))
+    def _list_targets(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListTargets(uow, SQLAlchemyTargetRepository(uow), sync=c[SyncTargetsFromProtCellar])
+
+    def _get_target(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetTarget(uow, SQLAlchemyTargetRepository(uow))
+
+    container.define(SyncTargetsFromProtCellar, _sync_targets)
+    container.define(ListTargets, _list_targets)
+    container.define(GetTarget, _get_target)
 
     # --- Compound Flags ---
     def _compound_flag_uc(uc_cls: type):

@@ -29,6 +29,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cellar}:${POSTGRES_PASSWORD:-cellar}@postgres:5432/${POSTGRES_DB:-cellar}
       REDIS_URL: redis://valkey:6379
       DUAR_URL: ${APP_DUAR_URL:-http://duar:9003}
+      PROT_CELLAR_URL: ${PROT_CELLAR_URL:-http://localhost:8001}
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
       STORAGE_ROOT: /data/storage

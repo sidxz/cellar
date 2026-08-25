@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 
 # Set duar env before any cellar imports — allows module-level get_duar() to succeed.
 # Must NOT use .env files (cross-contamination between DatabaseSettings and DuarSettings).
@@ -43,13 +43,15 @@ AUTH_ORG_ID = uuid.uuid4()
 OTHER_ORG_ID = uuid.uuid4()
 
 
-def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
+def _create_test_app(
+    database_url: str, fake_auth: FakeAuth, overrides: Mapping[type, object] | None = None
+) -> FastAPI:
     """Build a FastAPI app for testing — no Duar middleware, FakeAuth for routes."""
     app = FastAPI()
 
     # DI container pointed at test DB — _env_file=None avoids loading .env
     db_settings = DatabaseSettings(database_url=database_url, _env_file=None)  # type: ignore[call-arg]
-    container = create_container(db_settings)
+    container = create_container(db_settings, overrides=overrides)
     app.state.container = container
 
     # Error handlers (so DomainError → proper HTTP status)
