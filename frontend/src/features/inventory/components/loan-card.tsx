@@ -73,7 +73,10 @@ export function LoanCard({ loan, context, me }: LoanCardProps) {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   // Non-null while the request-return dialog is up; holds the item ids it was opened for.
   const [returnTargets, setReturnTargets] = useState<string[] | null>(null);
-  const { data: comments } = useComments({ loanId: loan.id });
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  // Only fetch once the panel is opened — an unpaginated loan list must not
+  // fire one comments request per card on mount (I1).
+  const { data: comments } = useComments({ loanId: loan.id }, { enabled: commentsOpen });
   const canWrite = canEdit(me);
 
   const orgName = (id: string) => orgs?.find((o) => o.id === id)?.name ?? "Unknown org";
@@ -188,10 +191,10 @@ export function LoanCard({ loan, context, me }: LoanCardProps) {
         </div>
       ) : null}
 
-      <Collapsible className="mt-3">
+      <Collapsible className="mt-3" open={commentsOpen} onOpenChange={setCommentsOpen}>
         <CollapsibleTrigger className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronDown className="h-4 w-4" />
-          Comments ({comments?.length ?? 0})
+          {comments ? `Comments (${comments.length})` : "Comments"}
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-2">
           <CommentFeed

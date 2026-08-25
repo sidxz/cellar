@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -99,6 +99,45 @@ describe("LoanCard admin visibility (approvals tab owner verbs)", () => {
       { wrapper },
     );
     expect(screen.getByRole("button", { name: /approve/i })).toBeInTheDocument();
+  });
+});
+
+describe("LoanCard comments panel (I1: no fetch until opened)", () => {
+  it("does not fetch comments on mount, only after the panel is opened", async () => {
+    customInstance.mockClear();
+    render(
+      <LoanCard
+        loan={baseLoan}
+        context="all"
+        me={
+          {
+            user_id: "u9",
+            email: "",
+            name: "",
+            org_id: "org-A",
+            is_admin: false,
+            workspace_role: "editor",
+          } as MeResponse
+        }
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByText("Comments")).toBeInTheDocument();
+    expect(customInstance).not.toHaveBeenCalledWith(
+      expect.objectContaining({ url: expect.stringMatching(/\/comments$/) }),
+    );
+
+    fireEvent.click(screen.getByText("Comments"));
+
+    await waitFor(() => {
+      expect(customInstance).toHaveBeenCalledWith(
+        expect.objectContaining({ url: expect.stringMatching(/\/comments$/) }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Comments (0)")).toBeInTheDocument();
+    });
   });
 });
 
