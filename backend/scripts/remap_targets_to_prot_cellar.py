@@ -50,7 +50,8 @@ async def plan_remap(session: AsyncSession, workspace_id: uuid.UUID) -> list[Act
                 "(SELECT count(*) FROM run_targets rt WHERE rt.target_id = l.id) AS rl "
                 "FROM targets l "
                 "LEFT JOIN targets m ON m.workspace_id = l.workspace_id "
-                "  AND m.source_version IS NOT NULL AND lower(m.name) = lower(l.name) "
+                "  AND m.source_version IS NOT NULL "
+                "  AND lower(btrim(m.name)) = lower(btrim(l.name)) "
                 "WHERE l.workspace_id = :ws AND l.source_version IS NULL "
                 "ORDER BY l.name"
             ),
@@ -119,6 +120,19 @@ async def run_remap(
     """
     async with factory() as session:
         actions = await plan_remap(session, workspace_id)
+        if apply and actions:
+            mirror_count = await session.scalar(
+                sa.text(
+                    "SELECT count(*) FROM targets "
+                    "WHERE workspace_id = :ws AND source_version IS NOT NULL"
+                ),
+                {"ws": workspace_id},
+            )
+            if not mirror_count:
+                raise SystemExit(
+                    "refusing: no prot-cellar mirror rows in this workspace — "
+                    "run the admin sync first"
+                )
     if apply and actions:
         async with factory.begin() as session:
             await apply_remap(session, actions)

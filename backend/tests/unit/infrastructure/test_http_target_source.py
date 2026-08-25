@@ -141,3 +141,19 @@ async def test_5xx_raises_service_unavailable():
     src = _source(lambda req: httpx.Response(502))
     with pytest.raises(ServiceUnavailableError):
         await src.fetch_all(forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+async def test_3xx_raises_service_unavailable():
+    """Any non-2xx that isn't a 401/403 is a source failure, not a 500 (Critical 1)."""
+    src = _source(lambda req: httpx.Response(302))
+    with pytest.raises(ServiceUnavailableError):
+        await src.fetch_all(forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+async def test_non_json_response_raises_service_unavailable():
+    """A 200 with an unparseable body must not raise a raw JSONDecodeError (Critical 1)."""
+    src = _source(lambda req: httpx.Response(200, content=b"not json"))
+    with pytest.raises(ServiceUnavailableError):
+        await src.fetch_all(forwarded_headers=HEADERS)

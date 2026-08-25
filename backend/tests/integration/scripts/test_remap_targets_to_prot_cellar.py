@@ -63,48 +63,55 @@ async def test_plan_then_apply(session_factory: async_sessionmaker[AsyncSession]
     async with session_factory() as session, session.begin():
         ids = await _seed(session, ws)
 
-    async with session_factory() as session:
-        actions = await plan_remap(session, ws)
-    assert sorted(actions, key=lambda a: a.name) == [
-        Action("drop", ids["legacy_egfr"], "Epidermal Growth Factor Receptor", None, 1, 0),
-        Action("remap", ids["legacy_nadd"], "NadD", ids["mirror_nadd"], 0, 1),
-    ]
+    try:
+        async with session_factory() as session:
+            actions = await plan_remap(session, ws)
+        assert sorted(actions, key=lambda a: a.name) == [
+            Action("drop", ids["legacy_egfr"], "Epidermal Growth Factor Receptor", None, 1, 0),
+            Action("remap", ids["legacy_nadd"], "NadD", ids["mirror_nadd"], 0, 1),
+        ]
 
-    async with session_factory() as session, session.begin():
-        await apply_remap(session, actions)
+        async with session_factory() as session, session.begin():
+            await apply_remap(session, actions)
 
-    async with session_factory() as session:
-        assert (
-            await _count(session, "SELECT count(*) FROM targets WHERE workspace_id=:ws", ws=ws)
-            == 1
-        )
-        assert (
-            await _count(session, "SELECT count(*) FROM run_targets WHERE run_id=:r", r=ids["run"])
-            == 1
-        )
-        assert (
-            await _count(
-                session,
-                "SELECT count(*) FROM run_targets WHERE run_id=:r AND target_id=:t",
-                r=ids["run"],
-                t=ids["mirror_nadd"],
+        async with session_factory() as session:
+            assert (
+                await _count(session, "SELECT count(*) FROM targets WHERE workspace_id=:ws", ws=ws)
+                == 1
             )
-            == 1
-        )
-        assert (
-            await _count(
-                session,
-                "SELECT count(*) FROM protocol_targets WHERE protocol_id=:p",
-                p=ids["proto"],
+            assert (
+                await _count(
+                    session, "SELECT count(*) FROM run_targets WHERE run_id=:r", r=ids["run"]
+                )
+                == 1
             )
-            == 0
-        )
-
-    # cleanup (session_factory rows are committed; keep the shared test DB tidy)
-    async with session_factory() as session, session.begin():
-        await session.execute(sa.text("DELETE FROM runs WHERE id=:r"), {"r": ids["run"]})
-        await session.execute(sa.text("DELETE FROM protocols WHERE id=:p"), {"p": ids["proto"]})
-        await session.execute(sa.text("DELETE FROM targets WHERE workspace_id=:ws"), {"ws": ws})
+            assert (
+                await _count(
+                    session,
+                    "SELECT count(*) FROM run_targets WHERE run_id=:r AND target_id=:t",
+                    r=ids["run"],
+                    t=ids["mirror_nadd"],
+                )
+                == 1
+            )
+            assert (
+                await _count(
+                    session,
+                    "SELECT count(*) FROM protocol_targets WHERE protocol_id=:p",
+                    p=ids["proto"],
+                )
+                == 0
+            )
+    finally:
+        # cleanup (session_factory rows are committed; keep the shared test DB tidy)
+        async with session_factory() as session, session.begin():
+            await session.execute(sa.text("DELETE FROM runs WHERE id=:r"), {"r": ids["run"]})
+            await session.execute(
+                sa.text("DELETE FROM protocols WHERE id=:p"), {"p": ids["proto"]}
+            )
+            await session.execute(
+                sa.text("DELETE FROM targets WHERE workspace_id=:ws"), {"ws": ws}
+            )
 
 
 async def test_run_remap_entrypoint_dry_run_then_apply(
@@ -120,27 +127,66 @@ async def test_run_remap_entrypoint_dry_run_then_apply(
     async with session_factory() as session, session.begin():
         ids = await _seed(session, ws)
 
-    dry = await run_remap(session_factory, ws, apply=False)
-    assert {a.kind for a in dry} == {"remap", "drop"}
-    async with session_factory() as session:
-        assert (
-            await _count(session, "SELECT count(*) FROM targets WHERE workspace_id=:ws", ws=ws)
-            == 3
-        )
+    try:
+        dry = await run_remap(session_factory, ws, apply=False)
+        assert {a.kind for a in dry} == {"remap", "drop"}
+        async with session_factory() as session:
+            assert (
+                await _count(session, "SELECT count(*) FROM targets WHERE workspace_id=:ws", ws=ws)
+                == 3
+            )
 
-    applied = await run_remap(session_factory, ws, apply=True)
-    assert applied == dry
-    async with session_factory() as session:
-        assert (
-            await _count(session, "SELECT count(*) FROM targets WHERE workspace_id=:ws", ws=ws)
-            == 1
-        )
-        assert (
-            await _count(session, "SELECT count(*) FROM run_targets WHERE run_id=:r", r=ids["run"])
-            == 1
-        )
+        applied = await run_remap(session_factory, ws, apply=True)
+        assert applied == dry
+        async with session_factory() as session:
+            assert (
+                await _count(session, "SELECT count(*) FROM targets WHERE workspace_id=:ws", ws=ws)
+                == 1
+            )
+            assert (
+                await _count(
+                    session, "SELECT count(*) FROM run_targets WHERE run_id=:r", r=ids["run"]
+                )
+                == 1
+            )
+    finally:
+        async with session_factory() as session, session.begin():
+            await session.execute(sa.text("DELETE FROM runs WHERE id=:r"), {"r": ids["run"]})
+            await session.execute(
+                sa.text("DELETE FROM protocols WHERE id=:p"), {"p": ids["proto"]}
+            )
+            await session.execute(
+                sa.text("DELETE FROM targets WHERE workspace_id=:ws"), {"ws": ws}
+            )
 
+
+async def test_run_remap_refuses_apply_without_mirror_rows(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """No admin sync has ever run for this workspace (zero mirror rows) — refuse the
+    apply entirely rather than silently dropping every legacy row as unmatched."""
+    ws = uuid.uuid4()
+    legacy_id = uuid.uuid4()
     async with session_factory() as session, session.begin():
-        await session.execute(sa.text("DELETE FROM runs WHERE id=:r"), {"r": ids["run"]})
-        await session.execute(sa.text("DELETE FROM protocols WHERE id=:p"), {"p": ids["proto"]})
-        await session.execute(sa.text("DELETE FROM targets WHERE workspace_id=:ws"), {"ws": ws})
+        await session.execute(
+            sa.text(
+                "INSERT INTO targets (id, workspace_id, name, target_type, source_version) "
+                "VALUES (:id, :ws, 'NadD', 'single_protein', NULL)"
+            ),
+            {"id": legacy_id, "ws": ws},
+        )
+
+    try:
+        with pytest.raises(SystemExit, match="no prot-cellar mirror rows"):
+            await run_remap(session_factory, ws, apply=True)
+
+        async with session_factory() as session:
+            assert (
+                await _count(session, "SELECT count(*) FROM targets WHERE id=:id", id=legacy_id)
+                == 1
+            )
+    finally:
+        async with session_factory() as session, session.begin():
+            await session.execute(
+                sa.text("DELETE FROM targets WHERE workspace_id=:ws"), {"ws": ws}
+            )

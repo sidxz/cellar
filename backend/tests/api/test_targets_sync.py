@@ -6,6 +6,7 @@ container ``overrides`` seam — no network in tests.
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from collections.abc import AsyncIterator, Mapping
 
@@ -93,6 +94,21 @@ async def test_admin_sync_upserts_mirror_and_forwards_only_auth_headers(
     again = await admin_sync_client.post("/api/v1/targets/sync", headers=FWD)
     assert again.json() == {"fetched": 2, "created": 0, "updated": 0, "skipped": 2}
 
+    # A source-side name/chembl_id/version change is a real update, not a
+    # re-create — proves _update_model persists source_version + chembl_id.
+    nadd = next(t for t in stub_source.targets if t.name == "NadD")
+    stub_source.targets = [
+        dataclasses.replace(nadd, name="NAD Kinase", chembl_id="CHEMBL9", version=2),
+        next(t for t in stub_source.targets if t.name == "AspS"),
+    ]
+    changed = await admin_sync_client.post("/api/v1/targets/sync", headers=FWD)
+    assert changed.json() == {"fetched": 2, "created": 0, "updated": 1, "skipped": 1}
+
+    relisted = await admin_sync_client.get("/api/v1/targets")
+    updated_row = next(t for t in relisted.json()["items"] if t["id"] == str(nadd.id))
+    assert updated_row["name"] == "NAD Kinase"
+    assert updated_row["chembl_id"] == "CHEMBL9"
+
 
 async def test_sync_requires_admin(viewer_sync_client: AsyncClient) -> None:
     resp = await viewer_sync_client.post("/api/v1/targets/sync", headers=FWD)
@@ -102,14 +118,40 @@ async def test_sync_requires_admin(viewer_sync_client: AsyncClient) -> None:
 async def test_sync_surfaces_prot_cellar_auth_and_outage(
     admin_sync_client: AsyncClient, stub_source: StubSource
 ) -> None:
-    stub_source.error = AuthorizationError("prot-cellar refused (403): editor required")
+    stub_source.error = AuthorizationError(
+        "prot-cellar refused the request: editor role required",
+        detail="(403) editor required. Target reads in prot-cellar require the editor role.",
+    )
     resp = await admin_sync_client.post("/api/v1/targets/sync", headers=FWD)
     assert resp.status_code == 403
     assert "editor" in resp.json()["message"]
+    assert "editor" in resp.json()["detail"]
 
-    stub_source.error = ServiceUnavailableError("prot-cellar unreachable")
+    stub_source.error = ServiceUnavailableError(
+        "prot-cellar unreachable", detail="connection refused"
+    )
     resp = await admin_sync_client.post("/api/v1/targets/sync", headers=FWD)
     assert resp.status_code == 503
+    assert "connection refused" in resp.json()["detail"]
+
+
+async def test_list_serves_mirror_when_source_raises_unexpected_error(
+    admin_sync_client: AsyncClient,
+    viewer_sync_client: AsyncClient,
+    stub_source: StubSource,
+    make_target,
+) -> None:
+    """A non-DomainError bug in the adapter (e.g. a malformed payload raising
+    KeyError) must not 500 the read path — and must still 503 the admin sync."""
+    seeded = await make_target("Seeded")
+    stub_source.error = KeyError("items")
+
+    resp = await viewer_sync_client.get("/api/v1/targets", headers=FWD)
+    assert resp.status_code == 200
+    assert [t["id"] for t in resp.json()["items"]] == [seeded]
+
+    sync_resp = await admin_sync_client.post("/api/v1/targets/sync", headers=FWD)
+    assert sync_resp.status_code == 503
 
 
 async def test_list_refreshes_best_effort_and_serves_mirror_when_source_fails(

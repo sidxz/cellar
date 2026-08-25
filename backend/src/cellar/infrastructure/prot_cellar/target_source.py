@@ -98,14 +98,25 @@ class HttpTargetSource(TargetSource):
         if resp.status_code in (401, 403):
             detail = _detail(resp)
             raise AuthorizationError(
-                f"prot-cellar refused the request ({resp.status_code}): {detail}. "
-                "Target reads in prot-cellar require the editor role."
+                "prot-cellar refused the request: editor role required",
+                detail=(
+                    f"({resp.status_code}) {detail}. "
+                    "Target reads in prot-cellar require the editor role."
+                ),
             )
-        if resp.status_code >= 400:
+        if not resp.is_success:
+            detail = _detail(resp)
             raise ServiceUnavailableError(
-                f"prot-cellar returned {resp.status_code} for {path}: {_detail(resp)}"
+                f"prot-cellar returned {resp.status_code} for {path}",
+                detail=f"({resp.status_code}) {detail}",
             )
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise ServiceUnavailableError(
+                f"prot-cellar returned non-JSON for {path}",
+                detail=resp.text[:200],
+            ) from exc
 
 
 def _detail(resp: httpx.Response) -> str:

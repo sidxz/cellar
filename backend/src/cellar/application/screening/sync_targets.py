@@ -34,7 +34,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import TargetType
 from cellar.domain.screening_assay.repository import TargetRepository
 from cellar.domain.screening_assay.target import Target
-from cellar.domain.shared.errors import DomainError
+from cellar.domain.shared.errors import DomainError, ServiceUnavailableError
 
 _log = structlog.get_logger(__name__)
 
@@ -107,6 +107,13 @@ class SyncTargetsFromProtCellar:
                 "targets.sync.failed", workspace_id=str(input.workspace_id), reason=str(exc)
             )
             return Failure(exc)
+        except Exception as exc:  # any adapter bug must not 500 the caller (Critical 1)
+            _log.warning(
+                "targets.sync.failed", workspace_id=str(input.workspace_id), reason=repr(exc)
+            )
+            return Failure(
+                ServiceUnavailableError(f"prot-cellar returned an unusable response: {exc!r}")
+            )
 
         created = updated = skipped = 0
         async with self._uow:
