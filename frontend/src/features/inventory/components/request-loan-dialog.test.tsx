@@ -36,7 +36,10 @@ beforeAll(() => {
   }
 });
 
-function setup() {
+function setup(
+  props: Partial<Parameters<typeof RequestLoanDialog>[0]> = {},
+  treeRoots: unknown[] = [],
+) {
   mocked.mockReset();
   mockedSaveText.mockReset();
   mocked.mockImplementation((opts: { url: string; method: string }) => {
@@ -46,14 +49,16 @@ function setup() {
         { id: "org2", slug: "org2", name: "Org Two" },
       ]);
     }
-    if (opts.method === "GET") return Promise.resolve({ roots: [] }); // group tree
+    if (opts.method === "GET") return Promise.resolve({ roots: treeRoots }); // group tree
     return Promise.resolve({ id: "loan1", items: [] }); // POST request-loan
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<RequestLoanDialog open onOpenChange={() => {}} orgId="org1" />, { wrapper });
+  return render(<RequestLoanDialog open onOpenChange={() => {}} orgId="org1" {...props} />, {
+    wrapper,
+  });
 }
 
 describe("RequestLoanDialog", () => {
@@ -135,6 +140,26 @@ describe("RequestLoanDialog", () => {
           url: "/api/v1/plate-loans",
           method: "POST",
           data: expect.objectContaining({ barcodes: ["005261", "003251"] }),
+        }),
+      ),
+    );
+  });
+
+  it("preselects initialGroupId in the group select and submits its id", async () => {
+    setup({ initialGroupId: "g2" }, [
+      { id: "g1", name: "Group One", plate_count: 2, children: [] },
+      { id: "g2", name: "Group Two", plate_count: 5, children: [] },
+    ]);
+    await waitFor(() =>
+      expect(screen.getByLabelText(/plate group/i)).toHaveTextContent("Group Two (5)"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /request loan/i }));
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "/api/v1/plate-loans",
+          method: "POST",
+          data: expect.objectContaining({ group_id: "g2" }),
         }),
       ),
     );

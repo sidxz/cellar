@@ -27,7 +27,7 @@ import { MovePlateGroupDialog } from "./move-plate-group-dialog";
 import { PlateGroupDetails } from "./plate-group-details";
 import { PlateGroupDialog } from "./plate-group-dialog";
 import { PlateGroupTreeView } from "./plate-group-tree";
-import { ROOT_STORAGE_KEY } from "./plate-group-tree-utils";
+import { ROOT_STORAGE_KEY, pickRoot } from "./plate-group-tree-utils";
 import { PlateInsightsPanel } from "./plate-insights-panel";
 import { RequestLoanDialog } from "./request-loan-dialog";
 
@@ -95,15 +95,14 @@ export function PlateGroupDashboard() {
   // root per org (localStorage), falling back to the first root.
   useEffect(() => {
     if (!orgId || roots.length === 0) return;
-    if (rootId && roots.some((r) => r.id === rootId)) return;
     let remembered: string | null = null;
     try {
       remembered = window.localStorage.getItem(ROOT_STORAGE_KEY(orgId));
     } catch {
       remembered = null;
     }
-    const next = roots.find((r) => r.id === remembered)?.id ?? roots[0].id;
-    setRootId(next);
+    const next = pickRoot(roots, remembered, rootId);
+    if (next !== rootId) setRootId(next);
   }, [orgId, roots, rootId]);
 
   const selectRoot = (id: string) => {

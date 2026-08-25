@@ -18,6 +18,18 @@ export const STATE_COLORS: Record<string, string> = {
 
 export const ROOT_STORAGE_KEY = (orgId: string) => `plate-groups.root.${orgId}`;
 
+/** Which root should be selected: keep the current one if it's still valid,
+ * else fall back to the remembered (localStorage) root, else the first. */
+export function pickRoot(
+  roots: { id: string }[],
+  remembered: string | null,
+  current: string | null,
+): string | null {
+  if (current !== null && roots.some((r) => r.id === current)) return current;
+  if (remembered !== null && roots.some((r) => r.id === remembered)) return remembered;
+  return roots[0]?.id ?? null;
+}
+
 export interface LegendEntry {
   label: string;
   color: string;

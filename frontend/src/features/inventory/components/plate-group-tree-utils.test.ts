@@ -5,6 +5,7 @@ import {
   formatLabel,
   groupTypeColor,
   legendEntries,
+  pickRoot,
   stateColor,
   truncateLabel,
 } from "./plate-group-tree-utils";
@@ -97,5 +98,26 @@ describe("legendEntries", () => {
     ]);
     expect(states.some((s) => s.label === "unset")).toBe(false);
     expect(types.some((t) => t.label === "untyped")).toBe(false);
+  });
+});
+
+describe("pickRoot", () => {
+  const roots = [{ id: "r1" }, { id: "r2" }];
+
+  it("keeps the current root when it's still among roots", () => {
+    expect(pickRoot(roots, "r1", "r2")).toBe("r2");
+  });
+
+  it("falls back to the remembered root when current is gone", () => {
+    expect(pickRoot(roots, "r1", "stale")).toBe("r1");
+  });
+
+  it("falls back to the first root when neither current nor remembered are valid", () => {
+    expect(pickRoot(roots, "stale", "also-stale")).toBe("r1");
+    expect(pickRoot(roots, null, null)).toBe("r1");
+  });
+
+  it("returns null when there are no roots", () => {
+    expect(pickRoot([], "r1", "r1")).toBeNull();
   });
 });
