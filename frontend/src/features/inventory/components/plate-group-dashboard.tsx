@@ -27,7 +27,7 @@ import { MovePlateGroupDialog } from "./move-plate-group-dialog";
 import { PlateGroupDetails } from "./plate-group-details";
 import { PlateGroupDialog } from "./plate-group-dialog";
 import { PlateGroupTreeView } from "./plate-group-tree";
-import { ROOT_STORAGE_KEY, pickRoot } from "./plate-group-tree-utils";
+import { ROOT_STORAGE_KEY, pickRoot, subtreePlateCount } from "./plate-group-tree-utils";
 import { PlateInsightsPanel } from "./plate-insights-panel";
 import { RequestLoanDialog } from "./request-loan-dialog";
 
@@ -127,7 +127,7 @@ export function PlateGroupDashboard() {
             <SelectContent>
               {roots.map((r) => (
                 <SelectItem key={r.id} value={r.id}>
-                  {r.name} ({r.plate_count})
+                  {r.name} ({subtreePlateCount(r)})
                 </SelectItem>
               ))}
             </SelectContent>

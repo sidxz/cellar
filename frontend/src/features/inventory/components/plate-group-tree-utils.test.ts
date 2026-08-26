@@ -7,6 +7,7 @@ import {
   legendEntries,
   pickRoot,
   stateColor,
+  subtreePlateCount,
   truncateLabel,
 } from "./plate-group-tree-utils";
 
@@ -98,6 +99,27 @@ describe("legendEntries", () => {
     ]);
     expect(states.some((s) => s.label === "unset")).toBe(false);
     expect(types.some((t) => t.label === "untyped")).toBe(false);
+  });
+});
+
+describe("subtreePlateCount", () => {
+  it("returns the leaf's own plate_count", () => {
+    expect(subtreePlateCount(node({ plate_count: 5 }))).toBe(5);
+  });
+
+  it("sums recursively over nested children", () => {
+    const tree = node({
+      plate_count: 2,
+      children: [
+        node({ id: "a", plate_count: 3, children: [node({ id: "a1", plate_count: 1 })] }),
+        node({ id: "b", plate_count: 4 }),
+      ],
+    });
+    expect(subtreePlateCount(tree)).toBe(2 + 3 + 1 + 4);
+  });
+
+  it("treats missing/empty children as zero", () => {
+    expect(subtreePlateCount(node({ plate_count: 0, children: [] }))).toBe(0);
   });
 });
 

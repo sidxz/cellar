@@ -54,6 +54,14 @@ export function stateColor(state: string | null | undefined): string {
   return STATE_COLORS[state.toLowerCase()] ?? CHART_COLORS.neutral;
 }
 
+/** plate_count is direct members only; sum it recursively over the subtree. */
+export function subtreePlateCount(node: PlateGroupNode): number {
+  return (
+    (node.plate_count ?? 0) +
+    (node.children ?? []).reduce((sum, c) => sum + subtreePlateCount(c), 0)
+  );
+}
+
 export function formatLabel(fmt: string | null | undefined): string | null {
   if (!fmt) return null;
   return fmt === "mixed" ? "mixed formats" : `${fmt}-well`;

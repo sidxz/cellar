@@ -1,12 +1,13 @@
 "use client";
 
+import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CustomNodeElementProps, RawNodeDatum } from "react-d3-tree";
 import type { PlateGroupNode } from "../hooks/use-plate-groups";
 import { useStorageLocations } from "../hooks/use-storage-locations";
-import { CARD_HEIGHT, CARD_WIDTH, PlateGroupCard } from "./plate-group-card";
-import { legendEntries, stateColor } from "./plate-group-tree-utils";
+import { PlateGroupCard } from "./plate-group-card";
+import { legendEntries, stateColor, subtreePlateCount } from "./plate-group-tree-utils";
 
 // react-d3-tree touches window/d3 at module scope — client-only.
 const Tree = dynamic(() => import("react-d3-tree"), { ssr: false });
@@ -24,7 +25,7 @@ interface GroupDatum extends RawNodeDatum {
   children?: GroupDatum[];
 }
 
-const NODE_SIZE = { x: 320, y: 260 };
+const NODE_SIZE = { x: 380, y: 300 };
 const CIRCLE_R = 25;
 const ROOT_R = 30;
 
@@ -53,7 +54,7 @@ export function PlateGroupTreeView({
   onRequestLoan,
 }: PlateGroupTreeViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [translate, setTranslate] = useState({ x: 400, y: 60 });
+  const [translate, setTranslate] = useState({ x: 400, y: 90 });
   const { data: locations } = useStorageLocations();
   const locationName = (id: string | null | undefined) =>
     id ? (locations?.find((l) => l.id === id)?.name ?? null) : null;
@@ -66,7 +67,7 @@ export function PlateGroupTreeView({
 
   useEffect(() => {
     const el = containerRef.current;
-    if (el && el.clientWidth > 0) setTranslate({ x: el.clientWidth / 2, y: 60 });
+    if (el && el.clientWidth > 0) setTranslate({ x: el.clientWidth / 2, y: 90 });
   }, []);
 
   const renderNode = ({ nodeDatum, toggleNode, hierarchyPointNode }: CustomNodeElementProps) => {
@@ -75,11 +76,12 @@ export function PlateGroupTreeView({
     if (!node) return <g />;
     const isRoot = hierarchyPointNode.depth === 0;
     const r = isRoot ? ROOT_R : CIRCLE_R;
+    const fill = isRoot ? CHART_COLORS.primary : stateColor(node.state);
     return (
       <g>
         <circle
           r={r}
-          style={{ fill: stateColor(node.state) }}
+          style={{ fill }}
           className={id === selectedId ? "stroke-primary" : "stroke-border"}
           strokeWidth={id === selectedId ? 3 : 1}
           role="button"
@@ -97,15 +99,33 @@ export function PlateGroupTreeView({
           }}
           data-testid={`tree-toggle-${id}`}
         />
-        <foreignObject x={r + 6} y={-CARD_HEIGHT / 2} width={CARD_WIDTH} height={CARD_HEIGHT}>
-          <PlateGroupCard
-            node={node}
-            locationName={locationName(node.storage_location_id)}
-            selected={id === selectedId}
-            onSelect={() => onSelect(node)}
-            onRequestLoan={() => onRequestLoan(node)}
-          />
-        </foreignObject>
+        {isRoot ? (
+          <foreignObject x={36} y={-28} width={300} height={70}>
+            <div>
+              <button
+                type="button"
+                onClick={() => onSelect(node)}
+                className="block text-left text-lg font-semibold"
+              >
+                {node.name}
+              </button>
+              <div className="text-sm text-muted-foreground">
+                {subtreePlateCount(node)} plates in this library
+              </div>
+            </div>
+          </foreignObject>
+        ) : (
+          <foreignObject x={r + 8} y={-20} width={300} height={200}>
+            <PlateGroupCard
+              node={node}
+              locationName={locationName(node.storage_location_id)}
+              subtreePlates={subtreePlateCount(node)}
+              selected={id === selectedId}
+              onSelect={() => onSelect(node)}
+              onRequestLoan={() => onRequestLoan(node)}
+            />
+          </foreignObject>
+        )}
       </g>
     );
   };
@@ -134,8 +154,9 @@ export function PlateGroupTreeView({
           pathFunc="elbow"
           translate={translate}
           initialDepth={5}
-          zoom={0.7}
-          scaleExtent={{ min: 0.1, max: 1.5 }}
+          zoom={0.8}
+          scaleExtent={{ min: 0.2, max: 1.5 }}
+          separation={{ siblings: 1, nonSiblings: 1.5 }}
           collapsible
           zoomable
           nodeSize={NODE_SIZE}
