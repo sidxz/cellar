@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from scripts.migrate_legacy_plate_tracker import (
@@ -21,6 +21,7 @@ from scripts.migrate_legacy_plate_tracker import (
     due_date_from,
     format_for_plate,
     full_name,
+    localize_legacy,
     map_loan_item_status,
     map_plate_status,
     map_plate_type,
@@ -103,6 +104,17 @@ def test_map_loan_item_status_unknown_raises():
 
 def test_due_date_is_last_activity_plus_14_days():
     assert due_date_from(datetime(2024, 1, 4, 11, 15)) == date(2024, 1, 18)
+
+
+def test_localize_legacy_converts_chicago_wall_clock_to_utc() -> None:
+    # May -> CDT (UTC-5)
+    assert localize_legacy(datetime(2026, 5, 1, 10, 0), "America/Chicago") == datetime(
+        2026, 5, 1, 15, 0, tzinfo=UTC
+    )
+    # January -> CST (UTC-6)
+    assert localize_legacy(datetime(2026, 1, 15, 10, 0), "America/Chicago") == datetime(
+        2026, 1, 15, 16, 0, tzinfo=UTC
+    )
 
 
 def test_compose_set_description_includes_state_scientist_conditions():

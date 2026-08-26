@@ -20,7 +20,8 @@ Usage (from backend/):
         --workspace-id <ws-uuid> --internal-org-id <org-uuid> \\
         --cdd-vault-id <vault> --actor-id <sentinel-user-uuid> \\
         --user-map user_map.csv --report-dir ./reports \\
-        [--site-name TAMU] [--building-name Main] [--dry-run]
+        [--site-name TAMU] [--building-name Main] \\
+        [--legacy-tz America/Chicago] [--dry-run]
 
 Cutover runbook:
   1. Grant `cellar:approve_loan` is NOT needed (migrated loans bypass approval).
@@ -36,6 +37,11 @@ Cutover runbook:
      also review closed_loans_unparsed.csv (system comment lines that didn't
      match a known grammar — the closed loan/item is skipped, not fabricated).
   5. Real run (no --dry-run). Re-run is safe (idempotent) if interrupted.
+     Legacy MySQL runs with `time_zone=SYSTEM` (naive wall-clock timestamps,
+     not UTC) — the default --legacy-tz is America/Chicago (the prod
+     server's zone); pass a different one if that's ever not true. This is
+     baked into the record on the real run (marker-guarded, not repairable
+     by re-running), so confirm it before the real run, not after.
   6. Spot-check in the UI: plate owners, the storage location tree under
      --site-name/--building-name, the group tree, the open and closed loans,
      the `legacy:inactive` tag on depleted plates (summary inactive_tagged),
@@ -63,6 +69,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import pymysql
 import sqlalchemy as sa
@@ -428,9 +435,17 @@ def _row_to_set(r: dict) -> LegacySet:
     return LegacySet(**r)
 
 
-def read_legacy(dsn: str) -> LegacyData:
+def localize_legacy(dt: datetime, tz: str) -> datetime:
+    """Legacy MySQL runs with `time_zone=SYSTEM` (America/Chicago on the prod
+    server), so every naive datetime it returns is local wall-clock time, not
+    UTC (C1) — localize to `tz` before converting."""
+    return dt.replace(tzinfo=ZoneInfo(tz)).astimezone(UTC)
+
+
+def read_legacy(dsn: str, *, tz: str = "America/Chicago") -> LegacyData:
     """Read every needed legacy table once into dataclasses via pymysql.
-    `dsn` = mysql://user:pass@host:port/dbname."""
+    `dsn` = mysql://user:pass@host:port/dbname. `tz` is the IANA zone the
+    legacy server's naive datetimes are local to (see `localize_legacy`)."""
     u = urlparse(dsn)
     conn = pymysql.connect(
         host=u.hostname,
@@ -468,7 +483,10 @@ def read_legacy(dsn: str) -> LegacyData:
             )
             d.transactions = [
                 LegacyTransaction(
-                    **{**r, "last_activity_date": r["last_activity_date"].replace(tzinfo=UTC)}
+                    **{
+                        **r,
+                        "last_activity_date": localize_legacy(r["last_activity_date"], tz),
+                    }
                 )
                 for r in cur.fetchall()
             ]
@@ -495,7 +513,7 @@ def read_legacy(dsn: str) -> LegacyData:
                     **{
                         **r,
                         "comments": r["comments"] or "",
-                        "act_date": r["act_date"].replace(tzinfo=UTC),
+                        "act_date": localize_legacy(r["act_date"], tz),
                     }
                 )
                 for r in cur.fetchall()
@@ -1468,6 +1486,11 @@ async def _main() -> None:
     p.add_argument(
         "--building-name", default="Main", help="StorageLocation (type=building) under --site-name"
     )
+    p.add_argument(
+        "--legacy-tz",
+        default="America/Chicago",
+        help="IANA zone legacy MySQL's naive datetimes are local to (time_zone=SYSTEM)",
+    )
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
@@ -1478,7 +1501,7 @@ async def _main() -> None:
                 if len(row) >= 2 and "@" in row[0]:
                     user_map[row[0].strip()] = uuid.UUID(row[1].strip())
 
-    legacy = read_legacy(args.legacy_dsn)
+    legacy = read_legacy(args.legacy_dsn, tz=args.legacy_tz)
     engine = create_async_engine(DatabaseSettings().database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
