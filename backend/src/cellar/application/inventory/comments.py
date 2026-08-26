@@ -86,8 +86,11 @@ async def resolve_target_visible(
 
 
 async def _loan_contains_target(
-    repos: TargetRepos, workspace_id: uuid.UUID, loan_id: uuid.UUID,
-    target_type: CommentTarget, target_id: uuid.UUID,
+    repos: TargetRepos,
+    workspace_id: uuid.UUID,
+    loan_id: uuid.UUID,
+    target_type: CommentTarget,
+    target_id: uuid.UUID,
 ) -> bool:
     loan = await repos.loan_repo.find_by_id_in_workspace(workspace_id, loan_id)
     if loan is None:
@@ -126,22 +129,32 @@ class AddComment:
 
         async with self._uow:
             err = await resolve_target_visible(
-                repos=self._repos, visibility=self._visibility, workspace_id=input.workspace_id,
-                auth=auth, target_type=input.target_type, target_id=input.target_id,
+                repos=self._repos,
+                visibility=self._visibility,
+                workspace_id=input.workspace_id,
+                auth=auth,
+                target_type=input.target_type,
+                target_id=input.target_id,
             )
             if err is not None:
                 return Failure(err)
             if input.loan_id is not None:
                 loan_err = await resolve_target_visible(
-                    repos=self._repos, visibility=self._visibility,
+                    repos=self._repos,
+                    visibility=self._visibility,
                     workspace_id=input.workspace_id,
-                    auth=auth, target_type=CommentTarget.PLATE_LOAN, target_id=input.loan_id,
+                    auth=auth,
+                    target_type=CommentTarget.PLATE_LOAN,
+                    target_id=input.loan_id,
                 )
                 if loan_err is not None:
                     return Failure(loan_err)
                 if not await _loan_contains_target(
-                    self._repos, input.workspace_id, input.loan_id,
-                    input.target_type, input.target_id,
+                    self._repos,
+                    input.workspace_id,
+                    input.loan_id,
+                    input.target_type,
+                    input.target_id,
                 ):
                     return Failure(ValidationError("The loan does not contain this target"))
             # A comment made directly on a loan is trivially in that loan's own
@@ -191,9 +204,12 @@ class ListComments:
             if by_loan:
                 assert input.loan_id is not None
                 err = await resolve_target_visible(
-                    repos=self._repos, visibility=self._visibility,
+                    repos=self._repos,
+                    visibility=self._visibility,
                     workspace_id=input.workspace_id,
-                    auth=auth, target_type=CommentTarget.PLATE_LOAN, target_id=input.loan_id,
+                    auth=auth,
+                    target_type=CommentTarget.PLATE_LOAN,
+                    target_id=input.loan_id,
                 )
                 if err is not None:
                     return Failure(err)
@@ -202,8 +218,12 @@ class ListComments:
                 )
             assert input.target_type is not None and input.target_id is not None
             err = await resolve_target_visible(
-                repos=self._repos, visibility=self._visibility, workspace_id=input.workspace_id,
-                auth=auth, target_type=input.target_type, target_id=input.target_id,
+                repos=self._repos,
+                visibility=self._visibility,
+                workspace_id=input.workspace_id,
+                auth=auth,
+                target_type=input.target_type,
+                target_id=input.target_id,
             )
             if err is not None:
                 return Failure(err)

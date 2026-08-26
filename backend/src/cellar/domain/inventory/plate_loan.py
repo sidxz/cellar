@@ -182,9 +182,7 @@ class PlateLoan(AggregateRoot):
 
     # -- internals ------------------------------------------------------
 
-    def _transition(
-        self, item_ids: list[uuid.UUID], target: LoanItemStatus
-    ) -> list[LoanItem]:
+    def _transition(self, item_ids: list[uuid.UUID], target: LoanItemStatus) -> list[LoanItem]:
         if not item_ids:
             raise ValidationError("No loan items given")
         # Dedupe preserving order — callers legitimately union "checked +

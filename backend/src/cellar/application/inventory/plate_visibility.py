@@ -74,9 +74,7 @@ class PlateVisibilityService:
         active loan to the caller's org (``borrowed`` — read surfaces only)."""
         return self.can_view_owner(plate.owner_org_id, excluded) or plate.id in borrowed
 
-    def can_view_owner(
-        self, owner_org_id: uuid.UUID | None, excluded: set[uuid.UUID]
-    ) -> bool:
+    def can_view_owner(self, owner_org_id: uuid.UUID | None, excluded: set[uuid.UUID]) -> bool:
         """Visibility by owner org alone — for org-owned things that aren't
         plates (plate groups). Same rule: hidden iff owner org is excluded.
         No loan carve-out — groups stay strict by design (S3/S4 scope)."""

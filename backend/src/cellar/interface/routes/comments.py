@@ -30,8 +30,14 @@ class CommentResponse(BaseModel):
     @classmethod
     def from_domain(cls, c: Comment) -> CommentResponse:
         return cls(
-            id=c.id, target_type=c.target_type, target_id=c.target_id, loan_id=c.loan_id,
-            body=c.body, author_id=c.author_id, author_name=c.author_name, created_at=c.created_at,
+            id=c.id,
+            target_type=c.target_type,
+            target_id=c.target_id,
+            loan_id=c.loan_id,
+            body=c.body,
+            author_id=c.author_id,
+            author_name=c.author_name,
+            created_at=c.created_at,
         )
 
 
@@ -55,8 +61,10 @@ async def list_comments(
     """Comments on one target (target_type + target_id) or every comment made
     in a loan's context (loan_id)."""
     query = ListCommentsQuery(
-        workspace_id=auth.workspace_id, target_type=target_type,
-        target_id=target_id, loan_id=loan_id,
+        workspace_id=auth.workspace_id,
+        target_type=target_type,
+        target_id=target_id,
+        loan_id=loan_id,
     )
     comments = result_to_response(await uc(query, auth=auth))
     return [CommentResponse.from_domain(c) for c in comments]
@@ -65,7 +73,10 @@ async def list_comments(
 @router.post("", response_model=CommentResponse, status_code=201)
 async def add_comment(body: AddCommentBody, auth: AuthDep, uc: AddCommentDep) -> CommentResponse:
     command = AddCommentCommand(
-        workspace_id=auth.workspace_id, target_type=body.target_type, target_id=body.target_id,
-        body=body.body, loan_id=body.loan_id,
+        workspace_id=auth.workspace_id,
+        target_type=body.target_type,
+        target_id=body.target_id,
+        body=body.body,
+        loan_id=body.loan_id,
     )
     return CommentResponse.from_domain(result_to_response(await uc(command, auth=auth)))

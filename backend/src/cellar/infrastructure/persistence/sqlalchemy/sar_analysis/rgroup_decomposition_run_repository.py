@@ -92,9 +92,7 @@ class SQLAlchemyRGroupDecompositionRunRepository(
         model = (await self._session.execute(stmt)).scalar_one_or_none()
         return self._to_domain(model) if model else None
 
-    async def write_assignments(
-        self, run_id: UUID, assignments: list[RGroupAssignment]
-    ) -> None:
+    async def write_assignments(self, run_id: UUID, assignments: list[RGroupAssignment]) -> None:
         batch = 1000
         rows = [
             {"run_id": run_id, "molecule_id": a.molecule_id, "rgroups": a.rgroups}
@@ -129,8 +127,7 @@ class SQLAlchemyRGroupDecompositionRunRepository(
         )
         models = (await self._session.execute(stmt)).scalars().all()
         return [
-            RGroupAssignment(molecule_id=m.molecule_id, rgroups=dict(m.rgroups))
-            for m in models
+            RGroupAssignment(molecule_id=m.molecule_id, rgroups=dict(m.rgroups)) for m in models
         ]
 
     async def count_assignments(self, run_id: UUID, *, workspace_id: UUID) -> int:

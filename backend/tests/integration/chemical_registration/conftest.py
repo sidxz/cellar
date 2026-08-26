@@ -30,8 +30,9 @@ def fake_event_dispatcher() -> _FakeDispatcher:
 
 
 @pytest.fixture
-def editor_auth() -> FakeAuth:
-    return FakeAuth(role="editor")
+def editor_auth(seeded_workspace_and_molecule) -> FakeAuth:
+    # Must share the seeded workspace — every use case enforces require_same_workspace.
+    return FakeAuth(role="editor", workspace_id=seeded_workspace_and_molecule[0])
 
 
 # ---------------------------------------------------------------------------

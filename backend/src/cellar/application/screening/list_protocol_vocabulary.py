@@ -2,6 +2,7 @@
 
 Read-only query backing autocomplete-at-entry. Suggests; never enforces.
 """
+
 from __future__ import annotations
 
 import uuid

@@ -78,7 +78,7 @@ async def test_register_molecule_persists_scaffold(uow: AsyncUnitOfWork) -> None
         originating_org_id=org_id,
         registered_by=uuid.uuid4(),
     )
-    result = await use_case(cmd, auth=FakeAuth(role="editor"))
+    result = await use_case(cmd, auth=FakeAuth(role="editor", workspace_id=ws_id))
 
     assert isinstance(result, Success)
     mol = result.unwrap().molecule
@@ -103,7 +103,7 @@ async def test_register_acyclic_records_empty_scaffold(uow: AsyncUnitOfWork) -> 
         originating_org_id=org_id,
         registered_by=uuid.uuid4(),
     )
-    result = await use_case(cmd, auth=FakeAuth(role="editor"))
+    result = await use_case(cmd, auth=FakeAuth(role="editor", workspace_id=ws_id))
 
     assert isinstance(result, Success)
     mol = result.unwrap().molecule

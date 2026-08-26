@@ -343,6 +343,17 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # registered_plates self-ref block above); deleting a plate clears its tag
     # links automatically.
     ("registered_plate_tags", "registered_plate_id", "registered_plates"),
+
+    # -------------------------------------------------------------------------
+    # SAR async-job result tables → their run/projection parent: DB CASCADE
+    # -------------------------------------------------------------------------
+    # rgroup_assignments.run_id and sar_activity_values.projection_id have
+    # ondelete=CASCADE at the DB level (migrations 057/058). The parents are
+    # AsyncJob-owned result aggregates, not Tier-1 admin-deletable entities;
+    # deleting a run/projection clears its rows automatically — same rationale
+    # as the campaign_* block above.
+    ("rgroup_assignments", "run_id", "rgroup_decomposition_runs"),
+    ("sar_activity_values", "projection_id", "sar_activity_projections"),
 }
 
 

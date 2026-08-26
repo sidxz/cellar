@@ -14,7 +14,6 @@ from cellar.application.screening._dose_response_config_serde import (
 )
 from cellar.application.screening.create_protocol import CreateProtocolCommand
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocolsQuery
-from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabularyQuery
 from cellar.application.screening.get_collection_gap import GetProtocolCollectionGapQuery
 from cellar.application.screening.get_protocol import (
     GetProtocolQuery,
@@ -23,6 +22,7 @@ from cellar.application.screening.get_protocol import (
 from cellar.application.screening.list_protocol_summaries import (
     ListProtocolSummariesQuery,
 )
+from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabularyQuery
 from cellar.application.screening.lock_protocol import (
     LockProtocolCommand,
     UnlockProtocolCommand,
@@ -76,7 +76,6 @@ from cellar.interface.dependencies import (
     CreateProtocolDep,
     DeleteProtocolDep,
     FindSimilarProtocolsDep,
-    ListProtocolVocabularyDep,
     GetProtocolCollectionCoverageDep,
     GetProtocolCollectionGapDep,
     GetProtocolDep,
@@ -84,6 +83,7 @@ from cellar.interface.dependencies import (
     ListProtocolsByProjectDep,
     ListProtocolsDep,
     ListProtocolSummariesDep,
+    ListProtocolVocabularyDep,
     LockProtocolDep,
     PublishProtocolDep,
     RemoveConditionDefinitionDep,

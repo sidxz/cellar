@@ -106,10 +106,12 @@ class RGroupDecompositionSession:
                     molecule_id=mid,
                     rgroups={k: row[k] for k in labels if k in row},
                 )
-                for mid, row in zip(self._added_ids, rows)
+                for mid, row in zip(self._added_ids, rows, strict=True)
             ]
         except Exception as exc:  # pragma: no cover — defensive
-            logger.warning("streaming_rgroup_decompose_failed", core=self._core_smiles, exc=str(exc))
+            logger.warning(
+                "streaming_rgroup_decompose_failed", core=self._core_smiles, exc=str(exc)
+            )
             return RGroupDecompositionResult(
                 core_smiles=self._core_smiles,
                 unmatched_ids=[*self._added_ids, *self._unmatched_ids],

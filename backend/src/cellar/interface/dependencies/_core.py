@@ -23,6 +23,9 @@ from cellar.application.shared.unit_of_work import (
 )
 from cellar.application.user.get_preferences import GetPreferences
 from cellar.application.user.update_preferences import UpdatePreferences
+from cellar.infrastructure.duar.auth import get_duar
+from cellar.infrastructure.duar.org_directory import OrgDirectory
+from cellar.infrastructure.duar.settings import DuarSettings
 from cellar.infrastructure.logging import bind_user_context
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
@@ -30,9 +33,6 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_re
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
-from cellar.infrastructure.duar.auth import get_duar
-from cellar.infrastructure.duar.org_directory import OrgDirectory
-from cellar.infrastructure.duar.settings import DuarSettings
 
 __all__ = [
     "AuditServiceDep",

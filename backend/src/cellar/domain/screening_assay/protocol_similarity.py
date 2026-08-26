@@ -1,4 +1,5 @@
 """Value object: a single protocol-similarity match (a read-model result)."""
+
 from __future__ import annotations
 
 import uuid

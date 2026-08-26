@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from cellar.infrastructure.di.container import create_container
-from cellar.infrastructure.logging import configure_logging
 from cellar.infrastructure.duar.auth import get_duar
+from cellar.infrastructure.logging import configure_logging
 from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.middleware.request_context import RequestContextMiddleware
 from cellar.version import build_info

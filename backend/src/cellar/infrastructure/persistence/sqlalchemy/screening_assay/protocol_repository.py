@@ -56,11 +56,11 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
     tag_filter_subquery,
 )
 
-
 # Similarity thresholds for find_similar (the tunable knobs; spec: "start conservative").
-_NAME_BLOCK_FLOOR = 0.3       # blocking: word_similarity(stored_name, draft) must exceed this (OR share a target)
-_RUN_READOUT_JACCARD = 0.5    # run-candidate (targets present): minimum readout-schema overlap
-_RUN_NAME_FLOOR = 0.6         # run-candidate (no targets yet): minimum name match
+# blocking: word_similarity(stored_name, draft) must exceed this (OR share a target)
+_NAME_BLOCK_FLOOR = 0.3
+_RUN_READOUT_JACCARD = 0.5  # run-candidate (targets present): minimum readout-schema overlap
+_RUN_NAME_FLOOR = 0.6  # run-candidate (no targets yet): minimum name match
 _RUN_MIN_SHARED_READOUTS = 2  # run-candidate (no targets yet): minimum shared readout kinds
 
 
