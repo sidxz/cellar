@@ -21,6 +21,7 @@ from scripts.migrate_legacy_plate_tracker import (
     due_date_from,
     format_for_plate,
     full_name,
+    historical_plate_names,
     localize_legacy,
     map_loan_item_status,
     map_plate_status,
@@ -344,6 +345,70 @@ def test_plan_closed_loans_unmapped_requester_falls_back_to_actor() -> None:
         {7: "Jane Doe"},
     )
     assert specs[0].requester_user_id == actor and specs[0].requester_name == "Jane Doe"
+
+
+def test_historical_plate_names_recovers_renamed_plate() -> None:
+    p1 = uuid.uuid4()
+    legacy = LegacyData(
+        plates=[LegacyPlate(1, None, "000001", "P1-new", "Active", "MASTER", 10)],
+        activities=[
+            LegacyActivity(
+                1, "T_REQ_CMT", 5001, 1, None,
+                SYS + "Plate P1-old has been approved. Please scan them out from vault",
+                7, datetime(2026, 5, 1, 10, 0),
+            ),
+        ],
+    )
+    assert historical_plate_names(legacy, {1: p1}) == {"P1-old": p1}
+    # a plate_id that never matched a cellar plate contributes nothing
+    assert historical_plate_names(legacy, {}) == {}
+
+
+def test_plan_closed_loans_resolves_renamed_plate_via_historical_map() -> None:
+    """I1: the current PLATE.plate_name is "P1-new" but every system line for
+    this closed transaction names the plate's old, pre-rename name — only
+    resolvable via ACTIVITY_LOG.plate_id (historical_plate_names)."""
+    p1 = uuid.uuid4()
+    legacy = LegacyData(
+        plates=[LegacyPlate(1, None, "000001", "P1-new", "Active", "MASTER", 10)],
+        transactions=[LegacyTransaction(5001, "CLOSED", 7, datetime(2026, 5, 1, 9, 0))],
+        accounts=[_acct(7, "jdoe", "j@tamu.edu")],
+        activities=[
+            LegacyActivity(
+                1, "T_REQ_CMT", 5001, 1, None,
+                SYS + "Plate P1-old has been approved. Please scan them out from vault",
+                7, datetime(2026, 5, 1, 10, 0),
+            ),
+            LegacyActivity(
+                2, "T_CMT", 5001, 1, None,
+                SYS + "Plate P1-old has been scanned out from vault",
+                7, datetime(2026, 5, 2, 8, 0),
+            ),
+            LegacyActivity(
+                3, "T_CMT", 5001, 1, None,
+                SYS + "Plate P1-old has been scanned back in to the vault",
+                7, datetime(2026, 5, 9, 8, 0),
+            ),
+            LegacyActivity(
+                4, "T_CMT", 5001, None, None,
+                SYS + "Transaction closed, all plates are checked back in",
+                7, datetime(2026, 5, 9, 8, 1),
+            ),
+        ],
+    )
+    matched = {1: p1}
+    # name-only map (no I1) would only know the CURRENT name "P1-new" and
+    # never resolve "P1-old" — merge historical in, current still wins.
+    plate_id_by_name = {**historical_plate_names(legacy, matched), "P1-new": p1}
+    specs, unparsed = plan_closed_loans(
+        legacy, plate_id_by_name, {7: "j@tamu.edu"}, {"j@tamu.edu": uuid.uuid4()},
+        uuid.uuid4(), {7: "Jane Doe"},
+    )
+    assert unparsed == []
+    (spec,) = specs
+    (item,) = spec.items
+    assert item.cellar_plate_id == p1
+    assert item.status is LoanItemStatus.RETURNED
 
 
 def test_plan_comments_targets_and_prefix_stripping() -> None:

@@ -1083,6 +1083,24 @@ class UnparsedLine:
     comments: str
 
 
+def historical_plate_names(
+    legacy: LegacyData, matched: dict[int, uuid.UUID]
+) -> dict[str, uuid.UUID]:
+    """Every plate name ever used in a system line, keyed by
+    `ACTIVITY_LOG.plate_id` — recovers plates renamed since the comment was
+    written (I1: e.g. `Enamine_X` -> `Enamine_Master_X`). Merge with the
+    *current* `PLATE.plate_name` map in run_migration, current name winning
+    on a collision."""
+    out: dict[str, uuid.UUID] = {}
+    for a in legacy.activities:
+        if a.plate_id is None or a.plate_id not in matched:
+            continue
+        line = parse_system_line(a.comments)
+        if line is not None and line.plate_name is not None:
+            out[line.plate_name] = matched[a.plate_id]
+    return out
+
+
 def plan_closed_loans(legacy, plate_id_by_name, account_email, user_map, actor_id, account_names):
     """Reconstruct one closed PlateLoan per CLOSED transaction from its system
     comment lines: the last status parsed per plate name (by act_date, act_id
@@ -1395,9 +1413,12 @@ async def run_migration(
         summary["unresolved_requesters"] = len(unresolved)
 
         # Phase 6: closed transactions → closed PlateLoans reconstructed from
-        # their system comment lines.
+        # their system comment lines. Historical names (I1) recover plates
+        # renamed since a system line was written; the current PLATE.plate_name
+        # map is merged in second so a live rename always wins.
         plate_id_by_name = {
-            p.plate_name: matched[p.plate_id] for p in legacy.plates if p.plate_id in matched
+            **historical_plate_names(legacy, matched),
+            **{p.plate_name: matched[p.plate_id] for p in legacy.plates if p.plate_id in matched},
         }
         closed_specs, closed_unparsed = plan_closed_loans(
             legacy, plate_id_by_name, account_email, user_map, actor_id, account_names,
