@@ -42,17 +42,17 @@ export function PlateGroupCard({
         type="button"
         onClick={onSelect}
         title={title}
-        className={`w-fit rounded-md px-2 py-0.5 text-left font-semibold text-[13px] leading-tight text-neutral-900 whitespace-normal break-words ${selected ? "ring-2 ring-primary" : ""}`}
+        className={`w-fit rounded-md px-2 py-0.5 text-left font-semibold text-[15px] leading-tight text-neutral-900 whitespace-normal break-words ${selected ? "ring-2 ring-primary" : ""}`}
         style={{ background: pillBg }}
       >
         {node.name}
       </button>
-      <ul className="space-y-0.5 text-[13px] leading-5 text-muted-foreground">
+      <ul className="space-y-0.5 text-[15px] leading-6 text-muted-foreground">
         {rows.map((r) => (
           <li key={r}>{r}</li>
         ))}
       </ul>
-      <div className="flex gap-3 text-[13px]">
+      <div className="flex gap-3 text-[15px]">
         <button type="button" className="text-primary hover:underline" onClick={onSelect}>
           Details
         </button>

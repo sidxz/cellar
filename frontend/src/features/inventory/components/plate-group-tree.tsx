@@ -25,7 +25,9 @@ interface GroupDatum extends RawNodeDatum {
   children?: GroupDatum[];
 }
 
-const NODE_SIZE = { x: 380, y: 300 };
+// Card body is ≤ ~195 px tall at 15 px type; 230 keeps ≥ 30 px between a card
+// and the next circle. Width 300 card + 33 px circle offset fits inside 360.
+const NODE_SIZE = { x: 360, y: 230 };
 const CIRCLE_R = 25;
 const ROOT_R = 30;
 
@@ -100,22 +102,22 @@ export function PlateGroupTreeView({
           data-testid={`tree-toggle-${id}`}
         />
         {isRoot ? (
-          <foreignObject x={36} y={-28} width={300} height={70}>
+          <foreignObject x={36} y={-30} width={300} height={80}>
             <div>
               <button
                 type="button"
                 onClick={() => onSelect(node)}
-                className="block text-left text-lg font-semibold"
+                className="block text-left text-xl font-semibold"
               >
                 {node.name}
               </button>
-              <div className="text-sm text-muted-foreground">
+              <div className="text-base text-muted-foreground">
                 {subtreePlateCount(node)} plates in this library
               </div>
             </div>
           </foreignObject>
         ) : (
-          <foreignObject x={r + 8} y={-20} width={300} height={200}>
+          <foreignObject x={r + 8} y={-20} width={300} height={220}>
             <PlateGroupCard
               node={node}
               locationName={locationName(node.storage_location_id)}
@@ -173,11 +175,11 @@ function LegendRow({
 }: { title: string; entries: { label: string; color: string }[] }) {
   if (entries.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
       <span className="font-medium">{title}</span>
       {entries.map((e) => (
         <span key={e.label} className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: e.color }} />
+          <span className="h-3 w-3 rounded-full" style={{ background: e.color }} />
           {e.label}
         </span>
       ))}
