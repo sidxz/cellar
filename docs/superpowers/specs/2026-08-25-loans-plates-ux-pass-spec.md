@@ -238,3 +238,12 @@ Plate Groups page (legacy parity just tuned) · backend changes · pagination ·
 | **S14** | §3.5–3.7, §8–9, their tests | `feat(frontend): plates answer "which set, where, who has it" — where column, custody hero, request-loan from plates` |
 
 One whole-branch review after S14; browser verification against the saclab-dev data for both.
+
+## S13–S14 sync note (2026-08-25) — shipped reality vs. §3–§10
+
+- Shipped in `53e83fe1` (S13 loans), `bb4d86d8` (S14 plates), `b896c609` (post-verification polish) and `dfae9d6a` (whole-branch review fixes); plan `docs/superpowers/plans/2026-08-25-s13-s14-loans-plates-ux.md`, executed as ten subagent tasks in three waves, one review at the end.
+- Deviations from the text, all deliberate: the plates **Set** column shows the leaf set name with the full path as `title` (legacy paths run three levels deep and truncated); the History quick-filter's hidden column also carries `notes` (migrated loans keep the legacy requester there, so searching "Maia" finds her history); `TONE_CLASS` lives in `plate-list.tsx`; `useMemberNames` returns `"…"` while the member list loads; `useGroupIndex` shares `usePlateGroupTree`'s cache key.
+- Review (APPROVE WITH FIXES) found the plate hero rendering the whole storage chain instead of §9's last three levels — fixed via `Whereabouts.location.heroPath` — and the missing 729/730 d `formatDue` boundary test; both in `dfae9d6a`.
+- Known, not bugs: `useHashTab` does not react to a client-side navigation to `/inventory/loans#history` (pre-existing hook; the tab click works); migrated loans resolve `requested_by` to the migration operator (attribution is a `--user-map` re-run, per §11); open migrated loans carry `created_at` = migration time. `CountChips` keeps `div[role=group]` (biome warn-level a11y hint, non-gating).
+- Test fixtures with timestamps use noon UTC — the machine is America/Chicago and midnight-UTC fixtures render as the previous day.
+- Suites at the end: frontend **1108 passed** (was 1055), tsc clean, biome clean on every touched file. Browser-verified on the saclab-dev data: Open tab chips (`To check in 4 · Overdue 6 · Requested by me 8`), chip filtering, a loan page with `Confirm return (2)` and set-grouped items, History (752 rows), Plates with TAMU selected (`2,260 plates · On loan 53 · Overdue 23 · Depleted 9`), On-loan Where cells, plate pages on loan and in storage, the More menu, Request loan pre-filled from a plate.
