@@ -6,9 +6,13 @@ Freezer StorageLocation tree, matches legacy plates to Cellar plates
 (cdd_plate_sync → barcode) and registers whatever doesn't match (+ a
 cdd_plate_sync row when the legacy row carries a CDD plate id), sets
 ownership/type/status (tolerating plates whose current status can't reach the
-legacy target — recorded, not fatal), builds the PlateGroup tree, and
-recreates the OPEN checkouts as PlateLoans. Closed history is NOT migrated
-(stays in the read-only legacy DB).
+legacy target — recorded, not fatal), builds the PlateGroup tree, recreates
+the OPEN checkouts as PlateLoans, reconstructs CLOSED transactions as closed
+PlateLoans from their system comment lines, and imports the human
+ACTIVITY_LOG rows as Comments (on the loan/group/plate they were left on).
+`--user-map` is now optional — an unmapped requester's loan is kept with
+`--actor-id` as the nominal requester (name recorded in the loan notes)
+instead of being dropped.
 
 Usage (from backend/):
     uv run python scripts/migrate_legacy_plate_tracker.py \\
@@ -27,19 +31,24 @@ Cutover runbook:
   4. Dry-run: add --dry-run; review MIGRATION SUMMARY + reports/*.csv.
      Resolve unmatched_plates.csv (plates registered under neither a cdd
      plate id nor a barcode — check plate_role/plate_format for typos) and
-     unresolved_requesters.csv (add to user_map.csv) until acceptable.
+     unresolved_requesters.csv (add to user_map.csv) until acceptable — this
+     is now informational only (unmapped requesters no longer drop a loan);
+     also review closed_loans_unparsed.csv (system comment lines that didn't
+     match a known grammar — the closed loan/item is skipped, not fabricated).
   5. Real run (no --dry-run). Re-run is safe (idempotent) if interrupted.
   6. Spot-check in the UI: plate owners, the storage location tree under
-     --site-name/--building-name, the group tree, the ~15 open loans, the
-     `legacy:inactive` tag on depleted plates (summary inactive_tagged), and
-     status_conflicts.csv (plates whose Cellar status couldn't reach the
-     legacy-mapped target — usually already `disposed`; resolve by hand).
+     --site-name/--building-name, the group tree, the open and closed loans,
+     the `legacy:inactive` tag on depleted plates (summary inactive_tagged),
+     comments on loans/groups/plates, and status_conflicts.csv (plates whose
+     Cellar status couldn't reach the legacy-mapped target — usually already
+     `disposed`; resolve by hand).
   7. Announce cutover.
 
 Summary counters: owner_backfilled, locations_created, plates_matched,
 plates_created, cdd_sync_rows, unmatched_plates, plates_classified,
 inactive_tagged, status_conflicts, groups_created, plates_grouped,
-loans_created, unresolved_requesters.
+loans_created, unresolved_requesters, closed_loans_created,
+closed_lines_unparsed, comments_created.
 """
 
 from __future__ import annotations
@@ -47,7 +56,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import re
 import uuid
+from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -59,15 +70,18 @@ import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from cellar.application.inventory.barcode_resolution import resolve_barcode
+from cellar.domain.inventory.comment import Comment
 from cellar.domain.inventory.enums import (
     VALID_PLATE_TRANSITIONS,
+    CommentTarget,
     LoanItemStatus,
+    LoanStatus,
     PlateStatus,
     PlateType,
     StorageLocationType,
 )
 from cellar.domain.inventory.plate_group import PlateGroup
-from cellar.domain.inventory.plate_loan import PlateLoan
+from cellar.domain.inventory.plate_loan import LoanItem, PlateLoan
 from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.inventory.storage_location import StorageLocation
 from cellar.domain.shared.enums import PlateFormat
@@ -77,6 +91,9 @@ from cellar.domain.workspace_config.tagging.tag import TagName
 from cellar.infrastructure.persistence.settings import DatabaseSettings
 from cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_sync_repository import (
     CddPlateSyncRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.comment_repository import (
+    SQLAlchemyCommentRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
     SQLAlchemyPlateGroupRepository,
@@ -872,6 +889,7 @@ class LoanSpec:
     requester_user_id: uuid.UUID
     due_date: date
     items: list[LoanItemSpec]
+    requester_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -882,7 +900,14 @@ class UnresolvedRequester:
     reason: str
 
 
-def plan_loans(legacy, matched, account_email, user_map):
+def plan_loans(legacy, matched, account_email, user_map, *, actor_id=None, account_names=None):
+    """Every OPEN transaction becomes a loan. An unresolved requester email no
+    longer drops the transaction: with `actor_id` given, the loan is kept
+    with `requester_user_id=actor_id` (the migration actor becomes the
+    nominal requester) and an `UnresolvedRequester` row is still appended —
+    now purely informational, for the operator's --user-map follow-up.
+    Without `actor_id` (caller opted out), the old drop behaviour holds."""
+    account_names = account_names or {}
     specs: list[LoanSpec] = []
     unresolved: list[UnresolvedRequester] = []
     tps_by_txn: dict[int, list] = {}
@@ -900,7 +925,11 @@ def plan_loans(legacy, matched, account_email, user_map):
                     "no email" if not email else "email not in --user-map",
                 )
             )
-            continue
+            if actor_id is None:
+                continue
+            requester_id = actor_id
+        else:
+            requester_id = user_id
         items: list[LoanItemSpec] = []
         for tp in tps_by_txn.get(txn.transaction_id, []):
             cellar_id = matched.get(tp.plate_id)
@@ -909,18 +938,26 @@ def plan_loans(legacy, matched, account_email, user_map):
             items.append(LoanItemSpec(cellar_id, map_loan_item_status(tp.p_status)))
         if items:
             specs.append(
-                LoanSpec(txn.transaction_id, user_id, due_date_from(txn.last_activity_date), items)
+                LoanSpec(
+                    txn.transaction_id, requester_id, due_date_from(txn.last_activity_date), items,
+                    account_names.get(txn.scientist, f"UIN {txn.scientist}"),
+                )
             )
     return specs, unresolved
 
 
-async def apply_loan(spec, *, loan_repo, workspace_id, internal_org_id) -> bool:
+async def apply_loan(spec, *, loan_repo, workspace_id, internal_org_id) -> uuid.UUID | None:
     already = await loan_repo.active_plate_ids(
         workspace_id, [i.cellar_plate_id for i in spec.items]
     )
     fresh = [i for i in spec.items if i.cellar_plate_id not in already]
     if not fresh:  # every plate already in an active loan → idempotent skip
-        return False
+        return None
+    notes = (
+        f"Migrated from legacy plate-tracker · requester: {spec.requester_name}"
+        if spec.requester_name
+        else "Migrated from legacy plate-tracker"
+    )
     loan = PlateLoan.request(
         workspace_id=workspace_id,
         owner_org_id=internal_org_id,
@@ -929,7 +966,7 @@ async def apply_loan(spec, *, loan_repo, workspace_id, internal_org_id) -> bool:
         plate_ids=[i.cellar_plate_id for i in fresh],
         auto_approved=False,
         due_date=spec.due_date,
-        notes="Migrated from legacy plate-tracker",
+        notes=notes,
     )
     item_by_plate = {it.plate_id: it for it in loan.items}
     target_by_plate = {i.cellar_plate_id: i.target for i in fresh}
@@ -953,7 +990,263 @@ async def apply_loan(spec, *, loan_repo, workspace_id, internal_org_id) -> bool:
     if to_return:
         loan.request_return(to_return)
     await loan_repo.save(loan)
-    return True
+    return loan.id
+
+
+# ---------------------------------------------------------------------------
+# Closed transactions → closed PlateLoans, human ACTIVITY_LOG rows → Comments
+# ---------------------------------------------------------------------------
+
+_SYS_PREFIX = "(System Generated Comment) "
+_PLATE_LINE = re.compile(
+    r"^Plate (?P<name>.+?) has been (?P<what>approved\. Please scan them out from vault"
+    r"|approved for check-in\. Please scan them back to vault|scanned out from vault"
+    r"|scanned back in to the vault|denied\.)"
+)
+_OVERRIDE_LINE = re.compile(r"^Status for (?P<name>.+?) has been Overridden to 'Assigned'")
+_CLOSE_PREFIXES = ("Transaction closed", "All transaction's plates are denied")
+_WHAT_TO_STATUS = {
+    "approved. Please scan them out from vault": LoanItemStatus.APPROVED,
+    "approved for check-in. Please scan them back to vault": LoanItemStatus.RETURN_PENDING,
+    "scanned out from vault": LoanItemStatus.CHECKED_OUT,
+    "scanned back in to the vault": LoanItemStatus.RETURNED,
+    "denied.": LoanItemStatus.DENIED,
+}
+
+
+@dataclass(frozen=True)
+class SystemLine:
+    kind: str  # "plate" | "close"
+    plate_name: str | None
+    status: LoanItemStatus | None
+
+
+def parse_system_line(comment: str) -> SystemLine | None:
+    if not comment.startswith(_SYS_PREFIX):
+        return None
+    rest = comment[len(_SYS_PREFIX) :].strip()
+    m = _PLATE_LINE.match(rest)
+    if m:
+        return SystemLine("plate", m.group("name"), _WHAT_TO_STATUS[m.group("what")])
+    m = _OVERRIDE_LINE.match(rest)
+    if m:
+        return SystemLine("plate", m.group("name"), LoanItemStatus.CHECKED_OUT)
+    if rest.startswith(_CLOSE_PREFIXES):
+        return SystemLine("close", None, None)
+    return None
+
+
+def is_system_comment(comment: str) -> bool:
+    return comment.startswith(_SYS_PREFIX)
+
+
+@dataclass(frozen=True)
+class ClosedItemSpec:
+    cellar_plate_id: uuid.UUID
+    status: LoanItemStatus
+    status_changed_at: datetime
+
+
+@dataclass(frozen=True)
+class ClosedLoanSpec:
+    transaction_id: int
+    requester_user_id: uuid.UUID
+    requester_name: str
+    created_at: datetime
+    closed_at: datetime
+    due_date: date
+    items: tuple[ClosedItemSpec, ...]
+
+
+@dataclass(frozen=True)
+class UnparsedLine:
+    transaction_id: int
+    act_id: int
+    comments: str
+
+
+def plan_closed_loans(legacy, plate_id_by_name, account_email, user_map, actor_id, account_names):
+    """Reconstruct one closed PlateLoan per CLOSED transaction from its system
+    comment lines: the last status parsed per plate name (by act_date, act_id
+    order) is the item's final state; a "close" line supplies `closed_at`
+    (falling back to the latest per-item timestamp when the close line itself
+    didn't parse). Lines that don't parse are reported, not fatal. An
+    unresolved requester falls back to `actor_id` (same policy as plan_loans)."""
+    by_txn: dict[int, list[LegacyActivity]] = defaultdict(list)
+    for a in legacy.activities:
+        if a.transaction_id is not None and is_system_comment(a.comments):
+            by_txn[a.transaction_id].append(a)
+    specs: list[ClosedLoanSpec] = []
+    unparsed: list[UnparsedLine] = []
+    for t in legacy.transactions:
+        if t.t_status != "CLOSED":
+            continue
+        final: dict[str, tuple[LoanItemStatus, datetime]] = {}
+        denied: set[str] = set()
+        closed_at: datetime | None = None
+        for a in sorted(by_txn.get(t.transaction_id, []), key=lambda x: (x.act_date, x.act_id)):
+            line = parse_system_line(a.comments)
+            if line is None:
+                unparsed.append(UnparsedLine(t.transaction_id, a.act_id, a.comments))
+                continue
+            if line.kind == "close":
+                closed_at = a.act_date
+                continue
+            assert line.plate_name is not None and line.status is not None
+            if line.status is LoanItemStatus.DENIED:
+                denied.add(line.plate_name)
+            final[line.plate_name] = (line.status, a.act_date)
+        items = []
+        for name, (_status, when) in final.items():
+            cellar_id = plate_id_by_name.get(name)
+            if cellar_id is None:
+                unparsed.append(UnparsedLine(t.transaction_id, 0, f"unknown plate name: {name}"))
+                continue
+            status = LoanItemStatus.DENIED if name in denied else LoanItemStatus.RETURNED
+            items.append(ClosedItemSpec(cellar_id, status, when))
+        if not items:
+            continue
+        email = account_email.get(t.scientist)
+        requester = user_map.get(email) if email else None
+        latest = max(i.status_changed_at for i in items)
+        specs.append(
+            ClosedLoanSpec(
+                transaction_id=t.transaction_id,
+                requester_user_id=requester or actor_id,
+                requester_name=account_names.get(t.scientist, f"UIN {t.scientist}"),
+                created_at=t.last_activity_date,
+                closed_at=closed_at or latest,
+                due_date=due_date_from(t.last_activity_date),
+                items=tuple(items),
+            )
+        )
+    return specs, unparsed
+
+
+_CLOSED_MARKER = "Legacy transaction {tid} · requester: {name}"
+
+
+async def apply_closed_loan(
+    spec, *, loan_repo, uow, workspace_id, internal_org_id
+) -> uuid.UUID | None:
+    """Closed history is built directly (no state replay) with legacy timestamps.
+    Idempotent on the notes marker; created_at is set by a post-save UPDATE
+    because the loan repository leaves it to the DB default."""
+    marker = _CLOSED_MARKER.format(tid=spec.transaction_id, name=spec.requester_name)
+    exists = await uow.session.execute(
+        sa.text("SELECT 1 FROM plate_loans WHERE workspace_id = :ws AND notes = :n LIMIT 1"),
+        {"ws": workspace_id, "n": marker},
+    )
+    if exists.first() is not None:
+        return None
+    loan_id = uuid.uuid4()
+    items = [
+        LoanItem(
+            loan_id=loan_id, plate_id=i.cellar_plate_id, status=i.status,
+            status_changed_at=i.status_changed_at,
+        )
+        for i in spec.items
+    ]
+    loan = PlateLoan(
+        id=loan_id, workspace_id=workspace_id, owner_org_id=internal_org_id,
+        borrower_org_id=internal_org_id, requested_by=spec.requester_user_id,
+        approved_by=spec.requester_user_id, due_date=spec.due_date, notes=marker,
+        status=LoanStatus.CLOSED, closed_at=spec.closed_at, items=items,
+    )
+    await loan_repo.save(loan)
+    await uow.session.flush()
+    await uow.session.execute(
+        sa.text("UPDATE plate_loans SET created_at = :c, updated_at = :u WHERE id = :id"),
+        {"c": spec.created_at, "u": spec.closed_at, "id": loan_id},
+    )
+    await uow.session.execute(
+        sa.text("UPDATE plate_loan_items SET created_at = :c WHERE loan_id = :id"),
+        {"c": spec.created_at, "id": loan_id},
+    )
+    return loan_id
+
+
+@dataclass(frozen=True)
+class CommentSpec:
+    target_type: CommentTarget
+    target_id: uuid.UUID
+    loan_id: uuid.UUID | None
+    body: str
+    author_id: uuid.UUID | None
+    author_name: str
+    created_at: datetime
+
+
+_COMMENT_PREFIX = re.compile(r"^\[(SET|PLATE)\] .*? : ")
+
+
+def plan_comments(
+    legacy, *, txn_loan_ids, set_group_ids, plate_ids, account_email, user_map, account_names
+):
+    """Human ACTIVITY_LOG rows (T_CMT/T_REQ_CMT → the loan; SET_CMT → the
+    group; PLATE_CMT → the plate) become Comments, `[SET] name : `/`[PLATE]
+    name : ` prefixes stripped. System-generated lines (see is_system_comment)
+    are never comments — they were consumed by plan_closed_loans instead.
+
+    Only rows whose `transaction_id` is in `txn_loan_ids` are considered —
+    this is the idempotency mechanism: `txn_loan_ids` holds only the loans
+    actually created THIS run (apply_loan/apply_closed_loan return None on a
+    re-run because the loan/marker already exists), so a re-run sees an empty
+    map and creates zero comments, matching zero new loans.
+    """
+    specs: list[CommentSpec] = []
+    for a in legacy.activities:
+        if a.transaction_id is None or a.transaction_id not in txn_loan_ids:
+            continue
+        if is_system_comment(a.comments):
+            continue
+        if a.act_type in ("T_CMT", "T_REQ_CMT"):
+            target_type = CommentTarget.PLATE_LOAN
+            target_id = txn_loan_ids[a.transaction_id]
+        elif a.act_type == "SET_CMT":
+            target_id = set_group_ids.get(a.set_id) if a.set_id is not None else None
+            if target_id is None:
+                continue
+            target_type = CommentTarget.PLATE_GROUP
+        elif a.act_type == "PLATE_CMT":
+            target_id = plate_ids.get(a.plate_id) if a.plate_id is not None else None
+            if target_id is None:
+                continue
+            target_type = CommentTarget.PLATE
+        else:
+            continue  # loan-less/other row types — skip defensively
+        body = _COMMENT_PREFIX.sub("", a.comments, count=1).strip()
+        if not body:
+            continue
+        email = account_email.get(a.scientist)
+        author_id = user_map.get(email) if email else None
+        author_name = account_names.get(a.scientist, f"UIN {a.scientist}")
+        specs.append(
+            CommentSpec(
+                target_type=target_type,
+                target_id=target_id,
+                loan_id=txn_loan_ids[a.transaction_id],
+                body=body,
+                author_id=author_id,
+                author_name=author_name,
+                created_at=a.act_date,
+            )
+        )
+    return specs
+
+
+async def apply_comments(specs, *, comment_repo, workspace_id) -> int:
+    n = 0
+    for c in specs:
+        await comment_repo.save(
+            Comment.create(
+                workspace_id=workspace_id, target_type=c.target_type, target_id=c.target_id,
+                body=c.body, author_id=c.author_id, author_name=c.author_name,
+                loan_id=c.loan_id, created_at=c.created_at,
+            )
+        )
+        n += 1
+    return n
 
 
 def _write_csv(path: Path, rows: list, header: list[str]) -> None:
@@ -994,6 +1287,7 @@ async def run_migration(
         tag_repo = SQLAlchemyTagRepository(uow)
         plate_tag_link_repo = RegisteredPlateTagLinkRepository(uow)
         location_repo = SQLAlchemyStorageLocationRepository(uow)
+        comment_repo = SQLAlchemyCommentRepository(uow)
 
         # Phase 0: NULL-owner backfill (S2-deferred)
         summary["owner_backfilled"] = await backfill_null_owner(
@@ -1063,20 +1357,61 @@ async def run_migration(
             legacy, key_to_group, matched, plate_repo=plate_repo, workspace_id=workspace_id
         )
 
-        # Phase 5: loans — read_legacy now reads ALL transactions (not just OPEN),
-        # so filter here to keep open-loan behaviour unchanged.
+        # Phase 5: open loans — read_legacy now reads ALL transactions (not just
+        # OPEN), so filter here to keep open-loan behaviour unchanged. Loan ids
+        # created THIS run feed txn_loan_ids, which gates comment idempotency.
+        txn_loan_ids: dict[int, uuid.UUID] = {}
         loan_specs, unresolved = plan_loans(
             replace(legacy, transactions=open_transactions(legacy)),
-            matched, account_email, user_map,
+            matched, account_email, user_map, actor_id=actor_id, account_names=account_names,
         )
         loans_created = 0
         for ls in loan_specs:
-            if await apply_loan(
+            loan_id = await apply_loan(
                 ls, loan_repo=loan_repo, workspace_id=workspace_id, internal_org_id=internal_org_id
-            ):
+            )
+            if loan_id is not None:
                 loans_created += 1
+                txn_loan_ids[ls.transaction_id] = loan_id
         summary["loans_created"] = loans_created
         summary["unresolved_requesters"] = len(unresolved)
+
+        # Phase 6: closed transactions → closed PlateLoans reconstructed from
+        # their system comment lines.
+        plate_id_by_name = {
+            p.plate_name: matched[p.plate_id] for p in legacy.plates if p.plate_id in matched
+        }
+        closed_specs, closed_unparsed = plan_closed_loans(
+            legacy, plate_id_by_name, account_email, user_map, actor_id, account_names,
+        )
+        closed_loans_created = 0
+        for cs in closed_specs:
+            loan_id = await apply_closed_loan(
+                cs, loan_repo=loan_repo, uow=uow,
+                workspace_id=workspace_id, internal_org_id=internal_org_id,
+            )
+            if loan_id is not None:
+                closed_loans_created += 1
+                txn_loan_ids[cs.transaction_id] = loan_id
+        summary["closed_loans_created"] = closed_loans_created
+        summary["closed_lines_unparsed"] = len(closed_unparsed)
+
+        # Phase 7: human ACTIVITY_LOG rows → Comments (loan/group/plate),
+        # gated to transactions whose loan was created THIS run (idempotency).
+        comment_specs = plan_comments(
+            legacy,
+            txn_loan_ids=txn_loan_ids,
+            set_group_ids={
+                int(k[4:]): v for k, v in key_to_group.items() if k.startswith("set:")
+            },
+            plate_ids=matched,
+            account_email=account_email,
+            user_map=user_map,
+            account_names=account_names,
+        )
+        summary["comments_created"] = await apply_comments(
+            comment_specs, comment_repo=comment_repo, workspace_id=workspace_id
+        )
 
         if dry_run:
             await uow.rollback()
@@ -1103,6 +1438,11 @@ async def run_migration(
         report_dir / "unresolved_requesters.csv",
         unresolved,
         ["transaction_id", "scientist_uin", "email", "reason"],
+    )
+    _write_csv(
+        report_dir / "closed_loans_unparsed.csv",
+        closed_unparsed,
+        ["transaction_id", "act_id", "comments"],
     )
     logger.info("migration_done", dry_run=dry_run, **summary)
     return summary

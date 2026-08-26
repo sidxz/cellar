@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime
 
 import pytest
 from scripts.migrate_legacy_plate_tracker import (
     LegacyAccount,
+    LegacyActivity,
     LegacyData,
     LegacyLibrary,
     LegacyLocation,
@@ -23,12 +25,15 @@ from scripts.migrate_legacy_plate_tracker import (
     map_plate_status,
     map_plate_type,
     open_transactions,
+    parse_system_line,
+    plan_closed_loans,
+    plan_comments,
     plan_group_tree,
     plan_loans,
     plan_locations,
 )
 
-from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
+from cellar.domain.inventory.enums import CommentTarget, LoanItemStatus, PlateStatus, PlateType
 from cellar.domain.shared.enums import PlateFormat
 
 
@@ -229,3 +234,121 @@ def test_plan_group_tree_carries_metadata() -> None:
     assert (vendor.initial_concentration_mm, vendor.compound_count, vendor.scientist) == (
         10.0, 17606, "Jane Doe",
     )
+
+
+SYS = "(System Generated Comment) "
+
+
+@pytest.mark.parametrize(
+    "line, kind, name, status",
+    [
+        (SYS + "Plate AbbVie_QD-1-4084 has been approved. Please scan them out from vault",
+         "plate", "AbbVie_QD-1-4084", LoanItemStatus.APPROVED),
+        (SYS + "Plate X has been approved for check-in. Please scan them back to vault",
+         "plate", "X", LoanItemStatus.RETURN_PENDING),
+        (SYS + "Plate X Y has been scanned out from vault",
+         "plate", "X Y", LoanItemStatus.CHECKED_OUT),
+        (SYS + "Plate X has been scanned back in to the vault",
+         "plate", "X", LoanItemStatus.RETURNED),
+        (SYS + "Plate X has been denied.", "plate", "X", LoanItemStatus.DENIED),
+        (SYS + "Status for TBAC-1 has been Overridden to 'Assigned' by Admin manpal",
+         "plate", "TBAC-1", LoanItemStatus.CHECKED_OUT),
+        (SYS + "Transaction closed, all plates are checked back in", "close", None, None),
+        (SYS + "Transaction closed, status overridden by Admin dwight.baker", "close", None, None),
+        (SYS + "All transaction's plates are denied. Transaction Closed", "close", None, None),
+    ],
+)
+def test_parse_system_line(line, kind, name, status) -> None:
+    parsed = parse_system_line(line)
+    assert parsed is not None
+    assert (parsed.kind, parsed.plate_name, parsed.status) == (kind, name, status)
+
+
+def test_parse_system_line_rejects_human_and_unknown() -> None:
+    assert parse_system_line("By Friday") is None
+    assert parse_system_line(SYS + "Something new we never saw") is None
+
+
+def _closed_legacy() -> LegacyData:
+    t0 = datetime(2026, 5, 1, 9, 0)
+    return LegacyData(
+        plates=[LegacyPlate(1, None, "000001", "P1", "Active", "MASTER", 10),
+                LegacyPlate(2, None, "000002", "P2", "Active", "MASTER", 10)],
+        transactions=[LegacyTransaction(5001, "CLOSED", 7, t0)],
+        accounts=[_acct(7, "jdoe", "j@tamu.edu")],
+        activities=[
+            LegacyActivity(1, "T_REQ_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been approved. Please scan them out from vault",
+                           7, datetime(2026, 5, 1, 10, 0)),
+            LegacyActivity(2, "T_REQ_CMT", 5001, None, None,
+                           SYS + "Plate P2 has been denied.", 7, datetime(2026, 5, 1, 10, 1)),
+            LegacyActivity(3, "T_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been scanned out from vault",
+                           7, datetime(2026, 5, 2, 8, 0)),
+            LegacyActivity(4, "T_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been scanned back in to the vault",
+                           7, datetime(2026, 5, 9, 8, 0)),
+            LegacyActivity(5, "T_CMT", 5001, None, None,
+                           SYS + "Transaction closed, all plates are checked back in",
+                           7, datetime(2026, 5, 9, 8, 1)),
+            LegacyActivity(6, "T_CMT", 5001, None, None,
+                           "1 ul used for nsp15 screening", 7, datetime(2026, 5, 3, 8, 0)),
+            LegacyActivity(7, "SET_CMT", 5001, None, 1,
+                           "[SET] sac1-vendor-X : 0.5 uL taken", 7, datetime(2026, 5, 9, 7, 0)),
+            LegacyActivity(8, "PLATE_CMT", 5001, 1, 1,
+                           "[PLATE] P1 : removed 12.5 uL", 7, datetime(2026, 5, 9, 7, 1)),
+            LegacyActivity(9, "T_CMT", 5001, None, None,
+                           SYS + "Weird unknown line", 7, datetime(2026, 5, 9, 9, 0)),
+        ],
+    )
+
+
+def test_plan_closed_loans_reconstructs_items_and_timestamps() -> None:
+    legacy = _closed_legacy()
+    p1, p2, actor, user = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    specs, unparsed = plan_closed_loans(
+        legacy, {"P1": p1, "P2": p2}, {7: "j@tamu.edu"}, {"j@tamu.edu": user}, actor,
+        {7: "Jane Doe"},
+    )
+    assert [u.act_id for u in unparsed] == [9]
+    (spec,) = specs
+    assert spec.transaction_id == 5001 and spec.requester_user_id == user
+    assert spec.requester_name == "Jane Doe"
+    assert spec.created_at == datetime(2026, 5, 1, 9, 0)
+    assert spec.closed_at == datetime(2026, 5, 9, 8, 1)
+    assert spec.due_date == datetime(2026, 5, 15).date()
+    by_plate = {i.cellar_plate_id: i for i in spec.items}
+    assert by_plate[p1].status is LoanItemStatus.RETURNED
+    assert by_plate[p1].status_changed_at == datetime(2026, 5, 9, 8, 0)
+    assert by_plate[p2].status is LoanItemStatus.DENIED
+    assert by_plate[p2].status_changed_at == datetime(2026, 5, 1, 10, 1)
+
+
+def test_plan_closed_loans_unmapped_requester_falls_back_to_actor() -> None:
+    legacy = _closed_legacy()
+    actor = uuid.uuid4()
+    specs, _ = plan_closed_loans(
+        legacy, {"P1": uuid.uuid4(), "P2": uuid.uuid4()}, {7: "j@tamu.edu"}, {}, actor,
+        {7: "Jane Doe"},
+    )
+    assert specs[0].requester_user_id == actor and specs[0].requester_name == "Jane Doe"
+
+
+def test_plan_comments_targets_and_prefix_stripping() -> None:
+    legacy = _closed_legacy()
+    loan, group, p1, user = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    specs = plan_comments(
+        legacy, txn_loan_ids={5001: loan}, set_group_ids={1: group}, plate_ids={1: p1},
+        account_email={7: "j@tamu.edu"}, user_map={"j@tamu.edu": user},
+        account_names={7: "Jane Doe"},
+    )
+    assert len(specs) == 3  # the 6 system lines are not comments
+    by_target = {(s.target_type, s.target_id): s for s in specs}
+    loan_c = by_target[(CommentTarget.PLATE_LOAN, loan)]
+    assert loan_c.body == "1 ul used for nsp15 screening"
+    assert loan_c.loan_id == loan and loan_c.author_id == user
+    assert by_target[(CommentTarget.PLATE_GROUP, group)].body == "0.5 uL taken"
+    plate_c = by_target[(CommentTarget.PLATE, p1)]
+    assert plate_c.body == "removed 12.5 uL" and plate_c.loan_id == loan
+    assert plate_c.author_name == "Jane Doe"
+    assert plate_c.created_at == datetime(2026, 5, 9, 7, 1)

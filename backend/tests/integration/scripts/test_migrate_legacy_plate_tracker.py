@@ -7,6 +7,7 @@ import pytest
 import sqlalchemy as sa
 from scripts.migrate_legacy_plate_tracker import (
     LegacyAccount,
+    LegacyActivity,
     LegacyData,
     LegacyLibrary,
     LegacyPlate,
@@ -374,7 +375,8 @@ async def test_apply_loan_reaches_target_states_and_is_idempotent(session_factor
             created_flags.append(await apply_loan(spec, loan_repo=loan_repo, workspace_id=ws,
                                                   internal_org_id=org))
             await uow.commit()
-    assert created_flags == [True, False]   # 2nd run skips (active plates already loaned)
+    assert created_flags[0] is not None
+    assert created_flags[1] is None  # 2nd run skips (already loaned)
     async with session_factory() as s:
         statuses = dict((await s.execute(sa.text(
             "SELECT plate_id, status FROM plate_loan_items WHERE plate_id IN (:a,:b,:c,:d)"),
@@ -399,8 +401,8 @@ async def test_apply_loan_skips_already_active_plate_in_partial_overlap(session_
                      [LoanItemSpec(p1, LoanItemStatus.CHECKED_OUT), LoanItemSpec(p2, LoanItemStatus.REQUESTED)])
     async with AsyncUnitOfWork(session_factory) as uow:
         loan_repo = SQLAlchemyPlateLoanRepository(uow)
-        assert await apply_loan(spec1, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is True
-        assert await apply_loan(spec2, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is True
+        assert await apply_loan(spec1, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is not None
+        assert await apply_loan(spec2, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is not None
         await uow.commit()
     async with session_factory() as s:
         counts = dict((await s.execute(sa.text(
@@ -459,3 +461,89 @@ async def test_run_migration_end_to_end_summary(session_factory, tmp_path):
             "SELECT count(*) FROM plate_loan_items li JOIN plate_loans l ON l.id = li.loan_id "
             "WHERE l.workspace_id=:ws"), {"ws": ws})).scalar_one()
     assert (n_plates, n_groups, n_loans, n_items) == (1, 2, 1, 1)   # no duplication across 2 runs
+
+
+SYS = "(System Generated Comment) "
+
+
+def _closed_legacy_with_library() -> LegacyData:
+    # Same shape as the unit test's _closed_legacy(), plus a library/set so
+    # the SET_CMT comment's PlateGroup target exists, and plate_format_id set
+    # directly on the plates so create_missing_plates can register them.
+    t0 = datetime(2026, 5, 1, 9, 0)
+    return LegacyData(
+        libraries=[LegacyLibrary(10, "Lib A", "SacchettiniLibrary")],
+        sets=[LegacySet(1, "VENDOR", "sac1-vendor-X", "Solubilized", 7, None, 10)],
+        set_plates=[LegacySetPlate(1, 1)],
+        plate_formats=[LegacyPlateFormat(2507, "96-well", 96)],
+        plates=[
+            LegacyPlate(1, None, "000001", "P1", "Active", "MASTER", 10, 2507),
+            LegacyPlate(2, None, "000002", "P2", "Active", "MASTER", 10, 2507),
+        ],
+        transactions=[LegacyTransaction(5001, "CLOSED", 7, t0)],
+        accounts=[LegacyAccount(7, "jdoe", "j@tamu.edu", None, None, None)],
+        activities=[
+            LegacyActivity(1, "T_REQ_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been approved. Please scan them out from vault",
+                           7, datetime(2026, 5, 1, 10, 0)),
+            LegacyActivity(2, "T_REQ_CMT", 5001, None, None,
+                           SYS + "Plate P2 has been denied.", 7, datetime(2026, 5, 1, 10, 1)),
+            LegacyActivity(3, "T_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been scanned out from vault",
+                           7, datetime(2026, 5, 2, 8, 0)),
+            LegacyActivity(4, "T_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been scanned back in to the vault",
+                           7, datetime(2026, 5, 9, 8, 0)),
+            LegacyActivity(5, "T_CMT", 5001, None, None,
+                           SYS + "Transaction closed, all plates are checked back in",
+                           7, datetime(2026, 5, 9, 8, 1)),
+            LegacyActivity(6, "T_CMT", 5001, None, None,
+                           "1 ul used for nsp15 screening", 7, datetime(2026, 5, 3, 8, 0)),
+            LegacyActivity(7, "SET_CMT", 5001, None, 1,
+                           "[SET] sac1-vendor-X : 0.5 uL taken", 7, datetime(2026, 5, 9, 7, 0)),
+            LegacyActivity(8, "PLATE_CMT", 5001, 1, 1,
+                           "[PLATE] P1 : removed 12.5 uL", 7, datetime(2026, 5, 9, 7, 1)),
+            LegacyActivity(9, "T_CMT", 5001, None, None,
+                           SYS + "Weird unknown line", 7, datetime(2026, 5, 9, 9, 0)),
+        ],
+    )
+
+
+@pytest.mark.integration
+async def test_closed_loan_and_comments_end_to_end_and_idempotent(
+    session_factory, tmp_path
+) -> None:
+    ws, org, actor = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    legacy = _closed_legacy_with_library()
+    summary1 = await run_migration(
+        session_factory, legacy, workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={}, actor_id=actor, report_dir=tmp_path,
+        dry_run=False, site_name="TAMU", building_name="Main",
+    )
+    assert summary1["closed_loans_created"] == 1 and summary1["comments_created"] == 3
+    async with session_factory() as s:
+        loan = (await s.execute(sa.text(
+            "SELECT status, closed_at, created_at, notes FROM plate_loans WHERE workspace_id = :ws"
+        ), {"ws": ws})).one()
+        # plate_loan_items carries no workspace_id — scope through the loan
+        # (the DB is session-scoped/shared across tests; unscoped would pick
+        # up sibling tests' rows).
+        items = (await s.execute(sa.text(
+            "SELECT li.status, li.status_changed_at FROM plate_loan_items li "
+            "JOIN plate_loans l ON l.id = li.loan_id WHERE l.workspace_id = :ws ORDER BY li.status"
+        ), {"ws": ws})).all()
+        comments = (await s.execute(sa.text(
+            "SELECT target_type, body, loan_id IS NOT NULL, author_id IS NULL, created_at "
+            "FROM plate_comments WHERE workspace_id = :ws ORDER BY created_at"
+        ), {"ws": ws})).all()
+    assert loan[0] == "closed" and loan[2].date() == date(2026, 5, 1)
+    assert loan[3].startswith("Legacy transaction 5001")
+    assert {r[0] for r in items} == {"denied", "returned"}
+    assert [c[0] for c in comments] == ["plate_loan", "plate_group", "plate"]
+    assert all(c[2] for c in comments) and all(c[3] for c in comments)
+    summary2 = await run_migration(
+        session_factory, legacy, workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={}, actor_id=actor, report_dir=tmp_path,
+        dry_run=False, site_name="TAMU", building_name="Main",
+    )
+    assert summary2["closed_loans_created"] == 0 and summary2["comments_created"] == 0
