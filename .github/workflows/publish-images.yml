@@ -64,17 +64,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: ver
-        env:
-          REF_TYPE: ${{ github.ref_type }}
-        run: |
-          if [ "$REF_TYPE" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#backend-v}"
-          else
-            VERSION="$(git describe --tags --match 'backend-v*' --always | sed 's/^backend-v//')"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "git_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+        # Single source of build identity (also what `make dev` exports).
+        run: scripts/build-info.sh backend | awk -F= -v OFS== '{$1=tolower($1)}1' >> "$GITHUB_OUTPUT"
       - uses: docker/metadata-action@v5
         id: meta
         with:
@@ -93,8 +84,8 @@ jobs:
           push: true
           build-args: |
             APP_VERSION=${{ steps.ver.outputs.version }}
-            GIT_SHA=${{ steps.ver.outputs.git_sha }}
-            BUILD_DATE=${{ steps.ver.outputs.build_date }}
+            APP_GIT_SHA=${{ steps.ver.outputs.git_sha }}
+            APP_BUILD_DATE=${{ steps.ver.outputs.build_date }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=backend
@@ -119,17 +110,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: ver
-        env:
-          REF_TYPE: ${{ github.ref_type }}
-        run: |
-          if [ "$REF_TYPE" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#frontend-v}"
-          else
-            VERSION="$(git describe --tags --match 'frontend-v*' --always | sed 's/^frontend-v//')"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "git_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+        # Single source of build identity (also what `make dev` exports).
+        run: scripts/build-info.sh frontend | awk -F= -v OFS== '{$1=tolower($1)}1' >> "$GITHUB_OUTPUT"
       - uses: docker/metadata-action@v5
         id: meta
         with:
@@ -148,8 +130,8 @@ jobs:
           push: true
           build-args: |
             APP_VERSION=${{ steps.ver.outputs.version }}
-            GIT_SHA=${{ steps.ver.outputs.git_sha }}
-            BUILD_DATE=${{ steps.ver.outputs.build_date }}
+            APP_GIT_SHA=${{ steps.ver.outputs.git_sha }}
+            APP_BUILD_DATE=${{ steps.ver.outputs.build_date }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=frontend
