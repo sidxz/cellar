@@ -16,6 +16,7 @@ from scripts.migrate_legacy_plate_tracker import (
     LegacyTransaction,
     LegacyTransactionPlate,
     LocationSpec,
+    UnmappedUser,
     build_account_email_map,
     compose_set_description,
     due_date_from,
@@ -33,6 +34,7 @@ from scripts.migrate_legacy_plate_tracker import (
     plan_group_tree,
     plan_loans,
     plan_locations,
+    plan_unmapped_users,
 )
 
 from cellar.domain.inventory.enums import CommentTarget, LoanItemStatus, PlateStatus, PlateType
@@ -429,3 +431,36 @@ def test_plan_comments_targets_and_prefix_stripping() -> None:
     assert plate_c.body == "removed 12.5 uL" and plate_c.loan_id == loan
     assert plate_c.author_name == "Jane Doe"
     assert plate_c.created_at == datetime(2026, 5, 9, 7, 1)
+
+
+def test_plan_unmapped_users_counts_open_closed_and_comments() -> None:
+    legacy = LegacyData(
+        transactions=[
+            LegacyTransaction(1, "OPEN", 42, datetime(2024, 1, 4)),  # unmapped requester
+            LegacyTransaction(2, "CLOSED", 42, datetime(2024, 1, 5)),  # same UIN, closed
+            LegacyTransaction(3, "OPEN", 77, datetime(2024, 1, 6)),  # resolved — excluded
+        ],
+        activities=[
+            LegacyActivity(1, "T_CMT", 1, None, None, "left a note", 42,
+                           datetime(2024, 1, 4, 9, 0)),
+            LegacyActivity(2, "T_CMT", 1, None, None,
+                           SYS + "Transaction closed, all plates are checked back in",
+                           42, datetime(2024, 1, 4, 10, 0)),  # system line — never a comment
+            LegacyActivity(3, "SET_CMT", 1, None, 1, "[SET] X : note", 77,
+                           datetime(2024, 1, 4, 11, 0)),  # resolved author — excluded
+        ],
+        accounts=[_acct(42, "bob", "bob@x.org"), _acct(77, "ann", "ann@x.org")],
+    )
+    account_email = build_account_email_map(legacy.accounts)
+    account_names = {42: "Bob Doe", 77: "Ann Lee"}
+    user_map = {"ann@x.org": uuid.uuid4()}  # 77 resolved, 42 not
+    out = plan_unmapped_users(legacy, account_email, user_map, account_names)
+    assert out == [UnmappedUser(uin=42, email="bob@x.org", name="Bob Doe",
+                                 open_txns=1, closed_txns=1, comments=1)]
+
+
+def test_plan_unmapped_users_falls_back_to_uin_placeholder_name_and_none_email() -> None:
+    legacy = LegacyData(transactions=[LegacyTransaction(9, "OPEN", 99, datetime(2024, 1, 1))])
+    out = plan_unmapped_users(legacy, {}, {}, {})
+    assert out == [UnmappedUser(uin=99, email=None, name="UIN 99",
+                                 open_txns=1, closed_txns=0, comments=0)]

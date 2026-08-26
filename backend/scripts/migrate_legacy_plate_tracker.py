@@ -26,16 +26,21 @@ Usage (from backend/):
 Cutover runbook:
   1. Grant `cellar:approve_loan` is NOT needed (migrated loans bypass approval).
   2. Freeze the legacy plate-tracker (read-only announcement).
-  3. Build user_map.csv: for each distinct OPEN-transaction requester email,
-     look up the Duar user id (admin UI → Users) → `email,user_id` rows.
+  3. Build user_map.csv: `email,duar_user_id` rows, one per distinct
+     requester/author email. The map covers OPEN- and CLOSED-transaction
+     requesters AND human comment authors (SET_CMT/PLATE_CMT/T_CMT/T_REQ_CMT)
+     — see reports/unmapped_users.csv (run a dry-run first) for exactly who
+     is still unresolved. Look up each Duar user id via admin UI → Users.
      (No service-key email→user lookup exists, so this step is manual.)
   4. Dry-run: add --dry-run; review MIGRATION SUMMARY + reports/*.csv.
      Resolve unmatched_plates.csv (plates registered under neither a cdd
      plate id nor a barcode — check plate_role/plate_format for typos) and
-     unresolved_requesters.csv (add to user_map.csv) until acceptable — this
-     is now informational only (unmapped requesters no longer drop a loan);
-     also review closed_loans_unparsed.csv (system comment lines that didn't
-     match a known grammar — the closed loan/item is skipped, not fabricated).
+     unresolved_requesters.csv / unmapped_users.csv (add to user_map.csv)
+     until acceptable — this is now informational only (an unmapped
+     requester/author no longer drops a loan or comment, just attributes it
+     to --actor-id / leaves author_id NULL); also review
+     closed_loans_unparsed.csv (system comment lines that didn't match a
+     known grammar — the closed loan/item is skipped, not fabricated).
   5. Real run (no --dry-run). Re-run is safe (idempotent) if interrupted.
      Legacy MySQL runs with `time_zone=SYSTEM` (naive wall-clock timestamps,
      not UTC) — the default --legacy-tz is America/Chicago (the prod
@@ -53,7 +58,7 @@ Cutover runbook:
 Summary counters: owner_backfilled, locations_created, plates_matched,
 plates_created, cdd_sync_rows, unmatched_plates, plates_classified,
 inactive_tagged, status_conflicts, groups_created, plates_grouped,
-loans_created, unresolved_requesters, closed_loans_created,
+loans_created, unresolved_requesters, unmapped_users, closed_loans_created,
 closed_lines_unparsed, comments_created.
 """
 
@@ -1285,6 +1290,66 @@ async def apply_comments(specs, *, comment_repo, workspace_id) -> int:
     return n
 
 
+@dataclass(frozen=True)
+class UnmappedUser:
+    uin: int
+    email: str | None
+    name: str
+    open_txns: int
+    closed_txns: int
+    comments: int
+
+
+_COMMENT_ACT_TYPES = ("T_CMT", "T_REQ_CMT", "SET_CMT", "PLATE_CMT")
+
+
+def plan_unmapped_users(
+    legacy: LegacyData,
+    account_email: dict[int, str],
+    user_map: dict[str, uuid.UUID],
+    account_names: dict[int, str],
+) -> list[UnmappedUser]:
+    """One row per UIN `--user-map` does not resolve, counting where their
+    attribution is at stake: as an OPEN/CLOSED transaction requester, or as
+    the author of a human ACTIVITY_LOG comment (system-generated lines
+    excluded). R21 already keeps these loans/comments (requested_by =
+    --actor-id, author_id = NULL) rather than dropping them — this is the
+    operator's --user-map worklist, built once over the WHOLE legacy
+    dataset (unlike plan_comments, which is gated per-run for idempotency)."""
+
+    def unresolved(uin: int) -> bool:
+        email = account_email.get(uin)
+        return email is None or email not in user_map
+
+    counts: dict[int, dict[str, int]] = defaultdict(
+        lambda: {"open": 0, "closed": 0, "comments": 0}
+    )
+    for t in legacy.transactions:
+        if not unresolved(t.scientist):
+            continue
+        if t.t_status == "OPEN":
+            counts[t.scientist]["open"] += 1
+        elif t.t_status == "CLOSED":
+            counts[t.scientist]["closed"] += 1
+    for a in legacy.activities:
+        if a.act_type not in _COMMENT_ACT_TYPES or is_system_comment(a.comments):
+            continue
+        if not unresolved(a.scientist):
+            continue
+        counts[a.scientist]["comments"] += 1
+    return [
+        UnmappedUser(
+            uin=uin,
+            email=account_email.get(uin),
+            name=account_names.get(uin, f"UIN {uin}"),
+            open_txns=c["open"],
+            closed_txns=c["closed"],
+            comments=c["comments"],
+        )
+        for uin, c in sorted(counts.items())
+    ]
+
+
 def _write_csv(path: Path, rows: list, header: list[str]) -> None:
     with path.open("w", newline="") as f:
         w = csv.writer(f)
@@ -1312,6 +1377,9 @@ async def run_migration(
     summary: dict[str, int] = {}
     report_dir = Path(report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
+
+    unmapped_users = plan_unmapped_users(legacy, account_email, user_map, account_names)
+    summary["unmapped_users"] = len(unmapped_users)
 
     uow = AsyncUnitOfWork(session_factory)
     async with uow:
@@ -1482,6 +1550,11 @@ async def run_migration(
         report_dir / "closed_loans_unparsed.csv",
         closed_unparsed,
         ["transaction_id", "act_id", "comments"],
+    )
+    _write_csv(
+        report_dir / "unmapped_users.csv",
+        unmapped_users,
+        ["uin", "email", "name", "open_txns", "closed_txns", "comments"],
     )
     logger.info("migration_done", dry_run=dry_run, **summary)
     return summary
