@@ -53,6 +53,7 @@ describe("plateWhereabouts precedence", () => {
     expect(plateWhereabouts(plate(), undefined, locations)).toEqual({
       kind: "location",
       path: "Room 1148 › Freezer 3",
+      heroPath: "Room 1148 › Freezer 3",
       fullPath: "Room 1148 › Freezer 3",
     });
     expect(plateWhereabouts(plate({ storage_location_id: null }), undefined, locations)).toEqual({
@@ -81,7 +82,15 @@ describe("whereText", () => {
       tone: "muted",
     });
     expect(
-      whereText({ kind: "location", path: "Freezer 3", fullPath: "Room › Freezer 3" }, name),
+      whereText(
+        {
+          kind: "location",
+          path: "Freezer 3",
+          heroPath: "Room › Freezer 3",
+          fullPath: "Room › Freezer 3",
+        },
+        name,
+      ),
     ).toEqual({ text: "Freezer 3", tone: "normal", title: "Room › Freezer 3" });
     expect(whereText({ kind: "status", status: "registered" }, name)).toEqual({
       text: "Registered",

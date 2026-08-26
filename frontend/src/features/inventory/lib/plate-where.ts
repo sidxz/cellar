@@ -9,7 +9,7 @@ import { storageFullPath, storagePath } from "./storage-path";
 export type Whereabouts =
   | { kind: "custody"; loan: PlateLoan; item: PlateLoanItem; overdue: boolean }
   | { kind: "terminal"; status: "depleted" | "disposed" }
-  | { kind: "location"; path: string; fullPath: string }
+  | { kind: "location"; path: string; heroPath: string; fullPath: string }
   | { kind: "status"; status: PlateStatus };
 
 /** Where a plate is, one answer: on loan > depleted/disposed > storage location > status. */
@@ -34,6 +34,8 @@ export function plateWhereabouts(
     return {
       kind: "location",
       path,
+      // Spec §9: the plate page hero shows the last three levels.
+      heroPath: storagePath(locations, plate.storage_location_id, 3),
       fullPath: storageFullPath(locations, plate.storage_location_id),
     };
   }

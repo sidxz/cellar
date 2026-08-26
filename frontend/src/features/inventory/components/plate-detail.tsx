@@ -254,7 +254,7 @@ function WhereaboutsHero({
     return (
       <div data-testid="plate-hero" className="flex items-center gap-2 text-sm">
         <Snowflake className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span>In storage · {where.fullPath}</span>
+        <span title={where.fullPath}>In storage · {where.heroPath}</span>
       </div>
     );
   }

@@ -81,7 +81,9 @@ function setup(plate = basePlate, loans: unknown[] = []) {
     if (opts.url === "/api/v1/plate-loans") return Promise.resolve(loans);
     if (opts.url === "/api/v1/storage-locations")
       return Promise.resolve([
-        { id: "room", name: "Room 1148", parent_id: null, type: "room", workspace_id: "w" },
+        { id: "site", name: "TAMU", parent_id: null, type: "site", workspace_id: "w" },
+        { id: "bld", name: "ILSB", parent_id: "site", type: "building", workspace_id: "w" },
+        { id: "room", name: "Room 1148", parent_id: "bld", type: "room", workspace_id: "w" },
         { id: "frz", name: "Freezer 3", parent_id: "room", type: "freezer", workspace_id: "w" },
       ]);
     if (opts.url === "/api/v1/orgs")
@@ -126,7 +128,9 @@ describe("PlateDetail hero", () => {
   it("in storage: full path; Request loan opens the dialog pre-filled with this barcode", async () => {
     setup();
     const hero = await screen.findByTestId("plate-hero");
-    await waitFor(() => expect(hero).toHaveTextContent("In storage · Room 1148 › Freezer 3"));
+    await waitFor(() =>
+      expect(hero).toHaveTextContent("In storage · ILSB › Room 1148 › Freezer 3"),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Request loan" }));
     const box = (await screen.findByLabelText("Barcodes")) as HTMLTextAreaElement;
     expect(box.value).toBe("0001");

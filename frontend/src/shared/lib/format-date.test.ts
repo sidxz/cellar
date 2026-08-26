@@ -192,6 +192,7 @@ describe("formatDue", () => {
     expect(due("2026-06-27")?.label).toBe("8 w overdue");
     expect(due("2026-06-26")?.label).toBe("2 mo overdue");
     expect(due("2025-03-13")?.label).toBe("17 mo overdue");
-    expect(due("2024-08-25")?.label).toBe("2 y overdue");
+    expect(due("2024-08-26")?.label).toBe("24 mo overdue"); // 729 d
+    expect(due("2024-08-25")?.label).toBe("2 y overdue"); // 730 d
   });
 });
