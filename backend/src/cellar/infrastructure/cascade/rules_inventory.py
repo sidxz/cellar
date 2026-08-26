@@ -47,4 +47,16 @@ register_rules(
         display_label="Samples",
         recurse_into_entity="sample",
     ),
+    # -------------------------------------------------------------------------
+    # Plate group → Collection link (spec 2026-08-26)
+    # -------------------------------------------------------------------------
+    # PlateGroupModel.collection_id → collections.id (ondelete=SET NULL)
+    CascadeRule(
+        child_table="plate_groups",
+        fk_column="collection_id",
+        parent_table="collections",
+        action=A.SET_NULL,
+        label_field="name",
+        display_label="Plate groups (collection link cleared)",
+    ),
 )

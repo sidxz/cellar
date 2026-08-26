@@ -18,6 +18,9 @@ Decisions:
 - Legacy-set metadata (state, location, initial vol/conc, compound count,
   scientist) lives on the group as optional fields (spec 2026-08-25 §5);
   ``plate_format`` is derived from member plates, never stored.
+- ``collection_id`` optionally links the group (any level) to the Collection
+  it physically realizes (spec 2026-08-26); existence is checked in the use
+  case, inheritance to descendants is display-only.
 """
 
 from __future__ import annotations
@@ -55,9 +58,7 @@ def _validated_group_type(group_type: str | None) -> str | None:
     if not cleaned:
         return None
     if len(cleaned) > MAX_GROUP_TYPE_LEN:
-        raise ValidationError(
-            f"group_type must be at most {MAX_GROUP_TYPE_LEN} characters"
-        )
+        raise ValidationError(f"group_type must be at most {MAX_GROUP_TYPE_LEN} characters")
     return cleaned
 
 
@@ -98,6 +99,7 @@ class PlateGroup(AggregateRoot):
         initial_concentration_mm: float | None = None,
         compound_count: int | None = None,
         scientist: str | None = None,
+        collection_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -118,6 +120,7 @@ class PlateGroup(AggregateRoot):
         )
         self.compound_count = _non_negative(compound_count, label="compound_count")
         self.scientist = _validated_text(scientist, max_len=MAX_SCIENTIST_LEN, label="scientist")
+        self.collection_id = collection_id
         self.created_by = created_by
 
     @classmethod
@@ -137,6 +140,7 @@ class PlateGroup(AggregateRoot):
         initial_concentration_mm: float | None = None,
         compound_count: int | None = None,
         scientist: str | None = None,
+        collection_id: uuid.UUID | None = None,
     ) -> PlateGroup:
         group = cls(
             workspace_id=workspace_id,
@@ -151,6 +155,7 @@ class PlateGroup(AggregateRoot):
             initial_concentration_mm=initial_concentration_mm,
             compound_count=compound_count,
             scientist=scientist,
+            collection_id=collection_id,
             created_by=created_by,
         )
         group.register_event(
@@ -178,6 +183,7 @@ class PlateGroup(AggregateRoot):
         initial_concentration_mm: float | None = ...,  # type: ignore[assignment]
         compound_count: int | None = ...,  # type: ignore[assignment]
         scientist: str | None = ...,  # type: ignore[assignment]
+        collection_id: uuid.UUID | None = ...,  # type: ignore[assignment]
     ) -> None:
         """Update mutable fields. Uses sentinel ``...`` for optional nullable fields."""
         if name is not None:
@@ -202,6 +208,8 @@ class PlateGroup(AggregateRoot):
             self.scientist = _validated_text(
                 scientist, max_len=MAX_SCIENTIST_LEN, label="scientist"
             )
+        if collection_id is not ...:
+            self.collection_id = collection_id
         self.updated_at = datetime.now(UTC)
         self.register_event(
             PlateGroupUpdated(

@@ -13,6 +13,8 @@ import type { PlateGroupResponseInitialVolumeUl } from './plateGroupResponseInit
 import type { PlateGroupResponseInitialConcentrationMm } from './plateGroupResponseInitialConcentrationMm';
 import type { PlateGroupResponseCompoundCount } from './plateGroupResponseCompoundCount';
 import type { PlateGroupResponseScientist } from './plateGroupResponseScientist';
+import type { PlateGroupResponseCollectionId } from './plateGroupResponseCollectionId';
+import type { PlateGroupResponseCollectionName } from './plateGroupResponseCollectionName';
 
 export interface PlateGroupResponse {
   id: string;
@@ -28,6 +30,8 @@ export interface PlateGroupResponse {
   initial_concentration_mm?: PlateGroupResponseInitialConcentrationMm;
   compound_count?: PlateGroupResponseCompoundCount;
   scientist?: PlateGroupResponseScientist;
+  collection_id?: PlateGroupResponseCollectionId;
+  collection_name?: PlateGroupResponseCollectionName;
   created_at: string;
   created_by: string;
   version: number;

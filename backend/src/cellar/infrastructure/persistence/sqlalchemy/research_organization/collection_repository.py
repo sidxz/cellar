@@ -102,6 +102,17 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
         self._uow.track(domain_entity)
         return domain_entity
 
+    async def find_by_ids(self, workspace_id: uuid.UUID, ids: list[uuid.UUID]) -> list[Collection]:
+        """Bulk-fetch by id (no molecule counts) — for name enrichment."""
+        if not ids:
+            return []
+        stmt = select(CollectionModel).where(
+            CollectionModel.workspace_id == workspace_id,
+            CollectionModel.id.in_(ids),
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
+
     # ------------------------------------------------------------------
     # Workspace queries
     # ------------------------------------------------------------------

@@ -7,6 +7,8 @@
 import type { GroupRefResponseGroupType } from './groupRefResponseGroupType';
 import type { GroupRefResponseState } from './groupRefResponseState';
 import type { GroupRefResponsePlateFormat } from './groupRefResponsePlateFormat';
+import type { GroupRefResponseCollectionId } from './groupRefResponseCollectionId';
+import type { GroupRefResponseCollectionName } from './groupRefResponseCollectionName';
 
 /**
  * Lightweight group reference used for ancestors + children lists.
@@ -18,4 +20,6 @@ export interface GroupRefResponse {
   state?: GroupRefResponseState;
   plate_count?: number;
   plate_format?: GroupRefResponsePlateFormat;
+  collection_id?: GroupRefResponseCollectionId;
+  collection_name?: GroupRefResponseCollectionName;
 }

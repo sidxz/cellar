@@ -14,6 +14,7 @@ from cellar.application.inventory.batch_identifiers import (
     RemoveBatchIdentifier,
 )
 from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
+from cellar.application.inventory.collection_plate_groups import ListPlateGroupsForCollection
 from cellar.application.inventory.comments import AddComment, ListComments
 from cellar.application.inventory.create_batch import CreateBatch
 from cellar.application.inventory.create_sample import CreateSample
@@ -148,6 +149,7 @@ __all__ = [
     "ListImportTemplatesDep",
     "ListKioskDevicesDep",
     "ListLoansDep",
+    "ListPlateGroupsForCollectionDep",
     "ListPlatesDep",
     "ListRunsForPlateDep",
     "ListSamplesByBatchDep",
@@ -273,6 +275,9 @@ MovePlateGroupDep = Annotated[MovePlateGroup, Depends(_get_use_case(MovePlateGro
 DeletePlateGroupDep = Annotated[DeletePlateGroup, Depends(_get_use_case(DeletePlateGroup))]
 GetGroupTreeDep = Annotated[GetGroupTree, Depends(_get_use_case(GetGroupTree))]
 GetPlateGroupDep = Annotated[GetPlateGroup, Depends(_get_use_case(GetPlateGroup))]
+ListPlateGroupsForCollectionDep = Annotated[
+    ListPlateGroupsForCollection, Depends(_get_use_case(ListPlateGroupsForCollection))
+]
 AssignPlatesToGroupDep = Annotated[
     AssignPlatesToGroup, Depends(_get_use_case(AssignPlatesToGroup))
 ]

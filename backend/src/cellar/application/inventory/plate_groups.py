@@ -9,6 +9,7 @@ like a missing one; the org-scoped tree read 403s for non-members instead
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
@@ -32,6 +33,7 @@ from cellar.domain.inventory.repository import (
     RegisteredPlateRepository,
     StorageLocationRepository,
 )
+from cellar.domain.research_organization.repository import CollectionRepository
 from cellar.domain.shared.errors import (
     AuthorizationError,
     ConflictError,
@@ -60,6 +62,7 @@ class CreatePlateGroupCommand(Command):
     initial_concentration_mm: float | None = None
     compound_count: int | None = None
     scientist: str | None = None
+    collection_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -75,6 +78,7 @@ class UpdatePlateGroupCommand(Command):
     initial_concentration_mm: float | None | object = UNSET
     compound_count: int | None | object = UNSET
     scientist: str | None | object = UNSET
+    collection_id: uuid.UUID | None | object = UNSET
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -138,6 +142,7 @@ class GroupTreeNode:
     group: PlateGroup
     plate_count: int
     plate_format: str | None = None
+    collection_name: str | None = None  # resolved from group.collection_id
     children: list[GroupTreeNode] = field(default_factory=list)
 
 
@@ -150,29 +155,57 @@ class GroupTree:
 @dataclass
 class GroupDetail:
     group: PlateGroup
+    collection_name: str | None
     plate_count: int  # direct members
     subtree_plate_count: int  # direct + all descendants
     plate_format: str | None  # derived over the direct members' formats
-    ancestors: list[PlateGroup]  # root-first, excluding the group itself
+    ancestors: list[GroupTreeNode]  # root-first, excluding the group itself; .children empty
     children: list[GroupTreeNode]  # direct children only; their .children is empty
+
+
+@dataclass
+class SavedGroup:
+    """Create/update result — the group plus its resolved collection name."""
+
+    group: PlateGroup
+    collection_name: str | None = None
+
+
+async def _collection_names(
+    repo: CollectionRepository, workspace_id: uuid.UUID, groups: Iterable[PlateGroup]
+) -> dict[uuid.UUID, str]:
+    """One batched fetch per response (spec §2 "Names") — never per node."""
+    ids = {g.collection_id for g in groups if g.collection_id is not None}
+    if not ids:
+        return {}
+    return {c.id: c.name for c in await repo.find_by_ids(workspace_id, list(ids))}
+
+
+def _node(
+    g: PlateGroup,
+    counts: dict[uuid.UUID, int],
+    formats: dict[uuid.UUID, list[str]],
+    names: dict[uuid.UUID, str],
+) -> GroupTreeNode:
+    return GroupTreeNode(
+        group=g,
+        plate_count=counts.get(g.id, 0),
+        plate_format=derive_format(formats.get(g.id, [])),
+        collection_name=names.get(g.collection_id),  # type: ignore[arg-type]  # None → None
+    )
 
 
 def build_tree(
     groups: list[PlateGroup],
     counts: dict[uuid.UUID, int],
     formats: dict[uuid.UUID, list[str]] | None = None,
+    collection_names: dict[uuid.UUID, str] | None = None,
 ) -> list[GroupTreeNode]:
     """Assemble nested nodes from a flat fetch. A node whose parent isn't in
     the fetched set is promoted to root (defensive — never crash the page)."""
     fmts = formats or {}
-    nodes = {
-        g.id: GroupTreeNode(
-            group=g,
-            plate_count=counts.get(g.id, 0),
-            plate_format=derive_format(fmts.get(g.id, [])),
-        )
-        for g in groups
-    }
+    names = collection_names or {}
+    nodes = {g.id: _node(g, counts, fmts, names) for g in groups}
     roots: list[GroupTreeNode] = []
     for g in groups:
         node = nodes[g.id]
@@ -212,6 +245,10 @@ def _location_not_found(location_id: uuid.UUID) -> Failure:
     return Failure(NotFoundError("StorageLocation", str(location_id)))
 
 
+def _collection_not_found(collection_id: uuid.UUID) -> Failure:
+    return Failure(NotFoundError("Collection", str(collection_id)))
+
+
 # ---------------------------------------------------------------------------
 # Use cases
 # ---------------------------------------------------------------------------
@@ -227,16 +264,18 @@ class CreatePlateGroup:
         dispatcher: EventDispatcherProtocol,
         visibility: PlateVisibilityService,
         location_repo: StorageLocationRepository,
+        collection_repo: CollectionRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._visibility = visibility
         self._location_repo = location_repo
+        self._collection_repo = collection_repo
 
     async def __call__(
         self, input: CreatePlateGroupCommand, auth: AuthContext | None = None
-    ) -> Result[PlateGroup, DomainError]:
+    ) -> Result[SavedGroup, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
 
@@ -248,8 +287,10 @@ class CreatePlateGroup:
         ):
             raise AuthorizationError("Cannot create groups for another organization")
 
-        owner_org_id = input.owner_org_id if input.owner_org_id is not None else (
-            auth.org_id if auth else None
+        owner_org_id = (
+            input.owner_org_id
+            if input.owner_org_id is not None
+            else (auth.org_id if auth else None)
         )
         if owner_org_id is None:
             return Failure(
@@ -286,6 +327,14 @@ class CreatePlateGroup:
                 if location is None:
                     return _location_not_found(input.storage_location_id)
 
+            collection = None
+            if input.collection_id is not None:
+                collection = await self._collection_repo.find_by_id_in_workspace(
+                    input.workspace_id, input.collection_id
+                )
+                if collection is None:
+                    return _collection_not_found(input.collection_id)
+
             group = PlateGroup.create(
                 workspace_id=input.workspace_id,
                 owner_org_id=owner_org_id,
@@ -300,12 +349,13 @@ class CreatePlateGroup:
                 initial_concentration_mm=input.initial_concentration_mm,
                 compound_count=input.compound_count,
                 scientist=input.scientist,
+                collection_id=input.collection_id,
             )
             await self._repo.save(group)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
-        return Success(group)
+        return Success(SavedGroup(group, collection.name if collection else None))
 
 
 class UpdatePlateGroup:
@@ -318,16 +368,18 @@ class UpdatePlateGroup:
         dispatcher: EventDispatcherProtocol,
         visibility: PlateVisibilityService,
         location_repo: StorageLocationRepository,
+        collection_repo: CollectionRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._visibility = visibility
         self._location_repo = location_repo
+        self._collection_repo = collection_repo
 
     async def __call__(
         self, input: UpdatePlateGroupCommand, auth: AuthContext | None = None
-    ) -> Result[PlateGroup, DomainError]:
+    ) -> Result[SavedGroup, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
 
@@ -341,14 +393,14 @@ class UpdatePlateGroup:
 
             if input.name is not None and input.name.strip() != group.name:
                 dup = await self._repo.find_by_name(
-                    input.workspace_id, group.owner_org_id, group.parent_group_id,
+                    input.workspace_id,
+                    group.owner_org_id,
+                    group.parent_group_id,
                     input.name.strip(),
                 )
                 if dup is not None and dup.id != group.id:
                     return Failure(
-                        ConflictError(
-                            f"A group named '{input.name.strip()}' already exists here"
-                        )
+                        ConflictError(f"A group named '{input.name.strip()}' already exists here")
                     )
 
             if input.storage_location_id is not UNSET and input.storage_location_id is not None:
@@ -357,6 +409,19 @@ class UpdatePlateGroup:
                 )
                 if location is None:
                     return _location_not_found(input.storage_location_id)
+
+            # Resolve the collection once: the new one (validated → 404) or,
+            # when untouched, the existing link — for the response's name.
+            collection = None
+            target_collection_id = (
+                group.collection_id if input.collection_id is UNSET else input.collection_id
+            )
+            if target_collection_id is not None:
+                collection = await self._collection_repo.find_by_id_in_workspace(
+                    input.workspace_id, target_collection_id
+                )
+                if collection is None and input.collection_id is not UNSET:
+                    return _collection_not_found(target_collection_id)
 
             kwargs: dict = {}
             if input.name is not None:
@@ -370,6 +435,7 @@ class UpdatePlateGroup:
                 "initial_concentration_mm",
                 "compound_count",
                 "scientist",
+                "collection_id",
             ):
                 value = getattr(input, key)
                 if value is not UNSET:
@@ -380,7 +446,7 @@ class UpdatePlateGroup:
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
-        return Success(group)
+        return Success(SavedGroup(group, collection.name if collection else None))
 
 
 class MovePlateGroup:
@@ -424,9 +490,7 @@ class MovePlateGroup:
                     # Missing OR belongs to another org — same 404 either way.
                     return _not_found(input.new_parent_group_id)
                 if is_descendant(by_id, group.id, parent.id):
-                    return Failure(
-                        ValidationError("Cannot move a group under its own descendant")
-                    )
+                    return Failure(ValidationError("Cannot move a group under its own descendant"))
 
             dup = await self._repo.find_by_name(
                 input.workspace_id, group.owner_org_id, input.new_parent_group_id, group.name
@@ -503,10 +567,12 @@ class GetGroupTree:
         uow: UnitOfWork,
         repo: PlateGroupRepository,
         visibility: PlateVisibilityService,
+        collection_repo: CollectionRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._visibility = visibility
+        self._collection_repo = collection_repo
 
     async def __call__(
         self, input: GetGroupTreeQuery, auth: AuthContext | None = None
@@ -530,8 +596,9 @@ class GetGroupTree:
             formats = await self._repo.plate_formats_by_group(
                 input.workspace_id, owner_org_id=org_id
             )
+            names = await _collection_names(self._collection_repo, input.workspace_id, groups)
             return Success(
-                GroupTree(org_id=org_id, roots=build_tree(groups, counts, formats))
+                GroupTree(org_id=org_id, roots=build_tree(groups, counts, formats, names))
             )
 
 
@@ -545,10 +612,12 @@ class GetPlateGroup:
         uow: UnitOfWork,
         repo: PlateGroupRepository,
         visibility: PlateVisibilityService,
+        collection_repo: CollectionRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._visibility = visibility
+        self._collection_repo = collection_repo
 
     async def __call__(
         self, input: GetPlateGroupQuery, auth: AuthContext | None = None
@@ -602,21 +671,18 @@ class GetPlateGroup:
                     )
                 frontier = next_frontier
 
+            names = await _collection_names(
+                self._collection_repo, input.workspace_id, [group, *ancestors, *direct_children]
+            )
             return Success(
                 GroupDetail(
                     group=group,
+                    collection_name=names.get(group.collection_id),  # type: ignore[arg-type]
                     plate_count=counts.get(group.id, 0),
                     subtree_plate_count=sum(counts.get(gid, 0) for gid in descendant_ids),
                     plate_format=derive_format(formats.get(group.id, [])),
-                    ancestors=ancestors,
-                    children=[
-                        GroupTreeNode(
-                            group=c,
-                            plate_count=counts.get(c.id, 0),
-                            plate_format=derive_format(formats.get(c.id, [])),
-                        )
-                        for c in direct_children
-                    ],
+                    ancestors=[_node(a, counts, formats, names) for a in ancestors],
+                    children=[_node(c, counts, formats, names) for c in direct_children],
                 )
             )
 
@@ -721,9 +787,7 @@ class RemovePlatesFromGroup:
                     return Failure(NotFoundError("RegisteredPlate", str(plate_id)))
                 if plate.group_id != group.id:
                     return Failure(
-                        ValidationError(
-                            f"Plate '{plate.barcode.value}' is not in this group"
-                        )
+                        ValidationError(f"Plate '{plate.barcode.value}' is not in this group")
                     )
                 plates.append(plate)
 

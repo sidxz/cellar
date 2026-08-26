@@ -14,6 +14,10 @@ from cellar.application.inventory.batch_identifiers import (
     RemoveBatchIdentifier,
 )
 from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
+from cellar.application.inventory.collection_plate_groups import (
+    CollectionPlateGroupsReader,
+    ListPlateGroupsForCollection,
+)
 from cellar.application.inventory.comments import AddComment, ListComments, TargetRepos
 from cellar.application.inventory.create_batch import CreateBatch
 from cellar.application.inventory.create_sample import CreateSample
@@ -136,6 +140,9 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory.collection_plate_groups_reader import (
+    SQLAlchemyCollectionPlateGroupsReader,
+)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.comment_repository import (
     SQLAlchemyCommentRepository,
 )
@@ -180,6 +187,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.storage_location_rep
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_repository import (
     SQLAlchemySynthesisRequestRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
+    SQLAlchemyCollectionRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (  # noqa: E501
     SQLAlchemyCustomFieldDefinitionRepository,
@@ -559,6 +569,7 @@ def register_inventory(container: Container) -> None:
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
             SQLAlchemyStorageLocationRepository(uow),
+            SQLAlchemyCollectionRepository(uow),
         )
 
     def _update_plate_group(c: Container):
@@ -569,6 +580,7 @@ def register_inventory(container: Container) -> None:
             c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort]),
             SQLAlchemyStorageLocationRepository(uow),
+            SQLAlchemyCollectionRepository(uow),
         )
 
     def _move_plate_group(c: Container):
@@ -595,6 +607,7 @@ def register_inventory(container: Container) -> None:
             uow,
             SQLAlchemyPlateGroupRepository(uow),
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyCollectionRepository(uow),
         )
 
     def _get_plate_group(c: Container):
@@ -603,6 +616,7 @@ def register_inventory(container: Container) -> None:
             uow,
             SQLAlchemyPlateGroupRepository(uow),
             PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyCollectionRepository(uow),
         )
 
     def _assign_plates_to_group(c: Container):
@@ -787,6 +801,23 @@ def register_inventory(container: Container) -> None:
 
     container.define(ListRunsForPlate, _list_runs_for_plate)
 
+    # --- Plate groups for collection (read model, S16 §5) ---
+    container.define(
+        CollectionPlateGroupsReader,
+        lambda c: SQLAlchemyCollectionPlateGroupsReader(c[async_sessionmaker]),
+    )
+
+    def _list_plate_groups_for_collection(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListPlateGroupsForCollection(
+            uow,
+            SQLAlchemyCollectionRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            c[CollectionPlateGroupsReader],
+        )
+
+    container.define(ListPlateGroupsForCollection, _list_plate_groups_for_collection)
+
     # --- Kiosk Devices ---
     def _create_kiosk_device(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -837,14 +868,19 @@ def register_inventory(container: Container) -> None:
     def _add_comment(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return AddComment(
-            uow, SQLAlchemyCommentRepository(uow), _comment_target_repos(uow), c[EventDispatcher],
+            uow,
+            SQLAlchemyCommentRepository(uow),
+            _comment_target_repos(uow),
+            c[EventDispatcher],
             PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
         )
 
     def _list_comments(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListComments(
-            uow, SQLAlchemyCommentRepository(uow), _comment_target_repos(uow),
+            uow,
+            SQLAlchemyCommentRepository(uow),
+            _comment_target_repos(uow),
             PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
         )
 

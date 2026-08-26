@@ -177,3 +177,21 @@ class TestMetadataFields:
         assert g.state == "Retired"
         events = g.collect_events()
         assert isinstance(events[-1], PlateGroupUpdated)
+
+
+class TestCollectionLink:
+    def test_create_with_and_without_collection(self) -> None:
+        assert _group().collection_id is None
+        coll = uuid.uuid4()
+        assert _group(collection_id=coll).collection_id == coll
+
+    def test_update_sets_clears_and_sentinel_leaves_alone(self) -> None:
+        coll = uuid.uuid4()
+        g = _group()
+        g.update(collection_id=coll)
+        assert g.collection_id == coll
+        g.update(name="Renamed")  # sentinel — untouched
+        assert g.collection_id == coll
+        g.update(collection_id=None)
+        assert g.collection_id is None
+        assert isinstance(g.collect_events()[-1], PlateGroupUpdated)

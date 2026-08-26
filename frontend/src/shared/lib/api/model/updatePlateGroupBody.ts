@@ -13,6 +13,7 @@ import type { UpdatePlateGroupBodyInitialVolumeUl } from './updatePlateGroupBody
 import type { UpdatePlateGroupBodyInitialConcentrationMm } from './updatePlateGroupBodyInitialConcentrationMm';
 import type { UpdatePlateGroupBodyCompoundCount } from './updatePlateGroupBodyCompoundCount';
 import type { UpdatePlateGroupBodyScientist } from './updatePlateGroupBodyScientist';
+import type { UpdatePlateGroupBodyCollectionId } from './updatePlateGroupBodyCollectionId';
 
 export interface UpdatePlateGroupBody {
   name?: UpdatePlateGroupBodyName;
@@ -24,4 +25,5 @@ export interface UpdatePlateGroupBody {
   initial_concentration_mm?: UpdatePlateGroupBodyInitialConcentrationMm;
   compound_count?: UpdatePlateGroupBodyCompoundCount;
   scientist?: UpdatePlateGroupBodyScientist;
+  collection_id?: UpdatePlateGroupBodyCollectionId;
 }

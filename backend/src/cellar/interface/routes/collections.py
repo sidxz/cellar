@@ -8,6 +8,10 @@ from typing import Literal
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
+from cellar.application.inventory.collection_plate_groups import (
+    CollectionPlateGroupRow,
+    ListPlateGroupsForCollectionQuery,
+)
 from cellar.application.research_organization.bulk_add_to_collection import (
     BulkAddToCollectionCommand,
 )
@@ -39,6 +43,7 @@ from cellar.interface.dependencies import (
     GetCollectionDep,
     ListCollectionMoleculesDep,
     ListCollectionsDep,
+    ListPlateGroupsForCollectionDep,
     RemoveMoleculesFromCollectionDep,
     UpdateCollectionDep,
 )
@@ -173,6 +178,24 @@ class BulkAddResponse(BaseModel):
     ambiguous_count: int
     error_count: int
     preview_id: uuid.UUID | None = None
+
+
+class CollectionPlateGroupResponse(BaseModel):
+    """A plate group that physically realizes this collection (S16)."""
+
+    group_id: uuid.UUID
+    name: str
+    group_type: str | None = None
+    owner_org_id: uuid.UUID
+    path: str
+    plate_count: int
+    subtree_plate_count: int
+    on_loan_count: int
+    overdue_count: int
+
+    @classmethod
+    def from_row(cls, r: CollectionPlateGroupRow) -> CollectionPlateGroupResponse:
+        return cls(**r.__dict__)
 
 
 @router.get("", response_model=PaginatedResponse[CollectionResponse])
@@ -346,6 +369,20 @@ async def list_collection_molecules(
     )
     molecule_ids = result_to_response(await use_case(query, auth=auth))
     return molecule_ids
+
+
+@router.get("/{collection_id}/plate-groups", response_model=list[CollectionPlateGroupResponse])
+async def list_collection_plate_groups(
+    collection_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListPlateGroupsForCollectionDep,
+) -> list[CollectionPlateGroupResponse]:
+    """Plate groups (any level) linked to this collection, with plate/loan counts."""
+    query = ListPlateGroupsForCollectionQuery(
+        workspace_id=auth.workspace_id, collection_id=collection_id
+    )
+    rows = result_to_response(await use_case(query, auth=auth))
+    return [CollectionPlateGroupResponse.from_row(r) for r in rows]
 
 
 @router.post(

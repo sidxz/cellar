@@ -12,6 +12,8 @@ import type { GroupTreeNodeResponseInitialVolumeUl } from './groupTreeNodeRespon
 import type { GroupTreeNodeResponseInitialConcentrationMm } from './groupTreeNodeResponseInitialConcentrationMm';
 import type { GroupTreeNodeResponseCompoundCount } from './groupTreeNodeResponseCompoundCount';
 import type { GroupTreeNodeResponseScientist } from './groupTreeNodeResponseScientist';
+import type { GroupTreeNodeResponseCollectionId } from './groupTreeNodeResponseCollectionId';
+import type { GroupTreeNodeResponseCollectionName } from './groupTreeNodeResponseCollectionName';
 import type { GroupTreeNodeResponseParentGroupId } from './groupTreeNodeResponseParentGroupId';
 import type { GroupTreeNodeResponsePlateFormat } from './groupTreeNodeResponsePlateFormat';
 
@@ -26,6 +28,8 @@ export interface GroupTreeNodeResponse {
   initial_concentration_mm?: GroupTreeNodeResponseInitialConcentrationMm;
   compound_count?: GroupTreeNodeResponseCompoundCount;
   scientist?: GroupTreeNodeResponseScientist;
+  collection_id?: GroupTreeNodeResponseCollectionId;
+  collection_name?: GroupTreeNodeResponseCollectionName;
   created_at: string;
   parent_group_id?: GroupTreeNodeResponseParentGroupId;
   owner_org_id: string;

@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from cellar.domain.inventory.enums import PlateType
 from cellar.domain.inventory.plate_group import PlateGroup
 from cellar.domain.inventory.registered_plate import RegisteredPlate
+from cellar.domain.research_organization.collection import Collection
 from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.shared.value_objects import Barcode
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
@@ -17,6 +18,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_reposito
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
+    SQLAlchemyCollectionRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
@@ -186,3 +190,28 @@ async def test_group_delete_sets_plate_group_null(session_factory) -> None:
             ws, plate.id
         )
         assert loaded is not None and loaded.group_id is None  # DB SET NULL
+
+
+@pytest.mark.integration
+async def test_collection_id_round_trip_and_clear(session_factory) -> None:
+    ws = uuid.uuid4()
+    coll = Collection.create(workspace_id=ws, name="SACCZ", created_by=USER)
+    g = PlateGroup.create(
+        workspace_id=ws, owner_org_id=ORG, name="Linked", created_by=USER, collection_id=coll.id
+    )
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await SQLAlchemyCollectionRepository(uow).save(coll)
+        await SQLAlchemyPlateGroupRepository(uow).save(g)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyPlateGroupRepository(uow)
+        loaded = await repo.find_by_id_in_workspace(ws, g.id)
+        assert loaded is not None and loaded.collection_id == coll.id
+        loaded.update(collection_id=None)
+        await repo.save(loaded)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        loaded = await SQLAlchemyPlateGroupRepository(uow).find_by_id_in_workspace(ws, g.id)
+        assert loaded is not None and loaded.collection_id is None

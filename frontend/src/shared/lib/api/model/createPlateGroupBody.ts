@@ -14,6 +14,7 @@ import type { CreatePlateGroupBodyInitialVolumeUl } from './createPlateGroupBody
 import type { CreatePlateGroupBodyInitialConcentrationMm } from './createPlateGroupBodyInitialConcentrationMm';
 import type { CreatePlateGroupBodyCompoundCount } from './createPlateGroupBodyCompoundCount';
 import type { CreatePlateGroupBodyScientist } from './createPlateGroupBodyScientist';
+import type { CreatePlateGroupBodyCollectionId } from './createPlateGroupBodyCollectionId';
 
 export interface CreatePlateGroupBody {
   name: string;
@@ -27,4 +28,5 @@ export interface CreatePlateGroupBody {
   initial_concentration_mm?: CreatePlateGroupBodyInitialConcentrationMm;
   compound_count?: CreatePlateGroupBodyCompoundCount;
   scientist?: CreatePlateGroupBodyScientist;
+  collection_id?: CreatePlateGroupBodyCollectionId;
 }
