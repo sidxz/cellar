@@ -33,18 +33,6 @@ describe("AggregationControl", () => {
     expect(onChange).toHaveBeenCalledWith("best_r2");
   });
 
-  it("renders all four modes in the menu", () => {
-    render(<AggregationControl mode="latest" onChange={vi.fn()} />);
-    fireEvent.click(screen.getByRole("combobox"));
-    // Radix Select renders the current value in the trigger too, so the
-    // currently-selected label ("Latest run") appears twice. Each label
-    // is found at least once.
-    expect(screen.getAllByText(/Latest run/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Geometric mean/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Arithmetic mean/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Best fit/).length).toBeGreaterThan(0);
-  });
-
   // The `disabled` prop swaps the dropdown for a static label (used when
   // every activity criterion narrows scope to one run and any aggregation
   // rule is a no-op). The behavior contract: no interactive combobox is

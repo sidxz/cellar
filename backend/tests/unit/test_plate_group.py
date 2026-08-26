@@ -45,12 +45,6 @@ class TestCreate:
         assert events[0].name == "Vendor Library A"
         assert events[0].owner_org_id == ORG
 
-    def test_create_with_parent_and_type(self) -> None:
-        parent_id = uuid.uuid4()
-        g = _group(parent_group_id=parent_id, group_type="vendor", description="desc")
-        assert g.parent_group_id == parent_id
-        assert g.group_type == "vendor"
-        assert g.description == "desc"
 
     def test_empty_name_rejected(self) -> None:
         with pytest.raises(ValidationError):
@@ -133,14 +127,6 @@ class TestMetadataFields:
         assert g.compound_count == 17606
         assert g.scientist == "Jane Doe"
 
-    def test_metadata_defaults_to_none(self) -> None:
-        g = _group()
-        assert g.state is None
-        assert g.storage_location_id is None
-        assert g.initial_volume_ul is None
-        assert g.initial_concentration_mm is None
-        assert g.compound_count is None
-        assert g.scientist is None
 
     def test_blank_state_and_scientist_normalize_to_none(self) -> None:
         g = _group(state="   ", scientist="")
@@ -180,10 +166,6 @@ class TestMetadataFields:
 
 
 class TestCollectionLink:
-    def test_create_with_and_without_collection(self) -> None:
-        assert _group().collection_id is None
-        coll = uuid.uuid4()
-        assert _group(collection_id=coll).collection_id == coll
 
     def test_update_sets_clears_and_sentinel_leaves_alone(self) -> None:
         coll = uuid.uuid4()

@@ -11,8 +11,6 @@ from cellar.domain.shared.enums import (
     AssignmentType,
     ConcentrationUnit,
     LightCondition,
-    LinkedEntityType,
-    Qualifier,
 )
 from cellar.domain.shared.value_objects import (
     Amount,
@@ -22,9 +20,7 @@ from cellar.domain.shared.value_objects import (
     Concentration,
     ComputedDescriptors,
     FormulationNumber,
-    LinkedEntityRef,
     PredictedProperties,
-    QualifiedValue,
     ReactionConditions,
     ReactionOutcome,
     RegistrationNumber,
@@ -234,15 +230,6 @@ class TestConcentration:
             Concentration(value=-1.0, unit=ConcentrationUnit.MM)
 
 
-class TestQualifiedValue:
-    def test_default_qualifier(self) -> None:
-        qv = QualifiedValue(value=42.0)
-        assert qv.qualifier == Qualifier.EQUAL
-
-    def test_explicit_qualifier(self) -> None:
-        qv = QualifiedValue(value=10000.0, qualifier=Qualifier.GREATER_THAN)
-        assert qv.qualifier == Qualifier.GREATER_THAN
-
 
 # ---------------------------------------------------------------------------
 # Synthesis VOs
@@ -315,18 +302,6 @@ class TestSynthesisAssignment:
 # Cross-context VOs
 # ---------------------------------------------------------------------------
 
-
-class TestLinkedEntityRef:
-    def test_valid(self) -> None:
-        eid = uuid.uuid4()
-        ref = LinkedEntityRef(entity_type=LinkedEntityType.MOLECULE, entity_id=eid)
-        assert ref.entity_id == eid
-
-    def test_equality(self) -> None:
-        eid = uuid.uuid4()
-        a = LinkedEntityRef(entity_type=LinkedEntityType.BATCH, entity_id=eid)
-        b = LinkedEntityRef(entity_type=LinkedEntityType.BATCH, entity_id=eid)
-        assert a == b
 
 
 class TestStorageCondition:

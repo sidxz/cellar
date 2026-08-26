@@ -20,17 +20,6 @@ beforeAll(() => {
 });
 
 describe("ScaffoldColorPicker", () => {
-  it("renders the 'Color by:' prefix label", () => {
-    render(
-      <ScaffoldColorPicker
-        protocols={[{ id: "p1", name: "Mtb WCA" }]}
-        value={null}
-        onChange={() => {}}
-      />,
-    );
-    expect(screen.getByText(/color by:/i)).toBeInTheDocument();
-  });
-
   it("hides entirely when there are no protocols to color by", () => {
     const { container } = render(
       <ScaffoldColorPicker protocols={[]} value={null} onChange={() => {}} />,

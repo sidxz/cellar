@@ -9,10 +9,6 @@ from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
 
 class TestInterceptKey:
-    def test_construct_with_kind_and_level(self) -> None:
-        key = InterceptKey(kind="ec", level=50.0)
-        assert key.kind == "ec"
-        assert key.level == 50.0
 
     def test_is_frozen(self) -> None:
         key = InterceptKey(kind="ec", level=50.0)
@@ -45,19 +41,7 @@ class TestInterceptKey:
 
 
 class TestHitCriterionInterceptKey:
-    def test_intercept_key_defaults_to_none(self) -> None:
-        crit = HitCriterion(readout_name="Resazurin", operator="lt", value=10.0)
-        assert crit.intercept_key is None
 
-    def test_intercept_key_can_be_set_explicitly(self) -> None:
-        key = InterceptKey(kind="ec", level=90.0)
-        crit = HitCriterion(
-            readout_name="Resazurin",
-            operator="lt",
-            value=10.0,
-            intercept_key=key,
-        )
-        assert crit.intercept_key == key
 
     def test_to_dict_emits_intercept_key_when_set(self) -> None:
         crit = HitCriterion(

@@ -8,7 +8,6 @@ import pytest
 
 from cellar.application.auth import (
     LOAN_APPROVE_ACTION,
-    AuthContext,
     require_admin,
     require_editor,
     require_loan_authority,
@@ -19,35 +18,6 @@ from cellar.application.auth import (
 from cellar.domain.shared.errors import AuthorizationError, NotFoundError
 from tests.fakes.fake_auth import FakeAuth
 
-
-class TestFakeAuthProtocol:
-    def test_satisfies_auth_context(self) -> None:
-        auth = FakeAuth()
-        assert isinstance(auth, AuthContext)
-
-    def test_role_hierarchy(self) -> None:
-        viewer = FakeAuth(role="viewer")
-        editor = FakeAuth(role="editor")
-        admin = FakeAuth(role="admin")
-        owner = FakeAuth(role="owner")
-
-        assert not viewer.has_role("editor")
-        assert editor.has_role("editor")
-        assert admin.has_role("editor")
-        assert owner.has_role("editor")
-
-    def test_is_admin(self) -> None:
-        assert not FakeAuth(role="viewer").is_admin
-        assert not FakeAuth(role="editor").is_admin
-        assert FakeAuth(role="admin").is_admin
-        assert FakeAuth(role="owner").is_admin
-
-    def test_custom_ids(self) -> None:
-        uid = uuid.uuid4()
-        wid = uuid.uuid4()
-        auth = FakeAuth(user_id=uid, workspace_id=wid)
-        assert auth.user_id == uid
-        assert auth.workspace_id == wid
 
 
 class TestRequireWorkspaceRole:

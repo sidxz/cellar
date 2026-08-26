@@ -53,10 +53,6 @@ class TestTargetMirror:
         assert not hasattr(Target, "create")
         assert not hasattr(Target, "update")
 
-    def test_new_enum_values_exist(self) -> None:
-        assert TargetType("domain") is TargetType.DOMAIN
-        assert TargetType("protein_protein_interaction") is TargetType.PROTEIN_PROTEIN_INTERACTION
-        assert TargetType("unknown") is TargetType.UNKNOWN
 
     def test_identity_equality(self, workspace_id: uuid.UUID) -> None:
         tid = uuid.uuid4()

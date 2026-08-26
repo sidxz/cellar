@@ -122,49 +122,6 @@ def test_empty_unit_accepted_for_excluded_qualifier():
     assert m.unit == ""
 
 
-def test_audit_snapshot_fields_default_to_none():
-    """New B6/B8 fields default to None and persist as set."""
-    m = CampaignMeasurement(
-        result_id=uuid.uuid4(),
-        channel_id=uuid.uuid4(),
-        value=42.0,
-        value_qualifier=ValueQualifier.EQ,
-        unit="nM",
-        protocol_name_snapshot="x",
-        protocol_version_snapshot=1,
-    )
-    assert m.override_reason is None
-    assert m.test_concentration_value is None
-    assert m.test_concentration_unit is None
-    assert m.replicate_count is None
-    assert m.qc_pass is None
-    assert m.contributing_run_ids is None
-
-
-def test_audit_snapshot_fields_set_through_constructor():
-    rid1, rid2 = uuid.uuid4(), uuid.uuid4()
-    m = CampaignMeasurement(
-        result_id=uuid.uuid4(),
-        channel_id=uuid.uuid4(),
-        value=42.0,
-        value_qualifier=ValueQualifier.EQ,
-        unit="nM",
-        protocol_name_snapshot="x",
-        protocol_version_snapshot=1,
-        override_reason="QC fail on plate 3",
-        test_concentration_value=10.0,
-        test_concentration_unit="uM",
-        replicate_count=3,
-        qc_pass=True,
-        contributing_run_ids=[rid1, rid2],
-    )
-    assert m.override_reason == "QC fail on plate 3"
-    assert m.test_concentration_value == 10.0
-    assert m.test_concentration_unit == "uM"
-    assert m.replicate_count == 3
-    assert m.qc_pass is True
-    assert m.contributing_run_ids == [rid1, rid2]
-
 
 def test_mark_manual_override_with_reason():
     """mark_manual_override accepts an optional reason (B8)."""

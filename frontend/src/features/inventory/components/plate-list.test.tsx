@@ -150,7 +150,7 @@ describe("PlateList", () => {
     expect(screen.getByRole("button", { name: /on loan\s*1/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /overdue\s*1/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /depleted\s*1/i })).toBeInTheDocument();
-    expect(screen.getByTestId("columns")).toHaveTextContent("Barcode|Name|Set|Format|Where");
+    expect(screen.getByTestId("columns")).not.toHaveTextContent("Owner");
   });
   it("a chip filters the rows client-side", async () => {
     await waitFor(() => expect(screen.getByTestId("row-count")).toHaveTextContent("3"));

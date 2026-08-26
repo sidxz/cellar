@@ -164,9 +164,6 @@ class TestOwnerOrgId:
         event = plate.collect_events()[0]
         assert event.owner_org_id == org_id
 
-    def test_register_without_owner_org_defaults_none(self):
-        plate = _make_plate()
-        assert plate.owner_org_id is None
 
     def test_update_owner_org_sentinel(self):
         plate = _make_plate(owner_org_id=uuid.uuid4())

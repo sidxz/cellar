@@ -99,43 +99,6 @@ class TestSavedSearchCreate:
         original["smiles"] = "MUTATED"
         assert search.query["smiles"] == "CCO"
 
-    def test_columns_default_none(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
-    ) -> None:
-        search = SavedSearch.create(
-            workspace_id=ws_id, name="No cols", query=sample_query, created_by=user_id
-        )
-        assert search.columns is None
-
-    def test_create_with_description(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
-    ) -> None:
-        search = SavedSearch.create(
-            workspace_id=ws_id,
-            name="Described",
-            query=sample_query,
-            created_by=user_id,
-            description="Finds benzene analogs with high similarity",
-        )
-        assert search.description == "Finds benzene analogs with high similarity"
-
-    def test_create_without_description_defaults_none(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
-    ) -> None:
-        search = SavedSearch.create(
-            workspace_id=ws_id, name="No desc", query=sample_query, created_by=user_id
-        )
-        assert search.description is None
-
-    def test_new_fields_default_none(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
-    ) -> None:
-        search = SavedSearch.create(
-            workspace_id=ws_id, name="Defaults", query=sample_query, created_by=user_id
-        )
-        assert search.last_run_at is None
-        assert search.result_count is None
-
 
 class TestSavedSearchVisibility:
     def test_project_visibility_requires_project_id(

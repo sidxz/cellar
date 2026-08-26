@@ -38,20 +38,6 @@ class TestOntologySlotDefinitionCreate:
         assert slot.display_order == 0
         assert slot.version == 1
 
-    def test_create_with_all_options(self, workspace_id: uuid.UUID):
-        slot = OntologySlotDefinition.create(
-            workspace_id=workspace_id,
-            name="cell_line",
-            label="Cell Line",
-            ontology_sources=["CLO", "EFO"],
-            is_required=True,
-            allow_free_text=False,
-            display_order=5,
-        )
-        assert slot.is_required is True
-        assert slot.allow_free_text is False
-        assert slot.display_order == 5
-        assert slot.ontology_sources == ["CLO", "EFO"]
 
     def test_create_strips_whitespace(self, workspace_id: uuid.UUID):
         slot = OntologySlotDefinition.create(

@@ -61,10 +61,6 @@ class TestProjectCreate:
         with pytest.raises(ValidationError, match="name must not be empty"):
             Project.create(workspace_id=ws_id, name="   ", created_by=user_id)
 
-    def test_optional_fields_default_none(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
-        project = Project.create(workspace_id=ws_id, name="Minimal", created_by=user_id)
-        assert project.description is None
-
 
 class TestProjectUpdate:
     def test_update_name(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:

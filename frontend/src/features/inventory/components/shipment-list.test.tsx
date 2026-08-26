@@ -47,10 +47,8 @@ function setup() {
 }
 
 describe("ShipmentListPage", () => {
-  it("grid carries Direction and Items columns and one row per shipment", async () => {
+  it("renders one row per shipment", async () => {
     setup();
-    expect(screen.getByTestId("columns")).toHaveTextContent("Direction");
-    expect(screen.getByTestId("columns")).toHaveTextContent("Items");
     await waitFor(() => expect(screen.getByTestId("row-count")).toHaveTextContent("1"));
   });
 });

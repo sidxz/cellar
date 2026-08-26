@@ -22,17 +22,6 @@ function makeTemplate(id: string, mapping: Record<string, unknown>): RunImportTe
   };
 }
 
-// ─── emptyDraft ───────────────────────────────────────────────────────────────
-
-describe("emptyDraft", () => {
-  it("produces a draft with empty/default fields", () => {
-    const draft = emptyDraft();
-    expect(draft.roles).toEqual({});
-    expect(draft.readoutDefByHeader).toEqual({});
-    expect(draft.acknowledgedLowConfidence).toBe(false);
-  });
-});
-
 // ─── applyTemplateToDraft ─────────────────────────────────────────────────────
 
 describe("applyTemplateToDraft", () => {

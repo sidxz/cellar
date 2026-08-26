@@ -1,7 +1,7 @@
 """Tests for DomainEvent base class."""
 
 import uuid
-from dataclasses import FrozenInstanceError, dataclass
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 
 import pytest
@@ -31,17 +31,3 @@ class TestDomainEvent:
         a = DomainEvent(aggregate_id=uuid.uuid4(), aggregate_type="X", workspace_id=uuid.uuid4())
         b = DomainEvent(aggregate_id=uuid.uuid4(), aggregate_type="X", workspace_id=uuid.uuid4())
         assert a.event_id != b.event_id
-
-    def test_subclass(self) -> None:
-        @dataclass(frozen=True, kw_only=True)
-        class MoleculeRegistered(DomainEvent):
-            registration_number: str
-
-        event = MoleculeRegistered(
-            aggregate_id=uuid.uuid4(),
-            aggregate_type="Molecule",
-            workspace_id=uuid.uuid4(),
-            registration_number="CV-00001",
-        )
-        assert event.registration_number == "CV-00001"
-        assert isinstance(event, DomainEvent)

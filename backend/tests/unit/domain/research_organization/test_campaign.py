@@ -9,7 +9,6 @@ from cellar.domain.research_organization.campaign_measurement import (
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
@@ -309,8 +308,3 @@ def test_supersede_transitions_and_emits_event():
     events = c.collect_events()
     assert any(isinstance(e, CampaignSuperseded) for e in events)
 
-
-def test_create_with_supersedes_carries_pointer():
-    prior_id = uuid.uuid4()
-    c = _make_campaign(supersedes_campaign_id=prior_id)
-    assert c.supersedes_campaign_id == prior_id

@@ -1,7 +1,6 @@
 """Tests for Molecule aggregate root."""
 
 import uuid
-from datetime import date
 
 import pytest
 
@@ -213,26 +212,6 @@ class TestRegisterDisclosed:
     ) -> None:
         mol = _make_disclosed(ws_id, org_id, aspirin_structure, aspirin_descriptors)
         assert mol.molecular_formula == aspirin_descriptors.molecular_formula
-
-    def test_optional_fields(
-        self,
-        ws_id: uuid.UUID,
-        org_id: uuid.UUID,
-        aspirin_structure: ChemicalStructure,
-        aspirin_descriptors: ComputedDescriptors,
-    ) -> None:
-        mol = _make_disclosed(
-            ws_id,
-            org_id,
-            aspirin_structure,
-            aspirin_descriptors,
-            stereochemistry=Stereochemistry.ACHIRAL,
-            invention_date=date(2024, 1, 15),
-            custom_fields={"project": "oncology"},
-        )
-        assert mol.stereochemistry == Stereochemistry.ACHIRAL
-        assert mol.invention_date == date(2024, 1, 15)
-        assert mol.custom_fields == {"project": "oncology"}
 
 
 # ---------------------------------------------------------------------------

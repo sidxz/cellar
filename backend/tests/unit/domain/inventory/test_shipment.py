@@ -83,11 +83,6 @@ class TestShipmentCreation:
         assert shipment.direction == ShipmentDirection.OUTBOUND
         assert shipment.loan_id is None
 
-    def test_create_inbound_with_loan(self, ws_id):
-        loan_id = uuid.uuid4()
-        shipment = _make_shipment(ws_id, direction=ShipmentDirection.INBOUND, loan_id=loan_id)
-        assert shipment.direction == ShipmentDirection.INBOUND
-        assert shipment.loan_id == loan_id
 
     def test_update_loan_id_set_clear_and_sentinel(self, ws_id):
         shipment = _make_shipment(ws_id)

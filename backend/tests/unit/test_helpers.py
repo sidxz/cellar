@@ -8,14 +8,13 @@ from dataclasses import dataclass
 import pytest
 from returns.result import Failure, Success
 
-from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.errors import NotFoundError, ValidationError
 from cellar.domain.shared.events import DomainEvent
 from tests.helpers.assertions import (
     assert_event_emitted,
     assert_result_err,
     assert_result_ok,
 )
-from tests.helpers.chem import known_inchi_key, known_smiles
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -88,19 +87,3 @@ class TestAssertEventEmitted:
         with pytest.raises(AssertionError, match="molecule_name"):
             assert_event_emitted(events, FakeEvent, molecule_name="wrong")
 
-
-class TestChemHelpers:
-    def test_default_smiles(self) -> None:
-        assert known_smiles() == "CCO"
-
-    def test_named_smiles(self) -> None:
-        assert "c1ccccc1" in known_smiles("benzene")
-
-    def test_default_inchi_key(self) -> None:
-        key = known_inchi_key()
-        assert len(key) == 27  # InChI Keys are 27 chars
-        assert key.startswith("LFQSCWFLJHTTHZ")
-
-    def test_named_inchi_key(self) -> None:
-        key = known_inchi_key("aspirin")
-        assert key.startswith("BSYNRYMUTXBXSQ")

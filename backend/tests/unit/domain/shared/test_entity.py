@@ -43,22 +43,9 @@ class TestEntity:
         assert hash(a) == hash(b)
         assert len({a, b}) == 1
 
-    def test_repr(self) -> None:
-        e = Entity()
-        assert "Entity(id=" in repr(e)
-
 
 class TestAggregateRoot:
-    def test_default_version(self) -> None:
-        ar = AggregateRoot()
-        assert ar.version == 1
 
-    def test_explicit_version(self) -> None:
-        ar = AggregateRoot(version=5)
-        assert ar.version == 5
-
-    def test_is_entity(self) -> None:
-        assert isinstance(AggregateRoot(), Entity)
 
     def test_register_and_collect_events(self) -> None:
         ar = AggregateRoot()

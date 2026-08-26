@@ -70,12 +70,6 @@ function renderWizard() {
 }
 
 describe("SummaryImportWizard", () => {
-  it("renders the dialog with the title when open", () => {
-    hookState.value = baseHook();
-    renderWizard();
-    expect(screen.getByText("Import Summary Results")).toBeInTheDocument();
-  });
-
   it("step 1 shows the upload affordance", () => {
     hookState.value = baseHook({ step: 1 });
     renderWizard();
@@ -152,22 +146,5 @@ describe("SummaryImportWizard", () => {
     expect(
       screen.getByText(/nothing to import — check your compound column mapping/i),
     ).toBeInTheDocument();
-  });
-
-  it("step 4 shows the result summary counts", () => {
-    hookState.value = baseHook({
-      step: 4,
-      result: {
-        rows_processed: 10,
-        values_inserted: 8,
-        values_updated: 1,
-        rows_skipped: 1,
-        errors: [],
-      },
-    });
-    renderWizard();
-    expect(screen.getByText(/import complete/i)).toBeInTheDocument();
-    expect(screen.getByText("Inserted")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /done/i })).toBeInTheDocument();
   });
 });

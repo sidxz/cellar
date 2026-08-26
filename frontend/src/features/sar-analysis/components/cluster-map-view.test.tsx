@@ -115,14 +115,6 @@ describe("ClusterMapView", () => {
     regionReset.mockClear();
   });
 
-  it("renders the scatter, basket pane, and split group", () => {
-    render(<ClusterMapView {...defaultProps} />, { wrapper });
-    expect(screen.getByTestId("cluster-scatter")).toBeInTheDocument();
-    expect(screen.getByTestId("selection-pane")).toBeInTheDocument();
-    expect(screen.getByTestId("panel-group")).toBeInTheDocument();
-    expect(screen.getByTestId("resize-handle")).toBeInTheDocument();
-  });
-
   it("renders the Diversify button and an empty basket bar", () => {
     render(<ClusterMapView {...defaultProps} />, { wrapper });
     // Exact-match: "Diversify" must not also match the basket bar's

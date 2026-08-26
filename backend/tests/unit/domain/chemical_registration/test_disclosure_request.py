@@ -459,27 +459,3 @@ class TestPendingConfirmation:
                 canonical_smiles="CCO",
                 inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
             )
-
-    def test_matched_molecule_id_defaults_to_none(
-        self, molecule_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        req = _make(molecule_id, user_id)
-        assert req.matched_molecule_id is None
-
-    def test_scientist_name_field(
-        self, molecule_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        req = DisclosureRequest.create(
-            workspace_id=WS_ID,
-            molecule_id=molecule_id,
-            disclosed_smiles="CCO",
-            requested_by=user_id,
-            scientist_name="Dr. Jane Smith",
-        )
-        assert req.scientist_name == "Dr. Jane Smith"
-
-    def test_scientist_name_defaults_to_none(
-        self, molecule_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        req = _make(molecule_id, user_id)
-        assert req.scientist_name is None

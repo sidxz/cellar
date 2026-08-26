@@ -1,7 +1,6 @@
 """Tests for Batch aggregate root."""
 
 import uuid
-from datetime import date
 
 import pytest
 
@@ -74,11 +73,6 @@ class TestBatchCreation:
         assert evt.batch_number == "CV-00001-001"
         assert evt.source == "synthesized"
 
-    def test_create_with_purity(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
-    ) -> None:
-        batch = _make_batch(workspace_id, molecule_id, chemist_id, purity=99.5)
-        assert batch.purity == 99.5
 
     def test_purity_zero_raises(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID

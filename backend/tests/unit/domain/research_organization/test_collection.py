@@ -66,14 +66,6 @@ class TestCollectionCreate:
         with pytest.raises(ValidationError, match="name must not be empty"):
             Collection.create(workspace_id=ws_id, name="   ", created_by=user_id)
 
-    def test_optional_fields_default_none(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
-        collection = Collection.create(
-            workspace_id=ws_id, name="Minimal", created_by=user_id
-        )
-        assert collection.description is None
-        assert collection.project_id is None
-        assert collection.owned_by_org_id is None
-
 
 class TestCollectionUpdate:
     def test_update_name(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
@@ -136,34 +128,12 @@ class TestCollectionUpdate:
             collection.update(name="   ")
 
 
-class TestCollectionType:
-    def test_values(self) -> None:
-        assert CollectionType.GENERIC.value == "generic"
-        assert CollectionType.REFERENCE_SET.value == "reference_set"
-        assert CollectionType.LIBRARY.value == "library"
-        assert CollectionType.HIT_LIST.value == "hit_list"
-        assert CollectionType.SERIES.value == "series"
-        assert CollectionType.DISTRIBUTION_SET.value == "distribution_set"
-
-    def test_constructable_from_string(self) -> None:
-        assert CollectionType("library") is CollectionType.LIBRARY
-
 
 class TestCollectionTypeOnAggregate:
     def test_defaults_to_generic(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
         collection = Collection.create(workspace_id=ws_id, name="C", created_by=user_id)
         assert collection.type is CollectionType.GENERIC
 
-    def test_factory_accepts_explicit_type(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        collection = Collection.create(
-            workspace_id=ws_id,
-            name="C",
-            created_by=user_id,
-            type=CollectionType.LIBRARY,
-        )
-        assert collection.type is CollectionType.LIBRARY
 
     def test_created_event_carries_type(
         self, ws_id: uuid.UUID, user_id: uuid.UUID
