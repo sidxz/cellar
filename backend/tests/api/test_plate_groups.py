@@ -182,6 +182,93 @@ class TestTree:
         assert resp.status_code == 200
 
 
+class TestGetGroup:
+    async def test_ancestors_children_and_subtree_counts(self, client: AsyncClient) -> None:
+        tag = uuid.uuid4().hex[:6]
+        root = await _mk_group(client, f"Root-{tag}")
+        child = await _mk_group(client, f"Child-{tag}", parent_group_id=root["id"])
+        grandchild = await _mk_group(client, f"Grand-{tag}", parent_group_id=child["id"])
+
+        root_plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}", format="96")
+        child_plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}", format="96")
+        grand_plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}", format="384")
+
+        for gid, ids in (
+            (root["id"], [root_plate["id"]]),
+            (child["id"], [child_plate["id"]]),
+            (grandchild["id"], [grand_plate["id"]]),
+        ):
+            r = await client.post(f"/api/v1/plate-groups/{gid}/plates", json={"plate_ids": ids})
+            assert r.status_code == 204, r.text
+
+        resp = await client.get(f"/api/v1/plate-groups/{grandchild['id']}")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert [a["name"] for a in body["ancestors"]] == [f"Root-{tag}", f"Child-{tag}"]
+        assert body["children"] == []
+        assert body["plate_count"] == 1
+        assert body["subtree_plate_count"] == 1
+
+        resp = await client.get(f"/api/v1/plate-groups/{root['id']}")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["ancestors"] == []
+        assert body["subtree_plate_count"] == 3
+        (child_ref,) = [c for c in body["children"] if c["name"] == f"Child-{tag}"]
+        assert child_ref["plate_count"] == 1
+        assert body["plate_format"] == "96"
+
+    async def test_group_with_no_direct_plates_has_null_format(
+        self, client: AsyncClient
+    ) -> None:
+        root = await _mk_group(client, f"Root-{uuid.uuid4().hex[:6]}")
+        child = await _mk_group(
+            client, f"Child-{uuid.uuid4().hex[:6]}", parent_group_id=root["id"]
+        )
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}", format="96")
+        r = await client.post(
+            f"/api/v1/plate-groups/{child['id']}/plates", json={"plate_ids": [plate["id"]]}
+        )
+        assert r.status_code == 204, r.text
+
+        resp = await client.get(f"/api/v1/plate-groups/{root['id']}")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["plate_count"] == 0
+        assert body["plate_format"] is None
+        assert body["subtree_plate_count"] == 1
+
+    async def test_metadata_round_trips(self, client: AsyncClient) -> None:
+        g = await _mk_group(
+            client, f"Meta-{uuid.uuid4().hex[:6]}", state="Solubilized", scientist="Jane Doe"
+        )
+        resp = await client.get(f"/api/v1/plate-groups/{g['id']}")
+        assert resp.status_code == 200, resp.text
+        group = resp.json()["group"]
+        assert group["state"] == "Solubilized"
+        assert group["scientist"] == "Jane Doe"
+
+    async def test_strict_visibility(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
+    ) -> None:
+        g = await _mk_group(
+            client, f"Frn-{uuid.uuid4().hex[:6]}", owner_org_id=str(OTHER_ORG_ID)
+        )
+        resp = await editor_client_own_org.get(f"/api/v1/plate-groups/{g['id']}")
+        assert resp.status_code == 404
+        resp = await editor_client_other_org.get(f"/api/v1/plate-groups/{g['id']}")
+        assert resp.status_code == 200, resp.text
+        resp = await client.get(f"/api/v1/plate-groups/{g['id']}")
+        assert resp.status_code == 200, resp.text
+
+    async def test_unknown_id_404s(self, client: AsyncClient) -> None:
+        resp = await client.get(f"/api/v1/plate-groups/{uuid.uuid4()}")
+        assert resp.status_code == 404
+
+
 class TestAssignRemove:
     async def test_assign_org_mismatch_rejected(self, client: AsyncClient) -> None:
         g = await _mk_group(client, f"G-{uuid.uuid4().hex[:6]}")  # AUTH_ORG

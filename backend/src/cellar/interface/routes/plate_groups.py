@@ -13,6 +13,8 @@ from cellar.application.inventory.plate_groups import (
     CreatePlateGroupCommand,
     DeletePlateGroupCommand,
     GetGroupTreeQuery,
+    GetPlateGroupQuery,
+    GroupDetail,
     GroupTree,
     GroupTreeNode,
     MovePlateGroupCommand,
@@ -27,6 +29,7 @@ from cellar.interface.dependencies import (
     CreatePlateGroupDep,
     DeletePlateGroupDep,
     GetGroupTreeDep,
+    GetPlateGroupDep,
     MovePlateGroupDep,
     RemovePlatesFromGroupDep,
     UpdatePlateGroupDep,
@@ -132,6 +135,52 @@ class GroupTreeResponse(BaseModel):
         return cls(org_id=t.org_id, roots=[GroupTreeNodeResponse.from_node(r) for r in t.roots])
 
 
+class GroupRefResponse(BaseModel):
+    """Lightweight group reference used for ancestors + children lists."""
+
+    id: uuid.UUID
+    name: str
+    group_type: str | None = None
+    state: str | None = None
+    plate_count: int = 0
+    plate_format: str | None = None
+
+    @classmethod
+    def from_group(cls, g: PlateGroup) -> GroupRefResponse:
+        return cls(id=g.id, name=g.name, group_type=g.group_type, state=g.state)
+
+    @classmethod
+    def from_node(cls, n: GroupTreeNode) -> GroupRefResponse:
+        return cls(
+            id=n.group.id,
+            name=n.group.name,
+            group_type=n.group.group_type,
+            state=n.group.state,
+            plate_count=n.plate_count,
+            plate_format=n.plate_format,
+        )
+
+
+class PlateGroupDetailResponse(BaseModel):
+    group: PlateGroupResponse
+    plate_count: int
+    subtree_plate_count: int
+    plate_format: str | None = None
+    ancestors: list[GroupRefResponse]
+    children: list[GroupRefResponse]
+
+    @classmethod
+    def from_detail(cls, d: GroupDetail) -> PlateGroupDetailResponse:
+        return cls(
+            group=PlateGroupResponse.from_domain(d.group),
+            plate_count=d.plate_count,
+            subtree_plate_count=d.subtree_plate_count,
+            plate_format=d.plate_format,
+            ancestors=[GroupRefResponse.from_group(a) for a in d.ancestors],
+            children=[GroupRefResponse.from_node(c) for c in d.children],
+        )
+
+
 class CreatePlateGroupBody(BaseModel):
     name: str
     owner_org_id: uuid.UUID | None = None
@@ -206,6 +255,16 @@ async def get_group_tree(
     query = GetGroupTreeQuery(workspace_id=auth.workspace_id, org_id=org_id)
     tree = result_to_response(await uc(query, auth=auth))
     return GroupTreeResponse.from_tree(tree)
+
+
+@router.get("/{group_id}", response_model=PlateGroupDetailResponse)
+async def get_plate_group(
+    group_id: uuid.UUID, auth: AuthDep, uc: GetPlateGroupDep
+) -> PlateGroupDetailResponse:
+    """Single-group detail: ancestors, direct children, and plate counts."""
+    query = GetPlateGroupQuery(workspace_id=auth.workspace_id, group_id=group_id)
+    detail = result_to_response(await uc(query, auth=auth))
+    return PlateGroupDetailResponse.from_detail(detail)
 
 
 @router.patch("/{group_id}", response_model=PlateGroupResponse)

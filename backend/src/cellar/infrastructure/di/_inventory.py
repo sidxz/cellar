@@ -60,6 +60,7 @@ from cellar.application.inventory.plate_groups import (
     CreatePlateGroup,
     DeletePlateGroup,
     GetGroupTree,
+    GetPlateGroup,
     MovePlateGroup,
     RemovePlatesFromGroup,
     UpdatePlateGroup,
@@ -591,6 +592,14 @@ def register_inventory(container: Container) -> None:
             PlateVisibilityService(c[OrgDirectoryPort]),
         )
 
+    def _get_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetPlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort]),
+        )
+
     def _assign_plates_to_group(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return AssignPlatesToGroup(
@@ -616,6 +625,7 @@ def register_inventory(container: Container) -> None:
     container.define(MovePlateGroup, _move_plate_group)
     container.define(DeletePlateGroup, _delete_plate_group)
     container.define(GetGroupTree, _get_group_tree)
+    container.define(GetPlateGroup, _get_plate_group)
     container.define(AssignPlatesToGroup, _assign_plates_to_group)
     container.define(RemovePlatesFromGroup, _remove_plates_from_group)
 

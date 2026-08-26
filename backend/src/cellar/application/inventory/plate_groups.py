@@ -110,6 +110,12 @@ class GetGroupTreeQuery(Query):
     org_id: uuid.UUID | None = None  # None -> caller's own org
 
 
+@dataclass(frozen=True, kw_only=True)
+class GetPlateGroupQuery(Query):
+    workspace_id: uuid.UUID
+    group_id: uuid.UUID
+
+
 # ---------------------------------------------------------------------------
 # Tree DTOs + pure helpers (unit-tested directly)
 # ---------------------------------------------------------------------------
@@ -139,6 +145,16 @@ class GroupTreeNode:
 class GroupTree:
     org_id: uuid.UUID
     roots: list[GroupTreeNode]
+
+
+@dataclass
+class GroupDetail:
+    group: PlateGroup
+    plate_count: int  # direct members
+    subtree_plate_count: int  # direct + all descendants
+    plate_format: str | None  # derived over the direct members' formats
+    ancestors: list[PlateGroup]  # root-first, excluding the group itself
+    children: list[GroupTreeNode]  # direct children only; their .children is empty
 
 
 def build_tree(
@@ -516,6 +532,92 @@ class GetGroupTree:
             )
             return Success(
                 GroupTree(org_id=org_id, roots=build_tree(groups, counts, formats))
+            )
+
+
+class GetPlateGroup:
+    """Single-group detail: ancestors, direct children, and plate counts
+    (direct + subtree). Visibility is strict — hidden owner org == 404,
+    same as ``UpdatePlateGroup``."""
+
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: PlateGroupRepository,
+        visibility: PlateVisibilityService,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._visibility = visibility
+
+    async def __call__(
+        self, input: GetPlateGroupQuery, auth: AuthContext | None = None
+    ) -> Result[GroupDetail, DomainError]:
+        require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
+
+        async with self._uow:
+            group = await self._repo.find_by_id_in_workspace(input.workspace_id, input.group_id)
+            if group is None:
+                return _not_found(input.group_id)
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            if not self._visibility.can_view_owner(group.owner_org_id, excluded):
+                return _not_found(input.group_id)
+
+            # Ancestors: walk parent pointers to the root, guarding against
+            # cycles (visited set) and pathological chains (hop cap).
+            ancestors: list[PlateGroup] = []
+            visited: set[uuid.UUID] = {group.id}
+            parent_id = group.parent_group_id
+            hops = 0
+            while parent_id is not None and parent_id not in visited and hops < 64:
+                parent = await self._repo.find_by_id_in_workspace(input.workspace_id, parent_id)
+                if parent is None:
+                    break
+                ancestors.append(parent)
+                visited.add(parent.id)
+                parent_id = parent.parent_group_id
+                hops += 1
+            ancestors.reverse()  # root-first
+
+            direct_children = await self._repo.find_children(input.workspace_id, group.id)
+
+            counts = await self._repo.count_plates_by_group(
+                input.workspace_id, owner_org_id=group.owner_org_id
+            )
+            formats = await self._repo.plate_formats_by_group(
+                input.workspace_id, owner_org_id=group.owner_org_id
+            )
+
+            # Subtree = the group + every descendant, breadth-first via
+            # find_children (org trees are small — ponytail: no recursive SQL).
+            descendant_ids = [group.id]
+            frontier = direct_children
+            while frontier:
+                descendant_ids.extend(c.id for c in frontier)
+                next_frontier: list[PlateGroup] = []
+                for child in frontier:
+                    next_frontier.extend(
+                        await self._repo.find_children(input.workspace_id, child.id)
+                    )
+                frontier = next_frontier
+
+            return Success(
+                GroupDetail(
+                    group=group,
+                    plate_count=counts.get(group.id, 0),
+                    subtree_plate_count=sum(counts.get(gid, 0) for gid in descendant_ids),
+                    plate_format=derive_format(formats.get(group.id, [])),
+                    ancestors=ancestors,
+                    children=[
+                        GroupTreeNode(
+                            group=c,
+                            plate_count=counts.get(c.id, 0),
+                            plate_format=derive_format(formats.get(c.id, [])),
+                        )
+                        for c in direct_children
+                    ],
+                )
             )
 
 

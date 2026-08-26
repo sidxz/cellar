@@ -59,6 +59,7 @@ from cellar.application.inventory.plate_groups import (
     CreatePlateGroup,
     DeletePlateGroup,
     GetGroupTree,
+    GetPlateGroup,
     MovePlateGroup,
     RemovePlatesFromGroup,
     UpdatePlateGroup,
@@ -131,6 +132,7 @@ __all__ = [
     "GetLoanDep",
     "GetOrgPlatePolicyDep",
     "GetPlateDep",
+    "GetPlateGroupDep",
     "GetPlateInsightsDep",
     "GetSampleDep",
     "GetStorageLocationChildrenDep",
@@ -267,6 +269,7 @@ UpdatePlateGroupDep = Annotated[UpdatePlateGroup, Depends(_get_use_case(UpdatePl
 MovePlateGroupDep = Annotated[MovePlateGroup, Depends(_get_use_case(MovePlateGroup))]
 DeletePlateGroupDep = Annotated[DeletePlateGroup, Depends(_get_use_case(DeletePlateGroup))]
 GetGroupTreeDep = Annotated[GetGroupTree, Depends(_get_use_case(GetGroupTree))]
+GetPlateGroupDep = Annotated[GetPlateGroup, Depends(_get_use_case(GetPlateGroup))]
 AssignPlatesToGroupDep = Annotated[
     AssignPlatesToGroup, Depends(_get_use_case(AssignPlatesToGroup))
 ]
