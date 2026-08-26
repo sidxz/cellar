@@ -164,6 +164,51 @@ describe("PlateGroupPage", () => {
     }
   });
 
+  it("links the group's own collection in Details", async () => {
+    setup({
+      ...baseDetail,
+      group: { ...baseDetail.group, collection_id: "col-1", collection_name: "SACCZ" },
+    });
+    await waitFor(() => expect(screen.getByText("Collection")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: "SACCZ" })).toHaveAttribute(
+      "href",
+      "/collections/col-1",
+    );
+    expect(screen.queryByText(/part of/)).not.toBeInTheDocument();
+  });
+
+  it("shows the nearest linked ancestor's collection as inherited, both linked", async () => {
+    setup({
+      ...baseDetail,
+      ancestors: [
+        {
+          id: "root1",
+          name: "Root Library",
+          plate_count: 10,
+          collection_id: "col-1",
+          collection_name: "SACCZ",
+        },
+        {
+          id: "mid1",
+          name: "Mid Group",
+          plate_count: 6,
+          collection_id: "col-2",
+          collection_name: "NadD hits",
+        },
+      ],
+    });
+    const row = await screen.findByText(/part of/);
+    expect(row).toHaveTextContent("part of NadD hits · via Mid Group");
+    expect(within(row).getByRole("link", { name: "NadD hits" })).toHaveAttribute(
+      "href",
+      "/collections/col-2",
+    );
+    expect(within(row).getByRole("link", { name: "Mid Group" })).toHaveAttribute(
+      "href",
+      "/inventory/plate-groups/mid1",
+    );
+  });
+
   it("hides Request loan when the subtree has no plates", async () => {
     setup({ ...baseDetail, subtree_plate_count: 0 });
     await waitFor(() =>

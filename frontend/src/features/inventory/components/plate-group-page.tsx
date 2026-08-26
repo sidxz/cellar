@@ -85,6 +85,11 @@ export function PlateGroupPage({ groupId }: PlateGroupPageProps) {
   const locationName = detail?.group.storage_location_id
     ? (locations?.find((l) => l.id === detail.group.storage_location_id)?.name ?? "…")
     : null;
+  // Display-only inheritance: nearest linked ancestor (ancestors are root-first).
+  const inheritedFrom =
+    detail && !detail.group.collection_id
+      ? detail.ancestors.findLast((a) => a.collection_id)
+      : undefined;
 
   return (
     <>
@@ -164,6 +169,39 @@ export function PlateGroupPage({ groupId }: PlateGroupPageProps) {
                         <>
                           <dt className="text-muted-foreground">Location</dt>
                           <dd>{locationName}</dd>
+                        </>
+                      ) : null}
+                      {d.group.collection_id ? (
+                        <>
+                          <dt className="text-muted-foreground">Collection</dt>
+                          <dd>
+                            <Link
+                              href={`/collections/${d.group.collection_id}`}
+                              className="text-primary hover:underline"
+                            >
+                              {d.group.collection_name}
+                            </Link>
+                          </dd>
+                        </>
+                      ) : inheritedFrom ? (
+                        <>
+                          <dt className="text-muted-foreground">Collection</dt>
+                          <dd className="text-muted-foreground">
+                            part of{" "}
+                            <Link
+                              href={`/collections/${inheritedFrom.collection_id}`}
+                              className="text-primary hover:underline"
+                            >
+                              {inheritedFrom.collection_name}
+                            </Link>{" "}
+                            · via{" "}
+                            <Link
+                              href={`/inventory/plate-groups/${inheritedFrom.id}`}
+                              className="text-primary hover:underline"
+                            >
+                              {inheritedFrom.name}
+                            </Link>
+                          </dd>
                         </>
                       ) : null}
                       {d.group.scientist ? (

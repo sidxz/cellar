@@ -55,6 +55,38 @@ describe("PlateGroupCard", () => {
     expect(onRequestLoan).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the group's own collection as a row", () => {
+    render(
+      <PlateGroupCard
+        node={{ ...node, collection_id: "col-1", collection_name: "SACCZ" }}
+        locationName={null}
+        subtreePlates={3}
+        selected={false}
+        onSelect={vi.fn()}
+        onRequestLoan={vi.fn()}
+        inheritedCollection={{ id: "col-9", name: "Ignored" }}
+      />,
+    );
+    expect(screen.getByText("Collection · SACCZ")).toBeInTheDocument();
+    expect(screen.queryByText(/part of/)).not.toBeInTheDocument();
+  });
+
+  it("shows an inherited collection as a muted 'part of' row", () => {
+    render(
+      <PlateGroupCard
+        node={node}
+        locationName={null}
+        subtreePlates={3}
+        selected={false}
+        onSelect={vi.fn()}
+        onRequestLoan={vi.fn()}
+        inheritedCollection={{ id: "col-1", name: "SACCZ" }}
+      />,
+    );
+    expect(screen.getByText("part of SACCZ")).toBeInTheDocument();
+    expect(screen.queryByText(/Collection ·/)).not.toBeInTheDocument();
+  });
+
   it("hides Request loan when the subtree has no plates", () => {
     render(
       <PlateGroupCard

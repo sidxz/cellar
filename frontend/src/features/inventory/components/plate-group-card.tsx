@@ -11,6 +11,8 @@ export interface PlateGroupCardProps {
   selected: boolean;
   onSelect: () => void;
   onRequestLoan: () => void;
+  /** Nearest linked ancestor's collection — shown only when the node has no link of its own. */
+  inheritedCollection?: { id: string; name: string } | null;
 }
 
 /** The HTML body of a set node — rendered inside an SVG <foreignObject>, legacy
@@ -22,10 +24,12 @@ export function PlateGroupCard({
   selected,
   onSelect,
   onRequestLoan,
+  inheritedCollection,
 }: PlateGroupCardProps) {
   const pillBg = groupTypeColor(node.group_type);
   const title = node.description ? `${node.name} — ${node.description}` : node.name;
   const rows: string[] = [];
+  if (node.collection_name) rows.push(`Collection · ${node.collection_name}`);
   const fmt = formatLabel(node.plate_format);
   if (fmt || node.scientist) rows.push([fmt, node.scientist].filter(Boolean).join(" · "));
   if (locationName) rows.push(locationName);
@@ -48,6 +52,9 @@ export function PlateGroupCard({
         {node.name}
       </button>
       <ul className="space-y-0.5 text-[15px] leading-6 text-muted-foreground">
+        {!node.collection_name && inheritedCollection ? (
+          <li className="italic">part of {inheritedCollection.name}</li>
+        ) : null}
         {rows.map((r) => (
           <li key={r}>{r}</li>
         ))}

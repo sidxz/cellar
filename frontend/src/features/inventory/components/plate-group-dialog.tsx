@@ -1,6 +1,8 @@
 "use client";
 
+import { useCollections } from "@/features/research-organization/hooks/use-collections";
 import { useVocabularyTerms } from "@/features/workspace-config/hooks/use-vocabularies";
+import { SearchableSelect } from "@/shared/components/searchable-select";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -19,7 +21,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PlateGroupNode } from "../hooks/use-plate-groups";
 import { useCreatePlateGroup, useUpdatePlateGroup } from "../hooks/use-plate-groups";
 import { useStorageLocations } from "../hooks/use-storage-locations";
@@ -54,6 +56,7 @@ export function PlateGroupDialog({
   const [description, setDescription] = useState("");
   const [state, setState] = useState<string>(NONE);
   const [locationId, setLocationId] = useState<string>(NONE);
+  const [collectionId, setCollectionId] = useState<string | null>(null);
   const [volume, setVolume] = useState("");
   const [concentration, setConcentration] = useState("");
   const [compoundCount, setCompoundCount] = useState("");
@@ -64,6 +67,11 @@ export function PlateGroupDialog({
   const vocabStates = useVocabularyTerms("plate_group_state");
   const groupStates = vocabStates.length > 0 ? vocabStates : DEFAULT_GROUP_STATES;
   const { data: storageLocations } = useStorageLocations();
+  const { data: collections } = useCollections();
+  const collectionOptions = useMemo(
+    () => (collections ?? []).map((c) => ({ value: c.id, label: c.name })),
+    [collections],
+  );
   const create = useCreatePlateGroup();
   const update = useUpdatePlateGroup();
   const pending = create.isPending || update.isPending;
@@ -76,6 +84,7 @@ export function PlateGroupDialog({
     setDescription(group?.description ?? "");
     setState(group?.state ?? NONE);
     setLocationId(group?.storage_location_id ?? NONE);
+    setCollectionId(group?.collection_id ?? null);
     setVolume(group?.initial_volume_ul != null ? String(group.initial_volume_ul) : "");
     setConcentration(
       group?.initial_concentration_mm != null ? String(group.initial_concentration_mm) : "",
@@ -90,6 +99,7 @@ export function PlateGroupDialog({
     const meta = {
       state: state === NONE ? null : state,
       storage_location_id: locationId === NONE ? null : locationId,
+      collection_id: collectionId,
       initial_volume_ul: volume.trim() ? Number(volume) : null,
       initial_concentration_mm: concentration.trim() ? Number(concentration) : null,
       compound_count: compoundCount.trim() ? Number(compoundCount) : null,
@@ -181,6 +191,17 @@ export function PlateGroupDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Collection</Label>
+            <SearchableSelect
+              options={collectionOptions}
+              value={collectionId}
+              onValueChange={setCollectionId}
+              placeholder="No collection"
+              searchPlaceholder="Search collections..."
+              emptyMessage="No collections found."
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">

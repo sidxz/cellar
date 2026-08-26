@@ -2,6 +2,7 @@
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
+  CollectionPlateGroupResponse,
   CreatePlateGroupBody,
   GroupTreeNodeResponse,
   GroupTreeResponse,
@@ -18,6 +19,7 @@ export type PlateGroup = PlateGroupResponse;
 export type PlateGroupTree = GroupTreeResponse;
 export type PlateGroupNode = GroupTreeNodeResponse;
 export type PlateGroupDetail = PlateGroupDetailResponse;
+export type CollectionPlateGroup = CollectionPlateGroupResponse;
 
 export function usePlateGroupTree(orgId?: string, opts?: { enabled?: boolean }) {
   return useQuery({
@@ -43,6 +45,20 @@ export function usePlateGroup(groupId: string | undefined) {
         signal,
       }),
     enabled: !!groupId,
+  });
+}
+
+/** Plate groups (any level) that realize a collection, with subtree/loan counts. */
+export function useCollectionPlateGroups(collectionId: string | undefined) {
+  return useQuery({
+    queryKey: [...PLATE_GROUPS_KEY, "by-collection", collectionId],
+    queryFn: ({ signal }) =>
+      customInstance<CollectionPlateGroup[]>({
+        url: `${API_V1}/collections/${collectionId}/plate-groups`,
+        method: "GET",
+        signal,
+      }),
+    enabled: !!collectionId,
   });
 }
 

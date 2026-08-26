@@ -78,6 +78,14 @@ export function PlateGroupTreeView({
     if (!node) return <g />;
     const isRoot = hierarchyPointNode.depth === 0;
     const r = isRoot ? ROOT_R : CIRCLE_R;
+    // Display-only inheritance: nearest ancestor with a collection link.
+    let inheritedCollection: { id: string; name: string } | null = null;
+    for (let p = hierarchyPointNode.parent; p && !inheritedCollection; p = p.parent) {
+      const a = nodesById.get((p.data.attributes as unknown as GroupDatum["attributes"]).id);
+      if (a?.collection_id && a.collection_name) {
+        inheritedCollection = { id: a.collection_id, name: a.collection_name };
+      }
+    }
     const fill = isRoot ? CHART_COLORS.primary : stateColor(node.state);
     return (
       <g>
@@ -102,7 +110,7 @@ export function PlateGroupTreeView({
           data-testid={`tree-toggle-${id}`}
         />
         {isRoot ? (
-          <foreignObject x={36} y={-30} width={300} height={80}>
+          <foreignObject x={36} y={-30} width={300} height={100}>
             <div>
               <button
                 type="button"
@@ -114,6 +122,11 @@ export function PlateGroupTreeView({
               <div className="text-base text-muted-foreground">
                 {subtreePlateCount(node)} plates in this library
               </div>
+              {node.collection_name ? (
+                <div className="text-base text-muted-foreground">
+                  Collection · {node.collection_name}
+                </div>
+              ) : null}
             </div>
           </foreignObject>
         ) : (
@@ -125,6 +138,7 @@ export function PlateGroupTreeView({
               selected={id === selectedId}
               onSelect={() => onSelect(node)}
               onRequestLoan={() => onRequestLoan(node)}
+              inheritedCollection={inheritedCollection}
             />
           </foreignObject>
         )}
