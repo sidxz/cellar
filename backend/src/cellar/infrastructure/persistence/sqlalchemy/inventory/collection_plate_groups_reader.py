@@ -26,12 +26,13 @@ _SQL = text(
         UNION ALL
         SELECT up.root, p.parent_group_id, p.name, up.depth + 1
           FROM plate_groups p JOIN up ON p.id = up.parent_group_id
-         WHERE up.depth < 64
+         WHERE p.workspace_id = :ws AND up.depth < 64
     ), down AS (
         SELECT id AS root, id FROM linked
         UNION ALL
         SELECT down.root, c.id
           FROM plate_groups c JOIN down ON c.parent_group_id = down.id
+         WHERE c.workspace_id = :ws
     ), paths AS (
         SELECT root, string_agg(name, ' › ' ORDER BY depth DESC) AS path
           FROM up GROUP BY root
