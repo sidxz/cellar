@@ -1,6 +1,6 @@
 # Spec: Plate Tracker Revamp — Strict Org Visibility, Legacy-Parity Tree, Comments, Kiosk Page, Full Data Cutover
 
-**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7–S11 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`); S12 cutover pending the operator gate
+**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7–S12 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`); legacy data cut over into the saclab-dev workspace
 **Contexts touched:** Inventory (03), Audit & Compliance (06), Workspace Config (07)
 **Builds on:** `2026-08-10-inventory-plate-org-loans-spec.md` (S1–S6, shipped). Sessions here continue the numbering: **S7–S12**.
 
@@ -242,4 +242,12 @@ Emails/notifications · volume-reduction editor (never persisted in legacy) · v
 - Dry-run #2 against the live `sacnet_dev` → the saclab-dev workspace on the local dev stack (rolled back): locations 15, plates matched 2259 (created 2247, `cdd_plate_sync` 639, vault `4443`), unmatched 0, status conflicts 0, groups created 93 (8 TAMU-owned Sanofi groups already existed), plates grouped 2248 (11 legacy plates belong to no set), open loans 8, closed loans **752/752**, unparsed lines **0**, comments **1303**, unmapped users 39.
 - Cutover facts for S12 (`docs/superpowers/plans/2026-08-25-s12-cutover.md`): the workspace holds verification seed data — 12 public-org plates with legacy barcodes on 5 open dev loans and 32 public-owned SAC1/SAC2 groups — that must be wiped or closed first; the 4 NULL-owner plates are demo plates (backfill stays off).
 - Suites at the end of S11: backend 3957 passed / 11 pre-existing failures; frontend 1055/1055; tsc clean.
+
+## S12 sync note (2026-08-25) — cutover done
+
+- Target: the **saclab-dev workspace `442df0cf-…` on the local dev stack** (the same Postgres the targets cutover used; no tunnel). CDD Vault was never called — `cdd_plate_sync` rows are local mappings under vault `4443`.
+- Pre-run decisions (user): verification seed data wiped first (12 public-org plates with legacy barcodes, their 8 dev loans, 32 public-owned SAC1/SAC2 groups, 2 comments — backup `scratchpad/s12-backup/s12-pre-cutover.dump`); building **ILSB**; no user map (all migrated loans `requested_by` = the operator, legacy names kept in `notes`/`author_name`; `unmapped_users.csv` lists the 39 people if attribution is ever wanted); NULL-owner backfill left off (the 4 NULL-owner plates are demo data).
+- Real run 2026-08-25 20:50 (one transaction): locations 15 (TAMU → ILSB → Rooms 1148/1203 → 11 freezers), plates created **2 259**, `cdd_plate_sync` 648, unmatched 0, status conflicts 0, `legacy:inactive` 9, groups created 93 (+ the 8 pre-existing TAMU Sanofi groups = the legacy 17 libraries + 84 sets), plates grouped 2 248 (11 legacy plates belong to no set), open loans 8, closed loans **752**, unparsed lines 0, comments **1 303**.
+- Idempotency proven: a following `--dry-run` created nothing and matched all 2 259 plates. Timestamps verified against legacy (`MAX(act_date)` = 2026-08-21 16:21:57 America/Chicago).
+- Operator notes carried forward for any other environment: run alembic to head 068, wipe/close conflicting seed loans first, pick site/building names for real (idempotency keys), pass the real CDD vault id, `DUAR_URL` must reach the internal listener (visibility), grant `cellar:approve_loan` per org.
 
