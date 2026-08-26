@@ -6,6 +6,11 @@ import type { ReactNode } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { RequestLoanDialog } from "./request-loan-dialog";
 
+const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock }),
+}));
 vi.mock("@/shared/lib/api/custom-instance", () => ({
   API_V1: "/api/v1",
   customInstance: vi.fn(),
@@ -42,6 +47,7 @@ function setup(
 ) {
   mocked.mockReset();
   mockedSaveText.mockReset();
+  pushMock.mockReset();
   mocked.mockImplementation((opts: { url: string; method: string }) => {
     if (opts.url === "/api/v1/orgs") {
       return Promise.resolve([
@@ -163,5 +169,18 @@ describe("RequestLoanDialog", () => {
         }),
       ),
     );
+  });
+
+  it("initialBarcodes opens in paste mode pre-filled, and success navigates to the loan", async () => {
+    setup({ initialBarcodes: ["005131", "005132"] });
+    const box = screen.getByLabelText("Barcodes") as HTMLTextAreaElement;
+    expect(box.value).toBe("005131\n005132");
+    fireEvent.click(screen.getByRole("button", { name: "Request loan" }));
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({ method: "POST", data: { barcodes: ["005131", "005132"] } }),
+      ),
+    );
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/inventory/loans/loan1"));
   });
 });

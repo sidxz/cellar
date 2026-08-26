@@ -105,18 +105,18 @@ describe("CommentFeed loan-context link (I2)", () => {
     },
   ];
 
-  it("shows the 'in loan' link when the feed's own scope is not that loan", async () => {
+  it("shows the 'view loan' link when the feed's own scope is not that loan", async () => {
     mocked.mockImplementation(async () => commentWithLoan);
     setup({ scope: { targetType: "plate_group", targetId: "g1" } });
     await waitFor(() => expect(screen.getByText("0.5 uL for NadE")).toBeInTheDocument());
-    const link = screen.getByRole("link", { name: "in loan" });
-    expect(link).toHaveAttribute("href", "/inventory/loans#all");
+    const link = screen.getByRole("link", { name: "view loan" });
+    expect(link).toHaveAttribute("href", "/inventory/loans/loan-1");
   });
 
   it("hides the link when the entry is shown on that loan's own feed", async () => {
     mocked.mockImplementation(async () => commentWithLoan);
     setup({ scope: { loanId: "loan-1" } });
     await waitFor(() => expect(screen.getByText("0.5 uL for NadE")).toBeInTheDocument());
-    expect(screen.queryByRole("link", { name: "in loan" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "view loan" })).not.toBeInTheDocument();
   });
 });

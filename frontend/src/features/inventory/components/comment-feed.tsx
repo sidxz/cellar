@@ -63,10 +63,10 @@ export function CommentFeed({
                 <span className="flex items-center gap-2">
                   {c.loan_id && c.loan_id !== ownLoanId ? (
                     <Link
-                      href="/inventory/loans#all"
+                      href={`/inventory/loans/${c.loan_id}`}
                       className="text-xs text-primary hover:underline"
                     >
-                      in loan
+                      view loan
                     </Link>
                   ) : null}
                   <time dateTime={c.created_at}>{formatDateTime(c.created_at)}</time>

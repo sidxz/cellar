@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatDate, formatDateTime, formatRelativeDate, formatRelativeDay } from "./format-date";
+import {
+  formatDate,
+  formatDateTime,
+  formatDue,
+  formatRelativeDate,
+  formatRelativeDay,
+} from "./format-date";
 
 describe("formatDate", () => {
   it("formats a Date object", () => {
@@ -157,5 +163,35 @@ describe("formatRelativeDay", () => {
 
   it("returns empty string for an unparseable value", () => {
     expect(formatRelativeDay("not-a-date")).toBe("");
+  });
+});
+
+describe("formatDue", () => {
+  const now = new Date(2026, 7, 25, 12, 0, 0); // Aug 25 2026, local noon
+  const due = (iso: string) => formatDue(iso, now);
+
+  it("returns null for no date", () => {
+    expect(formatDue(null, now)).toBeNull();
+    expect(formatDue(undefined, now)).toBeNull();
+  });
+  it("today / tomorrow", () => {
+    expect(due("2026-08-25")).toEqual({ label: "due today", overdue: false });
+    expect(due("2026-08-26")).toEqual({ label: "due tomorrow", overdue: false });
+  });
+  it("days until 13, weeks from 14, calendar from 60", () => {
+    expect(due("2026-09-07")?.label).toBe("due in 13 d");
+    expect(due("2026-09-08")?.label).toBe("due in 2 w");
+    expect(due("2026-10-23")?.label).toBe("due in 8 w");
+    expect(due("2026-10-24")?.label).toMatch(/^due Oct 24$/);
+    expect(due("2027-03-01")?.label).toMatch(/^due Mar 1, 2027$/);
+  });
+  it("overdue buckets: days, weeks, months, years", () => {
+    expect(due("2026-08-24")).toEqual({ label: "1 d overdue", overdue: true });
+    expect(due("2026-08-12")?.label).toBe("13 d overdue");
+    expect(due("2026-08-11")?.label).toBe("2 w overdue");
+    expect(due("2026-06-27")?.label).toBe("8 w overdue");
+    expect(due("2026-06-26")?.label).toBe("2 mo overdue");
+    expect(due("2025-03-13")?.label).toBe("17 mo overdue");
+    expect(due("2024-08-25")?.label).toBe("2 y overdue");
   });
 });

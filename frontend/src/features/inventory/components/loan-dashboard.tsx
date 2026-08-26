@@ -1,71 +1,108 @@
 "use client";
 
+import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { PageHeader } from "@/shared/components/page-header";
+import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
-import { Label } from "@/shared/components/ui/label";
-import { Switch } from "@/shared/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
-import type { MeResponse } from "@/shared/lib/api/model";
-import { showError } from "@/shared/lib/toast";
-import type { UseQueryResult } from "@tanstack/react-query";
+import { useOrgs } from "@/shared/hooks/use-orgs";
+import { useMemberNames } from "@/shared/hooks/use-workspace-members";
+import { formatDate } from "@/shared/lib/format-date";
+import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
-import { LoanStatus, type PlateLoan, useLoans } from "../hooks/use-plate-loans";
-import { LoanCard } from "./loan-card";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { LOAN_VARIANT, type PlateLoan, useLoans } from "../hooks/use-plate-loans";
+import {
+  INBOX_LABELS,
+  INBOX_ORDER,
+  type InboxKey,
+  inboxCounts,
+  loanInboxKeys,
+  loanOutcome,
+  setSummary,
+  sortOpenLoans,
+} from "../lib/loan-summary";
+import { CountChips } from "./count-chips";
+import { LoanRow } from "./loan-row";
 import { RequestLoanDialog } from "./request-loan-dialog";
 
-function LoanList({
-  query,
-  context,
-  me,
-}: {
-  query: UseQueryResult<PlateLoan[]>;
-  context: "mine" | "approvals" | "all";
-  me: MeResponse | undefined;
-}) {
-  if (query.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
-  if (query.error)
-    return (
-      <p className="text-sm text-destructive">
-        {query.error instanceof Error ? query.error.message : "Failed to load loans"}
-      </p>
-    );
-  const loans = query.data ?? [];
-  if (loans.length === 0) return <p className="text-sm text-muted-foreground">No loans.</p>;
-  return (
-    <div className="flex flex-col gap-3">
-      {loans.map((loan) => (
-        <LoanCard key={loan.id} loan={loan} context={context} me={me} />
-      ))}
-    </div>
-  );
-}
-
 export function LoanDashboard() {
-  const { data: me, isError: meFailed } = useCurrentUser();
-  const isAdmin = me?.is_admin === true;
-  const orgId = me?.org_id ?? undefined;
-  const showApprovals = isAdmin || !!orgId;
-  const [tab, setTab] = useHashTab("mine");
-  const [overdue, setOverdue] = useState(false);
+  const router = useRouter();
+  const { data: me } = useCurrentUser();
+  const { data: orgs } = useOrgs();
+  const memberName = useMemberNames();
+  const [tab, setTab] = useHashTab("open");
+  const [chip, setChip] = useState<InboxKey | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
+  const orgName = (id: string) => orgs?.find((o) => o.id === id)?.name ?? "Unknown org";
 
-  useEffect(() => {
-    if (meFailed) showError("Could not load your identity — the Approvals tab is unavailable.");
-  }, [meFailed]);
+  // Visibility already scopes this to loans I own or borrow.
+  const open = useLoans({ status: "open" });
+  const closed = useLoans({ status: "closed" }, { enabled: tab === "history" });
 
-  const mine = useLoans({ mine: true });
-  const approvals = useLoans(
-    { status: LoanStatus.open, owner_org_id: isAdmin ? undefined : orgId },
-    { enabled: showApprovals },
+  const openLoans = open.data ?? [];
+  const counts = useMemo(() => inboxCounts(openLoans, me), [openLoans, me]);
+  const visible = useMemo(
+    () => sortOpenLoans(chip ? openLoans.filter((l) => loanInboxKeys(l, me).has(chip)) : openLoans),
+    [openLoans, chip, me],
   );
-  const all = useLoans({ overdue: overdue || undefined });
+  const chips = INBOX_ORDER.map((key) => ({
+    key,
+    label: INBOX_LABELS[key],
+    count: counts[key],
+    tone: key === "overdue" ? ("destructive" as const) : undefined,
+  }));
+
+  const historyCols = useMemo<ColDef<PlateLoan>[]>(
+    () => [
+      {
+        headerName: "Requester",
+        valueGetter: (p) => (p.data ? memberName(p.data.requested_by) : ""),
+        flex: 1,
+        minWidth: 160,
+      },
+      {
+        headerName: "Sets",
+        valueGetter: (p) => (p.data ? setSummary(p.data) : ""),
+        flex: 1.5,
+        minWidth: 200,
+      },
+      { headerName: "Plates", valueGetter: (p) => p.data?.items.length ?? 0, width: 90 },
+      {
+        headerName: "Requested",
+        field: "created_at",
+        width: 130,
+        valueFormatter: (p) => formatDate(p.value),
+      },
+      {
+        headerName: "Closed",
+        field: "closed_at",
+        width: 130,
+        sort: "desc",
+        valueFormatter: (p) => formatDate(p.value),
+      },
+      {
+        headerName: "Outcome",
+        width: 120,
+        valueGetter: (p) => (p.data ? loanOutcome(p.data) : ""),
+        cellRenderer: (p: ICellRendererParams<PlateLoan, string>) =>
+          p.value ? <StatusBadge status={p.value} variant={LOAN_VARIANT[p.value]} /> : null,
+      },
+      {
+        headerName: "Barcodes",
+        hide: true, // quick-filter only
+        valueGetter: (p) => p.data?.items.map((i) => i.barcode).join(" ") ?? "",
+      },
+    ],
+    [memberName],
+  );
 
   return (
     <div className="flex flex-col gap-4 p-6">
-      <PageHeader title="Loans" subtitle="Plate checkout requests and approvals">
+      <PageHeader title="Loans" subtitle="Plate checkouts — who has what, and what's due back.">
         <Button onClick={() => setRequestOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Request loan
@@ -74,31 +111,58 @@ export function LoanDashboard() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="mine">My requests</TabsTrigger>
-          {showApprovals ? <TabsTrigger value="approvals">Approvals</TabsTrigger> : null}
-          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="open">Open</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="mine" className="mt-4">
-          <LoanList query={mine} context="mine" me={me} />
+        <TabsContent value="open" className="mt-4 flex flex-col gap-3">
+          <CountChips chips={chips} active={chip} onChange={(k) => setChip(k as InboxKey | null)} />
+          {open.isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : open.error ? (
+            <p className="text-sm text-destructive">
+              {open.error instanceof Error ? open.error.message : "Failed to load loans"}
+            </p>
+          ) : visible.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {chip ? `Nothing matches "${INBOX_LABELS[chip]}".` : "No open loans."}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {visible.map((loan) => (
+                <LoanRow
+                  key={loan.id}
+                  loan={loan}
+                  me={me}
+                  requesterName={memberName(loan.requested_by)}
+                  orgName={orgName}
+                />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
-        {showApprovals ? (
-          <TabsContent value="approvals" className="mt-4">
-            <LoanList query={approvals} context="approvals" me={me} />
-          </TabsContent>
-        ) : null}
-
-        <TabsContent value="all" className="mt-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Switch id="overdue-only" checked={overdue} onCheckedChange={setOverdue} />
-            <Label htmlFor="overdue-only">Overdue only</Label>
-          </div>
-          <LoanList query={all} context="all" me={me} />
+        <TabsContent value="history" className="mt-4">
+          <DataGrid<PlateLoan>
+            rowData={closed.data}
+            columnDefs={historyCols}
+            loading={closed.isLoading || !closed.data}
+            height="600px"
+            suppressFilters
+            preferencesKey="loans-history"
+            searchPlaceholder="Search requester, set or barcode…"
+            includeHiddenColumnsInQuickFilter
+            onRowClick={(loan) => router.push(`/inventory/loans/${loan.id}`)}
+            emptyState={<p className="p-6 text-sm text-muted-foreground">No closed loans yet.</p>}
+          />
         </TabsContent>
       </Tabs>
 
-      <RequestLoanDialog open={requestOpen} onOpenChange={setRequestOpen} orgId={orgId} />
+      <RequestLoanDialog
+        open={requestOpen}
+        onOpenChange={setRequestOpen}
+        orgId={me?.org_id ?? undefined}
+      />
     </div>
   );
 }

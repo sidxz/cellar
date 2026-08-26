@@ -24,6 +24,7 @@ import { saveText } from "@/shared/lib/api/download";
 import type { RequestLoanBody } from "@/shared/lib/api/model";
 import { parseCsvRows } from "@/shared/lib/parse-csv";
 import { Download } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { PlateGroupNode } from "../hooks/use-plate-groups";
 import { usePlateGroupTree } from "../hooks/use-plate-groups";
@@ -73,6 +74,9 @@ export interface RequestLoanDialogProps {
   orgId: string | undefined;
   /** Group to preselect in "From group" mode, e.g. opened from a tree card. */
   initialGroupId?: string;
+  /** Barcodes to pre-fill in "Paste barcodes" mode (opens in that mode when non-empty).
+   *  Pass a stable reference — an inline literal re-runs the reset effect every render. */
+  initialBarcodes?: string[];
 }
 
 export function RequestLoanDialog({
@@ -80,6 +84,7 @@ export function RequestLoanDialog({
   onOpenChange,
   orgId,
   initialGroupId,
+  initialBarcodes,
 }: RequestLoanDialogProps) {
   const [mode, setMode] = useState<Mode>("group");
   const [groupId, setGroupId] = useState("");
@@ -90,6 +95,7 @@ export function RequestLoanDialog({
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
   const request = useRequestLoan();
+  const router = useRouter();
 
   const { data: orgs } = useOrgs();
   const borrowerOptions = useMemo(() => (orgs ?? []).filter((o) => o.id !== orgId), [orgs, orgId]);
@@ -99,15 +105,16 @@ export function RequestLoanDialog({
 
   useEffect(() => {
     if (!open) return;
-    setMode("group");
+    const preset = initialBarcodes ?? [];
+    setMode(preset.length > 0 ? "paste" : "group");
     setGroupId(initialGroupId ?? "");
-    setPaste("");
+    setPaste(preset.join("\n"));
     setCsvBarcodes([]);
     setCsvName("");
     setBorrowerOrgId(MY_ORG);
     setDueDate("");
     setNotes("");
-  }, [open, initialGroupId]);
+  }, [open, initialGroupId, initialBarcodes]);
 
   const groupOptions = useMemo(() => {
     const out: GroupOption[] = [];
@@ -133,7 +140,12 @@ export function RequestLoanDialog({
     if (isLending) body.borrower_org_id = borrowerOrgId;
     if (dueDate) body.due_date = dueDate;
     if (notes.trim()) body.notes = notes.trim();
-    request.mutate(body, { onSuccess: () => onOpenChange(false) });
+    request.mutate(body, {
+      onSuccess: (loan) => {
+        onOpenChange(false);
+        router.push(`/inventory/loans/${loan.id}`);
+      },
+    });
   };
 
   return (
