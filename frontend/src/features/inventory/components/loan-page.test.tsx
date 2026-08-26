@@ -57,10 +57,16 @@ const me = (org: string, admin = false): MeResponse =>
     workspace_role: admin ? "admin" : "editor",
   }) as MeResponse;
 
-function setup(viewer: MeResponse) {
+function setup(viewer: MeResponse, shipments: unknown[] = []) {
   mocked.mockReset();
   mocked.mockImplementation((opts: { url: string; method: string }) => {
     if (opts.url === "/api/v1/plate-loans/l1") return Promise.resolve(loan);
+    if (opts.url === "/api/v1/plate-loans/l1/shipments") return Promise.resolve(shipments);
+    if (opts.url === "/api/v1/organizations")
+      return Promise.resolve([
+        { id: "org-A", name: "TAMU" },
+        { id: "org-B", name: "Sanofi" },
+      ]);
     if (opts.url === "/api/v1/user/me") return Promise.resolve(viewer);
     if (opts.url === "/api/v1/orgs")
       return Promise.resolve([
@@ -118,6 +124,33 @@ describe("LoanPage content", () => {
       "href",
       "/inventory/plates/p1",
     );
+  });
+  it("Logistics card lists the shipments carrying this loan; empty copy otherwise", async () => {
+    setup(me("org-A"), [
+      {
+        shipment_id: "s1",
+        direction: "outbound",
+        status: "in_transit",
+        destination_org_id: "org-B",
+        tracking_number: "7489",
+        carrier: "FedEx",
+        shipping_date: "2026-09-01",
+        received_date: null,
+        amount_value: null,
+        amount_unit: null,
+        created_at: "2026-08-30T12:00:00Z",
+      },
+    ]);
+    const card = await screen.findByTestId("shipment-links");
+    expect(card).toHaveTextContent("Logistics");
+    await waitFor(() => expect(card).toHaveTextContent("→ Sanofi"));
+    expect(card).toHaveTextContent("In Transit");
+    expect(card.querySelector("a")).toHaveAttribute("href", "/inventory/shipments/s1");
+  });
+  it("Logistics card: empty copy when no shipment is recorded", async () => {
+    setup(me("org-A"));
+    const card = await screen.findByTestId("shipment-links");
+    await waitFor(() => expect(card).toHaveTextContent("No shipment recorded for this loan."));
   });
   it("request-return opens the dialog instead of posting immediately", async () => {
     setup(me("org-B"));

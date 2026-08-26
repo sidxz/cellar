@@ -3,7 +3,8 @@
 import { AttachmentList, FileUploadZone } from "@/features/attachment";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
-import { OrgName, SampleName } from "@/shared/components/entity-name";
+import { OrgName } from "@/shared/components/entity-name";
+import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card } from "@/shared/components/ui/card";
 import {
@@ -17,23 +18,52 @@ import {
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useMemberNames } from "@/shared/hooks/use-workspace-members";
+import { formatStatusLabel } from "@/shared/lib/status-variants";
 import { PackageCheck, Pencil, Trash2, Truck } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useLoan } from "../hooks/use-plate-loans";
 import {
   useAddShipmentItem,
   useDeleteShipment,
   useDeliverShipment,
   useMarkInTransit,
+  useResolveShipmentItems,
   useReturnShipment,
   useShipShipment,
   useShipment,
   useUpdateShipment,
 } from "../hooks/use-shipments";
-import { SHIPMENT_STATUS_LABELS, type Shipment, type ShipmentStatus } from "../types/shipment";
+import { loanTitle } from "../lib/loan-summary";
+import {
+  type ResolvedItem,
+  SHIPMENT_STATUS_LABELS,
+  type Shipment,
+  type ShipmentItem,
+  type ShipmentStatus,
+} from "../types/shipment";
 
 interface ShipmentDetailProps {
   shipmentId: string;
+}
+
+const itemHref = (item: ShipmentItem) =>
+  `/inventory/${item.item_type === "plate" ? "plates" : "samples"}/${item.item_id}`;
+
+/** "carries loan → Maia Young · Set 5" — the loan whose plates ride in this box. */
+function LoanLink({ loanId }: { loanId: string }) {
+  const { data: loan } = useLoan(loanId);
+  const memberName = useMemberNames();
+  return (
+    <span>
+      · carries loan →{" "}
+      <Link href={`/inventory/loans/${loanId}`} className="text-primary hover:underline">
+        {loan ? loanTitle(loan, memberName(loan.requested_by)) : "…"}
+      </Link>
+    </span>
+  );
 }
 
 export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
@@ -121,8 +151,13 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
       >
         {(shipment) => (
           <>
-            <p className="-mt-3 text-sm text-muted-foreground">
-              Shipment to <OrgName id={shipment.destination_org_id} />
+            <p className="-mt-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <Badge variant="outline">{formatStatusLabel(shipment.direction)}</Badge>
+              <span>
+                Shipment {shipment.direction === "inbound" ? "from" : "to"}{" "}
+                <OrgName id={shipment.destination_org_id} />
+              </span>
+              {shipment.loan_id ? <LoanLink loanId={shipment.loan_id} /> : null}
             </p>
 
             {/* Properties */}
@@ -168,7 +203,7 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
             <div>
               <h2 className="text-lg font-semibold">Items</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Samples included in this shipment.
+                Plates and samples in this shipment.
               </p>
               <div className="mt-4">
                 {shipment.items.length === 0 ? (
@@ -180,19 +215,34 @@ export function ShipmentDetail({ shipmentId }: ShipmentDetailProps) {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/50">
-                          <th className="px-4 py-2 text-left font-medium">Sample</th>
+                          <th className="px-4 py-2 text-left font-medium">Type</th>
+                          <th className="px-4 py-2 text-left font-medium">Barcode</th>
+                          <th className="px-4 py-2 text-left font-medium">Label</th>
                           <th className="px-4 py-2 text-right font-medium">Amount</th>
-                          <th className="px-4 py-2 text-left font-medium">Unit</th>
                         </tr>
                       </thead>
                       <tbody>
                         {shipment.items.map((item) => (
                           <tr key={item.id} className="border-b last:border-0">
-                            <td className="px-4 py-2 text-sm">
-                              <SampleName id={item.sample_id} />
+                            <td className="px-4 py-2">
+                              <Badge variant="outline">{formatStatusLabel(item.item_type)}</Badge>
                             </td>
-                            <td className="px-4 py-2 text-right">{item.amount_value}</td>
-                            <td className="px-4 py-2">{item.amount_unit}</td>
+                            <td className="px-4 py-2">
+                              <Link
+                                href={itemHref(item)}
+                                className="font-mono text-primary hover:underline"
+                              >
+                                {item.barcode ?? item.item_id}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-2 text-muted-foreground">
+                              {item.label ?? "\u2014"}
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              {item.amount_value != null
+                                ? `${item.amount_value} ${item.amount_unit ?? ""}`
+                                : "\u2014"}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -421,54 +471,92 @@ function AddItemDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const mutation = useAddShipmentItem();
-  const [sampleId, setSampleId] = useState("");
+  const resolve = useResolveShipmentItems();
+  const [barcode, setBarcode] = useState("");
+  const [hit, setHit] = useState<ResolvedItem | null>(null);
   const [amountValue, setAmountValue] = useState("");
   const [amountUnit, setAmountUnit] = useState("mg");
+
+  const isSample = hit?.item_type === "sample";
+  const amount = Number.parseFloat(amountValue) || 0;
+  const canAdd = !!hit?.item_type && !!hit.item_id && (!isSample || amount > 0);
+
+  const reset = () => {
+    setBarcode("");
+    setHit(null);
+    setAmountValue("");
+    setAmountUnit("mg");
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="">
         <DialogHeader>
           <DialogTitle>Add Item</DialogTitle>
-          <DialogDescription>Add a sample to this shipment.</DialogDescription>
+          <DialogDescription>Add a plate or a sample by barcode.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="item-sample">
-              Sample Barcode <span className="text-destructive">*</span>
+            <Label htmlFor="item-barcode">
+              Barcode <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="item-sample"
-              placeholder="e.g. SMP-0042"
-              value={sampleId}
-              onChange={(e) => setSampleId(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="item-amount">Amount</Label>
+            <div className="flex gap-2">
               <Input
-                id="item-amount"
-                type="number"
-                placeholder="0.0"
-                min={0}
-                value={amountValue}
-                onChange={(e) => setAmountValue(e.target.value)}
+                id="item-barcode"
+                placeholder="e.g. SMP-0042 or 005261"
+                value={barcode}
+                onChange={(e) => {
+                  setBarcode(e.target.value);
+                  setHit(null);
+                }}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label>Unit</Label>
-              <select
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                value={amountUnit}
-                onChange={(e) => setAmountUnit(e.target.value)}
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!barcode.trim() || resolve.isPending}
+                onClick={() =>
+                  resolve.mutate([barcode.trim()], { onSuccess: (rows) => setHit(rows[0] ?? null) })
+                }
               >
-                <option value="mg">mg</option>
-                <option value="g">g</option>
-                <option value="mL">mL</option>
-              </select>
+                {resolve.isPending ? "Resolving..." : "Resolve"}
+              </Button>
             </div>
+            {hit?.error ? (
+              <p className="text-sm text-destructive">{hit.error}</p>
+            ) : hit?.item_type ? (
+              <p className="flex items-center gap-2 text-sm">
+                <Badge variant="outline">{formatStatusLabel(hit.item_type)}</Badge>
+                <span className="text-muted-foreground">{hit.label}</span>
+              </p>
+            ) : null}
           </div>
+          {isSample ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label htmlFor="item-amount">Amount</Label>
+                <Input
+                  id="item-amount"
+                  type="number"
+                  placeholder="0.0"
+                  min={0}
+                  value={amountValue}
+                  onChange={(e) => setAmountValue(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Unit</Label>
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  value={amountUnit}
+                  onChange={(e) => setAmountUnit(e.target.value)}
+                >
+                  <option value="mg">mg</option>
+                  <option value="g">g</option>
+                  <option value="mL">mL</option>
+                </select>
+              </div>
+            </div>
+          ) : null}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -476,29 +564,23 @@ function AddItemDialog({
           </Button>
           <Button
             onClick={() => {
+              if (!hit?.item_type || !hit.item_id) return;
               mutation.mutate(
                 {
                   id: shipmentId,
-                  sample_id: sampleId.trim(),
-                  amount_value: Number.parseFloat(amountValue) || 0,
-                  amount_unit: amountUnit,
+                  item_type: hit.item_type,
+                  item_id: hit.item_id,
+                  ...(isSample ? { amount_value: amount, amount_unit: amountUnit } : {}),
                 },
                 {
                   onSuccess: () => {
-                    setSampleId("");
-                    setAmountValue("");
-                    setAmountUnit("mg");
+                    reset();
                     onOpenChange(false);
                   },
                 },
               );
             }}
-            disabled={
-              !sampleId.trim() ||
-              !amountValue ||
-              Number.parseFloat(amountValue) <= 0 ||
-              mutation.isPending
-            }
+            disabled={!canAdd || mutation.isPending}
           >
             {mutation.isPending ? "Adding..." : "Add Item"}
           </Button>

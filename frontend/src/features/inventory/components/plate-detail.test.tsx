@@ -70,7 +70,12 @@ const openLoan = {
   ],
 };
 
-function setup(plate = basePlate, loans: unknown[] = [], runs: unknown[] = []) {
+function setup(
+  plate = basePlate,
+  loans: unknown[] = [],
+  runs: unknown[] = [],
+  shipments: unknown[] = [],
+) {
   mocked.mockReset();
   pushMock.mockReset();
   mocked.mockImplementation((opts: { url: string; method: string }) => {
@@ -79,6 +84,7 @@ function setup(plate = basePlate, loans: unknown[] = [], runs: unknown[] = []) {
     if (opts.url === "/api/v1/plates/p1") return Promise.resolve(plate);
     if (opts.url === "/api/v1/plates/p1/children") return Promise.resolve([]);
     if (opts.url === "/api/v1/plates/p1/runs") return Promise.resolve(runs);
+    if (opts.url === "/api/v1/plates/p1/shipments") return Promise.resolve(shipments);
     if (opts.url === "/api/v1/plate-loans") return Promise.resolve(loans);
     if (opts.url === "/api/v1/storage-locations")
       return Promise.resolve([
@@ -89,6 +95,7 @@ function setup(plate = basePlate, loans: unknown[] = [], runs: unknown[] = []) {
       ]);
     if (opts.url === "/api/v1/orgs")
       return Promise.resolve([{ id: "A", slug: "tamu", name: "TAMU" }]);
+    if (opts.url === "/api/v1/organizations") return Promise.resolve([{ id: "A", name: "TAMU" }]);
     if (opts.url === "/api/v1/user/workspace-members")
       return Promise.resolve([
         { user_id: "u1", name: "Maia Young", email: "", avatar_url: null, role: "editor" },
@@ -183,6 +190,38 @@ describe("PlateDetail body", () => {
     setup();
     const card = await screen.findByTestId("plate-runs");
     await waitFor(() => expect(card).toHaveTextContent("Not used in any run yet."));
+  });
+  it("Shipments card: arrow · org · status, linking to the shipment", async () => {
+    setup(
+      basePlate,
+      [],
+      [],
+      [
+        {
+          shipment_id: "s1",
+          direction: "outbound",
+          status: "shipped",
+          destination_org_id: "A",
+          tracking_number: "7489",
+          carrier: "FedEx",
+          shipping_date: "2026-09-01",
+          received_date: null,
+          amount_value: null,
+          amount_unit: null,
+          created_at: "2026-08-30T12:00:00Z",
+        },
+      ],
+    );
+    const card = await screen.findByTestId("shipment-links");
+    await waitFor(() => expect(card).toHaveTextContent("→ TAMU"));
+    expect(card).toHaveTextContent("Shipped");
+    expect(card).toHaveTextContent("shipped Sep 1, 2026");
+    expect(card.querySelector("a")).toHaveAttribute("href", "/inventory/shipments/s1");
+  });
+  it("Shipments card: empty copy when the plate was never shipped", async () => {
+    setup();
+    const card = await screen.findByTestId("shipment-links");
+    await waitFor(() => expect(card).toHaveTextContent("Never shipped."));
   });
   it("More → Delete → confirm deletes and returns to the list", async () => {
     setup();

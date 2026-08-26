@@ -57,6 +57,7 @@ import {
   usePlateChildren,
   usePlateRuns,
 } from "../hooks/use-plates";
+import { useShipmentsForPlate } from "../hooks/use-shipments";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import { downloadPlateLayout } from "../lib/download-plate-layout";
 import { type Whereabouts, plateWhereabouts } from "../lib/plate-where";
@@ -64,6 +65,7 @@ import type { PlateType, WellMapping } from "../types/plates";
 import { plateTypeLabels } from "../types/plates";
 import { CommentFeed } from "./comment-feed";
 import { RequestLoanDialog } from "./request-loan-dialog";
+import { ShipmentLinksCard } from "./shipment-links-card";
 import { WellMappingDialog } from "./well-mapping-dialog";
 
 // ---------------------------------------------------------------------------
@@ -283,6 +285,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
   const { data: runs } = usePlateRuns(plateId);
   // Every loan this plate appeared in (API orders desc): custody + history from one fetch.
   const { data: loans } = useLoans({ plate_id: plateId });
+  const shipmentsQuery = useShipmentsForPlate(plateId);
   const { data: locations } = useStorageLocations();
   const { data: orgs } = useOrgs();
   const groupQuery = usePlateGroup(plate?.group_id ?? undefined);
@@ -589,6 +592,13 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                       )}
                     </CardContent>
                   </Card>
+
+                  <ShipmentLinksCard
+                    title="Shipments"
+                    rows={shipmentsQuery.data}
+                    isLoading={shipmentsQuery.isLoading}
+                    emptyText="Never shipped."
+                  />
 
                   <Card>
                     <CardHeader>

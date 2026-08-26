@@ -1,6 +1,8 @@
 "use client";
 
 import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
+import { SearchableSelect } from "@/shared/components/searchable-select";
+import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -12,6 +14,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/shared/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -21,16 +24,26 @@ import {
 } from "@/shared/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { saveText } from "@/shared/lib/api/download";
+import type { ShipmentDirection, ShipmentItemType } from "@/shared/lib/api/model";
 import { parseCsv } from "@/shared/lib/parse-csv";
+import { formatStatusLabel } from "@/shared/lib/status-variants";
 import { AlertTriangle, CheckCircle2, Download, Plus, Trash2, Upload, XCircle } from "lucide-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useBatchesByMolecule } from "../hooks/use-batches";
+import { LoanStatus, useLoans } from "../hooks/use-plate-loans";
 import { useSamplesByBatch } from "../hooks/use-samples";
-import { useCreateShipment, usePreviewShipmentImport } from "../hooks/use-shipments";
+import {
+  useCreateShipment,
+  usePreviewShipmentImport,
+  useResolveShipmentItems,
+} from "../hooks/use-shipments";
+import { loanTitle } from "../lib/loan-summary";
 import type {
   ImportFieldCorrection,
   ImportResolvedRow,
+  ResolvedItem,
   ShipmentItemInput,
 } from "../types/shipment";
 import { MoleculeSelector } from "./molecule-selector";
@@ -56,6 +69,29 @@ const EMPTY_ITEM: ItemRowState = {
   amount_value: 0,
   amount_unit: "mg",
 };
+
+/** A barcode the server resolved, staged in the dialog. Plates ship whole — no amount. */
+interface ResolvedRow {
+  item_type: ShipmentItemType;
+  item_id: string;
+  barcode: string;
+  label: string | null;
+  amount_value: number;
+  amount_unit: string;
+}
+
+const isBlank = (it: ItemRowState) => !it._moleculeId && !it._batchId && !it.sample_id;
+
+function toRequestItem(r: ResolvedRow): ShipmentItemInput {
+  return r.item_type === "plate"
+    ? { item_type: "plate", item_id: r.item_id }
+    : {
+        item_type: "sample",
+        item_id: r.item_id,
+        amount_value: r.amount_value,
+        amount_unit: r.amount_unit,
+      };
+}
 
 // ---------------------------------------------------------------------------
 // CSV helpers
@@ -121,6 +157,24 @@ function StatusIcon({ status }: { status: string }) {
     default:
       return null;
   }
+}
+
+function UnitSelect({
+  value,
+  onValueChange,
+}: { value: string; onValueChange: (v: string) => void }) {
+  return (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger className="w-20">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="mg">mg</SelectItem>
+        <SelectItem value="g">g</SelectItem>
+        <SelectItem value="mL">mL</SelectItem>
+      </SelectContent>
+    </Select>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -279,18 +333,9 @@ function ShipmentItemRow({
           />
         </div>
 
-        <div className="grid gap-1 w-20">
+        <div className="grid gap-1">
           <Label className="text-xs">Unit</Label>
-          <Select value={item.amount_unit} onValueChange={(val) => onUpdate("amount_unit", val)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="mg">mg</SelectItem>
-              <SelectItem value="g">g</SelectItem>
-              <SelectItem value="mL">mL</SelectItem>
-            </SelectContent>
-          </Select>
+          <UnitSelect value={item.amount_unit} onValueChange={(v) => onUpdate("amount_unit", v)} />
         </div>
       </div>
     </div>
@@ -304,16 +349,29 @@ function ShipmentItemRow({
 export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialogProps) {
   const mutation = useCreateShipment();
   const previewMutation = usePreviewShipmentImport();
+  const resolveMutation = useResolveShipmentItems();
   const { data: orgs } = useOrganizations();
+  const { data: loans } = useLoans({ status: LoanStatus.open }, { enabled: open });
+  const memberName = useMemberNames();
+  const loanOptions = useMemo(
+    () =>
+      (loans ?? []).map((l) => ({ value: l.id, label: loanTitle(l, memberName(l.requested_by)) })),
+    [loans, memberName],
+  );
 
   // Shared fields
+  const [direction, setDirection] = useState<ShipmentDirection>("outbound");
   const [destinationOrgId, setDestinationOrgId] = useState("");
+  const [loanId, setLoanId] = useState<string | null>(null);
   const [carrier, setCarrier] = useState("");
   const [expectedArrivalDate, setExpectedArrivalDate] = useState("");
   const [shippingConditions, setShippingConditions] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Manual tab
+  // Manual tab — barcode box + cascade rows
+  const [barcodes, setBarcodes] = useState("");
+  const [resolved, setResolved] = useState<ResolvedRow[]>([]);
+  const [unresolved, setUnresolved] = useState<ResolvedItem[]>([]);
   const [items, setItems] = useState<ItemRowState[]>([{ ...EMPTY_ITEM }]);
 
   // CSV tab
@@ -328,11 +386,16 @@ export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialo
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function resetForm() {
+    setDirection("outbound");
     setDestinationOrgId("");
+    setLoanId(null);
     setCarrier("");
     setExpectedArrivalDate("");
     setShippingConditions("");
     setNotes("");
+    setBarcodes("");
+    setResolved([]);
+    setUnresolved([]);
     setItems([{ ...EMPTY_ITEM }]);
     setCsvText("");
     setPreviewRows(null);
@@ -342,6 +405,56 @@ export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialo
   function handleClose(v: boolean) {
     if (!v) resetForm();
     onOpenChange(v);
+  }
+
+  /** Header fields shared by both submit paths. */
+  const header = () => ({
+    destination_org_id: destinationOrgId.trim(),
+    direction,
+    loan_id: loanId,
+    carrier: carrier.trim() || null,
+    expected_arrival_date: expectedArrivalDate || null,
+    shipping_conditions: shippingConditions.trim() || null,
+    notes: notes.trim() || null,
+  });
+
+  // --- Barcode box ---
+
+  function handleResolve() {
+    const codes = barcodes
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (codes.length === 0) return;
+    resolveMutation.mutate(codes, {
+      onSuccess: (rows) => {
+        setResolved((prev) => {
+          const seen = new Set(prev.map((r) => r.item_id));
+          const next = [...prev];
+          for (const r of rows) {
+            if (!r.item_type || !r.item_id || seen.has(r.item_id)) continue;
+            seen.add(r.item_id);
+            next.push({
+              item_type: r.item_type,
+              item_id: r.item_id,
+              barcode: r.barcode,
+              label: r.label ?? null,
+              amount_value: 0,
+              amount_unit: "mg",
+            });
+          }
+          return next;
+        });
+        const failed = rows.filter((r) => r.error);
+        setUnresolved(failed);
+        // Keep only the failures in the box so a typo can be fixed and re-resolved.
+        setBarcodes(failed.map((r) => r.barcode).join("\n"));
+      },
+    });
+  }
+
+  function updateResolved(index: number, patch: Partial<ResolvedRow>) {
+    setResolved((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   }
 
   // --- Manual tab helpers ---
@@ -358,30 +471,27 @@ export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialo
     setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
   }
 
+  // Untouched cascade rows don't count — a barcode-only shipment is valid.
+  const cascade = items.filter((it) => !isBlank(it));
   const manualValid =
     destinationOrgId.trim().length > 0 &&
-    items.length > 0 &&
-    items.every(
+    cascade.length + resolved.length > 0 &&
+    cascade.every(
       (it) => it.sample_id.trim().length > 0 && it.amount_value > 0 && it.amount_unit.length > 0,
-    );
+    ) &&
+    resolved.every((r) => r.item_type === "plate" || r.amount_value > 0);
 
   function handleManualSubmit() {
-    const apiItems: ShipmentItemInput[] = items.map((it) => ({
-      sample_id: it.sample_id,
-      amount_value: it.amount_value,
-      amount_unit: it.amount_unit,
-    }));
-    mutation.mutate(
-      {
-        destination_org_id: destinationOrgId.trim(),
-        carrier: carrier.trim() || null,
-        expected_arrival_date: expectedArrivalDate || null,
-        shipping_conditions: shippingConditions.trim() || null,
-        notes: notes.trim() || null,
-        items: apiItems,
-      },
-      { onSuccess: () => handleClose(false) },
-    );
+    const apiItems: ShipmentItemInput[] = [
+      ...cascade.map((it) => ({
+        item_type: "sample" as const,
+        item_id: it.sample_id,
+        amount_value: it.amount_value,
+        amount_unit: it.amount_unit,
+      })),
+      ...resolved.map(toRequestItem),
+    ];
+    mutation.mutate({ ...header(), items: apiItems }, { onSuccess: () => handleClose(false) });
   }
 
   // --- CSV tab helpers ---
@@ -431,22 +541,13 @@ export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialo
     const apiItems: ShipmentItemInput[] = previewRows
       .filter((r) => r.status !== "error" && r.sample_id && r.amount_value && r.amount_unit)
       .map((r) => ({
-        sample_id: r.sample_id!,
+        item_type: "sample" as const,
+        item_id: r.sample_id!,
         amount_value: r.amount_value!,
         amount_unit: r.amount_unit!,
       }));
 
-    mutation.mutate(
-      {
-        destination_org_id: destinationOrgId.trim(),
-        carrier: carrier.trim() || null,
-        expected_arrival_date: expectedArrivalDate || null,
-        shipping_conditions: shippingConditions.trim() || null,
-        notes: notes.trim() || null,
-        items: apiItems,
-      },
-      { onSuccess: () => handleClose(false) },
-    );
+    mutation.mutate({ ...header(), items: apiItems }, { onSuccess: () => handleClose(false) });
   }
 
   // --- Helper: find correction for a field ---
@@ -463,28 +564,65 @@ export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialo
         <DialogHeader>
           <DialogTitle>New Shipment</DialogTitle>
           <DialogDescription>
-            Select compounds, then pick batches and samples to ship.
+            Pick the direction and organization, then add plates or samples by barcode or by
+            compound → batch → sample.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          {/* Shared fields: destination, carrier, conditions */}
+          {/* Shared fields: direction, organization, loan, carrier, conditions */}
           <div className="grid gap-2">
-            <Label>
-              Destination Organization <span className="text-destructive">*</span>
-            </Label>
-            <Select value={destinationOrgId} onValueChange={setDestinationOrgId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select destination organization" />
-              </SelectTrigger>
-              <SelectContent>
-                {orgs?.map((o) => (
-                  <SelectItem key={o.id} value={o.id}>
-                    {o.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Direction</Label>
+            <RadioGroup
+              value={direction}
+              onValueChange={(v) => setDirection(v as ShipmentDirection)}
+              className="flex gap-6"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="outbound" id="ship-dir-out" />
+                <Label htmlFor="ship-dir-out" className="font-normal">
+                  Outbound
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="inbound" id="ship-dir-in" />
+                <Label htmlFor="ship-dir-in" className="font-normal">
+                  Inbound
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="ship-org">
+                {direction === "inbound" ? "From Organization" : "Destination Organization"}{" "}
+                <span className="text-destructive">*</span>
+              </Label>
+              <Select value={destinationOrgId} onValueChange={setDestinationOrgId}>
+                <SelectTrigger id="ship-org">
+                  <SelectValue placeholder="Select organization" />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgs?.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Loan</Label>
+              <SearchableSelect
+                options={loanOptions}
+                value={loanId}
+                onValueChange={setLoanId}
+                placeholder="No loan"
+                searchPlaceholder="Search open loans..."
+                emptyMessage="No open loans."
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -524,11 +662,93 @@ export function CreateShipmentDialog({ open, onOpenChange }: CreateShipmentDialo
 
             {/* ---- Manual tab ---- */}
             <TabsContent value="manual">
-              <div className="grid gap-2 pt-2">
+              <div className="grid gap-3 pt-2">
+                {/* Barcode box */}
+                <div className="grid gap-2 rounded-md border p-3">
+                  <Label htmlFor="ship-barcodes">Barcodes</Label>
+                  <Textarea
+                    id="ship-barcodes"
+                    placeholder="Plates or samples, one per line"
+                    rows={3}
+                    className="font-mono text-xs"
+                    value={barcodes}
+                    onChange={(e) => setBarcodes(e.target.value)}
+                  />
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={barcodes.trim().length === 0 || resolveMutation.isPending}
+                      onClick={handleResolve}
+                    >
+                      {resolveMutation.isPending ? "Resolving..." : "Resolve"}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Plates ship whole; samples need an amount.
+                    </span>
+                  </div>
+                  {unresolved.length > 0 ? (
+                    <ul className="text-sm">
+                      {unresolved.map((u) => (
+                        <li key={u.barcode} className="text-destructive">
+                          {u.barcode} — {u.error}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {resolved.length > 0 ? (
+                    <ul data-testid="resolved-items" className="divide-y rounded-md border">
+                      {resolved.map((r, i) => (
+                        <li
+                          key={r.item_id}
+                          className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm"
+                        >
+                          <Badge variant="outline">{formatStatusLabel(r.item_type)}</Badge>
+                          <span className="font-mono">{r.barcode}</span>
+                          <span className="text-muted-foreground">{r.label}</span>
+                          <span className="ml-auto flex items-center gap-2">
+                            {r.item_type === "sample" ? (
+                              <>
+                                <Input
+                                  type="number"
+                                  placeholder="0.0"
+                                  min={0}
+                                  className="w-24"
+                                  aria-label={`Amount for ${r.barcode}`}
+                                  value={r.amount_value || ""}
+                                  onChange={(e) =>
+                                    updateResolved(i, {
+                                      amount_value: Number.parseFloat(e.target.value) || 0,
+                                    })
+                                  }
+                                />
+                                <UnitSelect
+                                  value={r.amount_unit}
+                                  onValueChange={(v) => updateResolved(i, { amount_unit: v })}
+                                />
+                              </>
+                            ) : null}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-destructive"
+                              aria-label={`Remove ${r.barcode}`}
+                              onClick={() => setResolved((prev) => prev.filter((_, j) => j !== i))}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+
+                {/* Cascade rows */}
                 <div className="flex items-center justify-between">
-                  <Label>
-                    Samples to Ship <span className="text-destructive">*</span>
-                  </Label>
+                  <Label>By compound</Label>
                   <Button type="button" variant="outline" size="sm" onClick={addItem}>
                     <Plus className="mr-1 h-3 w-3" />
                     Add Another Compound

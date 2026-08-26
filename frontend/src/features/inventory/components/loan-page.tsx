@@ -27,10 +27,12 @@ import {
   useLoan,
   useLoanItemsAction,
 } from "../hooks/use-plate-loans";
+import { useShipmentsForLoan } from "../hooks/use-shipments";
 import { loanSets, loanTitle, orgLine } from "../lib/loan-summary";
 import { VERB_LABELS, availableVerbs, eligibleItems } from "../lib/loan-verbs";
 import { CommentFeed } from "./comment-feed";
 import { RequestReturnDialog } from "./request-return-dialog";
+import { ShipmentLinksCard } from "./shipment-links-card";
 
 export interface LoanPageProps {
   loanId: string;
@@ -42,6 +44,7 @@ export function LoanPage({ loanId }: LoanPageProps) {
   const { data: orgs } = useOrgs();
   const memberName = useMemberNames();
   const action = useLoanItemsAction();
+  const shipmentsQuery = useShipmentsForLoan(loanId);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   // Non-null while the request-return dialog is up; the item ids it was opened for.
   const [returnTargets, setReturnTargets] = useState<string[] | null>(null);
@@ -205,19 +208,28 @@ export function LoanPage({ loanId }: LoanPageProps) {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Activity</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CommentFeed
-                      scope={{ loanId: loan.id }}
-                      composerTarget={{ targetType: "plate_loan", targetId: loan.id }}
-                      canWrite={canEdit(me)}
-                      emptyText="No activity yet — return notes and comments on this loan appear here."
-                    />
-                  </CardContent>
-                </Card>
+                <div className="flex flex-col gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Activity</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <CommentFeed
+                        scope={{ loanId: loan.id }}
+                        composerTarget={{ targetType: "plate_loan", targetId: loan.id }}
+                        canWrite={canEdit(me)}
+                        emptyText="No activity yet — return notes and comments on this loan appear here."
+                      />
+                    </CardContent>
+                  </Card>
+
+                  <ShipmentLinksCard
+                    title="Logistics"
+                    rows={shipmentsQuery.data}
+                    isLoading={shipmentsQuery.isLoading}
+                    emptyText="No shipment recorded for this loan."
+                  />
+                </div>
               </div>
             </>
           );

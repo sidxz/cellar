@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { formatStatusLabel } from "@/shared/lib/status-variants";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -37,7 +38,13 @@ export function ShipmentListPage() {
   const columnDefs = useMemo<ColDef<ShipmentSummary>[]>(
     () => [
       {
-        headerName: "Destination",
+        headerName: "Direction",
+        field: "direction",
+        width: 110,
+        valueFormatter: (p) => formatStatusLabel(p.value),
+      },
+      {
+        headerName: "Organization",
         field: "destination_org_id",
         flex: 1,
         minWidth: 160,
@@ -82,7 +89,7 @@ export function ShipmentListPage() {
     <div className="space-y-6">
       <PageHeader
         title="Shipments"
-        subtitle="Manage outbound sample shipments and chain-of-custody."
+        subtitle="Inbound and outbound shipments of plates and samples — chain-of-custody records."
       >
         <Button onClick={() => setCreateOpen(true)}>
           <Truck className="mr-2 h-4 w-4" />

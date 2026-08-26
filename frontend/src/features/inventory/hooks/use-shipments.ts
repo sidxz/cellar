@@ -7,7 +7,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CreateShipmentInput,
   ImportPreviewResponse,
+  ResolvedItem,
   Shipment,
+  ShipmentItemInput,
+  ShipmentLink,
   ShipmentSummary,
 } from "../types/shipment";
 
@@ -117,21 +120,11 @@ export function useReturnShipment() {
 export function useAddShipmentItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      sample_id,
-      amount_value,
-      amount_unit,
-    }: {
-      id: string;
-      sample_id: string;
-      amount_value: number;
-      amount_unit: string;
-    }) =>
+    mutationFn: ({ id, ...item }: { id: string } & ShipmentItemInput) =>
       customInstance<Shipment>({
         url: `${API_V1}/shipments/${id}/items`,
         method: "POST",
-        data: { sample_id, amount_value, amount_unit },
+        data: item,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SHIPMENTS_KEY });
@@ -182,3 +175,37 @@ export function usePreviewShipmentImport() {
       }),
   });
 }
+
+/** POST /shipments/resolve-items — barcodes → plate / sample items, input order kept. */
+export function useResolveShipmentItems() {
+  return useMutation({
+    mutationFn: (barcodes: string[]) =>
+      customInstance<ResolvedItem[]>({
+        url: `${API_V1}/shipments/resolve-items`,
+        method: "POST",
+        data: { barcodes },
+      }),
+  });
+}
+
+/** GET /{plates|samples|plate-loans}/{id}/shipments, newest first. Keyed under
+ * SHIPMENTS_KEY so every shipment mutation above already refreshes these cards. */
+function useShipmentLinks(path: "plates" | "samples" | "plate-loans", id: string | undefined) {
+  return useQuery({
+    queryKey: [...SHIPMENTS_KEY, "links", path, id],
+    queryFn: ({ signal }) =>
+      customInstance<ShipmentLink[]>({
+        url: `${API_V1}/${path}/${id}/shipments`,
+        method: "GET",
+        signal,
+      }),
+    enabled: !!id,
+  });
+}
+
+export const useShipmentsForPlate = (plateId: string | undefined) =>
+  useShipmentLinks("plates", plateId);
+export const useShipmentsForSample = (sampleId: string | undefined) =>
+  useShipmentLinks("samples", sampleId);
+export const useShipmentsForLoan = (loanId: string | undefined) =>
+  useShipmentLinks("plate-loans", loanId);
