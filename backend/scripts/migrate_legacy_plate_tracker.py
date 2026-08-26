@@ -1,8 +1,9 @@
 """Migrate the legacy plate-tracker (MySQL) into Cellar inventory plates.
 
 Idempotent + re-runnable. Reads the legacy DB once (pymysql), then, in one
-transaction: backfills NULL plate owners, builds the Site → Building → Room →
-Freezer StorageLocation tree, matches legacy plates to Cellar plates
+transaction: optionally backfills NULL plate owners (--backfill-null-owners,
+off by default), builds the Site → Building → Room → Freezer StorageLocation
+tree, matches legacy plates to Cellar plates
 (cdd_plate_sync → barcode) and registers whatever doesn't match (+ a
 cdd_plate_sync row when the legacy row carries a CDD plate id), sets
 ownership/type/status (tolerating plates whose current status can't reach the
@@ -21,11 +22,18 @@ Usage (from backend/):
         --cdd-vault-id <vault> --actor-id <sentinel-user-uuid> \\
         --user-map user_map.csv --report-dir ./reports \\
         [--site-name TAMU] [--building-name Main] \\
-        [--legacy-tz America/Chicago] [--dry-run]
+        [--legacy-tz America/Chicago] [--backfill-null-owners] [--dry-run]
 
 Cutover runbook:
   1. Grant `cellar:approve_loan` is NOT needed (migrated loans bypass approval).
-  2. Freeze the legacy plate-tracker (read-only announcement).
+  2. Freeze the legacy plate-tracker (read-only announcement). Pre-check:
+     `SELECT count(*) FROM registered_plates WHERE workspace_id = <ws> AND
+     owner_org_id IS NULL` on the Cellar DB — decide whether those rows are
+     legacy-owned before passing --backfill-null-owners (off by default: it
+     reassigns EVERY NULL-owner plate in the workspace to --internal-org-id,
+     legacy provenance or not — a CDD import or a manual test plate would be
+     swept up too). When on, review reports/owner_backfilled.csv for exactly
+     which plates moved.
   3. Build user_map.csv: `email,duar_user_id` rows, one per distinct
      requester/author email. The map covers OPEN- and CLOSED-transaction
      requesters AND human comment authors (SET_CMT/PLATE_CMT/T_CMT/T_REQ_CMT)
@@ -55,11 +63,12 @@ Cutover runbook:
      `disposed`; resolve by hand).
   7. Announce cutover.
 
-Summary counters: owner_backfilled, locations_created, plates_matched,
-plates_created, cdd_sync_rows, unmatched_plates, plates_classified,
-inactive_tagged, status_conflicts, groups_created, plates_grouped,
-loans_created, unresolved_requesters, unmapped_users, closed_loans_created,
-closed_lines_unparsed, comments_created.
+Summary counters: owner_backfilled (0 unless --backfill-null-owners),
+locations_created, plates_matched, plates_created, cdd_sync_rows,
+unmatched_plates, plates_classified, inactive_tagged, status_conflicts,
+groups_created, plates_grouped, loans_created, unresolved_requesters,
+unmapped_users, closed_loans_created, closed_lines_unparsed,
+comments_created.
 """
 
 from __future__ import annotations
@@ -714,7 +723,9 @@ async def apply_plate_ownership(
 
 async def backfill_null_owner(session, *, workspace_id, internal_org_id) -> int:
     """S2-deferred backfill: every NULL-owner plate in this workspace -> internal org.
-    Bulk SQL (matches alembic backfill precedent 042/021); bumps version for OCC safety."""
+    Bulk SQL (matches alembic backfill precedent 042/021); bumps version for OCC safety.
+    Opt-in via --backfill-null-owners (I4) — see select_null_owner_plates for the
+    pre-check that lists which rows this will touch."""
     result = await session.execute(
         sa.text(
             "UPDATE registered_plates SET owner_org_id = :org, version = version + 1, "
@@ -723,6 +734,27 @@ async def backfill_null_owner(session, *, workspace_id, internal_org_id) -> int:
         {"org": internal_org_id, "ws": workspace_id},
     )
     return result.rowcount or 0
+
+
+@dataclass(frozen=True)
+class BackfilledPlate:
+    id: uuid.UUID
+    barcode: str
+    plate_label: str
+
+
+async def select_null_owner_plates(session, *, workspace_id) -> list[BackfilledPlate]:
+    """The plates backfill_null_owner is about to re-own — every NULL-owner
+    plate in the workspace, legacy provenance or not (I4). Called before the
+    UPDATE so owner_backfilled.csv shows exactly what moved."""
+    rows = await session.execute(
+        sa.text(
+            "SELECT id, barcode, plate_label FROM registered_plates "
+            "WHERE workspace_id = :ws AND owner_org_id IS NULL"
+        ),
+        {"ws": workspace_id},
+    )
+    return [BackfilledPlate(r.id, r.barcode, r.plate_label) for r in rows.all()]
 
 
 @dataclass(frozen=True)
@@ -1371,6 +1403,7 @@ async def run_migration(
     dry_run,
     site_name: str = "TAMU",
     building_name: str = "Main",
+    backfill_null_owners: bool = False,
 ) -> dict:
     account_email = build_account_email_map(legacy.accounts)
     account_names = {a.uin: full_name(a) for a in legacy.accounts}
@@ -1393,10 +1426,19 @@ async def run_migration(
         location_repo = SQLAlchemyStorageLocationRepository(uow)
         comment_repo = SQLAlchemyCommentRepository(uow)
 
-        # Phase 0: NULL-owner backfill (S2-deferred)
-        summary["owner_backfilled"] = await backfill_null_owner(
-            uow.session, workspace_id=workspace_id, internal_org_id=internal_org_id
-        )
+        # Phase 0: NULL-owner backfill (S2-deferred). Opt-in (I4) — off by
+        # default because it reassigns EVERY NULL-owner plate in the
+        # workspace, legacy provenance or not.
+        backfilled_plates: list[BackfilledPlate] = []
+        if backfill_null_owners:
+            backfilled_plates = await select_null_owner_plates(
+                uow.session, workspace_id=workspace_id
+            )
+            summary["owner_backfilled"] = await backfill_null_owner(
+                uow.session, workspace_id=workspace_id, internal_org_id=internal_org_id
+            )
+        else:
+            summary["owner_backfilled"] = 0
 
         # Phase 1: storage locations (Site → Building → Room → Freezer)
         location_specs, location_alias = plan_locations(legacy)
@@ -1556,6 +1598,11 @@ async def run_migration(
         unmapped_users,
         ["uin", "email", "name", "open_txns", "closed_txns", "comments"],
     )
+    _write_csv(
+        report_dir / "owner_backfilled.csv",
+        backfilled_plates,
+        ["id", "barcode", "plate_label"],
+    )
     logger.info("migration_done", dry_run=dry_run, **summary)
     return summary
 
@@ -1585,6 +1632,12 @@ async def _main() -> None:
         default="America/Chicago",
         help="IANA zone legacy MySQL's naive datetimes are local to (time_zone=SYSTEM)",
     )
+    p.add_argument(
+        "--backfill-null-owners",
+        action="store_true",
+        help="Reassign EVERY NULL-owner plate in the workspace to --internal-org-id "
+        "(legacy provenance or not). Off by default; see reports/owner_backfilled.csv.",
+    )
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
@@ -1611,6 +1664,7 @@ async def _main() -> None:
             dry_run=args.dry_run,
             site_name=args.site_name,
             building_name=args.building_name,
+            backfill_null_owners=args.backfill_null_owners,
         )
         print("MIGRATION SUMMARY:", summary)
     finally:

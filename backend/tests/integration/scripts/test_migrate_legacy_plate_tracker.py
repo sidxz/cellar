@@ -307,6 +307,52 @@ async def test_backfill_null_owner_only_touches_nulls(session_factory):
 
 
 @pytest.mark.asyncio
+async def test_run_migration_leaves_unrelated_null_owner_plates_alone_by_default(
+    session_factory, tmp_path
+):
+    """I4: an unrelated NULL-owner plate (no legacy provenance at all) must
+    not be silently re-owned just because the migration ran."""
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    unrelated = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=unrelated, barcode="900060", ws=ws)  # owner NULL
+        await s.commit()
+    summary = await run_migration(
+        session_factory, LegacyData(), workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={}, actor_id=org, report_dir=tmp_path, dry_run=False,
+    )
+    assert summary["owner_backfilled"] == 0
+    assert (tmp_path / "owner_backfilled.csv").exists()
+    async with session_factory() as s:
+        owner = (await s.execute(sa.text(
+            "SELECT owner_org_id FROM registered_plates WHERE id = :id"), {"id": unrelated}
+        )).scalar_one()
+    assert owner is None
+
+
+@pytest.mark.asyncio
+async def test_run_migration_backfills_null_owners_when_flag_set(session_factory, tmp_path):
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    orphan = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=orphan, barcode="900061", ws=ws)  # owner NULL
+        await s.commit()
+    summary = await run_migration(
+        session_factory, LegacyData(), workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={}, actor_id=org, report_dir=tmp_path, dry_run=False,
+        backfill_null_owners=True,
+    )
+    assert summary["owner_backfilled"] == 1
+    async with session_factory() as s:
+        owner = (await s.execute(sa.text(
+            "SELECT owner_org_id FROM registered_plates WHERE id = :id"), {"id": orphan}
+        )).scalar_one()
+    assert owner == org
+
+
+@pytest.mark.asyncio
 async def test_apply_group_tree_and_assign_is_idempotent(session_factory):
     ws = uuid.uuid4()
     org = uuid.uuid4()
@@ -438,7 +484,9 @@ async def test_run_migration_end_to_end_summary(session_factory, tmp_path):
     assert summary["groups_created"] == 2   # library root + set
     assert summary["loans_created"] == 1
     assert summary["unmatched_plates"] == 0
+    assert summary["owner_backfilled"] == 0  # I4: off by default
     assert (tmp_path / "unmatched_plates.csv").exists()
+    assert (tmp_path / "owner_backfilled.csv").exists()
 
     # Full-pipeline idempotency: a 2nd run makes no new writes (runbook "re-run is safe").
     summary2 = await run_migration(
