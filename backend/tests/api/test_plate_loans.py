@@ -128,6 +128,21 @@ class TestRequestModes:
         loan = await _mk_loan(client, group_id=group["id"])
         assert [i["plate_id"] for i in loan["items"]] == [plate["id"]]
 
+    async def test_by_group_id_includes_sub_groups(self, client: AsyncClient) -> None:
+        """A library's plates live in its sets — requesting the root covers the subtree."""
+        library = await _mk_group(client, f"Lib-{uuid.uuid4().hex[:6]}")
+        child = await _mk_group(
+            client, f"Set-{uuid.uuid4().hex[:6]}", parent_group_id=library["id"]
+        )
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
+        assert (
+            await client.post(
+                f"/api/v1/plate-groups/{child['id']}/plates", json={"plate_ids": [plate["id"]]}
+            )
+        ).status_code == 204
+        loan = await _mk_loan(client, group_id=library["id"])
+        assert [i["plate_id"] for i in loan["items"]] == [plate["id"]]
+
     async def test_exactly_one_mode_required(self, client: AsyncClient) -> None:
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
         # none of plate_ids/barcodes/group_id provided
