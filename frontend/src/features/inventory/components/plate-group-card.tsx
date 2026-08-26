@@ -1,8 +1,7 @@
 "use client";
 
 import type { PlateGroupNode } from "../hooks/use-plate-groups";
-import { formatInitial } from "./plate-group-details";
-import { formatLabel, groupTypeColor } from "./plate-group-tree-utils";
+import { formatInitial, formatLabel, groupTypeColor } from "./plate-group-tree-utils";
 
 export interface PlateGroupCardProps {
   node: PlateGroupNode;

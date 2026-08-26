@@ -5,6 +5,7 @@ import type {
   CreatePlateGroupBody,
   GroupTreeNodeResponse,
   GroupTreeResponse,
+  PlateGroupDetailResponse,
   PlateGroupResponse,
   UpdatePlateGroupBody,
 } from "@/shared/lib/api/model";
@@ -15,6 +16,7 @@ import { PLATES_KEY, PLATE_GROUPS_KEY } from "./query-keys";
 export type PlateGroup = PlateGroupResponse;
 export type PlateGroupTree = GroupTreeResponse;
 export type PlateGroupNode = GroupTreeNodeResponse;
+export type PlateGroupDetail = PlateGroupDetailResponse;
 
 export function usePlateGroupTree(orgId?: string, opts?: { enabled?: boolean }) {
   return useQuery({
@@ -27,6 +29,19 @@ export function usePlateGroupTree(orgId?: string, opts?: { enabled?: boolean }) 
         signal,
       }),
     enabled: opts?.enabled ?? true,
+  });
+}
+
+export function usePlateGroup(groupId: string | undefined) {
+  return useQuery({
+    queryKey: [...PLATE_GROUPS_KEY, "detail", groupId],
+    queryFn: ({ signal }) =>
+      customInstance<PlateGroupDetail>({
+        url: `${API_V1}/plate-groups/${groupId}`,
+        method: "GET",
+        signal,
+      }),
+    enabled: !!groupId,
   });
 }
 

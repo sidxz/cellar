@@ -67,6 +67,17 @@ export function formatLabel(fmt: string | null | undefined): string | null {
   return fmt === "mixed" ? "mixed formats" : `${fmt}-well`;
 }
 
+/** "55 µL · 10 mM" — omits either half when absent. */
+export function formatInitial(
+  volumeUl: number | null | undefined,
+  concentrationMm: number | null | undefined,
+): string {
+  const parts: string[] = [];
+  if (volumeUl != null) parts.push(`${volumeUl} µL`);
+  if (concentrationMm != null) parts.push(`${concentrationMm} mM`);
+  return parts.join(" · ");
+}
+
 export function truncateLabel(name: string, max: number = MAX_NODE_LABEL): string {
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
 }

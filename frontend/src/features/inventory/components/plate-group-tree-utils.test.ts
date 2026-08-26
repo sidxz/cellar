@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PlateGroupNode } from "../hooks/use-plate-groups";
 import {
   MAX_NODE_LABEL,
+  formatInitial,
   formatLabel,
   groupTypeColor,
   legendEntries,
@@ -55,6 +56,17 @@ describe("formatLabel", () => {
     expect(formatLabel("96")).toBe("96-well");
     expect(formatLabel("mixed")).toBe("mixed formats");
     expect(formatLabel(null)).toBeNull();
+  });
+});
+
+describe("formatInitial", () => {
+  it("joins volume and concentration", () => {
+    expect(formatInitial(55, 10)).toBe("55 µL · 10 mM");
+  });
+  it("omits either half when absent", () => {
+    expect(formatInitial(55, null)).toBe("55 µL");
+    expect(formatInitial(null, 10)).toBe("10 mM");
+    expect(formatInitial(null, null)).toBe("");
   });
 });
 
