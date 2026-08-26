@@ -56,3 +56,11 @@ API tests `tests/api/test_plate_group_collections.py`: create with collection �
 
 ## 9. Out of scope
 Everything under "Not now" in §2; many-to-many; deriving links from well maps.
+
+## S16 sync note (2026-08-26) — shipped reality vs. §2–§8
+
+- Shipped in `f72548c5` (backend + client), `e3706cd4` (frontend), `438d9fdf` (group loan requests cover the subtree), `51477aac` (review fix); plan `docs/superpowers/plans/2026-08-26-s16-plate-group-collection-link.md`, three tasks in three waves, one whole-branch review (**APPROVE WITH FIXES** → the recursive CTEs now carry `workspace_id` on every hop).
+- Beyond the text: group detail `ancestors` are now full `GroupTreeNode`s (real `plate_count`/`plate_format`, plus `collection_*`); create/update return `SavedGroup(group, collection_name)` so routes never touch repos; the reader Protocol lives with its use case in `application/inventory/collection_plate_groups.py`; the tree's root node also shows `Collection · {name}`; `0 on loan` is hidden like `0 overdue`; an `UNSET` update re-resolves the existing link's name without re-validating it (a stale link shows `collection_name: null`, not 404).
+- **Found while verifying, fixed in `438d9fdf`:** a group-mode loan request only took the group's *direct* plates, so "Request loan" on a library root (0 direct, hundreds below) answered 422 "Group has no plates" — from the new card, the group page and the tree alike. A group request now collects the whole subtree (parent-first walk over one org-scoped load); the request dialog's group labels show subtree counts and the copy says "…and its sub-groups".
+- Migration 070 applied to the local dev DB. Suites: backend unit 3125 passed (2 known pre-existing failures), 189 unit + 121 API in the touched areas, 63 loan API tests; frontend **1123 passed**, tsc/biome clean. Browser-verified on saclab-dev: Edit SAC1 → Collection picker → save → Details row `Collection · My Collection 1`; collection page card `SAC1 · 832 plates · 9 on loan · 9 overdue · Request loan` → dialog opens in group mode pre-selected; test link removed afterwards.
+- Residuals: label matching/auto-link by name not built (17 libraries are linked by hand); compound-level bridges wait for well maps (§2 "Not now").
