@@ -45,6 +45,7 @@ function StructureThumbnailInner({ smiles, size = 48, className }: StructureThum
           bondLineWidth: 2.0,
           minFontSize: 14,
           addAtomIndices: false,
+          clearBackground: false, // transparent — the app background shows through
         });
         const svgStr = mol.get_svg_with_highlights(drawOpts);
         mol.delete();
