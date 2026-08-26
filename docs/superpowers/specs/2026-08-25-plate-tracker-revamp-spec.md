@@ -1,6 +1,6 @@
 # Spec: Plate Tracker Revamp — Strict Org Visibility, Legacy-Parity Tree, Comments, Kiosk Page, Full Data Cutover
 
-**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7–S10 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`)
+**Date:** 2026-08-25 · **Status:** APPROVED 2026-08-25 · S7–S11 shipped 2026-08-25 (branch `feat/plate-tracker-revamp`); S12 cutover pending the operator gate
 **Contexts touched:** Inventory (03), Audit & Compliance (06), Workspace Config (07)
 **Builds on:** `2026-08-10-inventory-plate-org-loans-spec.md` (S1–S6, shipped). Sessions here continue the numbering: **S7–S12**.
 
@@ -233,4 +233,13 @@ Emails/notifications · volume-reduction editor (never persisted in legacy) · v
 - `/kiosk` was added to the Duar auto-reauth exclusion list (`shared/lib/auth/auto-reauth.ts`) so a session-less kiosk browser is never bounced to the IdP.
 - Error copy reads Cellar's `{error, message}` body (the domain-error handler shape) and falls back to `{detail}` for validation errors — the spec's assumption of `detail` was wrong for 409s.
 - Not built (as specified): a post-scan loan status table. Browser-verified live (checkout, 404, 403, 409 paths).
+
+## S11 sync note (2026-08-25) — shipped reality vs. §9
+
+- Script phases now: `--backfill-null-owners` (opt-in, reports `owner_backfilled.csv`) → storage locations (`--site-name`/`--building-name`; Site → Building → Room `{room_no}` → Freezer `{freezer}`, idempotent by name under parent, `UNKNOWN/UNKNOWN` skipped) → match → **create** missing plates (barcode verbatim, format plate→set→96, type by role, TAMU owner, set's freezer; `cdd_plate_sync` rows under `--cdd-vault-id`) → ownership/status/tags (a plate whose status cannot reach the legacy target is recorded in `status_conflicts.csv` instead of aborting — S6 backlog item 3 closed) → vocab seeding (`plate_group_type` + `plate_group_state`) → groups with metadata (state, location, initial vol/conc, compound count, scientist; `description` keeps conditions / compound file / comments) → open loans (unmapped requester → `--actor-id`, name kept in `notes`) → **closed loans** (one `PlateLoan(status=CLOSED)` per legacy CLOSED transaction, items reconstructed from the system comment lines — DENIED if any denied line else RETURNED; historical `created_at`/`closed_at`/`status_changed_at`; renamed plates recovered via `ACTIVITY_LOG.plate_id`; `notes = "Legacy transaction <id> · requester: <name>"` is the idempotency marker) → **comments** (non-system `ACTIVITY_LOG` rows → `Comment` with `loan_id`, historical `created_at`, `author_id` from the user map else NULL; imported only for loans created in the same run) → reports (`created_plates`, `status_conflicts`, `closed_loans_unparsed`, `unmapped_users`, `unresolved_requesters`, `unmatched_plates`, `owner_backfilled`).
+- **Legacy timestamps are America/Chicago local** (MySQL `time_zone=SYSTEM`); `--legacy-tz` (default `America/Chicago`) localizes them before storing UTC — caught by the whole-branch review before any real run.
+- `--user-map` is optional; attribution is write-once, so `unmapped_users.csv` (39 people, all `@tamu.edu`) is the list to map before the real run.
+- Dry-run #2 against the live `sacnet_dev` → the saclab-dev workspace on the local dev stack (rolled back): locations 15, plates matched 2259 (created 2247, `cdd_plate_sync` 639, vault `4443`), unmatched 0, status conflicts 0, groups created 93 (8 TAMU-owned Sanofi groups already existed), plates grouped 2248 (11 legacy plates belong to no set), open loans 8, closed loans **752/752**, unparsed lines **0**, comments **1303**, unmapped users 39.
+- Cutover facts for S12 (`docs/superpowers/plans/2026-08-25-s12-cutover.md`): the workspace holds verification seed data — 12 public-org plates with legacy barcodes on 5 open dev loans and 32 public-owned SAC1/SAC2 groups — that must be wiped or closed first; the 4 NULL-owner plates are demo plates (backfill stays off).
+- Suites at the end of S11: backend 3957 passed / 11 pre-existing failures; frontend 1055/1055; tsc clean.
 
