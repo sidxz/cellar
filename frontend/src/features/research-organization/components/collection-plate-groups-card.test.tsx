@@ -33,7 +33,7 @@ const rows: CollectionPlateGroupResponse[] = [
     group_type: "vendor",
     owner_org_id: "org1",
     path: "SAC1",
-    plate_count: 0,
+    plate_count: 42,
     subtree_plate_count: 42,
     on_loan_count: 3,
     overdue_count: 1,
@@ -92,7 +92,7 @@ describe("CollectionPlateGroupsCard", () => {
     expect(screen.getByText("0 plates")).toBeInTheDocument();
     expect(screen.queryByText("0 on loan")).not.toBeInTheDocument();
     expect(screen.queryByText("0 overdue")).not.toBeInTheDocument();
-    // Request loan only where the subtree has plates.
+    // Request loan only where the group itself holds plates (a loan is of a set).
     expect(screen.getAllByRole("button", { name: "Request loan" })).toHaveLength(1);
   });
 

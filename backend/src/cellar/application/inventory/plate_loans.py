@@ -157,22 +157,6 @@ class RequestPlateLoan:
         self._visibility = visibility
         self._org_directory = org_directory
 
-    async def _subtree_ids(self, workspace_id: uuid.UUID, root: PlateGroup) -> list[uuid.UUID]:
-        """`root` plus every descendant group, parent-first (one org-scoped load)."""
-        groups = await self._group_repo.find_by_workspace(
-            workspace_id, owner_org_id=root.owner_org_id
-        )
-        children: dict[uuid.UUID | None, list[uuid.UUID]] = {}
-        for g in groups:
-            children.setdefault(g.parent_group_id, []).append(g.id)
-        ordered: list[uuid.UUID] = []
-        queue = [root.id]
-        while queue:
-            gid = queue.pop(0)
-            ordered.append(gid)
-            queue.extend(children.get(gid, []))
-        return ordered
-
     async def __call__(
         self, input: RequestPlateLoanCommand, auth: AuthContext | None = None
     ) -> Result[PlateLoan, DomainError]:
@@ -241,16 +225,11 @@ class RequestPlateLoan:
                 # gated access above, and every plate assigned to a group
                 # shares that group's owner org (S3 invariant, enforced in
                 # AssignPlatesToGroup) — so the outcome is identical either way.
-                # A library IS its sets: a group request covers the whole
-                # subtree (2026-08-26 — the collection card and the group page
-                # offer "Request loan" on roots whose plates all live in
-                # child groups; direct-only requests returned "no plates").
-                subtree = await self._subtree_ids(input.workspace_id, group)
-                plates = [
-                    plate
-                    for gid in subtree
-                    for plate in await self._plate_repo.search(input.workspace_id, group_id=gid)
-                ]
+                # Direct members only, by design (user ruling 2026-08-26): a
+                # loan is of a SET — people request the group that holds the
+                # plates, never a library whose plates live in child sets. The
+                # UI offers "Request loan" only where plate_count > 0.
+                plates = await self._plate_repo.search(input.workspace_id, group_id=group.id)
                 if not plates:
                     return Failure(ValidationError("Group has no plates"))
 

@@ -209,8 +209,10 @@ describe("PlateGroupPage", () => {
     );
   });
 
-  it("hides Request loan when the subtree has no plates", async () => {
-    setup({ ...baseDetail, subtree_plate_count: 0 });
+  it("hides Request loan when the group itself holds no plates, even with plates below it", async () => {
+    // A loan is of a SET (direct members) — a library root with plates only in its
+    // child sets must not offer a loan that would come back "Group has no plates".
+    setup({ ...baseDetail, plate_count: 0, subtree_plate_count: 5 });
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Vendor Library A" })).toBeInTheDocument(),
     );

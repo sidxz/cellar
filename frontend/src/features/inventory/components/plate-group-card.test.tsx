@@ -87,7 +87,7 @@ describe("PlateGroupCard", () => {
     expect(screen.queryByText(/Collection ·/)).not.toBeInTheDocument();
   });
 
-  it("hides Request loan when the subtree has no plates", () => {
+  it("hides Request loan when the group itself holds no plates (a loan is of a set)", () => {
     render(
       <PlateGroupCard
         node={{ ...node, plate_count: 0 }}

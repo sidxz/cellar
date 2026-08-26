@@ -50,7 +50,7 @@ export function CollectionPlateGroupsCard({ collectionId }: { collectionId: stri
                   {g.overdue_count > 0 ? (
                     <span className="text-destructive">{g.overdue_count} overdue</span>
                   ) : null}
-                  {canEdit && g.subtree_plate_count > 0 ? (
+                  {canEdit && g.plate_count > 0 ? (
                     <Button
                       size="sm"
                       variant="ghost"

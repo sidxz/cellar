@@ -128,8 +128,9 @@ class TestRequestModes:
         loan = await _mk_loan(client, group_id=group["id"])
         assert [i["plate_id"] for i in loan["items"]] == [plate["id"]]
 
-    async def test_by_group_id_includes_sub_groups(self, client: AsyncClient) -> None:
-        """A library's plates live in its sets — requesting the root covers the subtree."""
+    async def test_by_group_id_is_direct_members_only(self, client: AsyncClient) -> None:
+        """A loan is of a SET (user ruling 2026-08-26): plates in child groups are
+        not swept in, and a root whose plates all live below it has "no plates"."""
         library = await _mk_group(client, f"Lib-{uuid.uuid4().hex[:6]}")
         child = await _mk_group(
             client, f"Set-{uuid.uuid4().hex[:6]}", parent_group_id=library["id"]
@@ -140,7 +141,9 @@ class TestRequestModes:
                 f"/api/v1/plate-groups/{child['id']}/plates", json={"plate_ids": [plate["id"]]}
             )
         ).status_code == 204
-        loan = await _mk_loan(client, group_id=library["id"])
+        resp = await client.post("/api/v1/plate-loans", json={"group_id": library["id"]})
+        assert resp.status_code == 422, resp.text
+        loan = await _mk_loan(client, group_id=child["id"])
         assert [i["plate_id"] for i in loan["items"]] == [plate["id"]]
 
     async def test_exactly_one_mode_required(self, client: AsyncClient) -> None:

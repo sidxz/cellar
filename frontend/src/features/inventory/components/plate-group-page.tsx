@@ -108,7 +108,7 @@ export function PlateGroupPage({ groupId }: PlateGroupPageProps) {
         ]}
         actions={(d) => (
           <>
-            {d.subtree_plate_count > 0 ? (
+            {d.plate_count > 0 ? (
               <Button size="sm" variant="outline" onClick={() => setLoanOpen(true)}>
                 Request loan
               </Button>

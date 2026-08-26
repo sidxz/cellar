@@ -29,7 +29,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { PlateGroupNode } from "../hooks/use-plate-groups";
 import { usePlateGroupTree } from "../hooks/use-plate-groups";
 import { useRequestLoan } from "../hooks/use-plate-loans";
-import { subtreePlateCount } from "./plate-group-tree-utils";
 
 type Mode = "group" | "paste" | "csv";
 
@@ -65,7 +64,7 @@ function flattenGroups(nodes: PlateGroupNode[], depth: number, out: GroupOption[
   for (const n of nodes) {
     out.push({
       id: n.id,
-      label: `${" ".repeat(depth * 3)}${n.name} (${subtreePlateCount(n)})`,
+      label: `${" ".repeat(depth * 3)}${n.name} (${n.plate_count})`,
     });
     flattenGroups(n.children ?? [], depth + 1, out);
   }
@@ -180,7 +179,8 @@ export function RequestLoanDialog({
               </SelectContent>
             </Select>
             <p className="mt-2 text-xs text-muted-foreground">
-              Requests every plate currently in the selected group and its sub-groups.
+              Requests every plate directly in the selected group — sub-groups are loaned
+              separately.
             </p>
           </TabsContent>
 

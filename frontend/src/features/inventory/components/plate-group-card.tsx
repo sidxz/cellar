@@ -63,7 +63,7 @@ export function PlateGroupCard({
         <button type="button" className="text-primary hover:underline" onClick={onSelect}>
           Details
         </button>
-        {subtreePlates > 0 ? (
+        {node.plate_count > 0 ? (
           <button type="button" className="text-primary hover:underline" onClick={onRequestLoan}>
             Request loan
           </button>
