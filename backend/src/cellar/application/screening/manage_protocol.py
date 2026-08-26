@@ -165,9 +165,9 @@ class UpdateProtocolCommand(Command):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
     name: str | None = None
-    description: str | None | object = UNSET
-    category: str | None | object = UNSET
-    recommended_hit_criteria: list[dict] | None | object = UNSET
+    description: str | object | None = UNSET
+    category: str | object | None = UNSET
+    recommended_hit_criteria: list[dict] | object | None = UNSET
     pos_control_signal: str | None = None
 
 

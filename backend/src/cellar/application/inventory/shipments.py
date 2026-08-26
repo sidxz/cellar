@@ -105,11 +105,11 @@ class AddShipmentItemCommand(Command):
 class UpdateShipmentCommand(Command):
     workspace_id: uuid.UUID
     shipment_id: uuid.UUID
-    carrier: str | None | object = UNSET
-    expected_arrival_date: date | None | object = UNSET
-    shipping_conditions: str | None | object = UNSET
-    notes: str | None | object = UNSET
-    loan_id: uuid.UUID | None | object = UNSET
+    carrier: str | object | None = UNSET
+    expected_arrival_date: date | object | None = UNSET
+    shipping_conditions: str | object | None = UNSET
+    notes: str | object | None = UNSET
+    loan_id: uuid.UUID | object | None = UNSET
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -146,8 +146,8 @@ class CustomFieldDefinition(AggregateRoot):
         is_required: bool | object = UNSET,
         default_value: Any | object = UNSET,
         display_order: int | object = UNSET,
-        pick_list_values: list[str] | None | object = UNSET,
-        vocabulary_id: uuid.UUID | None | object = UNSET,
+        pick_list_values: list[str] | object | None = UNSET,
+        vocabulary_id: uuid.UUID | object | None = UNSET,
     ) -> None:
         """Partial update — only provided fields are changed."""
         if label is not UNSET:

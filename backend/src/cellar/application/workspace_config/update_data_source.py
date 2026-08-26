@@ -28,7 +28,7 @@ class UpdateDataSourceCommand(Command):
     name: str | object = UNSET
     is_active: bool | object = UNSET
     config: dict[str, Any] | object = UNSET
-    api_key_name: str | None | object = UNSET
+    api_key_name: str | object | None = UNSET
     entity_mappings: list[dict[str, Any]] | object = UNSET
     create_batch_on_duplicate: bool | object = UNSET
 

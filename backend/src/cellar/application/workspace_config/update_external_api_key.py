@@ -23,8 +23,8 @@ class UpdateExternalApiKeyCommand(Command):
     workspace_id: uuid.UUID
     key_id: uuid.UUID
     label: str | object = UNSET
-    description: str | None | object = UNSET
-    secret_value: str | None | object = UNSET
+    description: str | object | None = UNSET
+    secret_value: str | object | None = UNSET
     is_active: bool | object = UNSET
 
 

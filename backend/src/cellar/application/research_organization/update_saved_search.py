@@ -23,11 +23,11 @@ class UpdateSavedSearchCommand(Command):
     workspace_id: uuid.UUID
     saved_search_id: uuid.UUID
     name: str | None = None
-    description: str | None | object = UNSET
+    description: str | object | None = UNSET
     query: dict[str, Any] | None = None
-    columns: dict[str, Any] | None | object = UNSET
+    columns: dict[str, Any] | object | None = UNSET
     visibility: str | None = None
-    project_id: uuid.UUID | None | object = UNSET
+    project_id: uuid.UUID | object | None = UNSET
 
 
 class UpdateSavedSearch:

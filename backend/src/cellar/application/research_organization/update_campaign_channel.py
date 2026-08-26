@@ -63,8 +63,8 @@ class UpdateCampaignChannelCommand(Command):
     # UNSET means "don't touch"; None means "clear the value"
     label: str | object = UNSET
     selection_rule: SelectionRule | object = UNSET
-    qc_filter: dict | None | object = UNSET
-    hit_threshold: HitCriterion | None | object = UNSET
+    qc_filter: dict | object | None = UNSET
+    hit_threshold: HitCriterion | object | None = UNSET
 
 
 class UpdateCampaignChannel:

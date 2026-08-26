@@ -70,15 +70,15 @@ class UpdatePlateGroupCommand(Command):
     workspace_id: uuid.UUID
     group_id: uuid.UUID
     name: str | None = None
-    group_type: str | None | object = UNSET
-    description: str | None | object = UNSET
-    state: str | None | object = UNSET
-    storage_location_id: uuid.UUID | None | object = UNSET
-    initial_volume_ul: float | None | object = UNSET
-    initial_concentration_mm: float | None | object = UNSET
-    compound_count: int | None | object = UNSET
-    scientist: str | None | object = UNSET
-    collection_id: uuid.UUID | None | object = UNSET
+    group_type: str | object | None = UNSET
+    description: str | object | None = UNSET
+    state: str | object | None = UNSET
+    storage_location_id: uuid.UUID | object | None = UNSET
+    initial_volume_ul: float | object | None = UNSET
+    initial_concentration_mm: float | object | None = UNSET
+    compound_count: int | object | None = UNSET
+    scientist: str | object | None = UNSET
+    collection_id: uuid.UUID | object | None = UNSET
 
 
 @dataclass(frozen=True, kw_only=True)

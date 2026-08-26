@@ -82,8 +82,8 @@ class UpdateSynthesisRouteCommand(Command):
     workspace_id: uuid.UUID
     route_id: uuid.UUID
     name: str | object = UNSET
-    description: str | None | object = UNSET
-    scale: str | None | object = UNSET
+    description: str | object | None = UNSET
+    scale: str | object | None = UNSET
 
 
 @dataclass(frozen=True, kw_only=True)

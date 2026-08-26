@@ -1,5 +1,6 @@
 allowBuilds:
   '@biomejs/biome': true
+  '@scarf/scarf': false  # telemetry postinstall via orval -> @stoplight/spectral-core; never run it
   core-js: false
   es5-ext: false
   esbuild: true

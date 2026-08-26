@@ -63,9 +63,9 @@ class UpdatePlateCommand(Command):
     plate_id: uuid.UUID
     plate_label: str | None = None
     plate_type: str | None = None
-    notes: str | None | object = UNSET
-    project_id: uuid.UUID | None | object = UNSET
-    storage_location_id: uuid.UUID | None | object = UNSET
+    notes: str | object | None = UNSET
+    project_id: uuid.UUID | object | None = UNSET
+    storage_location_id: uuid.UUID | object | None = UNSET
 
 
 @dataclass(frozen=True, kw_only=True)

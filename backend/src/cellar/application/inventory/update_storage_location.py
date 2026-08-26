@@ -24,11 +24,11 @@ class UpdateStorageLocationCommand(Command):
     workspace_id: uuid.UUID
     location_id: uuid.UUID
     name: str | None = None
-    barcode: str | None | object = UNSET
-    temperature: str | None | object = UNSET
-    rows: int | None | object = UNSET
-    columns: int | None | object = UNSET
-    capacity: int | None | object = UNSET
+    barcode: str | object | None = UNSET
+    temperature: str | object | None = UNSET
+    rows: int | object | None = UNSET
+    columns: int | object | None = UNSET
+    capacity: int | object | None = UNSET
 
 
 class UpdateStorageLocation:

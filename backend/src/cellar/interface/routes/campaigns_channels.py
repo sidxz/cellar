@@ -93,8 +93,8 @@ async def update_campaign_channel(
         if "selection_rule" in provided and body.selection_rule is not None
         else UNSET
     )
-    qc_filter: dict | None | object = body.qc_filter if "qc_filter" in provided else UNSET
-    hit_threshold: HitCriterion | None | object = (
+    qc_filter: dict | object | None = body.qc_filter if "qc_filter" in provided else UNSET
+    hit_threshold: HitCriterion | object | None = (
         (body.hit_threshold.to_domain() if (body.hit_threshold is not None) else None)
         if "hit_threshold" in provided
         else UNSET

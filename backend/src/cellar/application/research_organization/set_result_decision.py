@@ -52,7 +52,7 @@ class SetResultDecisionCommand(Command):
     decision: CampaignDecision
     reason: str | None = None
     # UNSET means "don't touch"; None means "clear the notes"
-    notes: str | None | _Unset = UNSET  # type: ignore[assignment]
+    notes: str | _Unset | None = UNSET  # type: ignore[assignment]
 
 
 class SetResultDecision:

@@ -175,12 +175,12 @@ class ProtocolForm(AggregateRoot):
         self,
         *,
         name: str | object = UNSET,
-        description: str | None | object = UNSET,
-        protocol_type: str | None | object = UNSET,
+        description: str | object | None = UNSET,
+        protocol_type: str | object | None = UNSET,
         is_default: bool | object = UNSET,
-        readout_templates: list[ProtocolFormReadout] | None | object = UNSET,
-        condition_templates: list[ProtocolFormCondition] | None | object = UNSET,
-        ontology_defaults: list[ProtocolFormOntologyDefault] | None | object = UNSET,
+        readout_templates: list[ProtocolFormReadout] | object | None = UNSET,
+        condition_templates: list[ProtocolFormCondition] | object | None = UNSET,
+        ontology_defaults: list[ProtocolFormOntologyDefault] | object | None = UNSET,
     ) -> None:
         """Partial update — only provided fields are changed."""
         if name is not UNSET:

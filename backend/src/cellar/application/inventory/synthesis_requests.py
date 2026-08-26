@@ -129,7 +129,7 @@ class UpdateSynthesisRequestCommand(Command):
     priority: str | object = UNSET
     amount_value: float | object = UNSET
     amount_unit: str | object = UNSET
-    target_purity: float | None | object = UNSET
+    target_purity: float | object | None = UNSET
 
 
 @dataclass(frozen=True, kw_only=True)

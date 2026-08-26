@@ -25,9 +25,9 @@ class UpdateOrganizationCommand(Command):
     org_id: uuid.UUID
     name: str | None = None
     org_type: OrganizationType | None = None
-    contact_name: str | None | object = UNSET
-    contact_email: str | None | object = UNSET
-    notes: str | None | object = UNSET
+    contact_name: str | object | None = UNSET
+    contact_email: str | object | None = UNSET
+    notes: str | object | None = UNSET
 
 
 class UpdateOrganization:
