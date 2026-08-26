@@ -96,6 +96,12 @@ from cellar.application.inventory.sample_requests import (
     StartPreparingSampleRequest,
     UpdateSampleRequest,
 )
+from cellar.application.inventory.shipment_reads import (
+    ListShipmentsForItem,
+    ListShipmentsForLoan,
+    ResolveShipmentItems,
+    ShipmentsReader,
+)
 from cellar.application.inventory.shipments import (
     AddShipmentItem,
     CreateShipment,
@@ -181,6 +187,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_repos
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.shipment_repository import (
     SQLAlchemyShipmentRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.shipments_reader import (
+    SQLAlchemyShipmentsReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.storage_location_repository import (
     SQLAlchemyStorageLocationRepository,
@@ -428,13 +437,18 @@ def register_inventory(container: Container) -> None:
 
         return _f
 
+    # Loan repo wired into visibility so a borrower can ship the plates it holds (S17 §5).
     def _create_shipment(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        loan_repo = SQLAlchemyPlateLoanRepository(uow)
         return CreateShipment(
             uow,
             SQLAlchemyShipmentRepository(uow),
             c[EventDispatcher],
             sample_repo=SQLAlchemySampleRepository(uow),
+            plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            visibility=PlateVisibilityService(c[OrgDirectoryPort], loan_repo),
+            loan_repo=loan_repo,
         )
 
     container.define(CreateShipment, _create_shipment)
@@ -452,11 +466,64 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyShipmentRepository(uow),
             c[EventDispatcher],
             sample_repo=SQLAlchemySampleRepository(uow),
+            plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            visibility=PlateVisibilityService(
+                c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)
+            ),
+        )
+
+    def _update_shipment(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateShipment(
+            uow,
+            SQLAlchemyShipmentRepository(uow),
+            c[EventDispatcher],
+            loan_repo=SQLAlchemyPlateLoanRepository(uow),
+            visibility=PlateVisibilityService(c[OrgDirectoryPort]),
         )
 
     container.define(AddShipmentItem, _add_shipment_item)
-    container.define(UpdateShipment, _shipment_cmd(UpdateShipment))
+    container.define(UpdateShipment, _update_shipment)
     container.define(DeleteShipment, _shipment_cmd(DeleteShipment))
+
+    # --- Shipment read side (S17 §5): resolve-items, item/loan → shipments, labels ---
+    container.define(
+        ShipmentsReader,
+        lambda c: SQLAlchemyShipmentsReader(c[async_sessionmaker]),
+    )
+
+    def _resolve_shipment_items(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResolveShipmentItems(
+            uow,
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemySampleRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+            c[ShipmentsReader],
+        )
+
+    def _list_shipments_for_item(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListShipmentsForItem(
+            uow,
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemySampleRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+            c[ShipmentsReader],
+        )
+
+    def _list_shipments_for_loan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListShipmentsForLoan(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            c[ShipmentsReader],
+        )
+
+    container.define(ResolveShipmentItems, _resolve_shipment_items)
+    container.define(ListShipmentsForItem, _list_shipments_for_item)
+    container.define(ListShipmentsForLoan, _list_shipments_for_loan)
 
     def _preview_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

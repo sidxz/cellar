@@ -76,6 +76,20 @@ class ShipmentStatus(StrEnum):
     RETURNED = "returned"
 
 
+class ShipmentItemType(StrEnum):
+    """What a shipment item points at (spec 2026-08-26 §2)."""
+
+    PLATE = "plate"
+    SAMPLE = "sample"
+
+
+class ShipmentDirection(StrEnum):
+    """Which way the box travels; inbound = arriving (vendor library, CRO return)."""
+
+    OUTBOUND = "outbound"
+    INBOUND = "inbound"
+
+
 class SynthesisRequestStatus(StrEnum):
     """10-state lifecycle of a synthesis request."""
 
@@ -209,9 +223,7 @@ VALID_LOAN_ITEM_TRANSITIONS: dict[LoanItemStatus, frozenset[LoanItemStatus]] = {
     LoanItemStatus.CHECKED_OUT: frozenset({LoanItemStatus.APPROVED}),
     LoanItemStatus.RETURN_PENDING: frozenset({LoanItemStatus.CHECKED_OUT}),
     LoanItemStatus.RETURNED: frozenset({LoanItemStatus.RETURN_PENDING}),
-    LoanItemStatus.CANCELLED: frozenset(
-        {LoanItemStatus.REQUESTED, LoanItemStatus.APPROVED}
-    ),
+    LoanItemStatus.CANCELLED: frozenset({LoanItemStatus.REQUESTED, LoanItemStatus.APPROVED}),
 }
 
 

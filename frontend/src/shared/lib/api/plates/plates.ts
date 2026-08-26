@@ -35,6 +35,7 @@ import type {
   PlateResponse,
   PlateRunResponse,
   RegisterPlateBody,
+  ShipmentLinkResponse,
   UpdatePlateBody
 } from '.././model';
 
@@ -993,6 +994,99 @@ export function useListPlateRunsApiV1PlatesPlateIdRunsGet<TData = Awaited<Return
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListPlateRunsApiV1PlatesPlateIdRunsGetQueryOptions(plateId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Shipments that carried this plate, newest first (hidden plate 404s like missing).
+ * @summary List Plate Shipments
+ */
+export const listPlateShipmentsApiV1PlatesPlateIdShipmentsGet = (
+    plateId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ShipmentLinkResponse[]>(
+      {url: `/api/v1/plates/${plateId}/shipments`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListPlateShipmentsApiV1PlatesPlateIdShipmentsGetQueryKey = (plateId?: string,) => {
+    return [
+    `/api/v1/plates/${plateId}/shipments`
+    ] as const;
+    }
+
+    
+export const getListPlateShipmentsApiV1PlatesPlateIdShipmentsGetQueryOptions = <TData = Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError = HTTPValidationError>(plateId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPlateShipmentsApiV1PlatesPlateIdShipmentsGetQueryKey(plateId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>> = ({ signal }) => listPlateShipmentsApiV1PlatesPlateIdShipmentsGet(plateId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(plateId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListPlateShipmentsApiV1PlatesPlateIdShipmentsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>>
+export type ListPlateShipmentsApiV1PlatesPlateIdShipmentsGetQueryError = HTTPValidationError
+
+
+export function useListPlateShipmentsApiV1PlatesPlateIdShipmentsGet<TData = Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError = HTTPValidationError>(
+ plateId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPlateShipmentsApiV1PlatesPlateIdShipmentsGet<TData = Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError = HTTPValidationError>(
+ plateId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPlateShipmentsApiV1PlatesPlateIdShipmentsGet<TData = Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError = HTTPValidationError>(
+ plateId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Plate Shipments
+ */
+
+export function useListPlateShipmentsApiV1PlatesPlateIdShipmentsGet<TData = Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError = HTTPValidationError>(
+ plateId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateShipmentsApiV1PlatesPlateIdShipmentsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListPlateShipmentsApiV1PlatesPlateIdShipmentsGetQueryOptions(plateId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

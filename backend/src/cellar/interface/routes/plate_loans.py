@@ -18,6 +18,7 @@ from cellar.application.inventory.plate_loans import (
     RequestLoanReturnCommand,
     RequestPlateLoanCommand,
 )
+from cellar.application.inventory.shipment_reads import ListShipmentsForLoanQuery
 from cellar.domain.inventory.enums import LoanItemStatus, LoanStatus
 from cellar.interface.dependencies import (
     ApproveLoanItemsDep,
@@ -28,10 +29,12 @@ from cellar.interface.dependencies import (
     DenyLoanItemsDep,
     GetLoanDep,
     ListLoansDep,
+    ListShipmentsForLoanDep,
     RequestLoanReturnDep,
     RequestPlateLoanDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes.shipments import ShipmentLinkResponse
 
 router = APIRouter(prefix="/api/v1/plate-loans", tags=["plate-loans"])
 
@@ -80,9 +83,7 @@ class LoanResponse(BaseModel):
         for item in loan.items:
             plate = dto.plates.get(item.plate_id)
             group = (
-                dto.groups.get(plate.group_id)
-                if plate is not None and plate.group_id
-                else None
+                dto.groups.get(plate.group_id) if plate is not None and plate.group_id else None
             )
             items.append(
                 LoanItemResponse(
@@ -214,6 +215,19 @@ async def get_loan(loan_id: uuid.UUID, auth: AuthDep, uc: GetLoanDep) -> LoanRes
     query = GetLoanQuery(workspace_id=auth.workspace_id, loan_id=loan_id)
     dto = result_to_response(await uc(query, auth=auth))
     return LoanResponse.from_dto(dto)
+
+
+@router.get("/{loan_id}/shipments", response_model=list[ShipmentLinkResponse])
+async def list_loan_shipments(
+    loan_id: uuid.UUID, auth: AuthDep, uc: ListShipmentsForLoanDep
+) -> list[ShipmentLinkResponse]:
+    """Shipments carrying this loan's plates (lend or return leg), newest first.
+
+    Same loan visibility as GET /{loan_id} — a hidden loan 404s like a missing one.
+    """
+    query = ListShipmentsForLoanQuery(workspace_id=auth.workspace_id, loan_id=loan_id)
+    rows = result_to_response(await uc(query, auth=auth))
+    return [ShipmentLinkResponse.from_row(r) for r in rows]
 
 
 @router.post("/{loan_id}/items:approve", response_model=LoanResponse)

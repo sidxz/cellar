@@ -90,6 +90,12 @@ from cellar.application.inventory.registered_plates import (
     RegisterPlate,
     UpdatePlate,
 )
+from cellar.application.inventory.shipment_reads import (
+    ListShipmentsForItem,
+    ListShipmentsForLoan,
+    ResolveShipmentItems,
+    ShipmentsReader,
+)
 from cellar.application.inventory.update_batch import UpdateBatch
 from cellar.application.inventory.update_storage_location import UpdateStorageLocation
 from cellar.application.shared.org_directory import OrgDirectoryPort
@@ -154,6 +160,8 @@ __all__ = [
     "ListRunsForPlateDep",
     "ListSamplesByBatchDep",
     "ListSamplesGlobalDep",
+    "ListShipmentsForItemDep",
+    "ListShipmentsForLoanDep",
     "ListStorageLocationsDep",
     "ListStorageLocationsWithCountsDep",
     "MapWellsDep",
@@ -168,8 +176,10 @@ __all__ = [
     "RequestLoanReturnDep",
     "RequestPlateLoanDep",
     "ResolveScanDep",
+    "ResolveShipmentItemsDep",
     "RevokeKioskDeviceDep",
     "SetOrgPlatePolicyDep",
+    "ShipmentsReaderDep",
     "UpdateBatchDep",
     "UpdatePlateDep",
     "UpdatePlateGroupDep",
@@ -297,6 +307,19 @@ ConfirmLoanCheckoutDep = Annotated[
 RequestLoanReturnDep = Annotated[RequestLoanReturn, Depends(_get_use_case(RequestLoanReturn))]
 ConfirmLoanReturnDep = Annotated[ConfirmLoanReturn, Depends(_get_use_case(ConfirmLoanReturn))]
 CancelLoanItemsDep = Annotated[CancelLoanItems, Depends(_get_use_case(CancelLoanItems))]
+
+# --- Shipment read side (S17) — shared by the shipments, plates, samples and loans routers ---
+ResolveShipmentItemsDep = Annotated[
+    ResolveShipmentItems, Depends(_get_use_case(ResolveShipmentItems))
+]
+ListShipmentsForItemDep = Annotated[
+    ListShipmentsForItem, Depends(_get_use_case(ListShipmentsForItem))
+]
+ListShipmentsForLoanDep = Annotated[
+    ListShipmentsForLoan, Depends(_get_use_case(ListShipmentsForLoan))
+]
+# Singleton reader exposed so shipment routes can label items in one batched fetch.
+ShipmentsReaderDep = Annotated[ShipmentsReader, Depends(_get_use_case(ShipmentsReader))]
 
 # --- Kiosk Device dependencies ---
 CreateKioskDeviceDep = Annotated[CreateKioskDevice, Depends(_get_use_case(CreateKioskDevice))]

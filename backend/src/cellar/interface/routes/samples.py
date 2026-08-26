@@ -19,6 +19,8 @@ from cellar.application.inventory.manage_sample import (
     MoveSampleCommand,
     QuarantineSampleCommand,
 )
+from cellar.application.inventory.shipment_reads import ListShipmentsForItemQuery
+from cellar.domain.inventory.enums import ShipmentItemType
 from cellar.domain.inventory.sample import Sample
 from cellar.interface.dependencies import (
     AliquotSampleDep,
@@ -28,10 +30,12 @@ from cellar.interface.dependencies import (
     DisposeSampleDep,
     GetSampleDep,
     ListSamplesByBatchDep,
+    ListShipmentsForItemDep,
     MoveSampleDep,
     QuarantineSampleDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes.shipments import ShipmentLinkResponse
 
 router = APIRouter(prefix="/api/v1", tags=["samples"])
 
@@ -134,6 +138,20 @@ async def get_sample(
         auth=auth,
     )
     return SampleResponse.from_domain(result_to_response(result))
+
+
+@router.get("/samples/{sample_id}/shipments", response_model=list[ShipmentLinkResponse])
+async def list_sample_shipments(
+    sample_id: uuid.UUID,
+    auth: AuthDep,
+    uc: ListShipmentsForItemDep,
+) -> list[ShipmentLinkResponse]:
+    """Shipments that carried this sample (with the amount shipped), newest first."""
+    query = ListShipmentsForItemQuery(
+        workspace_id=auth.workspace_id, item_type=ShipmentItemType.SAMPLE, item_id=sample_id
+    )
+    rows = result_to_response(await uc(query, auth=auth))
+    return [ShipmentLinkResponse.from_row(r) for r in rows]
 
 
 @router.get("/batches/{batch_id}/samples", response_model=list[SampleResponse])

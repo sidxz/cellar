@@ -4,6 +4,8 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { ShipmentDirection } from './shipmentDirection';
+import type { ShipmentSummaryResponseLoanId } from './shipmentSummaryResponseLoanId';
 import type { ShipmentSummaryResponseTrackingNumber } from './shipmentSummaryResponseTrackingNumber';
 import type { ShipmentSummaryResponseCarrier } from './shipmentSummaryResponseCarrier';
 
@@ -14,6 +16,8 @@ export interface ShipmentSummaryResponse {
   id: string;
   workspace_id: string;
   destination_org_id: string;
+  direction: ShipmentDirection;
+  loan_id?: ShipmentSummaryResponseLoanId;
   tracking_number?: ShipmentSummaryResponseTrackingNumber;
   carrier?: ShipmentSummaryResponseCarrier;
   status: string;

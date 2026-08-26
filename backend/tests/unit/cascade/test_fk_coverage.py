@@ -219,6 +219,9 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     ("plate_loan_items", "loan_id", "plate_loans"),
     # SET NULL by design — a deleted loan detaches its comments
     ("plate_comments", "loan_id", "plate_loans"),
+    # SET NULL by design — a deleted loan detaches the shipments that carried it
+    # (migration 071); the shipment record itself survives.
+    ("shipments", "loan_id", "plate_loans"),
 
     # -------------------------------------------------------------------------
     # batches → salt_catalog: SET NULL on salt entry delete

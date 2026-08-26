@@ -33,8 +33,9 @@ from cellar.application.inventory.registered_plates import (
     RegisterPlateCommand,
     UpdatePlateCommand,
 )
+from cellar.application.inventory.shipment_reads import ListShipmentsForItemQuery
 from cellar.application.shared.sentinel import UNSET
-from cellar.domain.inventory.enums import PlateStatus, PlateType
+from cellar.domain.inventory.enums import PlateStatus, PlateType, ShipmentItemType
 from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.screening_assay.enums import PlateFormat
 from cellar.interface.dependencies import (
@@ -48,11 +49,13 @@ from cellar.interface.dependencies import (
     ListChildrenDep,
     ListPlatesDep,
     ListRunsForPlateDep,
+    ListShipmentsForItemDep,
     MapWellsDep,
     RegisterPlateDep,
     UpdatePlateDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes.shipments import ShipmentLinkResponse
 
 router = APIRouter(prefix="/api/v1/plates", tags=["plates"])
 
@@ -500,6 +503,20 @@ async def list_plate_runs(
     query = ListRunsForPlateQuery(workspace_id=auth.workspace_id, plate_id=plate_id)
     rows = result_to_response(await uc(query, auth=auth))
     return [PlateRunResponse.from_row(r) for r in rows]
+
+
+@router.get("/{plate_id}/shipments", response_model=list[ShipmentLinkResponse])
+async def list_plate_shipments(
+    plate_id: uuid.UUID,
+    auth: AuthDep,
+    uc: ListShipmentsForItemDep,
+) -> list[ShipmentLinkResponse]:
+    """Shipments that carried this plate, newest first (hidden plate 404s like missing)."""
+    query = ListShipmentsForItemQuery(
+        workspace_id=auth.workspace_id, item_type=ShipmentItemType.PLATE, item_id=plate_id
+    )
+    rows = result_to_response(await uc(query, auth=auth))
+    return [ShipmentLinkResponse.from_row(r) for r in rows]
 
 
 @router.delete("/{plate_id}", status_code=204)

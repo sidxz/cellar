@@ -5,7 +5,11 @@ from datetime import date
 
 import pytest
 
-from cellar.domain.inventory.enums import ShipmentStatus
+from cellar.domain.inventory.enums import (
+    ShipmentDirection,
+    ShipmentItemType,
+    ShipmentStatus,
+)
 from cellar.domain.inventory.events import (
     ShipmentCreated,
     ShipmentDelivered,
@@ -25,7 +29,8 @@ def ws_id() -> uuid.UUID:
 def _make_item(shipment_id: uuid.UUID | None = None) -> ShipmentItem:
     return ShipmentItem(
         shipment_id=shipment_id or uuid.uuid4(),
-        sample_id=uuid.uuid4(),
+        item_type=ShipmentItemType.SAMPLE,
+        item_id=uuid.uuid4(),
         amount_shipped=Amount(value=1.0, unit=AmountUnit.MG),
     )
 
@@ -42,11 +47,57 @@ def _make_shipment(ws_id: uuid.UUID, **overrides) -> Shipment:
     return Shipment.create(**defaults)
 
 
+class TestShipmentItemInvariants:
+    def test_sample_item_requires_amount(self):
+        with pytest.raises(ValidationError, match="amount"):
+            ShipmentItem(
+                shipment_id=uuid.uuid4(),
+                item_type=ShipmentItemType.SAMPLE,
+                item_id=uuid.uuid4(),
+            )
+
+    def test_plate_item_rejects_amount(self):
+        with pytest.raises(ValidationError, match="amount"):
+            ShipmentItem(
+                shipment_id=uuid.uuid4(),
+                item_type=ShipmentItemType.PLATE,
+                item_id=uuid.uuid4(),
+                amount_shipped=Amount(value=1.0, unit=AmountUnit.MG),
+            )
+
+    def test_plate_item_without_amount(self):
+        item = ShipmentItem(
+            shipment_id=uuid.uuid4(),
+            item_type=ShipmentItemType.PLATE,
+            item_id=uuid.uuid4(),
+        )
+        assert item.item_type == ShipmentItemType.PLATE
+        assert item.amount_shipped is None
+
+
 class TestShipmentCreation:
     def test_create_basic(self, ws_id):
         shipment = _make_shipment(ws_id)
         assert shipment.status == ShipmentStatus.PREPARING
         assert len(shipment.items) == 1
+        assert shipment.direction == ShipmentDirection.OUTBOUND
+        assert shipment.loan_id is None
+
+    def test_create_inbound_with_loan(self, ws_id):
+        loan_id = uuid.uuid4()
+        shipment = _make_shipment(ws_id, direction=ShipmentDirection.INBOUND, loan_id=loan_id)
+        assert shipment.direction == ShipmentDirection.INBOUND
+        assert shipment.loan_id == loan_id
+
+    def test_update_loan_id_set_clear_and_sentinel(self, ws_id):
+        shipment = _make_shipment(ws_id)
+        loan_id = uuid.uuid4()
+        shipment.update_details(loan_id=loan_id)
+        assert shipment.loan_id == loan_id
+        shipment.update_details(carrier="FedEx")  # loan_id omitted -> untouched
+        assert shipment.loan_id == loan_id
+        shipment.update_details(loan_id=None)
+        assert shipment.loan_id is None
 
     def test_create_emits_event(self, ws_id):
         shipment = _make_shipment(ws_id)

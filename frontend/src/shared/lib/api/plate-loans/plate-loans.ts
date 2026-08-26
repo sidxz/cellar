@@ -29,7 +29,8 @@ import type {
   LoanItemsBody,
   LoanResponse,
   RequestLoanBody,
-  RequestReturnBody
+  RequestReturnBody,
+  ShipmentLinkResponse
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
@@ -278,6 +279,101 @@ export function useGetLoanApiV1PlateLoansLoanIdGet<TData = Awaited<ReturnType<ty
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetLoanApiV1PlateLoansLoanIdGetQueryOptions(loanId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Shipments carrying this loan's plates (lend or return leg), newest first.
+
+Same loan visibility as GET /{loan_id} — a hidden loan 404s like a missing one.
+ * @summary List Loan Shipments
+ */
+export const listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet = (
+    loanId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ShipmentLinkResponse[]>(
+      {url: `/api/v1/plate-loans/${loanId}/shipments`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGetQueryKey = (loanId?: string,) => {
+    return [
+    `/api/v1/plate-loans/${loanId}/shipments`
+    ] as const;
+    }
+
+    
+export const getListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGetQueryOptions = <TData = Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError = HTTPValidationError>(loanId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGetQueryKey(loanId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>> = ({ signal }) => listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet(loanId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(loanId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>>
+export type ListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGetQueryError = HTTPValidationError
+
+
+export function useListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet<TData = Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError = HTTPValidationError>(
+ loanId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet<TData = Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError = HTTPValidationError>(
+ loanId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet<TData = Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError = HTTPValidationError>(
+ loanId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Loan Shipments
+ */
+
+export function useListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet<TData = Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError = HTTPValidationError>(
+ loanId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listLoanShipmentsApiV1PlateLoansLoanIdShipmentsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListLoanShipmentsApiV1PlateLoansLoanIdShipmentsGetQueryOptions(loanId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

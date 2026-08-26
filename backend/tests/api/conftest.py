@@ -164,6 +164,11 @@ def _create_test_app(
     app.include_router(search_router)
     app.include_router(search_algorithms_router)
     app.include_router(batch_router)
+    from cellar.interface.routes.samples import router as sample_router
+    from cellar.interface.routes.shipments import router as shipment_router
+
+    app.include_router(sample_router)
+    app.include_router(shipment_router)
     app.include_router(scaffold_tree_router)
     app.include_router(sar_analysis_router)
     app.include_router(umap_cluster_router)
