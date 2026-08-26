@@ -86,6 +86,7 @@ def _create_test_app(
     from cellar.interface.routes.molecules import router as mol_router
     from cellar.interface.routes.export import router as export_router
     from cellar.interface.routes.export import legacy_router as export_legacy_router
+    from cellar.interface.routes.plate_setup import router as plate_setup_router
     from cellar.interface.routes.plate_templates import router as plate_template_router
     from cellar.interface.routes.projects import router as project_router
     from cellar.interface.routes.favorites import router as favorites_router
@@ -144,6 +145,7 @@ def _create_test_app(
     app.include_router(export_router)
     app.include_router(export_legacy_router)
     app.include_router(plate_template_router)
+    app.include_router(plate_setup_router)
     app.include_router(registered_plates_router)
     app.include_router(plate_group_router)
     app.include_router(storage_router)

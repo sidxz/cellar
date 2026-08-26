@@ -83,6 +83,18 @@ register_rules(
         display_label="Plates",
         recurse_into_entity="plate",
     ),
+    # PlateModel.registered_plate_id → registered_plates (ondelete=SET NULL, S15)
+    # Optional link to the physical inventory plate. Deleting the inventory
+    # plate must never delete a run's plate — the run keeps its data and only
+    # loses the link.
+    CascadeRule(
+        child_table="plates",
+        fk_column="registered_plate_id",
+        parent_table="registered_plates",
+        action=A.SET_NULL,
+        label_field="barcode",
+        display_label="Run plates (inventory link cleared)",
+    ),
     # ReadoutDataModel.run_id → runs (no ondelete clause — application-level)
     # Bulk measurement rows owned by the run.
     CascadeRule(

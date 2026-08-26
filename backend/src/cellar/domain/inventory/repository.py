@@ -174,6 +174,9 @@ class RegisteredPlateRepository(Protocol):
     async def find_by_barcode(
         self, workspace_id: uuid.UUID, barcode: str
     ) -> RegisteredPlate | None: ...
+    async def find_by_label(
+        self, workspace_id: uuid.UUID, label: str
+    ) -> list[RegisteredPlate]: ...
     async def find_by_location(
         self, workspace_id: uuid.UUID, storage_location_id: uuid.UUID
     ) -> list[RegisteredPlate]: ...

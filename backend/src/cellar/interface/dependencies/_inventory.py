@@ -39,6 +39,7 @@ from cellar.application.inventory.kiosk_devices import (
     RevokeKioskDevice,
 )
 from cellar.application.inventory.list_batches_global import ListBatchesGlobal
+from cellar.application.inventory.list_runs_for_plate import ListRunsForPlate
 from cellar.application.inventory.list_samples_global import ListSamplesGlobal
 from cellar.application.inventory.manage_sample import (
     AliquotSample,
@@ -148,6 +149,7 @@ __all__ = [
     "ListKioskDevicesDep",
     "ListLoansDep",
     "ListPlatesDep",
+    "ListRunsForPlateDep",
     "ListSamplesByBatchDep",
     "ListSamplesGlobalDep",
     "ListStorageLocationsDep",
@@ -233,6 +235,7 @@ MapWellsDep = Annotated[MapWells, Depends(_get_use_case(MapWells))]
 ChangeStatusDep = Annotated[ChangeStatus, Depends(_get_use_case(ChangeStatus))]
 DerivePlateDep = Annotated[DerivePlate, Depends(_get_use_case(DerivePlate))]
 ListChildrenDep = Annotated[ListChildren, Depends(_get_use_case(ListChildren))]
+ListRunsForPlateDep = Annotated[ListRunsForPlate, Depends(_get_use_case(ListRunsForPlate))]
 DeletePlateDep = Annotated[DeletePlate, Depends(_get_use_case(DeletePlate))]
 ExportPlateLayoutDep = Annotated[ExportPlateLayout, Depends(_get_use_case(ExportPlateLayout))]
 PlateReadModelServiceDep = Annotated[

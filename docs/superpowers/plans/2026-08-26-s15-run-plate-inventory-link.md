@@ -58,7 +58,7 @@ def test_link_plate_unknown_plate_is_not_found(run_with_plate):
 def test_link_plate_blocked_when_locked(run_with_plate):
     run, plate = run_with_plate
     run.lock(locked_by=uuid.uuid4(), reason="qc")
-    with pytest.raises(DataLockedError):
+    with pytest.raises(ConflictError, match="locked"):
         run.link_plate(plate.id, uuid.uuid4())
 ```
 (`run_with_plate` = a fixture creating a run and `run.add_plate(Plate(run_id=run.id, plate_number=1))`.)
@@ -161,9 +161,9 @@ async def resolve_plate_reference(repo, workspace_id, raw) -> RegisteredPlate | 
 **Consumes:** T1 `Run.link_plate`, T2 column + `PlateMapData` fields, T3 resolver. **Produces:** the two routes + `RunPlateLinkResponse`.
 
 - [ ] **Step 1: failing tests.**
-  - `tests/unit/application/screening/test_link_run_plate.py` — model it on `tests/unit/application/screening/test_create_run.py`'s fixture style with `FakeAuth`, the fake run repo, fake plate repo and a `PlateVisibilityService` stub (see `tests/unit/test_plate_visibility.py` for how it is built with a stub org directory). Cases: link by barcode / zero-padded / label sets `registered_plate_id` and returns barcode+label; unknown → `Failure(NotFoundError)`; plate owned by a hidden org → `Failure(NotFoundError)`; locked run → `Failure(DataLockedError)` (or raised — match how other run use cases surface `DataLockedError`); plate not on run → `Failure(NotFoundError)`; viewer → `pytest.raises(AuthorizationError)`; unlink clears.
+  - `tests/unit/application/screening/test_link_run_plate.py` — model it on `tests/unit/application/screening/test_create_run.py`'s fixture style with `FakeAuth`, the fake run repo, fake plate repo and a `PlateVisibilityService` stub (see `tests/unit/test_plate_visibility.py` for how it is built with a stub org directory). Cases: link by barcode / zero-padded / label sets `registered_plate_id` and returns barcode+label; unknown → `Failure(NotFoundError)`; plate owned by a hidden org → `Failure(NotFoundError)`; locked run → `ConflictError` (409) exactly as the other run mutations surface `_guard_not_locked` — match `test_create_run.py`/the lock tests; plate not on run → `Failure(NotFoundError)`; viewer → `pytest.raises(AuthorizationError)`; unlink clears.
   - Import auto-link: extend the existing import-plan unit test module (find it under `tests/unit/application/screening/` — `test_import_plan*.py` or the import-run-file tests) with a case where a file plate name equals a registered plate's label → the new plate has `registered_plate_id`; another name → `None`.
-  - `tests/api/test_run_plate_links.py` — follow `tests/api/test_plate_loans.py` helpers (`_mk_plate`, `editor_client_own_org`, `editor_client_other_org`, `viewer_client`). Create a protocol + run (see `tests/api/test_run_collections.py:78` for the run body), create a run plate via `POST /runs/{id}/plate-setup` (see `tests/api/test_plate_templates.py` / plate-setup tests for a minimal body), then: link by barcode → 200 with `registered_plate_id`; by zero-padded barcode; by label; unknown → 404; other-org hidden plate → 404; relink overwrites; unlink → null; `GET /runs/{id}/plate-map` carries `registered_plate_*`; viewer → 403; locked run → 423 (lock via the existing lock route).
+  - `tests/api/test_run_plate_links.py` — follow `tests/api/test_plate_loans.py` helpers (`_mk_plate`, `editor_client_own_org`, `editor_client_other_org`, `viewer_client`). Create a protocol + run (see `tests/api/test_run_collections.py:78` for the run body), create a run plate via `POST /runs/{id}/plate-setup` (see `tests/api/test_plate_templates.py` / plate-setup tests for a minimal body), then: link by barcode → 200 with `registered_plate_id`; by zero-padded barcode; by label; unknown → 404; other-org hidden plate → 404; relink overwrites; unlink → null; `GET /runs/{id}/plate-map` carries `registered_plate_*`; viewer → 403; locked run → 409 (lock via the existing lock route).
 - [ ] **Step 2:** run → fail.
 - [ ] **Step 3: implement.**
   - `application/screening/link_run_plate.py` per spec §5.2 (commands are frozen `Command` dataclasses with `workspace_id`; guards in order; `excluded = await visibility.excluded_org_ids(ws, auth)`, `borrowed = await visibility.borrowed_plate_ids(ws, auth)`; return a small frozen dataclass `RunPlateLink`).
@@ -195,13 +195,13 @@ async def unlink_run_plate(run_id, plate_id, auth: AuthDep, uc: UnlinkRunPlateDe
 
 **Consumes:** T2 column. **Produces:** `PlateRunResponse` route.
 
-- [ ] **Step 1: failing tests.** Unit `tests/unit/application/inventory/test_list_runs_for_plate.py` (stub reader; hidden plate → NotFound; viewer allowed; other workspace → NotFound via `require_same_workspace`). API `tests/api/test_plate_runs.py`: after linking a run plate (reuse the T4 helpers — copy the small helper functions rather than importing across test modules), `GET /plates/{id}/runs` returns one row with `run_id`, `plate_number`, `protocol_name`; unlinked plate → `[]`; hidden plate (other org) → 404.
+- [ ] **Step 1: failing tests.** Unit `tests/unit/application/inventory/test_list_runs_for_plate.py` (stub reader; hidden plate → NotFound; viewer allowed; other workspace → NotFound via `require_same_workspace`). API `tests/api/test_plate_runs.py`: after linking a run plate (reuse the T4 helpers — copy the small helper functions rather than importing across test modules), `GET /plates/{id}/runs` returns one row with `run_id`, `run_date`, `plate_number`, `protocol_name`; unlinked plate → `[]`; hidden plate (other org) → 404.
 - [ ] **Step 2:** run → fail.
 - [ ] **Step 3: implement.** `application/inventory/plate_runs_reader.py` (`PlateRunRow` frozen dataclass + `PlateRunsReader` Protocol with `async def runs_for_plate(workspace_id, plate_id) -> list[PlateRunRow]`); SA reader:
 
 ```python
 stmt = (
-    select(RunModel.id, RunModel.<display name column>, RunModel.status, ProtocolModel.id, ProtocolModel.name,
+    select(RunModel.id, RunModel.run_date, RunModel.status, ProtocolModel.id, ProtocolModel.name,
            PlateModel.plate_number, RunModel.created_at)
     .join(RunModel, RunModel.id == PlateModel.run_id)
     .join(ProtocolModel, ProtocolModel.id == RunModel.protocol_id)
@@ -209,7 +209,7 @@ stmt = (
     .order_by(RunModel.created_at.desc())
 )
 ```
-(pick the run display-name column the way `list_runs_with_counts` does.) Use case per spec §5.4; DI in `di/_inventory.py` (construct `PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow))` there — mirror `_plate_visibility` in `_screening.py` rather than importing it); `ListRunsForPlateDep` in `dependencies/_inventory.py`; route in `registered_plates.py` **above** any `/{plate_id}` catch-alls that would shadow `/{plate_id}/runs` (FastAPI matches in order — `/{plate_id}/children` shows the placement).
+(`RunModel.run_date` — runs have no name.) Use case per spec §5.4; DI in `di/_inventory.py` (construct `PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow))` there — mirror `_plate_visibility` in `_screening.py` rather than importing it); `ListRunsForPlateDep` in `dependencies/_inventory.py`; route in `registered_plates.py` **above** any `/{plate_id}` catch-alls that would shadow `/{plate_id}/runs` (FastAPI matches in order — `/{plate_id}/children` shows the placement).
 - [ ] **Step 4:** tests pass; ruff.
 
 ---
@@ -220,7 +220,7 @@ stmt = (
 
 - [ ] **Step 1: failing tests.**
   - `run-plate-link.test.tsx`: (a) linked plate renders a link `href="/inventory/plates/{id}"` with the barcode and an Unlink button that POSTs `…/plates/{plate_id}:unlink`; (b) unlinked renders "Link plate", clicking opens a dialog, typing `SAC3-014-3070` and submitting POSTs `:link` with `{ barcode: "SAC3-014-3070" }`; (c) `readOnly` renders the link but no buttons, and no "Link plate" when unlinked.
-  - `plate-detail.test.tsx`: mock `GET /api/v1/plates/p1/runs` → one row → the "Used in runs" card lists `protocol_name`, `run_name`, `Plate 2` and links to `/assays/runs/{run_id}`; empty → "Not used in any run yet."
+  - `plate-detail.test.tsx`: mock `GET /api/v1/plates/p1/runs` → one row → the "Used in runs" card lists `protocol_name`, `Run {run_date}`, `Plate 2` and links to `/assays/runs/{run_id}`; empty → "Not used in any run yet."
 - [ ] **Step 2:** run → fail.
 - [ ] **Step 3: implement.**
   - Hooks in `use-plate-setup.ts`:
@@ -283,7 +283,7 @@ export function RunPlateLink({ runId, plate, readOnly }: { runId: string; plate:
 ```
   - Place it in `run-data-panel.tsx`'s plate header (next to "Plate {n}"; `readOnly={run is locked || !canEdit}` — read how the panel already knows lock/edit state, e.g. `run.status`/`locked` and `useCanEdit`) and in `run-heatmap-panel.tsx` with `readOnly`.
   - `use-plates.ts`: `usePlateRuns(plateId)` → `GET ${API_V1}/plates/${plateId}/runs` (`queryKey: [...PLATES_KEY, plateId, "runs"]`).
-  - `plate-detail.tsx`: card "Used in runs" above History in the right column, `data-testid="plate-runs"`; rows are `<Link href={/assays/runs/${r.run_id}}>` with `protocol_name · run_name`, `Plate {plate_number}`, `StatusBadge(run_status)`, `formatDate(created_at)`.
+  - `plate-detail.tsx`: card "Used in runs" above History in the right column, `data-testid="plate-runs"`; rows are `<Link href={/assays/runs/${r.run_id}}>` with `protocol_name · Run {formatDate(run_date)}`, `Plate {plate_number}`, `StatusBadge(run_status)`.
 - [ ] **Step 4:** tests pass, biome, tsc.
 
 ---

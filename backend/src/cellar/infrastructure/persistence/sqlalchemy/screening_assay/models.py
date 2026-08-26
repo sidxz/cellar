@@ -353,6 +353,10 @@ class PlateModel(Base, EntityModelMixin):
     plate_map: Mapped[dict | None] = mapped_column(JSONB)
     parent_plate_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     template_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    # Optional link to the physical inventory plate (spec 2026-08-26 §4).
+    registered_plate_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("registered_plates.id", ondelete="SET NULL")
+    )
 
     run: Mapped[RunModel] = relationship("RunModel", back_populates="plates")
     wells: Mapped[list[WellModel]] = relationship(
@@ -362,7 +366,10 @@ class PlateModel(Base, EntityModelMixin):
         back_populates="plate",
     )
 
-    __table_args__ = (Index("ix_plate_run", "run_id"),)
+    __table_args__ = (
+        Index("ix_plate_run", "run_id"),
+        Index("ix_plates_registered_plate", "registered_plate_id"),
+    )
 
 
 class WellModel(Base, EntityModelMixin):

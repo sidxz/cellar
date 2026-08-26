@@ -40,6 +40,7 @@ from cellar.application.inventory.kiosk_devices import (
     RevokeKioskDevice,
 )
 from cellar.application.inventory.list_batches_global import ListBatchesGlobal
+from cellar.application.inventory.list_runs_for_plate import ListRunsForPlate
 from cellar.application.inventory.list_samples_global import ListSamplesGlobal
 from cellar.application.inventory.manage_sample import (
     AliquotSample,
@@ -77,6 +78,7 @@ from cellar.application.inventory.plate_loans import (
     RequestLoanReturn,
     RequestPlateLoan,
 )
+from cellar.application.inventory.plate_runs_reader import PlateRunsReader
 from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.preview_shipment_import import PreviewShipmentImport
 from cellar.application.inventory.sample_requests import (
@@ -157,6 +159,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_insights_reade
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
     SQLAlchemyPlateLoanRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_runs_reader import (
+    SQLAlchemyPlateRunsReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
@@ -763,6 +768,24 @@ def register_inventory(container: Container) -> None:
         )
 
     container.define(GetPlateInsights, _get_plate_insights)
+
+    # --- Runs for plate (read model, S15 §5.4) ---
+    container.define(
+        PlateRunsReader,
+        lambda c: SQLAlchemyPlateRunsReader(c[async_sessionmaker]),
+    )
+
+    def _list_runs_for_plate(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListRunsForPlate(
+            uow,
+            SQLAlchemyRegisteredPlateRepository(uow),
+            # Loan repo wired so the borrowed-plate read carve-out applies (spec §5).
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+            c[PlateRunsReader],
+        )
+
+    container.define(ListRunsForPlate, _list_runs_for_plate)
 
     # --- Kiosk Devices ---
     def _create_kiosk_device(c: Container):

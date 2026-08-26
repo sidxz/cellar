@@ -17,7 +17,7 @@ Inventory plates (`RegisteredPlate`, table `registered_plates`) and run plates (
 | Resolution | One helper, `resolve_plate_reference(repo, ws, raw)`: the existing barcode chain (`resolve_barcode`: exact → zero-pad-to-6 → strip-leading-zeros) **then** exact `plate_label` match, accepted only when exactly one plate carries that label. Same helper for import auto-link and manual link. |
 | Visibility | A link is only made to a plate the actor may view (`PlateVisibilityService.can_view` with the borrowed carve-out; `auth=None` worker calls see everything). Hidden == "not found" (404) on manual link. The plate-map read does **not** filter linked details — the run already exposes the file's plate name; the link target (`/inventory/plates/{id}`) enforces visibility itself. Recorded residual. |
 | Auto-link | Run-file import: every **new** plate it creates is resolved by its file name (`plate_map.name`); a miss leaves the link null and is not an error. Plate setup (no name) never auto-links. |
-| Manual link | `POST /runs/{run_id}/plates/{plate_id}:link {barcode}` / `:unlink`. Editor, same workspace, run must not be locked (`DataLockedError` 423 via `_guard_not_locked`). `barcode` accepts a barcode **or** a plate label (same helper). Relinking overwrites. |
+| Manual link | `POST /runs/{run_id}/plates/{plate_id}:link {barcode}` / `:unlink`. Editor, same workspace, run must not be locked (`ConflictError` **409** — the existing `Run._guard_not_locked` convention shared by every locked-run mutation; the spec's first draft said 423). `barcode` accepts a barcode **or** a plate label (same helper). Relinking overwrites. |
 | Backfill | Migration **069** back-fills existing rows in SQL: exact `plates.barcode` = `registered_plates.barcode`, else `plates.plate_map->>'name'` = `registered_plates.plate_label`, same workspace as the run, only when exactly one candidate matches. `ponytail:` no zero-pad variants in SQL — the app resolver covers new links; re-run the statement by hand if ever needed. |
 | Reads | `PlateData` (run plate map) gains `registered_plate_id`, `registered_plate_barcode`, `registered_plate_label` (null when unlinked). New `GET /plates/{plate_id}/runs` → runs that carry this plate, newest first; plate visibility enforced (hidden == 404). |
 | Events | None new. `Run.update` registers no event today; `link_plate` follows it. Audit is unchanged. |
@@ -71,7 +71,7 @@ async def resolve_plate_reference(repo: RegisteredPlateRepository, workspace_id:
 Where a new `Plate(... plate_map={"name": plate_name})` is created, resolve `plate_name` through `resolve_plate_reference` (visibility-checked with the importing auth) and pass `registered_plate_id=`. The plan builder gains the plate repo + visibility as explicit parameters wired from the import use case's DI; misses are silent. Unit test: a file plate whose name equals a registered plate's label comes out linked; a miss stays null.
 
 ### 5.4 `application/inventory/list_runs_for_plate.py`
-`ListRunsForPlateQuery(workspace_id, plate_id)` → `ListRunsForPlate(uow, plate_repo, visibility, reader)`: `require_workspace_role(auth, "viewer")` → `require_same_workspace` → load plate + `can_view` (borrowed carve-out) else 404 → `reader.runs_for_plate(ws, plate_id)`. `PlateRunsReader` Protocol in `application/inventory/plate_runs_reader.py`; SA impl `infrastructure/persistence/sqlalchemy/inventory/plate_runs_reader.py` joining `plates → runs → protocols`, returning `PlateRunRow(run_id, run_name, run_status, protocol_id, protocol_name, plate_number, created_at)` ordered by `runs.created_at DESC`. `run_name` is whatever `list_runs_with_counts` shows as the run's display name.
+`ListRunsForPlateQuery(workspace_id, plate_id)` → `ListRunsForPlate(uow, plate_repo, visibility, reader)`: `require_workspace_role(auth, "viewer")` → `require_same_workspace` → load plate + `can_view` (borrowed carve-out) else 404 → `reader.runs_for_plate(ws, plate_id)`. `PlateRunsReader` Protocol in `application/inventory/plate_runs_reader.py`; SA impl `infrastructure/persistence/sqlalchemy/inventory/plate_runs_reader.py` joining `plates → runs → protocols`, returning `PlateRunRow(run_id, run_date, run_status, protocol_id, protocol_name, plate_number, created_at)` ordered by `runs.created_at DESC`. Runs have no name column; `run_date` is the run's identity (the run page titles itself `Run {run_date}`).
 
 ## 6. API
 
@@ -79,10 +79,10 @@ Where a new `Plate(... plate_map={"name": plate_name})` is created, resolve `pla
 |---|---|
 | `POST /api/v1/runs/{run_id}/plates/{plate_id}:link` (in `plate_setup.py`) | `{barcode: str}` → 200 `RunPlateLinkResponse{plate_id, registered_plate_id, barcode, plate_label}` |
 | `POST /api/v1/runs/{run_id}/plates/{plate_id}:unlink` | — → 200 `RunPlateLinkResponse{plate_id, registered_plate_id: null, barcode: null, plate_label: null}` |
-| `GET /api/v1/plates/{plate_id}/runs` (in `registered_plates.py`) | → `list[PlateRunResponse{run_id, run_name, run_status, protocol_id, protocol_name, plate_number, created_at}]` |
+| `GET /api/v1/plates/{plate_id}/runs` (in `registered_plates.py`) | → `list[PlateRunResponse{run_id, run_date, run_status, protocol_id, protocol_name, plate_number, created_at}]` |
 | `GET /api/v1/runs/{run_id}/plate-map` | `PlateData` + `registered_plate_id`, `registered_plate_barcode`, `registered_plate_label` |
 
-API tests `tests/api/test_run_plate_links.py`: link by exact barcode, by zero-padded barcode, by label; unknown → 404; hidden foreign-org plate → 404 (`editor_client_other_org`); locked run → 423; relink overwrites; unlink; plate-map carries the fields; `GET /plates/{id}/runs` lists the run once and 404s for a hidden plate; viewer cannot link (403).
+API tests `tests/api/test_run_plate_links.py`: link by exact barcode, by zero-padded barcode, by label; unknown → 404; hidden foreign-org plate → 404 (`editor_client_other_org`); locked run → 409; relink overwrites; unlink; plate-map carries the fields; `GET /plates/{id}/runs` lists the run once and 404s for a hidden plate; viewer cannot link (403).
 
 ## 7. Frontend
 
@@ -90,7 +90,7 @@ API tests `tests/api/test_run_plate_links.py`: link by exact barcode, by zero-pa
 - `features/screening-assay/hooks/use-plate-setup.ts`: `useLinkRunPlate(runId)` / `useUnlinkRunPlate(runId)` mutations (invalidate `PLATE_MAP_KEY`), success toasts "Plate linked" / "Plate unlinked".
 - `features/screening-assay/components/run-plate-link.tsx` — `RunPlateLink({ runId, plate, readOnly })`: linked → `<Link href="/inventory/plates/{registered_plate_id}">` showing the barcode (label muted after it) + an `Unlink` ghost button (hidden when `readOnly`); unlinked → `Link plate` ghost button → `Dialog` with one input "Barcode or plate name" → link mutation; errors via the global toast. Rendered in the plate header of `run-data-panel.tsx` (interactive) and `run-heatmap-panel.tsx` (`readOnly`). `readOnly` is also forced when the run is locked or the viewer cannot edit (`useCanEdit`).
 - `features/inventory/hooks/use-plates.ts`: `usePlateRuns(plateId)`.
-- `plate-detail.tsx`: **Used in runs** card, right column above History: one row per run — protocol name · run name · `Plate n` · `StatusBadge(run_status)` · date — the row links to `/assays/runs/{run_id}`; empty copy "Not used in any run yet."
+- `plate-detail.tsx`: **Used in runs** card, right column above History: one row per run — protocol name · `Run {run_date}` · `Plate n` · `StatusBadge(run_status)` — the row links to `/assays/runs/{run_id}`; empty copy "Not used in any run yet."
 - Tests: `run-plate-link.test.tsx` (linked renders link + unlink posts `:unlink`; unlinked opens dialog and posts `:link` with the typed value; `readOnly` hides controls); `plate-detail.test.tsx` gains the runs-card case.
 
 ## 8. Docs

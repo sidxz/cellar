@@ -29,6 +29,7 @@ import type {
   GroupTreeResponse,
   HTTPValidationError,
   MovePlateGroupBody,
+  PlateGroupDetailResponse,
   PlateGroupResponse,
   PlateIdsBody,
   UpdatePlateGroupBody
@@ -187,6 +188,99 @@ export function useGetGroupTreeApiV1PlateGroupsTreeGet<TData = Awaited<ReturnTyp
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetGroupTreeApiV1PlateGroupsTreeGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Single-group detail: ancestors, direct children, and plate counts.
+ * @summary Get Plate Group
+ */
+export const getPlateGroupApiV1PlateGroupsGroupIdGet = (
+    groupId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<PlateGroupDetailResponse>(
+      {url: `/api/v1/plate-groups/${groupId}`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getGetPlateGroupApiV1PlateGroupsGroupIdGetQueryKey = (groupId?: string,) => {
+    return [
+    `/api/v1/plate-groups/${groupId}`
+    ] as const;
+    }
+
+    
+export const getGetPlateGroupApiV1PlateGroupsGroupIdGetQueryOptions = <TData = Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError = HTTPValidationError>(groupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPlateGroupApiV1PlateGroupsGroupIdGetQueryKey(groupId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>> = ({ signal }) => getPlateGroupApiV1PlateGroupsGroupIdGet(groupId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(groupId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPlateGroupApiV1PlateGroupsGroupIdGetQueryResult = NonNullable<Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>>
+export type GetPlateGroupApiV1PlateGroupsGroupIdGetQueryError = HTTPValidationError
+
+
+export function useGetPlateGroupApiV1PlateGroupsGroupIdGet<TData = Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError = HTTPValidationError>(
+ groupId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>,
+          TError,
+          Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPlateGroupApiV1PlateGroupsGroupIdGet<TData = Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError = HTTPValidationError>(
+ groupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>,
+          TError,
+          Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPlateGroupApiV1PlateGroupsGroupIdGet<TData = Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError = HTTPValidationError>(
+ groupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Plate Group
+ */
+
+export function useGetPlateGroupApiV1PlateGroupsGroupIdGet<TData = Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError = HTTPValidationError>(
+ groupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPlateGroupApiV1PlateGroupsGroupIdGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPlateGroupApiV1PlateGroupsGroupIdGetQueryOptions(groupId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

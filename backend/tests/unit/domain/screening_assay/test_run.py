@@ -22,11 +22,9 @@ from cellar.domain.screening_assay.events import (
     RunUnlocked,
 )
 from cellar.domain.screening_assay.run import Plate, Run, Well
-from cellar.domain.shared.enums import ConcentrationUnit
-from cellar.domain.shared.errors import ConflictError, ValidationError
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 from cellar.domain.shared.hit_criterion import HitCriterion
-from cellar.domain.shared.value_objects import Barcode, Concentration
-
+from cellar.domain.shared.value_objects import Barcode
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -708,6 +706,7 @@ class TestPlate:
         assert plate.plate_map == {"A1": "sample", "H12": "control"}
         assert plate.parent_plate_id is None
         assert plate.template_id is None
+        assert plate.registered_plate_id is None
 
     def test_invalid_plate_number_zero(self) -> None:
         with pytest.raises(ValidationError, match="plate_number must be >= 1"):
@@ -785,9 +784,7 @@ class TestWell:
 # ---------------------------------------------------------------------------
 
 
-def _completed_run(
-    workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
-) -> Run:
+def _completed_run(workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID) -> Run:
     run = _make_run(workspace_id, protocol_id, operator_id)
     run.start()
     run.complete(plate_count=1, data_point_count=96)
@@ -912,3 +909,47 @@ class TestRunHitCriteria:
         ]
         with pytest.raises(ValidationError, match="Maximum"):
             run.set_hit_criteria(too_many, set_by=uuid.uuid4())
+
+
+# ---------------------------------------------------------------------------
+# TestRunPlateLink — optional link from a run plate to the inventory plate
+# ---------------------------------------------------------------------------
+
+
+class TestRunPlateLink:
+    def test_link_plate_sets_and_clears_registered_plate(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        plate = _make_plate(run.id)
+        run.add_plate(plate)
+        target = uuid.uuid4()
+        old_updated = run.updated_at
+
+        run.link_plate(plate.id, target)
+        assert plate.registered_plate_id == target
+        assert run.updated_at >= old_updated
+
+        run.link_plate(plate.id, None)
+        assert plate.registered_plate_id is None
+
+    def test_link_plate_unknown_plate_is_not_found(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _make_run(workspace_id, protocol_id, operator_id)
+        run.add_plate(_make_plate(run.id))
+
+        with pytest.raises(NotFoundError, match="Plate"):
+            run.link_plate(uuid.uuid4(), uuid.uuid4())
+
+    def test_link_plate_blocked_when_locked(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, operator_id: uuid.UUID
+    ) -> None:
+        run = _completed_run(workspace_id, protocol_id, operator_id)
+        plate = _make_plate(run.id)
+        run.add_plate(plate)
+        run.lock(locked_by=uuid.uuid4(), reason="Finalized")
+
+        with pytest.raises(ConflictError, match="locked"):
+            run.link_plate(plate.id, uuid.uuid4())
+        assert plate.registered_plate_id is None

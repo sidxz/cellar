@@ -72,6 +72,7 @@ from cellar.application.screening.import_run_file import (
 )
 from cellar.application.screening.import_run_readouts import ImportRunReadouts
 from cellar.application.screening.import_summary_file import ImportSummaryFile
+from cellar.application.screening.link_run_plate import LinkRunPlate, UnlinkRunPlate
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
 from cellar.application.screening.list_protocol_summaries import ListProtocolSummaries
@@ -705,6 +706,25 @@ def register_screening(container: Container) -> None:
 
     container.define(SetUpRunPlate, _set_up_run_plate)
 
+    # `_plate_visibility` is defined further down in this function; closures
+    # bind it by the time the container resolves these.
+    def _link_run_plate(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return LinkRunPlate(
+            uow,
+            SQLAlchemyRunRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            _plate_visibility(c, uow),
+            c[EventDispatcher],
+        )
+
+    def _unlink_run_plate(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UnlinkRunPlate(uow, SQLAlchemyRunRepository(uow), c[EventDispatcher])
+
+    container.define(LinkRunPlate, _link_run_plate)
+    container.define(UnlinkRunPlate, _unlink_run_plate)
+
     def _import_run_readouts(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ImportRunReadouts(
@@ -768,6 +788,8 @@ def register_screening(container: Container) -> None:
             dispatcher=c[EventDispatcher],
             calculation_engine=c[ReadoutCalculationEngine],
             ensure_batch_exists=c[EnsureBatchExists],
+            plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            plate_visibility=_plate_visibility(c, uow),
         )
 
     container.define(ImportRunFile, _import_run_file)

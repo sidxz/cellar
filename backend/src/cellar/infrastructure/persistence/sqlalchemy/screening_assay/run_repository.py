@@ -287,6 +287,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
                 plate_map=pm.plate_map,
                 parent_plate_id=pm.parent_plate_id,
                 template_id=pm.template_id,
+                registered_plate_id=pm.registered_plate_id,
                 created_at=pm.created_at,
                 updated_at=pm.updated_at,
             )
@@ -440,6 +441,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             plate_map=plate.plate_map,
             parent_plate_id=plate.parent_plate_id,
             template_id=plate.template_id,
+            registered_plate_id=plate.registered_plate_id,
         )
         pm.wells = [SQLAlchemyRunRepository._well_to_model(w) for w in wells]
         return pm

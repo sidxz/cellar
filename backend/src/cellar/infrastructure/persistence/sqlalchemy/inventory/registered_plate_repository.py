@@ -66,6 +66,14 @@ class SQLAlchemyRegisteredPlateRepository(
         self._uow.track(domain)
         return domain
 
+    async def find_by_label(self, workspace_id: uuid.UUID, label: str) -> list[RegisteredPlate]:
+        stmt = select(RegisteredPlateModel).where(
+            RegisteredPlateModel.workspace_id == workspace_id,
+            RegisteredPlateModel.plate_label == label,
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
+
     async def find_by_location(
         self, workspace_id: uuid.UUID, storage_location_id: uuid.UUID
     ) -> list[RegisteredPlate]:

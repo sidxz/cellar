@@ -20,6 +20,7 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models i
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     BatchModel,
+    RegisteredPlateModel,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     PlateModel,
@@ -61,6 +62,22 @@ class SQLAlchemyPlateMapReader:
             plates = list(plates_result.scalars().all())
 
             plate_ids = [p.id for p in plates]
+
+            # Linked inventory plates: id -> (barcode, plate_label).
+            linked: dict[uuid.UUID, tuple[str, str]] = {}
+            linked_ids = {p.registered_plate_id for p in plates if p.registered_plate_id}
+            if linked_ids:
+                linked_rows = await session.execute(
+                    select(
+                        RegisteredPlateModel.id,
+                        RegisteredPlateModel.barcode,
+                        RegisteredPlateModel.plate_label,
+                    ).where(
+                        RegisteredPlateModel.workspace_id == workspace_id,
+                        RegisteredPlateModel.id.in_(linked_ids),
+                    )
+                )
+                linked = {rid: (bc, label) for rid, bc, label in linked_rows}
 
             wells: list[WellModel] = []
             if plate_ids:
@@ -148,6 +165,7 @@ class SQLAlchemyPlateMapReader:
                             dose=well.dose,
                         )
                     )
+                link = linked.get(plate.registered_plate_id) if plate.registered_plate_id else None
                 plates_data.append(
                     PlateMapData(
                         plate_id=plate.id,
@@ -155,6 +173,9 @@ class SQLAlchemyPlateMapReader:
                         format=plate.format or "",
                         wells=well_entries,
                         summary=_summarize(well_entries),
+                        registered_plate_id=plate.registered_plate_id,
+                        registered_plate_barcode=link[0] if link else None,
+                        registered_plate_label=link[1] if link else None,
                     )
                 )
 

@@ -33,6 +33,7 @@ import type {
   MapWellsBody,
   PlateInsightsResponse,
   PlateResponse,
+  PlateRunResponse,
   RegisterPlateBody,
   UpdatePlateBody
 } from '.././model';
@@ -897,6 +898,101 @@ export function useListChildrenApiV1PlatesPlateIdChildrenGet<TData = Awaited<Ret
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListChildrenApiV1PlatesPlateIdChildrenGetQueryOptions(plateId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Runs whose plates are linked to this physical plate, newest first.
+
+Plate visibility applies — a hidden plate 404s like a missing one.
+ * @summary List Plate Runs
+ */
+export const listPlateRunsApiV1PlatesPlateIdRunsGet = (
+    plateId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<PlateRunResponse[]>(
+      {url: `/api/v1/plates/${plateId}/runs`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListPlateRunsApiV1PlatesPlateIdRunsGetQueryKey = (plateId?: string,) => {
+    return [
+    `/api/v1/plates/${plateId}/runs`
+    ] as const;
+    }
+
+    
+export const getListPlateRunsApiV1PlatesPlateIdRunsGetQueryOptions = <TData = Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError = HTTPValidationError>(plateId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPlateRunsApiV1PlatesPlateIdRunsGetQueryKey(plateId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>> = ({ signal }) => listPlateRunsApiV1PlatesPlateIdRunsGet(plateId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(plateId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListPlateRunsApiV1PlatesPlateIdRunsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>>
+export type ListPlateRunsApiV1PlatesPlateIdRunsGetQueryError = HTTPValidationError
+
+
+export function useListPlateRunsApiV1PlatesPlateIdRunsGet<TData = Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError = HTTPValidationError>(
+ plateId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPlateRunsApiV1PlatesPlateIdRunsGet<TData = Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError = HTTPValidationError>(
+ plateId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPlateRunsApiV1PlatesPlateIdRunsGet<TData = Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError = HTTPValidationError>(
+ plateId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Plate Runs
+ */
+
+export function useListPlateRunsApiV1PlatesPlateIdRunsGet<TData = Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError = HTTPValidationError>(
+ plateId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPlateRunsApiV1PlatesPlateIdRunsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListPlateRunsApiV1PlatesPlateIdRunsGetQueryOptions(plateId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
