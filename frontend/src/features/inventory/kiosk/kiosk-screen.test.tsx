@@ -106,6 +106,12 @@ describe("KioskScreen", () => {
     expect(screen.getByText("SAC1-12")).toBeInTheDocument();
     expect(screen.getByText("TAMU")).toBeInTheDocument();
 
+    // I2: refocused (and re-enabled) immediately on the result, not only
+    // after the 3s auto-clear — a scan during the result window must land.
+    const inputWhileResultShown = screen.getByLabelText("Barcode") as HTMLInputElement;
+    expect(inputWhileResultShown).not.toBeDisabled();
+    expect(inputWhileResultShown).toHaveFocus();
+
     act(() => {
       vi.advanceTimersByTime(3000);
     });

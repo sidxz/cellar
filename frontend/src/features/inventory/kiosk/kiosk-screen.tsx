@@ -57,6 +57,15 @@ export default function KioskScreen() {
     };
   }, [token, focusInput]);
 
+  // Refocus once the input is actually re-enabled. Calling focusInput()
+  // directly in scan()'s `finally` races React's batched setBusy(false):
+  // the DOM input is still `disabled` at that point, and focus() on a
+  // disabled control is a no-op — this effect runs after the re-render
+  // that clears `disabled`.
+  useEffect(() => {
+    if (!busy) focusInput();
+  }, [busy, focusInput]);
+
   const showResult = (r: Result) => {
     if (timer.current) clearTimeout(timer.current);
     setResult(r);
@@ -106,7 +115,6 @@ export default function KioskScreen() {
       showResult({ kind: "error", message: errorMessage(err) });
     } finally {
       setBusy(false);
-      focusInput();
     }
   };
 
