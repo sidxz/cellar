@@ -678,6 +678,25 @@ class TestOwnerLends:
         )
         assert resp.status_code == 404, resp.text  # hidden == missing
 
+    async def test_lend_requires_approve_action(
+        self, client: AsyncClient, denied_editor_client_own_org: AsyncClient
+    ) -> None:
+        """Lending approves on creation, so an owner-org editor WITHOUT
+        cellar:approve_loan must not be able to lend (2026-08-26 — otherwise
+        picking a foreign borrower org bypassed approval entirely). The same
+        editor can still make an ordinary request for its own org."""
+        plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")  # owner = AUTH_ORG
+        resp = await denied_editor_client_own_org.post(
+            "/api/v1/plate-loans",
+            json={"plate_ids": [plate["id"]], "borrower_org_id": str(OTHER_ORG_ID)},
+        )
+        assert resp.status_code == 403, resp.text
+        resp = await denied_editor_client_own_org.post(
+            "/api/v1/plate-loans", json={"plate_ids": [plate["id"]]}
+        )
+        assert resp.status_code == 201, resp.text
+        assert [i["status"] for i in resp.json()["items"]] == ["requested"]
+
     async def test_admin_can_lend_any_orgs_plate(self, client: AsyncClient) -> None:
         plate = await _mk_plate(
             client, f"PL-{uuid.uuid4().hex[:8]}", owner_org_id=str(OTHER_ORG_ID)
@@ -727,9 +746,7 @@ class TestOwnerLends:
             editor_client_own_org, plate_ids=[plate["id"]], borrower_org_id=str(OTHER_ORG_ID)
         )
         async with _client_as(database_url, workspace_id, org_id=uuid.uuid4()) as unrelated:
-            resp = await unrelated.post(
-                f"/api/v1/plate-loans/{loan['id']}/items:cancel", json={}
-            )
+            resp = await unrelated.post(f"/api/v1/plate-loans/{loan['id']}/items:cancel", json={})
             # hidden == missing: unrelated is neither owner (AUTH_ORG) nor
             # borrower (OTHER_ORG), so the loan is invisible to it before
             # _authorize ever runs (same invariant as
@@ -897,9 +914,7 @@ class TestReturnComments:
         await _set_policy(client, AUTH_ORG_ID, require_approval=False, confirmation="none")
         plate = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
         loan = await _mk_loan(client, plate_ids=[plate["id"]])
-        resp = await client.post(
-            f"/api/v1/plate-loans/{loan['id']}/items:request-return", json={}
-        )
+        resp = await client.post(f"/api/v1/plate-loans/{loan['id']}/items:request-return", json={})
         assert resp.status_code == 200, resp.text
 
     async def test_unknown_field_still_forbidden_on_other_verbs(self, client: AsyncClient) -> None:
@@ -961,9 +976,7 @@ class TestReturnComments:
         got = (await client.get(f"/api/v1/plate-loans/{loan['id']}")).json()
         assert {i["status"] for i in got["items"]} == {"checked_out"}
 
-    async def test_plate_comment_for_plate_not_in_loan_rejected(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_plate_comment_for_plate_not_in_loan_rejected(self, client: AsyncClient) -> None:
         loan, g1, g2, _p1 = await self._checked_out_loan_with_groups(client)
         outsider = await _mk_plate(client, f"PL-{uuid.uuid4().hex[:8]}")
         resp = await client.post(

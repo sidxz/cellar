@@ -243,12 +243,13 @@ class RequestPlateLoan:
             owner_org_id = owner_org_ids.pop()
 
             if owner_initiated:
-                # Ruling R6: lending is an owner-org (or admin) act. Non-admin
-                # callers only ever reach here with their own org's plates
-                # (foreign plates are hidden → 404 above), so this guard is
-                # the admin-vs-owner line, not a visibility check.
-                if not (auth is not None and (auth.is_admin or owner_org_id == caller_org_id)):
-                    raise AuthorizationError("Only the owner organization can lend its plates")
+                # Ruling R6 (+ 2026-08-26): a lend is the owner org APPROVING its
+                # own loan on creation, so it must clear exactly the approve
+                # verb's authority — admin, or an owner-org editor holding
+                # cellar:approve_loan. Anything weaker lets any editor pick a
+                # foreign borrower org and walk out with plates unapproved.
+                # Foreign plates are already hidden → 404 above.
+                await require_loan_authority(auth, owner_org_id)
                 known = {o.id for o in await self._org_directory.list_orgs()}
                 if borrower_org_id not in known:
                     return Failure(ValidationError("Unknown borrower organization"))
@@ -617,9 +618,7 @@ class RequestLoanReturn(_LoanItemsUseCase):
         group_repo: PlateGroupRepository,
         comment_repo: CommentRepository,
     ) -> None:
-        super().__init__(
-            uow, repo, plate_repo, policy_repo, dispatcher, visibility, group_repo
-        )
+        super().__init__(uow, repo, plate_repo, policy_repo, dispatcher, visibility, group_repo)
         self._comment_repo = comment_repo
 
     async def _authorize(self, auth: AuthContext | None, loan: PlateLoan) -> None:
@@ -646,9 +645,7 @@ class RequestLoanReturn(_LoanItemsUseCase):
         provided_ids = {c.group_id for c in input.comments}
         extra = provided_ids - required
         if extra:
-            return ValidationError(
-                "comments may only name groups of the plates being returned"
-            )
+            return ValidationError("comments may only name groups of the plates being returned")
         provided = {c.group_id for c in input.comments if c.body.strip()}
         missing = required - provided
         if missing:

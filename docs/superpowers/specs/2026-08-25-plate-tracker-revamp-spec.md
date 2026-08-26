@@ -252,3 +252,7 @@ Emails/notifications · volume-reduction editor (never persisted in legacy) · v
 - Idempotency proven: a following `--dry-run` created nothing and matched all 2 259 plates. Timestamps verified against legacy (`MAX(act_date)` = 2026-08-21 16:21:57 America/Chicago).
 - Operator notes carried forward for any other environment: run alembic to head 068, wipe/close conflicting seed loans first, pick site/building names for real (idempotency keys), pass the real CDD vault id, `DUAR_URL` must reach the internal listener (visibility), grant `cellar:approve_loan` per org.
 
+
+## §3.1 amendment (2026-08-26) — owner-initiated lending requires `cellar:approve_loan`
+
+User-caught bypass: the lend branch only checked "admin or the plates belong to my org", so any owner-org **editor** could pick a foreign borrower org and have the plates approved on creation (checked out too under `confirmation = none`) without ever holding the approve action — an end-run around approval for plates that then get used in the same lab. A lend is the owner approving its own loan, so it now clears exactly `require_loan_authority(auth, owner_org_id)` (admin bypass · owner-org match · `cellar:approve_loan`), the same guard as the approve verb. Pinned by `TestOwnerLends::test_lend_requires_approve_action` (denied editor → 403 on lend, 201 on a plain own-org request). Borrower-initiated requests are unchanged. Operator note: an org with no `cellar:approve_loan` grants can now only lend through a workspace admin — which is the intended state.
