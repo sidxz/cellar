@@ -92,9 +92,12 @@ export function LoanDashboard() {
           p.value ? <StatusBadge status={p.value} variant={LOAN_VARIANT[p.value]} /> : null,
       },
       {
-        headerName: "Barcodes",
-        hide: true, // quick-filter only
-        valueGetter: (p) => p.data?.items.map((i) => i.barcode).join(" ") ?? "",
+        headerName: "Search text",
+        // quick-filter only: barcodes + notes (migrated loans carry the legacy
+        // requester name in notes, so "Maia" still finds her history).
+        hide: true,
+        valueGetter: (p) =>
+          [...(p.data?.items.map((i) => i.barcode) ?? []), p.data?.notes ?? ""].join(" "),
       },
     ],
     [memberName],
@@ -150,7 +153,7 @@ export function LoanDashboard() {
             height="600px"
             suppressFilters
             preferencesKey="loans-history"
-            searchPlaceholder="Search requester, set or barcode…"
+            searchPlaceholder="Search requester, set, barcode or notes…"
             includeHiddenColumnsInQuickFilter
             onRowClick={(loan) => router.push(`/inventory/loans/${loan.id}`)}
             emptyState={<p className="p-6 text-sm text-muted-foreground">No closed loans yet.</p>}

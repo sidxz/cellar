@@ -194,8 +194,15 @@ export function PlateList() {
         headerName: "Set",
         flex: 1.2,
         minWidth: 160,
+        // Sort/quick-filter on the full path; the cell shows the leaf set name
+        // (legacy paths run three levels deep and truncate), path on hover.
         valueGetter: (p) =>
           p.data?.plate.group_id ? (groupIndex.get(p.data.plate.group_id)?.path ?? "…") : "—",
+        cellRenderer: ({ data }: { data: PlateRow | undefined }) => {
+          if (!data?.plate.group_id) return "—";
+          const ref = groupIndex.get(data.plate.group_id);
+          return <span title={ref?.path}>{ref?.name ?? "…"}</span>;
+        },
       },
       { headerName: "Format", field: "plate.format", width: 90 },
       {
