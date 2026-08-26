@@ -55,6 +55,7 @@ import {
   useDerivePlate,
   usePlate,
   usePlateChildren,
+  usePlateRuns,
 } from "../hooks/use-plates";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import { downloadPlateLayout } from "../lib/download-plate-layout";
@@ -279,6 +280,7 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
   const query = usePlate(plateId);
   const plate = query.data;
   const { data: children } = usePlateChildren(plateId);
+  const { data: runs } = usePlateRuns(plateId);
   // Every loan this plate appeared in (API orders desc): custody + history from one fetch.
   const { data: loans } = useLoans({ plate_id: plateId });
   const { data: locations } = useStorageLocations();
@@ -519,6 +521,35 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
                       </CardContent>
                     </Card>
                   ) : null}
+
+                  <Card data-testid="plate-runs">
+                    <CardHeader>
+                      <CardTitle className="text-base">Used in runs</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {runs && runs.length > 0 ? (
+                        <ul className="divide-y rounded-md border">
+                          {runs.map((r) => (
+                            <li key={`${r.run_id}-${r.plate_number}`}>
+                              <Link
+                                href={`/assays/runs/${r.run_id}`}
+                                className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm hover:bg-accent"
+                              >
+                                <span className="font-medium">{r.protocol_name}</span>
+                                <span>Run {formatDate(r.run_date)}</span>
+                                <span className="text-muted-foreground">
+                                  Plate {r.plate_number}
+                                </span>
+                                <StatusBadge status={r.run_status} className="ml-auto" />
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Not used in any run yet.</p>
+                      )}
+                    </CardContent>
+                  </Card>
 
                   <Card>
                     <CardHeader>

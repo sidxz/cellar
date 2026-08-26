@@ -70,7 +70,7 @@ const openLoan = {
   ],
 };
 
-function setup(plate = basePlate, loans: unknown[] = []) {
+function setup(plate = basePlate, loans: unknown[] = [], runs: unknown[] = []) {
   mocked.mockReset();
   pushMock.mockReset();
   mocked.mockImplementation((opts: { url: string; method: string }) => {
@@ -78,6 +78,7 @@ function setup(plate = basePlate, loans: unknown[] = []) {
       return Promise.resolve(undefined);
     if (opts.url === "/api/v1/plates/p1") return Promise.resolve(plate);
     if (opts.url === "/api/v1/plates/p1/children") return Promise.resolve([]);
+    if (opts.url === "/api/v1/plates/p1/runs") return Promise.resolve(runs);
     if (opts.url === "/api/v1/plate-loans") return Promise.resolve(loans);
     if (opts.url === "/api/v1/storage-locations")
       return Promise.resolve([
@@ -154,6 +155,34 @@ describe("PlateDetail body", () => {
     const history = await screen.findByTestId("loan-history");
     await waitFor(() => expect(history).toHaveTextContent("Maia Young"));
     expect(history.querySelector("a")).toHaveAttribute("href", "/inventory/loans/l1");
+  });
+  it("Used in runs lists protocol · Run date · plate number · status and links to the run", async () => {
+    setup(
+      basePlate,
+      [],
+      [
+        {
+          run_id: "r1",
+          run_date: "2026-08-20",
+          run_status: "completed",
+          protocol_id: "pr1",
+          protocol_name: "Mtb MABA",
+          plate_number: 2,
+          created_at: "2026-08-20T12:00:00Z",
+        },
+      ],
+    );
+    const card = await screen.findByTestId("plate-runs");
+    await waitFor(() => expect(card).toHaveTextContent("Mtb MABA"));
+    expect(card).toHaveTextContent("Run Aug 20, 2026");
+    expect(card).toHaveTextContent("Plate 2");
+    expect(card).toHaveTextContent("Completed");
+    expect(card.querySelector("a")).toHaveAttribute("href", "/assays/runs/r1");
+  });
+  it("Used in runs: empty copy when the plate was never run", async () => {
+    setup();
+    const card = await screen.findByTestId("plate-runs");
+    await waitFor(() => expect(card).toHaveTextContent("Not used in any run yet."));
   });
   it("More → Delete → confirm deletes and returns to the list", async () => {
     setup();
