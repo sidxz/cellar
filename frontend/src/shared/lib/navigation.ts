@@ -121,3 +121,23 @@ export const navigation: NavGroup[] = [
     ],
   },
 ];
+
+/** Which nav href is active for a pathname: the LONGEST href (top-level or
+ * child) that is the path itself or a whole-segment prefix of it. A section
+ * root such as "/inventory" therefore lights up on "/inventory/batches/…" but
+ * not on "/inventory/plates", where the sibling's longer href wins. */
+export function activeHref(groups: NavGroup[], pathname: string): string | null {
+  let best: string | null = null;
+  const consider = (href: string) => {
+    const matches =
+      pathname === href || pathname.startsWith(href.endsWith("/") ? href : `${href}/`);
+    if (matches && (best === null || href.length > best.length)) best = href;
+  };
+  for (const group of groups) {
+    for (const item of group.items) {
+      consider(item.href);
+      for (const child of item.children ?? []) consider(child.href);
+    }
+  }
+  return best;
+}

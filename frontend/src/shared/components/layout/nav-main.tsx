@@ -11,18 +11,17 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/shared/components/ui/sidebar";
-import { type NavItem, navigation } from "@/shared/lib/navigation";
+import { activeHref, navigation } from "@/shared/lib/navigation";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Collapsible } from "radix-ui";
 
-function isChildActive(child: NavItem, parent: NavItem, pathname: string): boolean {
-  return child.href === parent.href ? pathname === child.href : pathname.startsWith(child.href);
-}
-
 export function NavMain() {
   const pathname = usePathname();
+  // One active entry for the whole sidebar — longest matching href wins, so a
+  // section root ("/inventory") never stays lit under a sibling's page.
+  const active = activeHref(navigation, pathname);
 
   return (
     <>
@@ -36,7 +35,7 @@ export function NavMain() {
                   return (
                     <Collapsible.Root
                       key={item.href}
-                      defaultOpen={item.children.some((c) => isChildActive(c, item, pathname))}
+                      defaultOpen={item.children.some((c) => c.href === active)}
                       className="group/collapsible"
                     >
                       <SidebarMenuItem>
@@ -51,10 +50,7 @@ export function NavMain() {
                           <SidebarMenuSub>
                             {item.children.map((child) => (
                               <SidebarMenuSubItem key={child.href}>
-                                <SidebarMenuSubButton
-                                  asChild
-                                  isActive={isChildActive(child, item, pathname)}
-                                >
+                                <SidebarMenuSubButton asChild isActive={child.href === active}>
                                   <Link href={child.href}>
                                     <span>{child.title}</span>
                                   </Link>
@@ -68,8 +64,7 @@ export function NavMain() {
                   );
                 }
 
-                const isActive =
-                  item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                const isActive = item.href === active;
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
