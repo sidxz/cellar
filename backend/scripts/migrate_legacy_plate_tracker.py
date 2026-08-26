@@ -292,7 +292,14 @@ def map_loan_item_status(p_status: str) -> LoanItemStatus:
         raise ValueError(f"unknown legacy p_status: {p_status!r}") from None
 
 
-def due_date_from(last_activity: datetime) -> date:
+def due_date_from(last_activity: datetime, tz: str = "America/Chicago") -> date:
+    """Legacy due dates are the requester's LOCAL calendar date + 14 days —
+    a 23:30 America/Chicago transaction is still "today" locally even though
+    C1's UTC conversion may already show the next calendar day. Aware input
+    is converted to `tz` before taking the date; naive input (e.g. a bare
+    calendar date in a test) keeps the old date-arithmetic behaviour."""
+    if last_activity.tzinfo is not None:
+        return last_activity.astimezone(ZoneInfo(tz)).date() + timedelta(days=_DUE_DAYS)
     return (last_activity + timedelta(days=_DUE_DAYS)).date()
 
 
@@ -955,7 +962,10 @@ class UnresolvedRequester:
     reason: str
 
 
-def plan_loans(legacy, matched, account_email, user_map, *, actor_id=None, account_names=None):
+def plan_loans(
+    legacy, matched, account_email, user_map, *, actor_id=None, account_names=None,
+    tz: str = "America/Chicago",
+):
     """Every OPEN transaction becomes a loan. An unresolved requester email no
     longer drops the transaction: with `actor_id` given, the loan is kept
     with `requester_user_id=actor_id` (the migration actor becomes the
@@ -994,7 +1004,8 @@ def plan_loans(legacy, matched, account_email, user_map, *, actor_id=None, accou
         if items:
             specs.append(
                 LoanSpec(
-                    txn.transaction_id, requester_id, due_date_from(txn.last_activity_date), items,
+                    txn.transaction_id, requester_id,
+                    due_date_from(txn.last_activity_date, tz), items,
                     account_names.get(txn.scientist, f"UIN {txn.scientist}"),
                 )
             )
@@ -1138,7 +1149,10 @@ def historical_plate_names(
     return out
 
 
-def plan_closed_loans(legacy, plate_id_by_name, account_email, user_map, actor_id, account_names):
+def plan_closed_loans(
+    legacy, plate_id_by_name, account_email, user_map, actor_id, account_names,
+    tz: str = "America/Chicago",
+):
     """Reconstruct one closed PlateLoan per CLOSED transaction from its system
     comment lines: the last status parsed per plate name (by act_date, act_id
     order) is the item's final state; a "close" line supplies `closed_at`
@@ -1189,7 +1203,7 @@ def plan_closed_loans(legacy, plate_id_by_name, account_email, user_map, actor_i
                 requester_name=account_names.get(t.scientist, f"UIN {t.scientist}"),
                 created_at=t.last_activity_date,
                 closed_at=closed_at or latest,
-                due_date=due_date_from(t.last_activity_date),
+                due_date=due_date_from(t.last_activity_date, tz),
                 items=tuple(items),
             )
         )
@@ -1404,6 +1418,7 @@ async def run_migration(
     site_name: str = "TAMU",
     building_name: str = "Main",
     backfill_null_owners: bool = False,
+    legacy_tz: str = "America/Chicago",
 ) -> dict:
     account_email = build_account_email_map(legacy.accounts)
     account_names = {a.uin: full_name(a) for a in legacy.accounts}
@@ -1510,6 +1525,7 @@ async def run_migration(
         loan_specs, unresolved = plan_loans(
             replace(legacy, transactions=open_transactions(legacy)),
             matched, account_email, user_map, actor_id=actor_id, account_names=account_names,
+            tz=legacy_tz,
         )
         loans_created = 0
         for ls in loan_specs:
@@ -1532,6 +1548,7 @@ async def run_migration(
         }
         closed_specs, closed_unparsed = plan_closed_loans(
             legacy, plate_id_by_name, account_email, user_map, actor_id, account_names,
+            tz=legacy_tz,
         )
         closed_loans_created = 0
         for cs in closed_specs:
@@ -1665,6 +1682,7 @@ async def _main() -> None:
             site_name=args.site_name,
             building_name=args.building_name,
             backfill_null_owners=args.backfill_null_owners,
+            legacy_tz=args.legacy_tz,
         )
         print("MIGRATION SUMMARY:", summary)
     finally:

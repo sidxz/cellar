@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from scripts.migrate_legacy_plate_tracker import (
@@ -107,6 +108,13 @@ def test_map_loan_item_status_unknown_raises():
 
 def test_due_date_is_last_activity_plus_14_days():
     assert due_date_from(datetime(2024, 1, 4, 11, 15)) == date(2024, 1, 18)
+
+
+def test_due_date_uses_local_calendar_date_for_aware_input() -> None:
+    # 23:30 America/Chicago on May 1 is already May 2 in UTC — due date must
+    # still be the LOCAL calendar date (May 1) + 14 days, not May 2 + 14.
+    dt = datetime(2026, 5, 1, 23, 30, tzinfo=ZoneInfo("America/Chicago")).astimezone(UTC)
+    assert due_date_from(dt) == date(2026, 5, 15)
 
 
 def test_localize_legacy_converts_chicago_wall_clock_to_utc() -> None:
