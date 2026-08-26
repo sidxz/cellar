@@ -8,6 +8,13 @@ import type { CreatePlateGroupBodyOwnerOrgId } from './createPlateGroupBodyOwner
 import type { CreatePlateGroupBodyParentGroupId } from './createPlateGroupBodyParentGroupId';
 import type { CreatePlateGroupBodyGroupType } from './createPlateGroupBodyGroupType';
 import type { CreatePlateGroupBodyDescription } from './createPlateGroupBodyDescription';
+import type { CreatePlateGroupBodyState } from './createPlateGroupBodyState';
+import type { CreatePlateGroupBodyStorageLocationId } from './createPlateGroupBodyStorageLocationId';
+import type { CreatePlateGroupBodyInitialVolumeUl } from './createPlateGroupBodyInitialVolumeUl';
+import type { CreatePlateGroupBodyInitialConcentrationMm } from './createPlateGroupBodyInitialConcentrationMm';
+import type { CreatePlateGroupBodyCompoundCount } from './createPlateGroupBodyCompoundCount';
+import type { CreatePlateGroupBodyScientist } from './createPlateGroupBodyScientist';
+import type { CreatePlateGroupBodyCollectionId } from './createPlateGroupBodyCollectionId';
 
 export interface CreatePlateGroupBody {
   name: string;
@@ -15,4 +22,11 @@ export interface CreatePlateGroupBody {
   parent_group_id?: CreatePlateGroupBodyParentGroupId;
   group_type?: CreatePlateGroupBodyGroupType;
   description?: CreatePlateGroupBodyDescription;
+  state?: CreatePlateGroupBodyState;
+  storage_location_id?: CreatePlateGroupBodyStorageLocationId;
+  initial_volume_ul?: CreatePlateGroupBodyInitialVolumeUl;
+  initial_concentration_mm?: CreatePlateGroupBodyInitialConcentrationMm;
+  compound_count?: CreatePlateGroupBodyCompoundCount;
+  scientist?: CreatePlateGroupBodyScientist;
+  collection_id?: CreatePlateGroupBodyCollectionId;
 }

@@ -4,6 +4,8 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { ShipmentDirection } from './shipmentDirection';
+import type { CreateShipmentRequestLoanId } from './createShipmentRequestLoanId';
 import type { CreateShipmentRequestCarrier } from './createShipmentRequestCarrier';
 import type { CreateShipmentRequestExpectedArrivalDate } from './createShipmentRequestExpectedArrivalDate';
 import type { CreateShipmentRequestShippingConditions } from './createShipmentRequestShippingConditions';
@@ -12,6 +14,8 @@ import type { ShipmentItemRequest } from './shipmentItemRequest';
 
 export interface CreateShipmentRequest {
   destination_org_id: string;
+  direction?: ShipmentDirection;
+  loan_id?: CreateShipmentRequestLoanId;
   carrier?: CreateShipmentRequestCarrier;
   expected_arrival_date?: CreateShipmentRequestExpectedArrivalDate;
   shipping_conditions?: CreateShipmentRequestShippingConditions;

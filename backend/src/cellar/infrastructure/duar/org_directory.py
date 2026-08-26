@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from cellar.domain.shared.errors import ServiceUnavailableError
+
 
 @dataclass(frozen=True)
 class OrgSummary:
@@ -29,23 +31,32 @@ class OrgDirectory:
         service_key: str,
         ttl_seconds: float = 300.0,
         transport: httpx.AsyncBaseTransport | None = None,
+        include_disabled: bool = False,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._service_key = service_key
         self._ttl = ttl_seconds
         self._transport = transport
+        self._include_disabled = include_disabled
         self._cached_at: float = float("-inf")
         self._cache: list[OrgSummary] = []
 
     async def list_orgs(self) -> list[OrgSummary]:
         if time.monotonic() - self._cached_at < self._ttl:
             return self._cache
-        async with httpx.AsyncClient(transport=self._transport, timeout=10.0) as client:
-            resp = await client.get(
-                f"{self._base_url}/organizations",
-                headers={"X-Service-Key": self._service_key},
-            )
-        resp.raise_for_status()
+        params = {"include_disabled": "true"} if self._include_disabled else None
+        try:
+            async with httpx.AsyncClient(transport=self._transport, timeout=10.0) as client:
+                resp = await client.get(
+                    f"{self._base_url}/organizations",
+                    headers={"X-Service-Key": self._service_key},
+                    params=params,
+                )
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            # Fail closed (never serve a stale/partial list): map to 503 so
+            # operators can tell "Duar down" from "Cellar bug" in Sentry.
+            raise ServiceUnavailableError(f"org directory unreachable: {exc}") from exc
         self._cache = [
             OrgSummary(
                 id=uuid.UUID(o["id"]),

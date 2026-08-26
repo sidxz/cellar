@@ -6,6 +6,7 @@ import uuid
 import httpx
 import pytest
 
+from cellar.domain.shared.errors import ServiceUnavailableError
 from cellar.infrastructure.duar.org_directory import OrgDirectory, OrgSummary
 
 ORGS = [
@@ -59,10 +60,51 @@ async def test_refetches_after_ttl(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_error_raises():
+async def test_include_disabled_sends_query_param():
+    calls: list = []
+
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(503)
+        calls.append(request)
+        return httpx.Response(200, json=ORGS)
+
+    directory = OrgDirectory(
+        "http://duar", "svc-key", transport=httpx.MockTransport(handler), include_disabled=True
+    )
+    await directory.list_orgs()
+    assert calls[0].url.params["include_disabled"] == "true"
+
+
+@pytest.mark.asyncio
+async def test_default_omits_include_disabled_param():
+    calls: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=ORGS)
 
     directory = OrgDirectory("http://duar", "svc-key", transport=httpx.MockTransport(handler))
-    with pytest.raises(httpx.HTTPStatusError):
+    await directory.list_orgs()
+    assert "include_disabled" not in calls[0].url.params
+
+
+@pytest.mark.asyncio
+async def test_error_raises():
+    """I2: a Duar outage must surface as ServiceUnavailableError (-> 503 via
+    the app's error handlers), not the raw httpx exception (-> generic 500)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    directory = OrgDirectory("http://duar", "svc-key", transport=httpx.MockTransport(handler))
+    with pytest.raises(ServiceUnavailableError):
+        await directory.list_orgs()
+
+
+@pytest.mark.asyncio
+async def test_connect_error_raises_service_unavailable():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    directory = OrgDirectory("http://duar", "svc-key", transport=httpx.MockTransport(handler))
+    with pytest.raises(ServiceUnavailableError):
         await directory.list_orgs()

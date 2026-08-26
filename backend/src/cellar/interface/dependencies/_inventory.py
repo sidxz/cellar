@@ -14,6 +14,8 @@ from cellar.application.inventory.batch_identifiers import (
     RemoveBatchIdentifier,
 )
 from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
+from cellar.application.inventory.collection_plate_groups import ListPlateGroupsForCollection
+from cellar.application.inventory.comments import AddComment, ListComments
 from cellar.application.inventory.create_batch import CreateBatch
 from cellar.application.inventory.create_sample import CreateSample
 from cellar.application.inventory.delete_storage_location import DeleteStorageLocation
@@ -38,6 +40,7 @@ from cellar.application.inventory.kiosk_devices import (
     RevokeKioskDevice,
 )
 from cellar.application.inventory.list_batches_global import ListBatchesGlobal
+from cellar.application.inventory.list_runs_for_plate import ListRunsForPlate
 from cellar.application.inventory.list_samples_global import ListSamplesGlobal
 from cellar.application.inventory.manage_sample import (
     AliquotSample,
@@ -58,6 +61,7 @@ from cellar.application.inventory.plate_groups import (
     CreatePlateGroup,
     DeletePlateGroup,
     GetGroupTree,
+    GetPlateGroup,
     MovePlateGroup,
     RemovePlatesFromGroup,
     UpdatePlateGroup,
@@ -86,11 +90,15 @@ from cellar.application.inventory.registered_plates import (
     RegisterPlate,
     UpdatePlate,
 )
+from cellar.application.inventory.shipment_reads import (
+    ListShipmentsForItem,
+    ListShipmentsForLoan,
+    ResolveShipmentItems,
+    ShipmentsReader,
+)
 from cellar.application.inventory.update_batch import UpdateBatch
 from cellar.application.inventory.update_storage_location import UpdateStorageLocation
-from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
-    SQLAlchemyOrgPlatePolicyRepository,
-)
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
     SQLAlchemyPlateLoanRepository,
 )
@@ -100,6 +108,7 @@ from ._core import _get_use_case, get_container
 
 __all__ = [
     "AddBatchIdentifierDep",
+    "AddCommentDep",
     "AliquotSampleDep",
     "ApproveLoanItemsDep",
     "AssignPlatesToGroupDep",
@@ -131,6 +140,7 @@ __all__ = [
     "GetLoanDep",
     "GetOrgPlatePolicyDep",
     "GetPlateDep",
+    "GetPlateGroupDep",
     "GetPlateInsightsDep",
     "GetSampleDep",
     "GetStorageLocationChildrenDep",
@@ -141,12 +151,17 @@ __all__ = [
     "ListBatchesByMoleculeDep",
     "ListBatchesGlobalDep",
     "ListChildrenDep",
+    "ListCommentsDep",
     "ListImportTemplatesDep",
     "ListKioskDevicesDep",
     "ListLoansDep",
+    "ListPlateGroupsForCollectionDep",
     "ListPlatesDep",
+    "ListRunsForPlateDep",
     "ListSamplesByBatchDep",
     "ListSamplesGlobalDep",
+    "ListShipmentsForItemDep",
+    "ListShipmentsForLoanDep",
     "ListStorageLocationsDep",
     "ListStorageLocationsWithCountsDep",
     "MapWellsDep",
@@ -161,8 +176,10 @@ __all__ = [
     "RequestLoanReturnDep",
     "RequestPlateLoanDep",
     "ResolveScanDep",
+    "ResolveShipmentItemsDep",
     "RevokeKioskDeviceDep",
     "SetOrgPlatePolicyDep",
+    "ShipmentsReaderDep",
     "UpdateBatchDep",
     "UpdatePlateDep",
     "UpdatePlateGroupDep",
@@ -230,6 +247,7 @@ MapWellsDep = Annotated[MapWells, Depends(_get_use_case(MapWells))]
 ChangeStatusDep = Annotated[ChangeStatus, Depends(_get_use_case(ChangeStatus))]
 DerivePlateDep = Annotated[DerivePlate, Depends(_get_use_case(DerivePlate))]
 ListChildrenDep = Annotated[ListChildren, Depends(_get_use_case(ListChildren))]
+ListRunsForPlateDep = Annotated[ListRunsForPlate, Depends(_get_use_case(ListRunsForPlate))]
 DeletePlateDep = Annotated[DeletePlate, Depends(_get_use_case(DeletePlate))]
 ExportPlateLayoutDep = Annotated[ExportPlateLayout, Depends(_get_use_case(ExportPlateLayout))]
 PlateReadModelServiceDep = Annotated[
@@ -251,9 +269,7 @@ def get_plate_visibility_uow(
     """
     uow = AsyncUnitOfWork(container[async_sessionmaker])
     return (
-        PlateVisibilityService(
-            SQLAlchemyOrgPlatePolicyRepository(uow), SQLAlchemyPlateLoanRepository(uow)
-        ),
+        PlateVisibilityService(container[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
         uow,
     )
 
@@ -268,6 +284,10 @@ UpdatePlateGroupDep = Annotated[UpdatePlateGroup, Depends(_get_use_case(UpdatePl
 MovePlateGroupDep = Annotated[MovePlateGroup, Depends(_get_use_case(MovePlateGroup))]
 DeletePlateGroupDep = Annotated[DeletePlateGroup, Depends(_get_use_case(DeletePlateGroup))]
 GetGroupTreeDep = Annotated[GetGroupTree, Depends(_get_use_case(GetGroupTree))]
+GetPlateGroupDep = Annotated[GetPlateGroup, Depends(_get_use_case(GetPlateGroup))]
+ListPlateGroupsForCollectionDep = Annotated[
+    ListPlateGroupsForCollection, Depends(_get_use_case(ListPlateGroupsForCollection))
+]
 AssignPlatesToGroupDep = Annotated[
     AssignPlatesToGroup, Depends(_get_use_case(AssignPlatesToGroup))
 ]
@@ -288,10 +308,27 @@ RequestLoanReturnDep = Annotated[RequestLoanReturn, Depends(_get_use_case(Reques
 ConfirmLoanReturnDep = Annotated[ConfirmLoanReturn, Depends(_get_use_case(ConfirmLoanReturn))]
 CancelLoanItemsDep = Annotated[CancelLoanItems, Depends(_get_use_case(CancelLoanItems))]
 
+# --- Shipment read side (S17) — shared by the shipments, plates, samples and loans routers ---
+ResolveShipmentItemsDep = Annotated[
+    ResolveShipmentItems, Depends(_get_use_case(ResolveShipmentItems))
+]
+ListShipmentsForItemDep = Annotated[
+    ListShipmentsForItem, Depends(_get_use_case(ListShipmentsForItem))
+]
+ListShipmentsForLoanDep = Annotated[
+    ListShipmentsForLoan, Depends(_get_use_case(ListShipmentsForLoan))
+]
+# Singleton reader exposed so shipment routes can label items in one batched fetch.
+ShipmentsReaderDep = Annotated[ShipmentsReader, Depends(_get_use_case(ShipmentsReader))]
+
 # --- Kiosk Device dependencies ---
 CreateKioskDeviceDep = Annotated[CreateKioskDevice, Depends(_get_use_case(CreateKioskDevice))]
 ListKioskDevicesDep = Annotated[ListKioskDevices, Depends(_get_use_case(ListKioskDevices))]
 RevokeKioskDeviceDep = Annotated[RevokeKioskDevice, Depends(_get_use_case(RevokeKioskDevice))]
+
+# --- Comment dependencies ---
+AddCommentDep = Annotated[AddComment, Depends(_get_use_case(AddComment))]
+ListCommentsDep = Annotated[ListComments, Depends(_get_use_case(ListComments))]
 
 # --- Kiosk scan/confirm dependencies ---
 ResolveScanDep = Annotated[ResolveScan, Depends(_get_use_case(ResolveScan))]

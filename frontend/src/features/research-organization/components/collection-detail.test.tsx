@@ -56,6 +56,7 @@ vi.mock("./results/results-surface", () => ({
   ),
 }));
 vi.mock("./results/view-mode-toggle", () => ({ ViewModeToggle: () => <div /> }));
+vi.mock("./collection-plate-groups-card", () => ({ CollectionPlateGroupsCard: () => null }));
 vi.mock("@/shared/components/detail-shell", () => ({
   DetailShell: ({
     query,

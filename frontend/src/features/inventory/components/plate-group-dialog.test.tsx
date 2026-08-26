@@ -32,8 +32,20 @@ beforeAll(() => {
 });
 
 function setup(props: Partial<Parameters<typeof PlateGroupDialog>[0]> = {}) {
+  mocked.mockClear();
   mocked.mockImplementation((opts: { url: string; method: string }) => {
     if (opts.url.includes("/vocabularies")) return Promise.resolve([]);
+    if (opts.url.includes("/storage-locations")) {
+      return Promise.resolve([
+        { id: "loc-1", name: "Room 1148 / Freezer 4", type: "freezer", parent_id: null },
+      ]);
+    }
+    if (opts.url.endsWith("/collections")) {
+      return Promise.resolve([
+        { id: "col-1", name: "SACCZ", molecule_count: 900 },
+        { id: "col-2", name: "NadD hits", molecule_count: 12 },
+      ]);
+    }
     return Promise.resolve({ id: "g-new", name: "New Group" });
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -87,6 +99,7 @@ describe("PlateGroupDialog", () => {
         owner_org_id: "org1",
         plate_count: 0,
         created_by: "u1",
+        created_at: "2026-01-01T00:00:00Z",
         version: 1,
         children: [],
       },
@@ -99,6 +112,80 @@ describe("PlateGroupDialog", () => {
           url: "/api/v1/plate-groups/g1",
           method: "PATCH",
           data: expect.objectContaining({ name: "New Name" }),
+        }),
+      ),
+    );
+  });
+
+  it("create sends the metadata fields", async () => {
+    setup({ orgId: "org1", parentGroupId: null, group: null });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "SAC1" } });
+    fireEvent.change(screen.getByLabelText("Scientist"), { target: { value: "Jane Doe" } });
+    fireEvent.change(screen.getByLabelText("Initial volume (µL)"), { target: { value: "55" } });
+    fireEvent.change(screen.getByLabelText("Initial concentration (mM)"), {
+      target: { value: "10" },
+    });
+    fireEvent.change(screen.getByLabelText("Compound count"), { target: { value: "17606" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => {
+      const call = mocked.mock.calls.find(([o]) => (o as { method: string }).method === "POST");
+      expect(call).toBeTruthy();
+      const data = (call?.[0] as { data: Record<string, unknown> }).data;
+      expect(data).toMatchObject({
+        name: "SAC1",
+        scientist: "Jane Doe",
+        initial_volume_ul: 55,
+        initial_concentration_mm: 10,
+        compound_count: 17606,
+        state: null,
+        storage_location_id: null,
+        collection_id: null,
+      });
+    });
+  });
+
+  it("create sends the collection picked from the searchable list", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "SAC1" } });
+    // SearchableSelect trigger shows its placeholder until a value is picked.
+    fireEvent.click(await screen.findByText("No collection"));
+    const item = (await screen.findByText("SACCZ")).closest(
+      "[data-slot='command-item']",
+    ) as HTMLElement;
+    fireEvent.click(item);
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => {
+      const call = mocked.mock.calls.find(([o]) => (o as { method: string }).method === "POST");
+      expect(call).toBeTruthy();
+      const data = (call?.[0] as { data: Record<string, unknown> }).data;
+      expect(data).toMatchObject({ name: "SAC1", collection_id: "col-1" });
+    });
+  });
+
+  it("edit mode shows the linked collection and PATCHes it through", async () => {
+    setup({
+      group: {
+        id: "g1",
+        name: "SAC1",
+        parent_group_id: null,
+        owner_org_id: "org1",
+        plate_count: 0,
+        created_by: "u1",
+        created_at: "2026-01-01T00:00:00Z",
+        version: 1,
+        children: [],
+        collection_id: "col-2",
+        collection_name: "NadD hits",
+      },
+    });
+    expect(await screen.findByText("NadD hits")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "/api/v1/plate-groups/g1",
+          method: "PATCH",
+          data: expect.objectContaining({ collection_id: "col-2" }),
         }),
       ),
     );

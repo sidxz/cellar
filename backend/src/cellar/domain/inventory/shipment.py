@@ -1,11 +1,18 @@
-"""Shipment aggregate — chain-of-custody for external sample shipping."""
+"""Shipment aggregate — the container for a trip: plates + samples, in or out.
+
+Records only: shipping never mutates a plate or a sample.
+"""
 
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
 
-from cellar.domain.inventory.enums import ShipmentStatus
+from cellar.domain.inventory.enums import (
+    ShipmentDirection,
+    ShipmentItemType,
+    ShipmentStatus,
+)
 from cellar.domain.inventory.events import (
     ShipmentCreated,
     ShipmentDelivered,
@@ -21,21 +28,31 @@ from cellar.domain.shared.value_objects import Amount
 
 
 class ShipmentItem(Entity):
-    """An individual sample included in a shipment."""
+    """A plate or a sample in a shipment.
+
+    ``item_id`` is a loose polymorphic reference (no FK), resolved and
+    visibility-checked at write time. Samples ship an amount; plates ship whole.
+    """
 
     def __init__(
         self,
         *,
         id: uuid.UUID | None = None,
         shipment_id: uuid.UUID,
-        sample_id: uuid.UUID,
-        amount_shipped: Amount,
+        item_type: ShipmentItemType,
+        item_id: uuid.UUID,
+        amount_shipped: Amount | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
+        if item_type == ShipmentItemType.SAMPLE and amount_shipped is None:
+            raise ValidationError("A sample item requires an amount")
+        if item_type == ShipmentItemType.PLATE and amount_shipped is not None:
+            raise ValidationError("A plate item does not carry an amount")
         super().__init__(id=id, created_at=created_at, updated_at=updated_at)
         self.shipment_id = shipment_id
-        self.sample_id = sample_id
+        self.item_type = item_type
+        self.item_id = item_id
         self.amount_shipped = amount_shipped
 
 
@@ -60,7 +77,12 @@ _VALID_TRANSITIONS: dict[ShipmentStatus, set[ShipmentStatus]] = {
 
 
 class Shipment(AggregateRoot):
-    """Tracks chain-of-custody when samples are shipped externally."""
+    """Tracks chain-of-custody for a box of plates and/or samples.
+
+    ``destination_org_id`` is the counterparty: the destination when outbound,
+    the origin when inbound. ``loan_id`` optionally ties the box to the plate
+    loan it carries (the outbound lend or the inbound return leg).
+    """
 
     def __init__(
         self,
@@ -69,6 +91,8 @@ class Shipment(AggregateRoot):
         workspace_id: uuid.UUID,
         destination_org_id: uuid.UUID,
         sender_id: uuid.UUID,
+        direction: ShipmentDirection = ShipmentDirection.OUTBOUND,
+        loan_id: uuid.UUID | None = None,
         tracking_number: str | None = None,
         carrier: str | None = None,
         shipping_date: date | None = None,
@@ -86,6 +110,8 @@ class Shipment(AggregateRoot):
         self.workspace_id = workspace_id
         self.destination_org_id = destination_org_id
         self.sender_id = sender_id
+        self.direction = direction
+        self.loan_id = loan_id
         self.tracking_number = tracking_number
         self.carrier = carrier
         self.shipping_date = shipping_date
@@ -107,6 +133,8 @@ class Shipment(AggregateRoot):
         workspace_id: uuid.UUID,
         destination_org_id: uuid.UUID,
         sender_id: uuid.UUID,
+        direction: ShipmentDirection = ShipmentDirection.OUTBOUND,
+        loan_id: uuid.UUID | None = None,
         carrier: str | None = None,
         expected_arrival_date: date | None = None,
         shipping_conditions: str | None = None,
@@ -120,6 +148,8 @@ class Shipment(AggregateRoot):
             workspace_id=workspace_id,
             destination_org_id=destination_org_id,
             sender_id=sender_id,
+            direction=direction,
+            loan_id=loan_id,
             carrier=carrier,
             expected_arrival_date=expected_arrival_date,
             shipping_conditions=shipping_conditions,
@@ -157,6 +187,7 @@ class Shipment(AggregateRoot):
         expected_arrival_date: date | None = ...,  # type: ignore[assignment]
         shipping_conditions: str | None = ...,  # type: ignore[assignment]
         notes: str | None = ...,  # type: ignore[assignment]
+        loan_id: uuid.UUID | None = ...,  # type: ignore[assignment]
     ) -> None:
         """Update mutable fields on a preparing shipment (sentinel pattern)."""
         if self.status != ShipmentStatus.PREPARING:
@@ -169,6 +200,8 @@ class Shipment(AggregateRoot):
             self.shipping_conditions = shipping_conditions
         if notes is not ...:
             self.notes = notes
+        if loan_id is not ...:
+            self.loan_id = loan_id
         self.updated_at = datetime.now(UTC)
 
     # -- State transitions --

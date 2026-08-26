@@ -23,7 +23,7 @@ from cellar.domain.screening_assay.events import (
     RunUnlocked,
 )
 from cellar.domain.shared.entity import AggregateRoot, Entity
-from cellar.domain.shared.errors import ConflictError, ValidationError
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 from cellar.domain.shared.hit_criterion import HitCriterion, validate_hit_criteria
 from cellar.domain.shared.value_objects import Barcode
 
@@ -67,6 +67,7 @@ class Plate(Entity):
         plate_map: dict[str, Any] | None = None,
         parent_plate_id: uuid.UUID | None = None,
         template_id: uuid.UUID | None = None,
+        registered_plate_id: uuid.UUID | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -82,6 +83,9 @@ class Plate(Entity):
         self.plate_map = plate_map
         self.parent_plate_id = parent_plate_id
         self.template_id = template_id
+        # Optional link to the physical inventory plate (RegisteredPlate) this
+        # run plate was run on. Null is normal — nothing depends on it.
+        self.registered_plate_id = registered_plate_id
 
 
 class Well(Entity):
@@ -375,6 +379,19 @@ class Run(AggregateRoot):
         for well in getattr(plate, "wells", []):
             well.plate_id = plate.id
             self.wells.append(well)
+        self.updated_at = datetime.now(UTC)
+
+    def link_plate(self, plate_id: uuid.UUID, registered_plate_id: uuid.UUID | None) -> None:
+        """Point a run plate at the physical inventory plate it was run on (or clear it).
+
+        Optional by design — a run plate without a link is normal. ``None``
+        unlinks. Blocked when run is locked.
+        """
+        self._guard_not_locked()
+        plate = next((p for p in self.plates if p.id == plate_id), None)
+        if plate is None:
+            raise NotFoundError("Plate", str(plate_id))
+        plate.registered_plate_id = registered_plate_id
         self.updated_at = datetime.now(UTC)
 
     def reset_data(self, *, readouts_deleted: int, curves_deleted: int) -> None:

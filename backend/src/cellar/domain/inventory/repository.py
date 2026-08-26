@@ -7,6 +7,8 @@ from typing import Protocol, runtime_checkable
 
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.cdd_plate_import import CddPlateImport
+from cellar.domain.inventory.comment import Comment
+from cellar.domain.inventory.enums import CommentTarget
 from cellar.domain.inventory.import_template import ImportTemplate
 from cellar.domain.inventory.kiosk_device import KioskDevice
 from cellar.domain.inventory.org_plate_policy import OrgPlatePolicy
@@ -172,6 +174,9 @@ class RegisteredPlateRepository(Protocol):
     async def find_by_barcode(
         self, workspace_id: uuid.UUID, barcode: str
     ) -> RegisteredPlate | None: ...
+    async def find_by_label(
+        self, workspace_id: uuid.UUID, label: str
+    ) -> list[RegisteredPlate]: ...
     async def find_by_location(
         self, workspace_id: uuid.UUID, storage_location_id: uuid.UUID
     ) -> list[RegisteredPlate]: ...
@@ -211,6 +216,9 @@ class PlateGroupRepository(Protocol):
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> PlateGroup | None: ...
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[PlateGroup]: ...
     async def find_by_workspace(
         self, workspace_id: uuid.UUID, *, owner_org_id: uuid.UUID | None = None
     ) -> list[PlateGroup]: ...
@@ -227,6 +235,9 @@ class PlateGroupRepository(Protocol):
     async def count_plates_by_group(
         self, workspace_id: uuid.UUID, owner_org_id: uuid.UUID | None = None
     ) -> dict[uuid.UUID, int]: ...
+    async def plate_formats_by_group(
+        self, workspace_id: uuid.UUID, owner_org_id: uuid.UUID | None = None
+    ) -> dict[uuid.UUID, list[str]]: ...
     async def save(self, aggregate: PlateGroup) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
@@ -277,7 +288,6 @@ class OrgPlatePolicyRepository(Protocol):
     async def find_by_org(
         self, workspace_id: uuid.UUID, org_id: uuid.UUID
     ) -> OrgPlatePolicy | None: ...
-    async def list_private_org_ids(self, workspace_id: uuid.UUID) -> set[uuid.UUID]: ...
     async def save(self, aggregate: OrgPlatePolicy) -> None: ...
 
 
@@ -314,3 +324,16 @@ class KioskDeviceRepository(Protocol):
     async def find_active_by_token_hash(self, token_hash: str) -> KioskDevice | None: ...
     async def touch_last_seen(self, device_id: uuid.UUID) -> None: ...
     async def save(self, aggregate: KioskDevice) -> None: ...
+
+
+@runtime_checkable
+class CommentRepository(Protocol):
+    """Append-only comments on loans / groups / plates (spec 2026-08-25 §7)."""
+
+    async def list_for_target(
+        self, workspace_id: uuid.UUID, target_type: CommentTarget, target_id: uuid.UUID
+    ) -> list[Comment]: ...
+    async def list_for_loan(
+        self, workspace_id: uuid.UUID, loan_id: uuid.UUID
+    ) -> list[Comment]: ...
+    async def save(self, aggregate: Comment) -> None: ...

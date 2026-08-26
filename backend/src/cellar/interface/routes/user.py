@@ -34,8 +34,8 @@ class MeResponse(BaseModel):
 async def me(auth: AuthDep) -> MeResponse:
     return MeResponse(
         user_id=auth.user_id,
-        email=getattr(auth, "email", ""),
-        name=getattr(auth, "name", ""),
+        email=auth.email,
+        name=auth.name,
         org_id=auth.org_id,
         org_slug=auth.org_slug,
         workspace_role=auth.workspace_role,

@@ -30,7 +30,7 @@ export function TargetFilter({ value, onChange }: TargetFilterProps) {
   const [q, setQ] = useState("");
   // Targets are a small bounded reference set; load once and let cmdk filter
   // the rendered list client-side (the /targets route has no `q` param).
-  const { data: targets } = useTargets({ limit: "100" });
+  const { data: targets } = useTargets();
 
   const toggle = (id: string) =>
     onChange({

@@ -10,11 +10,15 @@ from pydantic import BaseModel
 
 from cellar.application.inventory.plate_loans import (
     GetLoanQuery,
+    GroupComment,
     ListLoansQuery,
     LoanItemsCommand,
     LoanWithPlates,
+    PlateComment,
+    RequestLoanReturnCommand,
     RequestPlateLoanCommand,
 )
+from cellar.application.inventory.shipment_reads import ListShipmentsForLoanQuery
 from cellar.domain.inventory.enums import LoanItemStatus, LoanStatus
 from cellar.interface.dependencies import (
     ApproveLoanItemsDep,
@@ -25,10 +29,12 @@ from cellar.interface.dependencies import (
     DenyLoanItemsDep,
     GetLoanDep,
     ListLoansDep,
+    ListShipmentsForLoanDep,
     RequestLoanReturnDep,
     RequestPlateLoanDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes.shipments import ShipmentLinkResponse
 
 router = APIRouter(prefix="/api/v1/plate-loans", tags=["plate-loans"])
 
@@ -45,6 +51,8 @@ class LoanItemResponse(BaseModel):
     plate_label: str
     status: LoanItemStatus
     status_changed_at: datetime
+    group_id: uuid.UUID | None = None
+    group_name: str | None = None
 
 
 class LoanResponse(BaseModel):
@@ -71,23 +79,24 @@ class LoanResponse(BaseModel):
         from the map (deleted after the loan closed) falls back to
         placeholders instead of failing the response."""
         loan = dto.loan
-        items = [
-            LoanItemResponse(
-                id=item.id,
-                plate_id=item.plate_id,
-                barcode=(
-                    dto.plates[item.plate_id].barcode.value
-                    if item.plate_id in dto.plates
-                    else "(deleted plate)"
-                ),
-                plate_label=(
-                    dto.plates[item.plate_id].plate_label if item.plate_id in dto.plates else ""
-                ),
-                status=item.status,
-                status_changed_at=item.status_changed_at,
+        items = []
+        for item in loan.items:
+            plate = dto.plates.get(item.plate_id)
+            group = (
+                dto.groups.get(plate.group_id) if plate is not None and plate.group_id else None
             )
-            for item in loan.items
-        ]
+            items.append(
+                LoanItemResponse(
+                    id=item.id,
+                    plate_id=item.plate_id,
+                    barcode=plate.barcode.value if plate is not None else "(deleted plate)",
+                    plate_label=plate.plate_label if plate is not None else "",
+                    status=item.status,
+                    status_changed_at=item.status_changed_at,
+                    group_id=group.id if group is not None else None,
+                    group_name=group.name if group is not None else None,
+                )
+            )
         return cls(
             id=loan.id,
             workspace_id=loan.workspace_id,
@@ -109,6 +118,7 @@ class RequestLoanBody(BaseModel):
     plate_ids: list[uuid.UUID] | None = None
     barcodes: list[str] | None = None
     group_id: uuid.UUID | None = None
+    borrower_org_id: uuid.UUID | None = None
     due_date: date | None = None
     notes: str | None = None
 
@@ -119,6 +129,25 @@ class LoanItemsBody(BaseModel):
     item_ids: list[uuid.UUID] | None = None
 
     model_config = {"extra": "forbid"}
+
+
+class GroupCommentBody(BaseModel):
+    group_id: uuid.UUID
+    body: str
+
+    model_config = {"extra": "forbid"}
+
+
+class PlateCommentBody(BaseModel):
+    plate_id: uuid.UUID
+    body: str
+
+    model_config = {"extra": "forbid"}
+
+
+class RequestReturnBody(LoanItemsBody):
+    comments: list[GroupCommentBody] = []
+    plate_comments: list[PlateCommentBody] = []
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +169,7 @@ async def request_plate_loan(
         plate_ids=body.plate_ids,
         barcodes=body.barcodes,
         group_id=body.group_id,
+        borrower_org_id=body.borrower_org_id,
         due_date=body.due_date,
         notes=body.notes,
     )
@@ -187,6 +217,19 @@ async def get_loan(loan_id: uuid.UUID, auth: AuthDep, uc: GetLoanDep) -> LoanRes
     return LoanResponse.from_dto(dto)
 
 
+@router.get("/{loan_id}/shipments", response_model=list[ShipmentLinkResponse])
+async def list_loan_shipments(
+    loan_id: uuid.UUID, auth: AuthDep, uc: ListShipmentsForLoanDep
+) -> list[ShipmentLinkResponse]:
+    """Shipments carrying this loan's plates (lend or return leg), newest first.
+
+    Same loan visibility as GET /{loan_id} — a hidden loan 404s like a missing one.
+    """
+    query = ListShipmentsForLoanQuery(workspace_id=auth.workspace_id, loan_id=loan_id)
+    rows = result_to_response(await uc(query, auth=auth))
+    return [ShipmentLinkResponse.from_row(r) for r in rows]
+
+
 @router.post("/{loan_id}/items:approve", response_model=LoanResponse)
 async def approve_loan_items(
     loan_id: uuid.UUID, body: LoanItemsBody, auth: AuthDep, uc: ApproveLoanItemsDep
@@ -225,11 +268,16 @@ async def confirm_loan_checkout(
 
 @router.post("/{loan_id}/items:request-return", response_model=LoanResponse)
 async def request_loan_return(
-    loan_id: uuid.UUID, body: LoanItemsBody, auth: AuthDep, uc: RequestLoanReturnDep
+    loan_id: uuid.UUID, body: RequestReturnBody, auth: AuthDep, uc: RequestLoanReturnDep
 ) -> LoanResponse:
-    """Borrower requests to return CHECKED_OUT items."""
-    command = LoanItemsCommand(
-        workspace_id=auth.workspace_id, loan_id=loan_id, item_ids=body.item_ids
+    """Borrower requests to return CHECKED_OUT items. Spec §7.3: one non-empty
+    comment is required per distinct group among the returning plates."""
+    command = RequestLoanReturnCommand(
+        workspace_id=auth.workspace_id,
+        loan_id=loan_id,
+        item_ids=body.item_ids,
+        comments=tuple(GroupComment(c.group_id, c.body) for c in body.comments),
+        plate_comments=tuple(PlateComment(p.plate_id, p.body) for p in body.plate_comments),
     )
     dto = result_to_response(await uc(command, auth=auth))
     return LoanResponse.from_dto(dto)

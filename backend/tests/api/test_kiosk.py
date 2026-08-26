@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cellar.infrastructure.duar.org_directory import OrgSummary
 from cellar.interface.dependencies import get_org_directory
-from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID
+from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID, _create_test_app
+from tests.fakes.fake_auth import FakeAuth
 
 
 async def _mk_plate(client: AsyncClient, barcode: str, **overrides) -> dict:
@@ -35,6 +39,22 @@ async def _mk_loan(client: AsyncClient, **body) -> dict:
     resp = await client.post("/api/v1/plate-loans", json=body)
     assert resp.status_code == 201, resp.text
     return resp.json()
+
+
+@asynccontextmanager
+async def _client_as(
+    database_url: str, workspace_id: uuid.UUID, **auth_kwargs
+) -> AsyncIterator[AsyncClient]:
+    """An ad-hoc client for an identity distinct from the standard fixtures
+    (mirrors ``tests/api/test_plate_loans.py::_client_as``) — needed here for
+    a borrower org the stub directory doesn't list."""
+    auth_kwargs.setdefault("role", "editor")
+    auth = FakeAuth(workspace_id=workspace_id, **auth_kwargs)
+    app = _create_test_app(database_url, auth)
+    transport = ASGITransport(app=app)  # type: ignore[arg-type]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    await app.state.container[AsyncEngine].dispose()
 
 
 async def _setup_approved_item(
@@ -244,13 +264,29 @@ class TestKioskConfirm:
 
 class TestBorrowerOrgName:
     async def test_borrower_org_name_none_when_directory_lacks_entry(
-        self, client: AsyncClient, editor_client_own_org: AsyncClient
+        self,
+        client: AsyncClient,
+        database_url: str,
+        workspace_id: uuid.UUID,
     ) -> None:
-        setup = await _setup_approved_item(client, editor_client_own_org)
+        # Borrower must be an org the 3-org stub directory doesn't list — an
+        # ad-hoc admin scoped to a fresh random org both bypasses strict
+        # visibility (to see the AUTH_ORG_ID plate) and supplies that org as
+        # RequestPlateLoan's borrower_org_id.
+        device = await _mk_device(client, AUTH_ORG_ID, f"Kiosk {uuid.uuid4().hex[:8]}")
+        plate = await _mk_plate(client, "000123")
+        unlisted_org_id = uuid.uuid4()
+        async with _client_as(
+            database_url, workspace_id, org_id=unlisted_org_id, role="admin"
+        ) as admin_as_org:
+            loan = await _mk_loan(admin_as_org, plate_ids=[plate["id"]])
+        approved = await client.post(f"/api/v1/plate-loans/{loan['id']}/items:approve", json={})
+        assert approved.status_code == 200, approved.text
+
         resp = await client.post(
             "/api/v1/kiosk/scan",
             json={"barcode": "000123"},
-            headers={"X-Kiosk-Token": setup["token"]},
+            headers={"X-Kiosk-Token": device["token"]},
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["borrower_org_name"] is None

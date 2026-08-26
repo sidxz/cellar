@@ -27,3 +27,15 @@ wrapper (e.g. `~16.25rem`), or better, let the parent page
 (`plate-group-dashboard.tsx`) give the tree a flex-based `min-h-0 flex-1` slot so it fills
 whatever space is actually left instead of guessing a fixed viewport offset. Verify by re-running
 a `debug_legend_height.mjs`-style measurement at 1600×900 and confirming `overflowPx <= 0`.
+
+## Status 2026-08-25
+
+S8 applied the stopgap half of the fix direction above: the constant was recalibrated to
+`16.25rem` (`plate-group-tree.tsx`, ruling R9), browser-verified at 0px overflow at 1600×900. This
+file was deleted as "closed" in the same session (`0aa167ba`) — premature, per the S8 final
+review: the stopgap re-creates the exact bug class it patches (any change to chrome height —
+header wrapping at narrow widths, a banner, a taller tab strip — brings the overflow back), and
+was verified at one viewport in one browser only. **Reopened.** The flex-slot refactor
+(`plate-group-dashboard.tsx` giving the tree a `min-h-0 flex-1` slot) remains the real fix and is
+still pending — it needs a `min-h-0` height chain from the app shell down, which the layout does
+not currently provide.

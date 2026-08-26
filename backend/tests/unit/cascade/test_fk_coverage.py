@@ -34,6 +34,7 @@ import cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_
 import cellar.infrastructure.persistence.sqlalchemy.inventory.cdd_plate_import_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.inventory.kiosk_device_models  # noqa: F401
+import cellar.infrastructure.persistence.sqlalchemy.inventory.comment_models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model  # noqa: F401
 import cellar.infrastructure.persistence.sqlalchemy.research_organization.models  # noqa: F401
@@ -114,6 +115,15 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # registered_plates → storage_locations: same rationale
     # -------------------------------------------------------------------------
     ("registered_plates", "storage_location_id", "storage_locations"),
+
+    # -------------------------------------------------------------------------
+    # plate_groups → storage_locations: SET NULL by design (migration 067)
+    # -------------------------------------------------------------------------
+    # plate_groups.storage_location_id is a nullable loose location reference,
+    # ondelete=SET NULL. A deleted location just un-places the group; nothing
+    # to cascade — same rationale as the samples/batches/registered_plates
+    # storage_location_id entries above.
+    ("plate_groups", "storage_location_id", "storage_locations"),
 
     # -------------------------------------------------------------------------
     # Plate groups — org-owned hierarchy (migration 062); same rationale as
@@ -207,6 +217,11 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # survive plate deletion. With no FK declared it never appears in
     # _collect_all_fks(), so there is nothing to categorize for it.
     ("plate_loan_items", "loan_id", "plate_loans"),
+    # SET NULL by design — a deleted loan detaches its comments
+    ("plate_comments", "loan_id", "plate_loans"),
+    # SET NULL by design — a deleted loan detaches the shipments that carried it
+    # (migration 071); the shipment record itself survives.
+    ("shipments", "loan_id", "plate_loans"),
 
     # -------------------------------------------------------------------------
     # batches → salt_catalog: SET NULL on salt entry delete
@@ -283,11 +298,12 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # -------------------------------------------------------------------------
     # protocol_targets / run_targets have ondelete=RESTRICT on target_id ->
     # targets (migration 053): a referenced target cannot be deleted, so links
-    # are never silently stripped — DeleteTarget 409s first with reference
-    # counts (verified by test_target_links). `targets` is a reference entity,
-    # not a Tier-1 admin-deletable aggregate. The protocol_id/run_id owner
-    # sides are ondelete=CASCADE: deleting a protocol/run drops its own link
-    # rows at the DB engine, which is intentional for pure association rows.
+    # are never silently stripped. Moot in practice — targets are a read-only
+    # mirror of prot-cellar and are never deleted locally (see sync_targets).
+    # `targets` is a reference entity, not a Tier-1 admin-deletable aggregate.
+    # The protocol_id/run_id owner sides are ondelete=CASCADE: deleting a
+    # protocol/run drops its own link rows at the DB engine, which is
+    # intentional for pure association rows.
     ("protocol_targets", "target_id", "targets"),
     ("run_targets", "target_id", "targets"),
 

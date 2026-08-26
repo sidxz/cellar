@@ -14,13 +14,20 @@ from cellar.application.auth import (
     require_same_workspace,
     require_workspace_role,
 )
+from cellar.application.inventory.plate_loans import _loan_visible
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
 from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.inventory.enums import ShipmentStatus
-from cellar.domain.inventory.repository import SampleRepository, ShipmentRepository
+from cellar.domain.inventory.enums import ShipmentDirection, ShipmentItemType, ShipmentStatus
+from cellar.domain.inventory.repository import (
+    PlateLoanRepository,
+    RegisteredPlateRepository,
+    SampleRepository,
+    ShipmentRepository,
+)
 from cellar.domain.inventory.shipment import Shipment, ShipmentItem
 from cellar.domain.shared.enums import AmountUnit
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
@@ -33,11 +40,12 @@ from cellar.domain.shared.value_objects import Amount
 
 @dataclass(frozen=True, kw_only=True)
 class ShipmentItemInput:
-    """Data carrier for a single shipment item in a create command."""
+    """A plate or a sample to put in the box. Samples need an amount; plates ship whole."""
 
-    sample_id: uuid.UUID
-    amount_value: float
-    amount_unit: str
+    item_type: ShipmentItemType
+    item_id: uuid.UUID
+    amount_value: float | None = None
+    amount_unit: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +58,8 @@ class CreateShipmentCommand(Command):
     workspace_id: uuid.UUID
     sender_id: uuid.UUID
     destination_org_id: uuid.UUID
+    direction: ShipmentDirection = ShipmentDirection.OUTBOUND
+    loan_id: uuid.UUID | None = None
     carrier: str | None = None
     expected_arrival_date: date | None = None
     shipping_conditions: str | None = None
@@ -88,9 +98,7 @@ class ReturnShipmentCommand(Command):
 class AddShipmentItemCommand(Command):
     workspace_id: uuid.UUID
     shipment_id: uuid.UUID
-    sample_id: uuid.UUID
-    amount_value: float
-    amount_unit: str
+    item: ShipmentItemInput
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -101,6 +109,7 @@ class UpdateShipmentCommand(Command):
     expected_arrival_date: date | None | object = UNSET
     shipping_conditions: str | None | object = UNSET
     notes: str | None | object = UNSET
+    loan_id: uuid.UUID | None | object = UNSET
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -127,6 +136,76 @@ class ListShipmentsQuery(Query):
 
 
 # ---------------------------------------------------------------------------
+# Item resolution + loan validation (shared by Create / AddItem / Update)
+# ---------------------------------------------------------------------------
+
+
+async def _build_items(
+    inputs: list[ShipmentItemInput],
+    *,
+    workspace_id: uuid.UUID,
+    shipment_id: uuid.UUID,
+    auth: AuthContext | None,
+    plate_repo: RegisteredPlateRepository,
+    sample_repo: SampleRepository,
+    visibility: PlateVisibilityService,
+) -> Result[list[ShipmentItem], DomainError]:
+    """Resolve every input to a workspace-scoped, visible plate or sample.
+
+    Missing and hidden plates report identically (no existence oracle). Plates on
+    active loan to the caller's org count as visible — the borrower ships them back.
+    """
+    excluded: set[uuid.UUID] = set()
+    borrowed: set[uuid.UUID] = set()
+    if any(i.item_type is ShipmentItemType.PLATE for i in inputs):
+        excluded = await visibility.excluded_org_ids(workspace_id, auth)
+        borrowed = await visibility.borrowed_plate_ids(workspace_id, auth)
+    items: list[ShipmentItem] = []
+    for inp in inputs:
+        if inp.item_type is ShipmentItemType.PLATE:
+            plate = await plate_repo.find_by_id_in_workspace(workspace_id, inp.item_id)
+            if plate is None or not visibility.can_view(plate, auth, excluded, borrowed):
+                return Failure(NotFoundError("RegisteredPlate", str(inp.item_id)))
+        elif await sample_repo.find_by_id_in_workspace(workspace_id, inp.item_id) is None:
+            return Failure(NotFoundError("Sample", str(inp.item_id)))
+        amount = (
+            Amount(value=inp.amount_value, unit=AmountUnit(inp.amount_unit))
+            if inp.amount_value is not None and inp.amount_unit is not None
+            else None
+        )
+        try:
+            items.append(
+                ShipmentItem(
+                    shipment_id=shipment_id,
+                    item_type=inp.item_type,
+                    item_id=inp.item_id,
+                    amount_shipped=amount,
+                )
+            )
+        except ValidationError as exc:
+            return Failure(exc)
+    return Success(items)
+
+
+async def _check_loan(
+    loan_id: uuid.UUID,
+    *,
+    workspace_id: uuid.UUID,
+    auth: AuthContext | None,
+    loan_repo: PlateLoanRepository,
+    visibility: PlateVisibilityService,
+) -> NotFoundError | None:
+    """The loan must exist in the workspace and be visible to the caller (else 404)."""
+    loan = await loan_repo.find_by_id_in_workspace(workspace_id, loan_id)
+    if loan is None:
+        return NotFoundError("PlateLoan", str(loan_id))
+    excluded = await visibility.excluded_org_ids(workspace_id, auth)
+    if not _loan_visible(loan, auth, excluded):
+        return NotFoundError("PlateLoan", str(loan_id))
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Use cases
 # ---------------------------------------------------------------------------
 
@@ -137,12 +216,19 @@ class CreateShipment:
         uow: UnitOfWork,
         repo: ShipmentRepository,
         dispatcher: EventDispatcherProtocol,
-        sample_repo: SampleRepository | None = None,
+        *,
+        sample_repo: SampleRepository,
+        plate_repo: RegisteredPlateRepository,
+        visibility: PlateVisibilityService,
+        loan_repo: PlateLoanRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._sample_repo = sample_repo
+        self._plate_repo = plate_repo
+        self._visibility = visibility
+        self._loan_repo = loan_repo
 
     async def __call__(
         self, input: CreateShipmentCommand, auth: AuthContext | None = None
@@ -151,40 +237,42 @@ class CreateShipment:
         require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:
-            # Verify all samples belong to this workspace
-            if self._sample_repo is not None:
-                for item_input in input.items:
-                    sample = await self._sample_repo.find_by_id_in_workspace(
-                        input.workspace_id, item_input.sample_id
-                    )
-                    if sample is None:
-                        return Failure(NotFoundError("Sample", str(item_input.sample_id)))
-
-            # Build a placeholder shipment_id so items have a valid ref before creation
-            placeholder_shipment_id = uuid.uuid4()
-            items = [
-                ShipmentItem(
-                    shipment_id=placeholder_shipment_id,
-                    sample_id=item_input.sample_id,
-                    amount_shipped=Amount(
-                        value=item_input.amount_value,
-                        unit=AmountUnit(item_input.amount_unit),
-                    ),
+            if input.loan_id is not None:
+                err = await _check_loan(
+                    input.loan_id,
+                    workspace_id=input.workspace_id,
+                    auth=auth,
+                    loan_repo=self._loan_repo,
+                    visibility=self._visibility,
                 )
-                for item_input in input.items
-            ]
+                if err is not None:
+                    return Failure(err)
+
+            # Placeholder shipment_id — Shipment.create() repoints items to its own id.
+            built = await _build_items(
+                input.items,
+                workspace_id=input.workspace_id,
+                shipment_id=uuid.uuid4(),
+                auth=auth,
+                plate_repo=self._plate_repo,
+                sample_repo=self._sample_repo,
+                visibility=self._visibility,
+            )
+            if isinstance(built, Failure):
+                return built
 
             shipment = Shipment.create(
                 workspace_id=input.workspace_id,
                 destination_org_id=input.destination_org_id,
                 sender_id=input.sender_id,
+                direction=input.direction,
+                loan_id=input.loan_id,
                 carrier=input.carrier,
                 expected_arrival_date=input.expected_arrival_date,
                 shipping_conditions=input.shipping_conditions,
                 notes=input.notes,
-                items=items,
+                items=built.unwrap(),
             )
-            # Shipment.create() now fixes item.shipment_id internally
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
@@ -365,12 +453,17 @@ class AddShipmentItem:
         uow: UnitOfWork,
         repo: ShipmentRepository,
         dispatcher: EventDispatcherProtocol,
-        sample_repo: SampleRepository | None = None,
+        *,
+        sample_repo: SampleRepository,
+        plate_repo: RegisteredPlateRepository,
+        visibility: PlateVisibilityService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._sample_repo = sample_repo
+        self._plate_repo = plate_repo
+        self._visibility = visibility
 
     async def __call__(
         self, input: AddShipmentItemCommand, auth: AuthContext | None = None
@@ -385,23 +478,18 @@ class AddShipmentItem:
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
 
-            # Verify sample belongs to this workspace
-            if self._sample_repo is not None:
-                sample = await self._sample_repo.find_by_id_in_workspace(
-                    input.workspace_id, input.sample_id
-                )
-                if sample is None:
-                    return Failure(NotFoundError("Sample", str(input.sample_id)))
-
-            item = ShipmentItem(
+            built = await _build_items(
+                [input.item],
+                workspace_id=input.workspace_id,
                 shipment_id=shipment.id,
-                sample_id=input.sample_id,
-                amount_shipped=Amount(
-                    value=input.amount_value,
-                    unit=AmountUnit(input.amount_unit),
-                ),
+                auth=auth,
+                plate_repo=self._plate_repo,
+                sample_repo=self._sample_repo,
+                visibility=self._visibility,
             )
-            shipment.add_item(item)
+            if isinstance(built, Failure):
+                return built
+            shipment.add_item(built.unwrap()[0])
 
             await self._repo.save(shipment)
             events = await self._uow.commit()
@@ -416,10 +504,15 @@ class UpdateShipment:
         uow: UnitOfWork,
         repo: ShipmentRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        loan_repo: PlateLoanRepository,
+        visibility: PlateVisibilityService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._loan_repo = loan_repo
+        self._visibility = visibility
 
     async def __call__(
         self, input: UpdateShipmentCommand, auth: AuthContext | None = None
@@ -433,6 +526,17 @@ class UpdateShipment:
             if shipment is None:
                 return Failure(NotFoundError("Shipment", str(input.shipment_id)))
 
+            if input.loan_id is not UNSET and input.loan_id is not None:
+                err = await _check_loan(
+                    input.loan_id,  # type: ignore[arg-type]
+                    workspace_id=input.workspace_id,
+                    auth=auth,
+                    loan_repo=self._loan_repo,
+                    visibility=self._visibility,
+                )
+                if err is not None:
+                    return Failure(err)
+
             try:
                 shipment.update_details(
                     carrier=input.carrier if input.carrier is not UNSET else ...,
@@ -443,6 +547,7 @@ class UpdateShipment:
                     if input.shipping_conditions is not UNSET
                     else ...,
                     notes=input.notes if input.notes is not UNSET else ...,
+                    loan_id=input.loan_id if input.loan_id is not UNSET else ...,
                 )
             except ValidationError as exc:
                 return Failure(exc)

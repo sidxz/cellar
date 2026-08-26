@@ -19,3 +19,5 @@ Plan: `docs/superpowers/plans/2026-08-14-s6-legacy-plate-tracker-migration.md`. 
 
 - **Name-based group dedup merging same-named sibling sets** was raised as a theoretical risk. It cannot occur here: legacy `APPS_PLATE_TRACKER_SET.set_name` is `UNIQUE`, so no two sets share a name. (Still worth eyeballing `groups_created` vs. the legacy set count during the dry-run.)
 - **`scripts/` ruff findings** (E501 noqa, dense style) are outside CI's lint scope (`ci.yml` lints `src/` only) and were accepted deliberately.
+
+**Status 2026-08-25 (S11/S12):** item 3 (`_set_plate_status` hard abort) closed — status conflicts are now recorded in `status_conflicts.csv` and the run continues; item 1 (no automated `read_legacy` test) still open, mitigated by the S11/S12 dry-runs and the real cutover against the live intranet DB; the remaining items stand as written.

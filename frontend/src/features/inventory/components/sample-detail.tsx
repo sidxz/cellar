@@ -27,6 +27,7 @@ import {
   useQuarantineSample,
   useSample,
 } from "../hooks/use-samples";
+import { useShipmentsForSample } from "../hooks/use-shipments";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import {
   CONTAINER_TYPE_LABELS,
@@ -35,6 +36,7 @@ import {
   type SampleStatus,
   type StorageLocation,
 } from "../types";
+import { ShipmentLinksCard } from "./shipment-links-card";
 
 interface SampleDetailProps {
   sampleId: string;
@@ -46,6 +48,7 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
   const query = useSample(sampleId);
   const { data: batch } = useBatch(query.data?.batch_id);
   const { data: locations } = useStorageLocations();
+  const shipmentsQuery = useShipmentsForSample(sampleId);
 
   const [aliquotOpen, setAliquotOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -176,6 +179,13 @@ export function SampleDetail({ sampleId }: SampleDetailProps) {
                   </div>
                 </Card>
               )}
+
+              <ShipmentLinksCard
+                title="Shipments"
+                rows={shipmentsQuery.data}
+                isLoading={shipmentsQuery.isLoading}
+                emptyText="Never shipped."
+              />
 
               {/* Attachments */}
               <Card className="p-6">

@@ -4,9 +4,13 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { ShipmentItemType } from './shipmentItemType';
+import type { ShipmentItemRequestAmountValue } from './shipmentItemRequestAmountValue';
+import type { ShipmentItemRequestAmountUnit } from './shipmentItemRequestAmountUnit';
 
 export interface ShipmentItemRequest {
-  sample_id: string;
-  amount_value: number;
-  amount_unit: string;
+  item_type: ShipmentItemType;
+  item_id: string;
+  amount_value?: ShipmentItemRequestAmountValue;
+  amount_unit?: ShipmentItemRequestAmountUnit;
 }

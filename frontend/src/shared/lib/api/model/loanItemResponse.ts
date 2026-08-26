@@ -5,6 +5,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LoanItemStatus } from './loanItemStatus';
+import type { LoanItemResponseGroupId } from './loanItemResponseGroupId';
+import type { LoanItemResponseGroupName } from './loanItemResponseGroupName';
 
 export interface LoanItemResponse {
   id: string;
@@ -13,4 +15,6 @@ export interface LoanItemResponse {
   plate_label: string;
   status: LoanItemStatus;
   status_changed_at: string;
+  group_id?: LoanItemResponseGroupId;
+  group_name?: LoanItemResponseGroupName;
 }

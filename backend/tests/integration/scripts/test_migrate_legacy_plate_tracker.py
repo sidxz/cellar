@@ -7,20 +7,26 @@ import pytest
 import sqlalchemy as sa
 from scripts.migrate_legacy_plate_tracker import (
     LegacyAccount,
+    LegacyActivity,
     LegacyData,
     LegacyLibrary,
     LegacyPlate,
+    LegacyPlateFormat,
     LegacySet,
     LegacySetPlate,
     LegacyTransaction,
     LegacyTransactionPlate,
     LoanItemSpec,
     LoanSpec,
+    LocationSpec,
+    UnmatchedPlate,
     apply_group_tree,
     apply_loan,
+    apply_locations,
     apply_plate_ownership,
     assign_plates_to_groups,
     backfill_null_owner,
+    create_missing_plates,
     match_plates,
     plan_group_tree,
     run_migration,
@@ -38,6 +44,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repositor
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.storage_location_repository import (
+    SQLAlchemyStorageLocationRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_link_repository import (
     RegisteredPlateTagLinkRepository,
@@ -134,11 +143,13 @@ async def test_apply_ownership_sets_owner_type_status_tags_inactive_and_is_idemp
             link_repo = RegisteredPlateTagLinkRepository(uow)
             matched, _ = await match_plates(legacy, plate_repo=plate_repo, cdd_repo=cdd_repo,
                                             workspace_id=ws, cdd_vault_id=VAULT)
-            await apply_plate_ownership(
+            stats, conflicts = await apply_plate_ownership(
                 legacy, matched, plate_repo=plate_repo, tag_repo=tag_repo,
                 plate_tag_link_repo=link_repo, uow=uow, workspace_id=ws,
                 internal_org_id=org, actor_id=org)
             await uow.commit()
+    assert stats["status_conflicts"] == 0
+    assert conflicts == []
     async with session_factory() as s:
         rows = (await s.execute(sa.text(
             "SELECT id, owner_org_id, plate_type, status FROM registered_plates "
@@ -155,6 +166,124 @@ async def test_apply_ownership_sets_owner_type_status_tags_inactive_and_is_idemp
     assert by_id[inactive]["plate_type"] == PlateType.COMPOUND_STORAGE.value
     assert by_id[inactive]["status"] == PlateStatus.DEPLETED.value   # registered→stored→depleted
     assert tagged == [inactive]   # legacy:inactive tagged once (idempotent), active untouched
+
+
+@pytest.mark.integration
+async def test_apply_plate_ownership_tolerates_status_conflict(session_factory) -> None:
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    plate = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=plate, barcode="900012", ws=ws, cdd_plate_id=103)
+        await s.execute(sa.text(
+            "UPDATE registered_plates SET status = 'disposed' WHERE id = :id"), {"id": plate})
+        await s.commit()
+    legacy = LegacyData(plates=[LegacyPlate(1, 103, "z", "P1", "Active", "MASTER", None)])
+    async with AsyncUnitOfWork(session_factory) as uow:
+        plate_repo = SQLAlchemyRegisteredPlateRepository(uow)
+        cdd_repo = CddPlateSyncRepository(uow)
+        tag_repo = SQLAlchemyTagRepository(uow)
+        link_repo = RegisteredPlateTagLinkRepository(uow)
+        matched, _ = await match_plates(legacy, plate_repo=plate_repo, cdd_repo=cdd_repo,
+                                        workspace_id=ws, cdd_vault_id=VAULT)
+        stats, conflicts = await apply_plate_ownership(
+            legacy, matched, plate_repo=plate_repo, tag_repo=tag_repo,
+            plate_tag_link_repo=link_repo, uow=uow, workspace_id=ws,
+            internal_org_id=org, actor_id=org)
+        await uow.commit()
+    assert stats["status_conflicts"] == 1
+    assert conflicts[0].legacy_plate_id == 1
+    assert conflicts[0].plate_barcode == "z"
+    assert conflicts[0].current_status == PlateStatus.DISPOSED.value
+    assert conflicts[0].target_status == PlateStatus.STORED.value
+    async with session_factory() as s:
+        status = (await s.execute(sa.text(
+            "SELECT status FROM registered_plates WHERE id = :id"), {"id": plate})).scalar_one()
+    assert status == PlateStatus.DISPOSED.value  # unchanged — conflict recorded, not forced
+
+
+@pytest.mark.integration
+async def test_apply_locations_builds_chain_and_is_idempotent(session_factory) -> None:
+    ws = uuid.uuid4()
+    specs = [LocationSpec(100001, "1148", "4"), LocationSpec(100004, "1203", "3")]
+    alias = {100002: 100001}
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyStorageLocationRepository(uow)
+        ids, created = await apply_locations(
+            specs, alias, location_repo=repo, workspace_id=ws,
+            site_name="TAMU", building_name="ILSB",
+        )
+        await uow.commit()
+    assert created == 1 + 1 + 2 + 2  # site, building, 2 rooms, 2 freezers
+    assert ids[100001] == ids[100002] and ids[100004] != ids[100001]
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyStorageLocationRepository(uow)
+        ids2, created2 = await apply_locations(
+            specs, alias, location_repo=repo, workspace_id=ws,
+            site_name="TAMU", building_name="ILSB",
+        )
+    assert created2 == 0 and ids2 == ids
+    async with session_factory() as s:
+        rows = (await s.execute(sa.text(
+            "SELECT name, type FROM storage_locations WHERE workspace_id = :ws ORDER BY name"
+        ), {"ws": ws})).all()
+    assert ("Freezer 4", "freezer") in rows
+    assert ("Room 1148", "room") in rows
+    assert ("TAMU", "site") in rows
+
+
+@pytest.mark.integration
+async def test_create_missing_plates_creates_with_format_location_and_cdd_sync(
+    session_factory,
+) -> None:
+    ws, org, actor = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    legacy = LegacyData(
+        plate_formats=[
+            LegacyPlateFormat(2501, "Invalid Plate Format", -1),
+            LegacyPlateFormat(2509, "384-well", 384),
+        ],
+        sets=[
+            LegacySet(
+                1, "SCREENING", "sac1-screening-1", "Solubilized", None, None, 10, 2509, 100001
+            )
+        ],
+        set_plates=[LegacySetPlate(1, 1), LegacySetPlate(1, 2)],
+        plates=[
+            LegacyPlate(1, 4242, "000001", "SAC1-1", "Active", "SCREENING", 10, 2509),
+            LegacyPlate(2, None, "000002", "SAC1-2", "Inactive", "MASTER", 10, 2501),
+            LegacyPlate(3, None, "000003", "SAC1-3", "Active", "BOGUS_ROLE", 10, None),
+        ],
+    )
+    unmatched = [
+        UnmatchedPlate(p.plate_id, p.plate_barcode, p.cdd_plate_id, "no match")
+        for p in legacy.plates
+    ]
+    freezer = uuid.uuid4()
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await uow.session.execute(sa.text(
+            "INSERT INTO storage_locations (id, workspace_id, name, type, version) "
+            "VALUES (:id, :ws, 'Freezer 4', 'freezer', 1)"
+        ), {"id": freezer, "ws": ws})
+        created_ids, created, still_unmatched = await create_missing_plates(
+            legacy, unmatched, plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            cdd_repo=CddPlateSyncRepository(uow), workspace_id=ws, internal_org_id=org,
+            actor_id=actor, cdd_vault_id=VAULT, location_ids={100001: freezer},
+        )
+        await uow.commit()
+    assert set(created_ids) == {1, 2}
+    assert [c.legacy_plate_id for c in still_unmatched] == [3]
+    assert {(c.plate_barcode, c.format) for c in created} == {("000001", "384"), ("000002", "384")}
+    async with session_factory() as s:
+        rows = (await s.execute(sa.text(
+            "SELECT barcode, plate_label, format, plate_type, owner_org_id, storage_location_id "
+            "FROM registered_plates WHERE workspace_id = :ws ORDER BY barcode"
+        ), {"ws": ws})).all()
+        sync = (await s.execute(sa.text(
+            "SELECT cdd_plate_id, plate_id FROM cdd_plate_sync WHERE workspace_id = :ws"
+        ), {"ws": ws})).all()
+    assert rows[0] == ("000001", "SAC1-1", "384", "assay", org, freezer)
+    assert rows[1][2] == "384"  # invalid own format → set's 384
+    assert sync == [(4242, created_ids[1])]
 
 
 @pytest.mark.asyncio
@@ -175,6 +304,52 @@ async def test_backfill_null_owner_only_touches_nulls(session_factory):
         got = (await s.execute(sa.text(
             "SELECT owner_org_id FROM registered_plates WHERE id = :id"), {"id": orphan})).scalar_one()
     assert got == org
+
+
+@pytest.mark.asyncio
+async def test_run_migration_leaves_unrelated_null_owner_plates_alone_by_default(
+    session_factory, tmp_path
+):
+    """I4: an unrelated NULL-owner plate (no legacy provenance at all) must
+    not be silently re-owned just because the migration ran."""
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    unrelated = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=unrelated, barcode="900060", ws=ws)  # owner NULL
+        await s.commit()
+    summary = await run_migration(
+        session_factory, LegacyData(), workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={}, actor_id=org, report_dir=tmp_path, dry_run=False,
+    )
+    assert summary["owner_backfilled"] == 0
+    assert (tmp_path / "owner_backfilled.csv").exists()
+    async with session_factory() as s:
+        owner = (await s.execute(sa.text(
+            "SELECT owner_org_id FROM registered_plates WHERE id = :id"), {"id": unrelated}
+        )).scalar_one()
+    assert owner is None
+
+
+@pytest.mark.asyncio
+async def test_run_migration_backfills_null_owners_when_flag_set(session_factory, tmp_path):
+    ws = uuid.uuid4()
+    org = uuid.uuid4()
+    orphan = uuid.uuid4()
+    async with session_factory() as s:
+        await _seed_plate(s, plate_id=orphan, barcode="900061", ws=ws)  # owner NULL
+        await s.commit()
+    summary = await run_migration(
+        session_factory, LegacyData(), workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={}, actor_id=org, report_dir=tmp_path, dry_run=False,
+        backfill_null_owners=True,
+    )
+    assert summary["owner_backfilled"] == 1
+    async with session_factory() as s:
+        owner = (await s.execute(sa.text(
+            "SELECT owner_org_id FROM registered_plates WHERE id = :id"), {"id": orphan}
+        )).scalar_one()
+    assert owner == org
 
 
 @pytest.mark.asyncio
@@ -246,7 +421,8 @@ async def test_apply_loan_reaches_target_states_and_is_idempotent(session_factor
             created_flags.append(await apply_loan(spec, loan_repo=loan_repo, workspace_id=ws,
                                                   internal_org_id=org))
             await uow.commit()
-    assert created_flags == [True, False]   # 2nd run skips (active plates already loaned)
+    assert created_flags[0] is not None
+    assert created_flags[1] is None  # 2nd run skips (already loaned)
     async with session_factory() as s:
         statuses = dict((await s.execute(sa.text(
             "SELECT plate_id, status FROM plate_loan_items WHERE plate_id IN (:a,:b,:c,:d)"),
@@ -271,8 +447,8 @@ async def test_apply_loan_skips_already_active_plate_in_partial_overlap(session_
                      [LoanItemSpec(p1, LoanItemStatus.CHECKED_OUT), LoanItemSpec(p2, LoanItemStatus.REQUESTED)])
     async with AsyncUnitOfWork(session_factory) as uow:
         loan_repo = SQLAlchemyPlateLoanRepository(uow)
-        assert await apply_loan(spec1, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is True
-        assert await apply_loan(spec2, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is True
+        assert await apply_loan(spec1, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is not None
+        assert await apply_loan(spec2, loan_repo=loan_repo, workspace_id=ws, internal_org_id=org) is not None
         await uow.commit()
     async with session_factory() as s:
         counts = dict((await s.execute(sa.text(
@@ -308,7 +484,9 @@ async def test_run_migration_end_to_end_summary(session_factory, tmp_path):
     assert summary["groups_created"] == 2   # library root + set
     assert summary["loans_created"] == 1
     assert summary["unmatched_plates"] == 0
+    assert summary["owner_backfilled"] == 0  # I4: off by default
     assert (tmp_path / "unmatched_plates.csv").exists()
+    assert (tmp_path / "owner_backfilled.csv").exists()
 
     # Full-pipeline idempotency: a 2nd run makes no new writes (runbook "re-run is safe").
     summary2 = await run_migration(
@@ -331,3 +509,89 @@ async def test_run_migration_end_to_end_summary(session_factory, tmp_path):
             "SELECT count(*) FROM plate_loan_items li JOIN plate_loans l ON l.id = li.loan_id "
             "WHERE l.workspace_id=:ws"), {"ws": ws})).scalar_one()
     assert (n_plates, n_groups, n_loans, n_items) == (1, 2, 1, 1)   # no duplication across 2 runs
+
+
+SYS = "(System Generated Comment) "
+
+
+def _closed_legacy_with_library() -> LegacyData:
+    # Same shape as the unit test's _closed_legacy(), plus a library/set so
+    # the SET_CMT comment's PlateGroup target exists, and plate_format_id set
+    # directly on the plates so create_missing_plates can register them.
+    t0 = datetime(2026, 5, 1, 9, 0)
+    return LegacyData(
+        libraries=[LegacyLibrary(10, "Lib A", "SacchettiniLibrary")],
+        sets=[LegacySet(1, "VENDOR", "sac1-vendor-X", "Solubilized", 7, None, 10)],
+        set_plates=[LegacySetPlate(1, 1)],
+        plate_formats=[LegacyPlateFormat(2507, "96-well", 96)],
+        plates=[
+            LegacyPlate(1, None, "000001", "P1", "Active", "MASTER", 10, 2507),
+            LegacyPlate(2, None, "000002", "P2", "Active", "MASTER", 10, 2507),
+        ],
+        transactions=[LegacyTransaction(5001, "CLOSED", 7, t0)],
+        accounts=[LegacyAccount(7, "jdoe", "j@tamu.edu", None, None, None)],
+        activities=[
+            LegacyActivity(1, "T_REQ_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been approved. Please scan them out from vault",
+                           7, datetime(2026, 5, 1, 10, 0)),
+            LegacyActivity(2, "T_REQ_CMT", 5001, None, None,
+                           SYS + "Plate P2 has been denied.", 7, datetime(2026, 5, 1, 10, 1)),
+            LegacyActivity(3, "T_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been scanned out from vault",
+                           7, datetime(2026, 5, 2, 8, 0)),
+            LegacyActivity(4, "T_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been scanned back in to the vault",
+                           7, datetime(2026, 5, 9, 8, 0)),
+            LegacyActivity(5, "T_CMT", 5001, None, None,
+                           SYS + "Transaction closed, all plates are checked back in",
+                           7, datetime(2026, 5, 9, 8, 1)),
+            LegacyActivity(6, "T_CMT", 5001, None, None,
+                           "1 ul used for nsp15 screening", 7, datetime(2026, 5, 3, 8, 0)),
+            LegacyActivity(7, "SET_CMT", 5001, None, 1,
+                           "[SET] sac1-vendor-X : 0.5 uL taken", 7, datetime(2026, 5, 9, 7, 0)),
+            LegacyActivity(8, "PLATE_CMT", 5001, 1, 1,
+                           "[PLATE] P1 : removed 12.5 uL", 7, datetime(2026, 5, 9, 7, 1)),
+            LegacyActivity(9, "T_CMT", 5001, None, None,
+                           SYS + "Weird unknown line", 7, datetime(2026, 5, 9, 9, 0)),
+        ],
+    )
+
+
+@pytest.mark.integration
+async def test_closed_loan_and_comments_end_to_end_and_idempotent(
+    session_factory, tmp_path
+) -> None:
+    ws, org, actor = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    legacy = _closed_legacy_with_library()
+    summary1 = await run_migration(
+        session_factory, legacy, workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={}, actor_id=actor, report_dir=tmp_path,
+        dry_run=False, site_name="TAMU", building_name="Main",
+    )
+    assert summary1["closed_loans_created"] == 1 and summary1["comments_created"] == 3
+    async with session_factory() as s:
+        loan = (await s.execute(sa.text(
+            "SELECT status, closed_at, created_at, notes FROM plate_loans WHERE workspace_id = :ws"
+        ), {"ws": ws})).one()
+        # plate_loan_items carries no workspace_id — scope through the loan
+        # (the DB is session-scoped/shared across tests; unscoped would pick
+        # up sibling tests' rows).
+        items = (await s.execute(sa.text(
+            "SELECT li.status, li.status_changed_at FROM plate_loan_items li "
+            "JOIN plate_loans l ON l.id = li.loan_id WHERE l.workspace_id = :ws ORDER BY li.status"
+        ), {"ws": ws})).all()
+        comments = (await s.execute(sa.text(
+            "SELECT target_type, body, loan_id IS NOT NULL, author_id IS NULL, created_at "
+            "FROM plate_comments WHERE workspace_id = :ws ORDER BY created_at"
+        ), {"ws": ws})).all()
+    assert loan[0] == "closed" and loan[2].date() == date(2026, 5, 1)
+    assert loan[3].startswith("Legacy transaction 5001")
+    assert {r[0] for r in items} == {"denied", "returned"}
+    assert [c[0] for c in comments] == ["plate_loan", "plate_group", "plate"]
+    assert all(c[2] for c in comments) and all(c[3] for c in comments)
+    summary2 = await run_migration(
+        session_factory, legacy, workspace_id=ws, internal_org_id=org,
+        cdd_vault_id=VAULT, user_map={}, actor_id=actor, report_dir=tmp_path,
+        dry_run=False, site_name="TAMU", building_name="Main",
+    )
+    assert summary2["closed_loans_created"] == 0 and summary2["comments_created"] == 0

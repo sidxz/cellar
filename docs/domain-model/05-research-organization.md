@@ -9,6 +9,8 @@ Supporting subdomain for organizing research work — projects as logical groupi
 
 ---
 
+**Cross-context link (S16, 2026-08-26):** Inventory `PlateGroup.collection_id` (optional, any tree level) points at a `Collection` as its physical realization. Collections stay abstract (membership = molecules); the plates, custody and storage live on the group side. `GET /collections/{id}/plate-groups` is the reverse read.
+
 ## Aggregates
 
 ### Project

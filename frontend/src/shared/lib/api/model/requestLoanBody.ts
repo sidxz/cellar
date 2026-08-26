@@ -7,6 +7,7 @@
 import type { RequestLoanBodyPlateIds } from './requestLoanBodyPlateIds';
 import type { RequestLoanBodyBarcodes } from './requestLoanBodyBarcodes';
 import type { RequestLoanBodyGroupId } from './requestLoanBodyGroupId';
+import type { RequestLoanBodyBorrowerOrgId } from './requestLoanBodyBorrowerOrgId';
 import type { RequestLoanBodyDueDate } from './requestLoanBodyDueDate';
 import type { RequestLoanBodyNotes } from './requestLoanBodyNotes';
 
@@ -14,6 +15,7 @@ export interface RequestLoanBody {
   plate_ids?: RequestLoanBodyPlateIds;
   barcodes?: RequestLoanBodyBarcodes;
   group_id?: RequestLoanBodyGroupId;
+  borrower_org_id?: RequestLoanBodyBorrowerOrgId;
   due_date?: RequestLoanBodyDueDate;
   notes?: RequestLoanBodyNotes;
 }

@@ -1,22 +1,50 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+import uuid
+from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 from scripts.migrate_legacy_plate_tracker import (
-    LegacyAccount, LegacyData, LegacyLibrary, LegacySet, LegacySetParent,
-    LegacyTransaction, LegacyTransactionPlate,
-    build_account_email_map, compose_set_description, due_date_from,
-    map_loan_item_status, map_plate_status, map_plate_type, plan_group_tree,
+    LegacyAccount,
+    LegacyActivity,
+    LegacyData,
+    LegacyLibrary,
+    LegacyLocation,
+    LegacyPlate,
+    LegacySet,
+    LegacySetParent,
+    LegacyTransaction,
+    LegacyTransactionPlate,
+    LocationSpec,
+    UnmappedUser,
+    build_account_email_map,
+    compose_set_description,
+    due_date_from,
+    format_for_plate,
+    full_name,
+    historical_plate_names,
+    localize_legacy,
+    map_loan_item_status,
+    map_plate_status,
+    map_plate_type,
+    open_transactions,
+    parse_system_line,
+    plan_closed_loans,
+    plan_comments,
+    plan_group_tree,
     plan_loans,
+    plan_locations,
+    plan_unmapped_users,
 )
 
-from cellar.domain.inventory.enums import LoanItemStatus, PlateStatus, PlateType
+from cellar.domain.inventory.enums import CommentTarget, LoanItemStatus, PlateStatus, PlateType
+from cellar.domain.shared.enums import PlateFormat
 
 
 def _acct(uin: int, netid: str, email: str | None, alt: str | None = None) -> LegacyAccount:
     return LegacyAccount(uin=uin, netid=netid, email=email, alt_email=alt,
-                         first_name="F", last_name="L")
+                         first_name=None, last_name=None)
 
 
 def test_build_account_email_map_uses_email_and_skips_placeholders():
@@ -82,11 +110,30 @@ def test_due_date_is_last_activity_plus_14_days():
     assert due_date_from(datetime(2024, 1, 4, 11, 15)) == date(2024, 1, 18)
 
 
+def test_due_date_uses_local_calendar_date_for_aware_input() -> None:
+    # 23:30 America/Chicago on May 1 is already May 2 in UTC — due date must
+    # still be the LOCAL calendar date (May 1) + 14 days, not May 2 + 14.
+    dt = datetime(2026, 5, 1, 23, 30, tzinfo=ZoneInfo("America/Chicago")).astimezone(UTC)
+    assert due_date_from(dt) == date(2026, 5, 15)
+
+
+def test_localize_legacy_converts_chicago_wall_clock_to_utc() -> None:
+    # May -> CDT (UTC-5)
+    assert localize_legacy(datetime(2026, 5, 1, 10, 0), "America/Chicago") == datetime(
+        2026, 5, 1, 15, 0, tzinfo=UTC
+    )
+    # January -> CST (UTC-6)
+    assert localize_legacy(datetime(2026, 1, 15, 10, 0), "America/Chicago") == datetime(
+        2026, 1, 15, 16, 0, tzinfo=UTC
+    )
+
+
 def test_compose_set_description_includes_state_scientist_conditions():
     s = LegacySet(set_id=1, set_type="SCREENING", set_name="S", set_state="Solubilized",
                   scientist=42, generating_conditions="DMSO 10mM", library_id=None)
     out = compose_set_description(s, {42: "Ann Lee"})
-    assert "Solubilized" in out and "Ann Lee" in out and "DMSO 10mM" in out
+    assert "Solubilized" not in out and "Ann Lee" not in out
+    assert "DMSO 10mM" in out
 
 
 def test_plan_group_tree_roots_by_library_and_nests_sets():
@@ -134,3 +181,294 @@ def test_plan_loans_resolves_requester_maps_states_and_reports_unresolved():
     assert targets[p_ok] == LoanItemStatus.CHECKED_OUT
     assert list(targets.values()).count(LoanItemStatus.REQUESTED) == 1
     assert [u.transaction_id for u in unresolved] == [2]
+
+
+def test_format_for_plate_prefers_plate_then_set_then_96() -> None:
+    formats = {2501: -1, 2507: 96, 2509: 384}
+    p384 = LegacyPlate(1, None, "000001", "P1", "Active", "MASTER", 10, 2509)
+    pinv = LegacyPlate(2, None, "000002", "P2", "Active", "MASTER", 10, 2501)
+    pnone = LegacyPlate(3, None, "000003", "P3", "Active", "MASTER", 10, None)
+    s384 = LegacySet(1, "MASTER_TWIN", "S", "Dry", None, None, 10, 2509)
+    assert format_for_plate(p384, None, formats) is PlateFormat.F384
+    assert format_for_plate(pinv, s384, formats) is PlateFormat.F384
+    assert format_for_plate(pinv, None, formats) is PlateFormat.F96
+    assert format_for_plate(pnone, None, formats) is PlateFormat.F96
+
+
+def test_full_name_falls_back_to_netid_then_uin() -> None:
+    assert full_name(_acct(1, "jdoe", "j@x.org")) == "jdoe"
+    assert full_name(LegacyAccount(2, "", None, None, " Jane ", "Doe")) == "Jane Doe"
+    assert full_name(LegacyAccount(3, "", None, None, None, None)) == "UIN 3"
+
+
+def test_plan_locations_skips_unknown_and_dedupes() -> None:
+    legacy = LegacyData(
+        locations=[
+            LegacyLocation(100001, "1148", "4"),
+            LegacyLocation(100002, "1148", "4"),
+            LegacyLocation(100003, "UNKNOWN", "UNKNOWN"),
+            LegacyLocation(100004, "1203", "3"),
+        ]
+    )
+    specs, alias = plan_locations(legacy)
+    assert [(s.room_no, s.freezer) for s in specs] == [("1148", "4"), ("1203", "3")]
+    assert alias == {100002: 100001}
+    assert specs[0] == LocationSpec(100001, "1148", "4")
+
+
+def test_open_transactions_filters_closed() -> None:
+    now = datetime(2026, 8, 1)
+    legacy = LegacyData(
+        transactions=[
+            LegacyTransaction(5001, "OPEN", 1, now),
+            LegacyTransaction(5002, "CLOSED", 1, now),
+        ]
+    )
+    assert [t.transaction_id for t in open_transactions(legacy)] == [5001]
+
+
+def test_compose_set_description_no_longer_folds_state_and_scientist() -> None:
+    s = LegacySet(
+        1, "VENDOR", "sac1-vendor-X", "Solubilized", 7, "Compounds selected by T.", 10,
+        2507, 100001, 0.0, 10.0, 17606, "file.sdf", "Purchased from Asinex",
+    )
+    desc = compose_set_description(s, {7: "Jane Doe"})
+    assert desc is not None
+    assert "Solubilized" not in desc and "Jane" not in desc
+    assert "Compounds selected by T." in desc
+    assert "file.sdf" in desc and "Purchased from Asinex" in desc
+
+
+def test_plan_group_tree_carries_metadata() -> None:
+    legacy = LegacyData(
+        libraries=[LegacyLibrary(10, "Lib A", "SacchettiniLibrary")],
+        sets=[
+            LegacySet(
+                1, "VENDOR", "sac1-vendor-X", "Solubilized", 7, None, 10,
+                2507, 100001, 55.0, 10.0, 17606, None, None,
+            )
+        ],
+    )
+    specs = plan_group_tree(legacy, {7: "Jane Doe"})
+    vendor = next(g for g in specs if g.key == "set:1")
+    assert (vendor.state, vendor.location_id, vendor.initial_volume_ul) == (
+        "Solubilized", 100001, 55.0,
+    )
+    assert (vendor.initial_concentration_mm, vendor.compound_count, vendor.scientist) == (
+        10.0, 17606, "Jane Doe",
+    )
+
+
+SYS = "(System Generated Comment) "
+
+
+@pytest.mark.parametrize(
+    "line, kind, name, status",
+    [
+        (SYS + "Plate AbbVie_QD-1-4084 has been approved. Please scan them out from vault",
+         "plate", "AbbVie_QD-1-4084", LoanItemStatus.APPROVED),
+        (SYS + "Plate X has been approved for check-in. Please scan them back to vault",
+         "plate", "X", LoanItemStatus.RETURN_PENDING),
+        (SYS + "Plate X Y has been scanned out from vault",
+         "plate", "X Y", LoanItemStatus.CHECKED_OUT),
+        (SYS + "Plate X has been scanned back in to the vault",
+         "plate", "X", LoanItemStatus.RETURNED),
+        (SYS + "Plate X has been denied.", "plate", "X", LoanItemStatus.DENIED),
+        (SYS + "Status for TBAC-1 has been Overridden to 'Assigned' by Admin manpal",
+         "plate", "TBAC-1", LoanItemStatus.CHECKED_OUT),
+        (SYS + "Transaction closed, all plates are checked back in", "close", None, None),
+        (SYS + "Transaction closed, status overridden by Admin dwight.baker", "close", None, None),
+        (SYS + "All transaction's plates are denied. Transaction Closed", "close", None, None),
+    ],
+)
+def test_parse_system_line(line, kind, name, status) -> None:
+    parsed = parse_system_line(line)
+    assert parsed is not None
+    assert (parsed.kind, parsed.plate_name, parsed.status) == (kind, name, status)
+
+
+def test_parse_system_line_rejects_human_and_unknown() -> None:
+    assert parse_system_line("By Friday") is None
+    assert parse_system_line(SYS + "Something new we never saw") is None
+
+
+def _closed_legacy() -> LegacyData:
+    t0 = datetime(2026, 5, 1, 9, 0)
+    return LegacyData(
+        plates=[LegacyPlate(1, None, "000001", "P1", "Active", "MASTER", 10),
+                LegacyPlate(2, None, "000002", "P2", "Active", "MASTER", 10)],
+        transactions=[LegacyTransaction(5001, "CLOSED", 7, t0)],
+        accounts=[_acct(7, "jdoe", "j@tamu.edu")],
+        activities=[
+            LegacyActivity(1, "T_REQ_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been approved. Please scan them out from vault",
+                           7, datetime(2026, 5, 1, 10, 0)),
+            LegacyActivity(2, "T_REQ_CMT", 5001, None, None,
+                           SYS + "Plate P2 has been denied.", 7, datetime(2026, 5, 1, 10, 1)),
+            LegacyActivity(3, "T_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been scanned out from vault",
+                           7, datetime(2026, 5, 2, 8, 0)),
+            LegacyActivity(4, "T_CMT", 5001, None, None,
+                           SYS + "Plate P1 has been scanned back in to the vault",
+                           7, datetime(2026, 5, 9, 8, 0)),
+            LegacyActivity(5, "T_CMT", 5001, None, None,
+                           SYS + "Transaction closed, all plates are checked back in",
+                           7, datetime(2026, 5, 9, 8, 1)),
+            LegacyActivity(6, "T_CMT", 5001, None, None,
+                           "1 ul used for nsp15 screening", 7, datetime(2026, 5, 3, 8, 0)),
+            LegacyActivity(7, "SET_CMT", 5001, None, 1,
+                           "[SET] sac1-vendor-X : 0.5 uL taken", 7, datetime(2026, 5, 9, 7, 0)),
+            LegacyActivity(8, "PLATE_CMT", 5001, 1, 1,
+                           "[PLATE] P1 : removed 12.5 uL", 7, datetime(2026, 5, 9, 7, 1)),
+            LegacyActivity(9, "T_CMT", 5001, None, None,
+                           SYS + "Weird unknown line", 7, datetime(2026, 5, 9, 9, 0)),
+        ],
+    )
+
+
+def test_plan_closed_loans_reconstructs_items_and_timestamps() -> None:
+    legacy = _closed_legacy()
+    p1, p2, actor, user = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    specs, unparsed = plan_closed_loans(
+        legacy, {"P1": p1, "P2": p2}, {7: "j@tamu.edu"}, {"j@tamu.edu": user}, actor,
+        {7: "Jane Doe"},
+    )
+    assert [u.act_id for u in unparsed] == [9]
+    (spec,) = specs
+    assert spec.transaction_id == 5001 and spec.requester_user_id == user
+    assert spec.requester_name == "Jane Doe"
+    assert spec.created_at == datetime(2026, 5, 1, 9, 0)
+    assert spec.closed_at == datetime(2026, 5, 9, 8, 1)
+    assert spec.due_date == datetime(2026, 5, 15).date()
+    by_plate = {i.cellar_plate_id: i for i in spec.items}
+    assert by_plate[p1].status is LoanItemStatus.RETURNED
+    assert by_plate[p1].status_changed_at == datetime(2026, 5, 9, 8, 0)
+    assert by_plate[p2].status is LoanItemStatus.DENIED
+    assert by_plate[p2].status_changed_at == datetime(2026, 5, 1, 10, 1)
+
+
+def test_plan_closed_loans_unmapped_requester_falls_back_to_actor() -> None:
+    legacy = _closed_legacy()
+    actor = uuid.uuid4()
+    specs, _ = plan_closed_loans(
+        legacy, {"P1": uuid.uuid4(), "P2": uuid.uuid4()}, {7: "j@tamu.edu"}, {}, actor,
+        {7: "Jane Doe"},
+    )
+    assert specs[0].requester_user_id == actor and specs[0].requester_name == "Jane Doe"
+
+
+def test_historical_plate_names_recovers_renamed_plate() -> None:
+    p1 = uuid.uuid4()
+    legacy = LegacyData(
+        plates=[LegacyPlate(1, None, "000001", "P1-new", "Active", "MASTER", 10)],
+        activities=[
+            LegacyActivity(
+                1, "T_REQ_CMT", 5001, 1, None,
+                SYS + "Plate P1-old has been approved. Please scan them out from vault",
+                7, datetime(2026, 5, 1, 10, 0),
+            ),
+        ],
+    )
+    assert historical_plate_names(legacy, {1: p1}) == {"P1-old": p1}
+    # a plate_id that never matched a cellar plate contributes nothing
+    assert historical_plate_names(legacy, {}) == {}
+
+
+def test_plan_closed_loans_resolves_renamed_plate_via_historical_map() -> None:
+    """I1: the current PLATE.plate_name is "P1-new" but every system line for
+    this closed transaction names the plate's old, pre-rename name — only
+    resolvable via ACTIVITY_LOG.plate_id (historical_plate_names)."""
+    p1 = uuid.uuid4()
+    legacy = LegacyData(
+        plates=[LegacyPlate(1, None, "000001", "P1-new", "Active", "MASTER", 10)],
+        transactions=[LegacyTransaction(5001, "CLOSED", 7, datetime(2026, 5, 1, 9, 0))],
+        accounts=[_acct(7, "jdoe", "j@tamu.edu")],
+        activities=[
+            LegacyActivity(
+                1, "T_REQ_CMT", 5001, 1, None,
+                SYS + "Plate P1-old has been approved. Please scan them out from vault",
+                7, datetime(2026, 5, 1, 10, 0),
+            ),
+            LegacyActivity(
+                2, "T_CMT", 5001, 1, None,
+                SYS + "Plate P1-old has been scanned out from vault",
+                7, datetime(2026, 5, 2, 8, 0),
+            ),
+            LegacyActivity(
+                3, "T_CMT", 5001, 1, None,
+                SYS + "Plate P1-old has been scanned back in to the vault",
+                7, datetime(2026, 5, 9, 8, 0),
+            ),
+            LegacyActivity(
+                4, "T_CMT", 5001, None, None,
+                SYS + "Transaction closed, all plates are checked back in",
+                7, datetime(2026, 5, 9, 8, 1),
+            ),
+        ],
+    )
+    matched = {1: p1}
+    # name-only map (no I1) would only know the CURRENT name "P1-new" and
+    # never resolve "P1-old" — merge historical in, current still wins.
+    plate_id_by_name = {**historical_plate_names(legacy, matched), "P1-new": p1}
+    specs, unparsed = plan_closed_loans(
+        legacy, plate_id_by_name, {7: "j@tamu.edu"}, {"j@tamu.edu": uuid.uuid4()},
+        uuid.uuid4(), {7: "Jane Doe"},
+    )
+    assert unparsed == []
+    (spec,) = specs
+    (item,) = spec.items
+    assert item.cellar_plate_id == p1
+    assert item.status is LoanItemStatus.RETURNED
+
+
+def test_plan_comments_targets_and_prefix_stripping() -> None:
+    legacy = _closed_legacy()
+    loan, group, p1, user = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    specs = plan_comments(
+        legacy, txn_loan_ids={5001: loan}, set_group_ids={1: group}, plate_ids={1: p1},
+        account_email={7: "j@tamu.edu"}, user_map={"j@tamu.edu": user},
+        account_names={7: "Jane Doe"},
+    )
+    assert len(specs) == 3  # the 6 system lines are not comments
+    by_target = {(s.target_type, s.target_id): s for s in specs}
+    loan_c = by_target[(CommentTarget.PLATE_LOAN, loan)]
+    assert loan_c.body == "1 ul used for nsp15 screening"
+    assert loan_c.loan_id == loan and loan_c.author_id == user
+    assert by_target[(CommentTarget.PLATE_GROUP, group)].body == "0.5 uL taken"
+    plate_c = by_target[(CommentTarget.PLATE, p1)]
+    assert plate_c.body == "removed 12.5 uL" and plate_c.loan_id == loan
+    assert plate_c.author_name == "Jane Doe"
+    assert plate_c.created_at == datetime(2026, 5, 9, 7, 1)
+
+
+def test_plan_unmapped_users_counts_open_closed_and_comments() -> None:
+    legacy = LegacyData(
+        transactions=[
+            LegacyTransaction(1, "OPEN", 42, datetime(2024, 1, 4)),  # unmapped requester
+            LegacyTransaction(2, "CLOSED", 42, datetime(2024, 1, 5)),  # same UIN, closed
+            LegacyTransaction(3, "OPEN", 77, datetime(2024, 1, 6)),  # resolved — excluded
+        ],
+        activities=[
+            LegacyActivity(1, "T_CMT", 1, None, None, "left a note", 42,
+                           datetime(2024, 1, 4, 9, 0)),
+            LegacyActivity(2, "T_CMT", 1, None, None,
+                           SYS + "Transaction closed, all plates are checked back in",
+                           42, datetime(2024, 1, 4, 10, 0)),  # system line — never a comment
+            LegacyActivity(3, "SET_CMT", 1, None, 1, "[SET] X : note", 77,
+                           datetime(2024, 1, 4, 11, 0)),  # resolved author — excluded
+        ],
+        accounts=[_acct(42, "bob", "bob@x.org"), _acct(77, "ann", "ann@x.org")],
+    )
+    account_email = build_account_email_map(legacy.accounts)
+    account_names = {42: "Bob Doe", 77: "Ann Lee"}
+    user_map = {"ann@x.org": uuid.uuid4()}  # 77 resolved, 42 not
+    out = plan_unmapped_users(legacy, account_email, user_map, account_names)
+    assert out == [UnmappedUser(uin=42, email="bob@x.org", name="Bob Doe",
+                                 open_txns=1, closed_txns=1, comments=1)]
+
+
+def test_plan_unmapped_users_falls_back_to_uin_placeholder_name_and_none_email() -> None:
+    legacy = LegacyData(transactions=[LegacyTransaction(9, "OPEN", 99, datetime(2024, 1, 1))])
+    out = plan_unmapped_users(legacy, {}, {}, {})
+    assert out == [UnmappedUser(uin=99, email=None, name="UIN 99",
+                                 open_txns=1, closed_txns=0, comments=0)]

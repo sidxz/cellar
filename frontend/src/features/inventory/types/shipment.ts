@@ -1,9 +1,13 @@
 import type {
   CellarInterfaceRoutesShipmentsImportPreviewResponse,
+  CreateShipmentRequest,
   FieldCorrectionResponse,
   OriginalRowResponse,
+  ResolvedItemResponse,
   ResolvedRowResponse,
+  ShipmentItemRequest,
   ShipmentItemResponse,
+  ShipmentLinkResponse,
   ShipmentResponse,
   ShipmentSummaryResponse,
 } from "@/shared/lib/api/model";
@@ -15,6 +19,15 @@ import type {
 export type ShipmentItem = ShipmentItemResponse;
 export type Shipment = ShipmentResponse;
 export type ShipmentSummary = ShipmentSummaryResponse;
+/** A shipment as seen from a plate, a sample or a loan page (newest first). */
+export type ShipmentLink = ShipmentLinkResponse;
+/** One pasted barcode → plate / sample, or an error. */
+export type ResolvedItem = ResolvedItemResponse;
+
+// --- Create bodies (aliased) ---
+
+export type ShipmentItemInput = ShipmentItemRequest;
+export type CreateShipmentInput = CreateShipmentRequest;
 
 // --- CSV Import preview DTOs (aliased) ---
 
@@ -37,22 +50,3 @@ export const SHIPMENT_STATUS_LABELS: Record<ShipmentStatus, string> = {
   delivered: "Delivered",
   returned: "Returned",
 };
-
-// ---------------------------------------------------------------------------
-// Client-only form-input shapes for create mutations.
-// ---------------------------------------------------------------------------
-
-export interface ShipmentItemInput {
-  sample_id: string;
-  amount_value: number;
-  amount_unit: string;
-}
-
-export interface CreateShipmentInput {
-  destination_org_id: string;
-  carrier?: string | null;
-  expected_arrival_date?: string | null;
-  shipping_conditions?: string | null;
-  notes?: string | null;
-  items: ShipmentItemInput[];
-}

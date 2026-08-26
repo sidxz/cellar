@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from cellar.application.inventory.plate_groups import build_tree, is_descendant
+from cellar.application.inventory.plate_groups import build_tree, derive_format, is_descendant
 from cellar.domain.inventory.plate_group import PlateGroup
 
 WS = uuid.uuid4()
@@ -66,3 +66,23 @@ def test_is_descendant_tolerates_broken_chain() -> None:
     stray = _g("Stray", parent=uuid.uuid4())  # parent not in map
     by_id = {stray.id: stray}
     assert is_descendant(by_id, uuid.uuid4(), stray.id) is False
+
+
+def test_derive_format_none_single_mixed() -> None:
+    assert derive_format([]) is None
+    assert derive_format(["96"]) == "96"
+    assert derive_format(["384", "384"]) == "384"
+    assert derive_format(["96", "384"]) == "mixed"
+
+
+def test_build_tree_carries_plate_format_and_metadata() -> None:
+    root = _g("Root")
+    a = _g("A", parent=root.id)
+    nodes = build_tree([root, a], {a.id: 2}, {a.id: ["96", "384"], root.id: ["96"]})
+    assert nodes[0].plate_format == "96"
+    assert nodes[0].children[0].plate_format == "mixed"
+
+
+def test_build_tree_formats_default_to_none() -> None:
+    root = _g("Root")
+    assert build_tree([root], {})[0].plate_format is None

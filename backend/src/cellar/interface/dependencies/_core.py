@@ -7,6 +7,7 @@ Everything else in the package imports :func:`_get_use_case` from here.
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Annotated, Any
 
 from fastapi import Depends, Request
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.audit.audit_recording_service import AuditRecordingService
 from cellar.application.inventory.salt_matcher import SaltMatcher
+from cellar.application.shared.actor_context import set_current_actor
 from cellar.application.shared.unit_of_work import (
     UnitOfWork,  # noqa: F401  (re-exported for compat)
 )
@@ -180,11 +182,12 @@ async def get_auth(
     Also binds the authenticated user/workspace into the logging context and
     onto ``request.state`` so the access-log line can include them.
     """
-    user_id = getattr(auth, "user_id", None)
+    raw_user_id = getattr(auth, "user_id", None)
     workspace_id = getattr(auth, "workspace_id", None)
-    user_id = str(user_id) if user_id is not None else None
+    user_id = str(raw_user_id) if raw_user_id is not None else None
     workspace_id = str(workspace_id) if workspace_id is not None else None
     bind_user_context(user_id=user_id, workspace_id=workspace_id)
+    set_current_actor(raw_user_id if isinstance(raw_user_id, uuid.UUID) else None)
     request.state.user_id = user_id
     request.state.workspace_id = workspace_id
     return auth

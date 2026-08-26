@@ -9,6 +9,7 @@ function renderWithConfig(uiVersion: string) {
     apiUrl: "",
     appUrl: "",
     duarUrl: "",
+    protCellarUrl: "",
     idpProvider: "google",
     googleClientId: "",
     entraIdClientId: "",

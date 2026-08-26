@@ -37,6 +37,7 @@ import { useProtocolTestCounts } from "../hooks/use-protocol-test-counts";
 import { useViewMode } from "../lib/use-view-mode";
 import type { ViewMode } from "../lib/use-view-mode";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
+import { CollectionPlateGroupsCard } from "./collection-plate-groups-card";
 import { CollectionHeader } from "./collection/collection-header";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import { ResultsSurface } from "./results/results-surface";
@@ -251,6 +252,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
             <div className="mt-0.5">
               <TagTable entity="collections" entityId={collection.id} canEdit={canEditTags} />
             </div>
+
+            <CollectionPlateGroupsCard collectionId={collection.id} />
 
             <ResultsSurface
               molecules={molecules}

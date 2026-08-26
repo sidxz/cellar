@@ -6,6 +6,11 @@ import type { ReactNode } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { RequestLoanDialog } from "./request-loan-dialog";
 
+const { pushMock } = vi.hoisted(() => ({ pushMock: vi.fn() }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: pushMock }),
+}));
 vi.mock("@/shared/lib/api/custom-instance", () => ({
   API_V1: "/api/v1",
   customInstance: vi.fn(),
@@ -36,18 +41,30 @@ beforeAll(() => {
   }
 });
 
-function setup() {
+function setup(
+  props: Partial<Parameters<typeof RequestLoanDialog>[0]> = {},
+  treeRoots: unknown[] = [],
+) {
   mocked.mockReset();
   mockedSaveText.mockReset();
+  pushMock.mockReset();
   mocked.mockImplementation((opts: { url: string; method: string }) => {
-    if (opts.method === "GET") return Promise.resolve({ roots: [] }); // group tree
+    if (opts.url === "/api/v1/orgs") {
+      return Promise.resolve([
+        { id: "org1", slug: "org1", name: "Org One" },
+        { id: "org2", slug: "org2", name: "Org Two" },
+      ]);
+    }
+    if (opts.method === "GET") return Promise.resolve({ roots: treeRoots }); // group tree
     return Promise.resolve({ id: "loan1", items: [] }); // POST request-loan
   });
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return render(<RequestLoanDialog open onOpenChange={() => {}} orgId="org1" />, { wrapper });
+  return render(<RequestLoanDialog open onOpenChange={() => {}} orgId="org1" {...props} />, {
+    wrapper,
+  });
 }
 
 describe("RequestLoanDialog", () => {
@@ -73,6 +90,36 @@ describe("RequestLoanDialog", () => {
         }),
       ),
     );
+  });
+
+  it("sends borrower_org_id only when a foreign org is selected, and the button reads Lend", async () => {
+    setup();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /paste/i }));
+    fireEvent.change(screen.getByPlaceholderText(/one barcode per line/i), {
+      target: { value: "005261\n" },
+    });
+
+    // Default: self-checkout — no borrower_org_id, button reads "Request loan".
+    fireEvent.click(screen.getByRole("button", { name: /request loan/i }));
+    await waitFor(() => expect(mocked).toHaveBeenCalled());
+    const defaultCall = mocked.mock.calls.find(
+      ([opts]) => (opts as { url: string }).url === "/api/v1/plate-loans",
+    );
+    expect(defaultCall?.[0]).not.toHaveProperty("data.borrower_org_id");
+
+    // Pick a foreign org — borrower_org_id is sent, button reads "Lend".
+    fireEvent.click(await screen.findByLabelText(/borrower organization/i));
+    fireEvent.click(await screen.findByRole("option", { name: "Org Two" }));
+    const lendButton = screen.getByRole("button", { name: "Lend" });
+    fireEvent.click(lendButton);
+    await waitFor(() => {
+      const lendCall = mocked.mock.calls
+        .filter(([opts]) => (opts as { url: string }).url === "/api/v1/plate-loans")
+        .at(-1);
+      expect(lendCall?.[0]).toEqual(
+        expect.objectContaining({ data: expect.objectContaining({ borrower_org_id: "org2" }) }),
+      );
+    });
   });
 
   it("download-template button saves a Barcode-headed CSV", () => {
@@ -102,5 +149,38 @@ describe("RequestLoanDialog", () => {
         }),
       ),
     );
+  });
+
+  it("preselects initialGroupId in the group select and submits its id", async () => {
+    setup({ initialGroupId: "g2" }, [
+      { id: "g1", name: "Group One", plate_count: 2, children: [] },
+      { id: "g2", name: "Group Two", plate_count: 5, children: [] },
+    ]);
+    await waitFor(() =>
+      expect(screen.getByLabelText(/plate group/i)).toHaveTextContent("Group Two (5)"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /request loan/i }));
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "/api/v1/plate-loans",
+          method: "POST",
+          data: expect.objectContaining({ group_id: "g2" }),
+        }),
+      ),
+    );
+  });
+
+  it("initialBarcodes opens in paste mode pre-filled, and success navigates to the loan", async () => {
+    setup({ initialBarcodes: ["005131", "005132"] });
+    const box = screen.getByLabelText("Barcodes") as HTMLTextAreaElement;
+    expect(box.value).toBe("005131\n005132");
+    fireEvent.click(screen.getByRole("button", { name: "Request loan" }));
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({ method: "POST", data: { barcodes: ["005131", "005132"] } }),
+      ),
+    );
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/inventory/loans/loan1"));
   });
 });

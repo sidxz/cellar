@@ -7,9 +7,23 @@
 import type { UpdatePlateGroupBodyName } from './updatePlateGroupBodyName';
 import type { UpdatePlateGroupBodyGroupType } from './updatePlateGroupBodyGroupType';
 import type { UpdatePlateGroupBodyDescription } from './updatePlateGroupBodyDescription';
+import type { UpdatePlateGroupBodyState } from './updatePlateGroupBodyState';
+import type { UpdatePlateGroupBodyStorageLocationId } from './updatePlateGroupBodyStorageLocationId';
+import type { UpdatePlateGroupBodyInitialVolumeUl } from './updatePlateGroupBodyInitialVolumeUl';
+import type { UpdatePlateGroupBodyInitialConcentrationMm } from './updatePlateGroupBodyInitialConcentrationMm';
+import type { UpdatePlateGroupBodyCompoundCount } from './updatePlateGroupBodyCompoundCount';
+import type { UpdatePlateGroupBodyScientist } from './updatePlateGroupBodyScientist';
+import type { UpdatePlateGroupBodyCollectionId } from './updatePlateGroupBodyCollectionId';
 
 export interface UpdatePlateGroupBody {
   name?: UpdatePlateGroupBodyName;
   group_type?: UpdatePlateGroupBodyGroupType;
   description?: UpdatePlateGroupBodyDescription;
+  state?: UpdatePlateGroupBodyState;
+  storage_location_id?: UpdatePlateGroupBodyStorageLocationId;
+  initial_volume_ul?: UpdatePlateGroupBodyInitialVolumeUl;
+  initial_concentration_mm?: UpdatePlateGroupBodyInitialConcentrationMm;
+  compound_count?: UpdatePlateGroupBodyCompoundCount;
+  scientist?: UpdatePlateGroupBodyScientist;
+  collection_id?: UpdatePlateGroupBodyCollectionId;
 }

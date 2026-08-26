@@ -2,16 +2,18 @@
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import {
+  type GroupCommentBody,
   type LoanItemResponse,
   LoanItemStatus,
   type LoanResponse,
   LoanStatus,
+  type PlateCommentBody,
   type RequestLoanBody,
 } from "@/shared/lib/api/model";
 import type { BadgeVariant } from "@/shared/lib/status-variants";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LOANS_KEY, PLATES_KEY } from "./query-keys";
+import { COMMENTS_KEY, LOANS_KEY, PLATES_KEY } from "./query-keys";
 
 export type PlateLoan = LoanResponse;
 export type PlateLoanItem = LoanItemResponse;
@@ -106,19 +108,35 @@ export function useLoanItemsAction() {
       loanId,
       verb,
       itemIds,
+      comments,
+      plateComments,
     }: {
       loanId: string;
       verb: LoanVerb;
       itemIds?: string[];
+      comments?: GroupCommentBody[];
+      plateComments?: PlateCommentBody[];
     }) =>
       customInstance<PlateLoan>({
         url: `${API_V1}/plate-loans/${loanId}/items:${verb}`,
         method: "POST",
-        data: { item_ids: itemIds ?? null },
+        // The other five verbs' bodies are extra=forbid on the backend — only
+        // request-return's contract carries comments/plate_comments.
+        data:
+          verb === "request-return"
+            ? {
+                item_ids: itemIds ?? null,
+                comments: comments ?? [],
+                plate_comments: plateComments ?? [],
+              }
+            : { item_ids: itemIds ?? null },
       }),
     onSuccess: (_data, { verb }) => {
       qc.invalidateQueries({ queryKey: LOANS_KEY });
       qc.invalidateQueries({ queryKey: PLATES_KEY });
+      // request-return is the only verb that writes comments as a side effect —
+      // invalidating unconditionally is harmless and keeps this in one place.
+      qc.invalidateQueries({ queryKey: COMMENTS_KEY });
       showSuccess(LOAN_VERB_MESSAGES[verb]);
     },
   });

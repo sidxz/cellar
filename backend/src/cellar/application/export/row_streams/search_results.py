@@ -509,6 +509,14 @@ class _AuthShim:
         return None
 
     @property
+    def name(self) -> str:
+        return ""  # exports have no display identity
+
+    @property
+    def email(self) -> str:
+        return ""  # exports have no display identity
+
+    @property
     def is_admin(self) -> bool:
         return False
 

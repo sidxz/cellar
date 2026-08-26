@@ -1,4 +1,4 @@
-"""Org plate policy endpoints — per-org plate loan/visibility config."""
+"""Org plate policy endpoints — per-org plate loan config."""
 
 from __future__ import annotations
 
@@ -24,7 +24,6 @@ class OrgPlatePolicyResponse(BaseModel):
     require_approval: bool
     confirmation: LoanConfirmationMode
     default_due_days: int | None = None
-    plates_private: bool
     version: int
 
     @classmethod
@@ -34,7 +33,6 @@ class OrgPlatePolicyResponse(BaseModel):
             require_approval=p.require_approval,
             confirmation=p.confirmation,
             default_due_days=p.default_due_days,
-            plates_private=p.plates_private,
             version=p.version,
         )
 
@@ -43,7 +41,6 @@ class SetOrgPlatePolicyBody(BaseModel):
     require_approval: bool
     confirmation: LoanConfirmationMode
     default_due_days: int | None
-    plates_private: bool
 
     model_config = {"extra": "forbid"}
 
@@ -72,7 +69,6 @@ async def set_org_plate_policy(
         require_approval=body.require_approval,
         confirmation=body.confirmation.value,
         default_due_days=body.default_due_days,
-        plates_private=body.plates_private,
     )
     policy = result_to_response(await use_case(command, auth=auth))
     return OrgPlatePolicyResponse.from_domain(policy)

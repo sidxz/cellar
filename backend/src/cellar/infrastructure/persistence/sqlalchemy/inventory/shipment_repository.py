@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 
-from cellar.domain.inventory.enums import ShipmentStatus
+from cellar.domain.inventory.enums import ShipmentDirection, ShipmentItemType, ShipmentStatus
 from cellar.domain.inventory.shipment import Shipment, ShipmentItem
 from cellar.domain.shared.enums import AmountUnit
 from cellar.domain.shared.value_objects import Amount
@@ -45,10 +45,16 @@ class SQLAlchemyShipmentRepository(SQLAlchemyRepository[Shipment, ShipmentModel]
             ShipmentItem(
                 id=item.id,
                 shipment_id=item.shipment_id,
-                sample_id=item.sample_id,
-                amount_shipped=Amount(
-                    value=item.amount_shipped_value,
-                    unit=AmountUnit(item.amount_shipped_unit),
+                item_type=ShipmentItemType(item.item_type),
+                item_id=item.item_id,
+                amount_shipped=(
+                    Amount(
+                        value=item.amount_shipped_value,
+                        unit=AmountUnit(item.amount_shipped_unit),
+                    )
+                    if item.amount_shipped_value is not None
+                    and item.amount_shipped_unit is not None
+                    else None
                 ),
                 created_at=item.created_at,
                 updated_at=item.updated_at,
@@ -61,6 +67,8 @@ class SQLAlchemyShipmentRepository(SQLAlchemyRepository[Shipment, ShipmentModel]
             workspace_id=model.workspace_id,
             destination_org_id=model.destination_org_id,
             sender_id=model.sender_id,
+            direction=ShipmentDirection(model.direction),
+            loan_id=model.loan_id,
             tracking_number=model.tracking_number,
             carrier=model.carrier,
             shipping_date=model.shipping_date,
@@ -81,6 +89,8 @@ class SQLAlchemyShipmentRepository(SQLAlchemyRepository[Shipment, ShipmentModel]
             workspace_id=aggregate.workspace_id,
             destination_org_id=aggregate.destination_org_id,
             sender_id=aggregate.sender_id,
+            direction=aggregate.direction.value,
+            loan_id=aggregate.loan_id,
             tracking_number=aggregate.tracking_number,
             carrier=aggregate.carrier,
             shipping_date=aggregate.shipping_date,
@@ -95,6 +105,8 @@ class SQLAlchemyShipmentRepository(SQLAlchemyRepository[Shipment, ShipmentModel]
         return model
 
     def _update_model(self, model: ShipmentModel, aggregate: Shipment) -> None:
+        model.direction = aggregate.direction.value
+        model.loan_id = aggregate.loan_id
         model.tracking_number = aggregate.tracking_number
         model.carrier = aggregate.carrier
         model.shipping_date = aggregate.shipping_date
@@ -110,7 +122,8 @@ class SQLAlchemyShipmentRepository(SQLAlchemyRepository[Shipment, ShipmentModel]
         return ShipmentItemModel(
             id=item.id,
             shipment_id=item.shipment_id,
-            sample_id=item.sample_id,
-            amount_shipped_value=item.amount_shipped.value,
-            amount_shipped_unit=item.amount_shipped.unit.value,
+            item_type=item.item_type.value,
+            item_id=item.item_id,
+            amount_shipped_value=item.amount_shipped.value if item.amount_shipped else None,
+            amount_shipped_unit=item.amount_shipped.unit.value if item.amount_shipped else None,
         )

@@ -50,6 +50,7 @@ from cellar.application.attachment.upload_attachment import (
     UploadAttachmentCommand,
 )
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.screening.compound_ref_resolver import resolve_rows
 
 # Re-exported here so existing callers `from import_run_file import WellConflict`
@@ -58,6 +59,7 @@ from cellar.application.screening.compound_ref_resolver import resolve_rows
 from cellar.application.screening.import_plan import (  # noqa: F401
     ReadoutConflict,
     WellConflict,
+    _autolink_new_plates,
     _ImportPlan,
     _ReadoutWrite,
     _scan_conflicts,
@@ -103,7 +105,7 @@ from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.chemical_registration.repository import MoleculeRepository
-from cellar.domain.inventory.repository import BatchRepository
+from cellar.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
 from cellar.domain.screening_assay.enums import ReadoutDataType
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.repository import (
@@ -171,6 +173,8 @@ class ImportRunFile:
         dispatcher: EventDispatcherProtocol | None = None,
         calculation_engine: ReadoutCalculationEngine | None = None,
         ensure_batch_exists=None,  # EnsureBatchExists | None; optional for back-compat
+        plate_repo: RegisteredPlateRepository | None = None,
+        plate_visibility: PlateVisibilityService | None = None,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -184,6 +188,9 @@ class ImportRunFile:
         self._dispatcher = dispatcher
         self._calc_engine = calculation_engine
         self._ensure_batch_exists = ensure_batch_exists
+        # Both or neither: without them new plates are simply not auto-linked.
+        self._plate_repo = plate_repo
+        self._plate_visibility = plate_visibility
 
     async def __call__(
         self,
@@ -407,6 +414,12 @@ class ImportRunFile:
             unmatched_compound_refs=sorted(resolutions.unmatched_compound_refs),
             auto_created_batches=auto_created_batches,
         )
+
+        # Auto-link new plates to the inventory plate their file name names.
+        if self._plate_repo is not None and self._plate_visibility is not None:
+            await _autolink_new_plates(
+                plan, self._plate_repo, self._plate_visibility, cmd.workspace_id, auth
+            )
 
         # Track new plates first so we can emit creation counters.
         for new_plate in plan.new_plates:

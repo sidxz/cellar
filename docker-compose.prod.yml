@@ -29,6 +29,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cellar}:${POSTGRES_PASSWORD:-cellar}@postgres:5432/${POSTGRES_DB:-cellar}
       REDIS_URL: redis://valkey:6379
       DUAR_URL: ${APP_DUAR_URL:-http://duar:9003}
+      PROT_CELLAR_URL: ${PROT_CELLAR_URL:-http://localhost:8001}
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
       STORAGE_ROOT: /data/storage
@@ -72,6 +73,7 @@ services:
       APP_API_URL: ${APP_API_URL:-http://localhost:8000}
       APP_URL: ${APP_URL:-http://localhost:3000}
       APP_DUAR_URL: ${APP_DUAR_URL:-http://localhost:9003}
+      APP_PROT_CELLAR_URL: ${APP_PROT_CELLAR_URL:-http://localhost:3001}
       APP_IDP_PROVIDER: ${APP_IDP_PROVIDER:-google}
       APP_GOOGLE_CLIENT_ID: ${APP_GOOGLE_CLIENT_ID:-}
       APP_ENTRA_ID_CLIENT_ID: ${APP_ENTRA_ID_CLIENT_ID:-}

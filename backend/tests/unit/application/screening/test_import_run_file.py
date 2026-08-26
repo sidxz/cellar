@@ -244,6 +244,8 @@ def _build_import_uc(
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
     existing_readouts: list | None = None,
     upload_attachment=None,
+    plate_repo=None,
+    plate_visibility=None,
 ) -> tuple[ImportRunFile, FakeUoW, AsyncMock]:
     uow = FakeUoW()
 
@@ -303,6 +305,8 @@ def _build_import_uc(
         preview_store=store,
         plate_template_repo=_make_plate_template_repo(plate_templates),
         upload_attachment=upload_attachment,
+        plate_repo=plate_repo,
+        plate_visibility=plate_visibility,
     )
     return uc, uow, run_repo
 
@@ -1869,3 +1873,111 @@ class TestAutoCreateMissingBatches:
         ensure_uc.assert_not_called()
         assert "MISSING-BATCH-X" in preview.unmatched_batches
         assert preview.auto_created_batches == 0
+
+
+# ---------------------------------------------------------------------------
+# Import auto-link to inventory plates (S15 spec §5.3)
+# ---------------------------------------------------------------------------
+
+
+class TestImportAutoLinksInventoryPlate:
+    """Every *new* plate the import creates is resolved by its file name
+    against inventory; a miss (or a hidden plate) leaves the link null."""
+
+    @staticmethod
+    def _inventory(workspace_id: uuid.UUID, org_id: uuid.UUID, label: str):
+        from types import SimpleNamespace
+
+        from cellar.application.inventory.plate_visibility import PlateVisibilityService
+        from cellar.domain.inventory.enums import PlateType
+        from cellar.domain.inventory.registered_plate import RegisteredPlate
+        from cellar.domain.shared.value_objects import Barcode
+        from tests.fakes.fake_registered_plate_repository import (
+            FakeRegisteredPlateRepository,
+        )
+
+        plate = RegisteredPlate.register(
+            workspace_id=workspace_id,
+            owner_org_id=org_id,
+            barcode=Barcode(value="000777"),
+            plate_label=label,
+            format=PlateFormat.F96,
+            plate_type=PlateType.ASSAY,
+            registered_by=uuid.uuid4(),
+        )
+
+        class _Dir:
+            async def list_orgs(self):
+                return [SimpleNamespace(id=org_id), SimpleNamespace(id=uuid.uuid4())]
+
+        return plate, FakeRegisteredPlateRepository([plate]), PlateVisibilityService(_Dir())
+
+    async def _import(self, auth, plate_repo, visibility) -> Run:
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Raw Data\n"
+            b"SAC3-014-3070,A1,100,LG-1,0.5\n"
+            b"UNKNOWN-PLATE,A1,100,LG-1,0.4\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            plate_repo=plate_repo,
+            plate_visibility=visibility,
+        )
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                plate_name="Plate Name",
+                concentration="Concentration",
+                batch_ref="Batch",
+                readout_columns=(ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),),
+            ),
+        )
+        result = await uc(cmd, auth=auth)
+        assert isinstance(result, Success), result
+        assert result.unwrap().plates_created == 2
+        return run
+
+    async def test_matching_label_links_and_miss_stays_null(self) -> None:
+        org_id = uuid.uuid4()
+        auth = FakeAuth()
+        auth.org_id = org_id
+        rp, plate_repo, visibility = self._inventory(auth.workspace_id, org_id, "SAC3-014-3070")
+
+        run = await self._import(auth, plate_repo, visibility)
+
+        by_name = {p.plate_map["name"]: p for p in run.plates}
+        assert by_name["SAC3-014-3070"].registered_plate_id == rp.id
+        assert by_name["UNKNOWN-PLATE"].registered_plate_id is None
+
+    async def test_hidden_foreign_org_plate_is_not_linked(self) -> None:
+        auth = FakeAuth()
+        auth.org_id = uuid.uuid4()
+        _, plate_repo, visibility = self._inventory(
+            auth.workspace_id, uuid.uuid4(), "SAC3-014-3070"
+        )
+
+        run = await self._import(auth, plate_repo, visibility)
+
+        assert all(p.registered_plate_id is None for p in run.plates)
+
+    async def test_without_inventory_wiring_nothing_links(self) -> None:
+        auth = FakeAuth()
+        run = await self._import(auth, None, None)
+        assert all(p.registered_plate_id is None for p in run.plates)

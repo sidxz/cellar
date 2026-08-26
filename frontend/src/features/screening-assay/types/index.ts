@@ -20,6 +20,8 @@ import type {
   RunCountsResponse as RunCountsResponseModel,
   RunResponse,
   TargetRefResponse,
+  TargetResponse,
+  TargetSyncReportResponse,
 } from "@/shared/lib/api/model";
 
 /** A run's coverage of one attached collection (covered / total + fraction).
@@ -110,7 +112,10 @@ export type TargetType =
   | "nucleic_acid"
   | "organism"
   | "cell_line"
-  | "tissue";
+  | "tissue"
+  | "domain"
+  | "protein_protein_interaction"
+  | "unknown";
 
 export const TARGET_TYPE_LABELS: Record<TargetType, string> = {
   single_protein: "Single Protein",
@@ -120,6 +125,9 @@ export const TARGET_TYPE_LABELS: Record<TargetType, string> = {
   organism: "Organism",
   cell_line: "Cell Line",
   tissue: "Tissue",
+  domain: "Domain",
+  protein_protein_interaction: "Protein–Protein Interaction",
+  unknown: "Unknown",
 };
 
 export type PlateFormat = "6" | "12" | "24" | "48" | "96" | "384" | "1536";
@@ -404,18 +412,12 @@ export interface Protocol {
   locked_at: string | null;
 }
 
-export interface Target {
-  id: string;
-  workspace_id: string;
-  name: string;
-  target_type: TargetType;
-  organism: string | null;
-  gene_name: string | null;
-  uniprot_id: string | null;
-  ncbi_gene_id: string | null;
-  description: string | null;
-  target_class: string | null;
-}
+/** Read-only mirror of a prot-cellar target. Aliases the orval DTO — never
+ *  redefine its shape. `target_type` is widened by `TargetType` at use sites. */
+export type Target = TargetResponse;
+
+/** Result of `POST /targets/sync` (admin → Targets → Sync from Prot-Cellar). */
+export type TargetSyncReport = TargetSyncReportResponse;
 
 /**
  * Aliases the generated `RunResponse` so the shape can't silently drift from
@@ -575,28 +577,6 @@ export interface CreateProtocolInput {
   /** Facets keyed by slot name. Persisted atomically with the protocol so a
    *  multi-slot set can't race/drop the way separate post-create PUTs did. */
   ontology_annotations?: Record<string, OntologyTerm[]>;
-}
-
-export interface CreateTargetInput {
-  name: string;
-  target_type: TargetType;
-  organism?: string | null;
-  gene_name?: string | null;
-  uniprot_id?: string | null;
-  ncbi_gene_id?: string | null;
-  description?: string | null;
-  target_class?: string | null;
-}
-
-export interface UpdateTargetInput {
-  name?: string | null;
-  target_type?: string | null;
-  organism?: string | null;
-  gene_name?: string | null;
-  uniprot_id?: string | null;
-  ncbi_gene_id?: string | null;
-  description?: string | null;
-  target_class?: string | null;
 }
 
 export interface CreateRunInput {

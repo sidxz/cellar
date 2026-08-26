@@ -1,21 +1,26 @@
-"""PlateVisibilityService — private-org plate exclusion for list/get, plus the
-borrowed-plate read carve-out (spec §5 loan clause)."""
+"""PlateVisibilityService — strict org scoping for plates and org-owned things
+(spec 2026-08-25 §3), plus the borrowed-plate read carve-out (loan clause)."""
 
 from __future__ import annotations
 
 import uuid
 
 from cellar.application.auth import AuthContext
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.domain.inventory.registered_plate import RegisteredPlate
-from cellar.domain.inventory.repository import OrgPlatePolicyRepository, PlateLoanRepository
+from cellar.domain.inventory.repository import PlateLoanRepository
 
 
 class PlateVisibilityService:
-    """S2 scope: private-org exclusion. RESOLVED (S4): the 'plates on active
-    loan to my org stay visible' clause (spec §5) lives here, via
-    ``borrowed_plate_ids`` feeding the ``can_view`` ``borrowed`` param — the
-    S2 seam note that pointed callers elsewhere is obsolete now that
-    PlateLoanRepository exists.
+    """Strict rule: a caller sees plates of their own org (plus plates on
+    active loan to it — read surfaces only); workspace admins and system
+    calls (``auth is None``) see everything.
+
+    ``excluded_org_ids`` returns "every org in the directory except mine" so
+    the existing call sites keep their exclusion-set plumbing unchanged.
+    # ponytail: an inclusion scope (visible_owner_org_id | None) would drop
+    # the directory dependency; only worth the ~20-site refactor if the
+    # directory ever proves unreliable.
 
     Write-path narrowing is deliberate: Update/MapWells/ChangeStatus/Derive/
     Delete, export, tag verbs, and plate groups never fetch a borrowed set
@@ -27,20 +32,26 @@ class PlateVisibilityService:
 
     def __init__(
         self,
-        policy_repo: OrgPlatePolicyRepository,
+        org_directory: OrgDirectoryPort | None = None,
         loan_repo: PlateLoanRepository | None = None,
     ) -> None:
-        self._policy_repo = policy_repo
+        self._org_directory = org_directory
         self._loan_repo = loan_repo
 
     async def excluded_org_ids(
         self, workspace_id: uuid.UUID, auth: AuthContext | None
     ) -> set[uuid.UUID]:
-        """Private org ids, minus the caller's own org. Empty for system calls."""
-        if auth is None:
+        """Every directory org id except the caller's own. Empty for system
+        calls and workspace admins. Fails closed (raises) when a non-admin
+        caller arrives and no directory is wired."""
+        if auth is None or auth.is_admin:
             return set()
-        private_org_ids = await self._policy_repo.list_private_org_ids(workspace_id)
-        return private_org_ids - {auth.org_id}
+        if self._org_directory is None:
+            raise RuntimeError(
+                "PlateVisibilityService needs an org directory for non-admin callers"
+            )
+        all_ids = {o.id for o in await self._org_directory.list_orgs()}
+        return all_ids - {auth.org_id}
 
     async def borrowed_plate_ids(
         self, workspace_id: uuid.UUID, auth: AuthContext | None

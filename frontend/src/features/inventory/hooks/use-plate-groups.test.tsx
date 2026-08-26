@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useCreatePlateGroup, usePlateGroupTree } from "./use-plate-groups";
+import { useCreatePlateGroup, usePlateGroup, usePlateGroupTree } from "./use-plate-groups";
 
 vi.mock("@/shared/lib/api/custom-instance", () => ({
   API_V1: "/api/v1",
@@ -47,6 +47,31 @@ describe("usePlateGroupTree", () => {
 
   it("respects enabled=false", () => {
     renderHook(() => usePlateGroupTree("o1", { enabled: false }), { wrapper });
+    expect(mocked).not.toHaveBeenCalled();
+  });
+});
+
+describe("usePlateGroup", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("fetches the group detail by id", async () => {
+    mocked.mockResolvedValueOnce({
+      group: { id: "g1", name: "G" },
+      plate_count: 1,
+      subtree_plate_count: 2,
+      ancestors: [],
+      children: [],
+    });
+    const { result } = renderHook(() => usePlateGroup("g1"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mocked).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "/api/v1/plate-groups/g1", method: "GET" }),
+    );
+    expect(result.current.data?.subtree_plate_count).toBe(2);
+  });
+
+  it("is disabled without a groupId", () => {
+    renderHook(() => usePlateGroup(undefined), { wrapper });
     expect(mocked).not.toHaveBeenCalled();
   });
 });

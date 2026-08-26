@@ -26,16 +26,6 @@ async def _register_plate(client: AsyncClient, **overrides):
     return await client.post("/api/v1/plates", json=body)
 
 
-async def _set_plates_private(client: AsyncClient, org_id: uuid.UUID, *, private: bool = True):
-    body = {
-        "require_approval": True,
-        "confirmation": "admin_confirm",
-        "default_due_days": None,
-        "plates_private": private,
-    }
-    return await client.put(f"/api/v1/org-plate-policies/{org_id}", json=body)
-
-
 class TestAssignAndRead:
     async def test_assign_then_get(self, client: AsyncClient) -> None:
         cid = await _make_collection(client, "TagCol-1")
@@ -157,19 +147,21 @@ class TestPlateVisibility:
     an invisible plate's tags 404 exactly like a missing plate's would."""
 
     async def test_get_and_assign_404_for_foreign_org(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
         reg = await _register_plate(client, owner_org_id=str(OTHER_ORG_ID))
         assert reg.status_code == 201, reg.text
         plate_id = reg.json()["id"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        got = await client.get(f"/api/v1/plates/{plate_id}/tags")
+        got = await editor_client_own_org.get(f"/api/v1/plates/{plate_id}/tags")
         assert got.status_code == 404, got.text
 
-        assigned = await client.post(f"/api/v1/plates/{plate_id}/tags", json={"key": "spam"})
+        assigned = await editor_client_own_org.post(
+            f"/api/v1/plates/{plate_id}/tags", json={"key": "spam"}
+        )
         assert assigned.status_code == 404, assigned.text
 
         # Own org unaffected.
@@ -178,29 +170,30 @@ class TestPlateVisibility:
         assert got_own.json() == []
 
     async def test_set_and_unassign_404_for_foreign_org_200_for_own_org(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
         reg = await _register_plate(client, owner_org_id=str(OTHER_ORG_ID))
         assert reg.status_code == 201, reg.text
         plate_id = reg.json()["id"]
 
-        # Own org tags it while still visible, so we have a real tag_id to
-        # probe DELETE with once the plate goes private.
+        # Own org tags it, so we have a real tag_id to probe DELETE with.
         tagged = await editor_client_other_org.post(
             f"/api/v1/plates/{plate_id}/tags", json={"key": "legit"}
         )
         assert tagged.status_code == 201, tagged.text
         tag_id = tagged.json()["id"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        set_foreign = await client.put(
+        set_foreign = await editor_client_own_org.put(
             f"/api/v1/plates/{plate_id}/tags", json={"tags": [{"key": "spam"}]}
         )
         assert set_foreign.status_code == 404, set_foreign.text
 
-        unassign_foreign = await client.delete(f"/api/v1/plates/{plate_id}/tags/{tag_id}")
+        unassign_foreign = await editor_client_own_org.delete(
+            f"/api/v1/plates/{plate_id}/tags/{tag_id}"
+        )
         assert unassign_foreign.status_code == 404, unassign_foreign.text
 
         # Status quo preserved — the plate's own org can still read/write its tags.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 
 # Set duar env before any cellar imports — allows module-level get_duar() to succeed.
 # Must NOT use .env files (cross-contamination between DatabaseSettings and DuarSettings).
@@ -23,7 +23,9 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cellar.application.auth import LOAN_APPROVE_ACTION
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.infrastructure.di.container import create_container
+from cellar.infrastructure.duar.org_directory import OrgSummary
 from cellar.infrastructure.persistence.settings import DatabaseSettings
 from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.dependencies import get_auth
@@ -43,13 +45,33 @@ AUTH_ORG_ID = uuid.uuid4()
 OTHER_ORG_ID = uuid.uuid4()
 
 
-def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
+class _StubOrgDirectory:
+    """Static Duar org directory — every org id the API tests use, so the
+    strict visibility rule ("every other org is excluded") sees all of them.
+    Never makes HTTP calls."""
+
+    async def list_orgs(self) -> list[OrgSummary]:
+        return [
+            OrgSummary(id=ORG_ID, slug="abbvie", name="AbbVie", is_public=False),
+            OrgSummary(id=AUTH_ORG_ID, slug="tamu", name="TAMU", is_public=False),
+            OrgSummary(id=OTHER_ORG_ID, slug="partner", name="Partner", is_public=False),
+        ]
+
+
+STUB_ORG_DIRECTORY = _StubOrgDirectory()
+
+
+def _create_test_app(
+    database_url: str, fake_auth: FakeAuth, overrides: Mapping[type, object] | None = None
+) -> FastAPI:
     """Build a FastAPI app for testing — no Duar middleware, FakeAuth for routes."""
     app = FastAPI()
 
     # DI container pointed at test DB — _env_file=None avoids loading .env
     db_settings = DatabaseSettings(database_url=database_url, _env_file=None)  # type: ignore[call-arg]
-    container = create_container(db_settings)
+    container = create_container(
+        db_settings, overrides={OrgDirectoryPort: STUB_ORG_DIRECTORY, **(overrides or {})}
+    )
     app.state.container = container
 
     # Error handlers (so DomainError → proper HTTP status)
@@ -64,6 +86,7 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     from cellar.interface.routes.molecules import router as mol_router
     from cellar.interface.routes.export import router as export_router
     from cellar.interface.routes.export import legacy_router as export_legacy_router
+    from cellar.interface.routes.plate_setup import router as plate_setup_router
     from cellar.interface.routes.plate_templates import router as plate_template_router
     from cellar.interface.routes.projects import router as project_router
     from cellar.interface.routes.favorites import router as favorites_router
@@ -100,7 +123,9 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     from cellar.interface.routes.kiosk_devices import router as kiosk_device_router
     from cellar.interface.routes.org_plate_policies import router as org_plate_policy_router
     from cellar.interface.routes.plate_groups import router as plate_group_router
+    from cellar.interface.routes.storage import router as storage_router
     from cellar.interface.routes.plate_loans import router as plate_loan_router
+    from cellar.interface.routes.comments import router as comments_router
     from cellar.interface.routes.registered_plates import router as registered_plates_router
     from cellar.interface.routes.plate_import import router as plate_import_router
     from cellar.interface.routes.tags import router as tags_router
@@ -120,11 +145,14 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(export_router)
     app.include_router(export_legacy_router)
     app.include_router(plate_template_router)
+    app.include_router(plate_setup_router)
     app.include_router(registered_plates_router)
     app.include_router(plate_group_router)
+    app.include_router(storage_router)
     app.include_router(plate_import_router)
     app.include_router(org_plate_policy_router)
     app.include_router(plate_loan_router)
+    app.include_router(comments_router)
     app.include_router(kiosk_device_router)
     app.include_router(kiosk_router)
     app.include_router(project_router)
@@ -136,6 +164,11 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     app.include_router(search_router)
     app.include_router(search_algorithms_router)
     app.include_router(batch_router)
+    from cellar.interface.routes.samples import router as sample_router
+    from cellar.interface.routes.shipments import router as shipment_router
+
+    app.include_router(sample_router)
+    app.include_router(shipment_router)
     app.include_router(scaffold_tree_router)
     app.include_router(sar_analysis_router)
     app.include_router(umap_cluster_router)
@@ -159,15 +192,10 @@ def _create_test_app(database_url: str, fake_auth: FakeAuth) -> FastAPI:
     # Override the stable auth wrapper (not the sentinel SDK directly)
     app.dependency_overrides[get_auth] = lambda: fake_auth
 
-    # Stub the Duar org directory — never make real HTTP calls in tests.
-    from cellar.infrastructure.duar.org_directory import OrgSummary
+    # Stub the Duar org directory for the /api/v1/orgs route too.
     from cellar.interface.dependencies import get_org_directory
 
-    class _StubOrgDirectory:
-        async def list_orgs(self) -> list[OrgSummary]:
-            return [OrgSummary(id=ORG_ID, slug="abbvie", name="AbbVie", is_public=False)]
-
-    app.dependency_overrides[get_org_directory] = lambda: _StubOrgDirectory()
+    app.dependency_overrides[get_org_directory] = lambda: STUB_ORG_DIRECTORY
 
     return app
 
@@ -206,6 +234,34 @@ async def client(api_app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=api_app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+def make_target(api_app: FastAPI, workspace_id: uuid.UUID):
+    """Seed a mirror target row directly (there is no create route — prot-cellar owns targets).
+
+    Returns ``async (name, *, target_type="single_protein") -> str`` (the new id).
+    """
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import TargetModel
+
+    async def _make(name: str, *, target_type: str = "single_protein") -> str:
+        tid = uuid.uuid4()
+        factory = api_app.state.container[async_sessionmaker]
+        async with factory() as session, session.begin():
+            session.add(
+                TargetModel(
+                    id=tid,
+                    workspace_id=workspace_id,
+                    name=name,
+                    target_type=target_type,
+                    source_version=1,
+                )
+            )
+        return str(tid)
+
+    return _make
 
 
 @pytest.fixture

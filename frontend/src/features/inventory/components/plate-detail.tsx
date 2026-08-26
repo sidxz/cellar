@@ -5,8 +5,8 @@ import { useProject } from "@/features/research-organization/hooks/use-projects"
 import { usePlateTemplate } from "@/features/screening-assay/hooks/use-plate-templates";
 import { WELL_TYPE_LABELS, type WellType } from "@/features/screening-assay/types";
 import { TagTable } from "@/features/tagging/components/tag-table";
+import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
-import { EmptyState } from "@/shared/components/empty-state";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -23,6 +23,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { Input } from "@/shared/components/ui/input";
@@ -36,33 +37,40 @@ import {
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useOrgs } from "@/shared/hooks/use-orgs";
-import { formatDate } from "@/shared/lib/format-date";
+import { useMemberNames } from "@/shared/hooks/use-workspace-members";
+import { formatDate, formatDue } from "@/shared/lib/format-date";
+import { formatStatusLabel } from "@/shared/lib/status-variants";
 import { showError } from "@/shared/lib/toast";
 import { cn } from "@/shared/lib/utils";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
-import { Copy, Download, FileUp, FlaskConical, Grid3x3 } from "lucide-react";
+import { Archive, ArrowLeftRight, MapPin, MoreHorizontal, Snowflake } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { LOAN_VARIANT, useLoans } from "../hooks/use-plate-loans";
-import { useChangeStatus, useDerivePlate, usePlate, usePlateChildren } from "../hooks/use-plates";
+import { usePlateGroup } from "../hooks/use-plate-groups";
+import { LOAN_VARIANT, buildCustodyMap, useLoans } from "../hooks/use-plate-loans";
+import {
+  useChangeStatus,
+  useDeletePlate,
+  useDerivePlate,
+  usePlate,
+  usePlateChildren,
+  usePlateRuns,
+} from "../hooks/use-plates";
+import { useShipmentsForPlate } from "../hooks/use-shipments";
 import { useStorageLocations } from "../hooks/use-storage-locations";
 import { downloadPlateLayout } from "../lib/download-plate-layout";
+import { type Whereabouts, plateWhereabouts } from "../lib/plate-where";
 import type { PlateType, WellMapping } from "../types/plates";
 import { plateTypeLabels } from "../types/plates";
+import { CommentFeed } from "./comment-feed";
+import { RequestLoanDialog } from "./request-loan-dialog";
+import { ShipmentLinksCard } from "./shipment-links-card";
 import { WellMappingDialog } from "./well-mapping-dialog";
 
 // ---------------------------------------------------------------------------
 // ID → name resolver helpers
 // ---------------------------------------------------------------------------
-
-function ResolvedStorageLocation({ id }: { id: string | null }) {
-  const { data: locations } = useStorageLocations();
-  if (!id) return <span className="text-muted-foreground">Not set</span>;
-  if (!locations) return <span className="text-muted-foreground">Loading...</span>;
-  const loc = locations.find((l) => l.id === id);
-  return <span>{loc?.name ?? id}</span>;
-}
 
 function ResolvedProject({ id }: { id: string | null }) {
   const { data: project } = useProject(id ?? undefined);
@@ -189,49 +197,75 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
 }
 
 // ---------------------------------------------------------------------------
-// Loan history
+// Whereabouts hero — the one line a chemist came for
 // ---------------------------------------------------------------------------
 
-/** Every loan this plate has appeared in, newest first (API orders desc). Shows
- * the plate's OWN item status within each loan, coloured like the loan dashboard. */
-function LoanHistoryCard({ plateId }: { plateId: string }) {
-  const { data: loans, isLoading } = useLoans({ plate_id: plateId });
-  const { data: orgs } = useOrgs();
-  const orgNameById = useMemo(() => new Map((orgs ?? []).map((o) => [o.id, o.name])), [orgs]);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Loan History</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {loans && loans.length > 0 ? (
-          <ul className="space-y-2">
-            {loans.map((loan) => {
-              const item = loan.items.find((i) => i.plate_id === plateId);
-              return (
-                <li key={loan.id} className="flex flex-wrap items-center gap-3 text-sm">
-                  <span>{orgNameById.get(loan.borrower_org_id) ?? "Unknown org"}</span>
-                  {item ? (
-                    <StatusBadge status={item.status} variant={LOAN_VARIANT[item.status]} />
-                  ) : null}
-                  <span className="text-muted-foreground">
-                    requested {formatDate(loan.created_at)}
-                  </span>
-                  {loan.due_date ? (
-                    <span className="text-muted-foreground">due {formatDate(loan.due_date)}</span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        ) : isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : (
-          <p className="text-sm text-muted-foreground">Never loaned.</p>
+function WhereaboutsHero({
+  where,
+  memberName,
+}: {
+  where: Whereabouts;
+  memberName: (id: string) => string;
+}) {
+  if (where.kind === "custody") {
+    const due = formatDue(where.loan.due_date);
+    return (
+      <div
+        data-testid="plate-hero"
+        className={cn(
+          "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-sm",
+          where.overdue
+            ? "border-destructive/40 bg-destructive/5"
+            : "border-warning/40 bg-warning/10",
         )}
-      </CardContent>
-    </Card>
+      >
+        <ArrowLeftRight className="h-4 w-4 shrink-0" />
+        <span className="font-medium">{formatStatusLabel(where.item.status)}</span>
+        <span>· {memberName(where.loan.requested_by)}</span>
+        <span className="text-muted-foreground">
+          · since {formatDate(where.item.status_changed_at)}
+        </span>
+        {due ? (
+          <span
+            title={`Due ${formatDate(where.loan.due_date)}`}
+            className={cn(where.overdue ? "font-medium text-destructive" : "text-muted-foreground")}
+          >
+            · {due.label}
+          </span>
+        ) : null}
+        <Link
+          href={`/inventory/loans/${where.loan.id}`}
+          className="ml-auto text-primary hover:underline"
+        >
+          View loan →
+        </Link>
+      </div>
+    );
+  }
+  if (where.kind === "terminal") {
+    return (
+      <div
+        data-testid="plate-hero"
+        className="flex items-center gap-2 text-sm text-muted-foreground"
+      >
+        <Archive className="h-4 w-4 shrink-0" />
+        {formatStatusLabel(where.status)}
+      </div>
+    );
+  }
+  if (where.kind === "location") {
+    return (
+      <div data-testid="plate-hero" className="flex items-center gap-2 text-sm">
+        <Snowflake className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span title={where.fullPath}>In storage · {where.heroPath}</span>
+      </div>
+    );
+  }
+  return (
+    <div data-testid="plate-hero" className="flex items-center gap-2 text-sm text-muted-foreground">
+      <MapPin className="h-4 w-4 shrink-0" />
+      {formatStatusLabel(where.status)} · no storage location
+    </div>
   );
 }
 
@@ -246,11 +280,35 @@ interface PlateDetailProps {
 export function PlateDetail({ plateId }: PlateDetailProps) {
   const router = useRouter();
   const query = usePlate(plateId);
+  const plate = query.data;
   const { data: children } = usePlateChildren(plateId);
+  const { data: runs } = usePlateRuns(plateId);
+  // Every loan this plate appeared in (API orders desc): custody + history from one fetch.
+  const { data: loans } = useLoans({ plate_id: plateId });
+  const shipmentsQuery = useShipmentsForPlate(plateId);
+  const { data: locations } = useStorageLocations();
+  const { data: orgs } = useOrgs();
+  const groupQuery = usePlateGroup(plate?.group_id ?? undefined);
+  const memberName = useMemberNames();
   const [wellMapOpen, setWellMapOpen] = useState(false);
   const [deriveOpen, setDeriveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [loanBarcodes, setLoanBarcodes] = useState<string[] | null>(null);
   const changeStatus = useChangeStatus(plateId);
+  const deletePlate = useDeletePlate();
   const canEditTags = useAuthzHasRole("editor");
+
+  const custody = useMemo(() => buildCustodyMap(loans ?? []).get(plateId), [loans, plateId]);
+  const where = useMemo(
+    () => (plate ? plateWhereabouts(plate, custody, locations) : null),
+    [plate, custody, locations],
+  );
+  const groupPath = groupQuery.data
+    ? [...groupQuery.data.ancestors.map((a) => a.name), groupQuery.data.group.name].join(" › ")
+    : null;
+  const ownerName = plate?.owner_org_id
+    ? orgs?.find((o) => o.id === plate.owner_org_id)?.name
+    : undefined;
 
   const handleExport = async (id: string, format: "csv" | "xlsx") => {
     try {
@@ -268,212 +326,298 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
         backLabel="Back to Plates"
         title={(p) => p.barcode || "Plate"}
         notFoundMessage="Plate not found."
-        actions={(p) => (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setWellMapOpen(true)}
-              disabled={p.status === "disposed"}
-            >
-              <Grid3x3 className="mr-1.5 h-3.5 w-3.5" />
-              Map Wells
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push("/inventory/plates/import")}
-            >
-              <FileUp className="mr-1.5 h-3.5 w-3.5" />
-              Import Data
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
-                  Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleExport(p.id, "csv")}>
-                  CSV — round-trippable
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport(p.id, "xlsx")}>
-                  Excel (.xlsx)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDeriveOpen(true)}
-              disabled={p.status === "disposed"}
-            >
-              <Copy className="mr-1.5 h-3.5 w-3.5" />
-              Derive Plate
-            </Button>
-            <Select
-              value="__current__"
-              onValueChange={(v) => {
-                if (v !== "__current__") changeStatus.mutate(v);
-              }}
-            >
-              <SelectTrigger className="h-8 w-[150px] text-xs">
-                <SelectValue>Change Status</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__current__" disabled>
-                  Change Status
-                </SelectItem>
-                {p.status === "registered" && (
-                  <>
-                    <SelectItem value="stored">Store</SelectItem>
-                    <SelectItem value="in_use">Check Out</SelectItem>
-                    <SelectItem value="disposed">Dispose</SelectItem>
-                  </>
-                )}
-                {p.status === "in_use" && (
-                  <>
-                    <SelectItem value="stored">Return to Storage</SelectItem>
-                    <SelectItem value="depleted">Mark Depleted</SelectItem>
-                  </>
-                )}
-                {p.status === "stored" && (
-                  <>
-                    <SelectItem value="in_use">Check Out</SelectItem>
-                    <SelectItem value="depleted">Mark Depleted</SelectItem>
-                    <SelectItem value="disposed">Dispose</SelectItem>
-                  </>
-                )}
-                {p.status === "depleted" && <SelectItem value="disposed">Dispose</SelectItem>}
-              </SelectContent>
-            </Select>
-          </>
-        )}
-      >
-        {(plate) => {
-          const wellCount = plate.well_map ? Object.keys(plate.well_map).length : 0;
+        actions={(p) => {
+          const canLoan =
+            where?.kind !== "custody" && p.status !== "depleted" && p.status !== "disposed";
           return (
             <>
-              <div className="flex flex-wrap items-center gap-2 -mt-3">
-                <StatusBadge status={plate.status} />
-                <Badge variant="outline">
-                  {plateTypeLabels[plate.plate_type as PlateType] ?? plate.plate_type}
-                </Badge>
-                {plate.plate_label && (
-                  <span className="text-muted-foreground">{plate.plate_label}</span>
-                )}
+              {canLoan ? (
+                <Button size="sm" onClick={() => setLoanBarcodes([p.barcode])}>
+                  Request loan
+                </Button>
+              ) : null}
+              <Select
+                value="__current__"
+                onValueChange={(v) => {
+                  if (v !== "__current__") changeStatus.mutate(v);
+                }}
+              >
+                <SelectTrigger className="h-8 w-[150px] text-xs">
+                  <SelectValue>Change Status</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__current__" disabled>
+                    Change Status
+                  </SelectItem>
+                  {p.status === "registered" && (
+                    <>
+                      <SelectItem value="stored">Store</SelectItem>
+                      <SelectItem value="in_use">Check Out</SelectItem>
+                      <SelectItem value="disposed">Dispose</SelectItem>
+                    </>
+                  )}
+                  {p.status === "in_use" && (
+                    <>
+                      <SelectItem value="stored">Return to Storage</SelectItem>
+                      <SelectItem value="depleted">Mark Depleted</SelectItem>
+                    </>
+                  )}
+                  {p.status === "stored" && (
+                    <>
+                      <SelectItem value="in_use">Check Out</SelectItem>
+                      <SelectItem value="depleted">Mark Depleted</SelectItem>
+                      <SelectItem value="disposed">Dispose</SelectItem>
+                    </>
+                  )}
+                  {p.status === "depleted" && <SelectItem value="disposed">Dispose</SelectItem>}
+                </SelectContent>
+              </Select>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" aria-label="More actions">
+                    <MoreHorizontal className="mr-1.5 h-3.5 w-3.5" />
+                    More
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => setWellMapOpen(true)}
+                    disabled={p.status === "disposed"}
+                  >
+                    Map wells
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push("/inventory/plates/import")}>
+                    Import data
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport(p.id, "csv")}>
+                    Export CSV — round-trippable
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport(p.id, "xlsx")}>
+                    Export Excel (.xlsx)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setDeriveOpen(true)}
+                    disabled={p.status === "disposed"}
+                  >
+                    Derive daughter plate
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
+                    Delete plate
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          );
+        }}
+      >
+        {(p) => {
+          const wellCount = p.well_map ? Object.keys(p.well_map).length : 0;
+          return (
+            <>
+              <div className="-mt-3 flex flex-col gap-3">
+                {where ? <WhereaboutsHero where={where} memberName={memberName} /> : null}
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  {p.group_id && !groupQuery.isError ? (
+                    <Link
+                      href={`/inventory/plate-groups/${p.group_id}`}
+                      className="text-primary hover:underline"
+                    >
+                      {groupPath ?? "…"}
+                    </Link>
+                  ) : null}
+                  <span className="text-muted-foreground">{p.format}-well</span>
+                  <Badge variant="outline">
+                    {plateTypeLabels[p.plate_type as PlateType] ?? p.plate_type}
+                  </Badge>
+                  {ownerName ? <span className="text-muted-foreground">{ownerName}</span> : null}
+                  {p.plate_label ? (
+                    <span className="text-muted-foreground">{p.plate_label}</span>
+                  ) : null}
+                </div>
               </div>
 
-              {/* Metadata card */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <MetaRow label="Format">{plate.format}-well</MetaRow>
-                  <MetaRow label="Wells Mapped">
-                    {wellCount > 0 ? (
-                      <span>
-                        {wellCount} / {plate.format} wells
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">None</span>
-                    )}
-                  </MetaRow>
-                  <MetaRow label="Storage Location">
-                    <ResolvedStorageLocation id={plate.storage_location_id ?? null} />
-                  </MetaRow>
-                  <MetaRow label="Project">
-                    <ResolvedProject id={plate.project_id ?? null} />
-                  </MetaRow>
-                  <MetaRow label="Template">
-                    <ResolvedTemplate id={plate.template_id ?? null} />
-                  </MetaRow>
-                  <MetaRow label="Parent Plate">
-                    <ResolvedParentPlate id={plate.parent_plate_id ?? null} />
-                  </MetaRow>
-                  {plate.notes && (
-                    <MetaRow label="Notes">
-                      <span className="text-muted-foreground">{plate.notes}</span>
-                    </MetaRow>
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                <div className="flex flex-col gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <MetaRow label="Project">
+                        <ResolvedProject id={p.project_id ?? null} />
+                      </MetaRow>
+                      <MetaRow label="Template">
+                        <ResolvedTemplate id={p.template_id ?? null} />
+                      </MetaRow>
+                      <MetaRow label="Parent Plate">
+                        <ResolvedParentPlate id={p.parent_plate_id ?? null} />
+                      </MetaRow>
+                      <MetaRow label="Registered by">{memberName(p.registered_by)}</MetaRow>
+                      {p.notes && (
+                        <MetaRow label="Notes">
+                          <span className="text-muted-foreground">{p.notes}</span>
+                        </MetaRow>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <TagTable entity="plates" entityId={plateId} canEdit={canEditTags} />
+
+                  {children && children.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">
+                          Daughter Plates ({children.length})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-2">
+                          {children.map((child) => (
+                            <li key={child.id} className="flex items-center gap-3">
+                              <Link
+                                href={`/inventory/plates/${child.id}`}
+                                className="font-mono text-sm text-primary hover:underline"
+                              >
+                                {child.barcode}
+                              </Link>
+                              <span className="text-sm text-muted-foreground">
+                                {child.plate_label}
+                              </span>
+                              <StatusBadge status={child.status} className="ml-auto" />
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
                   )}
-                </CardContent>
-              </Card>
 
-              {/* Tags */}
-              <TagTable entity="plates" entityId={plateId} canEdit={canEditTags} />
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Files</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <FileUploadZone entityType="plate" entityId={plateId} />
+                      <AttachmentList entityType="plate" entityId={plateId} />
+                    </CardContent>
+                  </Card>
+                </div>
 
-              {/* Well map visualization */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Well Map{" "}
-                    {wellCount > 0 && (
-                      <span className="ml-1 text-sm font-normal text-muted-foreground">
-                        ({wellCount} wells occupied)
-                      </span>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {wellCount > 0 && plate.well_map ? (
-                    <div className="overflow-auto">
-                      <WellMapVisualization wellMap={plate.well_map} format={plate.format} />
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        Colored wells have compound batches mapped. Hover a well for details.
-                      </p>
-                    </div>
-                  ) : (
-                    <EmptyState icon={FlaskConical} title="No wells mapped yet." />
-                  )}
-                </CardContent>
-              </Card>
+                <div className="flex flex-col gap-6">
+                  {wellCount > 0 && p.well_map ? (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">
+                          Well Map{" "}
+                          <span className="ml-1 text-sm font-normal text-muted-foreground">
+                            ({wellCount} wells occupied)
+                          </span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="overflow-auto">
+                          <WellMapVisualization wellMap={p.well_map} format={p.format} />
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            Colored wells have compound batches mapped. Hover a well for details.
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : null}
 
-              {/* Children plates */}
-              {children && children.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Daughter Plates ({children.length})</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      {children.map((child) => (
-                        <li key={child.id} className="flex items-center gap-3">
-                          <Link
-                            href={`/inventory/plates/${child.id}`}
-                            className="font-mono text-sm text-primary hover:underline"
-                          >
-                            {child.barcode}
-                          </Link>
-                          <span className="text-sm text-muted-foreground">{child.plate_label}</span>
-                          <StatusBadge status={child.status} className="ml-auto" />
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
+                  <Card data-testid="plate-runs">
+                    <CardHeader>
+                      <CardTitle className="text-base">Used in runs</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {runs && runs.length > 0 ? (
+                        <ul className="divide-y rounded-md border">
+                          {runs.map((r) => (
+                            <li key={`${r.run_id}-${r.plate_number}`}>
+                              <Link
+                                href={`/assays/runs/${r.run_id}`}
+                                className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm hover:bg-accent"
+                              >
+                                <span className="font-medium">{r.protocol_name}</span>
+                                <span>Run {formatDate(r.run_date)}</span>
+                                <span className="text-muted-foreground">
+                                  Plate {r.plate_number}
+                                </span>
+                                <StatusBadge status={r.run_status} className="ml-auto" />
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Not used in any run yet.</p>
+                      )}
+                    </CardContent>
+                  </Card>
 
-              {/* Loan history */}
-              <LoanHistoryCard plateId={plateId} />
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">History</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {loans && loans.length > 0 ? (
+                        <ul className="divide-y rounded-md border" data-testid="loan-history">
+                          {loans.map((loan) => {
+                            const item = loan.items.find((i) => i.plate_id === plateId);
+                            return (
+                              <li key={loan.id}>
+                                <Link
+                                  href={`/inventory/loans/${loan.id}`}
+                                  className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm hover:bg-accent"
+                                >
+                                  <span className="font-medium">
+                                    {memberName(loan.requested_by)}
+                                  </span>
+                                  {item ? (
+                                    <StatusBadge
+                                      status={item.status}
+                                      variant={LOAN_VARIANT[item.status]}
+                                    />
+                                  ) : null}
+                                  <span className="text-muted-foreground">
+                                    {formatDate(loan.created_at)}
+                                    {loan.closed_at ? ` → ${formatDate(loan.closed_at)}` : ""}
+                                  </span>
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Never loaned.</p>
+                      )}
+                    </CardContent>
+                  </Card>
 
-              {/* Attachments */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Files</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <FileUploadZone entityType="plate" entityId={plateId} />
-                  <AttachmentList entityType="plate" entityId={plateId} />
-                </CardContent>
-              </Card>
+                  <ShipmentLinksCard
+                    title="Shipments"
+                    rows={shipmentsQuery.data}
+                    isLoading={shipmentsQuery.isLoading}
+                    emptyText="Never shipped."
+                  />
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Comments</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <CommentFeed
+                        scope={{ targetType: "plate", targetId: plateId }}
+                        canWrite={canEditTags}
+                      />
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
             </>
           );
         }}
       </DetailShell>
 
-      {/* Well mapping dialog */}
       {query.data && (
         <WellMappingDialog
           open={wellMapOpen}
@@ -483,9 +627,25 @@ export function PlateDetail({ plateId }: PlateDetailProps) {
           initialWellMap={query.data.well_map ?? null}
         />
       )}
-
-      {/* Derive plate dialog */}
       <DerivePlateDialog parentPlateId={plateId} open={deriveOpen} onOpenChange={setDeriveOpen} />
+      <RequestLoanDialog
+        open={loanBarcodes !== null}
+        onOpenChange={(o) => {
+          if (!o) setLoanBarcodes(null);
+        }}
+        orgId={plate?.owner_org_id ?? undefined}
+        initialBarcodes={loanBarcodes ?? undefined}
+      />
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete plate?"
+        description={`This will permanently delete plate "${plate?.barcode ?? ""}" (${plate?.plate_label ?? ""}). Well mappings will be lost.`}
+        isPending={deletePlate.isPending}
+        onConfirm={() =>
+          deletePlate.mutate(plateId, { onSuccess: () => router.push("/inventory/plates") })
+        }
+      />
     </>
   );
 }

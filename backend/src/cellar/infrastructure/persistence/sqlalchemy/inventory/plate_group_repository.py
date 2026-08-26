@@ -33,6 +33,15 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
+    async def find_by_ids(self, workspace_id: uuid.UUID, ids: list[uuid.UUID]) -> list[PlateGroup]:
+        if not ids:
+            return []
+        stmt = select(PlateGroupModel).where(
+            PlateGroupModel.workspace_id == workspace_id, PlateGroupModel.id.in_(ids)
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
     async def find_children(
         self, workspace_id: uuid.UUID, parent_group_id: uuid.UUID
     ) -> list[PlateGroup]:
@@ -84,6 +93,26 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
         result = await self._session.execute(stmt)
         return {row[0]: row[1] for row in result.all()}
 
+    async def plate_formats_by_group(
+        self, workspace_id: uuid.UUID, owner_org_id: uuid.UUID | None = None
+    ) -> dict[uuid.UUID, list[str]]:
+        """Distinct plate formats per group — the tree derives "96"/"384"/"mixed"."""
+        stmt = (
+            select(
+                RegisteredPlateModel.group_id,
+                func.array_agg(func.distinct(RegisteredPlateModel.format)),
+            )
+            .where(
+                RegisteredPlateModel.workspace_id == workspace_id,
+                RegisteredPlateModel.group_id.is_not(None),
+            )
+            .group_by(RegisteredPlateModel.group_id)
+        )
+        if owner_org_id is not None:
+            stmt = stmt.where(RegisteredPlateModel.owner_org_id == owner_org_id)
+        result = await self._session.execute(stmt)
+        return {row[0]: [str(f) for f in row[1]] for row in result.all()}
+
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         model = await self._session.get(PlateGroupModel, id)
         if model is not None and model.workspace_id == workspace_id:
@@ -102,6 +131,13 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
             parent_group_id=model.parent_group_id,
             group_type=model.group_type,
             description=model.description,
+            state=model.state,
+            storage_location_id=model.storage_location_id,
+            initial_volume_ul=model.initial_volume_ul,
+            initial_concentration_mm=model.initial_concentration_mm,
+            compound_count=model.compound_count,
+            scientist=model.scientist,
+            collection_id=model.collection_id,
             created_by=model.created_by,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -117,6 +153,13 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
             parent_group_id=aggregate.parent_group_id,
             group_type=aggregate.group_type,
             description=aggregate.description,
+            state=aggregate.state,
+            storage_location_id=aggregate.storage_location_id,
+            initial_volume_ul=aggregate.initial_volume_ul,
+            initial_concentration_mm=aggregate.initial_concentration_mm,
+            compound_count=aggregate.compound_count,
+            scientist=aggregate.scientist,
+            collection_id=aggregate.collection_id,
             created_by=aggregate.created_by,
             version=aggregate.version,
         )
@@ -127,3 +170,10 @@ class SQLAlchemyPlateGroupRepository(SQLAlchemyRepository[PlateGroup, PlateGroup
         model.parent_group_id = aggregate.parent_group_id
         model.group_type = aggregate.group_type
         model.description = aggregate.description
+        model.state = aggregate.state
+        model.storage_location_id = aggregate.storage_location_id
+        model.initial_volume_ul = aggregate.initial_volume_ul
+        model.initial_concentration_mm = aggregate.initial_concentration_mm
+        model.compound_count = aggregate.compound_count
+        model.scientist = aggregate.scientist
+        model.collection_id = aggregate.collection_id

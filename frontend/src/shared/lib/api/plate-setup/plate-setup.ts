@@ -29,10 +29,12 @@ import type {
   HTTPValidationError,
   ImportReadoutsResponse,
   ImportRunReadoutsApiV1RunsRunIdImportReadoutsPostParams,
+  LinkRunPlateBody,
   ParsePlateMapResponse,
   PlateMapResponse,
   RecomputeRunApiV1RunsRunIdRecomputePostBody,
   RecomputeRunResponse,
+  RunPlateLinkResponse,
   SetUpRunPlateRequest,
   SetUpRunPlateResponse
 } from '.././model';
@@ -278,6 +280,139 @@ export function useGetPlateMapApiV1RunsRunIdPlateMapGet<TData = Awaited<ReturnTy
 
 
 /**
+ * Point a run plate at the physical inventory plate it was run on.
+
+``barcode`` accepts a barcode or a plate label. Relinking overwrites.
+ * @summary Link Run Plate
+ */
+export const linkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost = (
+    runId: string,
+    plateId: string,
+    linkRunPlateBody: LinkRunPlateBody,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<RunPlateLinkResponse>(
+      {url: `/api/v1/runs/${runId}/plates/${plateId}:link`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: linkRunPlateBody, signal
+    },
+      );
+    }
+  
+
+
+export const getLinkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost>>, TError,{runId: string;plateId: string;data: LinkRunPlateBody}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof linkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost>>, TError,{runId: string;plateId: string;data: LinkRunPlateBody}, TContext> => {
+
+const mutationKey = ['linkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof linkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost>>, {runId: string;plateId: string;data: LinkRunPlateBody}> = (props) => {
+          const {runId,plateId,data} = props ?? {};
+
+          return  linkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost(runId,plateId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LinkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPostMutationResult = NonNullable<Awaited<ReturnType<typeof linkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost>>>
+    export type LinkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPostMutationBody = LinkRunPlateBody
+    export type LinkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Link Run Plate
+ */
+export const useLinkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost>>, TError,{runId: string;plateId: string;data: LinkRunPlateBody}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof linkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPost>>,
+        TError,
+        {runId: string;plateId: string;data: LinkRunPlateBody},
+        TContext
+      > => {
+
+      const mutationOptions = getLinkRunPlateApiV1RunsRunIdPlatesPlateIdLinkPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Clear a run plate's inventory link.
+ * @summary Unlink Run Plate
+ */
+export const unlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost = (
+    runId: string,
+    plateId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<RunPlateLinkResponse>(
+      {url: `/api/v1/runs/${runId}/plates/${plateId}:unlink`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getUnlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost>>, TError,{runId: string;plateId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof unlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost>>, TError,{runId: string;plateId: string}, TContext> => {
+
+const mutationKey = ['unlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost>>, {runId: string;plateId: string}> = (props) => {
+          const {runId,plateId} = props ?? {};
+
+          return  unlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost(runId,plateId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPostMutationResult = NonNullable<Awaited<ReturnType<typeof unlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost>>>
+    
+    export type UnlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Unlink Run Plate
+ */
+export const useUnlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost>>, TError,{runId: string;plateId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof unlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPost>>,
+        TError,
+        {runId: string;plateId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getUnlinkRunPlateApiV1RunsRunIdPlatesPlateIdUnlinkPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
  * Import readout data from a CSV or XLSX into a run that already has wells set up.
 
 Wells must have been created via the plate-setup endpoint first.

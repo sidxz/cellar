@@ -2,19 +2,24 @@
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
+  CollectionPlateGroupResponse,
   CreatePlateGroupBody,
   GroupTreeNodeResponse,
   GroupTreeResponse,
+  PlateGroupDetailResponse,
   PlateGroupResponse,
   UpdatePlateGroupBody,
 } from "@/shared/lib/api/model";
 import { showSuccess } from "@/shared/lib/toast";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { PLATES_KEY, PLATE_GROUPS_KEY } from "./query-keys";
 
 export type PlateGroup = PlateGroupResponse;
 export type PlateGroupTree = GroupTreeResponse;
 export type PlateGroupNode = GroupTreeNodeResponse;
+export type PlateGroupDetail = PlateGroupDetailResponse;
+export type CollectionPlateGroup = CollectionPlateGroupResponse;
 
 export function usePlateGroupTree(orgId?: string, opts?: { enabled?: boolean }) {
   return useQuery({
@@ -27,6 +32,33 @@ export function usePlateGroupTree(orgId?: string, opts?: { enabled?: boolean }) 
         signal,
       }),
     enabled: opts?.enabled ?? true,
+  });
+}
+
+export function usePlateGroup(groupId: string | undefined) {
+  return useQuery({
+    queryKey: [...PLATE_GROUPS_KEY, "detail", groupId],
+    queryFn: ({ signal }) =>
+      customInstance<PlateGroupDetail>({
+        url: `${API_V1}/plate-groups/${groupId}`,
+        method: "GET",
+        signal,
+      }),
+    enabled: !!groupId,
+  });
+}
+
+/** Plate groups (any level) that realize a collection, with subtree/loan counts. */
+export function useCollectionPlateGroups(collectionId: string | undefined) {
+  return useQuery({
+    queryKey: [...PLATE_GROUPS_KEY, "by-collection", collectionId],
+    queryFn: ({ signal }) =>
+      customInstance<CollectionPlateGroup[]>({
+        url: `${API_V1}/collections/${collectionId}/plate-groups`,
+        method: "GET",
+        signal,
+      }),
+    enabled: !!collectionId,
   });
 }
 
@@ -109,4 +141,43 @@ export function useRemovePlatesFromGroup() {
     }),
     "Plates removed from group",
   );
+}
+
+export interface GroupRef {
+  name: string;
+  /** Ancestry path, "SAC1 › Set 014". */
+  path: string;
+}
+
+const combineTrees = (results: { data?: PlateGroupTree }[]) => results.map((r) => r.data);
+
+/** group id → { name, path } over the trees of the given orgs. Shares the
+ * `usePlateGroupTree` cache key, so the Plate Groups page and this index
+ * never fetch the same tree twice. */
+export function useGroupIndex(orgIds: string[]): Map<string, GroupRef> {
+  const trees = useQueries({
+    queries: orgIds.map((orgId) => ({
+      queryKey: [...PLATE_GROUPS_KEY, "tree", orgId],
+      queryFn: ({ signal }: { signal?: AbortSignal }) =>
+        customInstance<PlateGroupTree>({
+          url: `${API_V1}/plate-groups/tree`,
+          method: "GET",
+          params: { org_id: orgId },
+          signal,
+        }),
+    })),
+    combine: combineTrees,
+  });
+  return useMemo(() => {
+    const index = new Map<string, GroupRef>();
+    const walk = (nodes: PlateGroupNode[], prefix: string) => {
+      for (const n of nodes) {
+        const path = prefix ? `${prefix} › ${n.name}` : n.name;
+        index.set(n.id, { name: n.name, path });
+        walk(n.children ?? [], path);
+      }
+    };
+    for (const tree of trees) if (tree) walk(tree.roots, "");
+    return index;
+  }, [trees]);
 }

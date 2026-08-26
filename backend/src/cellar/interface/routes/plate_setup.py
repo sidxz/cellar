@@ -7,13 +7,18 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cellar.application.screening.fit_dose_response import FitOverrides
 from cellar.application.screening.get_plate_map import GetPlateMapQuery
 from cellar.application.screening.import_run_readouts import (
     ImportRunReadoutsCommand,
     ImportRunReadoutsResult,
+)
+from cellar.application.screening.link_run_plate import (
+    LinkRunPlateCommand,
+    RunPlateLink,
+    UnlinkRunPlateCommand,
 )
 from cellar.application.screening.plate_setup import (
     CompoundAssignment,
@@ -27,9 +32,11 @@ from cellar.interface.dependencies import (
     AuthDep,
     GetPlateMapDep,
     ImportRunReadoutsDep,
+    LinkRunPlateDep,
     ParsePlateMapFileDep,
     ReadoutCalculationEngineDep,
     SetUpRunPlateDep,
+    UnlinkRunPlateDep,
 )
 from cellar.interface.error_handlers import result_to_response
 
@@ -99,6 +106,10 @@ class PlateData(BaseModel):
     format: str
     wells: list[PlateMapWellModel]
     summary: PlateMapSummaryModel
+    # Physical inventory plate this run plate was run on — all null when unlinked.
+    registered_plate_id: uuid.UUID | None = None
+    registered_plate_barcode: str | None = None
+    registered_plate_label: str | None = None
 
 
 class PlateMapResponse(BaseModel):
@@ -106,6 +117,27 @@ class PlateMapResponse(BaseModel):
     # The protocol's dose_unit. All `wells[].dose` values are in this unit.
     dose_unit: str
     plates: list[PlateData]
+
+
+class LinkRunPlateBody(BaseModel):
+    # A barcode or a plate label — resolved server-side (no UUIDs in the UI).
+    barcode: str = Field(min_length=1, max_length=100)
+
+
+class RunPlateLinkResponse(BaseModel):
+    plate_id: uuid.UUID
+    registered_plate_id: uuid.UUID | None = None
+    barcode: str | None = None
+    plate_label: str | None = None
+
+    @classmethod
+    def from_domain(cls, link: RunPlateLink) -> RunPlateLinkResponse:
+        return cls(
+            plate_id=link.plate_id,
+            registered_plate_id=link.registered_plate_id,
+            barcode=link.barcode,
+            plate_label=link.plate_label,
+        )
 
 
 class ImportReadoutsResponse(BaseModel):
@@ -237,6 +269,9 @@ async def get_plate_map(
                 plate_id=plate.plate_id,
                 plate_number=plate.plate_number,
                 format=plate.format,
+                registered_plate_id=plate.registered_plate_id,
+                registered_plate_barcode=plate.registered_plate_barcode,
+                registered_plate_label=plate.registered_plate_label,
                 wells=well_entries,
                 summary=PlateMapSummaryModel(
                     total_wells=summary.total_wells if summary else 0,
@@ -252,6 +287,45 @@ async def get_plate_map(
         )
 
     return PlateMapResponse(run_id=run_id, dose_unit=data.dose_unit, plates=plates_data)
+
+
+@router.post("/runs/{run_id}/plates/{plate_id}:link", response_model=RunPlateLinkResponse)
+async def link_run_plate(
+    run_id: uuid.UUID,
+    plate_id: uuid.UUID,
+    auth: AuthDep,
+    body: LinkRunPlateBody,
+    uc: LinkRunPlateDep,
+) -> RunPlateLinkResponse:
+    """Point a run plate at the physical inventory plate it was run on.
+
+    ``barcode`` accepts a barcode or a plate label. Relinking overwrites.
+    """
+    result = await uc(
+        LinkRunPlateCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run_id,
+            plate_id=plate_id,
+            barcode=body.barcode,
+        ),
+        auth=auth,
+    )
+    return RunPlateLinkResponse.from_domain(result_to_response(result))
+
+
+@router.post("/runs/{run_id}/plates/{plate_id}:unlink", response_model=RunPlateLinkResponse)
+async def unlink_run_plate(
+    run_id: uuid.UUID,
+    plate_id: uuid.UUID,
+    auth: AuthDep,
+    uc: UnlinkRunPlateDep,
+) -> RunPlateLinkResponse:
+    """Clear a run plate's inventory link."""
+    result = await uc(
+        UnlinkRunPlateCommand(workspace_id=auth.workspace_id, run_id=run_id, plate_id=plate_id),
+        auth=auth,
+    )
+    return RunPlateLinkResponse.from_domain(result_to_response(result))
 
 
 @router.post(

@@ -3,6 +3,7 @@
 import { MOLECULES_KEY } from "@/features/chemical-registration";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { PlateRunResponse } from "@/shared/lib/api/model";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -124,6 +125,19 @@ export function usePlateChildren(parentId: string | undefined) {
         method: "GET",
       }),
     enabled: !!parentId,
+  });
+}
+
+/** Runs this physical plate was used in, newest first. */
+export function usePlateRuns(plateId: string | undefined) {
+  return useQuery({
+    queryKey: [...PLATES_KEY, plateId, "runs"],
+    queryFn: () =>
+      customInstance<PlateRunResponse[]>({
+        url: `${API_V1}/plates/${plateId}/runs`,
+        method: "GET",
+      }),
+    enabled: !!plateId,
   });
 }
 

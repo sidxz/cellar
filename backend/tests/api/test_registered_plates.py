@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 
 from tests.api.conftest import AUTH_ORG_ID, OTHER_ORG_ID
@@ -22,16 +24,6 @@ async def _register(client: AsyncClient, **overrides):
     }
     body.update(overrides)
     return await client.post("/api/v1/plates", json=body)
-
-
-async def _set_plates_private(client: AsyncClient, org_id: uuid.UUID, *, private: bool = True):
-    body = {
-        "require_approval": True,
-        "confirmation": "admin_confirm",
-        "default_due_days": None,
-        "plates_private": private,
-    }
-    return await client.put(f"/api/v1/org-plate-policies/{org_id}", json=body)
 
 
 class TestWellRoles:
@@ -165,23 +157,23 @@ class TestOwnerOrg:
 class TestPlateVisibility:
     """Private-org plate exclusion (PlateVisibilityService) — S2 scope."""
 
-    async def test_private_org_excluded_from_list_and_get_for_other_org_caller(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    async def test_foreign_org_plate_hidden_from_editor_visible_to_owner_org(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
         reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
         assert reg.status_code == 201, reg.text
         plate_id = reg.json()["id"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        # `client` is AUTH_ORG_ID — a different org than the plate's owner —
-        # so the now-private plate is excluded from list and 404s on direct GET.
-        listed = await client.get("/api/v1/plates")
+        # editor in AUTH_ORG_ID — a different org than the plate's owner —
+        # so the plate is excluded from list and 404s on direct GET.
+        listed = await editor_client_own_org.get("/api/v1/plates")
         assert listed.status_code == 200, listed.text
         assert plate_id not in {p["id"] for p in listed.json()}
 
-        got = await client.get(f"/api/v1/plates/{plate_id}")
+        got = await editor_client_own_org.get(f"/api/v1/plates/{plate_id}")
         assert got.status_code == 404, got.text
 
         # `editor_client_other_org` is OTHER_ORG_ID — the plate's own org —
@@ -194,27 +186,29 @@ class TestPlateVisibility:
         assert listed_own.status_code == 200, listed_own.text
         assert plate_id in {p["id"] for p in listed_own.json()}
 
-    async def test_explicit_owner_org_filter_cannot_disclose_private_org(
-        self, client: AsyncClient
+    async def test_explicit_owner_org_filter_cannot_disclose_foreign_org(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
     ) -> None:
         """Security-review addition: an explicit ``owner_org_id`` filter for a
-        now-private org must not leak its plates either — the exclusion applies
+        foreign org must not leak its plates either — the exclusion applies
         even when the caller names the org directly, not just on the unfiltered
         list."""
         reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
         assert reg.status_code == 201, reg.text
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        resp = await client.get("/api/v1/plates", params={"owner_org_id": str(OTHER_ORG_ID)})
+        resp = await editor_client_own_org.get(
+            "/api/v1/plates", params={"owner_org_id": str(OTHER_ORG_ID)}
+        )
         assert resp.status_code == 200, resp.text
         assert resp.json() == []
 
     # -- Task 5b: children / export / write-path enforcement -----------------
 
-    async def test_children_exclude_private_org_child(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    async def test_children_exclude_foreign_org_child(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
         parent = await _register(client)
         assert parent.status_code == 201, parent.text
@@ -224,42 +218,46 @@ class TestPlateVisibility:
         assert child.status_code == 201, child.text
         child_id = child.json()["id"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        # Parent (AUTH_ORG_ID) is visible, but the private-org child must not
-        # appear in its children list.
-        listed = await client.get(f"/api/v1/plates/{parent_id}/children")
+        # Parent (AUTH_ORG_ID) is visible, but the foreign-org child must not
+        # appear in its children list for a non-admin caller.
+        listed = await editor_client_own_org.get(f"/api/v1/plates/{parent_id}/children")
         assert listed.status_code == 200, listed.text
         assert child_id not in {p["id"] for p in listed.json()}
 
-        # The child's own org still sees it.
-        listed_own = await editor_client_other_org.get(f"/api/v1/plates/{parent_id}/children")
-        assert listed_own.status_code == 200, listed_own.text
-        assert child_id in {p["id"] for p in listed_own.json()}
+        # The child's own org does not own the *parent*, so the whole
+        # children endpoint 404s for it too — an invisible parent hides its
+        # children, same as test_children_of_invisible_parent_404.
+        listed_foreign_parent = await editor_client_other_org.get(
+            f"/api/v1/plates/{parent_id}/children"
+        )
+        assert listed_foreign_parent.status_code == 404, listed_foreign_parent.text
 
-    async def test_children_of_invisible_parent_404(self, client: AsyncClient) -> None:
+        # Admin bypasses exclusion entirely and sees the cross-org child too.
+        listed_admin = await client.get(f"/api/v1/plates/{parent_id}/children")
+        assert listed_admin.status_code == 200, listed_admin.text
+        assert child_id in {p["id"] for p in listed_admin.json()}
+
+    async def test_children_of_invisible_parent_404(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
         parent = await _register(client, owner_org_id=str(OTHER_ORG_ID))
         assert parent.status_code == 201, parent.text
         parent_id = parent.json()["id"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        resp = await client.get(f"/api/v1/plates/{parent_id}/children")
+        resp = await editor_client_own_org.get(f"/api/v1/plates/{parent_id}/children")
         assert resp.status_code == 404, resp.text
 
-    async def test_export_private_plate_404_foreign_200_own_org(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    async def test_export_plate_404_for_foreign_org_200_for_own_org(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
         reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
         assert reg.status_code == 201, reg.text
         plate_id = reg.json()["id"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        resp = await client.get(f"/api/v1/plates/{plate_id}/export?format=csv")
+        resp = await editor_client_own_org.get(f"/api/v1/plates/{plate_id}/export?format=csv")
         assert resp.status_code == 404, resp.text
 
         resp_own = await editor_client_other_org.get(
@@ -267,20 +265,22 @@ class TestPlateVisibility:
         )
         assert resp_own.status_code == 200, resp_own.text
 
-    async def test_update_and_delete_private_plate_404_foreign_200_own_org(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    async def test_update_and_delete_plate_404_for_foreign_org_200_for_own_org(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
         reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
         assert reg.status_code == 201, reg.text
         plate_id = reg.json()["id"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        patch_foreign = await client.patch(f"/api/v1/plates/{plate_id}", json={"notes": "nope"})
+        patch_foreign = await editor_client_own_org.patch(
+            f"/api/v1/plates/{plate_id}", json={"notes": "nope"}
+        )
         assert patch_foreign.status_code == 404, patch_foreign.text
 
-        delete_foreign = await client.delete(f"/api/v1/plates/{plate_id}")
+        delete_foreign = await editor_client_own_org.delete(f"/api/v1/plates/{plate_id}")
         assert delete_foreign.status_code == 404, delete_foreign.text
 
         # Status quo preserved — the plate's own org can still update it.
@@ -291,7 +291,7 @@ class TestPlateVisibility:
         assert patch_own.json()["notes"] == "legit update"
 
     async def test_map_wells_change_status_derive_404_for_foreign_org(
-        self, client: AsyncClient
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
     ) -> None:
         """MapWells, ChangeStatus, and DerivePlate's parent lookup share the
         exact fetch-then-can_view guard proven above for update/delete — this
@@ -300,40 +300,37 @@ class TestPlateVisibility:
         assert reg.status_code == 201, reg.text
         plate_id = reg.json()["id"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        wells = await client.put(
+        wells = await editor_client_own_org.put(
             f"/api/v1/plates/{plate_id}/wells",
             json={"well_map": {"A1": {"well_type": "blank"}}},
         )
         assert wells.status_code == 404, wells.text
 
-        status = await client.patch(
+        status = await editor_client_own_org.patch(
             f"/api/v1/plates/{plate_id}/status", json={"new_status": "in_use"}
         )
         assert status.status_code == 404, status.text
 
-        derive = await client.post(
+        derive = await editor_client_own_org.post(
             f"/api/v1/plates/{plate_id}/derive",
             json={"barcode": f"PLT-CHILD-{uuid.uuid4().hex[:8]}", "plate_label": "Child"},
         )
         assert derive.status_code == 404, derive.text
 
-    async def test_derive_from_private_org_plate_inherits_owner_and_stays_private(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    async def test_derive_from_foreign_org_plate_inherits_owner_and_stays_hidden(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
         """Derived children inherit the parent's owner_org_id (domain invariant,
-        not a caller choice) — so a daughter of a private org's plate is itself
-        private, invisible to a foreign-org caller."""
+        not a caller choice) — so a daughter of a foreign org's plate is itself
+        in that foreign org, invisible to a non-admin caller in another org."""
         parent = await _register(client, owner_org_id=str(OTHER_ORG_ID))
         assert parent.status_code == 201, parent.text
         parent_id = parent.json()["id"]
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        # Derive as the plate's own org — the only caller that can see the parent.
+        # Derive as the plate's own org — the only non-admin caller that can see the parent.
         derive = await editor_client_other_org.post(
             f"/api/v1/plates/{parent_id}/derive",
             json={"barcode": f"PLT-CHILD-{uuid.uuid4().hex[:8]}", "plate_label": "Child"},
@@ -344,19 +341,41 @@ class TestPlateVisibility:
         child_id = child["id"]
 
         # Foreign-org caller cannot see the derived child, same as the parent.
-        got_foreign = await client.get(f"/api/v1/plates/{child_id}")
+        got_foreign = await editor_client_own_org.get(f"/api/v1/plates/{child_id}")
         assert got_foreign.status_code == 404, got_foreign.text
 
-        listed_foreign = await client.get("/api/v1/plates")
+        listed_foreign = await editor_client_own_org.get("/api/v1/plates")
         assert listed_foreign.status_code == 200, listed_foreign.text
         assert child_id not in {p["id"] for p in listed_foreign.json()}
+
+    async def test_strict_by_default_admin_sees_all_editor_sees_own_org_only(
+        self, client: AsyncClient, editor_client_own_org: AsyncClient
+    ) -> None:
+        """No policy row, no toggle: a foreign org's plate is hidden from a
+        non-admin caller and visible to a workspace admin."""
+        reg = await _register(client, owner_org_id=str(OTHER_ORG_ID))
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        admin_get = await client.get(f"/api/v1/plates/{plate_id}")
+        assert admin_get.status_code == 200, admin_get.text
+        admin_list = await client.get("/api/v1/plates", params={"owner_org_id": str(OTHER_ORG_ID)})
+        assert plate_id in {p["id"] for p in admin_list.json()}
+
+        editor_get = await editor_client_own_org.get(f"/api/v1/plates/{plate_id}")
+        assert editor_get.status_code == 404, editor_get.text
+        editor_list = await editor_client_own_org.get("/api/v1/plates")
+        assert plate_id not in {p["id"] for p in editor_list.json()}
 
 
 class TestMoleculePlatesVisibility:
     """Private-org exclusion on GET /molecules/{id}/plates (read-model path)."""
 
-    async def test_molecule_plates_excludes_private_org_plate(
-        self, client: AsyncClient, editor_client_other_org: AsyncClient
+    async def test_molecule_plates_excludes_foreign_org_plate(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
     ) -> None:
         org = await client.post(
             "/api/v1/organizations", json={"name": "MolPlateVisOrg", "org_type": "internal"}
@@ -403,16 +422,13 @@ class TestMoleculePlatesVisibility:
         )
         assert mapped_visible.status_code == 200, mapped_visible.text
 
-        policy = await _set_plates_private(client, OTHER_ORG_ID)
-        assert policy.status_code == 200, policy.text
-
-        resp = await client.get(f"/api/v1/molecules/{molecule_id}/plates")
+        resp = await editor_client_own_org.get(f"/api/v1/molecules/{molecule_id}/plates")
         assert resp.status_code == 200, resp.text
         plate_ids = {e["plate_id"] for e in resp.json()}
         assert private_plate_id not in plate_ids
         assert visible_plate_id in plate_ids
 
-        # The private plate's own org still sees it.
+        # The foreign-org plate's own org still sees it.
         resp_own = await editor_client_other_org.get(f"/api/v1/molecules/{molecule_id}/plates")
         assert resp_own.status_code == 200, resp_own.text
         assert private_plate_id in {e["plate_id"] for e in resp_own.json()}
@@ -458,3 +474,59 @@ class TestCoverageGaps:
         assert plate["format"] == "96"
         assert plate["plate_type"] == "assay"
         assert plate["status"] == "registered"
+
+
+class TestAuditActor:
+    @pytest.fixture(autouse=True)
+    def _wire_audit_catch_all(self, api_app: FastAPI) -> None:
+        """The shared test app never wires the audit catch-all handler (only
+        production's ``create_app()`` lifespan does) — every other API test
+        exercises audit via explicit ``record()`` calls, not this handler.
+        Wire it here, scoped to this class, since this is the one test that
+        needs the catch-all path itself under test.
+        """
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        from cellar.domain.shared.events import DomainEvent
+        from cellar.infrastructure.messaging.audit_event_handler import AuditEventHandler
+        from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+
+        container = api_app.state.container
+        container[EventDispatcher].register(
+            DomainEvent, AuditEventHandler(container[async_sessionmaker])
+        )
+
+    @pytest.fixture(autouse=True)
+    def _bind_actor_context(self, api_app: FastAPI, fake_auth) -> None:
+        """The shared ``get_auth`` override (``tests/api/conftest.py``) returns
+        ``fake_auth`` directly, bypassing the real ``get_auth`` wrapper — so it
+        never calls ``set_current_actor``. Reproduce that one side effect here
+        so this test exercises the real request → ContextVar → audit path.
+        """
+        from cellar.application.shared.actor_context import set_current_actor
+        from cellar.interface.dependencies import get_auth
+
+        async def _fake_get_auth():
+            # Must be async: FastAPI runs sync dependencies in a threadpool
+            # (a copied context), so a plain `def` here would set the
+            # ContextVar on a copy that never propagates back to the
+            # request's own task.
+            set_current_actor(fake_auth.user_id)
+            return fake_auth
+
+        api_app.dependency_overrides[get_auth] = _fake_get_auth
+
+    async def test_plate_registration_audit_row_names_the_caller(
+        self, client: AsyncClient, api_app: FastAPI, user_id: uuid.UUID
+    ) -> None:
+        reg = await _register(client)
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        audit = await client.get(
+            "/api/v1/audit", params={"entity_type": "RegisteredPlate", "entity_id": plate_id}
+        )
+        assert audit.status_code == 200, audit.text
+        rows = audit.json()["items"]
+        assert rows, "expected at least one audit row for the registered plate"
+        assert {r["performed_by"] for r in rows} == {str(user_id)}

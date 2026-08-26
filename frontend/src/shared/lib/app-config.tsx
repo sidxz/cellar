@@ -6,6 +6,7 @@ export interface AppConfig {
   apiUrl: string;
   appUrl: string;
   duarUrl: string;
+  protCellarUrl: string;
   idpProvider: string;
   googleClientId: string;
   entraIdClientId: string;
@@ -20,6 +21,7 @@ const defaultConfig: AppConfig = {
   apiUrl: "http://localhost:8000",
   appUrl: "http://localhost:3000",
   duarUrl: "http://localhost:9003",
+  protCellarUrl: "http://localhost:3001",
   idpProvider: "google",
   googleClientId: "",
   entraIdClientId: "",
@@ -62,6 +64,7 @@ export async function fetchAppConfig(): Promise<AppConfig> {
     apiUrl: process.env.NEXT_PUBLIC_API_URL ?? defaultConfig.apiUrl,
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? defaultConfig.appUrl,
     duarUrl: process.env.NEXT_PUBLIC_DUAR_URL ?? defaultConfig.duarUrl,
+    protCellarUrl: process.env.NEXT_PUBLIC_PROT_CELLAR_URL ?? defaultConfig.protCellarUrl,
     idpProvider: process.env.NEXT_PUBLIC_IDP_PROVIDER ?? defaultConfig.idpProvider,
     googleClientId: process.env.NEXT_PUBLIC_IDP_CLIENT_ID ?? defaultConfig.googleClientId,
     entraIdClientId: process.env.NEXT_PUBLIC_ENTRA_ID_CLIENT_ID ?? defaultConfig.entraIdClientId,

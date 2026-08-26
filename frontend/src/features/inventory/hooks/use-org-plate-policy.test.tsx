@@ -8,7 +8,6 @@ const policy = {
   require_approval: true,
   confirmation: "kiosk_scan",
   default_due_days: 14,
-  plates_private: false,
   version: 1,
 };
 
@@ -57,7 +56,6 @@ describe("useSetOrgPlatePolicy", () => {
         require_approval: true,
         confirmation: "admin_confirm",
         default_due_days: null,
-        plates_private: true,
       });
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -72,7 +70,6 @@ describe("useSetOrgPlatePolicy", () => {
       require_approval: true,
       confirmation: "admin_confirm",
       default_due_days: null,
-      plates_private: true,
     });
   });
 });

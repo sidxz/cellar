@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cellar.application.inventory.plate_groups import (
     AssignPlatesToGroupCommand,
     CreatePlateGroupCommand,
     DeletePlateGroupCommand,
     GetGroupTreeQuery,
+    GetPlateGroupQuery,
+    GroupDetail,
     GroupTree,
     GroupTreeNode,
     MovePlateGroupCommand,
     RemovePlatesFromGroupCommand,
+    SavedGroup,
     UpdatePlateGroupCommand,
 )
 from cellar.application.shared.sentinel import UNSET
@@ -26,6 +30,7 @@ from cellar.interface.dependencies import (
     CreatePlateGroupDep,
     DeletePlateGroupDep,
     GetGroupTreeDep,
+    GetPlateGroupDep,
     MovePlateGroupDep,
     RemovePlatesFromGroupDep,
     UpdatePlateGroupDep,
@@ -43,11 +48,20 @@ class PlateGroupResponse(BaseModel):
     parent_group_id: uuid.UUID | None = None
     group_type: str | None = None
     description: str | None = None
+    state: str | None = None
+    storage_location_id: uuid.UUID | None = None
+    initial_volume_ul: float | None = None
+    initial_concentration_mm: float | None = None
+    compound_count: int | None = None
+    scientist: str | None = None
+    collection_id: uuid.UUID | None = None
+    collection_name: str | None = None
+    created_at: datetime
     created_by: uuid.UUID
     version: int
 
     @classmethod
-    def from_domain(cls, g: PlateGroup) -> PlateGroupResponse:
+    def from_domain(cls, g: PlateGroup, collection_name: str | None = None) -> PlateGroupResponse:
         return cls(
             id=g.id,
             workspace_id=g.workspace_id,
@@ -56,9 +70,22 @@ class PlateGroupResponse(BaseModel):
             parent_group_id=g.parent_group_id,
             group_type=g.group_type,
             description=g.description,
+            state=g.state,
+            storage_location_id=g.storage_location_id,
+            initial_volume_ul=g.initial_volume_ul,
+            initial_concentration_mm=g.initial_concentration_mm,
+            compound_count=g.compound_count,
+            scientist=g.scientist,
+            collection_id=g.collection_id,
+            collection_name=collection_name,
+            created_at=g.created_at,
             created_by=g.created_by,
             version=g.version,
         )
+
+    @classmethod
+    def from_saved(cls, s: SavedGroup) -> PlateGroupResponse:
+        return cls.from_domain(s.group, s.collection_name)
 
 
 class GroupTreeNodeResponse(BaseModel):
@@ -66,9 +93,19 @@ class GroupTreeNodeResponse(BaseModel):
     name: str
     group_type: str | None = None
     description: str | None = None
+    state: str | None = None
+    storage_location_id: uuid.UUID | None = None
+    initial_volume_ul: float | None = None
+    initial_concentration_mm: float | None = None
+    compound_count: int | None = None
+    scientist: str | None = None
+    collection_id: uuid.UUID | None = None
+    collection_name: str | None = None
+    created_at: datetime
     parent_group_id: uuid.UUID | None = None
     owner_org_id: uuid.UUID
     plate_count: int
+    plate_format: str | None = None
     created_by: uuid.UUID
     version: int
     children: list[GroupTreeNodeResponse] = []
@@ -80,9 +117,19 @@ class GroupTreeNodeResponse(BaseModel):
             name=n.group.name,
             group_type=n.group.group_type,
             description=n.group.description,
+            state=n.group.state,
+            storage_location_id=n.group.storage_location_id,
+            initial_volume_ul=n.group.initial_volume_ul,
+            initial_concentration_mm=n.group.initial_concentration_mm,
+            compound_count=n.group.compound_count,
+            scientist=n.group.scientist,
+            collection_id=n.group.collection_id,
+            collection_name=n.collection_name,
+            created_at=n.group.created_at,
             parent_group_id=n.group.parent_group_id,
             owner_org_id=n.group.owner_org_id,
             plate_count=n.plate_count,
+            plate_format=n.plate_format,
             created_by=n.group.created_by,
             version=n.group.version,
             children=[cls.from_node(c) for c in n.children],
@@ -101,12 +148,65 @@ class GroupTreeResponse(BaseModel):
         return cls(org_id=t.org_id, roots=[GroupTreeNodeResponse.from_node(r) for r in t.roots])
 
 
+class GroupRefResponse(BaseModel):
+    """Lightweight group reference used for ancestors + children lists."""
+
+    id: uuid.UUID
+    name: str
+    group_type: str | None = None
+    state: str | None = None
+    plate_count: int = 0
+    plate_format: str | None = None
+    collection_id: uuid.UUID | None = None
+    collection_name: str | None = None
+
+    @classmethod
+    def from_node(cls, n: GroupTreeNode) -> GroupRefResponse:
+        return cls(
+            id=n.group.id,
+            name=n.group.name,
+            group_type=n.group.group_type,
+            state=n.group.state,
+            plate_count=n.plate_count,
+            plate_format=n.plate_format,
+            collection_id=n.group.collection_id,
+            collection_name=n.collection_name,
+        )
+
+
+class PlateGroupDetailResponse(BaseModel):
+    group: PlateGroupResponse
+    plate_count: int
+    subtree_plate_count: int
+    plate_format: str | None = None
+    ancestors: list[GroupRefResponse]
+    children: list[GroupRefResponse]
+
+    @classmethod
+    def from_detail(cls, d: GroupDetail) -> PlateGroupDetailResponse:
+        return cls(
+            group=PlateGroupResponse.from_domain(d.group, d.collection_name),
+            plate_count=d.plate_count,
+            subtree_plate_count=d.subtree_plate_count,
+            plate_format=d.plate_format,
+            ancestors=[GroupRefResponse.from_node(a) for a in d.ancestors],
+            children=[GroupRefResponse.from_node(c) for c in d.children],
+        )
+
+
 class CreatePlateGroupBody(BaseModel):
     name: str
     owner_org_id: uuid.UUID | None = None
     parent_group_id: uuid.UUID | None = None
     group_type: str | None = None
     description: str | None = None
+    state: str | None = None
+    storage_location_id: uuid.UUID | None = None
+    initial_volume_ul: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    initial_concentration_mm: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    compound_count: int | None = Field(default=None, ge=0)
+    scientist: str | None = None
+    collection_id: uuid.UUID | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -115,6 +215,13 @@ class UpdatePlateGroupBody(BaseModel):
     name: str | None = None
     group_type: str | None = None
     description: str | None = None
+    state: str | None = None
+    storage_location_id: uuid.UUID | None = None
+    initial_volume_ul: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    initial_concentration_mm: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    compound_count: int | None = Field(default=None, ge=0)
+    scientist: str | None = None
+    collection_id: uuid.UUID | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -144,9 +251,15 @@ async def create_plate_group(
         parent_group_id=body.parent_group_id,
         group_type=body.group_type,
         description=body.description,
+        state=body.state,
+        storage_location_id=body.storage_location_id,
+        initial_volume_ul=body.initial_volume_ul,
+        initial_concentration_mm=body.initial_concentration_mm,
+        compound_count=body.compound_count,
+        scientist=body.scientist,
+        collection_id=body.collection_id,
     )
-    group = result_to_response(await uc(command, auth=auth))
-    return PlateGroupResponse.from_domain(group)
+    return PlateGroupResponse.from_saved(result_to_response(await uc(command, auth=auth)))
 
 
 @router.get("/tree", response_model=GroupTreeResponse)
@@ -157,6 +270,16 @@ async def get_group_tree(
     query = GetGroupTreeQuery(workspace_id=auth.workspace_id, org_id=org_id)
     tree = result_to_response(await uc(query, auth=auth))
     return GroupTreeResponse.from_tree(tree)
+
+
+@router.get("/{group_id}", response_model=PlateGroupDetailResponse)
+async def get_plate_group(
+    group_id: uuid.UUID, auth: AuthDep, uc: GetPlateGroupDep
+) -> PlateGroupDetailResponse:
+    """Single-group detail: ancestors, direct children, and plate counts."""
+    query = GetPlateGroupQuery(workspace_id=auth.workspace_id, group_id=group_id)
+    detail = result_to_response(await uc(query, auth=auth))
+    return PlateGroupDetailResponse.from_detail(detail)
 
 
 @router.patch("/{group_id}", response_model=PlateGroupResponse)
@@ -171,9 +294,19 @@ async def update_plate_group(
         name=body.name if "name" in provided else None,
         group_type=body.group_type if "group_type" in provided else UNSET,
         description=body.description if "description" in provided else UNSET,
+        state=body.state if "state" in provided else UNSET,
+        storage_location_id=(
+            body.storage_location_id if "storage_location_id" in provided else UNSET
+        ),
+        initial_volume_ul=body.initial_volume_ul if "initial_volume_ul" in provided else UNSET,
+        initial_concentration_mm=(
+            body.initial_concentration_mm if "initial_concentration_mm" in provided else UNSET
+        ),
+        compound_count=body.compound_count if "compound_count" in provided else UNSET,
+        scientist=body.scientist if "scientist" in provided else UNSET,
+        collection_id=body.collection_id if "collection_id" in provided else UNSET,
     )
-    group = result_to_response(await uc(command, auth=auth))
-    return PlateGroupResponse.from_domain(group)
+    return PlateGroupResponse.from_saved(result_to_response(await uc(command, auth=auth)))
 
 
 @router.post("/{group_id}/move", response_model=PlateGroupResponse)
@@ -191,9 +324,7 @@ async def move_plate_group(
 
 
 @router.delete("/{group_id}", status_code=204)
-async def delete_plate_group(
-    group_id: uuid.UUID, auth: AuthDep, uc: DeletePlateGroupDep
-) -> None:
+async def delete_plate_group(group_id: uuid.UUID, auth: AuthDep, uc: DeletePlateGroupDep) -> None:
     """Delete a childless group; its plates are ungrouped, not deleted."""
     command = DeletePlateGroupCommand(workspace_id=auth.workspace_id, group_id=group_id)
     result_to_response(await uc(command, auth=auth))

@@ -26,9 +26,6 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository imp
     SQLAlchemyBatchRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
-from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
-    SQLAlchemyOrgPlatePolicyRepository,
-)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
 )
@@ -98,8 +95,9 @@ class PlateRegistrationActivities:
         batch_repo = SQLAlchemyBatchRepository(uow)
         # No caller identity in a worker — auth=None below makes
         # PlateVisibilityService short-circuit to an empty exclusion set
-        # without a query, so this never restricts the pipeline's own writes.
-        visibility = PlateVisibilityService(SQLAlchemyOrgPlatePolicyRepository(uow))
+        # without consulting a directory, so this never restricts the
+        # pipeline's own writes (and none is wired here on purpose).
+        visibility = PlateVisibilityService()
         map_wells_uc = MapWells(
             uow=uow,
             repo=repo,

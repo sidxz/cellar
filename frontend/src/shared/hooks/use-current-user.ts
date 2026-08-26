@@ -21,3 +21,15 @@ export function useCurrentUser() {
     staleTime: Number.POSITIVE_INFINITY,
   });
 }
+
+/** Editors and admins may write (comments, records); viewers are read-only. */
+export function canEdit(me: CurrentUser | undefined): boolean {
+  return !!me && me.workspace_role !== "viewer";
+}
+
+/** {@link canEdit} bound to the current session's user, for components that
+ * don't already have `me` in scope. */
+export function useCanEdit(): boolean {
+  const { data: me } = useCurrentUser();
+  return canEdit(me);
+}

@@ -8,7 +8,6 @@ from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.screening_assay.activity_types import AggregatedReadout
-from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
 from cellar.domain.screening_assay.collection_coverage import (
     CollectionCoverage,
     EffectiveCollectionCoverage,
@@ -16,6 +15,7 @@ from cellar.domain.screening_assay.collection_coverage import (
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.plate_template import PlateTemplate
 from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
+from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_import_template import RunImportTemplate
@@ -190,16 +190,6 @@ class TargetRepository(Protocol):
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
     ) -> list[Target]: ...
-    async def count_references(
-        self, workspace_id: uuid.UUID, target_id: uuid.UUID
-    ) -> tuple[int, int]:
-        """``(protocol_count, run_count)`` of link rows referencing the target.
-
-        Used by DeleteTarget to refuse (409) deleting an in-use target instead
-        of letting the RESTRICT FK raise.
-        """
-        ...
-
     async def save(self, entity: Target) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
