@@ -35,7 +35,7 @@ export function ActiveInCell({ value }: { value: AnyProtocolActivity | undefined
         const singleTarget = e.target_names.length === 1 ? e.target_names[0] : null;
         return (
           <div
-            key={`${e.protocol_id}:${e.readout_definition_id}`}
+            key={`${e.protocol_id}:${e.readout_definition_id}:${e.source}`}
             data-testid="active-in-row"
             className={cn("flex min-w-0 items-center gap-1.5", inactive && "text-muted-foreground")}
           >

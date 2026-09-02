@@ -160,12 +160,6 @@ function SearchPageInner() {
   // ── Project scoping (independent of search state) ──────────────────────
   const [projectIds, setProjectIds] = useState<string[]>([]);
 
-  // ── Protocols matched by the clicked row's "any" column (Active in) ────
-  // The grid only knows about `visibleProtocolIds` (from `protocol_columns`);
-  // an any-protocol row's matches aren't in that set, so the detail sheet
-  // wouldn't show them without this.
-  const [clickedAnyProtocolIds, setClickedAnyProtocolIds] = useState<string[]>([]);
-
   // ── Dialogs (independent of search state) ─────────────────────────────
   const [reportOpen, setReportOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -211,13 +205,22 @@ function SearchPageInner() {
     [protocolColumns, protocols],
   );
 
-  // ── Derived: visible protocol IDs + the clicked row's "any" matches ────
-  // The detail sheet needs to show every protocol the clicked compound
+  // ── Derived: visible protocol IDs + the selected compound's "any" matches ─
+  // The detail sheet needs to show every protocol the selected compound
   // actually matched in an any-protocol search, not just the columns on
-  // screen (an any-protocol row has no dedicated protocol column).
+  // screen (an any-protocol row has no dedicated protocol column). Derived
+  // from `selectedMolecule` (not a click-time snapshot) so prev/next
+  // navigation stays correct without a separate state to keep in sync.
   const sheetVisibleProtocolIds = useMemo(
-    () => [...new Set([...visibleProtocolIds, ...clickedAnyProtocolIds])],
-    [visibleProtocolIds, clickedAnyProtocolIds],
+    () => [
+      ...new Set([
+        ...visibleProtocolIds,
+        ...(selectedMolecule
+          ? (anyProtocolActivity(selectedMolecule)?.entries.map((e) => e.protocol_id) ?? [])
+          : []),
+      ]),
+    ],
+    [visibleProtocolIds, selectedMolecule],
   );
 
   // ── Derived: should the toolbar Summarize: dropdown be hidden? ──────────
@@ -600,9 +603,6 @@ function SearchPageInner() {
     (molecule: EnrichedMolecule) => {
       const idx = results.findIndex((m) => m.id === molecule.id);
       dispatch({ type: "select", molecule, index: idx >= 0 ? idx : 0 });
-      setClickedAnyProtocolIds(
-        anyProtocolActivity(molecule)?.entries.map((e) => e.protocol_id) ?? [],
-      );
     },
     [results],
   );

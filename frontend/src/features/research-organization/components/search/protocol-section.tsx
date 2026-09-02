@@ -181,6 +181,21 @@ function WhereList({ where, options, anyProtocol = false, onChange }: WhereListP
     onChange(where.filter((_, idx) => idx !== i));
   }
   function add() {
+    // On an any-protocol row, a fresh {source:"dr_curve", readout_definition_id:""}
+    // is indistinguishable from the legacy saved "potency" shape — seed from
+    // the first catalog option instead so the new row actually resolves to
+    // what it displays.
+    const firstOption = anyProtocol ? options[0] : undefined;
+    const parsed = firstOption ? parseWhereOptionId(firstOption.id) : null;
+    if (parsed) {
+      onChange([
+        ...where,
+        parsed.source === "curve_class"
+          ? { ...parsed, operator: "eq", curve_classes: [] }
+          : { ...parsed, operator: "lt", value: 0 },
+      ]);
+      return;
+    }
     onChange([...where, defaultWhereCondition()]);
   }
 
@@ -715,7 +730,7 @@ function ActivityRow({
                     />
                     <span className="text-sm">Any protocol</span>
                     <span className="ml-auto text-xs text-muted-foreground">
-                      curve class · potency in µM
+                      any measured intercept or readout
                     </span>
                   </CommandItem>
                 </CommandGroup>

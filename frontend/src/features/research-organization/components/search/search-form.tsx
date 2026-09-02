@@ -382,7 +382,7 @@ export function SearchForm({
     });
     // Filter to valid criteria and their matching conjunctions
     const validIndices = cleanedActivity
-      .map((c, i) => (c.protocol_id !== "" ? i : -1)) // null = any protocol, valid
+      .map((c, i) => (c.protocol_id === null || !!c.protocol_id ? i : -1)) // null = any protocol, valid
       .filter((i) => i >= 0);
     const validActivity = validIndices.map((i) => cleanedActivity[i]);
     const validConjs = validIndices.map((i) => protocolConjunctions[i] ?? "or");

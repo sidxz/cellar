@@ -534,10 +534,13 @@ export function buildActiveInColumn(): ColDef<EnrichedMolecule> {
       const first = p.data ? anyProtocolActivity(p.data)?.entries[0] : undefined;
       return first?.value_um ?? null;
     },
-    comparator: (a: number | null, b: number | null) => {
+    // AG Grid negates the whole comparator for desc sort, so a plain
+    // "nulls last" return would flip to "nulls first" on desc — direction
+    // must be baked in explicitly to keep nulls last both ways.
+    comparator: (a: number | null, b: number | null, _nA, _nB, isDescending) => {
       if (a == null && b == null) return 0;
-      if (a == null) return 1;
-      if (b == null) return -1;
+      if (a == null) return isDescending ? -1 : 1;
+      if (b == null) return isDescending ? 1 : -1;
       return a - b;
     },
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => (

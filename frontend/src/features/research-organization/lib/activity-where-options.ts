@@ -180,19 +180,13 @@ export function buildAnyProtocolWhereOptions(protocols: Protocol[]): WhereOption
     for (const rd of p.readout_definitions ?? []) {
       const cfg = rd.dose_response_config;
       if (cfg) {
-        const specs = cfg.intercepts ?? [];
-        const keys: Array<{ key: InterceptKey; label: string }> =
-          specs.length > 0
-            ? specs.map((s) => ({
-                key: { kind: s.kind, level: s.level },
-                label: interceptLabel(s),
-              }))
-            : [
-                {
-                  key: { kind: cfg.curve_type.startsWith("ic") ? "ic" : "ec", level: 50 },
-                  label: cfg.curve_type.toUpperCase(),
-                },
-              ];
+        // The backend always fills `intercepts` (DoseResponseConfig defaults
+        // it to the primary from curve_type), so an empty list here
+        // contributes nothing rather than guessing a fallback key/label.
+        const keys = (cfg.intercepts ?? []).map((s) => ({
+          key: { kind: s.kind, level: s.level },
+          label: interceptLabel(s),
+        }));
         for (const { key, label } of keys) {
           const id = anyDrOptionId(key);
           const entry = dr.get(id) ?? { key, label, protos: new Set<string>() };
@@ -217,7 +211,7 @@ export function buildAnyProtocolWhereOptions(protocols: Protocol[]): WhereOption
 
   const drOpts: WhereOption[] = [...dr.entries()].map(([id, e]) => ({
     id,
-    label: `${e.label} · ${countLabel(e.protos.size)}`,
+    label: `${e.label} (µM) · ${countLabel(e.protos.size)}`,
     unit: "µM",
     source: "dr_curve",
     readout_definition_id: "",
@@ -273,6 +267,8 @@ export function parseWhereOptionId(
   }
   if (id.startsWith("any:rd:")) {
     const body = id.slice("any:rd:".length);
+    // lastIndexOf is load-bearing: readout names may contain "|", units never
+    // do, so splitting from the right always finds the name/unit boundary.
     const sep = body.lastIndexOf("|");
     if (sep < 0) return null;
     const unit = body.slice(sep + 1);

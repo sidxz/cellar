@@ -252,6 +252,7 @@ describe("any-protocol derived catalog", () => {
 
   const ic50 = { kind: "ic" as const, level: 50, basis: "relative_percent" as const, label: null };
   const ic90 = { ...ic50, level: 90 };
+  const ec50 = { kind: "ec" as const, level: 50, basis: "relative_percent" as const, label: null };
 
   const protocols = [
     protocolWith(P1, [
@@ -276,13 +277,12 @@ describe("any-protocol derived catalog", () => {
       rd({ id: "b3", name: "Scientist", data_type: "text" }),
     ]),
     protocolWith(P3, [
-      // legacy DR readout, no declared intercepts → falls back to curve_type
       rd({
         id: "c1",
         name: "EC50",
         data_type: "dose_response",
         unit: "uM",
-        dose_response_config: drConfig("ec50", []),
+        dose_response_config: drConfig("ec50", [ec50]),
       }),
       rd({ id: "c2", name: "% Inhibition", unit: null }),
     ]),
@@ -296,7 +296,7 @@ describe("any-protocol derived catalog", () => {
       ["any:dr:ec:50", 1],
       ["any:dr:ic:90", 1],
     ]);
-    expect(dr[0].label).toBe("IC50 · 2 protocols");
+    expect(dr[0].label).toBe("IC50 (µM) · 2 protocols");
     expect(dr[0].unit).toBe("µM");
     expect(dr[0].source).toBe("dr_curve");
     expect(dr[0].intercept_key).toEqual({ kind: "ic", level: 50 });
@@ -342,6 +342,20 @@ describe("any-protocol derived catalog", () => {
     );
     // per-protocol rows never resolve any:* ids
     expect(whereConditionOptionId({ ...rdc!, operator: "gt", value: 50 }, false)).toBe("");
+  });
+
+  it("a fresh any-protocol where-row seeds from the first catalog option, not the legacy potency shape", () => {
+    // WhereList.add() on an any-protocol row seeds the new condition from
+    // parseWhereOptionId(options[0].id) — proves that resolves to a real
+    // dr_curve condition with an intercept_key, not the ambiguous
+    // {source:"dr_curve", readout_definition_id:""} legacy shape.
+    const opts = buildAnyProtocolWhereOptions(protocols);
+    const seeded = parseWhereOptionId(opts[0].id);
+    expect(seeded).toEqual({
+      source: "dr_curve",
+      readout_definition_id: "",
+      intercept_key: { kind: "ic", level: 50 },
+    });
   });
 
   it("legacy potency (dr_curve, no rd, no key) still resolves on any-protocol rows", () => {
