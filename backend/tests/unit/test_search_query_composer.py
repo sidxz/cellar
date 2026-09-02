@@ -1231,7 +1231,8 @@ class TestActivityAnyProtocol:
             _compose({
                 "criteria": [
                     {"type": "activity",
-                     "where": [{"source": "readout_data", "readout_definition_id": str(uuid.uuid4()),
+                     "where": [{"source": "readout_data",
+                                "readout_definition_id": str(uuid.uuid4()),
                                 "operator": "gt", "value": 50}]}
                 ],
                 "logic": "and",

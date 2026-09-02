@@ -470,6 +470,7 @@ def test_cell_value_any_joins_entries():
     raw = {"activity": {"any": {"entries": [
         {"protocol_name": "Beta", "label": "IC50", "value": 5.0, "unit": "nM", "qualifier": None},
         {"protocol_name": "Alpha", "label": "IC50", "value": 5.0, "unit": "uM", "qualifier": ">"},
-        {"protocol_name": "Gamma", "label": "% Inhibition", "value": None, "unit": "%", "qualifier": None},
+        {"protocol_name": "Gamma", "label": "% Inhibition", "value": None, "unit": "%",
+         "qualifier": None},
     ]}}}
     assert _cell_value(spec, raw) == "Beta: IC50 5 nM; Alpha: IC50 >5 uM; Gamma: % Inhibition —"
