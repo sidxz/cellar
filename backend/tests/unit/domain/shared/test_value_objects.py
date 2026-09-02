@@ -323,3 +323,24 @@ class TestStorageCondition:
     def test_temperature_only(self) -> None:
         sc = StorageCondition(temperature_celsius=5.0)
         assert sc.relative_humidity_percent is None
+
+
+class TestConcentrationUnitMicromolarFactor:
+    def test_molar_units_have_constant_factor(self) -> None:
+        from cellar.domain.shared.enums import ConcentrationUnit
+
+        assert ConcentrationUnit.MM.micromolar_factor == 1000.0
+        assert ConcentrationUnit.UM.micromolar_factor == 1.0
+        assert ConcentrationUnit.NM.micromolar_factor == 0.001
+
+    def test_mass_unit_needs_molecular_weight(self) -> None:
+        from cellar.domain.shared.enums import ConcentrationUnit
+
+        assert ConcentrationUnit.MG_ML.micromolar_factor is None
+
+    def test_every_member_is_classified(self) -> None:
+        """Adding a unit without deciding its conversion must fail loudly."""
+        from cellar.domain.shared.enums import ConcentrationUnit
+
+        for u in ConcentrationUnit:
+            u.micromolar_factor  # noqa: B018 — raises if unmapped

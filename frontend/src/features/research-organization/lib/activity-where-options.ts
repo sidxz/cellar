@@ -124,22 +124,43 @@ export function buildActivityWhereOptions(protocol: Protocol | undefined): Where
     }
   }
 
-  if (hasAnyDr) {
-    out.push({
-      id: CURVE_CLASS_OPTION_ID,
-      label: "Curve Class",
-      unit: null,
-      source: "curve_class",
-      readout_definition_id: "",
-      intercept_key: null,
-      group: "curve_class",
-    });
-  }
+  if (hasAnyDr) out.push(CURVE_CLASS_OPTION);
 
   return out;
 }
 
 export const CURVE_CLASS_OPTION_ID = "curve_class";
+/** Any-protocol only: primary fitted value of any DR curve, normalized to µM
+ *  server-side via each protocol's dose_unit. Serializes as a ``dr_curve``
+ *  condition with no readout-def. */
+export const POTENCY_UM_OPTION_ID = "potency_um";
+
+const CURVE_CLASS_OPTION: WhereOption = {
+  id: CURVE_CLASS_OPTION_ID,
+  label: "Curve Class",
+  unit: null,
+  source: "curve_class",
+  readout_definition_id: "",
+  intercept_key: null,
+  group: "curve_class",
+};
+
+/** Picker options for an "Any protocol" row — the only dimensions that are
+ *  comparable across protocols. */
+export function buildAnyProtocolWhereOptions(): WhereOption[] {
+  return [
+    {
+      id: POTENCY_UM_OPTION_ID,
+      label: "Potency (IC50 / EC50)",
+      unit: "µM",
+      source: "dr_curve",
+      readout_definition_id: "",
+      intercept_key: null,
+      group: "dose_response",
+    },
+    CURVE_CLASS_OPTION,
+  ];
+}
 
 function drOptionId(rdId: string, key: InterceptKey | null): string {
   if (!key) return `dr_curve:${rdId}`;
@@ -158,6 +179,9 @@ export function parseWhereOptionId(
 ): Pick<ActivityWhereCondition, "source" | "readout_definition_id" | "intercept_key"> | null {
   if (id === CURVE_CLASS_OPTION_ID) {
     return { source: "curve_class", readout_definition_id: "", intercept_key: null };
+  }
+  if (id === POTENCY_UM_OPTION_ID) {
+    return { source: "dr_curve", readout_definition_id: "", intercept_key: null };
   }
   const parts = id.split(":");
   if (parts.length < 2) return null;
@@ -192,10 +216,14 @@ export function parseWhereOptionId(
 
 /** Inverse of `parseWhereOptionId`: given a saved where-condition, find
  *  the option id that should be highlighted in the picker. Returns an
- *  empty string when no readout-def is set (fresh row). */
-export function whereConditionOptionId(cond: ActivityWhereCondition): string {
+ *  empty string when no readout-def is set (fresh row) — except on an
+ *  any-protocol row, where a readout-def-less ``dr_curve`` *is* the
+ *  potency option. */
+export function whereConditionOptionId(cond: ActivityWhereCondition, anyProtocol = false): string {
   if (cond.source === "curve_class") return CURVE_CLASS_OPTION_ID;
-  if (!cond.readout_definition_id) return "";
+  if (!cond.readout_definition_id) {
+    return anyProtocol && cond.source === "dr_curve" ? POTENCY_UM_OPTION_ID : "";
+  }
   if (cond.source === "readout_data") return numericOptionId(cond.readout_definition_id);
   return drOptionId(cond.readout_definition_id, cond.intercept_key ?? null);
 }

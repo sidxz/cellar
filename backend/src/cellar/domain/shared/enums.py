@@ -22,6 +22,22 @@ class ConcentrationUnit(StrEnum):
     NM = "nM"
     MG_ML = "mg/mL"
 
+    @property
+    def micromolar_factor(self) -> float | None:
+        """Multiply a value in this unit by the factor to get µM.
+
+        ``None`` means the unit is mass-based and needs the compound's
+        molecular weight (µM = mg/mL × 1e6 / MW). Every member must be
+        classified here — a new unit without an entry raises at first use.
+        """
+        factors: dict[ConcentrationUnit, float | None] = {
+            ConcentrationUnit.MM: 1000.0,
+            ConcentrationUnit.UM: 1.0,
+            ConcentrationUnit.NM: 0.001,
+            ConcentrationUnit.MG_ML: None,
+        }
+        return factors[self]
+
 
 class Qualifier(StrEnum):
     """Qualifiers for assay measurements."""

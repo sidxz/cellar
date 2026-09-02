@@ -18,9 +18,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay import (
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
-SQLAlchemyDoseResponseCurveRepository = (
-    _dr_repo_module.SQLAlchemyDoseResponseCurveRepository
-)
+SQLAlchemyDoseResponseCurveRepository = _dr_repo_module.SQLAlchemyDoseResponseCurveRepository
 
 
 @pytest.fixture
@@ -38,9 +36,7 @@ async def org_id(client: AsyncClient) -> str:
 
 
 class TestExecuteSearch:
-    async def test_empty_criteria_returns_all(
-        self, client: AsyncClient, org_id: str
-    ) -> None:
+    async def test_empty_criteria_returns_all(self, client: AsyncClient, org_id: str) -> None:
         """Empty criteria should return molecules (no filter)."""
         await client.post(
             "/api/v1/molecules",
@@ -54,9 +50,7 @@ class TestExecuteSearch:
         data = resp.json()
         assert len(data["items"]) >= 1
 
-    async def test_text_name_contains(
-        self, client: AsyncClient, org_id: str
-    ) -> None:
+    async def test_text_name_contains(self, client: AsyncClient, org_id: str) -> None:
         await client.post(
             "/api/v1/molecules",
             json={"name": "SearchTarget", "smiles": "CC", "originating_org_id": org_id},
@@ -70,7 +64,12 @@ class TestExecuteSearch:
             json={
                 "query": {
                     "criteria": [
-                        {"type": "text", "field": "name", "operator": "contains", "value": "SearchTarget"}
+                        {
+                            "type": "text",
+                            "field": "name",
+                            "operator": "contains",
+                            "value": "SearchTarget",
+                        }
                     ],
                     "logic": "and",
                 }
@@ -81,9 +80,7 @@ class TestExecuteSearch:
         assert any(m["name"] == "SearchTarget" for m in items)
         assert not any(m["name"] == "Other" for m in items)
 
-    async def test_property_mw_between(
-        self, client: AsyncClient, org_id: str
-    ) -> None:
+    async def test_property_mw_between(self, client: AsyncClient, org_id: str) -> None:
         """Register ethanol (MW ~46) and filter by MW range."""
         await client.post(
             "/api/v1/molecules",
@@ -94,7 +91,13 @@ class TestExecuteSearch:
             json={
                 "query": {
                     "criteria": [
-                        {"type": "property", "field": "molecular_weight", "operator": "between", "min": 40, "max": 50}
+                        {
+                            "type": "property",
+                            "field": "molecular_weight",
+                            "operator": "between",
+                            "min": 40,
+                            "max": 50,
+                        }
                     ],
                     "logic": "and",
                 }
@@ -104,9 +107,7 @@ class TestExecuteSearch:
         items = resp.json()["items"]
         assert any(m["name"] == "Ethanol" for m in items)
 
-    async def test_saved_search_execution(
-        self, client: AsyncClient, org_id: str
-    ) -> None:
+    async def test_saved_search_execution(self, client: AsyncClient, org_id: str) -> None:
         """Create saved search, register molecule, execute saved search."""
         await client.post(
             "/api/v1/molecules",
@@ -118,7 +119,12 @@ class TestExecuteSearch:
                 "name": "Find SavedTarget",
                 "query": {
                     "criteria": [
-                        {"type": "text", "field": "name", "operator": "contains", "value": "SavedTarget"}
+                        {
+                            "type": "text",
+                            "field": "name",
+                            "operator": "contains",
+                            "value": "SavedTarget",
+                        }
                     ],
                     "logic": "and",
                 },
@@ -146,21 +152,28 @@ class TestExecuteSearch:
         )
         assert resp.status_code == 404
 
-    async def test_pagination(
-        self, client: AsyncClient, org_id: str
-    ) -> None:
+    async def test_pagination(self, client: AsyncClient, org_id: str) -> None:
         """Verify cursor pagination works on search results."""
         for i in range(3):
             await client.post(
                 "/api/v1/molecules",
-                json={"name": f"PageMol{i}", "smiles": f"{'C' * (i + 5)}", "originating_org_id": org_id},
+                json={
+                    "name": f"PageMol{i}",
+                    "smiles": f"{'C' * (i + 5)}",
+                    "originating_org_id": org_id,
+                },
             )
         resp = await client.post(
             "/api/v1/search/execute?limit=2",
             json={
                 "query": {
                     "criteria": [
-                        {"type": "text", "field": "name", "operator": "contains", "value": "PageMol"}
+                        {
+                            "type": "text",
+                            "field": "name",
+                            "operator": "contains",
+                            "value": "PageMol",
+                        }
                     ],
                     "logic": "and",
                 }
@@ -177,7 +190,12 @@ class TestExecuteSearch:
             json={
                 "query": {
                     "criteria": [
-                        {"type": "text", "field": "name", "operator": "contains", "value": "PageMol"}
+                        {
+                            "type": "text",
+                            "field": "name",
+                            "operator": "contains",
+                            "value": "PageMol",
+                        }
                     ],
                     "logic": "and",
                 }
@@ -193,7 +211,12 @@ class TestExecuteSearch:
             json={
                 "query": {
                     "criteria": [
-                        {"type": "text", "field": "nonexistent", "operator": "contains", "value": "x"}
+                        {
+                            "type": "text",
+                            "field": "nonexistent",
+                            "operator": "contains",
+                            "value": "x",
+                        }
                     ],
                     "logic": "and",
                 }
@@ -223,7 +246,12 @@ class TestCountSearch:
             json={
                 "query": {
                     "criteria": [
-                        {"type": "text", "field": "name", "operator": "contains", "value": "CountTarget"}
+                        {
+                            "type": "text",
+                            "field": "name",
+                            "operator": "contains",
+                            "value": "CountTarget",
+                        }
                     ],
                     "logic": "and",
                 }
@@ -234,9 +262,7 @@ class TestCountSearch:
         assert "total_count" in data
         assert data["total_count"] >= 1
 
-    async def test_empty_criteria_counts_all(
-        self, client: AsyncClient, org_id: str
-    ) -> None:
+    async def test_empty_criteria_counts_all(self, client: AsyncClient, org_id: str) -> None:
         await client.post(
             "/api/v1/molecules",
             json={"name": "AnyMol", "smiles": "C", "originating_org_id": org_id},
@@ -248,9 +274,7 @@ class TestCountSearch:
         assert resp.status_code == 200
         assert resp.json()["total_count"] >= 1
 
-    async def test_zero_match_returns_zero(
-        self, client: AsyncClient, org_id: str
-    ) -> None:
+    async def test_zero_match_returns_zero(self, client: AsyncClient, org_id: str) -> None:
         resp = await client.post(
             "/api/v1/search/count",
             json={
@@ -270,9 +294,7 @@ class TestCountSearch:
         assert resp.status_code == 200
         assert resp.json()["total_count"] == 0
 
-    async def test_count_matches_execute_total(
-        self, client: AsyncClient, org_id: str
-    ) -> None:
+    async def test_count_matches_execute_total(self, client: AsyncClient, org_id: str) -> None:
         """The count endpoint and the execute endpoint must agree on total_count
         for the same query -- otherwise the chemist sees one number on the
         button and a different one on the result panel."""
@@ -349,6 +371,8 @@ async def _seed_multi_run_dr(
     molecule_id: uuid.UUID,
     run_count: int,
     approved: bool = True,
+    dose_unit: str = "uM",
+    fitted_value: float = 5.0,
 ) -> tuple[uuid.UUID, uuid.UUID, list[uuid.UUID]]:
     """Seed a protocol + DR readout-def + N runs + N curves for one molecule.
 
@@ -369,12 +393,13 @@ async def _seed_multi_run_dr(
                 "is_locked, dose_unit, pos_control_signal, version, "
                 "protocol_version, created_by) "
                 "VALUES (:id, :ws, :name, 'biochemical', 'active', "
-                "false, 'uM', 'high', 1, 1, :user)"
+                "false, :dose_unit, 'high', 1, 1, :user)"
             ),
             {
                 "id": protocol_id,
                 "ws": workspace_id,
                 "name": f"AggTest-{protocol_id.hex[:8]}",
+                "dose_unit": dose_unit,
                 "user": _SEED_USER_ID,
             },
         )
@@ -424,7 +449,7 @@ async def _seed_multi_run_dr(
                 run_id=run_id,
                 readout_definition_id=rd_id,
                 curve_type=CurveType.IC50,
-                fitted_value=5.0 + i * 0.1,
+                fitted_value=fitted_value + i * 0.1,
                 hill_slope=1.0,
                 top=100.0,
                 bottom=0.0,
@@ -598,3 +623,57 @@ class TestExecuteSearchAggregationWiring:
         assert data["activity_data"] is not None
         cell = data["activity_data"][str(mol_id)][f"drc:{rd_id}"]
         assert cell["run_count"] == 2
+
+
+class TestActivityAnyProtocol:
+    """``protocol_id: null`` spans every protocol; potency cutoffs are in µM
+    and normalized through each protocol's dose_unit."""
+
+    async def test_potency_cutoff_normalizes_units_across_protocols(
+        self,
+        client: AsyncClient,
+        org_id: str,
+        uow: AsyncUnitOfWork,
+        workspace_id: uuid.UUID,
+    ) -> None:
+        resp = await client.post(
+            "/api/v1/molecules",
+            json={"name": "AnyProtoMol", "smiles": "CCCCO", "originating_org_id": org_id},
+        )
+        assert resp.status_code == 201
+        mol_id = str(resp.json()["molecule"]["id"])
+
+        # 5 µM in a µM protocol, 5 nM (= 0.005 µM) in an nM protocol.
+        await _seed_multi_run_dr(
+            uow, workspace_id=workspace_id, molecule_id=uuid.UUID(mol_id), run_count=1
+        )
+        await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol_id),
+            run_count=1,
+            dose_unit="nM",
+        )
+
+        async def ids_for(where: list[dict]) -> set[str]:
+            body = {
+                "query": {
+                    "criteria": [{"type": "activity", "protocol_id": None, "where": where}],
+                    "logic": "and",
+                }
+            }
+            res = await client.post("/api/v1/search/execute", json=body)
+            assert res.status_code == 200, res.text
+            return {m["id"] for m in res.json()["items"]}
+
+        # < 1 µM: only the nM curve qualifies once normalized.
+        assert mol_id in await ids_for([{"source": "dr_curve", "operator": "lt", "value": 1.0}])
+        # < 0.001 µM: nothing qualifies — proves nM was scaled, not compared raw.
+        assert mol_id not in await ids_for(
+            [{"source": "dr_curve", "operator": "lt", "value": 0.001}]
+        )
+        # Curve class across any protocol.
+        assert mol_id in await ids_for([{"source": "curve_class", "curve_classes": ["full"]}])
+        assert mol_id not in await ids_for(
+            [{"source": "curve_class", "curve_classes": ["inactive"]}]
+        )

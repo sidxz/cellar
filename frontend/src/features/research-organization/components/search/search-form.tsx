@@ -180,6 +180,8 @@ function deriveProtocolColumns(
     if (!columns.includes(col)) columns.push(col);
   }
   for (const c of activityCriteria) {
+    // ponytail: any-protocol rows (null) derive no columns — results show the
+    // molecule list only. Add a cross-protocol "best potency" column if asked.
     if (!c.protocol_id) continue;
     const conds =
       Array.isArray(c.where) && c.where.length > 0
@@ -362,7 +364,10 @@ export function SearchForm({
         if (w.source === "curve_class") {
           return Array.isArray(w.curve_classes) && w.curve_classes.length > 0;
         }
-        if (!w.readout_definition_id) return false;
+        // Any-protocol potency rows are readout-def-less by design.
+        if (!w.readout_definition_id && !(c.protocol_id === null && w.source === "dr_curve")) {
+          return false;
+        }
         if (w.operator === "between") {
           return w.min !== undefined && w.max !== undefined;
         }
@@ -372,7 +377,7 @@ export function SearchForm({
     });
     // Filter to valid criteria and their matching conjunctions
     const validIndices = cleanedActivity
-      .map((c, i) => (c.protocol_id ? i : -1))
+      .map((c, i) => (c.protocol_id !== "" ? i : -1)) // null = any protocol, valid
       .filter((i) => i >= 0);
     const validActivity = validIndices.map((i) => cleanedActivity[i]);
     const validConjs = validIndices.map((i) => protocolConjunctions[i] ?? "or");

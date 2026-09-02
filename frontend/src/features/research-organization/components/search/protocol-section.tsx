@@ -35,6 +35,7 @@ import {
   CURVE_CLASS_OPTIONS,
   type WhereOption,
   buildActivityWhereOptions,
+  buildAnyProtocolWhereOptions,
   parseWhereOptionId,
   whereConditionOptionId,
 } from "../../lib/activity-where-options";
@@ -167,10 +168,11 @@ function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
 interface WhereListProps {
   where: ActivityWhereCondition[];
   options: WhereOption[];
+  anyProtocol?: boolean;
   onChange: (next: ActivityWhereCondition[]) => void;
 }
 
-function WhereList({ where, options, onChange }: WhereListProps) {
+function WhereList({ where, options, anyProtocol = false, onChange }: WhereListProps) {
   function update(i: number, next: ActivityWhereCondition) {
     onChange(where.map((w, idx) => (idx === i ? next : w)));
   }
@@ -200,6 +202,7 @@ function WhereList({ where, options, onChange }: WhereListProps) {
               cond={cond}
               isFirst={i === 0}
               options={options}
+              anyProtocol={anyProtocol}
               onChange={(next) => update(i, next)}
               onRemove={() => remove(i)}
             />
@@ -222,14 +225,15 @@ interface WhereRowProps {
   cond: ActivityWhereCondition;
   isFirst: boolean;
   options: WhereOption[];
+  anyProtocol: boolean;
   onChange: (next: ActivityWhereCondition) => void;
   onRemove: () => void;
 }
 
-function WhereRow({ cond, isFirst, options, onChange, onRemove }: WhereRowProps) {
+function WhereRow({ cond, isFirst, options, anyProtocol, onChange, onRemove }: WhereRowProps) {
   // The picker emits a stable option id; the row stores the (source,
   // readout-def, intercept_key) triple plus an operator and value.
-  const fieldValue = whereConditionOptionId(cond);
+  const fieldValue = whereConditionOptionId(cond, anyProtocol);
   const isBetween = cond.operator === "between";
   const isCurveClass = cond.source === "curve_class";
 
@@ -556,10 +560,31 @@ function ActivityRow({
   }, [visibleProtocols]);
 
   const selectedProtocol = protocols.find((p) => p.id === criterion.protocol_id);
+  const isAnyProtocol = criterion.protocol_id === null;
 
-  const whereOptions = useMemo(() => buildActivityWhereOptions(protocol), [protocol]);
+  const whereOptions = useMemo(
+    () => (isAnyProtocol ? buildAnyProtocolWhereOptions() : buildActivityWhereOptions(protocol)),
+    [isAnyProtocol, protocol],
+  );
 
-  const hasProtocol = Boolean(criterion.protocol_id);
+  // null = "Any protocol" (chosen); "" = nothing chosen yet.
+  const hasProtocol = criterion.protocol_id !== "";
+
+  function pickProtocol(next: string | null) {
+    // The where-option vocabulary differs between a specific protocol and
+    // "any", so crossing that line resets the where-list; run scope is
+    // per-protocol and always drops on "any".
+    const crossed = (criterion.protocol_id === null) !== (next === null);
+    onChange({
+      ...criterion,
+      protocol_id: next,
+      where: crossed ? [] : criterion.where,
+      run_scope: next === null ? undefined : criterion.run_scope,
+      readout_definition_id: undefined,
+      source: undefined,
+    });
+    setProtocolOpen(false);
+  }
   // Pristine rows don't surface validation — the row is a passive
   // "always-visible empty row" placeholder. Only flag invalid once the
   // user has committed (real row from +Add or saved-search load).
@@ -612,12 +637,14 @@ function ActivityRow({
               type="button"
               className={cn(
                 "flex h-8 min-w-0 flex-1 items-center justify-between gap-1.5 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs",
-                !criterion.protocol_id && "text-muted-foreground",
+                !hasProtocol && "text-muted-foreground",
                 protocolInvalid && "border-destructive",
               )}
               aria-invalid={protocolInvalid}
             >
-              {selectedProtocol ? (
+              {isAnyProtocol ? (
+                <span className="truncate">Any protocol</span>
+              ) : selectedProtocol ? (
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span
                     className={cn(
@@ -648,6 +675,26 @@ function ActivityRow({
               <CommandList className="max-h-96">
                 <CommandEmpty>No protocols found.</CommandEmpty>
 
+                <CommandGroup>
+                  <CommandItem
+                    value="any protocol"
+                    onSelect={() => pickProtocol(null)}
+                    className="flex items-center gap-2 py-1.5"
+                  >
+                    <Check
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0",
+                        isAnyProtocol ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <span className="text-sm">Any protocol</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      curve class · potency in µM
+                    </span>
+                  </CommandItem>
+                </CommandGroup>
+                <CommandSeparator />
+
                 {hasRecents && (
                   <>
                     <CommandGroup heading="Recently used">
@@ -656,15 +703,7 @@ function ActivityRow({
                           key={p.id}
                           protocol={p}
                           selected={criterion.protocol_id === p.id}
-                          onPick={() => {
-                            onChange({
-                              ...criterion,
-                              protocol_id: p.id,
-                              readout_definition_id: undefined,
-                              source: undefined,
-                            });
-                            setProtocolOpen(false);
-                          }}
+                          onPick={() => pickProtocol(p.id)}
                         />
                       ))}
                     </CommandGroup>
@@ -678,15 +717,7 @@ function ActivityRow({
                       key={p.id}
                       protocol={p}
                       selected={criterion.protocol_id === p.id}
-                      onPick={() => {
-                        onChange({
-                          ...criterion,
-                          protocol_id: p.id,
-                          readout_definition_id: undefined,
-                          source: undefined,
-                        });
-                        setProtocolOpen(false);
-                      }}
+                      onPick={() => pickProtocol(p.id)}
                     />
                   ))}
                 </CommandGroup>
@@ -735,18 +766,21 @@ function ActivityRow({
           all three labels (Protocol/runs/where) and their controls align. */}
       {hasProtocol && (
         <div className="ml-[104px] space-y-1.5">
-          {/* runs — always visible, defaults to "Any run" when omitted */}
-          <RunScopePicker
-            protocolId={criterion.protocol_id}
-            value={criterion.run_scope}
-            onChange={(next: RunScope | undefined) => onChange({ ...criterion, run_scope: next })}
-          />
+          {/* runs — per-protocol only; "Any protocol" has no run scope */}
+          {criterion.protocol_id !== null && (
+            <RunScopePicker
+              protocolId={criterion.protocol_id}
+              value={criterion.run_scope}
+              onChange={(next: RunScope | undefined) => onChange({ ...criterion, run_scope: next })}
+            />
+          )}
 
           {/* where — optional, multiple. Empty list ⇒ presence filter
               ("compounds screened in this protocol/scope"). */}
           <WhereList
             where={whereList}
             options={whereOptions}
+            anyProtocol={isAnyProtocol}
             onChange={(next) => {
               // Drop the inline single-where fields once we manage where[].
               onChange({

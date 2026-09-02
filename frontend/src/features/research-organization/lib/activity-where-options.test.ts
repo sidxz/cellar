@@ -212,3 +212,26 @@ describe("parseWhereOptionId / whereConditionOptionId roundtrip", () => {
     expect(parseWhereOptionId(`dr_curve:${RD_DR}:wat:50`)).toBeNull();
   });
 });
+
+describe("any-protocol options", () => {
+  it("offers only potency (µM) and curve class", async () => {
+    const { buildAnyProtocolWhereOptions, POTENCY_UM_OPTION_ID } = await import(
+      "./activity-where-options"
+    );
+    const opts = buildAnyProtocolWhereOptions();
+    expect(opts.map((o) => o.id)).toEqual([POTENCY_UM_OPTION_ID, CURVE_CLASS_OPTION_ID]);
+    expect(opts[0].unit).toBe("µM");
+    expect(opts[0].source).toBe("dr_curve");
+    expect(opts[0].readout_definition_id).toBe("");
+  });
+
+  it("round-trips the potency option through parse and back", async () => {
+    const { POTENCY_UM_OPTION_ID } = await import("./activity-where-options");
+    const seed = parseWhereOptionId(POTENCY_UM_OPTION_ID);
+    expect(seed).toEqual({ source: "dr_curve", readout_definition_id: "", intercept_key: null });
+    const cond = { ...seed!, operator: "lt" as const, value: 1 };
+    expect(whereConditionOptionId(cond, true)).toBe(POTENCY_UM_OPTION_ID);
+    // On a per-protocol row the same shape is just an unfilled fresh row.
+    expect(whereConditionOptionId(cond, false)).toBe("");
+  });
+});

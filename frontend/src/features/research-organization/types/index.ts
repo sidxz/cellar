@@ -313,7 +313,9 @@ export interface ActivityWhereCondition {
 
 export interface ActivityCriterion {
   type: "activity";
-  protocol_id: string;
+  /** Protocol to filter on. ``null`` = any protocol (curve class / potency
+   *  in µM only, run scope fixed to "any"). ``""`` = not chosen yet (UI only). */
+  protocol_id: string | null;
   /** Multi-where list — preferred shape. Each row ANDed with the others. */
   where?: ActivityWhereCondition[];
   /** Run scope. Omit (or {mode:"any"}) for cross-run match — the default. */
