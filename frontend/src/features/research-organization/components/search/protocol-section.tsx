@@ -6,7 +6,7 @@ import {
   useProtocol,
   useProtocolSummaries,
 } from "@/features/screening-assay/hooks/use-protocols";
-import { CURVE_CLASS_LABELS } from "@/features/screening-assay/types";
+import { CURVE_CLASS_LABELS, type Protocol } from "@/features/screening-assay/types";
 import { Badge } from "@/shared/components/ui/badge";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
@@ -33,6 +33,7 @@ import { Check, ChevronsUpDown, Minus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CURVE_CLASS_OPTIONS,
+  POTENCY_UM_OPTION_ID,
   type WhereOption,
   buildActivityWhereOptions,
   buildAnyProtocolWhereOptions,
@@ -236,6 +237,11 @@ function WhereRow({ cond, isFirst, options, anyProtocol, onChange, onRemove }: W
   const fieldValue = whereConditionOptionId(cond, anyProtocol);
   const isBetween = cond.operator === "between";
   const isCurveClass = cond.source === "curve_class";
+  // Legacy saved searches carry the pre-catalog "potency in µM" option id,
+  // which no longer appears in the built option list — synthesize a
+  // disabled entry so the Select still shows a label instead of blank.
+  const legacyPotency =
+    fieldValue === POTENCY_UM_OPTION_ID && !options.some((o) => o.id === fieldValue);
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
@@ -271,6 +277,8 @@ function WhereRow({ cond, isFirst, options, anyProtocol, onChange, onRemove }: W
             onChange({
               ...cond,
               ...parsed,
+              readout_name: parsed.readout_name,
+              unit: parsed.unit,
               operator: cond.operator === "eq" || isCurveClass ? "lt" : cond.operator,
               curve_classes: undefined,
             });
@@ -281,7 +289,7 @@ function WhereRow({ cond, isFirst, options, anyProtocol, onChange, onRemove }: W
           <SelectValue placeholder="select readout…" />
         </SelectTrigger>
         <SelectContent>
-          <WhereOptionList options={options} />
+          <WhereOptionList options={options} legacyPotency={legacyPotency} />
         </SelectContent>
       </Select>
 
@@ -402,8 +410,14 @@ function WhereRow({ cond, isFirst, options, anyProtocol, onChange, onRemove }: W
   );
 }
 
-function WhereOptionList({ options }: { options: WhereOption[] }) {
-  if (options.length === 0) {
+function WhereOptionList({
+  options,
+  legacyPotency = false,
+}: {
+  options: WhereOption[];
+  legacyPotency?: boolean;
+}) {
+  if (options.length === 0 && !legacyPotency) {
     return (
       <div className="px-2 py-3 text-sm text-muted-foreground text-center">
         No readouts configured
@@ -415,6 +429,11 @@ function WhereOptionList({ options }: { options: WhereOption[] }) {
   const curve = options.filter((o) => o.group === "curve_class");
   return (
     <>
+      {legacyPotency && (
+        <SelectItem value={POTENCY_UM_OPTION_ID} disabled>
+          Potency (primary fit) — legacy
+        </SelectItem>
+      )}
       {dr.length > 0 && (
         <>
           <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground/50">
@@ -435,7 +454,7 @@ function WhereOptionList({ options }: { options: WhereOption[] }) {
           {numeric.map((o) => (
             <SelectItem key={o.id} value={o.id}>
               {o.label}
-              {o.unit ? ` (${o.unit})` : ""}
+              {o.unit && !o.id.startsWith("any:") ? ` (${o.unit})` : ""}
             </SelectItem>
           ))}
         </>
@@ -497,6 +516,9 @@ interface ActivityRowProps {
   criterion: ActivityCriterion;
   conjunction: ProtocolConjunction;
   protocols: ProtocolSummary[];
+  /** Full protocol records (with readout_definitions) — feeds the
+   *  any-protocol where-option catalog. */
+  fullProtocols: Protocol[];
   isFirst: boolean;
   /** True when the search panel has at least one project selected — controls
    *  visibility of the "Show all (across projects)" toggle inside the picker. */
@@ -521,6 +543,7 @@ function ActivityRow({
   criterion,
   conjunction,
   protocols,
+  fullProtocols,
   isFirst,
   hasProjectScope,
   showAllProjects,
@@ -563,8 +586,11 @@ function ActivityRow({
   const isAnyProtocol = criterion.protocol_id === null;
 
   const whereOptions = useMemo(
-    () => (isAnyProtocol ? buildAnyProtocolWhereOptions() : buildActivityWhereOptions(protocol)),
-    [isAnyProtocol, protocol],
+    () =>
+      isAnyProtocol
+        ? buildAnyProtocolWhereOptions(fullProtocols)
+        : buildActivityWhereOptions(protocol),
+    [isAnyProtocol, fullProtocols, protocol],
   );
 
   // null = "Any protocol" (chosen); "" = nothing chosen yet.
@@ -808,6 +834,8 @@ export interface ProtocolSectionProps {
   conjunctions: ProtocolConjunction[];
   /** Selected projects from the search panel — scopes the picker list when non-empty. */
   projectIds: string[];
+  /** Full protocol records (with readout_definitions) — feeds the any-protocol catalog. */
+  protocols: Protocol[];
   onChange: (criteria: ActivityCriterion[], conjunctions: ProtocolConjunction[]) => void;
 }
 
@@ -815,6 +843,7 @@ export function ProtocolSection({
   criteria,
   conjunctions,
   projectIds,
+  protocols,
   onChange,
 }: ProtocolSectionProps) {
   // Section-level "Show all (across projects)" — flipping in one picker
@@ -833,7 +862,10 @@ export function ProtocolSection({
   }, [criteria.length]);
   const showPristine = criteria.length === 0 && !pristineDismissed;
   const hasProjectScope = projectIds.length > 0;
-  const { data: protocols } = useProtocolSummaries(projectIds, {
+  // Renamed from `protocols` to avoid shadowing the `protocols: Protocol[]`
+  // prop (full records) — this is the lighter ProtocolSummary[] list used
+  // by the picker only.
+  const { data: protocolSummaries } = useProtocolSummaries(projectIds, {
     includeAll: showAllProjects,
   });
 
@@ -921,7 +953,8 @@ export function ProtocolSection({
             index={0}
             criterion={defaultActivityCriterion()}
             conjunction="or"
-            protocols={protocols ?? []}
+            protocols={protocolSummaries ?? []}
+            fullProtocols={protocols}
             isFirst
             isPristine
             hasProjectScope={hasProjectScope}
@@ -944,7 +977,8 @@ export function ProtocolSection({
             index={i}
             criterion={c}
             conjunction={conjunctions[i] ?? "or"}
-            protocols={protocols ?? []}
+            protocols={protocolSummaries ?? []}
+            fullProtocols={protocols}
             isFirst={i === 0}
             hasProjectScope={hasProjectScope}
             showAllProjects={showAllProjects}

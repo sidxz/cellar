@@ -364,9 +364,12 @@ export function SearchForm({
         if (w.source === "curve_class") {
           return Array.isArray(w.curve_classes) && w.curve_classes.length > 0;
         }
-        // Any-protocol potency rows are readout-def-less by design.
-        if (!w.readout_definition_id && !(c.protocol_id === null && w.source === "dr_curve")) {
-          return false;
+        // Any-protocol rows: potency (dr_curve, no rd) and readout-by-name are
+        // readout-def-less by design.
+        if (!w.readout_definition_id) {
+          const anyDr = c.protocol_id === null && w.source === "dr_curve";
+          const anyRd = c.protocol_id === null && w.source === "readout_data" && !!w.readout_name;
+          if (!anyDr && !anyRd) return false;
         }
         if (w.operator === "between") {
           return w.min !== undefined && w.max !== undefined;
@@ -574,6 +577,7 @@ export function SearchForm({
           criteria={activityCriteria}
           conjunctions={protocolConjunctions}
           projectIds={projectIds}
+          protocols={protocols}
           onChange={(criteria, conjs) => {
             setActivityCriteria(criteria);
             setProtocolConjunctions(conjs);
