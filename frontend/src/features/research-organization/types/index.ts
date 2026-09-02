@@ -306,6 +306,11 @@ export interface ActivityWhereCondition {
    *  omitted = the readout-def's primary intercept (fast path:
    *  ``fitted_value`` column). */
   intercept_key?: InterceptKey | null;
+  /** Any-protocol ``readout_data`` rows only: the readout-def group to match,
+   *  by normalized name (+ ``unit``) across every protocol. Mutually exclusive
+   *  with ``readout_definition_id``. */
+  readout_name?: string;
+  unit?: string | null;
   /** For ``curve_class`` source: the allowed curve classes (multi-select).
    *  E.g. ``["full", "partial"]`` to match well-fitted curves only. */
   curve_classes?: string[];
