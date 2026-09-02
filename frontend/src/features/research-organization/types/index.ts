@@ -2,7 +2,7 @@ import type {
   AdditionalCurve,
   AggregateMarker,
 } from "@/features/screening-assay/components/dose-response-figure";
-import type { TargetRef } from "@/features/screening-assay/types";
+import type { CurveClass, TargetRef } from "@/features/screening-assay/types";
 import type {
   CollectionResponse,
   CollectionType,
@@ -531,6 +531,47 @@ export interface ActivityValue {
    *  suppresses the per-curve intercept dashed lines (per-run fitted_values
    *  don't equal the cell value in aggregate modes). Mirrors CurveSnapshot. */
   aggregate?: AggregateMarker | null;
+}
+
+// ─── "any" column — CLIENT-SIDE narrowing, NOT a DTO alias ─────────────────
+// Same situation as ActivityValue: `activity_data` is `dict[str, dict[str, Any]]`
+// on the wire, so orval emits `unknown`. Produced by
+// MoleculeActivityService._build_any_activity (AnyProtocolActivity dataclass).
+export interface AnyProtocolEntry {
+  protocol_id: string;
+  protocol_name: string;
+  protocol_type: string;
+  target_names: string[];
+  /** "IC50", "EC90", "% Inhibition" */
+  label: string;
+  source: "dose_response" | "readout";
+  readout_definition_id: string;
+  /** Native unit of the owning protocol. */
+  value: number | null;
+  qualifier: string | null;
+  unit: string | null;
+  /** µM normalization — ordering only, never displayed. Null for readouts. */
+  value_um: number | null;
+  curve_class: CurveClass | null;
+  run_count: number;
+}
+
+export interface AnyProtocolActivity {
+  /** Best first (value_um asc, nulls last). */
+  entries: AnyProtocolEntry[];
+}
+
+/** Read the "any" column off an enriched row. The activity map is typed as
+ *  ActivityValue for every other key; this is the one differently-shaped
+ *  entry, so it gets a single typed accessor instead of a union type that
+ *  would force narrowing at every DR cell. */
+export function anyProtocolActivity(mol: {
+  activity?: Record<string, unknown>;
+}): AnyProtocolActivity | undefined {
+  const raw = mol.activity?.any;
+  return raw && typeof raw === "object" && Array.isArray((raw as AnyProtocolActivity).entries)
+    ? (raw as AnyProtocolActivity)
+    : undefined;
 }
 
 // ─── Report Configuration ───────────────────────────────────────────────────

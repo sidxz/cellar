@@ -20,7 +20,14 @@ import {
   wireToAggregationMode,
 } from "../lib/use-aggregation-mode";
 import type { AggregationMode } from "../lib/use-aggregation-mode";
-import type { ActivityValue, SavedSearch, SearchQuery, SortDir, SortField } from "../types";
+import {
+  type ActivityValue,
+  type SavedSearch,
+  type SearchQuery,
+  type SortDir,
+  type SortField,
+  anyProtocolActivity,
+} from "../types";
 import { CompoundDetailSheet } from "./search/compound-detail-sheet";
 import { ReportCustomizer } from "./search/report-customizer";
 import { ResultsGrid } from "./search/results-grid";
@@ -153,6 +160,12 @@ function SearchPageInner() {
   // ── Project scoping (independent of search state) ──────────────────────
   const [projectIds, setProjectIds] = useState<string[]>([]);
 
+  // ── Protocols matched by the clicked row's "any" column (Active in) ────
+  // The grid only knows about `visibleProtocolIds` (from `protocol_columns`);
+  // an any-protocol row's matches aren't in that set, so the detail sheet
+  // wouldn't show them without this.
+  const [clickedAnyProtocolIds, setClickedAnyProtocolIds] = useState<string[]>([]);
+
   // ── Dialogs (independent of search state) ─────────────────────────────
   const [reportOpen, setReportOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -196,6 +209,15 @@ function SearchPageInner() {
   const visibleProtocolIds = useMemo(
     () => uniqueProtocolIds(protocolColumns, protocols ?? []),
     [protocolColumns, protocols],
+  );
+
+  // ── Derived: visible protocol IDs + the clicked row's "any" matches ────
+  // The detail sheet needs to show every protocol the clicked compound
+  // actually matched in an any-protocol search, not just the columns on
+  // screen (an any-protocol row has no dedicated protocol column).
+  const sheetVisibleProtocolIds = useMemo(
+    () => [...new Set([...visibleProtocolIds, ...clickedAnyProtocolIds])],
+    [visibleProtocolIds, clickedAnyProtocolIds],
   );
 
   // ── Derived: should the toolbar Summarize: dropdown be hidden? ──────────
@@ -578,6 +600,9 @@ function SearchPageInner() {
     (molecule: EnrichedMolecule) => {
       const idx = results.findIndex((m) => m.id === molecule.id);
       dispatch({ type: "select", molecule, index: idx >= 0 ? idx : 0 });
+      setClickedAnyProtocolIds(
+        anyProtocolActivity(molecule)?.entries.map((e) => e.protocol_id) ?? [],
+      );
     },
     [results],
   );
@@ -672,7 +697,7 @@ function SearchPageInner() {
       {/* Overlays */}
       <CompoundDetailSheet
         molecule={selectedMolecule}
-        visibleProtocolIds={visibleProtocolIds}
+        visibleProtocolIds={sheetVisibleProtocolIds}
         currentIndex={selectedIndex}
         totalCount={results.length}
         onNavigate={handleDetailNavigate}

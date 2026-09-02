@@ -6,7 +6,7 @@ import { Separator } from "@/shared/components/ui/separator";
 import { RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchCount } from "../../hooks/use-search-count";
-import { drcColId, rdColId } from "../../lib/protocol-column-id";
+import { ANY_COLUMN_ID, drcColId, rdColId } from "../../lib/protocol-column-id";
 import type {
   ActivityCriterion,
   GroupCriterion,
@@ -180,8 +180,10 @@ function deriveProtocolColumns(
     if (!columns.includes(col)) columns.push(col);
   }
   for (const c of activityCriteria) {
-    // ponytail: any-protocol rows (null) derive no columns — results show the
-    // molecule list only. Add a cross-protocol "best potency" column if asked.
+    if (c.protocol_id === null) {
+      add(ANY_COLUMN_ID); // one "Active in" column for every any-protocol row
+      continue;
+    }
     if (!c.protocol_id) continue;
     const conds =
       Array.isArray(c.where) && c.where.length > 0

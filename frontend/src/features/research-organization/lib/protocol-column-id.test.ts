@@ -188,3 +188,11 @@ describe("toBackendProtocolColumns", () => {
     ]);
   });
 });
+
+describe("any column token", () => {
+  it("is ignored by resolveColumns and uniqueProtocolIds, and survives toBackendProtocolColumns", () => {
+    expect(resolveColumns(["any"], [])).toEqual([]);
+    expect(uniqueProtocolIds(["any"], [])).toEqual([]);
+    expect(toBackendProtocolColumns(["any", "any"])).toEqual(["any"]);
+  });
+});
