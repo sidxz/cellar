@@ -8,6 +8,7 @@ from cellar.application.export.row_streams.search_results import (
     SearchResultsRowStream,
     _activity_parent_token,
     _cell_value,
+    _expand_protocol_column,
 )
 from cellar.application.export.row_streams.base import ColumnSpec
 
@@ -457,3 +458,18 @@ async def test_pdf_format_honors_smiles_hidden():
     )
     await stream.total_count()
     assert "smiles" not in {c.key for c in stream.columns}
+
+
+def test_any_token_expands_to_one_text_column():
+    cols = _expand_protocol_column("any", {})
+    assert [(c.key, c.header, c.kind) for c in cols] == [("any::text", "Active in", "text")]
+
+
+def test_cell_value_any_joins_entries():
+    spec = ColumnSpec(key="any::text", header="Active in", kind="text")
+    raw = {"activity": {"any": {"entries": [
+        {"protocol_name": "Beta", "label": "IC50", "value": 5.0, "unit": "nM", "qualifier": None},
+        {"protocol_name": "Alpha", "label": "IC50", "value": 5.0, "unit": "uM", "qualifier": ">"},
+        {"protocol_name": "Gamma", "label": "% Inhibition", "value": None, "unit": "%", "qualifier": None},
+    ]}}}
+    assert _cell_value(spec, raw) == "Beta: IC50 5 nM; Alpha: IC50 >5 uM; Gamma: % Inhibition —"
