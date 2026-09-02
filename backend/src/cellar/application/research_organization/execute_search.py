@@ -152,7 +152,7 @@ class ExecuteSearch:
                 drc_cols = [c for c in (input.protocol_columns or []) if c.startswith("drc:")]
                 criteria = query_dict.get("criteria", []) if query_dict else []
                 run_scopes = _collect_run_scopes(criteria, drc_cols)
-                any_groups = collect_any_readout_groups(criteria)
+                any_groups = _collect_any_readout_groups(criteria)
                 activity_data_raw = await self._activity_service.enrich_molecules(
                     input.workspace_id,
                     mol_ids,
@@ -194,14 +194,14 @@ def _query_has_similarity(criteria: list[dict]) -> bool:
     )
 
 
-def collect_any_readout_groups(criteria: list[dict]) -> list[tuple[str, str | None]]:
+def _collect_any_readout_groups(criteria: list[dict]) -> list[tuple[str, str | None]]:
     """``(readout_name, unit)`` groups named by any-protocol activity criteria
     (``protocol_id`` None + ``readout_data`` where with ``readout_name``).
     Feeds the ``any`` column so readout entries appear only when asked for."""
     groups: list[tuple[str, str | None]] = []
 
     def _visit(c: dict) -> None:
-        if c.get("type") != "activity" or c.get("protocol_id") is not None:
+        if c.get("type") != "activity" or c.get("protocol_id"):
             return
         where = c.get("where") if isinstance(c.get("where"), list) else []
         for w in where:

@@ -956,3 +956,167 @@ class TestActivityAnyProtocol:
         assert [e["unit"] for e in entries] == ["nM", "uM", "%"]
         assert entries[2]["label"] == "% Inhibition" and entries[2]["value"] == 77.0
         assert all(e["protocol_name"] for e in entries)
+
+    async def test_readout_name_ignores_normalized_layer_rows(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """The any-protocol readout filter matches raw-layer rows only. A
+        normalized row (``normalization_applied`` set) on the *same*
+        readout-def name+unit group must not leak into the match even when
+        its value would otherwise satisfy the cutoff."""
+        resp = await client.post(
+            "/api/v1/molecules",
+            json={"name": "AnyRdNormMol", "smiles": "CCCCCCCCO", "originating_org_id": org_id},
+        )
+        assert resp.status_code == 201
+        mol_id = uuid.UUID(resp.json()["molecule"]["id"])
+
+        # Raw-layer row that does NOT satisfy ">50".
+        await _seed_numeric_readout(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=mol_id,
+            readout_name="% Inhibition",
+            unit="%",
+            value=10.0,
+        )
+
+        # Normalized-layer row, same readout-def name+unit group, value that
+        # WOULD satisfy ">50" if the filter wrongly included it.
+        protocol_id, rd_id, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO protocols (id, workspace_id, name, protocol_type, status, "
+                    "is_locked, dose_unit, pos_control_signal, version, protocol_version, "
+                    "created_by) "
+                    "VALUES (:id, :ws, :name, 'biochemical', 'active', false, 'uM', 'high', 1, "
+                    "1, :user)"
+                ),
+                {
+                    "id": protocol_id,
+                    "ws": workspace_id,
+                    "name": f"RDNorm-{protocol_id.hex[:8]}",
+                    "user": _SEED_USER_ID,
+                },
+            )
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO readout_definitions "
+                    "(id, protocol_id, name, data_type, unit, display_order, is_calculated) "
+                    "VALUES (:id, :proto, :name, 'numeric', :unit, 0, false)"
+                ),
+                {"id": rd_id, "proto": protocol_id, "name": "% Inhibition", "unit": "%"},
+            )
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO runs (id, workspace_id, protocol_id, run_date, operator, "
+                    "status, is_locked, version, notes) "
+                    "VALUES (:id, :ws, :proto, :run_date, :user, 'approved', false, 1, NULL)"
+                ),
+                {
+                    "id": run_id,
+                    "ws": workspace_id,
+                    "proto": protocol_id,
+                    "run_date": date.today(),
+                    "user": _SEED_USER_ID,
+                },
+            )
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO readout_data (id, workspace_id, run_id, molecule_id, "
+                    "readout_definition_id, value_numeric, is_outlier, is_computed, "
+                    "normalization_applied) "
+                    "VALUES (:id, :ws, :run, :mol, :rd, :val, false, false, :norm)"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "ws": workspace_id,
+                    "run": run_id,
+                    "mol": mol_id,
+                    "rd": rd_id,
+                    "val": 95.0,
+                    "norm": "percent_inhibition",
+                },
+            )
+            await uow.commit()
+
+        body = {
+            "query": {
+                "criteria": [
+                    {
+                        "type": "activity",
+                        "protocol_id": None,
+                        "where": [
+                            {
+                                "source": "readout_data",
+                                "readout_name": "% Inhibition",
+                                "unit": "%",
+                                "operator": "gt",
+                                "value": 50,
+                            }
+                        ],
+                    }
+                ],
+                "logic": "and",
+            }
+        }
+        res = await client.post("/api/v1/search/execute", json=body)
+        assert res.status_code == 200, res.text
+        ids = {m["id"] for m in res.json()["items"]}
+        assert str(mol_id) not in ids
+
+    async def test_mg_ml_dose_unit_normalizes_via_molecular_weight(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """A ``mg/mL`` protocol converts to µM via the molecule's molecular
+        weight (µM = mg/mL × 1e6 / MW), not left uncoverted or raising."""
+        resp = await client.post(
+            "/api/v1/molecules",
+            json={"name": "MgMlMol", "smiles": "CCO", "originating_org_id": org_id},
+        )
+        assert resp.status_code == 201
+        mol = resp.json()["molecule"]
+        mol_id = mol["id"]
+        mw = mol["descriptors"]["molecular_weight"]
+        assert mw
+
+        # Pick fitted_value so µM = fitted_value * 1e6 / MW is clearly < 1 µM.
+        target_um = 0.5
+        fitted_value = target_um * mw / 1e6
+
+        await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol_id),
+            run_count=1,
+            dose_unit="mg/mL",
+            intercepts=[("ic", 50, fitted_value)],
+        )
+
+        async def ids_for(value: float) -> set[str]:
+            body = {
+                "query": {
+                    "criteria": [
+                        {
+                            "type": "activity",
+                            "protocol_id": None,
+                            "where": [
+                                {
+                                    "source": "dr_curve",
+                                    "intercept_key": {"kind": "ic", "level": 50},
+                                    "operator": "lt",
+                                    "value": value,
+                                }
+                            ],
+                        }
+                    ],
+                    "logic": "and",
+                }
+            }
+            res = await client.post("/api/v1/search/execute", json=body)
+            assert res.status_code == 200, res.text
+            return {m["id"] for m in res.json()["items"]}
+
+        assert mol_id in await ids_for(1.0)
+        assert mol_id not in await ids_for(target_um / 10)

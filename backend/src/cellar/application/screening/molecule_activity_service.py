@@ -340,6 +340,10 @@ class MoleculeActivityService:
         any_targets: dict[uuid.UUID, list[str]] = {}
         any_readouts: dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]] = {}
         if want_any:
+            # ponytail: loads every curve incl. raw_data for the page (100 rows ×
+            # protocols × runs); if it bites, add a dedicated fetch with
+            # defer(raw_data) — entries need only fitted_value/curve_class/
+            # intercept_values/protocol_id/run_id.
             any_curves = await self._curve_repo.find_all_curves_for_molecules(
                 workspace_id, molecule_ids, readout_definition_ids=None, run_scope=RunScope.all()
             )

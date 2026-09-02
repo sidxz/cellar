@@ -7,7 +7,6 @@ specific, date_range, past_n_days, all).
 
 from __future__ import annotations
 
-import re
 import uuid
 from typing import Any
 
@@ -16,6 +15,7 @@ from sqlalchemy import column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import ColumnElement
 
+from cellar.domain.screening_assay.readout_name import normalize_readout_name
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
@@ -36,15 +36,6 @@ _ACTIVITY_OP_MAP: dict[str, str] = {
     "gte": "__ge__",
     # "between" is handled separately (uses min+max instead of value).
 }
-
-_WS_RUN = re.compile(r"\s+")
-
-
-def normalize_readout_name(name: str) -> str:
-    """Grouping key for readout-defs across protocols: lowercase, trimmed,
-    internal whitespace collapsed. The FE catalog uses the same rule.
-    A controlled readout vocabulary would replace this string key."""
-    return _WS_RUN.sub(" ", name.strip()).lower()
 
 
 def _sql_normalized_name(col: Any) -> ColumnElement:
@@ -293,12 +284,13 @@ def _to_micromolar(expr: Any) -> ColumnElement:
     whens = []
     for unit in ConcentrationUnit:
         factor = unit.micromolar_factor
-        if factor is None:
-            scaled = expr * 1_000_000.0 / MoleculeModel.molecular_weight
-        else:
-            scaled = expr * factor
-        whens.append((ProtocolModel.dose_unit == unit.value, scaled))
-    return sa.case(*whens, else_=None)
+        f = (
+            sa.literal(factor)
+            if factor is not None
+            else 1_000_000.0 / sa.func.nullif(MoleculeModel.molecular_weight, 0)
+        )
+        whens.append((ProtocolModel.dose_unit == unit.value, f))
+    return expr * sa.case(*whens, else_=None)
 
 
 def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
@@ -326,6 +318,7 @@ def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) 
         .join(MoleculeModel, DoseResponseCurveModel.molecule_id == MoleculeModel.id)
         .where(
             DoseResponseCurveModel.workspace_id == workspace_id,
+            ProtocolModel.workspace_id == workspace_id,
             _value_filter(_to_micromolar(expr), cond),
         )
     )
@@ -352,6 +345,7 @@ def _readout_name_any_protocol_clause(
         .where(
             ReadoutDataModel.workspace_id == workspace_id,
             ReadoutDataModel.is_outlier == False,  # noqa: E712
+            ReadoutDataModel.normalization_applied.is_(None),
             _sql_normalized_name(ReadoutDefinitionModel.name) == normalize_readout_name(name),
             sa.func.coalesce(ReadoutDefinitionModel.unit, "") == unit,
             _value_filter(ReadoutDataModel.value_numeric, cond),

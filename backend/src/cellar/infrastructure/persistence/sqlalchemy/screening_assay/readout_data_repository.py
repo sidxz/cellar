@@ -186,9 +186,7 @@ class SQLAlchemyReadoutDataRepository:
         *name* so a criterion like "% Inhibition" pulls in the matching
         readout-def from every protocol that defines one, not just one.
         """
-        from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._activity_query import (  # noqa: E501
-            normalize_readout_name,
-        )
+        from cellar.domain.screening_assay.readout_name import normalize_readout_name
         from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
             ReadoutDefinitionModel,
         )
