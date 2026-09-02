@@ -117,6 +117,35 @@ class ActivityValue:
 
 
 @dataclass(frozen=True)
+class AnyProtocolEntry:
+    """One protocol's measurement of a molecule, for the search grid's
+    "Active in" column. Value is in the protocol's NATIVE unit; ``value_um``
+    is the µM normalization used only for ordering."""
+
+    protocol_id: uuid.UUID
+    protocol_name: str
+    protocol_type: str
+    target_names: list[str]
+    label: str  # "IC50", "EC90", "% Inhibition"
+    source: str  # "dose_response" | "readout"
+    readout_definition_id: uuid.UUID
+    value: float | None
+    qualifier: str | None
+    unit: str | None
+    value_um: float | None
+    curve_class: str | None  # DR only
+    run_count: int
+
+
+@dataclass(frozen=True)
+class AnyProtocolActivity:
+    """Value of the ``any`` column: entries sorted best-first
+    (``value_um`` asc, NULL last, then label)."""
+
+    entries: list[AnyProtocolEntry]
+
+
+@dataclass(frozen=True)
 class ProtocolActivitySummary:
     """Activity summary for one protocol on one molecule."""
 

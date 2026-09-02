@@ -30,6 +30,8 @@ from cellar.domain.screening_assay.activity_types import (
     ActivitySummary,
     ActivityValue,
     AggregatedReadout,
+    AnyProtocolActivity,
+    AnyProtocolEntry,
     CurveParams,
     InterceptAggregate,
     ProtocolActivitySummary,
@@ -51,6 +53,7 @@ from cellar.domain.screening_assay.repository import (
 )
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_scope import RunScope
+from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.hit_criterion import InterceptKey
 
 # Cap the per-cell wire payload of per-run summaries. Multi-year programs
@@ -210,7 +213,8 @@ class MoleculeActivityService:
         selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
         qualifier_handling: QualifierHandling = QualifierHandling.EXCLUDE_QUALIFIED,
         run_scopes: dict[str, RunScope] | None = None,
-    ) -> dict[uuid.UUID, dict[str, ActivityValue]]:
+        any_readout_groups: list[tuple[str, str | None]] | None = None,
+    ) -> dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]]:
         """Batch enrichment for search results.
 
         protocol_columns format:
@@ -223,6 +227,9 @@ class MoleculeActivityService:
             that DR readout-def. The readout-def identifies the column on
             multi-DR protocols (target IC50, counter-screen IC50, ...);
             curve_type was ambiguous when two DRs shared it.
+          - "any" -- one AnyProtocolActivity listing every protocol the
+            molecule has DR curves in (plus readout groups named in
+            ``any_readout_groups``), best first, native units.
 
         DR columns flow through the shared run-aggregator (``run_aggregation``):
         every in-scope run contributes a ``ResolvedRun``, and ``selection_rule``
@@ -243,6 +250,7 @@ class MoleculeActivityService:
                 selection_rule=selection_rule,
                 qualifier_handling=qualifier_handling,
                 run_scopes=run_scopes,
+                any_readout_groups=any_readout_groups,
             )
         async with self._uow:
             return await self._enrich_molecules(
@@ -252,6 +260,7 @@ class MoleculeActivityService:
                 selection_rule=selection_rule,
                 qualifier_handling=qualifier_handling,
                 run_scopes=run_scopes,
+                any_readout_groups=any_readout_groups,
             )
 
     async def _enrich_molecules(
@@ -263,7 +272,8 @@ class MoleculeActivityService:
         selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
         qualifier_handling: QualifierHandling = QualifierHandling.EXCLUDE_QUALIFIED,
         run_scopes: dict[str, RunScope] | None = None,
-    ) -> dict[uuid.UUID, dict[str, ActivityValue]]:
+        any_readout_groups: list[tuple[str, str | None]] | None = None,
+    ) -> dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]]:
         # Parse column specs
         # Formats:
         #   "rd:{rd_def_id}"                          -- raw, legacy/unscoped
@@ -290,6 +300,7 @@ class MoleculeActivityService:
                 rd_col_map[spec] = col
             elif col.startswith("drc:"):
                 drc_specs.append(uuid.UUID(col.split(":", 1)[1]))
+        want_any = "any" in protocol_columns
 
         # Fetch aggregated readouts
         rd_data: dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]] = {}
@@ -322,10 +333,41 @@ class MoleculeActivityService:
                 protos = await self._protocol_repo.find_by_ids(workspace_id, list(curve_proto_ids))
                 proto_dose_unit = {p.id: p.dose_unit.value for p in protos}
 
+        # "any" column: every curve the molecule has, in every protocol.
+        any_curves: dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]] = {}
+        any_runs: dict[uuid.UUID, Run] = {}
+        any_protos: dict[uuid.UUID, Any] = {}
+        any_targets: dict[uuid.UUID, list[str]] = {}
+        if want_any:
+            any_curves = await self._curve_repo.find_all_curves_for_molecules(
+                workspace_id, molecule_ids, readout_definition_ids=None, run_scope=RunScope.all()
+            )
+            any_run_ids = list(
+                {c.run_id for by_rd in any_curves.values() for cs in by_rd.values() for c in cs}
+            )
+            any_runs = (
+                await self._run_repo.find_by_ids(workspace_id, any_run_ids) if any_run_ids else {}
+            )
+            any_proto_ids = list(
+                {
+                    c.protocol_id
+                    for by_rd in any_curves.values()
+                    for cs in by_rd.values()
+                    for c in cs
+                }
+            )
+            if any_proto_ids:
+                for p in await self._protocol_repo.find_by_ids(workspace_id, any_proto_ids):
+                    any_protos[p.id] = p
+                targets = await self._protocol_repo.find_effective_targets_for_protocols(
+                    workspace_id, any_proto_ids
+                )
+                any_targets = {pid: [t.name for t in refs] for pid, refs in targets.items()}
+
         # Build result
-        result: dict[uuid.UUID, dict[str, ActivityValue]] = {}
+        result: dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]] = {}
         for mol_id in molecule_ids:
-            mol_activity: dict[str, ActivityValue] = {}
+            mol_activity: dict[str, ActivityValue | AnyProtocolActivity] = {}
 
             # Readout columns
             mol_rds = rd_data.get(mol_id, {})
@@ -366,6 +408,18 @@ class MoleculeActivityService:
                 )
                 if activity is not None:
                     mol_activity[col_key] = activity
+
+            if want_any:
+                block = self._build_any_activity(
+                    any_curves.get(mol_id, {}),
+                    runs_by_id=any_runs,
+                    protos=any_protos,
+                    targets=any_targets,
+                    selection_rule=selection_rule,
+                    qualifier_handling=qualifier_handling,
+                )
+                if block is not None:
+                    mol_activity["any"] = block
 
             if mol_activity:
                 result[mol_id] = mol_activity
@@ -613,6 +667,56 @@ class MoleculeActivityService:
             aggregate=aggregate_marker,
         )
 
+    def _build_any_activity(
+        self,
+        by_rd: dict[uuid.UUID, list[DoseResponseCurve]],
+        *,
+        runs_by_id: dict[uuid.UUID, Run],
+        protos: dict[uuid.UUID, Any],
+        targets: dict[uuid.UUID, list[str]],
+        selection_rule: SelectionRule,
+        qualifier_handling: QualifierHandling,
+    ) -> AnyProtocolActivity | None:
+        """One entry per (protocol, DR readout-def) the molecule has curves in,
+        collapsed per readout-def by the same run aggregation as the DR
+        columns. Native unit from the protocol; µM only for ordering."""
+        entries: list[AnyProtocolEntry] = []
+        for rd_id, curves in by_rd.items():
+            resolved = self._build_resolved_runs(curves, runs_by_id)
+            if not resolved:
+                continue
+            proto = protos.get(curves[0].protocol_id)
+            unit = proto.dose_unit.value if proto is not None else "uM"
+            av = self._build_dr_activity(
+                resolved_runs=resolved,
+                unit=unit,
+                selection_rule=selection_rule,
+                qualifier_handling=qualifier_handling,
+            )
+            if av is None:
+                continue
+            entries.append(
+                AnyProtocolEntry(
+                    protocol_id=curves[0].protocol_id,
+                    protocol_name=proto.name if proto is not None else "",
+                    protocol_type=proto.protocol_type.value if proto is not None else "",
+                    target_names=targets.get(curves[0].protocol_id, []),
+                    label=_primary_intercept_label(av),
+                    source="dose_response",
+                    readout_definition_id=rd_id,
+                    value=av.value,
+                    qualifier=av.qualifier,
+                    unit=unit,
+                    value_um=_value_to_micromolar(av.value, unit),
+                    curve_class=av.curve_params.curve_class if av.curve_params else None,
+                    run_count=av.run_count,
+                )
+            )
+        if not entries:
+            return None
+        entries.sort(key=lambda e: (e.value_um is None, e.value_um or 0.0, e.label))
+        return AnyProtocolActivity(entries=entries)
+
 
 def _discover_intercept_keys(runs: list[ResolvedRun]) -> list[InterceptKey]:
     """Union of (kind, level) tuples across every run's intercept_values.
@@ -677,3 +781,30 @@ def _to_run_summary(run: ResolvedRun) -> RunSummary:
         r_squared=run.curve_r_squared,
         intercept_values=list(run.intercept_values or []),
     )
+
+
+def _primary_intercept_label(av: ActivityValue) -> str:
+    """Label of the cell's primary intercept: the protocol's declared label
+    when the curve carries it, else the curve type upper-cased ("IC50")."""
+    first = (av.intercept_values or [None])[0]
+    if isinstance(first, dict):
+        spec = first.get("spec") or {}
+        if spec.get("label"):
+            return str(spec["label"])
+        if spec.get("kind") and spec.get("level") is not None:
+            return f"{str(spec['kind']).upper()}{int(float(spec['level']))}"
+    return (av.curve_type or "").upper()
+
+
+def _value_to_micromolar(value: float | None, unit: str) -> float | None:
+    """µM for ordering only (Python-side twin of the SQL CASE in _activity_query).
+
+    mg/mL needs molecular weight, which this service does not load — those
+    entries sort last (None)."""
+    if value is None:
+        return None
+    try:
+        factor = ConcentrationUnit(unit).micromolar_factor
+    except ValueError:
+        return None
+    return None if factor is None else value * factor

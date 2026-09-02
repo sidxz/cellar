@@ -763,3 +763,79 @@ class TestEnrichMoleculesMultiRunAggregation:
         assert av.value == pytest.approx(0.1414, rel=1e-2)
         assert av.additional_curves is None
         assert av.aggregate is None
+
+
+# ---------------------------------------------------------------------------
+# Tests — "any" column: one entry per (protocol, DR readout-def), best first.
+# ---------------------------------------------------------------------------
+
+PROTO_B = uuid.UUID("bbbbbbbb-0000-0000-0000-00000000000b")
+RD_B = uuid.UUID("bbbbbbbb-0000-0000-0000-00000000000d")
+
+
+def _make_protocol(*, protocol_id: uuid.UUID, name: str, dose_unit: str):
+    """Minimal stand-in for the Protocol aggregate as the service reads it."""
+    from types import SimpleNamespace
+
+    from cellar.domain.shared.enums import ConcentrationUnit
+
+    return SimpleNamespace(
+        id=protocol_id,
+        name=name,
+        protocol_type=SimpleNamespace(value="biochemical"),
+        dose_unit=ConcentrationUnit(dose_unit),
+    )
+
+
+class TestEnrichMoleculesAnyColumn:
+    @pytest.mark.asyncio
+    async def test_any_lists_protocols_best_first_in_native_units(self) -> None:
+        run_a, run_b = uuid.uuid4(), uuid.uuid4()
+        curve_a = _make_curve(fitted_value=5.0, run_id=run_a,
+                              intercept_values=[_make_intercept_value(
+                                  kind=InterceptKind.IC, level=50.0, label="IC50", value=5.0)])
+        curve_b = _make_curve(protocol_id=PROTO_B, readout_definition_id=RD_B,
+                              fitted_value=5.0, run_id=run_b, curve_class=CurveClass.PARTIAL,
+                              intercept_values=[_make_intercept_value(
+                                  kind=InterceptKind.IC, level=50.0, label="IC50", value=5.0)])
+        curve_repo = AsyncMock()
+        curve_repo.find_all_curves_for_molecules = AsyncMock(
+            return_value={MOL_ID: {RD_ID: [curve_a], RD_B: [curve_b]}}
+        )
+        runs = {
+            run_a: _make_run(run_id=run_a, run_date=date(2026, 4, 1)),
+            run_b: _make_run(run_id=run_b, run_date=date(2026, 4, 2), protocol_id=PROTO_B),
+        }
+        service = _make_service(curve_repo=curve_repo, run_repo=_run_repo_for(runs))
+        service._protocol_repo.find_by_ids = AsyncMock(return_value=[
+            _make_protocol(protocol_id=PROTO_ID, name="Alpha", dose_unit="uM"),
+            _make_protocol(protocol_id=PROTO_B, name="Beta", dose_unit="nM"),
+        ])
+        from types import SimpleNamespace
+        service._protocol_repo.find_effective_targets_for_protocols = AsyncMock(return_value={
+            PROTO_ID: [SimpleNamespace(id=uuid.uuid4(), name="NadD")],
+            PROTO_B: [],
+        })
+
+        result = await service.enrich_molecules(WS, [MOL_ID], ["any"])
+
+        block = result[MOL_ID]["any"]
+        assert [e.protocol_name for e in block.entries] == ["Beta", "Alpha"]  # 5 nM < 5 µM
+        beta, alpha = block.entries
+        assert (beta.value, beta.unit) == (5.0, "nM")
+        assert beta.value_um == pytest.approx(0.005)
+        assert (alpha.value, alpha.unit, alpha.value_um) == (5.0, "uM", 5.0)
+        assert alpha.label == "IC50"
+        assert alpha.curve_class == "full" and beta.curve_class == "partial"
+        assert alpha.target_names == ["NadD"] and beta.target_names == []
+        assert alpha.source == "dose_response"
+        assert alpha.readout_definition_id == RD_ID
+        assert alpha.run_count == 1
+
+    @pytest.mark.asyncio
+    async def test_any_absent_when_molecule_has_no_curves(self) -> None:
+        curve_repo = AsyncMock()
+        curve_repo.find_all_curves_for_molecules = AsyncMock(return_value={})
+        service = _make_service(curve_repo=curve_repo)
+        result = await service.enrich_molecules(WS, [MOL_ID], ["any"])
+        assert result == {}
