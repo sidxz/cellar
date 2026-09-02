@@ -1258,3 +1258,29 @@ class TestActivityAnyProtocol:
                 ],
                 "logic": "and",
             })
+
+    def test_intercept_key_any_protocol_uses_jsonb_and_unit_case(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": None,
+                 "where": [{"source": "dr_curve", "intercept_key": {"kind": "ec", "level": 90},
+                            "operator": "lt", "value": 10.0}]}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "jsonb_array_elements" in sql
+        assert "dose_unit" in sql
+        assert "molecular_weight" in sql
+        assert "readout_definition_id" not in sql
+
+    def test_intercept_key_any_protocol_invalid_kind_rejected(self) -> None:
+        with pytest.raises(ValueError, match="intercept_key"):
+            _compose({
+                "criteria": [
+                    {"type": "activity", "protocol_id": None,
+                     "where": [{"source": "dr_curve", "intercept_key": {"kind": "xx", "level": 50},
+                                "operator": "lt", "value": 1}]}
+                ],
+                "logic": "and",
+            })

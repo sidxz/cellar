@@ -265,38 +265,52 @@ def _value_filter(data_col: Any, cond: dict[str, Any]) -> ColumnElement:
     return getattr(data_col, op_name)(cond["value"])
 
 
-def _fitted_value_micromolar() -> ColumnElement:
-    """Primary fitted value of a curve expressed in µM.
+def _to_micromolar(expr: Any) -> ColumnElement:
+    """Express ``expr`` (a value in the owning protocol's ``dose_unit``) in µM.
 
-    Curves store ``fitted_value`` in the owning protocol's ``dose_unit``.
     Molar units scale by a constant; mg/mL needs the molecule's molecular
     weight (µM = mg/mL × 1e6 / MW) and yields NULL when MW is unknown, so
     that curve simply cannot match a cutoff. The CASE is generated from
     ``ConcentrationUnit`` so a new unit cannot be silently mis-scaled.
+    Callers must join ``ProtocolModel`` and ``MoleculeModel``.
     """
     whens = []
     for unit in ConcentrationUnit:
         factor = unit.micromolar_factor
         if factor is None:
-            expr = (
-                DoseResponseCurveModel.fitted_value * 1_000_000.0 / MoleculeModel.molecular_weight
-            )
+            scaled = expr * 1_000_000.0 / MoleculeModel.molecular_weight
         else:
-            expr = DoseResponseCurveModel.fitted_value * factor
-        whens.append((ProtocolModel.dose_unit == unit.value, expr))
+            scaled = expr * factor
+        whens.append((ProtocolModel.dose_unit == unit.value, scaled))
     return sa.case(*whens, else_=None)
 
 
 def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
-    """Molecules with at least one DR curve (any protocol, any readout-def)
-    whose primary fitted value, normalized to µM, satisfies the condition."""
+    """Molecules with at least one DR curve in ANY protocol whose intercept,
+    normalized to µM, satisfies the condition.
+
+    ``intercept_key`` (kind, level) picks the intercept from the curve's
+    ``intercept_values`` JSONB (curves store the primary there too, so one
+    path serves IC50 and EC90). Without it the primary ``fitted_value`` is
+    used — the legacy shape from the first any-protocol release.
+    """
+    ik = cond.get("intercept_key")
+    if ik is None:
+        expr: Any = DoseResponseCurveModel.fitted_value
+    else:
+        kind = ik.get("kind") if isinstance(ik, dict) else None
+        level = ik.get("level") if isinstance(ik, dict) else None
+        if kind not in ("ic", "ec") or not isinstance(level, (int, float)):
+            msg = f"Invalid intercept_key on any-protocol activity where: {ik!r}"
+            raise ValueError(msg)
+        expr = _jsonb_intercept_value(kind, float(level))
     sub = (
         sa.select(DoseResponseCurveModel.molecule_id)
         .join(ProtocolModel, DoseResponseCurveModel.protocol_id == ProtocolModel.id)
         .join(MoleculeModel, DoseResponseCurveModel.molecule_id == MoleculeModel.id)
         .where(
             DoseResponseCurveModel.workspace_id == workspace_id,
-            _value_filter(_fitted_value_micromolar(), cond),
+            _value_filter(_to_micromolar(expr), cond),
         )
     )
     return MoleculeModel.id.in_(sub)
