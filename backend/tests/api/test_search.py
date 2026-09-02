@@ -11,6 +11,12 @@ from httpx import AsyncClient
 
 # Force ORM model registration so FK resolution works in test DB.
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
+from cellar.domain.screening_assay.curve_fitting import InterceptValue
+from cellar.domain.screening_assay.dose_response_config import (
+    InterceptBasis,
+    InterceptKind,
+    InterceptSpec,
+)
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.enums import CurveClass, CurveType
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay import (
@@ -373,12 +379,16 @@ async def _seed_multi_run_dr(
     approved: bool = True,
     dose_unit: str = "uM",
     fitted_value: float = 5.0,
+    intercepts: list[tuple[str, float, float]] | None = None,
 ) -> tuple[uuid.UUID, uuid.UUID, list[uuid.UUID]]:
     """Seed a protocol + DR readout-def + N runs + N curves for one molecule.
 
     Returns ``(protocol_id, readout_definition_id, run_ids)``. Run dates are
     spaced one day apart starting today and decreasing back in time, so the
     aggregator can resolve "latest" deterministically.
+
+    ``intercepts`` = list of ``(kind, level, value)`` stored on every curve's
+    ``intercept_values`` (e.g. ``[("ic", 50, 5.0), ("ic", 90, 40.0)]``).
     """
     protocol_id = uuid.uuid4()
     rd_id = uuid.uuid4()
@@ -441,6 +451,25 @@ async def _seed_multi_run_dr(
                 },
             )
 
+            intercept_values = (
+                [
+                    InterceptValue(
+                        spec=InterceptSpec(
+                            kind=InterceptKind(kind),
+                            level=level,
+                            basis=InterceptBasis.RELATIVE_PERCENT,
+                            label=f"{kind.upper()}{int(level)}",
+                        ),
+                        value=value,
+                        confidence_interval_low=None,
+                        confidence_interval_high=None,
+                        at_bound=False,
+                    )
+                    for kind, level, value in intercepts
+                ]
+                if intercepts
+                else None
+            )
             curve = DoseResponseCurve(
                 workspace_id=workspace_id,
                 molecule_id=molecule_id,
@@ -457,12 +486,81 @@ async def _seed_multi_run_dr(
                 num_points=8,
                 curve_class=CurveClass.FULL,
                 raw_data=[],
+                intercept_values=intercept_values,
             )
             repo = SQLAlchemyDoseResponseCurveRepository(uow)
             await repo.save(curve)
 
         await uow.commit()
     return protocol_id, rd_id, run_ids
+
+
+async def _seed_numeric_readout(
+    uow: AsyncUnitOfWork,
+    *,
+    workspace_id: uuid.UUID,
+    molecule_id: uuid.UUID,
+    readout_name: str,
+    unit: str | None,
+    value: float,
+) -> uuid.UUID:
+    """One protocol + one numeric readout-def + one run + one readout_data row."""
+    protocol_id, rd_id, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    async with uow:
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO protocols (id, workspace_id, name, protocol_type, status, "
+                "is_locked, dose_unit, pos_control_signal, version, protocol_version, "
+                "created_by) "
+                "VALUES (:id, :ws, :name, 'biochemical', 'active', false, 'uM', 'high', 1, 1, "
+                ":user)"
+            ),
+            {
+                "id": protocol_id,
+                "ws": workspace_id,
+                "name": f"RD-{protocol_id.hex[:8]}",
+                "user": _SEED_USER_ID,
+            },
+        )
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO readout_definitions "
+                "(id, protocol_id, name, data_type, unit, display_order, is_calculated) "
+                "VALUES (:id, :proto, :name, 'numeric', :unit, 0, false)"
+            ),
+            {"id": rd_id, "proto": protocol_id, "name": readout_name, "unit": unit},
+        )
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO runs (id, workspace_id, protocol_id, run_date, operator, "
+                "status, is_locked, version, notes) "
+                "VALUES (:id, :ws, :proto, :run_date, :user, 'approved', false, 1, NULL)"
+            ),
+            {
+                "id": run_id,
+                "ws": workspace_id,
+                "proto": protocol_id,
+                "run_date": date.today(),
+                "user": _SEED_USER_ID,
+            },
+        )
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO readout_data (id, workspace_id, run_id, molecule_id, "
+                "readout_definition_id, value_numeric, is_outlier, is_computed) "
+                "VALUES (:id, :ws, :run, :mol, :rd, :val, false, false)"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "ws": workspace_id,
+                "run": run_id,
+                "mol": molecule_id,
+                "rd": rd_id,
+                "val": value,
+            },
+        )
+        await uow.commit()
+    return protocol_id
 
 
 class TestExecuteSearchAggregationWiring:
@@ -676,4 +774,124 @@ class TestActivityAnyProtocol:
         assert mol_id in await ids_for([{"source": "curve_class", "curve_classes": ["full"]}])
         assert mol_id not in await ids_for(
             [{"source": "curve_class", "curve_classes": ["inactive"]}]
+        )
+
+    async def test_intercept_key_across_protocols(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        resp = await client.post(
+            "/api/v1/molecules",
+            json={"name": "AnyIcMol", "smiles": "CCCCCO", "originating_org_id": org_id},
+        )
+        mol_id = str(resp.json()["molecule"]["id"])
+        # Protocol A (µM): IC50 5 µM, IC90 40 µM.  Protocol B (nM): IC50 5 nM.
+        await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol_id),
+            run_count=1,
+            intercepts=[("ic", 50, 5.0), ("ic", 90, 40.0)],
+        )
+        await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol_id),
+            run_count=1,
+            dose_unit="nM",
+            intercepts=[("ic", 50, 5.0)],
+        )
+
+        async def ids_for(where: list[dict]) -> set[str]:
+            body = {
+                "query": {
+                    "criteria": [{"type": "activity", "protocol_id": None, "where": where}],
+                    "logic": "and",
+                }
+            }
+            res = await client.post("/api/v1/search/execute", json=body)
+            assert res.status_code == 200, res.text
+            return {m["id"] for m in res.json()["items"]}
+
+        ic50 = {"kind": "ic", "level": 50}
+        ic90 = {"kind": "ic", "level": 90}
+        # IC50 < 1 µM: only B (5 nM) qualifies after normalization.
+        assert mol_id in await ids_for(
+            [{"source": "dr_curve", "intercept_key": ic50, "operator": "lt", "value": 1.0}]
+        )
+        # IC90 < 10 µM: A's IC90 is 40 µM, B has no IC90 → no match.
+        assert mol_id not in await ids_for(
+            [{"source": "dr_curve", "intercept_key": ic90, "operator": "lt", "value": 10.0}]
+        )
+        # IC90 < 50 µM: A qualifies.
+        assert mol_id in await ids_for(
+            [{"source": "dr_curve", "intercept_key": ic90, "operator": "lt", "value": 50.0}]
+        )
+
+    async def test_readout_name_across_protocols(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        resp = await client.post(
+            "/api/v1/molecules",
+            json={"name": "AnyRdMol", "smiles": "CCCCCCO", "originating_org_id": org_id},
+        )
+        mol_id = uuid.UUID(resp.json()["molecule"]["id"])
+        await _seed_numeric_readout(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=mol_id,
+            readout_name="% Inhibition",
+            unit="%",
+            value=20.0,
+        )
+        await _seed_numeric_readout(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=mol_id,
+            readout_name="%  inhibition",
+            unit="%",
+            value=80.0,
+        )
+        await _seed_numeric_readout(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=mol_id,
+            readout_name="% Inhibition",
+            unit=None,
+            value=99.0,
+        )
+
+        async def ids_for(where: list[dict]) -> set[str]:
+            body = {
+                "query": {
+                    "criteria": [{"type": "activity", "protocol_id": None, "where": where}],
+                    "logic": "and",
+                }
+            }
+            res = await client.post("/api/v1/search/execute", json=body)
+            assert res.status_code == 200, res.text
+            return {m["id"] for m in res.json()["items"]}
+
+        # > 50 in "% Inhibition (%)": second protocol (80) matches despite spacing/case.
+        assert str(mol_id) in await ids_for(
+            [
+                {
+                    "source": "readout_data",
+                    "readout_name": "% Inhibition",
+                    "unit": "%",
+                    "operator": "gt",
+                    "value": 50,
+                }
+            ]
+        )
+        # > 90 in "% Inhibition (%)": 99 is in the unit-less group, so no match.
+        assert str(mol_id) not in await ids_for(
+            [
+                {
+                    "source": "readout_data",
+                    "readout_name": "% Inhibition",
+                    "unit": "%",
+                    "operator": "gt",
+                    "value": 90,
+                }
+            ]
         )
