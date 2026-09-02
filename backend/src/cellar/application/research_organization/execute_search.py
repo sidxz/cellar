@@ -152,12 +152,14 @@ class ExecuteSearch:
                 drc_cols = [c for c in (input.protocol_columns or []) if c.startswith("drc:")]
                 criteria = query_dict.get("criteria", []) if query_dict else []
                 run_scopes = _collect_run_scopes(criteria, drc_cols)
+                any_groups = collect_any_readout_groups(criteria)
                 activity_data_raw = await self._activity_service.enrich_molecules(
                     input.workspace_id,
                     mol_ids,
                     input.protocol_columns,
                     selection_rule=input.aggregation,
                     run_scopes=run_scopes or None,
+                    any_readout_groups=any_groups or None,
                 )
                 # Convert UUID keys to strings and ActivityValue to dicts for JSON
                 activity_data = {
@@ -190,6 +192,29 @@ def _query_has_similarity(criteria: list[dict]) -> bool:
             and (c.get("kind") or c.get("search_type")) == "similarity"
         ),
     )
+
+
+def collect_any_readout_groups(criteria: list[dict]) -> list[tuple[str, str | None]]:
+    """``(readout_name, unit)`` groups named by any-protocol activity criteria
+    (``protocol_id`` None + ``readout_data`` where with ``readout_name``).
+    Feeds the ``any`` column so readout entries appear only when asked for."""
+    groups: list[tuple[str, str | None]] = []
+
+    def _visit(c: dict) -> None:
+        if c.get("type") != "activity" or c.get("protocol_id") is not None:
+            return
+        where = c.get("where") if isinstance(c.get("where"), list) else []
+        for w in where:
+            if not isinstance(w, dict) or w.get("source") != "readout_data":
+                continue
+            name = w.get("readout_name")
+            if isinstance(name, str) and name.strip():
+                key = (name, w.get("unit") or None)
+                if key not in groups:
+                    groups.append(key)
+
+    walk_criteria(criteria, _visit)
+    return groups
 
 
 def _collect_run_scopes(

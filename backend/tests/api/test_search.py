@@ -895,3 +895,64 @@ class TestActivityAnyProtocol:
                 }
             ]
         )
+
+    async def test_any_column_returns_entries(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        resp = await client.post(
+            "/api/v1/molecules",
+            json={"name": "AnyColMol", "smiles": "CCCCCCCO", "originating_org_id": org_id},
+        )
+        mol_id = str(resp.json()["molecule"]["id"])
+        await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol_id),
+            run_count=1,
+            intercepts=[("ic", 50, 5.0)],
+        )
+        await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol_id),
+            run_count=1,
+            dose_unit="nM",
+            intercepts=[("ic", 50, 5.0)],
+        )
+        await _seed_numeric_readout(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol_id),
+            readout_name="% Inhibition",
+            unit="%",
+            value=77.0,
+        )
+
+        body = {
+            "query": {
+                "criteria": [
+                    {
+                        "type": "activity",
+                        "protocol_id": None,
+                        "where": [
+                            {
+                                "source": "readout_data",
+                                "readout_name": "% inhibition",
+                                "unit": "%",
+                                "operator": "gt",
+                                "value": 50,
+                            }
+                        ],
+                    }
+                ],
+                "logic": "and",
+            },
+            "protocol_columns": ["any"],
+        }
+        res = await client.post("/api/v1/search/execute", json=body)
+        assert res.status_code == 200, res.text
+        entries = res.json()["activity_data"][mol_id]["any"]["entries"]
+        # nM curve first (0.005 µM), then µM curve, readouts (no µM) last.
+        assert [e["unit"] for e in entries] == ["nM", "uM", "%"]
+        assert entries[2]["label"] == "% Inhibition" and entries[2]["value"] == 77.0
+        assert all(e["protocol_name"] for e in entries)

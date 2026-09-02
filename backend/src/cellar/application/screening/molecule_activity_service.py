@@ -338,6 +338,7 @@ class MoleculeActivityService:
         any_runs: dict[uuid.UUID, Run] = {}
         any_protos: dict[uuid.UUID, Any] = {}
         any_targets: dict[uuid.UUID, list[str]] = {}
+        any_readouts: dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]] = {}
         if want_any:
             any_curves = await self._curve_repo.find_all_curves_for_molecules(
                 workspace_id, molecule_ids, readout_definition_ids=None, run_scope=RunScope.all()
@@ -363,6 +364,21 @@ class MoleculeActivityService:
                     workspace_id, any_proto_ids
                 )
                 any_targets = {pid: [t.name for t in refs] for pid, refs in targets.items()}
+
+            if any_readout_groups:
+                any_readouts = await self._readout_repo.find_aggregated_by_molecules_and_names(
+                    workspace_id, molecule_ids, any_readout_groups
+                )
+                extra_proto_ids = [
+                    pid for lst in any_readouts.values() for pid, _ in lst if pid not in any_protos
+                ]
+                if extra_proto_ids:
+                    for p in await self._protocol_repo.find_by_ids(workspace_id, extra_proto_ids):
+                        any_protos[p.id] = p
+                    more = await self._protocol_repo.find_effective_targets_for_protocols(
+                        workspace_id, extra_proto_ids
+                    )
+                    any_targets.update({pid: [t.name for t in refs] for pid, refs in more.items()})
 
         # Build result
         result: dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]] = {}
@@ -412,6 +428,7 @@ class MoleculeActivityService:
             if want_any:
                 block = self._build_any_activity(
                     any_curves.get(mol_id, {}),
+                    readouts=any_readouts.get(mol_id, []),
                     runs_by_id=any_runs,
                     protos=any_protos,
                     targets=any_targets,
@@ -671,6 +688,7 @@ class MoleculeActivityService:
         self,
         by_rd: dict[uuid.UUID, list[DoseResponseCurve]],
         *,
+        readouts: list[tuple[uuid.UUID, AggregatedReadout]] | None = None,
         runs_by_id: dict[uuid.UUID, Run],
         protos: dict[uuid.UUID, Any],
         targets: dict[uuid.UUID, list[str]],
@@ -679,7 +697,9 @@ class MoleculeActivityService:
     ) -> AnyProtocolActivity | None:
         """One entry per (protocol, DR readout-def) the molecule has curves in,
         collapsed per readout-def by the same run aggregation as the DR
-        columns. Native unit from the protocol; µM only for ordering."""
+        columns, plus one entry per matching readout-def named in
+        ``any_readout_groups``. Native unit from the protocol; µM only for
+        ordering (readout entries have no µM equivalent and sort last)."""
         entries: list[AnyProtocolEntry] = []
         for rd_id, curves in by_rd.items():
             resolved = self._build_resolved_runs(curves, runs_by_id)
@@ -710,6 +730,25 @@ class MoleculeActivityService:
                     value_um=_value_to_micromolar(av.value, unit),
                     curve_class=av.curve_params.curve_class if av.curve_params else None,
                     run_count=av.run_count,
+                )
+            )
+        for proto_id, agg in readouts or []:
+            proto = protos.get(proto_id)
+            entries.append(
+                AnyProtocolEntry(
+                    protocol_id=proto_id,
+                    protocol_name=proto.name if proto is not None else "",
+                    protocol_type=proto.protocol_type.value if proto is not None else "",
+                    target_names=targets.get(proto_id, []),
+                    label=agg.readout_name,
+                    source="readout",
+                    readout_definition_id=agg.readout_definition_id,
+                    value=agg.value,
+                    qualifier=agg.qualifier,
+                    unit=agg.unit,
+                    value_um=None,
+                    curve_class=None,
+                    run_count=agg.data_point_count,
                 )
             )
         if not entries:

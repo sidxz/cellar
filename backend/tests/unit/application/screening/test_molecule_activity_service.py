@@ -839,3 +839,47 @@ class TestEnrichMoleculesAnyColumn:
         service = _make_service(curve_repo=curve_repo)
         result = await service.enrich_molecules(WS, [MOL_ID], ["any"])
         assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_any_includes_named_readout_groups(self) -> None:
+        from cellar.domain.screening_assay.activity_types import AggregatedReadout
+
+        curve_repo = AsyncMock()
+        curve_repo.find_all_curves_for_molecules = AsyncMock(return_value={})
+        service = _make_service(curve_repo=curve_repo)
+        rd_x = uuid.uuid4()
+        service._readout_repo.find_aggregated_by_molecules_and_names = AsyncMock(
+            return_value={
+                MOL_ID: [
+                    (
+                        PROTO_B,
+                        AggregatedReadout(
+                            readout_definition_id=rd_x,
+                            readout_name="% Inhibition",
+                            value=82.0,
+                            qualifier=None,
+                            unit="%",
+                            aggregation="mean",
+                            data_point_count=3,
+                        ),
+                    )
+                ]
+            }
+        )
+        service._protocol_repo.find_by_ids = AsyncMock(
+            return_value=[_make_protocol(protocol_id=PROTO_B, name="Beta", dose_unit="uM")]
+        )
+        service._protocol_repo.find_effective_targets_for_protocols = AsyncMock(return_value={})
+
+        result = await service.enrich_molecules(
+            WS, [MOL_ID], ["any"], any_readout_groups=[("% inhibition", "%")]
+        )
+        [entry] = result[MOL_ID]["any"].entries
+        assert (entry.label, entry.value, entry.unit, entry.source) == (
+            "% Inhibition",
+            82.0,
+            "%",
+            "readout",
+        )
+        assert entry.value_um is None and entry.curve_class is None
+        assert entry.protocol_name == "Beta" and entry.run_count == 3
