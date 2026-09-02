@@ -10,6 +10,7 @@ hand-set.
 from __future__ import annotations
 
 from cellar.domain.screening_assay.protocol import Protocol
+from cellar.domain.screening_assay.readout_name import normalize_readout_name
 from cellar.domain.shared.ontology import OntologyTerm
 
 # v1: protocol_type + readout schema. v2: adds the `facets` map (ontology
@@ -32,10 +33,6 @@ def normalize_facet_id(facet_id: str) -> str:
     return " ".join(s.lower().split())
 
 
-def _normalize_readout_name(name: str) -> str:
-    return " ".join(name.strip().lower().split())
-
-
 def _facet_key(term: OntologyTerm) -> str:
     """Stable, comparable key for a facet term.
 
@@ -51,11 +48,7 @@ def _facet_key(term: OntologyTerm) -> str:
 
 def compute_protocol_fingerprint(protocol: Protocol) -> dict:
     readout_kinds = sorted(
-        {
-            _normalize_readout_name(rd.name)
-            for rd in protocol.readout_definitions
-            if rd.name.strip()
-        }
+        {normalize_readout_name(rd.name) for rd in protocol.readout_definitions if rd.name.strip()}
     )
     readout_data_types = sorted({rd.data_type.value for rd in protocol.readout_definitions})
     facets = {

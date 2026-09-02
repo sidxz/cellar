@@ -6,7 +6,7 @@ import { Separator } from "@/shared/components/ui/separator";
 import { RotateCcw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchCount } from "../../hooks/use-search-count";
-import { drcColId, rdColId } from "../../lib/protocol-column-id";
+import { ANY_COLUMN_ID, drcColId, rdColId } from "../../lib/protocol-column-id";
 import type {
   ActivityCriterion,
   GroupCriterion,
@@ -180,6 +180,10 @@ function deriveProtocolColumns(
     if (!columns.includes(col)) columns.push(col);
   }
   for (const c of activityCriteria) {
+    if (c.protocol_id === null) {
+      add(ANY_COLUMN_ID); // one "Active in" column for every any-protocol row
+      continue;
+    }
     if (!c.protocol_id) continue;
     const conds =
       Array.isArray(c.where) && c.where.length > 0
@@ -362,7 +366,13 @@ export function SearchForm({
         if (w.source === "curve_class") {
           return Array.isArray(w.curve_classes) && w.curve_classes.length > 0;
         }
-        if (!w.readout_definition_id) return false;
+        // Any-protocol rows: potency (dr_curve, no rd) and readout-by-name are
+        // readout-def-less by design.
+        if (!w.readout_definition_id) {
+          const anyDr = c.protocol_id === null && w.source === "dr_curve";
+          const anyRd = c.protocol_id === null && w.source === "readout_data" && !!w.readout_name;
+          if (!anyDr && !anyRd) return false;
+        }
         if (w.operator === "between") {
           return w.min !== undefined && w.max !== undefined;
         }
@@ -372,7 +382,7 @@ export function SearchForm({
     });
     // Filter to valid criteria and their matching conjunctions
     const validIndices = cleanedActivity
-      .map((c, i) => (c.protocol_id ? i : -1))
+      .map((c, i) => (c.protocol_id === null || !!c.protocol_id ? i : -1)) // null = any protocol, valid
       .filter((i) => i >= 0);
     const validActivity = validIndices.map((i) => cleanedActivity[i]);
     const validConjs = validIndices.map((i) => protocolConjunctions[i] ?? "or");
@@ -569,6 +579,7 @@ export function SearchForm({
           criteria={activityCriteria}
           conjunctions={protocolConjunctions}
           projectIds={projectIds}
+          protocols={protocols}
           onChange={(criteria, conjs) => {
             setActivityCriteria(criteria);
             setProtocolConjunctions(conjs);

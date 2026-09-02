@@ -1182,3 +1182,143 @@ class TestStructureClauseNewShape:
         })
         sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
         assert "BSYNRYMUTXBXSQ-UHFFFAOYSA-N" in sql
+
+
+class TestActivityAnyProtocol:
+    """``protocol_id`` absent/None ⇒ the criterion spans every protocol."""
+
+    def test_curve_class_any_protocol_omits_protocol_filter(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": None,
+                 "where": [{"source": "curve_class", "curve_classes": ["full", "partial"]}]}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "curve_class IN" in sql
+        assert "protocol_id" not in sql
+
+    def test_presence_any_protocol_omits_protocol_filter(self) -> None:
+        clause = _compose({
+            "criteria": [{"type": "activity", "where": []}],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "readout_data" in sql
+        assert "protocol_id" not in sql
+
+    def test_potency_any_protocol_normalizes_to_micromolar(self) -> None:
+        """No readout-def + any protocol ⇒ primary fitted_value converted to µM
+        via the owning protocol's dose_unit (mg/mL via molecular weight)."""
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": None,
+                 "where": [{"source": "dr_curve", "operator": "lt", "value": 1.0}]}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "fitted_value" in sql
+        assert "dose_unit" in sql
+        assert "molecular_weight" in sql
+        # protocol join for dose_unit only, never a literal protocol_id filter
+        assert "protocols.id" in sql
+        assert "protocol_id = '" not in sql
+
+    def test_readout_data_any_protocol_rejected(self) -> None:
+        with pytest.raises(ValueError, match="protocol_id"):
+            _compose({
+                "criteria": [
+                    {"type": "activity",
+                     "where": [{"source": "readout_data",
+                                "readout_definition_id": str(uuid.uuid4()),
+                                "operator": "gt", "value": 50}]}
+                ],
+                "logic": "and",
+            })
+
+    def test_run_scope_any_protocol_rejected(self) -> None:
+        with pytest.raises(ValueError, match="run_scope"):
+            _compose({
+                "criteria": [
+                    {"type": "activity", "run_scope": {"mode": "latest"},
+                     "where": [{"source": "curve_class", "curve_classes": ["full"]}]}
+                ],
+                "logic": "and",
+            })
+
+    def test_dr_curve_with_readout_def_still_requires_protocol(self) -> None:
+        """Per-protocol shape (readout-def given) is unchanged: protocol required."""
+        with pytest.raises(ValueError, match="protocol_id"):
+            _compose({
+                "criteria": [
+                    {"type": "activity",
+                     "where": [{"source": "dr_curve", "readout_definition_id": str(uuid.uuid4()),
+                                "operator": "lt", "value": 1.0}]}
+                ],
+                "logic": "and",
+            })
+
+    def test_intercept_key_any_protocol_uses_jsonb_and_unit_case(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": None,
+                 "where": [{"source": "dr_curve", "intercept_key": {"kind": "ec", "level": 90},
+                            "operator": "lt", "value": 10.0}]}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "jsonb_array_elements" in sql
+        assert "dose_unit" in sql
+        assert "molecular_weight" in sql
+        assert "readout_definition_id" not in sql
+
+    def test_intercept_key_any_protocol_invalid_kind_rejected(self) -> None:
+        with pytest.raises(ValueError, match="intercept_key"):
+            _compose({
+                "criteria": [
+                    {"type": "activity", "protocol_id": None,
+                     "where": [{"source": "dr_curve", "intercept_key": {"kind": "xx", "level": 50},
+                                "operator": "lt", "value": 1}]}
+                ],
+                "logic": "and",
+            })
+
+    def test_readout_name_any_protocol_joins_definitions(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": None,
+                 "where": [{"source": "readout_data", "readout_name": "  % Inhibition ",
+                            "unit": "%", "operator": "gt", "value": 50}]}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "readout_definitions" in sql
+        assert "'% inhibition'" in sql          # normalized: lower + trim + single spaces
+        assert "value_numeric > 50" in sql
+        assert "is_outlier" in sql
+
+    def test_readout_name_any_protocol_null_unit_matches_empty(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": None,
+                 "where": [{"source": "readout_data", "readout_name": "MIC",
+                            "operator": "lt", "value": 2}]}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "coalesce(readout_definitions.unit, '') = ''" in sql
+
+    def test_readout_data_any_protocol_without_name_rejected(self) -> None:
+        with pytest.raises(ValueError, match="readout_name"):
+            _compose({
+                "criteria": [
+                    {"type": "activity", "protocol_id": None,
+                     "where": [{"source": "readout_data", "operator": "gt", "value": 1}]}
+                ],
+                "logic": "and",
+            })

@@ -250,7 +250,10 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
       ``rd:<proto_id>:<rd_id>[:<normalization>]`` — scalar readout
       ``drc:<rd_id>``                              — DR readout, all intercepts
       ``drc:<rd_id>:<kind>:<level>``               — DR readout, one intercept
+      ``any``                                       — all activity entries
     """
+    if token == "any":
+        return [ColumnSpec(key="any::text", header="Active in", kind="text")]
     parts = token.split(":")
     if parts[0] == "rd":
         proto_id = parts[1]
@@ -386,6 +389,9 @@ def _cell_value(spec: ColumnSpec, raw: dict) -> Any:
     if "::" not in spec.key:
         return None
     col_token, suffix = spec.key.rsplit("::", 1)
+    if col_token == "any":
+        block = (raw.get("activity") or {}).get("any") or {}
+        return _format_any_entries(block.get("entries") or [])
     parent_token = _activity_parent_token(col_token)
     av = (raw.get("activity") or {}).get(parent_token)
     if not av:
@@ -402,6 +408,26 @@ def _cell_value(spec: ColumnSpec, raw: dict) -> Any:
     if suffix == "curve_class":
         return (av.get("curve_params") or {}).get("curve_class")
     return None
+
+
+def _format_any_entries(entries: list[dict]) -> str:
+    """ "Protocol: LABEL value unit" per entry, joined by "; " — the text
+    form of the grid's "Active in" cell."""
+    parts: list[str] = []
+    for e in entries:
+        value = e.get("value")
+        if value is None:
+            shown = "—"
+        else:
+            q = e.get("qualifier") or ""
+            q = "" if q == "=" else q
+            num = f"{value:g}"
+            unit = e.get("unit") or ""
+            shown = f"{q}{num}{' ' + unit if unit else ''}"
+        protocol_name = e.get("protocol_name") or "Protocol"
+        label = e.get("label") or ""
+        parts.append(f"{protocol_name}: {label} {shown}".rstrip())
+    return "; ".join(parts)
 
 
 def _display_value(av: dict, iv: dict | None) -> Any:

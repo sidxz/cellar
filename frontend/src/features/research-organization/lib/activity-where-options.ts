@@ -22,15 +22,17 @@
  * intercepts persist an explicit `{kind, level}` key.
  */
 import {
+  interceptLabel,
   interceptOptionLabel,
   narrowInterceptKey,
 } from "@/features/screening-assay/lib/intercept-label";
 import {
   CURVE_CLASS_LABELS,
   type CurveClass,
+  type InterceptKey,
   type Protocol,
 } from "@/features/screening-assay/types";
-import type { ActivityWhereCondition, ActivityWhereSource, InterceptKey } from "../types";
+import type { ActivityWhereCondition, ActivityWhereSource } from "../types";
 
 /** Group heading in the picker — kept here so the section component doesn't
  *  carry chemistry vocabulary directly. */
@@ -54,6 +56,8 @@ export interface WhereOption {
   intercept_key: InterceptKey | null;
   /** Which section heading the picker should render this under. */
   group: WhereOptionGroup;
+  /** Any-protocol options: how many protocols measure this. */
+  protocolCount?: number;
 }
 
 /** All allowed curve classes, derived from the FE union/labels map so the
@@ -124,22 +128,110 @@ export function buildActivityWhereOptions(protocol: Protocol | undefined): Where
     }
   }
 
-  if (hasAnyDr) {
-    out.push({
-      id: CURVE_CLASS_OPTION_ID,
-      label: "Curve Class",
-      unit: null,
-      source: "curve_class",
-      readout_definition_id: "",
-      intercept_key: null,
-      group: "curve_class",
-    });
-  }
+  if (hasAnyDr) out.push(CURVE_CLASS_OPTION);
 
   return out;
 }
 
 export const CURVE_CLASS_OPTION_ID = "curve_class";
+/** Legacy any-protocol option (first release): primary fitted value of any
+ *  DR curve in µM. Not offered in the picker any more; saved searches that
+ *  carry it keep round-tripping. */
+export const POTENCY_UM_OPTION_ID = "potency_um";
+
+const CURVE_CLASS_OPTION: WhereOption = {
+  id: CURVE_CLASS_OPTION_ID,
+  label: "Curve Class",
+  unit: null,
+  source: "curve_class",
+  readout_definition_id: "",
+  intercept_key: null,
+  group: "curve_class",
+};
+
+/** Grouping key for a readout name across protocols: lowercase, trimmed,
+ *  internal whitespace collapsed. Mirrors the backend's
+ *  `normalize_readout_name`. A controlled vocabulary would replace this. */
+export function normalizeReadoutName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function anyDrOptionId(key: { kind: string; level: number }): string {
+  return `any:dr:${key.kind}:${key.level}`;
+}
+
+export function anyRdOptionId(name: string, unit: string | null): string {
+  return `any:rd:${normalizeReadoutName(name)}|${unit ?? ""}`;
+}
+
+function countLabel(n: number): string {
+  return `${n} protocol${n === 1 ? "" : "s"}`;
+}
+
+/** Build the "Any protocol" picker from what the workspace's protocols
+ *  actually measure: one entry per DR intercept (kind, level) and one per
+ *  numeric readout (normalized name + unit), each with a protocol count,
+ *  then Curve Class. Sorted by count desc, then label. */
+export function buildAnyProtocolWhereOptions(protocols: Protocol[]): WhereOption[] {
+  const dr = new Map<string, { key: InterceptKey; label: string; protos: Set<string> }>();
+  const num = new Map<string, { name: string; unit: string | null; protos: Set<string> }>();
+
+  for (const p of protocols) {
+    for (const rd of p.readout_definitions ?? []) {
+      const cfg = rd.dose_response_config;
+      if (cfg) {
+        // The backend always fills `intercepts` (DoseResponseConfig defaults
+        // it to the primary from curve_type), so an empty list here
+        // contributes nothing rather than guessing a fallback key/label.
+        const keys = (cfg.intercepts ?? []).map((s) => ({
+          key: { kind: s.kind, level: s.level },
+          label: interceptLabel(s),
+        }));
+        for (const { key, label } of keys) {
+          const id = anyDrOptionId(key);
+          const entry = dr.get(id) ?? { key, label, protos: new Set<string>() };
+          entry.protos.add(p.id);
+          dr.set(id, entry);
+        }
+      } else if (rd.data_type === "numeric") {
+        const id = anyRdOptionId(rd.name, rd.unit);
+        const entry = num.get(id) ?? {
+          name: rd.name.trim(),
+          unit: rd.unit,
+          protos: new Set<string>(),
+        };
+        entry.protos.add(p.id);
+        num.set(id, entry);
+      }
+    }
+  }
+
+  const byCountThenLabel = (a: WhereOption, b: WhereOption) =>
+    (b.protocolCount ?? 0) - (a.protocolCount ?? 0) || a.label.localeCompare(b.label);
+
+  const drOpts: WhereOption[] = [...dr.entries()].map(([id, e]) => ({
+    id,
+    label: `${e.label} (µM) · ${countLabel(e.protos.size)}`,
+    unit: "µM",
+    source: "dr_curve",
+    readout_definition_id: "",
+    intercept_key: e.key,
+    group: "dose_response",
+    protocolCount: e.protos.size,
+  }));
+  const numOpts: WhereOption[] = [...num.entries()].map(([id, e]) => ({
+    id,
+    label: `${e.name}${e.unit ? ` (${e.unit})` : ""} · ${countLabel(e.protos.size)}`,
+    unit: e.unit,
+    source: "readout_data",
+    readout_definition_id: "",
+    intercept_key: null,
+    group: "numeric_readout",
+    protocolCount: e.protos.size,
+  }));
+
+  return [...drOpts.sort(byCountThenLabel), ...numOpts.sort(byCountThenLabel), CURVE_CLASS_OPTION];
+}
 
 function drOptionId(rdId: string, key: InterceptKey | null): string {
   if (!key) return `dr_curve:${rdId}`;
@@ -155,9 +247,38 @@ function numericOptionId(rdId: string): string {
  *  a future schema). */
 export function parseWhereOptionId(
   id: string,
-): Pick<ActivityWhereCondition, "source" | "readout_definition_id" | "intercept_key"> | null {
+): Pick<
+  ActivityWhereCondition,
+  "source" | "readout_definition_id" | "intercept_key" | "readout_name" | "unit"
+> | null {
   if (id === CURVE_CLASS_OPTION_ID) {
     return { source: "curve_class", readout_definition_id: "", intercept_key: null };
+  }
+  if (id === POTENCY_UM_OPTION_ID) {
+    return { source: "dr_curve", readout_definition_id: "", intercept_key: null };
+  }
+  if (id.startsWith("any:dr:")) {
+    const [, , kind, levelStr] = id.split(":");
+    const level = Number(levelStr);
+    if (Number.isNaN(level)) return null;
+    const intercept_key = narrowInterceptKey({ kind, level });
+    if (!intercept_key) return null;
+    return { source: "dr_curve", readout_definition_id: "", intercept_key };
+  }
+  if (id.startsWith("any:rd:")) {
+    const body = id.slice("any:rd:".length);
+    // lastIndexOf is load-bearing: readout names may contain "|", units never
+    // do, so splitting from the right always finds the name/unit boundary.
+    const sep = body.lastIndexOf("|");
+    if (sep < 0) return null;
+    const unit = body.slice(sep + 1);
+    return {
+      source: "readout_data",
+      readout_definition_id: "",
+      intercept_key: null,
+      readout_name: body.slice(0, sep),
+      unit: unit === "" ? null : unit,
+    };
   }
   const parts = id.split(":");
   if (parts.length < 2) return null;
@@ -192,10 +313,21 @@ export function parseWhereOptionId(
 
 /** Inverse of `parseWhereOptionId`: given a saved where-condition, find
  *  the option id that should be highlighted in the picker. Returns an
- *  empty string when no readout-def is set (fresh row). */
-export function whereConditionOptionId(cond: ActivityWhereCondition): string {
+ *  empty string when no readout-def is set (fresh row) — except on an
+ *  any-protocol row, where a readout-def-less ``dr_curve`` *is* the
+ *  potency option. */
+export function whereConditionOptionId(cond: ActivityWhereCondition, anyProtocol = false): string {
   if (cond.source === "curve_class") return CURVE_CLASS_OPTION_ID;
-  if (!cond.readout_definition_id) return "";
+  if (!cond.readout_definition_id) {
+    if (!anyProtocol) return "";
+    if (cond.source === "readout_data") {
+      return cond.readout_name ? anyRdOptionId(cond.readout_name, cond.unit ?? null) : "";
+    }
+    if (cond.source === "dr_curve") {
+      return cond.intercept_key ? anyDrOptionId(cond.intercept_key) : POTENCY_UM_OPTION_ID;
+    }
+    return "";
+  }
   if (cond.source === "readout_data") return numericOptionId(cond.readout_definition_id);
   return drOptionId(cond.readout_definition_id, cond.intercept_key ?? null);
 }

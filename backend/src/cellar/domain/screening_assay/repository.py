@@ -302,6 +302,17 @@ class ReadoutDataRepository(Protocol):
         molecule_ids: list[uuid.UUID],
         specs: list[tuple[uuid.UUID, str | None]],
     ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]: ...
+    async def find_aggregated_by_molecules_and_names(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        groups: list[tuple[str, str | None]],
+    ) -> dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]]:
+        """Raw-layer aggregation across EVERY protocol whose readout-def matches
+        a ``(normalized_name, unit)`` group. Returns, per molecule, one
+        ``(protocol_id, AggregatedReadout)`` per matching readout-def."""
+        ...
+
     async def find_by_molecule_and_definition(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, readout_definition_id: uuid.UUID
     ) -> list: ...

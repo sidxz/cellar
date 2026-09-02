@@ -137,7 +137,7 @@ export function collectRunScopesByProtocol(
   function walk(list: SearchCriterion[]): void {
     for (const c of list) {
       if (c.type === "activity") {
-        if (!c.run_scope) continue;
+        if (!c.run_scope || c.protocol_id === null) continue;
         if (c.run_scope.mode === "any" || c.run_scope.mode === "all") continue;
         out.set(c.protocol_id, c.run_scope);
       } else if (c.type === "group") {

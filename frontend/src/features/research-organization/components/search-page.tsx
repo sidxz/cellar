@@ -20,7 +20,14 @@ import {
   wireToAggregationMode,
 } from "../lib/use-aggregation-mode";
 import type { AggregationMode } from "../lib/use-aggregation-mode";
-import type { ActivityValue, SavedSearch, SearchQuery, SortDir, SortField } from "../types";
+import {
+  type ActivityValue,
+  type SavedSearch,
+  type SearchQuery,
+  type SortDir,
+  type SortField,
+  anyProtocolActivity,
+} from "../types";
 import { CompoundDetailSheet } from "./search/compound-detail-sheet";
 import { ReportCustomizer } from "./search/report-customizer";
 import { ResultsGrid } from "./search/results-grid";
@@ -196,6 +203,24 @@ function SearchPageInner() {
   const visibleProtocolIds = useMemo(
     () => uniqueProtocolIds(protocolColumns, protocols ?? []),
     [protocolColumns, protocols],
+  );
+
+  // ── Derived: visible protocol IDs + the selected compound's "any" matches ─
+  // The detail sheet needs to show every protocol the selected compound
+  // actually matched in an any-protocol search, not just the columns on
+  // screen (an any-protocol row has no dedicated protocol column). Derived
+  // from `selectedMolecule` (not a click-time snapshot) so prev/next
+  // navigation stays correct without a separate state to keep in sync.
+  const sheetVisibleProtocolIds = useMemo(
+    () => [
+      ...new Set([
+        ...visibleProtocolIds,
+        ...(selectedMolecule
+          ? (anyProtocolActivity(selectedMolecule)?.entries.map((e) => e.protocol_id) ?? [])
+          : []),
+      ]),
+    ],
+    [visibleProtocolIds, selectedMolecule],
   );
 
   // ── Derived: should the toolbar Summarize: dropdown be hidden? ──────────
@@ -672,7 +697,7 @@ function SearchPageInner() {
       {/* Overlays */}
       <CompoundDetailSheet
         molecule={selectedMolecule}
-        visibleProtocolIds={visibleProtocolIds}
+        visibleProtocolIds={sheetVisibleProtocolIds}
         currentIndex={selectedIndex}
         totalCount={results.length}
         onNavigate={handleDetailNavigate}
