@@ -7,6 +7,7 @@ specific, date_range, past_n_days, all).
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -23,6 +24,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     DoseResponseCurveModel,
     ProtocolModel,
     ReadoutDataModel,
+    ReadoutDefinitionModel,
     RunModel,
 )
 
@@ -34,6 +36,19 @@ _ACTIVITY_OP_MAP: dict[str, str] = {
     "gte": "__ge__",
     # "between" is handled separately (uses min+max instead of value).
 }
+
+_WS_RUN = re.compile(r"\s+")
+
+
+def normalize_readout_name(name: str) -> str:
+    """Grouping key for readout-defs across protocols: lowercase, trimmed,
+    internal whitespace collapsed. The FE catalog uses the same rule.
+    A controlled readout vocabulary would replace this string key."""
+    return _WS_RUN.sub(" ", name.strip()).lower()
+
+
+def _sql_normalized_name(col: Any) -> ColumnElement:
+    return sa.func.lower(sa.func.btrim(sa.func.regexp_replace(col, r"\s+", " ", "g")))
 
 
 def _activity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
@@ -55,11 +70,15 @@ def _activity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> Colu
           ``between``). Treated as a single-element where list.
         - **Presence-only:** neither shape provides a where condition.
 
-    ``protocol_id`` may be absent/None ⇒ **any protocol**. Only the
-    presence-only, ``curve_class`` and readout-def-less ``dr_curve``
-    (potency in µM, normalized via each protocol's dose_unit) shapes are
-    allowed there; ``readout_data`` and every ``run_scope`` other than
-    ``any`` are per-protocol by nature and rejected.
+    ``protocol_id`` may be absent/None ⇒ **any protocol**. Only these shapes
+    are allowed there: presence-only; ``curve_class``; readout-def-less
+    ``dr_curve`` (potency in µM, normalized via each protocol's dose_unit,
+    optionally scoped to one intercept via ``intercept_key``); and
+    readout-def-less ``readout_data`` with a ``readout_name`` (matches
+    readout-defs across protocols by normalized name + unit, no unit
+    conversion). Every other shape — a ``readout_definition_id`` without a
+    ``protocol_id``, or any ``run_scope`` other than ``any`` — is per-protocol
+    by nature and rejected.
 
     ``run_scope`` (optional) restricts every condition to a subset of runs:
         - ``{"mode": "any"}`` (default): no constraint.
@@ -148,11 +167,8 @@ def _activity_where_clause(
 
     rd_id = cond.get("readout_definition_id")
     if protocol_id is None:
-        if source == "readout_data":
-            msg = (
-                "readout_data where conditions need a protocol_id (readout-defs are per-protocol)"
-            )
-            raise ValueError(msg)
+        if source == "readout_data" and not rd_id:
+            return _readout_name_any_protocol_clause(cond, workspace_id)
         if source == "dr_curve" and not rd_id:
             return _potency_any_protocol_clause(cond, workspace_id)
     if not rd_id:
@@ -311,6 +327,34 @@ def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) 
         .where(
             DoseResponseCurveModel.workspace_id == workspace_id,
             _value_filter(_to_micromolar(expr), cond),
+        )
+    )
+    return MoleculeModel.id.in_(sub)
+
+
+def _readout_name_any_protocol_clause(
+    cond: dict[str, Any], workspace_id: uuid.UUID
+) -> ColumnElement:
+    """Molecules with a non-outlier readout value, in ANY protocol whose
+    readout-def matches by normalized name + unit, satisfying the condition.
+    No unit conversion: the unit is part of the group identity."""
+    name = cond.get("readout_name")
+    if not isinstance(name, str) or not name.strip():
+        msg = "any-protocol readout_data where needs a non-empty readout_name"
+        raise ValueError(msg)
+    unit = cond.get("unit") or ""
+    sub = (
+        sa.select(ReadoutDataModel.molecule_id)
+        .join(
+            ReadoutDefinitionModel,
+            ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
+        )
+        .where(
+            ReadoutDataModel.workspace_id == workspace_id,
+            ReadoutDataModel.is_outlier == False,  # noqa: E712
+            _sql_normalized_name(ReadoutDefinitionModel.name) == normalize_readout_name(name),
+            sa.func.coalesce(ReadoutDefinitionModel.unit, "") == unit,
+            _value_filter(ReadoutDataModel.value_numeric, cond),
         )
     )
     return MoleculeModel.id.in_(sub)

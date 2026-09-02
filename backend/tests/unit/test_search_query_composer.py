@@ -1227,7 +1227,7 @@ class TestActivityAnyProtocol:
         assert "protocol_id = '" not in sql
 
     def test_readout_data_any_protocol_rejected(self) -> None:
-        with pytest.raises(ValueError, match="readout_data"):
+        with pytest.raises(ValueError, match="protocol_id"):
             _compose({
                 "criteria": [
                     {"type": "activity",
@@ -1281,6 +1281,43 @@ class TestActivityAnyProtocol:
                     {"type": "activity", "protocol_id": None,
                      "where": [{"source": "dr_curve", "intercept_key": {"kind": "xx", "level": 50},
                                 "operator": "lt", "value": 1}]}
+                ],
+                "logic": "and",
+            })
+
+    def test_readout_name_any_protocol_joins_definitions(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": None,
+                 "where": [{"source": "readout_data", "readout_name": "  % Inhibition ",
+                            "unit": "%", "operator": "gt", "value": 50}]}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "readout_definitions" in sql
+        assert "'% inhibition'" in sql          # normalized: lower + trim + single spaces
+        assert "value_numeric > 50" in sql
+        assert "is_outlier" in sql
+
+    def test_readout_name_any_protocol_null_unit_matches_empty(self) -> None:
+        clause = _compose({
+            "criteria": [
+                {"type": "activity", "protocol_id": None,
+                 "where": [{"source": "readout_data", "readout_name": "MIC",
+                            "operator": "lt", "value": 2}]}
+            ],
+            "logic": "and",
+        })
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "coalesce(readout_definitions.unit, '') = ''" in sql
+
+    def test_readout_data_any_protocol_without_name_rejected(self) -> None:
+        with pytest.raises(ValueError, match="readout_name"):
+            _compose({
+                "criteria": [
+                    {"type": "activity", "protocol_id": None,
+                     "where": [{"source": "readout_data", "operator": "gt", "value": 1}]}
                 ],
                 "logic": "and",
             })
