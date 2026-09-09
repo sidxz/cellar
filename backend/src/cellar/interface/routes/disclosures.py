@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cellar.application.chemical_registration.confirm_disclosure import ConfirmDisclosureCommand
 from cellar.application.chemical_registration.disclosure_service import SubmitDisclosureCommand
@@ -104,7 +104,7 @@ class SubmitDisclosureBody(BaseModel):
     molecule_id: uuid.UUID
     disclosed_smiles: str
     disclosing_org_id: uuid.UUID | None = None
-    scientist_name: str | None = None
+    scientist_name: str | None = Field(default=None, max_length=200)
     auto_approve: bool = True
     notes: str | None = None
     disclosure_date: date | None = None  # declared date; today is stamped separately

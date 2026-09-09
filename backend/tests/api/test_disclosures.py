@@ -6,7 +6,7 @@ disclosure date; the observed recorded-at stamps stay alongside it.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -44,6 +44,10 @@ async def test_declared_disclosure_date_round_trips(
     assert dr["disclosure_date"] == "2024-03-15"
     assert dr["requested_at"] is not None
 
+    stored = await client.get(f"/api/v1/disclosures/{dr['id']}")
+    assert stored.status_code == 200
+    assert stored.json()["disclosure_date"] == "2024-03-15"
+
     mol = await client.get(f"/api/v1/molecules/{undisclosed_molecule_id}")
     assert mol.status_code == 200
     body = mol.json()
@@ -61,7 +65,7 @@ async def test_future_disclosure_date_is_rejected(
         json={
             "molecule_id": undisclosed_molecule_id,
             "disclosed_smiles": "CCO",
-            "disclosure_date": (date.today() + timedelta(days=1)).isoformat(),
+            "disclosure_date": (datetime.now(UTC).date() + timedelta(days=1)).isoformat(),
         },
     )
     assert resp.status_code == 422, resp.text

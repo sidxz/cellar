@@ -354,7 +354,7 @@ class Molecule(AggregateRoot):
         self._guard_tombstone()
         if self.structure_status != StructureStatus.UNDISCLOSED:
             raise ValidationError("Only undisclosed molecules can be disclosed")
-        if disclosure_date is not None and disclosure_date > date.today():
+        if disclosure_date is not None and disclosure_date > datetime.now(UTC).date():
             raise ValidationError("disclosure_date cannot be in the future")
 
         self.structure = structure

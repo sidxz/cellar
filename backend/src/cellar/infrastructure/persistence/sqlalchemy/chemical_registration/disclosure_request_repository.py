@@ -100,6 +100,7 @@ class SQLAlchemyDisclosureRequestRepository(
         model.resolved_to_molecule_id = aggregate.resolved_to_molecule_id
         model.matched_molecule_id = aggregate.matched_molecule_id
         model.scientist_name = aggregate.scientist_name
+        model.disclosure_date = aggregate.disclosure_date
         model.resolved_at = aggregate.resolved_at
         model.conflict_reason = aggregate.conflict_reason
         model.notes = aggregate.notes

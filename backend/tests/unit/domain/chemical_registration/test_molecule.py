@@ -1,7 +1,7 @@
 """Tests for Molecule aggregate root."""
 
 import uuid
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -521,7 +521,7 @@ class TestDisclose:
                 structure=aspirin_structure,
                 descriptors=aspirin_descriptors,
                 disclosed_by=user_id,
-                disclosure_date=date.today() + timedelta(days=1),
+                disclosure_date=datetime.now(UTC).date() + timedelta(days=1),
             )
         assert mol.structure_status == StructureStatus.UNDISCLOSED
 

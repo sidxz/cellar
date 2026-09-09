@@ -107,3 +107,8 @@ Full machine-readable findings (incl. the fixed high/medium set, verifier
 notes, per-finding file:line evidence): generated 2026-06-06 by the
 `fe-maintainability-review` workflow; archived copy at
 `/tmp/fe-review-findings.json` (re-derivable by re-running the review).
+
+## Addendum 2026-09-09 — hand-rolled `Molecule` interface
+
+`frontend/src/features/chemical-registration/types/index.ts` still hand-rolls `Molecule` (narrower enum types than the generated `MoleculeResponse`). The `feat/daikon-asks` branch added `scientist_name` / `disclosure_date` to it as the minimal move; the debt is that it should become `export type Molecule = MoleculeResponse` (or a typed narrowing of it) so backend DTO changes can't drift — roughly five consumer files.
+
