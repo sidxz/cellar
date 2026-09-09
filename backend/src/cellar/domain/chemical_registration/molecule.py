@@ -119,6 +119,7 @@ class Molecule(AggregateRoot):
         merged_into_id: uuid.UUID | None = None,
         custom_fields: dict[str, Any] | None = None,
         originating_org_id: uuid.UUID,
+        scientist_name: str | None = None,
         identifiers: list[MoleculeIdentifier] | None = None,
         mixture_components: list[MixtureComponent] | None = None,
         created_at: datetime | None = None,
@@ -152,6 +153,10 @@ class Molecule(AggregateRoot):
         self.merged_into_id = merged_into_id
         self.custom_fields = dict(custom_fields) if custom_fields else None
         self.originating_org_id = originating_org_id
+        # The person half of provenance (originating_org_id is the org half).
+        # Free text, not a user id: API/bulk registrants often act on behalf of
+        # a scientist who is not a Cellar user. Mirrors DisclosureRequest.
+        self.scientist_name = scientist_name
         self.identifiers: list[MoleculeIdentifier] = list(identifiers) if identifiers else []
         self.mixture_components: list[MixtureComponent] = (
             list(mixture_components) if mixture_components else []
@@ -250,6 +255,7 @@ class Molecule(AggregateRoot):
         synthesis_status: SynthesisStatus = SynthesisStatus.SYNTHESIZED,
         invention_date: date | None = None,
         custom_fields: dict[str, Any] | None = None,
+        scientist_name: str | None = None,
     ) -> Molecule:
         mol = cls(
             workspace_id=workspace_id,
@@ -267,6 +273,7 @@ class Molecule(AggregateRoot):
             synthesis_status=synthesis_status,
             invention_date=invention_date,
             custom_fields=custom_fields,
+            scientist_name=scientist_name,
         )
         mol.register_event(
             MoleculeRegistered(
@@ -294,6 +301,7 @@ class Molecule(AggregateRoot):
         synthesis_status: SynthesisStatus = SynthesisStatus.VIRTUAL,
         invention_date: date | None = None,
         custom_fields: dict[str, Any] | None = None,
+        scientist_name: str | None = None,
     ) -> Molecule:
         mol = cls(
             workspace_id=workspace_id,
@@ -310,6 +318,7 @@ class Molecule(AggregateRoot):
             synthesis_status=synthesis_status,
             invention_date=invention_date,
             custom_fields=custom_fields,
+            scientist_name=scientist_name,
         )
         mol.register_event(
             MoleculeRegistered(

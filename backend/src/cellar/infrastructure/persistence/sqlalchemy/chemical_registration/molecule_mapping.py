@@ -118,6 +118,7 @@ def model_to_molecule(model: MoleculeModel) -> Molecule:
         merged_into_id=model.merged_into_id,
         custom_fields=model.custom_fields,
         originating_org_id=model.originating_org_id,
+        scientist_name=model.scientist_name,
         identifiers=identifiers,
         mixture_components=mixture_components,
         created_at=model.created_at,

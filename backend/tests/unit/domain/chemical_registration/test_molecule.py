@@ -120,6 +120,28 @@ def _make_undisclosed(
 
 
 # ---------------------------------------------------------------------------
+# Provenance: scientist_name (the person half of originating_org_id)
+# ---------------------------------------------------------------------------
+
+
+class TestScientistName:
+    def test_register_disclosed_keeps_scientist_name(
+        self, ws_id, org_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        mol = _make_disclosed(
+            ws_id, org_id, aspirin_structure, aspirin_descriptors, scientist_name="A. Chemist"
+        )
+        assert mol.scientist_name == "A. Chemist"
+
+    def test_register_undisclosed_keeps_scientist_name(self, ws_id, org_id) -> None:
+        mol = _make_undisclosed(ws_id, org_id, scientist_name="A. Chemist")
+        assert mol.scientist_name == "A. Chemist"
+
+    def test_scientist_name_defaults_to_none(self, ws_id, org_id) -> None:
+        assert _make_undisclosed(ws_id, org_id).scientist_name is None
+
+
+# ---------------------------------------------------------------------------
 # Factory: register_disclosed
 # ---------------------------------------------------------------------------
 

@@ -347,6 +347,7 @@ class RegisterMolecule:
                     descriptors=processed.descriptors,
                     originating_org_id=input.originating_org_id,
                     custom_fields=input.custom_fields,
+                    scientist_name=input.scientist_name,
                     stereochemistry=processed.stereochemistry,
                 )
                 mol.morgan_fp = processed.fingerprints.morgan
@@ -486,6 +487,7 @@ class RegisterMolecule:
                 molecule_type=MoleculeType(input.molecule_type),
                 originating_org_id=input.originating_org_id,
                 custom_fields=input.custom_fields,
+                scientist_name=input.scientist_name,
             )
             self._add_name_and_ids(mol, input, source="name")
 

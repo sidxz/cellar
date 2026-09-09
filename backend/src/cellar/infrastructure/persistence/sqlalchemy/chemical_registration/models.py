@@ -98,6 +98,7 @@ class MoleculeModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     originating_org_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), nullable=False
     )
+    scientist_name: Mapped[str | None] = mapped_column(String(200))
 
     # Relationships
     identifiers: Mapped[list[MoleculeIdentifierModel]] = relationship(

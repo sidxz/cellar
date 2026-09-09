@@ -7,7 +7,7 @@ from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cellar.application.chemical_registration.depict_molecules import (
     DepictMoleculesQuery,
@@ -171,6 +171,7 @@ class MoleculeResponse(BaseModel):
     merged_into_id: uuid.UUID | None = None
     custom_fields: dict | None = None
     originating_org_id: uuid.UUID
+    scientist_name: str | None = None
     identifiers: list[IdentifierResponse]
     version: int
     similarity_score: float | None = None  # set only on similarity-search rows
@@ -221,6 +222,7 @@ class MoleculeResponse(BaseModel):
             merged_into_id=mol.merged_into_id,
             custom_fields=mol.custom_fields,
             originating_org_id=mol.originating_org_id,
+            scientist_name=mol.scientist_name,
             identifiers=identifiers,
             version=mol.version,
         )
@@ -350,6 +352,7 @@ class RegisterMoleculeBody(BaseModel):
     molecule_type: str = "small_molecule"
     external_ids: list[ExternalIdBody] = []
     originating_org_id: uuid.UUID
+    scientist_name: str | None = Field(default=None, max_length=200)
     custom_fields: dict | None = None
     batch: BatchBody | None = None
     auto_approve: bool = True
@@ -394,6 +397,7 @@ async def register_molecule(
             for e in body.external_ids
         ],
         originating_org_id=body.originating_org_id,
+        scientist_name=body.scientist_name,
         custom_fields=body.custom_fields,
         registered_by=auth.user_id,
         auto_approve=body.auto_approve,
