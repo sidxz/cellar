@@ -115,6 +115,7 @@ def model_to_molecule(model: MoleculeModel) -> Molecule:
         invention_date=model.invention_date,
         disclosed_at=model.disclosed_at,
         disclosed_by=model.disclosed_by,
+        disclosure_date=model.disclosure_date,
         merged_into_id=model.merged_into_id,
         custom_fields=model.custom_fields,
         originating_org_id=model.originating_org_id,

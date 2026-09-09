@@ -168,6 +168,7 @@ class MoleculeResponse(BaseModel):
     stereochemistry: str | None = None
     invention_date: date | None = None
     disclosed_at: datetime | None = None
+    disclosure_date: date | None = None
     merged_into_id: uuid.UUID | None = None
     custom_fields: dict | None = None
     originating_org_id: uuid.UUID
@@ -219,6 +220,7 @@ class MoleculeResponse(BaseModel):
             stereochemistry=mol.stereochemistry.value if mol.stereochemistry else None,
             invention_date=mol.invention_date,
             disclosed_at=mol.disclosed_at,
+            disclosure_date=mol.disclosure_date,
             merged_into_id=mol.merged_into_id,
             custom_fields=mol.custom_fields,
             originating_org_id=mol.originating_org_id,

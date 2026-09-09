@@ -1,6 +1,7 @@
 """Tests for DisclosureRequest aggregate root."""
 
 import uuid
+from datetime import date, timedelta
 
 import pytest
 
@@ -99,6 +100,31 @@ class TestDisclosureRequestCreation:
         assert req.conflict_reason is None
         assert req.notes is None
         assert req.version == 1
+
+    def test_create_keeps_declared_disclosure_date(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        req = DisclosureRequest.create(
+            workspace_id=WS_ID,
+            molecule_id=molecule_id,
+            disclosed_smiles="CCO",
+            requested_by=user_id,
+            disclosure_date=date(2024, 3, 15),
+        )
+        assert req.disclosure_date == date(2024, 3, 15)
+        assert req.requested_at is not None  # observed stamp still recorded
+
+    def test_create_rejects_future_disclosure_date(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        with pytest.raises(ValidationError, match="future"):
+            DisclosureRequest.create(
+                workspace_id=WS_ID,
+                molecule_id=molecule_id,
+                disclosed_smiles="CCO",
+                requested_by=user_id,
+                disclosure_date=date.today() + timedelta(days=1),
+            )
 
     def test_create_emits_disclosure_requested_event(
         self, molecule_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID

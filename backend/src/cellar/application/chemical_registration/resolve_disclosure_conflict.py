@@ -144,6 +144,7 @@ class ResolveDisclosureConflict:
             descriptors=processed.descriptors,
             disclosed_by=input.resolved_by,
             stereochemistry=processed.stereochemistry,
+            disclosure_date=dr.disclosure_date,
         )
 
         dr.resolve_as_new_structure(

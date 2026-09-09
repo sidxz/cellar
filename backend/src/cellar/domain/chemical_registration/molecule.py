@@ -116,6 +116,7 @@ class Molecule(AggregateRoot):
         invention_date: date | None = None,
         disclosed_at: datetime | None = None,
         disclosed_by: uuid.UUID | None = None,
+        disclosure_date: date | None = None,
         merged_into_id: uuid.UUID | None = None,
         custom_fields: dict[str, Any] | None = None,
         originating_org_id: uuid.UUID,
@@ -150,6 +151,9 @@ class Molecule(AggregateRoot):
         self.invention_date = invention_date
         self.disclosed_at = disclosed_at
         self.disclosed_by = disclosed_by
+        # Declared (user-asserted) disclosure date, like invention_date;
+        # disclosed_at stays the observed recorded-at stamp. Both are kept.
+        self.disclosure_date = disclosure_date
         self.merged_into_id = merged_into_id
         self.custom_fields = dict(custom_fields) if custom_fields else None
         self.originating_org_id = originating_org_id
@@ -344,11 +348,14 @@ class Molecule(AggregateRoot):
         disclosed_by: uuid.UUID,
         molecular_formula: str | None = None,
         stereochemistry: Stereochemistry | None = None,
+        disclosure_date: date | None = None,
     ) -> None:
         """Transition undisclosed -> disclosed."""
         self._guard_tombstone()
         if self.structure_status != StructureStatus.UNDISCLOSED:
             raise ValidationError("Only undisclosed molecules can be disclosed")
+        if disclosure_date is not None and disclosure_date > date.today():
+            raise ValidationError("disclosure_date cannot be in the future")
 
         self.structure = structure
         self.descriptors = descriptors
@@ -356,6 +363,7 @@ class Molecule(AggregateRoot):
         self.structure_status = StructureStatus.DISCLOSED
         self.disclosed_at = datetime.now(UTC)
         self.disclosed_by = disclosed_by
+        self.disclosure_date = disclosure_date
         self.stereochemistry = stereochemistry
         self.updated_at = datetime.now(UTC)
 
