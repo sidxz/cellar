@@ -164,6 +164,9 @@ class TestSummaryImportRoutes:
         assert out["values_updated"] == 0
         assert out["rows_processed"] == 1
         assert out["errors"] == []
+        # The raw file is attached to the run (audit trail), mirroring the plate importer.
+        assert out["attachment_warning"] is None
+        assert uuid.UUID(out["attachment_id"])
 
     async def test_import_missing_run_returns_404(
         self,

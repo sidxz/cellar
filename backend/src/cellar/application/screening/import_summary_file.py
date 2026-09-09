@@ -26,17 +26,22 @@ Mirrors ``PreviewSummaryFile`` conventions: Railway ``Result``,
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import structlog
 from returns.result import Failure, Result, Success
 
+from cellar.application.attachment.upload_attachment import (
+    UploadAttachment,
+    UploadAttachmentCommand,
+)
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.screening.bulk_create_readout_data import (
     BulkCreateReadoutData,
     BulkCreateReadoutDataCommand,
     ReadoutDataItem,
 )
+from cellar.application.screening.import_run_file_preview_store import _guess_content_type
 from cellar.application.screening.summary_import_models import (
     SummaryColumnMapping,
     SummaryImportResult,
@@ -49,6 +54,7 @@ from cellar.application.screening.summary_import_resolver import (
 from cellar.application.shared.command import Command
 from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.repository import (
@@ -72,6 +78,7 @@ class ImportSummaryFileCommand(Command):
     filename: str
     content: bytes
     mapping: SummaryColumnMapping
+    content_type: str | None = None
 
 
 class ImportSummaryFile:
@@ -87,6 +94,7 @@ class ImportSummaryFile:
         batch_repo: BatchRepository,
         parser: TabularParser,
         bulk_uc: BulkCreateReadoutData,
+        upload_attachment: UploadAttachment,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -96,6 +104,7 @@ class ImportSummaryFile:
         self._batch_repo = batch_repo
         self._parser = parser
         self._bulk = bulk_uc
+        self._upload_attachment = upload_attachment
 
     async def __call__(
         self,
@@ -109,7 +118,48 @@ class ImportSummaryFile:
         # ``self._bulk`` opens its OWN write UoW (separate instance) that commits
         # + closes independently, so the read session is never torn down under us.
         async with self._uow:
-            return await self._execute(command, auth)
+            result = await self._execute(command, auth)
+
+        # Attach the raw upload in its own UoW after the import is committed —
+        # best-effort, exactly like the plate importer: losing the readouts to
+        # save the file would be the worse trade.
+        if isinstance(result, Success):
+            return Success(await self._attach_raw_file(command, result.unwrap(), auth))
+        return result
+
+    async def _attach_raw_file(
+        self,
+        cmd: ImportSummaryFileCommand,
+        result: SummaryImportResult,
+        auth: AuthContext | None,
+    ) -> SummaryImportResult:
+        """Persist the upload as a Run attachment; warn (never fail) on error."""
+        if auth is None:
+            return replace(result, attachment_warning="no auth context — skipped")
+        upload_cmd = UploadAttachmentCommand(
+            workspace_id=cmd.workspace_id,
+            attachable_type=AttachableType.RUN,
+            attachable_id=cmd.run_id,
+            uploaded_by=auth.user_id,
+            file_name=cmd.filename,
+            mime_type=cmd.content_type or _guess_content_type(cmd.filename),
+            file_data=cmd.content,
+        )
+        try:
+            attached = await self._upload_attachment(upload_cmd, auth=auth)
+        except Exception as exc:
+            _log.warning(
+                "summary_import.attachment_failed",
+                run_id=str(cmd.run_id),
+                workspace_id=str(cmd.workspace_id),
+                file_name=cmd.filename,
+                error=str(exc),
+                exc_info=True,
+            )
+            return replace(result, attachment_warning=f"attachment failed: {exc}")
+        if isinstance(attached, Failure):
+            return replace(result, attachment_warning=str(attached.failure()))
+        return replace(result, attachment_id=attached.unwrap().id)
 
     async def _execute(
         self,

@@ -65,3 +65,7 @@ class SummaryImportResult:
     values_updated: int = 0
     rows_skipped: int = 0
     errors: list[dict[str, str]] = field(default_factory=list)
+    # Raw upload attached to the run (audit trail). Best-effort: a failed
+    # attachment sets ``attachment_warning`` and never fails the import.
+    attachment_id: uuid.UUID | None = None
+    attachment_warning: str | None = None

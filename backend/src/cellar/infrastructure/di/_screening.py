@@ -822,6 +822,7 @@ def register_screening(container: Container) -> None:
             batch_repo=SQLAlchemyBatchRepository(uow),
             parser=c[TabularParser],
             bulk_uc=c[BulkCreateReadoutData],
+            upload_attachment=c[UploadAttachment],
         )
 
     container.define(ImportSummaryFile, _import_summary_file)
