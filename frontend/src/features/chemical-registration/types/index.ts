@@ -89,6 +89,10 @@ export interface Molecule {
   merged_into_id: string | null;
   custom_fields: Record<string, unknown> | null;
   originating_org_id: string;
+  // Provenance: the person half (originating_org_id is the org half) and the
+  // declared disclosure date; disclosed_at stays the observed stamp.
+  scientist_name?: string | null;
+  disclosure_date?: string | null;
   identifiers: MoleculeIdentifier[];
   version: number;
   // Set by /api/v1/search/execute on similarity-search rows; null/absent

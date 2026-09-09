@@ -24,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { formatDate } from "@/shared/lib/format-date";
 import { COPY_FEEDBACK_MS } from "@/shared/lib/timing";
 import { AlertTriangle, Check, Copy, FlaskConical, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -190,6 +191,44 @@ function AddIdentifierForm({
 }
 
 // ---------------------------------------------------------------------------
+// Provenance — who registered it and the declared disclosure date. Only
+// rendered when there is something to show; the observed disclosed_at stamp
+// rides along as "recorded" so the two facts stay distinguishable.
+// ---------------------------------------------------------------------------
+
+export function ProvenanceCard({ molecule }: { molecule: Molecule }) {
+  if (!molecule.scientist_name && !molecule.disclosure_date) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Provenance</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
+          {molecule.scientist_name && (
+            <div>
+              <p className="text-sm text-muted-foreground">Scientist</p>
+              <p className="font-medium">{molecule.scientist_name}</p>
+            </div>
+          )}
+          {molecule.disclosure_date && (
+            <div>
+              <p className="text-sm text-muted-foreground">Disclosure date</p>
+              <p className="font-medium">{formatDate(molecule.disclosure_date)}</p>
+              {molecule.disclosed_at && (
+                <p className="text-xs text-muted-foreground">
+                  recorded {formatDate(molecule.disclosed_at)}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Custom Fields section (uses definitions for proper labels)
 // ---------------------------------------------------------------------------
 
@@ -342,6 +381,8 @@ export function OverviewTab({ molecule, compoundId, canEditTags }: OverviewTabPr
           </div>
         </CardContent>
       </Card>
+
+      <ProvenanceCard molecule={molecule} />
 
       {/* Identifiers Section */}
       <Card>

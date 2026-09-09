@@ -426,6 +426,16 @@ function ConfirmStep({ result }: { result: SummaryImportResponse }) {
             {result.values_inserted} inserted · {result.values_updated} updated ·{" "}
             {result.rows_skipped} skipped · {result.rows_processed} rows processed
           </p>
+          {result.attachment_id && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Source file saved to the run&apos;s Files tab.
+            </p>
+          )}
+          {result.attachment_warning && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300/90">
+              File attachment failed: {result.attachment_warning}
+            </p>
+          )}
         </div>
       </div>
 
