@@ -39,6 +39,14 @@ def create_app() -> FastAPI:
         container = create_container()
         app.state.container = container
 
+        # Schema must be at this image's migration head before we serve a request.
+        # Migrations are the deploy job's work; this only refuses to run without them.
+        from sqlalchemy.ext.asyncio import async_sessionmaker as _async_sm
+
+        from cellar.infrastructure.persistence.schema_guard import ensure_schema_current
+
+        await ensure_schema_current(container[_async_sm])
+
         # Wire audit event handler — catch-all for all domain events
         from sqlalchemy.ext.asyncio import async_sessionmaker as async_sm
 

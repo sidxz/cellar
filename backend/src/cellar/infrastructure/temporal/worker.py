@@ -47,6 +47,11 @@ async def run_worker() -> None:
 
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
+    # Same precondition as the API: this image's migrations must be applied.
+    from cellar.infrastructure.persistence.schema_guard import ensure_schema_current
+
+    await ensure_schema_current(container[async_sessionmaker])
+
     from cellar.application.chemical_registration.merge_side_effect_registry import (
         MergeSideEffectRegistry,
     )
