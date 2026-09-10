@@ -141,6 +141,26 @@ class TestScientistName:
     def test_scientist_name_defaults_to_none(self, ws_id, org_id) -> None:
         assert _make_undisclosed(ws_id, org_id).scientist_name is None
 
+    def test_register_disclosed_keeps_declared_disclosure_date(
+        self, ws_id, org_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        mol = _make_disclosed(
+            ws_id, org_id, aspirin_structure, aspirin_descriptors, disclosure_date=date(2024, 3, 15)
+        )
+        assert mol.disclosure_date == date(2024, 3, 15)
+
+    def test_register_disclosed_rejects_future_disclosure_date(
+        self, ws_id, org_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        with pytest.raises(ValidationError, match="future"):
+            _make_disclosed(
+                ws_id,
+                org_id,
+                aspirin_structure,
+                aspirin_descriptors,
+                disclosure_date=datetime.now(UTC).date() + timedelta(days=1),
+            )
+
 
 # ---------------------------------------------------------------------------
 # Factory: register_disclosed

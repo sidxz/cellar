@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from returns.pipeline import is_successful
@@ -67,6 +68,8 @@ class RegisterMoleculeCommand(Command):
     originating_org_id: uuid.UUID
     registered_by: uuid.UUID
     scientist_name: str | None = None
+    # Declared (possibly historic) disclosure date; only meaningful with a structure.
+    disclosure_date: date | None = None
     custom_fields: dict[str, Any] | None = None
     qc_reject_threshold: int | None = None
     qc_warn_threshold: int | None = None
@@ -117,6 +120,8 @@ class RegisterMolecule:
 
         if input.smiles is not None:
             return await self._register_disclosed(input)
+        if input.disclosure_date is not None:
+            return Failure(ValidationError("disclosure_date requires a structure (smiles)"))
         return await self._register_undisclosed(input)
 
     def _collect_all_identifiers(self, input: RegisterMoleculeCommand) -> set[str]:
@@ -222,6 +227,7 @@ class RegisterMolecule:
             disclosing_org_id=input.originating_org_id,
             scientist_name=input.scientist_name,
             notes="Auto-recorded during registration",
+            disclosure_date=input.disclosure_date,
         )
         dr.start_processing()
 
@@ -348,6 +354,7 @@ class RegisterMolecule:
                     originating_org_id=input.originating_org_id,
                     custom_fields=input.custom_fields,
                     scientist_name=input.scientist_name,
+                    disclosure_date=input.disclosure_date,
                     stereochemistry=processed.stereochemistry,
                 )
                 mol.morgan_fp = processed.fingerprints.morgan
@@ -385,6 +392,7 @@ class RegisterMolecule:
                     scientist_name=input.scientist_name,
                     auto_approve=input.auto_approve,
                     notes="Auto-detected via identifier match during registration",
+                    disclosure_date=input.disclosure_date,
                 )
             )
             if isinstance(disclosure_result, Failure):

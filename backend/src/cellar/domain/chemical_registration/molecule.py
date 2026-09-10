@@ -86,6 +86,15 @@ _LIFECYCLE_TRANSITIONS: dict[LifecycleStage, set[LifecycleStage]] = {
 }
 
 
+def _reject_future_disclosure_date(disclosure_date: date | None) -> None:
+    """A declared disclosure date is asserted history; tomorrow is not history yet.
+
+    Compared against the UTC date, the same clock as the observed stamps.
+    """
+    if disclosure_date is not None and disclosure_date > datetime.now(UTC).date():
+        raise ValidationError("disclosure_date cannot be in the future")
+
+
 class Molecule(AggregateRoot):
     """A unique chemical structure (or undisclosed placeholder) within a workspace.
 
@@ -260,7 +269,9 @@ class Molecule(AggregateRoot):
         invention_date: date | None = None,
         custom_fields: dict[str, Any] | None = None,
         scientist_name: str | None = None,
+        disclosure_date: date | None = None,
     ) -> Molecule:
+        _reject_future_disclosure_date(disclosure_date)
         mol = cls(
             workspace_id=workspace_id,
             registration_number=registration_number,
@@ -278,6 +289,7 @@ class Molecule(AggregateRoot):
             invention_date=invention_date,
             custom_fields=custom_fields,
             scientist_name=scientist_name,
+            disclosure_date=disclosure_date,
         )
         mol.register_event(
             MoleculeRegistered(
@@ -354,8 +366,7 @@ class Molecule(AggregateRoot):
         self._guard_tombstone()
         if self.structure_status != StructureStatus.UNDISCLOSED:
             raise ValidationError("Only undisclosed molecules can be disclosed")
-        if disclosure_date is not None and disclosure_date > datetime.now(UTC).date():
-            raise ValidationError("disclosure_date cannot be in the future")
+        _reject_future_disclosure_date(disclosure_date)
 
         self.structure = structure
         self.descriptors = descriptors

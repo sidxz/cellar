@@ -355,6 +355,7 @@ class RegisterMoleculeBody(BaseModel):
     external_ids: list[ExternalIdBody] = []
     originating_org_id: uuid.UUID
     scientist_name: str | None = Field(default=None, max_length=200)
+    disclosure_date: date | None = None  # declared; requires smiles
     custom_fields: dict | None = None
     batch: BatchBody | None = None
     auto_approve: bool = True
@@ -400,6 +401,7 @@ async def register_molecule(
         ],
         originating_org_id=body.originating_org_id,
         scientist_name=body.scientist_name,
+        disclosure_date=body.disclosure_date,
         custom_fields=body.custom_fields,
         registered_by=auth.user_id,
         auto_approve=body.auto_approve,

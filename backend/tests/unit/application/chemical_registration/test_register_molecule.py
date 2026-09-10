@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from types import TracebackType
 from typing import Self
 from unittest.mock import AsyncMock, MagicMock
@@ -181,6 +182,7 @@ def _make_command(
     name: str = "Test Compound",
     auto_approve: bool = True,
     external_ids: list[ExternalId] | None = None,
+    disclosure_date: date | None = None,
 ) -> RegisterMoleculeCommand:
     return RegisterMoleculeCommand(
         workspace_id=WS_ID,
@@ -190,6 +192,7 @@ def _make_command(
         registered_by=USER_ID,
         auto_approve=auto_approve,
         external_ids=external_ids or [],
+        disclosure_date=disclosure_date,
     )
 
 
@@ -198,6 +201,7 @@ def _make_use_case(
     repo: AsyncMock | None = None,
     disclosure_service: AsyncMock | None = None,
     uow: FakeUnitOfWork | None = None,
+    disclosure_repo: AsyncMock | None = None,
 ) -> RegisterMolecule:
     return RegisterMolecule(
         uow=uow or FakeUnitOfWork(),
@@ -205,7 +209,85 @@ def _make_use_case(
         dispatcher=FakeEventDispatcher(),
         structure_processor=_make_processor(),
         disclosure_service=disclosure_service,
+        disclosure_repo=disclosure_repo,
     )
+
+
+def _make_disclosed_molecule(name: str = "Known-001") -> Molecule:
+    mol = Molecule.register_disclosed(
+        workspace_id=WS_ID,
+        registration_number=RegistrationNumber(value="CV-00002"),
+        name=name,
+        molecule_type=MoleculeType.SMALL_MOLECULE,
+        structure=_STRUCTURE,
+        descriptors=_DESCRIPTORS,
+        originating_org_id=ORG_ID,
+    )
+    mol.clear_events()
+    return mol
+
+
+# ---------------------------------------------------------------------------
+# Tests — declared disclosure date through the registration door
+# ---------------------------------------------------------------------------
+
+
+class TestDeclaredDisclosureDate:
+    """POST /molecules can assert when a structure was disclosed; the molecule
+    and the provenance DisclosureRequest must agree."""
+
+    async def test_new_molecule_and_provenance_row_carry_the_declared_date(self) -> None:
+        disclosure_repo = AsyncMock()
+        uc = _make_use_case(disclosure_repo=disclosure_repo)
+        result = await uc(
+            _make_command(disclosure_date=date(2024, 3, 15)), auth=FakeAuth(workspace_id=WS_ID)
+        )
+        assert isinstance(result, Success)
+        assert result.unwrap().molecule.disclosure_date == date(2024, 3, 15)
+        saved_dr = disclosure_repo.save.call_args.args[0]
+        assert saved_dr.disclosure_date == date(2024, 3, 15)
+
+    async def test_inchi_duplicate_provenance_row_carries_the_declared_date(self) -> None:
+        disclosure_repo = AsyncMock()
+        repo = _make_repo(find_by_inchi_key=_make_disclosed_molecule())
+        uc = _make_use_case(repo=repo, disclosure_repo=disclosure_repo)
+        result = await uc(
+            _make_command(name="Alias-2", disclosure_date=date(2024, 3, 15)),
+            auth=FakeAuth(workspace_id=WS_ID),
+        )
+        assert isinstance(result, Success)
+        assert result.unwrap().action == RegistrationAction.DEDUPLICATED
+        assert disclosure_repo.save.call_args.args[0].disclosure_date == date(2024, 3, 15)
+
+    async def test_delegate_path_passes_the_declared_date_to_disclosure(self) -> None:
+        undisclosed = _make_undisclosed_molecule()
+        mock_ds = AsyncMock(
+            return_value=Success(
+                DisclosureOutcome(
+                    disclosure_request=_make_disclosure_request(undisclosed.id), was_merged=False
+                )
+            )
+        )
+        uc = _make_use_case(
+            repo=_make_repo(find_undisclosed_by_identifiers=undisclosed), disclosure_service=mock_ds
+        )
+        result = await uc(
+            _make_command(name="Undisclosed-001", disclosure_date=date(2024, 3, 15)),
+            auth=FakeAuth(workspace_id=WS_ID),
+        )
+        assert isinstance(result, Success)
+        sent: SubmitDisclosureCommand = mock_ds.call_args.args[0]
+        assert sent.disclosure_date == date(2024, 3, 15)
+
+    async def test_undisclosed_registration_rejects_a_disclosure_date(self) -> None:
+        uc = _make_use_case()
+        result = await uc(
+            _make_command(smiles=None, disclosure_date=date(2024, 3, 15)),
+            auth=FakeAuth(workspace_id=WS_ID),
+        )
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ValidationError)
+        assert "structure" in str(result.failure())
 
 
 # ---------------------------------------------------------------------------
