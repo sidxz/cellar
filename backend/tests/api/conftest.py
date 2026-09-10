@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import uuid
 from collections.abc import AsyncIterator, Mapping
 
@@ -16,6 +17,8 @@ os.environ["DUAR_IDP_AUDIENCE"] = "test-audience.apps.googleusercontent.com"
 # Disable Temporal so the DI container binds NullExportOrchestrator (and the other Null
 # orchestrators) without needing a running Temporal server.
 os.environ["TEMPORAL_DISABLED"] = "1"
+# File storage for the test app: a throwaway dir, never the repo's ./data.
+os.environ["STORAGE_ROOT"] = tempfile.mkdtemp(prefix="cellar-api-test-storage-")
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -84,6 +87,7 @@ def _create_test_app(
     from cellar.interface.routes.settings import router as settings_router
     from cellar.interface.routes.vocabularies import router as vocab_router
     from cellar.interface.routes.molecules import router as mol_router
+    from cellar.interface.routes.attachments import router as attachment_router
     from cellar.interface.routes.disclosures import router as disclosure_router
     from cellar.interface.routes.export import router as export_router
     from cellar.interface.routes.export import legacy_router as export_legacy_router
@@ -143,6 +147,7 @@ def _create_test_app(
     app.include_router(settings_router)
     app.include_router(vocab_router)
     app.include_router(mol_router)
+    app.include_router(attachment_router)
     app.include_router(disclosure_router)
     app.include_router(export_router)
     app.include_router(export_legacy_router)

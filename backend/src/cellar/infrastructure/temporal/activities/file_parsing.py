@@ -7,7 +7,6 @@ of BulkRegistrationItem DTOs for the registration activity.
 
 from __future__ import annotations
 
-import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -17,6 +16,7 @@ from temporalio import activity
 
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
 from cellar.infrastructure.parsers.chemical_file_parser import get_parser
+from cellar.infrastructure.storage.fsspec_client import StorageSettings
 from cellar.infrastructure.temporal.activities.dtos import ChunkItem
 from cellar.infrastructure.temporal.task_queues import CHUNK_SIZE
 
@@ -112,11 +112,10 @@ class FileParsingActivities:
 def save_upload_to_storage(content: bytes, filename: str) -> str:
     """Save an uploaded file to persistent storage. Returns the absolute path.
 
-    Called from the API route (not an activity). Uses STORAGE_ROOT env var.
+    Called from the API route (not an activity). Lives under STORAGE_ROOT.
     """
-    storage_root = os.getenv("STORAGE_ROOT", "./data/storage")
     upload_id = str(uuid.uuid4())
-    upload_dir = Path(storage_root) / "bulk-imports" / upload_id
+    upload_dir = StorageSettings().subdir("bulk-imports") / upload_id
     upload_dir.mkdir(parents=True, exist_ok=True)
     file_path = upload_dir / filename
     file_path.write_bytes(content)
