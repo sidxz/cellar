@@ -145,7 +145,9 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         model.invention_date = aggregate.invention_date
         model.disclosed_at = aggregate.disclosed_at
         model.disclosed_by = aggregate.disclosed_by
+        model.disclosure_date = aggregate.disclosure_date
         model.merged_into_id = aggregate.merged_into_id
+        model.scientist_name = aggregate.scientist_name
 
     @staticmethod
     def _ident_to_model(

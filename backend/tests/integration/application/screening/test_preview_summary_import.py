@@ -172,7 +172,13 @@ def _build_import(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummaryFi
         batch_repo=SQLAlchemyBatchRepository(read_uow),
         parser=TabularFileParser(),
         bulk_uc=bulk,
+        upload_attachment=_no_attach,
     )
+
+
+async def _no_attach(upload_cmd, auth=None):
+    """Attachment is the import's concern, not this preview/forecast test's."""
+    return Success(type("A", (), {"id": uuid.uuid4()})())
 
 
 async def _readout_count(session_factory) -> int:

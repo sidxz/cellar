@@ -655,6 +655,9 @@ class SummaryImportResponse(BaseModel):
     values_updated: int
     rows_skipped: int
     errors: list[SummaryImportErrorModel] = Field(default_factory=list)
+    # Raw upload attached to the run; mirrors ``ImportRunFileResponse``.
+    attachment_id: uuid.UUID | None = None
+    attachment_warning: str | None = None
 
     @classmethod
     def from_result(cls, out: SummaryImportResult) -> SummaryImportResponse:
@@ -667,6 +670,8 @@ class SummaryImportResponse(BaseModel):
                 SummaryImportErrorModel(row=e.get("row", ""), error=e.get("error", ""))
                 for e in out.errors
             ],
+            attachment_id=out.attachment_id,
+            attachment_warning=out.attachment_warning,
         )
 
 
@@ -786,6 +791,7 @@ async def import_summary_file(
         run_id=run_id,
         filename=file.filename or "upload",
         content=content,
+        content_type=file.content_type,
         mapping=parsed_map.to_domain(),
     )
     result = await uc(cmd, auth=auth)

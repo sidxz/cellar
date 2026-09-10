@@ -147,4 +147,42 @@ describe("SummaryImportWizard", () => {
       screen.getByText(/nothing to import — check your compound column mapping/i),
     ).toBeInTheDocument();
   });
+
+  it("step 4 says the source file was saved to the run", () => {
+    hookState.value = baseHook({
+      step: 4,
+      result: {
+        rows_processed: 1,
+        values_inserted: 1,
+        values_updated: 0,
+        rows_skipped: 0,
+        errors: [],
+        attachment_id: "att-1",
+        attachment_warning: null,
+      },
+    });
+    renderWizard();
+    expect(screen.getByText(/source file saved to the run/i)).toBeInTheDocument();
+    expect(screen.queryByText(/file attachment failed/i)).not.toBeInTheDocument();
+  });
+
+  it("step 4 surfaces an attachment warning without hiding the import result", () => {
+    hookState.value = baseHook({
+      step: 4,
+      result: {
+        rows_processed: 1,
+        values_inserted: 1,
+        values_updated: 0,
+        rows_skipped: 0,
+        errors: [],
+        attachment_id: null,
+        attachment_warning: "attachment failed: disk full",
+      },
+    });
+    renderWizard();
+    expect(screen.getByText("Import complete")).toBeInTheDocument();
+    expect(
+      screen.getByText(/file attachment failed: attachment failed: disk full/i),
+    ).toBeInTheDocument();
+  });
 });

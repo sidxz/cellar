@@ -21,6 +21,7 @@ from cellar.application.screening.import_summary_file import (
     ImportSummaryFileCommand,
 )
 from cellar.application.screening.summary_import_models import SummaryColumnMapping
+from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
@@ -140,7 +141,17 @@ async def _insert_molecule(
     )
 
 
-def _build_use_case(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummaryFile:
+class _FakeAttachment:
+    id = uuid.uuid4()
+
+
+async def _ok_upload(upload_cmd, auth=None):
+    return Success(_FakeAttachment())
+
+
+def _build_use_case(
+    read_uow: AsyncUnitOfWork, session_factory, upload_attachment=None
+) -> ImportSummaryFile:
     # The orchestrating use case owns + enters ``read_uow`` itself; the delegated
     # bulk use case opens its own write UoW. They MUST be separate instances so
     # the bulk's commit/close does not tear down the read session used for the
@@ -169,6 +180,7 @@ def _build_use_case(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummary
         batch_repo=SQLAlchemyBatchRepository(read_uow),
         parser=TabularFileParser(),
         bulk_uc=bulk,
+        upload_attachment=upload_attachment or _ok_upload,
     )
 
 
@@ -180,12 +192,32 @@ async def _wellless(session_factory, workspace_id, run_id):
         return [r for r in rows if r.well_id is None and not r.is_computed]
 
 
-async def _run_import(session_factory, command, auth):
+async def _run_import(session_factory, command, auth, upload_attachment=None):
     """Run the import. The use case now owns + enters its own read UoW, so the
     caller just builds it and awaits (mirrors how the route calls it)."""
     read_uow = AsyncUnitOfWork(session_factory)
-    uc = _build_use_case(read_uow, session_factory)
+    uc = _build_use_case(read_uow, session_factory, upload_attachment)
     return await uc(command, auth=auth)
+
+
+async def _seed_one_readout(session_factory, workspace_id):
+    """Org + protocol + numeric IC50 def + run + resolvable molecule.
+
+    Returns (run_id, ic50_id, reg).
+    """
+    org_id, protocol_id, run_id, ic50_id, molecule_id = (uuid.uuid4() for _ in range(5))
+    reg = f"REG-{uuid.uuid4().hex[:8]}"
+    seed_uow = AsyncUnitOfWork(session_factory)
+    async with seed_uow:
+        await _insert_org(seed_uow, org_id, workspace_id)
+        await _insert_protocol(seed_uow, protocol_id, workspace_id)
+        await _insert_readout_def_typed(
+            seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+        )
+        await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+        await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+        await seed_uow.commit()
+    return run_id, ic50_id, reg
 
 
 class TestImportSummaryFile:
@@ -255,6 +287,76 @@ class TestImportSummaryFile:
         rows = await _wellless(session_factory, workspace_id, run_id)
         assert len(rows) == 1
         assert rows[0].value.value == 9.9
+
+    async def test_attaches_raw_file_to_run(self, session_factory, workspace_id) -> None:
+        """The uploaded bytes land as a Run attachment (audit trail), id on the result."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        run_id, ic50_id, reg = await _seed_one_readout(session_factory, workspace_id)
+        csv = f"Compound,IC50\n{reg},5.2\n".encode()
+        seen: list = []
+
+        async def _capture(upload_cmd, auth=None):
+            seen.append(upload_cmd)
+            return Success(_FakeAttachment())
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=csv,
+                content_type="text/csv",
+                mapping=SummaryColumnMapping(
+                    compound_ref="Compound", readout_columns={"IC50": ic50_id}
+                ),
+            ),
+            auth,
+            upload_attachment=_capture,
+        )
+        assert isinstance(result, Success), result
+        assert len(seen) == 1
+        cmd = seen[0]
+        assert cmd.file_data == csv
+        assert cmd.file_name == "summary.csv"
+        assert cmd.mime_type == "text/csv"
+        assert cmd.attachable_type == AttachableType.RUN
+        assert cmd.attachable_id == run_id
+        assert cmd.uploaded_by == auth.user_id
+        assert result.unwrap().attachment_id == _FakeAttachment.id
+        assert result.unwrap().attachment_warning is None
+
+    async def test_attachment_failure_warns_never_fails(
+        self, session_factory, workspace_id
+    ) -> None:
+        """Best-effort: a broken attachment store must not lose the readouts."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        run_id, ic50_id, reg = await _seed_one_readout(session_factory, workspace_id)
+
+        async def _boom(upload_cmd, auth=None):
+            raise OSError("disk full")
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},5.2\n".encode(),
+                content_type="text/csv",
+                mapping=SummaryColumnMapping(
+                    compound_ref="Compound", readout_columns={"IC50": ic50_id}
+                ),
+            ),
+            auth,
+            upload_attachment=_boom,
+        )
+        assert isinstance(result, Success), result
+        res = result.unwrap()
+        assert res.values_inserted == 1
+        assert res.attachment_id is None
+        assert "disk full" in (res.attachment_warning or "")
+        assert len(await _wellless(session_factory, workspace_id, run_id)) == 1
 
     async def test_text_readout_stores_value_text(self, session_factory, workspace_id) -> None:
         molecule_id = uuid.uuid4()

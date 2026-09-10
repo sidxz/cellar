@@ -7,7 +7,7 @@ from datetime import date, datetime
 from typing import Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cellar.application.chemical_registration.depict_molecules import (
     DepictMoleculesQuery,
@@ -24,6 +24,10 @@ from cellar.application.chemical_registration.identifiers import (
 from cellar.application.chemical_registration.list_molecules import ListMoleculesQuery
 from cellar.application.chemical_registration.list_molecules_by_ids import (
     ListMoleculesByIdsQuery,
+)
+from cellar.application.chemical_registration.preview_registration import (
+    PreviewRegistrationItem,
+    PreviewRegistrationQuery,
 )
 from cellar.application.chemical_registration.register_molecule import (
     ExternalId,
@@ -60,6 +64,7 @@ from cellar.interface.dependencies import (
     MoleculeActivityServiceDep,
     PlateReadModelServiceDep,
     PlateVisibilityUoWDep,
+    PreviewRegistrationDep,
     RegisterMoleculeDep,
     RemoveIdentifierDep,
     SaltMatcherUoWDep,
@@ -168,9 +173,11 @@ class MoleculeResponse(BaseModel):
     stereochemistry: str | None = None
     invention_date: date | None = None
     disclosed_at: datetime | None = None
+    disclosure_date: date | None = None
     merged_into_id: uuid.UUID | None = None
     custom_fields: dict | None = None
     originating_org_id: uuid.UUID
+    scientist_name: str | None = None
     identifiers: list[IdentifierResponse]
     version: int
     similarity_score: float | None = None  # set only on similarity-search rows
@@ -218,9 +225,11 @@ class MoleculeResponse(BaseModel):
             stereochemistry=mol.stereochemistry.value if mol.stereochemistry else None,
             invention_date=mol.invention_date,
             disclosed_at=mol.disclosed_at,
+            disclosure_date=mol.disclosure_date,
             merged_into_id=mol.merged_into_id,
             custom_fields=mol.custom_fields,
             originating_org_id=mol.originating_org_id,
+            scientist_name=mol.scientist_name,
             identifiers=identifiers,
             version=mol.version,
         )
@@ -350,10 +359,39 @@ class RegisterMoleculeBody(BaseModel):
     molecule_type: str = "small_molecule"
     external_ids: list[ExternalIdBody] = []
     originating_org_id: uuid.UUID
+    scientist_name: str | None = Field(default=None, max_length=200)
+    disclosure_date: date | None = None  # declared; requires smiles
     custom_fields: dict | None = None
     batch: BatchBody | None = None
     auto_approve: bool = True
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
+
+
+class PreviewRegistrationItemBody(BaseModel):
+    """Mirrors RegisterMoleculeBody so a caller can preview the exact payload it will
+    POST; keys the forecast does not use (originating_org_id, batch, …) are ignored."""
+
+    name: str | None = None
+    smiles: str | None = None  # None = intends an undisclosed registration
+    molecule_type: str = "small_molecule"
+    external_ids: list[ExternalIdBody] = []
+
+
+class PreviewRegistrationBody(BaseModel):
+    items: list[PreviewRegistrationItemBody]
+
+
+class PreviewRegistrationItemResponse(BaseModel):
+    index: int
+    # registered | deduplicated | disclosed | merge_candidate | conflict; null with `error`
+    action: str | None
+    matched_molecule_id: uuid.UUID | None = None
+    conflict_reason: str | None = None
+    error: str | None = None
+
+
+class PreviewRegistrationResponse(BaseModel):
+    items: list[PreviewRegistrationItemResponse]
 
 
 class UpdateMoleculeBody(BaseModel):
@@ -394,6 +432,8 @@ async def register_molecule(
             for e in body.external_ids
         ],
         originating_org_id=body.originating_org_id,
+        scientist_name=body.scientist_name,
+        disclosure_date=body.disclosure_date,
         custom_fields=body.custom_fields,
         registered_by=auth.user_id,
         auto_approve=body.auto_approve,
@@ -498,6 +538,50 @@ async def register_molecule(
         matched_molecule_id=outcome.matched_molecule_id,
         disclosure_id=outcome.disclosure_id,
         conflict_reason=outcome.conflict_reason,
+    )
+
+
+@router.post("/preview-registration", response_model=PreviewRegistrationResponse)
+async def preview_registration(
+    body: PreviewRegistrationBody,
+    auth: AuthDep,
+    use_case: PreviewRegistrationDep,
+) -> PreviewRegistrationResponse:
+    """Forecast what ``POST /molecules`` would do for each item. Writes nothing.
+
+    ADVISORY ONLY. The forecast comes from the same classifier the real
+    registration uses, but a registration landing between this call and the
+    commit can change the answer — ``POST /molecules`` remains the authority.
+    There are deliberately no locks, reservations or preview tokens.
+
+    Per item: ``registered`` / ``deduplicated`` (same InChIKey; ``matched_molecule_id``
+    set) / ``disclosed`` (structure discloses an undisclosed molecule) / ``conflict``
+    (``conflict_reason`` set). ``merge_candidate`` only arises in a race. ``action`` is
+    null with ``error`` set when the structure cannot be processed. At most 500 items.
+    """
+    query = PreviewRegistrationQuery(
+        workspace_id=auth.workspace_id,
+        items=[
+            PreviewRegistrationItem(
+                name=item.name,
+                smiles=item.smiles,
+                external_ids=[e.identifier for e in item.external_ids],
+            )
+            for item in body.items
+        ],
+    )
+    outcome = result_to_response(await use_case(query, auth=auth))
+    return PreviewRegistrationResponse(
+        items=[
+            PreviewRegistrationItemResponse(
+                index=i.index,
+                action=i.action.value if i.action else None,
+                matched_molecule_id=i.matched_molecule_id,
+                conflict_reason=i.conflict_reason,
+                error=i.error,
+            )
+            for i in outcome.items
+        ]
     )
 
 

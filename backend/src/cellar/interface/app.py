@@ -26,6 +26,15 @@ def create_app() -> FastAPI:
         # Structured logging (reads LOG_LEVEL / LOG_FORMAT / LOG_LEVEL_OVERRIDES)
         configure_logging()
 
+        # File storage must be usable (and, in production, on a mounted volume)
+        # before we serve a single request — otherwise attachments/exports are lost.
+        from cellar.infrastructure.storage.fsspec_client import (
+            StorageSettings,
+            ensure_storage_root,
+        )
+
+        ensure_storage_root(StorageSettings())
+
         # Initialize DI container and attach to app state
         container = create_container()
         app.state.container = container

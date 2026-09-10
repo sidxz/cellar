@@ -12,7 +12,6 @@ and resolve the actual key from SecretProvider at execution time.
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from pathlib import Path
 
@@ -29,6 +28,7 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_mole
     CddMoleculeSyncRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.storage.fsspec_client import StorageSettings
 from cellar.infrastructure.temporal.activities.dtos import (
     CddPollExportInput,
     CddPollExportOutput,
@@ -128,8 +128,7 @@ class CddFetchActivities:
             raise RuntimeError(f"CDD export {input.export_id} was canceled")
 
         # Export finished — set up storage directory
-        storage_root = os.getenv("STORAGE_ROOT", "./data/storage")
-        export_dir = Path(storage_root) / "cdd-exports" / str(input.export_id)
+        export_dir = StorageSettings().subdir("cdd-exports") / str(input.export_id)
         export_dir.mkdir(parents=True, exist_ok=True)
 
         raw_path = export_dir / "raw_export.json"

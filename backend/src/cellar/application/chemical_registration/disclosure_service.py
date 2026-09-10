@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import date
 
 from returns.result import (
     Failure,
@@ -46,6 +47,7 @@ class SubmitDisclosureCommand(Command):
     scientist_name: str | None = None
     auto_approve: bool = True
     notes: str | None = None
+    disclosure_date: date | None = None
 
 
 @dataclass(frozen=True)
@@ -137,6 +139,7 @@ class DisclosureService:
                 disclosing_org_id=input.disclosing_org_id,
                 scientist_name=input.scientist_name,
                 notes=input.notes,
+                disclosure_date=input.disclosure_date,
             )
             dr.start_processing()
 
@@ -165,6 +168,7 @@ class DisclosureService:
                         descriptors=processed.descriptors,
                         disclosed_by=input.requested_by,
                         stereochemistry=processed.stereochemistry,
+                        disclosure_date=dr.disclosure_date,
                     )
                     dr.resolve_as_new_structure(
                         canonical_smiles=canonical_smiles,

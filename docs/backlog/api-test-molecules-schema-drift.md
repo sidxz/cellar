@@ -10,3 +10,5 @@
 **Root cause:** the test seeds rows with hand-written SQL instead of the domain factories/repositories, so every schema change silently breaks it. Unrelated to dependencies — fails identically on the pre-upgrade lockfile.
 
 **Fix direction:** update the prefix expectation to `CC-`, seed the curve through a real batch (or the `BulkCreateReadoutData` path), and drop `visibility` from the project insert. Better: replace the raw SQL seeding with the existing fixtures used elsewhere in `tests/api/`. Consider adding `tests/api/` to CI once green — it is the only suite exercising FastAPI/Starlette/Pydantic together.
+
+> Re-confirmed 2026-09-09 on `feat/daikon-asks` (summary-import attachment, `scientist_name`, `disclosure_date`): the same three fail identically with all branch changes `git stash`-ed. Also seen this run: `tests/unit/application/export/renderers/test_pdf_renderer.py::test_pdf_renders_a_small_report` — `OSError: cannot load library 'libgobject-2.0-0'` (WeasyPrint system lib missing on this Mac; environmental, tracked in `preexisting-test-lint-failures-main.md`).

@@ -24,6 +24,12 @@ async def run_worker() -> None:
     """Connect to Temporal, create DI container, and run the worker forever."""
     configure_logging()
 
+    # Same invariant as the API: every on-disk write (CDD dumps, bulk-import
+    # chunks) hangs off STORAGE_ROOT, which in production must be a mounted volume.
+    from cellar.infrastructure.storage.fsspec_client import StorageSettings, ensure_storage_root
+
+    ensure_storage_root(StorageSettings())
+
     settings = TemporalSettings()
     logger.info(
         "temporal.connecting",

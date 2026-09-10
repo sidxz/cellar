@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from cellar.domain.chemical_registration.enums import (
     DisclosureResolutionType,
@@ -84,6 +84,7 @@ class DisclosureRequest(AggregateRoot):
         resolved_at: datetime | None = None,
         matched_molecule_id: uuid.UUID | None = None,
         scientist_name: str | None = None,
+        disclosure_date: date | None = None,
         conflict_reason: str | None = None,
         notes: str | None = None,
         created_at: datetime | None = None,
@@ -110,6 +111,10 @@ class DisclosureRequest(AggregateRoot):
         self.resolved_at = resolved_at
         self.matched_molecule_id = matched_molecule_id
         self.scientist_name = scientist_name
+        # Declared disclosure date (may be historic); requested_at stays the
+        # observed stamp. Carried here so a conflict resolved later still
+        # applies the date the requester asserted.
+        self.disclosure_date = disclosure_date
         self.conflict_reason = conflict_reason
         self.notes = notes
 
@@ -129,8 +134,11 @@ class DisclosureRequest(AggregateRoot):
         bulk_disclosure_id: uuid.UUID | None = None,
         scientist_name: str | None = None,
         notes: str | None = None,
+        disclosure_date: date | None = None,
     ) -> DisclosureRequest:
         """Create a new disclosure request in PENDING status."""
+        if disclosure_date is not None and disclosure_date > datetime.now(UTC).date():
+            raise ValidationError("disclosure_date cannot be in the future")
         req = cls(
             workspace_id=workspace_id,
             molecule_id=molecule_id,
@@ -140,6 +148,7 @@ class DisclosureRequest(AggregateRoot):
             bulk_disclosure_id=bulk_disclosure_id,
             scientist_name=scientist_name,
             notes=notes,
+            disclosure_date=disclosure_date,
         )
         req.register_event(
             DisclosureRequested(

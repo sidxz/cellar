@@ -5,6 +5,9 @@ import type {
   MergeDecisionResult as GeneratedMergeDecisionResult,
   PreviewBulkRegistrationResponse as GeneratedPreviewBulkRegistrationResponse,
   PreviewItem as GeneratedPreviewItem,
+  PreviewRegistrationBody as GeneratedPreviewRegistrationBody,
+  PreviewRegistrationItemResponse as GeneratedPreviewRegistrationItemResponse,
+  PreviewRegistrationResponse as GeneratedPreviewRegistrationResponse,
 } from "@/shared/lib/api/model";
 import type { BatchInput, Molecule } from "./index";
 
@@ -66,6 +69,16 @@ export interface BulkInput {
 export type PreviewItem = GeneratedPreviewItem;
 
 export type PreviewBulkRegistrationResponse = GeneratedPreviewBulkRegistrationResponse;
+
+// ─── Advisory forecast returned by POST /molecules/preview-registration ─────
+// What each row WOULD do (registered / deduplicated / disclosed / conflict);
+// decided for real only when the job runs.
+
+export type PreviewRegistrationBody = GeneratedPreviewRegistrationBody;
+
+export type PreviewRegistrationItemResponse = GeneratedPreviewRegistrationItemResponse;
+
+export type PreviewRegistrationResponse = GeneratedPreviewRegistrationResponse;
 
 // ─── Per-row results returned by /{wf}/items ────────────────────────────────
 

@@ -1,6 +1,7 @@
 """Tests for Molecule aggregate root."""
 
 import uuid
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -117,6 +118,48 @@ def _make_undisclosed(
         originating_org_id=org_id,
         **kwargs,
     )
+
+
+# ---------------------------------------------------------------------------
+# Provenance: scientist_name (the person half of originating_org_id)
+# ---------------------------------------------------------------------------
+
+
+class TestScientistName:
+    def test_register_disclosed_keeps_scientist_name(
+        self, ws_id, org_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        mol = _make_disclosed(
+            ws_id, org_id, aspirin_structure, aspirin_descriptors, scientist_name="A. Chemist"
+        )
+        assert mol.scientist_name == "A. Chemist"
+
+    def test_register_undisclosed_keeps_scientist_name(self, ws_id, org_id) -> None:
+        mol = _make_undisclosed(ws_id, org_id, scientist_name="A. Chemist")
+        assert mol.scientist_name == "A. Chemist"
+
+    def test_scientist_name_defaults_to_none(self, ws_id, org_id) -> None:
+        assert _make_undisclosed(ws_id, org_id).scientist_name is None
+
+    def test_register_disclosed_keeps_declared_disclosure_date(
+        self, ws_id, org_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        mol = _make_disclosed(
+            ws_id, org_id, aspirin_structure, aspirin_descriptors, disclosure_date=date(2024, 3, 15)
+        )
+        assert mol.disclosure_date == date(2024, 3, 15)
+
+    def test_register_disclosed_rejects_future_disclosure_date(
+        self, ws_id, org_id, aspirin_structure, aspirin_descriptors
+    ) -> None:
+        with pytest.raises(ValidationError, match="future"):
+            _make_disclosed(
+                ws_id,
+                org_id,
+                aspirin_structure,
+                aspirin_descriptors,
+                disclosure_date=datetime.now(UTC).date() + timedelta(days=1),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +506,44 @@ class TestDisclose:
         assert len(events) == 1
         assert isinstance(events[0], MoleculeDisclosed)
         assert events[0].inchi_key == aspirin_structure.inchi_key
+
+    def test_disclose_keeps_declared_date_and_observed_stamp(
+        self,
+        ws_id: uuid.UUID,
+        org_id: uuid.UUID,
+        user_id: uuid.UUID,
+        aspirin_structure: ChemicalStructure,
+        aspirin_descriptors: ComputedDescriptors,
+    ) -> None:
+        """A declared (historic) date and the recorded-at stamp are different facts."""
+        mol = _make_undisclosed(ws_id, org_id)
+        mol.disclose(
+            structure=aspirin_structure,
+            descriptors=aspirin_descriptors,
+            disclosed_by=user_id,
+            disclosure_date=date(2024, 3, 15),
+        )
+        assert mol.disclosure_date == date(2024, 3, 15)
+        assert mol.disclosed_at is not None
+        assert mol.disclosed_at.date() != date(2024, 3, 15)
+
+    def test_disclose_rejects_future_disclosure_date(
+        self,
+        ws_id: uuid.UUID,
+        org_id: uuid.UUID,
+        user_id: uuid.UUID,
+        aspirin_structure: ChemicalStructure,
+        aspirin_descriptors: ComputedDescriptors,
+    ) -> None:
+        mol = _make_undisclosed(ws_id, org_id)
+        with pytest.raises(ValidationError, match="future"):
+            mol.disclose(
+                structure=aspirin_structure,
+                descriptors=aspirin_descriptors,
+                disclosed_by=user_id,
+                disclosure_date=datetime.now(UTC).date() + timedelta(days=1),
+            )
+        assert mol.structure_status == StructureStatus.UNDISCLOSED
 
     def test_cannot_disclose_already_disclosed(
         self,

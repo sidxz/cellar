@@ -48,6 +48,7 @@ class SQLAlchemyDisclosureRequestRepository(
             requested_by=model.requested_by,
             requested_at=model.requested_at,
             resolved_at=model.resolved_at,
+            disclosure_date=model.disclosure_date,
             conflict_reason=model.conflict_reason,
             notes=model.notes,
             created_at=model.created_at,
@@ -79,6 +80,7 @@ class SQLAlchemyDisclosureRequestRepository(
             requested_by=aggregate.requested_by,
             requested_at=aggregate.requested_at,
             resolved_at=aggregate.resolved_at,
+            disclosure_date=aggregate.disclosure_date,
             conflict_reason=aggregate.conflict_reason,
             notes=aggregate.notes,
             version=aggregate.version,
@@ -98,6 +100,7 @@ class SQLAlchemyDisclosureRequestRepository(
         model.resolved_to_molecule_id = aggregate.resolved_to_molecule_id
         model.matched_molecule_id = aggregate.matched_molecule_id
         model.scientist_name = aggregate.scientist_name
+        model.disclosure_date = aggregate.disclosure_date
         model.resolved_at = aggregate.resolved_at
         model.conflict_reason = aggregate.conflict_reason
         model.notes = aggregate.notes
