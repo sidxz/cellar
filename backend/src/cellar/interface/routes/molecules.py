@@ -25,6 +25,10 @@ from cellar.application.chemical_registration.list_molecules import ListMolecule
 from cellar.application.chemical_registration.list_molecules_by_ids import (
     ListMoleculesByIdsQuery,
 )
+from cellar.application.chemical_registration.preview_registration import (
+    PreviewRegistrationItem,
+    PreviewRegistrationQuery,
+)
 from cellar.application.chemical_registration.register_molecule import (
     ExternalId,
     RegisterMoleculeCommand,
@@ -60,6 +64,7 @@ from cellar.interface.dependencies import (
     MoleculeActivityServiceDep,
     PlateReadModelServiceDep,
     PlateVisibilityUoWDep,
+    PreviewRegistrationDep,
     RegisterMoleculeDep,
     RemoveIdentifierDep,
     SaltMatcherUoWDep,
@@ -362,6 +367,33 @@ class RegisterMoleculeBody(BaseModel):
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
 
 
+class PreviewRegistrationItemBody(BaseModel):
+    """Mirrors RegisterMoleculeBody so a caller can preview the exact payload it will
+    POST; keys the forecast does not use (originating_org_id, batch, …) are ignored."""
+
+    name: str | None = None
+    smiles: str | None = None  # None = intends an undisclosed registration
+    molecule_type: str = "small_molecule"
+    external_ids: list[ExternalIdBody] = []
+
+
+class PreviewRegistrationBody(BaseModel):
+    items: list[PreviewRegistrationItemBody]
+
+
+class PreviewRegistrationItemResponse(BaseModel):
+    index: int
+    # registered | deduplicated | disclosed | merge_candidate | conflict; null with `error`
+    action: str | None
+    matched_molecule_id: uuid.UUID | None = None
+    conflict_reason: str | None = None
+    error: str | None = None
+
+
+class PreviewRegistrationResponse(BaseModel):
+    items: list[PreviewRegistrationItemResponse]
+
+
 class UpdateMoleculeBody(BaseModel):
     lifecycle_stage: str | None = None
     lifecycle_reason: str | None = None
@@ -506,6 +538,50 @@ async def register_molecule(
         matched_molecule_id=outcome.matched_molecule_id,
         disclosure_id=outcome.disclosure_id,
         conflict_reason=outcome.conflict_reason,
+    )
+
+
+@router.post("/preview-registration", response_model=PreviewRegistrationResponse)
+async def preview_registration(
+    body: PreviewRegistrationBody,
+    auth: AuthDep,
+    use_case: PreviewRegistrationDep,
+) -> PreviewRegistrationResponse:
+    """Forecast what ``POST /molecules`` would do for each item. Writes nothing.
+
+    ADVISORY ONLY. The forecast comes from the same classifier the real
+    registration uses, but a registration landing between this call and the
+    commit can change the answer — ``POST /molecules`` remains the authority.
+    There are deliberately no locks, reservations or preview tokens.
+
+    Per item: ``registered`` / ``deduplicated`` (same InChIKey; ``matched_molecule_id``
+    set) / ``disclosed`` (structure discloses an undisclosed molecule) / ``conflict``
+    (``conflict_reason`` set). ``merge_candidate`` only arises in a race. ``action`` is
+    null with ``error`` set when the structure cannot be processed. At most 500 items.
+    """
+    query = PreviewRegistrationQuery(
+        workspace_id=auth.workspace_id,
+        items=[
+            PreviewRegistrationItem(
+                name=item.name,
+                smiles=item.smiles,
+                external_ids=[e.identifier for e in item.external_ids],
+            )
+            for item in body.items
+        ],
+    )
+    outcome = result_to_response(await use_case(query, auth=auth))
+    return PreviewRegistrationResponse(
+        items=[
+            PreviewRegistrationItemResponse(
+                index=i.index,
+                action=i.action.value if i.action else None,
+                matched_molecule_id=i.matched_molecule_id,
+                conflict_reason=i.conflict_reason,
+                error=i.error,
+            )
+            for i in outcome.items
+        ]
     )
 
 

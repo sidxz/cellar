@@ -15,6 +15,11 @@ from cellar.application.chemical_registration.protocols import (
     DetectedSaltDTO,
     StructureProcessorProtocol,
 )
+from cellar.application.chemical_registration.registration_classifier import (
+    classify_disclosed,
+    classify_undisclosed,
+    collect_identifiers,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -125,11 +130,12 @@ class RegisterMolecule:
         return await self._register_undisclosed(input)
 
     def _collect_all_identifiers(self, input: RegisterMoleculeCommand) -> set[str]:
-        """Collect name + all external IDs into a single set for batch lookup."""
-        ids = {ext.identifier for ext in input.external_ids}
-        if input.name and input.promote_name_as_identifier:
-            ids.add(input.name)
-        return ids
+        """Name + external ids — the identifiers this registration will claim."""
+        return collect_identifiers(
+            input.name,
+            (ext.identifier for ext in input.external_ids),
+            promote_name=input.promote_name_as_identifier,
+        )
 
     async def _resolve_reg_number_config(self, workspace_id: uuid.UUID) -> tuple[str, int]:
         """Read prefix + width from WorkspaceSettings; fall back to defaults."""
@@ -140,31 +146,6 @@ class RegisterMolecule:
             if settings is None:
                 settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
         return settings.registration_number_prefix, settings.registration_number_width
-
-    async def _check_identifier_conflicts(
-        self,
-        input: RegisterMoleculeCommand,
-        allowed_molecule_id: uuid.UUID | None,
-    ) -> Result[None, DomainError]:
-        """Batch-check all identifiers (name + external_ids) for conflicts.
-
-        If allowed_molecule_id is set, identifiers already on that molecule
-        are not considered conflicts (duplicate detection case).
-        """
-        all_ids = self._collect_all_identifiers(input)
-        if not all_ids:
-            return Success(None)
-
-        existing_map = await self._repo.find_identifiers_in_workspace(input.workspace_id, all_ids)
-
-        for identifier, owner_id in existing_map.items():
-            if allowed_molecule_id is not None and owner_id == allowed_molecule_id:
-                continue  # already on the target molecule — not a conflict
-            return Failure(
-                ConflictError(f"Identifier '{identifier}' is already assigned to another molecule")
-            )
-
-        return Success(None)
 
     def _add_name_and_ids(
         self,
@@ -286,37 +267,27 @@ class RegisterMolecule:
         events: list = []
 
         async with self._uow:
-            # 2. Check InChIKey against existing active molecules
-            existing_by_inchi = await self._repo.find_by_inchi_key(input.workspace_id, inchi_key)
-
-            # 3. Check for undisclosed molecule match (before conflict check)
-            undisclosed_match: Molecule | None = None
-            if existing_by_inchi is None and self._disclosure_service is not None:
-                all_ids = self._collect_all_identifiers(input)
-                if all_ids:
-                    undisclosed_match = await self._repo.find_undisclosed_by_identifiers(
-                        input.workspace_id, all_ids
-                    )
-
-            # 4. Batch-check all identifiers (name + external_ids) for conflicts.
-            allowed_id = (
-                existing_by_inchi.id
-                if existing_by_inchi
-                else (undisclosed_match.id if undisclosed_match else None)
+            # 2. One shared rule decides what this registration will do
+            #    (PreviewRegistration asks the same function, read-only).
+            forecast = await classify_disclosed(
+                self._repo,
+                input.workspace_id,
+                inchi_key,
+                self._collect_all_identifiers(input),
+                detect_undisclosed=self._disclosure_service is not None,
             )
-            conflict_check = await self._check_identifier_conflicts(
-                input,
-                allowed_molecule_id=allowed_id,
-            )
-            if isinstance(conflict_check, Failure):
-                return Failure(conflict_check.failure())
+            existing_by_inchi: Molecule | None = None
 
-            # 5. Branch on the outcome of the reads above.
-            if undisclosed_match is not None and self._disclosure_service is not None:
+            # 3. Branch on the forecast.
+            if forecast.action is RegistrationAction.CONFLICT:
+                return Failure(ConflictError(forecast.conflict_reason or "Identifier conflict"))
+            if forecast.action is RegistrationAction.DISCLOSED:
                 # Defer to disclosure_service — it manages its own UoW so we
                 # exit ours first, no writes pending.
-                delegate_to_disclosure = undisclosed_match
-            elif existing_by_inchi is not None:
+                delegate_to_disclosure = forecast.matched_molecule
+            elif forecast.action is RegistrationAction.DEDUPLICATED:
+                existing_by_inchi = forecast.matched_molecule
+            if existing_by_inchi is not None:
                 # 6a. Duplicate InChIKey — add identifiers to existing molecule
                 self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
                 await self._repo.save(existing_by_inchi)
@@ -336,7 +307,7 @@ class RegisterMolecule:
                     qc_warnings=qc_warnings,
                     detected_salt=processed.detected_salt,
                 )
-            else:
+            elif delegate_to_disclosure is None:
                 # 6b. New molecule — same transaction as the conflict check, so
                 # the unique InChIKey + identifier constraints are enforced
                 # against the same snapshot we read above.
@@ -427,38 +398,17 @@ class RegisterMolecule:
         self, input: RegisterMoleculeCommand
     ) -> Result[RegistrationOutcome, DomainError]:
         async with self._uow:
-            # 1. Batch-check all identifiers (name + external_ids)
-            all_ids = self._collect_all_identifiers(input)
-            existing_map = await self._repo.find_identifiers_in_workspace(
-                input.workspace_id, all_ids
+            # 1. Same shared rule as the preview: identifiers are all there is.
+            forecast = await classify_undisclosed(
+                self._repo, input.workspace_id, self._collect_all_identifiers(input)
             )
-
-            # 2. Determine if any existing molecule is matched
-            matched_molecule: Molecule | None = None
-            matched_id: uuid.UUID | None = None
-
-            for _identifier, owner_id in existing_map.items():
-                if matched_id is None:
-                    matched_id = owner_id
-                elif owner_id != matched_id:
-                    return Failure(ConflictError("Identifiers map to different molecules"))
-
-            if matched_id is not None:
-                matched_molecule = await self._repo.find_by_id_in_workspace(
-                    input.workspace_id, matched_id
-                )
-                if (
-                    matched_molecule is not None
-                    and matched_molecule.structure_status.value == "disclosed"
-                ):
-                    # One of our identifiers/name is claimed by a disclosed molecule
-                    conflict_id = next(k for k, v in existing_map.items() if v == matched_id)
-                    return Failure(
-                        ConflictError(
-                            f"Identifier '{conflict_id}' belongs to disclosed "
-                            f"molecule '{matched_molecule.registration_number.value}'"
-                        )
-                    )
+            if forecast.action is RegistrationAction.CONFLICT:
+                return Failure(ConflictError(forecast.conflict_reason or "Identifier conflict"))
+            matched_molecule: Molecule | None = (
+                forecast.matched_molecule
+                if forecast.action is RegistrationAction.DEDUPLICATED
+                else None
+            )
 
             # 3a. Matched existing undisclosed — add new IDs
             events = []

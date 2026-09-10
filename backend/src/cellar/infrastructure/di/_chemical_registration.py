@@ -65,6 +65,7 @@ from cellar.application.chemical_registration.preview_bulk_registration_file imp
     BulkFileParserProtocol,
     PreviewBulkRegistrationFile,
 )
+from cellar.application.chemical_registration.preview_registration import PreviewRegistration
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.chemical_registration.register_molecule import RegisterMolecule
 from cellar.application.chemical_registration.reject_disclosure import RejectDisclosure
@@ -235,6 +236,17 @@ def register_chemical_registration(container: Container) -> None:
         )
 
     container.define(RegisterMolecule, _register_molecule)
+
+    def _preview_registration(c: Container):
+        # Read-only forecast: its own UoW, entered and exited without commit.
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewRegistration(
+            uow=uow,
+            repo=SQLAlchemyMoleculeRepository(uow),
+            structure_processor=c[StructureProcessorProtocol],
+        )
+
+    container.define(PreviewRegistration, _preview_registration)
 
     def _update_molecule(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
