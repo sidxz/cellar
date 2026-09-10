@@ -49,8 +49,8 @@ export function StepPreview() {
   // parse preview is in. Local state on purpose: revisiting the step re-asks,
   // which is what you want from a forecast.
   const forecastMutation = usePreviewRegistration();
-  const [forecast, setForecast] = useState<Forecast | null>(null);
-  const hasForecast = useRef(false);
+  // null = waiting, "failed" = could not ask (never rendered as zeros), Map = answer.
+  const [forecast, setForecast] = useState<Forecast | "failed" | null>(null);
 
   // Kick off preview on mount when no data yet
   // biome-ignore lint/correctness/useExhaustiveDependencies: kick off the preview once on mount (guarded by hasRequested ref); the captured bulkInput/previewMutation are intentionally not re-subscribed.
@@ -65,10 +65,9 @@ export function StepPreview() {
       });
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: run once per parse preview (guarded by hasForecast ref); the mutation object is intentionally not re-subscribed.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run only when the parse preview changes; mutateAsync is stable and the cancel flag handles overlap (StrictMode double-run included).
   useEffect(() => {
-    if (hasForecast.current || !bulkPreview) return;
-    hasForecast.current = true;
+    if (!bulkPreview) return;
     const rows = bulkPreview.items.filter((i) => !i.error);
     let cancelled = false;
     (async () => {
@@ -80,8 +79,8 @@ export function StepPreview() {
       }
       if (!cancelled) setForecast(byRow);
     })().catch(() => {
-      // Error toast comes from the hook; the table just stops waiting.
-      if (!cancelled) setForecast(new Map());
+      // Error toast comes from the hook; the table must not read as "0 will merge".
+      if (!cancelled) setForecast("failed");
     });
     return () => {
       cancelled = true;
@@ -137,7 +136,8 @@ export function StepPreview() {
 
   const validCount = bulkPreview.total_count - bulkPreview.error_count;
   const hasErrors = bulkPreview.error_count > 0;
-  const counts = countForecast(forecast);
+  const answered = forecast instanceof Map ? forecast : null;
+  const counts = countForecast(answered);
 
   return (
     <div className="space-y-5">
@@ -169,7 +169,7 @@ export function StepPreview() {
       </div>
 
       {/* Forecast counters — what confirming would do */}
-      {forecast && (
+      {answered && (
         <div className="grid grid-cols-4 gap-3 max-w-3xl">
           <SummaryStat label="Will register" value={counts.registered} tone="success" />
           <SummaryStat label="Duplicates" value={counts.deduplicated} tone="default" />
@@ -212,7 +212,7 @@ export function StepPreview() {
                     className={cn(
                       "border-b last:border-b-0",
                       item.error && "bg-destructive/5",
-                      forecast?.get(item.row_index)?.action === "conflict" && "bg-amber-500/5",
+                      answered?.get(item.row_index)?.action === "conflict" && "bg-amber-500/5",
                     )}
                   >
                     <td className="px-3 py-1.5 text-muted-foreground">{item.row_index + 1}</td>
@@ -242,15 +242,20 @@ export function StepPreview() {
                       {item.batch_source ?? "\u2014"}
                     </td>
                     <td className="px-3 py-1.5">
-                      {item.error ? (
+                      {item.error || forecast === "failed" ? (
                         "\u2014"
-                      ) : forecast ? (
-                        <OutcomeBadge outcome={forecast.get(item.row_index)} />
+                      ) : answered ? (
+                        <OutcomeBadge outcome={answered.get(item.row_index)} />
                       ) : (
                         <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-destructive">{item.error ?? ""}</td>
+                    <td className="px-3 py-1.5 text-destructive">
+                      {item.error ??
+                        answered?.get(item.row_index)?.conflict_reason ??
+                        answered?.get(item.row_index)?.error ??
+                        ""}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -259,7 +264,13 @@ export function StepPreview() {
         </CardContent>
       </Card>
 
-      {forecast && (
+      {forecast === "failed" && (
+        <p className="text-xs text-muted-foreground">
+          Forecast unavailable — outcomes will be decided when the job runs.
+        </p>
+      )}
+
+      {answered && (
         <p className="text-xs text-muted-foreground">
           Forecast only — outcomes are decided when the job runs, and a registration landing in
           between can change them.
@@ -320,18 +331,9 @@ const OUTCOME_LABELS: Record<
 
 function OutcomeBadge({ outcome }: { outcome: PreviewRegistrationItemResponse | undefined }) {
   const spec = outcome?.action ? OUTCOME_LABELS[outcome.action] : undefined;
-  if (!spec) {
-    return (
-      <Badge variant="outline" title={outcome?.error ?? undefined}>
-        Unknown
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant={spec.variant} title={outcome?.conflict_reason ?? undefined}>
-      {spec.label}
-    </Badge>
-  );
+  // The reason / error is printed in the Issue column, so the badge stays a label.
+  if (!spec) return <Badge variant="outline">Unknown</Badge>;
+  return <Badge variant={spec.variant}>{spec.label}</Badge>;
 }
 
 function SummaryStat({

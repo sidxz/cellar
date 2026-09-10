@@ -16,6 +16,7 @@ from cellar.application.chemical_registration.protocols import (
     StructureProcessorProtocol,
 )
 from cellar.application.chemical_registration.registration_classifier import (
+    RegistrationForecast,
     classify_disclosed,
     classify_undisclosed,
     collect_identifiers,
@@ -80,6 +81,13 @@ class RegisterMoleculeCommand(Command):
     qc_warn_threshold: int | None = None
     promote_name_as_identifier: bool = True  # False for auto-generated names
     auto_approve: bool = True  # False from wizard — merge candidates need confirmation
+
+
+def _matched(forecast: RegistrationForecast) -> Molecule:
+    """The molecule a DEDUPLICATED / DISCLOSED forecast names; never None by contract."""
+    if forecast.matched_molecule is None:
+        raise AssertionError(f"forecast {forecast.action} carried no matched molecule")
+    return forecast.matched_molecule
 
 
 class RegisterMolecule:
@@ -278,15 +286,22 @@ class RegisterMolecule:
             )
             existing_by_inchi: Molecule | None = None
 
-            # 3. Branch on the forecast.
-            if forecast.action is RegistrationAction.CONFLICT:
-                return Failure(ConflictError(forecast.conflict_reason or "Identifier conflict"))
-            if forecast.action is RegistrationAction.DISCLOSED:
-                # Defer to disclosure_service — it manages its own UoW so we
-                # exit ours first, no writes pending.
-                delegate_to_disclosure = forecast.matched_molecule
-            elif forecast.action is RegistrationAction.DEDUPLICATED:
-                existing_by_inchi = forecast.matched_molecule
+            # 3. Branch on the forecast — every action handled, nothing falls through.
+            match forecast.action:
+                case RegistrationAction.CONFLICT:
+                    return Failure(
+                        ConflictError(forecast.conflict_reason or "Identifier conflict")
+                    )
+                case RegistrationAction.DISCLOSED:
+                    # Defer to disclosure_service — it manages its own UoW so we
+                    # exit ours first, no writes pending.
+                    delegate_to_disclosure = _matched(forecast)
+                case RegistrationAction.DEDUPLICATED:
+                    existing_by_inchi = _matched(forecast)
+                case RegistrationAction.REGISTERED:
+                    pass
+                case _:
+                    raise AssertionError(f"unexpected registration forecast {forecast.action}")
             if existing_by_inchi is not None:
                 # 6a. Duplicate InChIKey — add identifiers to existing molecule
                 self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
@@ -307,7 +322,7 @@ class RegisterMolecule:
                     qc_warnings=qc_warnings,
                     detected_salt=processed.detected_salt,
                 )
-            elif delegate_to_disclosure is None:
+            elif forecast.action is RegistrationAction.REGISTERED:
                 # 6b. New molecule — same transaction as the conflict check, so
                 # the unique InChIKey + identifier constraints are enforced
                 # against the same snapshot we read above.
@@ -402,13 +417,18 @@ class RegisterMolecule:
             forecast = await classify_undisclosed(
                 self._repo, input.workspace_id, self._collect_all_identifiers(input)
             )
-            if forecast.action is RegistrationAction.CONFLICT:
-                return Failure(ConflictError(forecast.conflict_reason or "Identifier conflict"))
-            matched_molecule: Molecule | None = (
-                forecast.matched_molecule
-                if forecast.action is RegistrationAction.DEDUPLICATED
-                else None
-            )
+            matched_molecule: Molecule | None = None
+            match forecast.action:
+                case RegistrationAction.CONFLICT:
+                    return Failure(
+                        ConflictError(forecast.conflict_reason or "Identifier conflict")
+                    )
+                case RegistrationAction.DEDUPLICATED:
+                    matched_molecule = _matched(forecast)
+                case RegistrationAction.REGISTERED:
+                    pass
+                case _:
+                    raise AssertionError(f"unexpected registration forecast {forecast.action}")
 
             # 3a. Matched existing undisclosed — add new IDs
             events = []

@@ -57,6 +57,7 @@ services:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: default
       STORAGE_ROOT: /data/storage
+      APP_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       INFISICAL_BASE_URL: http://infisical:8080
       INFISICAL_TOKEN: ${INFISICAL_TOKEN:-}

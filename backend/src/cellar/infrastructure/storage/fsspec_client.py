@@ -77,9 +77,10 @@ def ensure_storage_root(
         )
     try:
         root.mkdir(parents=True, exist_ok=True)
-        probe = root / ".write-probe"
+        # Per-process name: API and worker boot together on the same volume.
+        probe = root / f".write-probe-{os.getpid()}"
         probe.write_bytes(b"")
-        probe.unlink()
+        probe.unlink(missing_ok=True)
     except OSError as exc:
         raise RuntimeError(f"STORAGE_ROOT={root} is not writable: {exc}") from exc
     logger.info("storage.root_ready", root=str(root), production=production)

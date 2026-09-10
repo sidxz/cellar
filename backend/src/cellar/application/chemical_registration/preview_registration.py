@@ -13,6 +13,7 @@ merge_candidate only arises in a race on the disclosure path.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 
@@ -109,7 +110,9 @@ class PreviewRegistration:
         if item.smiles is None:
             forecast = await classify_undisclosed(self._repo, workspace_id, identifiers)
         else:
-            processed = self._processor.process(item.smiles)
+            # RDKit work is synchronous and ~ms per structure; 500 in a row would
+            # stall the single uvicorn worker, so run it off the event loop.
+            processed = await asyncio.to_thread(self._processor.process, item.smiles)
             if isinstance(processed, Failure):
                 return RegistrationPreviewItem(index, None, error=str(processed.failure()))
             inchi_key = processed.unwrap().structure.inchi_key

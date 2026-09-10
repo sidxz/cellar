@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
@@ -52,18 +53,32 @@ beforeEach(() => {
 
 describe("StepPreview forecast", () => {
   it("asks the forecast only for parseable rows and shows one outcome per row", async () => {
-    render(<StepPreview />);
+    // StrictMode double-invokes effects in dev; the forecast must still land.
+    render(
+      <StrictMode>
+        <StepPreview />
+      </StrictMode>,
+    );
 
-    await waitFor(() => expect(forecastMock).toHaveBeenCalledTimes(1));
-    const sent = forecastMock.mock.calls[0][0].items;
+    // StrictMode issues the request twice in dev (first run cancelled); prod once.
+    await waitFor(() => expect(forecastMock).toHaveBeenCalled());
+    const sent = forecastMock.mock.calls.at(-1)?.[0].items;
     expect(sent).toHaveLength(3); // the parse-error row is not sent
     expect(sent[0]).toMatchObject({ name: "Fresh-1", smiles: "CCCCC", external_ids: [] });
 
     expect(await screen.findByText("New")).toBeInTheDocument();
     expect(screen.getByText("Duplicate")).toBeInTheDocument();
-    const conflict = screen.getByText("Conflict");
-    expect(conflict).toBeInTheDocument();
-    expect(conflict.closest("[title]")?.getAttribute("title")).toMatch(/already assigned/);
+    expect(screen.getByText("Conflict")).toBeInTheDocument();
+    // The reason is readable text in the Issue column, not hover-only.
+    expect(screen.getByText(/already assigned to another molecule/)).toBeInTheDocument();
+  });
+
+  it("says the forecast is unavailable when the request fails, never zeros", async () => {
+    forecastMock.mockRejectedValue(new Error("boom"));
+    render(<StepPreview />);
+    expect(await screen.findByText(/forecast unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByText("Will register")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unknown")).not.toBeInTheDocument();
   });
 
   it("counts the forecast and says it is advisory", async () => {

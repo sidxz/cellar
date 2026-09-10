@@ -65,3 +65,24 @@ async def test_preview_batch_over_cap_is_422(client: AsyncClient) -> None:
     )
     assert resp.status_code == 422, resp.text
     assert "500" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_preview_forecasts_disclosure_of_an_undisclosed_molecule(
+    client: AsyncClient, org_id: str
+) -> None:
+    """Name-only match on an undisclosed molecule + a structure → 'disclosed'."""
+    undisclosed = await client.post(
+        "/api/v1/molecules", json={"name": "PV-Undisc", "originating_org_id": org_id}
+    )
+    assert undisclosed.status_code == 201, undisclosed.text
+    undisclosed_id = undisclosed.json()["molecule"]["id"]
+
+    resp = await client.post(
+        "/api/v1/molecules/preview-registration",
+        json={"items": [{"name": "PV-Undisc", "smiles": "CCCO"}]},
+    )
+    assert resp.status_code == 200, resp.text
+    item = resp.json()["items"][0]
+    assert item["action"] == "disclosed"
+    assert item["matched_molecule_id"] == undisclosed_id
