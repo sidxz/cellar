@@ -11,6 +11,8 @@ import type {
   ListBulkRegItemsResponse,
   MergeDecision,
   PreviewBulkRegistrationResponse,
+  PreviewRegistrationBody,
+  PreviewRegistrationResponse,
 } from "../types/registration-wizard";
 
 import { MOLECULES_KEY } from "./query-keys";
@@ -54,6 +56,23 @@ export function usePreviewBulkRegistration() {
     },
     onError: (err: Error) => {
       showError(err.message ?? "Failed to preview file");
+    },
+  });
+}
+
+// ─── Registration forecast (advisory) ──────────────────────────────────────
+
+/** POST /api/v1/molecules/preview-registration — what each item WOULD do; writes nothing. */
+export function usePreviewRegistration() {
+  return useMutation({
+    mutationFn: (body: PreviewRegistrationBody) =>
+      customInstance<PreviewRegistrationResponse>({
+        url: `${API_V1}/molecules/preview-registration`,
+        method: "POST",
+        data: body,
+      }),
+    onError: (err: Error) => {
+      showError(err.message ?? "Could not forecast registration outcomes");
     },
   });
 }

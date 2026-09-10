@@ -5,9 +5,31 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { cn } from "@/shared/lib/utils";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
-import { usePreviewBulkRegistration } from "../../hooks/use-registration-wizard-api";
+import {
+  usePreviewBulkRegistration,
+  usePreviewRegistration,
+} from "../../hooks/use-registration-wizard-api";
+import type { PreviewItem, PreviewRegistrationItemResponse } from "../../types/registration-wizard";
+
+/** Backend caps a forecast request at 500 items; larger files go in chunks. */
+const FORECAST_CHUNK = 500;
+
+type Forecast = Map<number, PreviewRegistrationItemResponse>; // row_index → outcome
+
+/** Same shape POST /molecules takes, which is what the forecast classifies. */
+function toForecastItem(item: PreviewItem) {
+  return {
+    name: item.name ?? null,
+    smiles: item.smiles ?? null,
+    molecule_type: item.molecule_type,
+    external_ids: (item.external_ids ?? []).map((e) => ({
+      identifier: e.identifier,
+      identifier_type: e.identifier_type,
+    })),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // StepPreview — parse-only preview between Input and Processing
@@ -23,6 +45,13 @@ export function StepPreview() {
   const previewMutation = usePreviewBulkRegistration();
   const hasRequested = useRef(false);
 
+  // Advisory forecast of what each parseable row will do, fetched once the
+  // parse preview is in. Local state on purpose: revisiting the step re-asks,
+  // which is what you want from a forecast.
+  const forecastMutation = usePreviewRegistration();
+  const [forecast, setForecast] = useState<Forecast | null>(null);
+  const hasForecast = useRef(false);
+
   // Kick off preview on mount when no data yet
   // biome-ignore lint/correctness/useExhaustiveDependencies: kick off the preview once on mount (guarded by hasRequested ref); the captured bulkInput/previewMutation are intentionally not re-subscribed.
   useEffect(() => {
@@ -35,6 +64,29 @@ export function StepPreview() {
         // Error surfaced via mutation state below.
       });
   }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once per parse preview (guarded by hasForecast ref); the mutation object is intentionally not re-subscribed.
+  useEffect(() => {
+    if (hasForecast.current || !bulkPreview) return;
+    hasForecast.current = true;
+    const rows = bulkPreview.items.filter((i) => !i.error);
+    let cancelled = false;
+    (async () => {
+      const byRow: Forecast = new Map();
+      for (let start = 0; start < rows.length; start += FORECAST_CHUNK) {
+        const chunk = rows.slice(start, start + FORECAST_CHUNK);
+        const res = await forecastMutation.mutateAsync({ items: chunk.map(toForecastItem) });
+        for (const it of res.items) byRow.set(chunk[it.index].row_index, it);
+      }
+      if (!cancelled) setForecast(byRow);
+    })().catch(() => {
+      // Error toast comes from the hook; the table just stops waiting.
+      if (!cancelled) setForecast(new Map());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bulkPreview]);
 
   if (!bulkInput.file) {
     return (
@@ -85,6 +137,7 @@ export function StepPreview() {
 
   const validCount = bulkPreview.total_count - bulkPreview.error_count;
   const hasErrors = bulkPreview.error_count > 0;
+  const counts = countForecast(forecast);
 
   return (
     <div className="space-y-5">
@@ -115,6 +168,21 @@ export function StepPreview() {
         />
       </div>
 
+      {/* Forecast counters — what confirming would do */}
+      {forecast && (
+        <div className="grid grid-cols-4 gap-3 max-w-3xl">
+          <SummaryStat label="Will register" value={counts.registered} tone="success" />
+          <SummaryStat label="Duplicates" value={counts.deduplicated} tone="default" />
+          <SummaryStat label="Will disclose" value={counts.disclosed} tone="default" />
+          <SummaryStat
+            label="Conflicts"
+            value={counts.conflict}
+            tone={counts.conflict > 0 ? "destructive" : "default"}
+            icon={counts.conflict > 0 ? <AlertTriangle className="h-3.5 w-3.5" /> : null}
+          />
+        </div>
+      )}
+
       {/* Per-row table */}
       <Card>
         <CardHeader className="pb-2">
@@ -133,6 +201,7 @@ export function StepPreview() {
                   <th className="px-3 py-2 text-left font-medium">Salt</th>
                   <th className="px-3 py-2 text-left font-medium">Purity</th>
                   <th className="px-3 py-2 text-left font-medium">Source</th>
+                  <th className="px-3 py-2 text-left font-medium">Outcome</th>
                   <th className="px-3 py-2 text-left font-medium">Issue</th>
                 </tr>
               </thead>
@@ -140,7 +209,11 @@ export function StepPreview() {
                 {bulkPreview.items.map((item) => (
                   <tr
                     key={item.row_index}
-                    className={cn("border-b last:border-b-0", item.error && "bg-destructive/5")}
+                    className={cn(
+                      "border-b last:border-b-0",
+                      item.error && "bg-destructive/5",
+                      forecast?.get(item.row_index)?.action === "conflict" && "bg-amber-500/5",
+                    )}
                   >
                     <td className="px-3 py-1.5 text-muted-foreground">{item.row_index + 1}</td>
                     <td className="px-3 py-1.5">{item.name ?? "\u2014"}</td>
@@ -168,6 +241,15 @@ export function StepPreview() {
                     <td className="px-3 py-1.5 text-muted-foreground">
                       {item.batch_source ?? "\u2014"}
                     </td>
+                    <td className="px-3 py-1.5">
+                      {item.error ? (
+                        "\u2014"
+                      ) : forecast ? (
+                        <OutcomeBadge outcome={forecast.get(item.row_index)} />
+                      ) : (
+                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                      )}
+                    </td>
                     <td className="px-3 py-1.5 text-destructive">{item.error ?? ""}</td>
                   </tr>
                 ))}
@@ -176,6 +258,13 @@ export function StepPreview() {
           </div>
         </CardContent>
       </Card>
+
+      {forecast && (
+        <p className="text-xs text-muted-foreground">
+          Forecast only — outcomes are decided when the job runs, and a registration landing in
+          between can change them.
+        </p>
+      )}
 
       {hasErrors && (
         <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
@@ -207,6 +296,42 @@ export function StepPreview() {
 
 function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1)}\u2026` : s;
+}
+
+function countForecast(forecast: Forecast | null) {
+  const counts = { registered: 0, deduplicated: 0, disclosed: 0, merge_candidate: 0, conflict: 0 };
+  if (!forecast) return counts;
+  for (const it of forecast.values()) {
+    if (it.action && it.action in counts) counts[it.action as keyof typeof counts] += 1;
+  }
+  return counts;
+}
+
+const OUTCOME_LABELS: Record<
+  string,
+  { label: string; variant: "success" | "warning" | "secondary" | "destructive" }
+> = {
+  registered: { label: "New", variant: "success" },
+  deduplicated: { label: "Duplicate", variant: "warning" },
+  disclosed: { label: "Discloses", variant: "secondary" },
+  merge_candidate: { label: "Merge?", variant: "warning" },
+  conflict: { label: "Conflict", variant: "destructive" },
+};
+
+function OutcomeBadge({ outcome }: { outcome: PreviewRegistrationItemResponse | undefined }) {
+  const spec = outcome?.action ? OUTCOME_LABELS[outcome.action] : undefined;
+  if (!spec) {
+    return (
+      <Badge variant="outline" title={outcome?.error ?? undefined}>
+        Unknown
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant={spec.variant} title={outcome?.conflict_reason ?? undefined}>
+      {spec.label}
+    </Badge>
+  );
 }
 
 function SummaryStat({
