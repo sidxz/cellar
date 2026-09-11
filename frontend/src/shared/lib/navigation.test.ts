@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeHref, navigation } from "./navigation";
+import { activeHref, activeNavItem, navigation } from "./navigation";
 
 describe("activeHref — longest whole-segment prefix wins", () => {
   it("a section root stays active on its own sub-routes only", () => {
@@ -19,5 +19,13 @@ describe("activeHref — longest whole-segment prefix wins", () => {
   it("prefix matching respects segment boundaries and unknown paths match nothing", () => {
     expect(activeHref(navigation, "/inventoryx")).toBeNull();
     expect(activeHref(navigation, "/nowhere")).toBeNull();
+  });
+});
+
+describe("activeNavItem", () => {
+  it("child inherits the parent's iconClass", () => {
+    const item = activeNavItem(navigation, "/admin/custom-fields");
+    expect(item?.title).toBe("Custom Fields");
+    expect(item?.iconClass).toBe("text-emerald-500");
   });
 });
