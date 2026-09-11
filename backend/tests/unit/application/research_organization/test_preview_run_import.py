@@ -169,7 +169,6 @@ def _make_draft_campaign(workspace_id: uuid.UUID) -> Campaign:
         project_id=uuid.uuid4(),
         name="C1",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
 

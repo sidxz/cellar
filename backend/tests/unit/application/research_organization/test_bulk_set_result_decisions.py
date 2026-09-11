@@ -29,7 +29,6 @@ def _draft_campaign_with_results(workspace_id: uuid.UUID, n: int) -> tuple[Campa
         project_id=uuid.uuid4(),
         name="Bulk decision test",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
     results = []

@@ -17,12 +17,11 @@ from cellar.application.research_organization.channel_resolution import (
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
-    HitCall,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.shared.hit_criterion import InterceptKey
 
 
 class _FakeQuery:
@@ -36,7 +35,6 @@ class _FakeQuery:
 def _channel(
     rule: SelectionRule,
     *,
-    threshold: HitCriterion | None = None,
     qc: dict | None = None,
     qualifier_handling: QualifierHandling | None = None,
     intercept_key: InterceptKey | None = None,
@@ -51,7 +49,6 @@ def _channel(
         qualifier_handling=qualifier_handling or QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
         qc_filter=qc,
-        hit_threshold=threshold,
         intercept_key=intercept_key,
     )
 
@@ -143,24 +140,6 @@ async def test_no_candidates_yields_nd():
     )
     assert m.value is None
     assert m.value_qualifier == ValueQualifier.ND
-    assert m.hit_call is None
-
-
-@pytest.mark.asyncio
-async def test_hit_threshold_computes_hit():
-    ch = _channel(
-        SelectionRule.LATEST_APPROVED_RUN,
-        threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
-    )
-    candidates = [_candidate(42.0, run_date=date(2026, 5, 1))]
-    resolver = ChannelResolver(_FakeQuery(candidates))
-    m = await resolver.resolve(
-        workspace_id=uuid.uuid4(),
-        channel=ch,
-        result_id=uuid.uuid4(),
-        molecule_id=uuid.uuid4(),
-    )
-    assert m.hit_call == HitCall.HIT
 
 
 @pytest.mark.asyncio
@@ -181,13 +160,12 @@ async def test_qc_filter_drops_low_z_prime():
 
 
 @pytest.mark.asyncio
-async def test_intercept_key_resolves_secondary_intercept_for_hit_call():
+async def test_intercept_key_resolves_secondary_intercept_value():
     """A channel that surfaces EC90 yields EC90's value as the cell value,
-    and the threshold (`< 50`) compares against EC90 (80) → MISS."""
+    not the curve's primary (EC50) value."""
     ch = _channel(
         SelectionRule.LATEST_APPROVED_RUN,
         intercept_key=InterceptKey(kind="ec", level=90.0),
-        threshold=HitCriterion(readout_name="Resazurin", operator="lt", value=50.0),
     )
     candidates = [
         _candidate(
@@ -203,17 +181,13 @@ async def test_intercept_key_resolves_secondary_intercept_for_hit_call():
         result_id=uuid.uuid4(),
         molecule_id=uuid.uuid4(),
     )
-    assert m.hit_call == HitCall.MISS
     assert m.value == 80.0  # the channel IS for EC90 — its value IS EC90
 
 
 @pytest.mark.asyncio
 async def test_intercept_key_none_keeps_legacy_primary_behavior():
     """No channel-level intercept_key → cell value is the primary fitted value."""
-    ch = _channel(
-        SelectionRule.LATEST_APPROVED_RUN,
-        threshold=HitCriterion(readout_name="Resazurin", operator="lt", value=50.0),
-    )
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
     candidates = [
         _candidate(
             2.0,
@@ -229,16 +203,14 @@ async def test_intercept_key_none_keeps_legacy_primary_behavior():
         molecule_id=uuid.uuid4(),
     )
     assert m.value == 2.0
-    assert m.hit_call == HitCall.HIT
 
 
 @pytest.mark.asyncio
-async def test_intercept_key_missing_match_yields_no_hit_call():
-    """Channel targets EC90 but the curve only has EC50 → cell value None, hit_call None."""
+async def test_intercept_key_missing_match_yields_no_value():
+    """Channel targets EC90 but the curve only has EC50 → cell value None."""
     ch = _channel(
         SelectionRule.LATEST_APPROVED_RUN,
         intercept_key=InterceptKey(kind="ec", level=90.0),
-        threshold=HitCriterion(readout_name="Resazurin", operator="lt", value=50.0),
     )
     candidates = [
         _candidate(
@@ -255,7 +227,6 @@ async def test_intercept_key_missing_match_yields_no_hit_call():
         molecule_id=uuid.uuid4(),
     )
     assert m.value is None
-    assert m.hit_call is None
 
 
 @pytest.mark.asyncio
@@ -264,9 +235,8 @@ async def test_intercept_key_aggregates_under_mean_selection():
     ch = _channel(
         SelectionRule.MEAN_ACROSS_RUNS,
         intercept_key=InterceptKey(kind="ec", level=90.0),
-        threshold=HitCriterion(readout_name="Resazurin", operator="lt", value=50.0),
     )
-    # EC90 values 80 and 100 average to 90 → MISS under lt 50.
+    # EC90 values 80 and 100 average to 90.
     candidates = [
         _candidate(2.0, intercept_values=[_iv("ec", 50.0, 2.0), _iv("ec", 90.0, 80.0)]),
         _candidate(4.0, intercept_values=[_iv("ec", 50.0, 4.0), _iv("ec", 90.0, 100.0)]),
@@ -279,7 +249,6 @@ async def test_intercept_key_aggregates_under_mean_selection():
         molecule_id=uuid.uuid4(),
     )
     assert m.value == 90.0  # mean of the EC90 values
-    assert m.hit_call == HitCall.MISS
 
 
 @pytest.mark.asyncio
@@ -487,7 +456,6 @@ async def test_latest_approved_run_inactive_pick_emits_nd():
     )
     assert m.value is None
     assert m.value_qualifier == ValueQualifier.ND
-    assert m.hit_call is None
 
 
 @pytest.mark.asyncio

@@ -5,10 +5,10 @@
  *
  * Reuses the same V2 sections as the draft builder (HeaderStrip,
  * SourcesSection, ChannelsSection, CampaignFilterBar, CampaignToolbar,
- * ResultsGridV2) with `readOnly={true}`. The closed-only details
- * (source protocols, published collection) are surfaced as a small
- * cards row below the channels section. The supersede dialog is
- * preserved and triggered from the HeaderStrip Supersede action.
+ * ResultsGridV2) with `readOnly={true}`. The closed-only detail
+ * (source protocols) is surfaced as a small card below the channels
+ * section. The supersede dialog is preserved and triggered from the
+ * HeaderStrip Supersede action.
  */
 
 import { useAuthzHasRole } from "@duar-auth/nextjs";
@@ -18,7 +18,7 @@ import { TagTable } from "@/features/tagging/components/tag-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
 import { ResultsGridV2 } from "../grid/results-grid";
-import { PublishedCollectionLink } from "./published-collection-link";
+import { ReopenDialog } from "./reopen-dialog";
 import { SourceProtocolsList } from "./source-protocols-list";
 import { SupersedeDialog } from "./supersede-dialog";
 
@@ -30,11 +30,12 @@ import {
 import { ChannelsSection } from "../sections/channels-section";
 import { HeaderStrip } from "../sections/header-strip";
 import { SourcesSection } from "../sections/sources-section";
+import { StagesSection } from "../sections/stages-section";
 
 import { useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet } from "@/shared/lib/api/campaigns/campaigns";
 import { saveText } from "@/shared/lib/api/download";
 
-import type { CampaignResponse } from "../../types";
+import type { CampaignResponse, StageOutcome } from "../../types";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -46,8 +47,26 @@ interface CampaignViewProps {
 
 export function CampaignView({ campaign }: CampaignViewProps) {
   const [supersedeOpen, setSupersedeOpen] = useState(false);
+  const [reopenOpen, setReopenOpen] = useState(false);
   const canEditTags = useAuthzHasRole("editor");
   const [filters, setFilters] = useState<CampaignFilters>(() => closedCampaignFilters());
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  // Closed campaigns are read-only, but a superseding refresh can still
+  // drop a stage out from under the current selection — derive back to
+  // "All" the moment that happens rather than pointing at a stale id.
+  const effectiveStageId = campaign.stages.some((s) => s.id === selectedStageId)
+    ? selectedStageId
+    : null;
+
+  // Same lens as the draft builder: a stage tab pre-selects its population
+  // (hit + miss + untested); "All" clears the outcome chips.
+  function selectStage(id: string | null) {
+    setSelectedStageId(id);
+    setFilters((f) => ({
+      ...f,
+      stageOutcomes: new Set<StageOutcome>(id ? ["hit", "miss", "untested"] : []),
+    }));
+  }
 
   // Published endpoint — fetched lazily on download click.
   const { refetch: fetchPublished, isFetching: isDownloading } =
@@ -69,10 +88,8 @@ export function CampaignView({ campaign }: CampaignViewProps) {
   const supersedesId = campaign.supersedes_campaign_id as string | undefined | null;
   const closedAt = campaign.closed_at as string | undefined | null;
   const closedBy = campaign.closed_by as string | undefined | null;
-  const signatureId = campaign.signature_id as string | undefined | null;
 
   const sourceProtocols = (campaign.source_protocols as Array<Record<string, unknown>>) ?? [];
-  const publishedCollectionId = campaign.published_collection_id as string | undefined | null;
 
   return (
     <div className="flex flex-col">
@@ -82,10 +99,9 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         refreshing={false}
         onRefresh={() => {}}
         onPreview={() => {}}
-        onCloseAndSign={() => {}}
+        onClose={() => {}}
         closedAt={closedAt}
         closedBy={closedBy}
-        signatureId={signatureId}
         supersedesId={supersedesId}
         supersededBy={supersededBy}
         projectId={campaign.project_id}
@@ -93,12 +109,19 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         downloadDisabled={isDownloading}
         downloadLabel={isDownloading ? "Downloading…" : undefined}
         onSupersede={campaign.status !== "superseded" ? () => setSupersedeOpen(true) : undefined}
+        onReopen={() => setReopenOpen(true)}
       />
       <SourcesSection campaign={campaign} projectId={campaign.project_id} readOnly />
       <ChannelsSection campaign={campaign} projectId={campaign.project_id} readOnly />
+      <StagesSection
+        campaign={campaign}
+        selectedStageId={effectiveStageId}
+        onSelectStage={selectStage}
+        readOnly
+      />
 
-      {/* Closed-campaign-only details row */}
-      <section className="grid grid-cols-1 gap-4 border-b px-6 py-4 md:grid-cols-2">
+      {/* Closed-campaign-only detail */}
+      <section className="border-b px-6 py-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Source protocols</CardTitle>
@@ -107,30 +130,28 @@ export function CampaignView({ campaign }: CampaignViewProps) {
             <SourceProtocolsList protocols={sourceProtocols} />
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Published collection</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PublishedCollectionLink id={publishedCollectionId} />
-          </CardContent>
-        </Card>
       </section>
 
       <CampaignFilterBar
         campaign={campaign}
         filters={filters}
         onChange={setFilters}
+        selectedStageId={effectiveStageId}
         resultCount={campaign.results?.length ?? 0}
       />
-      <ResultsGridV2 campaign={campaign} filters={filters} readOnly />
+      <ResultsGridV2
+        campaign={campaign}
+        filters={filters}
+        selectedStageId={effectiveStageId}
+        readOnly
+      />
 
       <section className="border-t px-6 py-4">
         <TagTable entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />
       </section>
 
       <SupersedeDialog open={supersedeOpen} onOpenChange={setSupersedeOpen} campaign={campaign} />
+      <ReopenDialog campaign={campaign} open={reopenOpen} onOpenChange={setReopenOpen} />
     </div>
   );
 }

@@ -320,6 +320,9 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.campaigns_results import (
         router as campaign_results_router,
     )
+    from cellar.interface.routes.campaigns_stages import (
+        router as campaign_stages_router,
+    )
     from cellar.interface.routes.collection_import_previews import (
         router as collection_import_previews_router,
     )
@@ -339,6 +342,7 @@ def create_app() -> FastAPI:
     app.include_router(saved_search_router)
     app.include_router(campaign_router)
     app.include_router(campaign_channels_router)
+    app.include_router(campaign_stages_router)
     app.include_router(campaign_results_router)
     app.include_router(campaign_publishing_router)
 

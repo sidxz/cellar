@@ -11,6 +11,7 @@ from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.research_organization.add_campaign_channel import AddCampaignChannel
+from cellar.application.research_organization.add_campaign_stage import AddCampaignStage
 from cellar.application.research_organization.add_result_row import AddResultRow
 from cellar.application.research_organization.add_results_from_campaign import (
     AddResultsFromCampaign as AddResultsFromCampaignUC,
@@ -92,8 +93,11 @@ from cellar.application.research_organization.refresh_campaign_from_sources impo
     RefreshFromSources,
 )
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
+from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
+from cellar.application.research_organization.reopen_campaign import ReopenCampaign
 from cellar.application.research_organization.set_result_decision import SetResultDecision
+from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaign as SupersedeCampaignUC,
 )
@@ -101,6 +105,7 @@ from cellar.application.research_organization.update_campaign_channel import Upd
 from cellar.application.research_organization.update_campaign_metadata import (
     UpdateCampaignMetadata,
 )
+from cellar.application.research_organization.update_campaign_stage import UpdateCampaignStage
 from cellar.application.research_organization.update_collection import UpdateCollection
 from cellar.application.research_organization.update_project import UpdateProject
 from cellar.application.research_organization.update_saved_search import UpdateSavedSearch
@@ -481,7 +486,6 @@ def register_research_organization(container: Container) -> None:
         return AddCampaignChannel(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            protocol_repo=SQLAlchemyProtocolRepository(uow),
             resolver=c[ChannelResolver],
             dispatcher=c[EventDispatcher],
         )
@@ -498,6 +502,38 @@ def register_research_organization(container: Container) -> None:
     def _remove_channel(c: Container) -> RemoveCampaignChannel:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return RemoveCampaignChannel(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _add_stage(c: Container) -> AddCampaignStage:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddCampaignStage(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _update_stage(c: Container) -> UpdateCampaignStage:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateCampaignStage(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _remove_stage(c: Container) -> RemoveCampaignStage:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemoveCampaignStage(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _set_stage_override(c: Container) -> SetStageOverride:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetStageOverride(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
             dispatcher=c[EventDispatcher],
@@ -585,9 +621,16 @@ def register_research_organization(container: Container) -> None:
         return CloseCampaign(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            collection_repo=SQLAlchemyCollectionRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _reopen_campaign(c: Container) -> ReopenCampaign:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ReopenCampaign(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
             dispatcher=c[EventDispatcher],
         )
 
@@ -606,7 +649,6 @@ def register_research_organization(container: Container) -> None:
             campaign_repo=SQLAlchemyCampaignRepository(uow),
             project_repo=SQLAlchemyProjectRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
-            collection_repo=SQLAlchemyCollectionRepository(uow),
             molecule_repo=SQLAlchemyMoleculeRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
         )
@@ -635,6 +677,10 @@ def register_research_organization(container: Container) -> None:
     container.define(AddCampaignChannel, _add_channel)
     container.define(UpdateCampaignChannel, _update_channel)
     container.define(RemoveCampaignChannel, _remove_channel)
+    container.define(AddCampaignStage, _add_stage)
+    container.define(UpdateCampaignStage, _update_stage)
+    container.define(RemoveCampaignStage, _remove_stage)
+    container.define(SetStageOverride, _set_stage_override)
     container.define(MirrorProtocolChannels, _mirror_protocol_channels)
     container.define(SetResultDecision, _set_decision)
     container.define(BulkSetResultDecisions, _bulk_set_decisions)
@@ -645,6 +691,7 @@ def register_research_organization(container: Container) -> None:
     container.define(UpdateCampaignMetadata, _update_campaign_metadata)
     container.define(RefreshFromSources, _refresh)
     container.define(CloseCampaign, _close_campaign)
+    container.define(ReopenCampaign, _reopen_campaign)
     container.define(SupersedeCampaignUC, _supersede)
     container.define(GetPublishedCampaign, _get_published)
     container.define(CampaignScientistReader, _campaign_scientist_reader)

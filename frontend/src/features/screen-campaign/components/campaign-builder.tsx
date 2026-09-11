@@ -26,10 +26,10 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
 import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
 import { campaignKeys, useCampaign } from "../hooks/use-campaigns";
-import type { CampaignResponse } from "../types";
+import type { CampaignResponse, StageOutcome } from "../types";
 import { CampaignFilterBar, type CampaignFilters, emptyFilters } from "./campaign-filter-bar";
 import { CampaignView } from "./campaign-view";
-import { CloseSignDialog } from "./close-sign-dialog";
+import { CloseCampaignDialog } from "./close-campaign-dialog";
 import { ResultsGridV2 } from "./grid/results-grid";
 import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
 
@@ -38,6 +38,7 @@ import { ChannelsSection } from "./sections/channels-section";
 // ── V2 section imports ────────────────────────────────────────────────────────
 import { HeaderStrip } from "./sections/header-strip";
 import { SourcesSection } from "./sections/sources-section";
+import { StagesSection } from "./sections/stages-section";
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
@@ -110,7 +111,25 @@ function CampaignBuilderV2({
 
   const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [closeSignOpen, setCloseSignOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  // The selection can point at a stage that was just deleted (its popover's
+  // own delete flow only closes itself, it doesn't know about this state) —
+  // derive back to "All" the moment the campaign refetch confirms it's gone.
+  const effectiveStageId = campaign.stages.some((s) => s.id === selectedStageId)
+    ? selectedStageId
+    : null;
+
+  // Picking a stage tab lenses the grid onto that stage's population
+  // (hit + miss + untested) and hides the rows gated out of it; "All"
+  // clears the outcome chips again.
+  function selectStage(id: string | null) {
+    setSelectedStageId(id);
+    setFilters((f) => ({
+      ...f,
+      stageOutcomes: new Set<StageOutcome>(id ? ["hit", "miss", "untested"] : []),
+    }));
+  }
 
   const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
     mutation: {
@@ -130,7 +149,7 @@ function CampaignBuilderV2({
         refreshing={refreshing}
         onRefresh={onRefresh}
         onPreview={() => setPreviewOpen(true)}
-        onCloseAndSign={() => setCloseSignOpen(true)}
+        onClose={() => setCloseOpen(true)}
       />
       <SourcesSection
         campaign={campaign}
@@ -142,18 +161,31 @@ function CampaignBuilderV2({
         projectId={projectId}
         readOnly={campaign.status !== "draft"}
       />
+      <StagesSection
+        campaign={campaign}
+        selectedStageId={effectiveStageId}
+        onSelectStage={selectStage}
+        readOnly={campaign.status !== "draft"}
+      />
       <CampaignFilterBar
         campaign={campaign}
         filters={filters}
         onChange={setFilters}
+        selectedStageId={effectiveStageId}
         resultCount={campaign.results?.length ?? 0}
       />
       <CampaignToolbar
         campaign={campaign}
         filters={filters}
+        selectedStageId={effectiveStageId}
         readOnly={campaign.status !== "draft"}
       />
-      <ResultsGridV2 campaign={campaign} filters={filters} readOnly={campaign.status !== "draft"} />
+      <ResultsGridV2
+        campaign={campaign}
+        filters={filters}
+        selectedStageId={effectiveStageId}
+        readOnly={campaign.status !== "draft"}
+      />
 
       <section className="border-t px-6 py-4">
         <TagTable entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />
@@ -165,7 +197,7 @@ function CampaignBuilderV2({
         open={previewOpen}
         onOpenChange={setPreviewOpen}
       />
-      <CloseSignDialog campaign={campaign} open={closeSignOpen} onOpenChange={setCloseSignOpen} />
+      <CloseCampaignDialog campaign={campaign} open={closeOpen} onOpenChange={setCloseOpen} />
     </div>
   );
 }

@@ -27,7 +27,6 @@ from cellar.application.research_organization.set_result_decision import (
 )
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
-    HitCall,
     ValueQualifier,
 )
 from cellar.interface.dependencies import (
@@ -130,7 +129,6 @@ async def override_result_cell(
         value=body.value,
         value_qualifier=ValueQualifier(body.value_qualifier),
         unit=body.unit,
-        hit_call=HitCall(body.hit_call) if body.hit_call is not None else None,
         reason=body.reason,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))

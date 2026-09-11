@@ -33,6 +33,22 @@ interface PreviewAsPublishedDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+interface PublishedStageShape {
+  id: string;
+  name: string;
+  parent_stage_id: string | null;
+  display_order: number;
+  criteria: unknown[];
+  counts: {
+    population: number;
+    hit: number;
+    miss: number;
+    untested: number;
+    not_in_stage: number;
+    overridden: number;
+  };
+}
+
 interface PublishedShape {
   campaign: {
     name: string;
@@ -41,6 +57,7 @@ interface PublishedShape {
     closed_at?: string | null;
   };
   channels: { id: string; label: string }[];
+  stages: PublishedStageShape[];
   results: {
     molecule: { registration_number: string | null; name: string | null };
     decision: string;
@@ -48,11 +65,9 @@ interface PublishedShape {
       channel_id: string;
       value: number | null;
       unit: string;
-      hit_call: string | null;
     }[];
   }[];
   source_protocols: { name?: string; version?: number | null }[];
-  published_collection: { name: string; size: number } | null;
 }
 
 export function PreviewAsPublishedDialog({
@@ -145,18 +160,47 @@ export function PreviewAsPublishedDialog({
                 </div>
               </section>
 
-              {/* Published collection */}
-              {doc.published_collection && (
+              {/* Stages */}
+              {doc.stages.length > 0 && (
                 <section className="space-y-1">
                   <div className="text-xs uppercase text-muted-foreground">
-                    Published collection
+                    Stages ({doc.stages.length})
                   </div>
-                  <span className="text-sm">
-                    {doc.published_collection.name}{" "}
-                    <span className="text-muted-foreground">
-                      ({doc.published_collection.size} molecules)
-                    </span>
-                  </span>
+                  <div className="rounded border">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left p-2">Stage</th>
+                          <th className="text-left p-2">After</th>
+                          <th className="text-left p-2">Criteria</th>
+                          <th className="text-left p-2">Hit</th>
+                          <th className="text-left p-2">Miss</th>
+                          <th className="text-left p-2">Untested</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {(() => {
+                          const stageNameById = new Map(doc.stages.map((s) => [s.id, s.name]));
+                          return [...doc.stages]
+                            .sort((a, b) => a.display_order - b.display_order)
+                            .map((s) => (
+                              <tr key={s.id}>
+                                <td className="p-2 font-medium">{s.name}</td>
+                                <td className="p-2 text-muted-foreground">
+                                  {s.parent_stage_id
+                                    ? (stageNameById.get(s.parent_stage_id) ?? "—")
+                                    : "—"}
+                                </td>
+                                <td className="p-2">{s.criteria.length}</td>
+                                <td className="p-2">{s.counts.hit}</td>
+                                <td className="p-2">{s.counts.miss}</td>
+                                <td className="p-2">{s.counts.untested}</td>
+                              </tr>
+                            ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
                 </section>
               )}
 
@@ -204,11 +248,6 @@ export function PreviewAsPublishedDialog({
                             return (
                               <td key={c.id} className="p-2">
                                 {formatMeasurementValue(m.value)} {m.unit !== "-" ? m.unit : ""}
-                                {m.hit_call === "hit" && (
-                                  <Badge className="ml-1 bg-orange-100 text-orange-800 text-[9px] px-1 py-0">
-                                    HIT
-                                  </Badge>
-                                )}
                               </td>
                             );
                           })}

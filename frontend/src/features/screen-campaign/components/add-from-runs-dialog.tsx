@@ -55,6 +55,7 @@ import {
 import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { formatDate } from "@/shared/lib/format-date";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
+import { showSuccess } from "@/shared/lib/toast";
 
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
@@ -131,6 +132,10 @@ function channelConfigKey(readoutDefId: string, interceptKey: InterceptKey | nul
 interface AddFromRunsDialogProps {
   campaignId: string;
   projectId: string;
+  /** Existing stage names on this campaign — used to default the "Save as
+   *  hit stage" checkbox off (and to block Add) when the auto-derived
+   *  `<Protocol> hits` name would collide (case-insensitive). */
+  existingStageNames: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -140,6 +145,7 @@ interface AddFromRunsDialogProps {
 export function AddFromRunsDialog({
   campaignId,
   projectId,
+  existingStageNames,
   open,
   onOpenChange,
 }: AddFromRunsDialogProps) {
@@ -164,6 +170,13 @@ export function AddFromRunsDialog({
   );
   const [refreshExisting, setRefreshExisting] = useState(false);
   const [approvedOnly, setApprovedOnly] = useState(true);
+  // "Save these criteria as a hit stage" — shown once any channel config has
+  // a threshold. Name + default checked-state derive per-protocol (see
+  // onProtocolChange below, which also guards against colliding with an
+  // existing stage name); inert here since the checkbox isn't shown until a
+  // protocol is chosen.
+  const [saveStage, setSaveStage] = useState(false);
+  const [stageName, setStageName] = useState("Imported hits");
 
   // — Data —
   const { data: protocolsData } = useProtocolSummaries([projectId]);
@@ -283,8 +296,14 @@ export function AddFromRunsDialog({
   const previewMutation = usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost();
   const addMutation = useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data) => {
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+        // Built from the backend's actual outcome, not from the checkbox
+        // intent — the backend only creates a stage when >=1 config both
+        // opts into filtering and has a threshold (see stage_name payload
+        // gating below), so intent alone can overclaim.
+        const stageNote = data.stage_created ? ` and created stage "${stageName.trim()}"` : "";
+        showSuccess(`Added ${data.added} compound${data.added === 1 ? "" : "s"}${stageNote}`);
         handleClose();
       },
     },
@@ -387,10 +406,23 @@ export function AddFromRunsDialog({
     setDefaultDecision("selected");
     setRefreshExisting(false);
     setApprovedOnly(true);
+    setSaveStage(false);
+    setStageName("Imported hits");
     onOpenChange(false);
   }
 
   const canGoToPreview = selectedRunIds.size > 0 && channelConfigs.length > 0;
+  // Gates both the "Save as hit stage" checkbox/name-input visibility and
+  // whether stage_name is sent at all (see buildPayload's caller below) —
+  // the backend only creates a stage from configs that both opt into
+  // filtering and carry a threshold.
+  const hasThreshold = channelConfigs.some((c) => c.hit_operator !== "");
+  const trimmedStageName = stageName.trim();
+  const stageNameCollides =
+    hasThreshold &&
+    saveStage &&
+    trimmedStageName !== "" &&
+    existingStageNames.some((n) => n.toLowerCase() === trimmedStageName.toLowerCase());
 
   // — Debounced preview refresh —
   const [previewData, setPreviewData] = useState<{
@@ -458,6 +490,16 @@ export function AddFromRunsDialog({
               setProtocolId(id);
               runSelection.clear();
               setUserEditedConfigs(new Map());
+              const proto = protocols.find((pr) => pr.id === id);
+              const defaultName = proto ? `${proto.name} hits` : "Imported hits";
+              setStageName(defaultName);
+              // Off by default when the auto-derived name already exists on
+              // this campaign — a repeat import of the same protocol would
+              // otherwise submit a duplicate stage_name and 422 the whole
+              // request (spec: stage names are unique per campaign).
+              setSaveStage(
+                !existingStageNames.some((n) => n.toLowerCase() === defaultName.toLowerCase()),
+              );
             }}
             runs={filteredRuns}
             selectedRunIds={selectedRunIds}
@@ -487,6 +529,12 @@ export function AddFromRunsDialog({
             onDefaultDecisionChange={setDefaultDecision}
             refreshExisting={refreshExisting}
             onRefreshExistingChange={setRefreshExisting}
+            hasThreshold={hasThreshold}
+            saveStage={saveStage}
+            onSaveStageChange={setSaveStage}
+            stageNameCollides={stageNameCollides}
+            stageName={stageName}
+            onStageNameChange={setStageName}
           />
         ) : (
           <PreviewStep data={previewData} isLoading={previewMutation.isPending && !previewData} />
@@ -502,7 +550,7 @@ export function AddFromRunsDialog({
             </Button>
           ) : (
             <Button
-              disabled={!previewData || addMutation.isPending}
+              disabled={!previewData || addMutation.isPending || stageNameCollides}
               onClick={() => {
                 const payload = buildPayload();
                 addMutation.mutate({
@@ -512,6 +560,7 @@ export function AddFromRunsDialog({
                     scope,
                     default_decision: defaultDecision,
                     refresh_existing_cells: refreshExisting,
+                    stage_name: hasThreshold && saveStage ? trimmedStageName : null,
                   } as never,
                 });
               }}
@@ -564,6 +613,16 @@ interface ConfigureStepProps {
   onDefaultDecisionChange: (v: "selected" | "deferred" | "rejected") => void;
   refreshExisting: boolean;
   onRefreshExistingChange: (v: boolean) => void;
+  /** Whether at least one channel config has a threshold — gates the
+   *  "Save as hit stage" checkbox below. */
+  hasThreshold: boolean;
+  saveStage: boolean;
+  onSaveStageChange: (v: boolean) => void;
+  /** True when the typed stage name collides (case-insensitive) with an
+   *  existing stage on this campaign — shows an inline hint and blocks Add. */
+  stageNameCollides: boolean;
+  stageName: string;
+  onStageNameChange: (v: string) => void;
 }
 
 function ConfigureStep(p: ConfigureStepProps) {
@@ -915,6 +974,37 @@ function ConfigureStep(p: ConfigureStepProps) {
               <Switch checked={p.refreshExisting} onCheckedChange={p.onRefreshExistingChange} />
               Refresh non-override cells for molecules already in this campaign
             </label>
+
+            {p.hasThreshold && (
+              <div className="space-y-2 border-t pt-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="save-stage"
+                    checked={p.saveStage}
+                    onCheckedChange={(v) => p.onSaveStageChange(v === true)}
+                  />
+                  <Label htmlFor="save-stage" className="text-xs cursor-pointer">
+                    Save these criteria as a hit stage
+                  </Label>
+                </div>
+                {p.saveStage && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Stage name</Label>
+                    <Input
+                      value={p.stageName}
+                      onChange={(e) => p.onStageNameChange(e.target.value)}
+                      placeholder="e.g. Screening hits"
+                      className="h-8 text-sm"
+                    />
+                    {p.stageNameCollides && (
+                      <p className="text-xs text-destructive">
+                        A stage named "{p.stageName.trim()}" already exists on this campaign.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}

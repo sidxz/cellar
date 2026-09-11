@@ -21,11 +21,14 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import (
+    CampaignStage,
+    StageCriterion,
+)
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
-    HitCall,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
@@ -86,7 +89,6 @@ def _make_measurement(
         unit=unit,
         protocol_name_snapshot="EGFR Binding Assay",
         protocol_version_snapshot=3,
-        hit_call=HitCall.HIT,
         source_run_id=source_run_id or uuid.uuid4(),
         run_date_snapshot=date(2026, 5, 1),
     )
@@ -115,13 +117,11 @@ def _make_fake_protocol(
 def _make_closed_campaign(
     workspace_id: uuid.UUID,
     *,
-    publishes_collection: bool = True,
     n_results: int = 2,
     protocol_id: uuid.UUID | None = None,
     readout_definition_id: uuid.UUID | None = None,
     decisions: list[CampaignDecision] | None = None,
-    published_collection_id: uuid.UUID | None = None,
-    signature_id: uuid.UUID | None = None,
+    close_note: str | None = None,
 ) -> tuple[Campaign, CampaignChannel]:
     """Build a CLOSED campaign with 1 channel and n_results results."""
     pid = protocol_id or uuid.uuid4()
@@ -134,7 +134,6 @@ def _make_closed_campaign(
         name="EGFR Round 2",
         description="Primary screen",
         status=CampaignStatus.CLOSED,
-        publishes_collection=publishes_collection,
         source_protocols=[
             {
                 "id": str(pid),
@@ -146,8 +145,7 @@ def _make_closed_campaign(
         ],
         closed_at=datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc),
         closed_by=uuid.uuid4(),
-        signature_id=signature_id or uuid.uuid4(),
-        published_collection_id=published_collection_id,
+        close_note=close_note,
         created_by=uuid.uuid4(),
     )
 
@@ -188,8 +186,6 @@ def _build_use_case(
     protocol_id: uuid.UUID | None = None,
     readout_definition_id: uuid.UUID | None = None,
     project: AsyncMock | None = None,
-    collection: AsyncMock | None = None,
-    collection_size: int = 12,
     molecule_lookup: dict | None = None,
     batch_lookup: dict | None = None,
 ) -> tuple[GetPublishedCampaign, AsyncMock]:
@@ -204,10 +200,6 @@ def _build_use_case(
         protocol_repo.find_by_ids = AsyncMock(return_value=[proto])
     else:
         protocol_repo.find_by_ids = AsyncMock(return_value=[])
-
-    coll_repo = AsyncMock()
-    coll_repo.find_by_id_in_workspace = AsyncMock(return_value=collection)
-    coll_repo.count_molecules = AsyncMock(return_value=collection_size)
 
     mol_repo = AsyncMock()
     if molecule_lookup is not None:
@@ -235,7 +227,6 @@ def _build_use_case(
         campaign_repo=campaign_repo,
         project_repo=project_repo,
         protocol_repo=protocol_repo,
-        collection_repo=coll_repo,
         molecule_repo=mol_repo,
         batch_repo=batch_repo,
     )
@@ -260,59 +251,44 @@ class TestCursorHelpers:
 
 class TestGetPublishedCampaign:
     # ------------------------------------------------------------------
-    # 1. Happy path: publishes_collection=True
+    # 1. Happy path: doc keys, no signature, no published_collection,
+    #    close_note present.
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_happy_path_publishes_collection_true(self) -> None:
+    async def test_happy_path_doc_keys_and_close_note(self) -> None:
         auth = fake_auth()
         pid = uuid.uuid4()
         rdid = uuid.uuid4()
-        coll_id = uuid.uuid4()
 
         campaign, ch = _make_closed_campaign(
             auth.workspace_id,
-            publishes_collection=True,
             n_results=2,
             protocol_id=pid,
             readout_definition_id=rdid,
             decisions=[CampaignDecision.SELECTED, CampaignDecision.REJECTED],
-            published_collection_id=coll_id,
+            close_note="Confirmed by wet lab",
         )
-        sig_id = campaign.signature_id
 
-        fake_coll = AsyncMock()
-        fake_coll.id = coll_id
-        fake_coll.name = "Hits — EGFR Round 2"
-
-        uc, _ = _build_use_case(
-            campaign,
-            protocol_id=pid,
-            readout_definition_id=rdid,
-            collection=fake_coll,
-            collection_size=12,
-        )
+        uc, _ = _build_use_case(campaign, protocol_id=pid, readout_definition_id=rdid)
         q = _make_query(auth.workspace_id, campaign.id)
         out = await uc(q, auth=auth)
 
         assert isinstance(out, Success)
         doc = out.unwrap()
 
-        # Top-level keys present.
-        for key in ("campaign", "compound_sources", "source_protocols", "channels", "results", "published_collection"):
+        # Top-level keys present. No published_collection — soft close
+        # publishes nothing (spec §4/§5).
+        for key in ("campaign", "compound_sources", "source_protocols", "channels", "results"):
             assert key in doc, f"missing key: {key}"
+        assert "published_collection" not in doc
 
-        # Campaign header.
+        # Campaign header — no signature, has close_note.
         assert doc["campaign"]["status"] == "closed"
-        assert doc["campaign"]["signature"]["id"] == str(sig_id)
-        assert doc["campaign"]["signature"]["signed_at"] is None  # TODO pending
+        assert "signature" not in doc["campaign"]
+        assert doc["campaign"]["close_note"] == "Confirmed by wet lab"
 
         # Results length.
         assert len(doc["results"]) == 2
-
-        # Published collection present.
-        assert doc["published_collection"] is not None
-        assert doc["published_collection"]["id"] == str(coll_id)
-        assert doc["published_collection"]["size"] == 12
 
         # compound_sources is now a list (plural).
         assert isinstance(doc["compound_sources"], list)
@@ -321,24 +297,19 @@ class TestGetPublishedCampaign:
         assert "pagination" not in doc
 
     # ------------------------------------------------------------------
-    # 2. Happy path: publishes_collection=False → null
+    # 2. close_note=None → null in output
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_happy_path_publishes_collection_false(self) -> None:
+    async def test_close_note_none_emits_null(self) -> None:
         auth = fake_auth()
-        campaign, _ = _make_closed_campaign(
-            auth.workspace_id,
-            publishes_collection=False,
-            published_collection_id=None,
-        )
+        campaign, _ = _make_closed_campaign(auth.workspace_id, close_note=None)
 
         uc, _ = _build_use_case(campaign)
         q = _make_query(auth.workspace_id, campaign.id)
         out = await uc(q, auth=auth)
 
         assert isinstance(out, Success)
-        doc = out.unwrap()
-        assert doc["published_collection"] is None
+        assert out.unwrap()["campaign"]["close_note"] is None
 
     # ------------------------------------------------------------------
     # 3. compound_sources grouping — collection + manual
@@ -504,7 +475,6 @@ class TestGetPublishedCampaign:
             project_id=uuid.uuid4(),
             name="Draft Campaign",
             status=CampaignStatus.DRAFT,
-            publishes_collection=False,
             created_by=uuid.uuid4(),
         )
         uc, _ = _build_use_case(draft)
@@ -517,26 +487,7 @@ class TestGetPublishedCampaign:
         assert "closed/superseded" in str(err).lower()
 
     # ------------------------------------------------------------------
-    # 9. Signature is None → "signature": null in output
-    # ------------------------------------------------------------------
-    @pytest.mark.asyncio
-    async def test_signature_none_emits_null(self) -> None:
-        auth = fake_auth()
-        campaign, _ = _make_closed_campaign(
-            auth.workspace_id,
-            signature_id=None,  # force no signature
-        )
-        campaign.signature_id = None  # type: ignore[misc]
-
-        uc, _ = _build_use_case(campaign)
-        q = _make_query(auth.workspace_id, campaign.id)
-        out = await uc(q, auth=auth)
-
-        assert isinstance(out, Success)
-        assert out.unwrap()["campaign"]["signature"] is None
-
-    # ------------------------------------------------------------------
-    # 10. Missing protocol in lookup → protocol_ref with nulls (defensive)
+    # 9. Missing protocol in lookup → protocol_ref with nulls (defensive)
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_missing_protocol_emits_null_protocol_ref(self) -> None:
@@ -566,7 +517,7 @@ class TestGetPublishedCampaign:
         assert pref["version"] is None
 
     # ------------------------------------------------------------------
-    # 11. Unauthorized (viewer role) → Failure(AuthorizationError)
+    # 10. Unauthorized (viewer role) → Failure(AuthorizationError)
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_unauthorized_viewer_returns_authorization_failure(self) -> None:
@@ -577,8 +528,9 @@ class TestGetPublishedCampaign:
         q = _make_query(auth.workspace_id, campaign.id)
         with pytest.raises(AuthorizationError):
             await uc(q, auth=auth)
+
     # ------------------------------------------------------------------
-    # 12. Superseded campaign is also publishable
+    # 11. Superseded campaign is also publishable
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_superseded_campaign_is_valid(self) -> None:
@@ -594,7 +546,7 @@ class TestGetPublishedCampaign:
         assert out.unwrap()["campaign"]["status"] == "superseded"
 
     # ------------------------------------------------------------------
-    # 13. Molecule and batch resolution in results
+    # 12. Molecule and batch resolution in results
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_molecule_and_batch_resolved_in_results(self) -> None:
@@ -637,3 +589,108 @@ class TestGetPublishedCampaign:
         assert result["molecule"]["primary_id"] == "CVT-000142"
         assert result["molecule"]["structure_smiles"] == "CCO"
         assert result["representative_batch"]["name"] == "BAT-000171"
+
+    # ------------------------------------------------------------------
+    # 13. Stages: parent/child funnel, per-result outcomes hit/miss/not_in_stage
+    # ------------------------------------------------------------------
+    @pytest.mark.asyncio
+    async def test_stages_and_stage_outcomes(self) -> None:
+        auth = fake_auth()
+        pid = uuid.uuid4()
+        rdid = uuid.uuid4()
+
+        campaign, ch = _make_closed_campaign(
+            auth.workspace_id, n_results=0, protocol_id=pid, readout_definition_id=rdid
+        )
+
+        parent_stage = CampaignStage(
+            campaign_id=campaign.id,
+            name="Screening Hits",
+            display_order=0,
+            criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=100.0)],
+        )
+        child_stage = CampaignStage(
+            campaign_id=campaign.id,
+            name="Confirmed Hits",
+            display_order=1,
+            parent_stage_id=parent_stage.id,
+            criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=10.0)],
+        )
+        campaign.stages.append(parent_stage)
+        campaign.stages.append(child_stage)
+
+        # A: hits both stages (5 < 100 and 5 < 10).
+        result_a = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        result_a.measurements.append(_make_measurement(result_a.id, ch.id, value=5.0))
+        # B: hits parent, misses child (50 < 100 but not < 10).
+        result_b = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        result_b.measurements.append(_make_measurement(result_b.id, ch.id, value=50.0))
+        # C: misses parent -> child is not_in_stage (500 is not < 100).
+        result_c = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        result_c.measurements.append(_make_measurement(result_c.id, ch.id, value=500.0))
+        campaign.results.extend([result_a, result_b, result_c])
+
+        uc, _ = _build_use_case(campaign, protocol_id=pid, readout_definition_id=rdid)
+        q = _make_query(auth.workspace_id, campaign.id)
+        out = await uc(q, auth=auth)
+
+        assert isinstance(out, Success)
+        doc = out.unwrap()
+
+        # --- stages[] with counts, ids as strings ---
+        assert len(doc["stages"]) == 2
+        stages_by_name = {s["name"]: s for s in doc["stages"]}
+        parent_doc = stages_by_name["Screening Hits"]
+        child_doc = stages_by_name["Confirmed Hits"]
+
+        assert parent_doc["id"] == str(parent_stage.id)
+        assert parent_doc["parent_stage_id"] is None
+        assert parent_doc["criteria"] == [
+            {"channel_id": str(ch.id), "operator": "lt", "value": 100.0}
+        ]
+        assert parent_doc["counts"] == {
+            "population": 3,
+            "hit": 2,
+            "miss": 1,
+            "untested": 0,
+            "not_in_stage": 0,
+            "overridden": 0,
+        }
+
+        assert child_doc["parent_stage_id"] == str(parent_stage.id)
+        assert child_doc["counts"] == {
+            "population": 2,
+            "hit": 1,
+            "miss": 1,
+            "untested": 0,
+            "not_in_stage": 1,
+            "overridden": 0,
+        }
+
+        # --- results[].stage_outcomes, ordered like campaign.stages ---
+        results_by_mol = {r["molecule"]["id"]: r for r in doc["results"]}
+        a_outcomes = results_by_mol[str(result_a.molecule_id)]["stage_outcomes"]
+        b_outcomes = results_by_mol[str(result_b.molecule_id)]["stage_outcomes"]
+        c_outcomes = results_by_mol[str(result_c.molecule_id)]["stage_outcomes"]
+
+        assert [o["stage_id"] for o in a_outcomes] == [
+            str(parent_stage.id),
+            str(child_stage.id),
+        ]
+
+        # A: hit on both stages.
+        assert a_outcomes[0]["outcome"] == "hit"
+        assert a_outcomes[1]["outcome"] == "hit"
+        assert a_outcomes[1]["overridden"] is False
+        assert a_outcomes[1]["override_reason"] is None
+        assert a_outcomes[1]["checks"] == [{"channel_id": str(ch.id), "verdict": "pass"}]
+
+        # B: hit on parent, miss on child.
+        assert b_outcomes[0]["outcome"] == "hit"
+        assert b_outcomes[1]["outcome"] == "miss"
+        assert b_outcomes[1]["checks"] == [{"channel_id": str(ch.id), "verdict": "fail"}]
+
+        # C: miss on parent, not_in_stage on child (no checks run).
+        assert c_outcomes[0]["outcome"] == "miss"
+        assert c_outcomes[1]["outcome"] == "not_in_stage"
+        assert c_outcomes[1]["checks"] == []

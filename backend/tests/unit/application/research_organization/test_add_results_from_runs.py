@@ -27,6 +27,10 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import (
+    CampaignStage,
+    StageCriterion,
+)
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
@@ -108,7 +112,6 @@ def _draft_campaign(workspace_id) -> Campaign:
         project_id=uuid.uuid4(),
         name="C",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
 
@@ -315,11 +318,12 @@ class TestAddResultsFromRuns:
         outcome = out.unwrap()
         assert outcome.channels_reused == 1
         assert outcome.channels_created == 0
-        # Original channel still exists (id stable); rule + threshold updated
+        # Original channel still exists (id stable); selection rule updated.
+        # The threshold is import-time filtering only — never persisted to
+        # the channel record.
         assert len(campaign.channels) == 1
         assert campaign.channels[0].id == existing.id
         assert campaign.channels[0].selection_rule == SelectionRule.MEAN_ACROSS_RUNS
-        assert campaign.channels[0].hit_threshold == new_threshold
 
     @pytest.mark.asyncio
     async def test_idempotent_rerun_does_not_duplicate(self) -> None:
@@ -569,3 +573,235 @@ class TestAddResultsFromRuns:
         assert set(
             campaign.results[0].measurements[0].contributing_run_ids
         ) == {r1, r2}
+
+    # ------------------------------------------------------------------
+    # stage_name (Task 12)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_stage_created_with_criteria_bound_to_channels(self) -> None:
+        """stage_name + N filtering configs -> one CampaignStage, N criteria,
+        each bound to the channel its own config resolved to."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto1, readout1, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        proto2, readout2 = uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+        candidates = {
+            (proto1, readout1): {mol: [_candidate(value=42.0, run_id=run_id)]},
+            (proto2, readout2): {mol: [_candidate(value=7.0, run_id=run_id)]},
+        }
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto1,
+                    readout_definition_id=readout1,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="IC50", operator="lt", value=1000.0
+                    ),
+                ),
+                ChannelImportConfig(
+                    protocol_id=proto2,
+                    readout_definition_id=readout2,
+                    label="CC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="CC50", operator="gt", value=5.0
+                    ),
+                ),
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is True
+        assert len(campaign.stages) == 1
+        stage = campaign.stages[0]
+        assert stage.name == "Primary Hits"
+        assert stage.parent_stage_id is None
+        assert len(stage.criteria) == 2
+
+        ic50_channel = next(
+            ch for ch in campaign.channels if ch.readout_definition_id == readout1
+        )
+        cc50_channel = next(
+            ch for ch in campaign.channels if ch.readout_definition_id == readout2
+        )
+        by_channel = {c.channel_id: c for c in stage.criteria}
+        assert by_channel[ic50_channel.id].operator == "lt"
+        assert by_channel[ic50_channel.id].value == 1000.0
+        assert by_channel[cc50_channel.id].operator == "gt"
+        assert by_channel[cc50_channel.id].value == 5.0
+
+    @pytest.mark.asyncio
+    async def test_no_stage_when_no_filter_criteria(self) -> None:
+        """stage_name given but no config has use_for_filter+hit_threshold ->
+        no stage is created; not an error."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    # no hit_threshold -> nothing qualifies for the stage
+                )
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is False
+        assert campaign.stages == []
+
+    @pytest.mark.asyncio
+    async def test_stage_skips_in_operator_configs(self) -> None:
+        """A config whose hit_threshold uses the string-based 'in' operator
+        contributes no StageCriterion (StageCriterion — unlike HitCriterion —
+        doesn't support it, same as the mirror-protocol path); the stage is
+        still built from the remaining numeric config(s)."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto1, readout1, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        proto2, readout2 = uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+        candidates = {
+            (proto1, readout1): {mol: [_candidate(value=42.0, run_id=run_id)]},
+            (proto2, readout2): {mol: [_candidate(value=7.0, run_id=run_id)]},
+        }
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto1,
+                    readout_definition_id=readout1,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
+                ),
+                ChannelImportConfig(
+                    protocol_id=proto2,
+                    readout_definition_id=readout2,
+                    label="Curve Class",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="Curve Class", operator="in", value=["full"]
+                    ),
+                ),
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is True
+        assert len(campaign.stages) == 1
+        stage = campaign.stages[0]
+        assert len(stage.criteria) == 1  # the 'in' config contributed nothing
+        ic50_channel = next(ch for ch in campaign.channels if ch.readout_definition_id == readout1)
+        assert stage.criteria[0].channel_id == ic50_channel.id
+
+    @pytest.mark.asyncio
+    async def test_stage_name_collision_returns_failure(self) -> None:
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+
+        other_channel = CampaignChannel(
+            campaign_id=campaign.id,
+            label="Other",
+            display_order=0,
+            protocol_id=uuid.uuid4(),
+            readout_definition_id=uuid.uuid4(),
+            source_kind=ChannelSourceKind.READOUT_DATA,
+            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        )
+        campaign.channels.append(other_channel)
+        campaign.add_stage(
+            CampaignStage(
+                campaign_id=campaign.id,
+                name="Primary Hits",
+                display_order=0,
+                criteria=[
+                    StageCriterion(channel_id=other_channel.id, operator="lt", value=1.0)
+                ],
+            )
+        )
+
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="IC50", operator="lt", value=1000.0
+                    ),
+                )
+            ],
+            scope="all",
+            stage_name="Primary Hits",  # collides with the pre-existing stage
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Failure)
+        assert isinstance(out.failure(), ValidationError)
+        # The colliding stage attempt must not have appended a duplicate.
+        assert len(campaign.stages) == 1

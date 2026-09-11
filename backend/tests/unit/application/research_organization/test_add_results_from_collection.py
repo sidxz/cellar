@@ -46,7 +46,6 @@ def _make_campaign(auth) -> Campaign:
         project_id=uuid.uuid4(),
         name="Test Campaign",
         description=None,
-        publishes_collection=True,
         created_by=auth.user_id,
     )
 
@@ -210,7 +209,7 @@ class TestAddResultsFromCollection:
         ch = _make_channel(campaign)
         campaign.add_channel(ch)
         campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
-        campaign.close(closed_by=auth.user_id, signature_id=uuid.uuid4(), source_protocols=[])
+        campaign.close(closed_by=auth.user_id, note=None, source_protocols=[])
 
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
         collection_repo = make_collection_repo(in_ws=True, molecule_ids=[uuid.uuid4()])

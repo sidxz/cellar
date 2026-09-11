@@ -1,14 +1,11 @@
 "use client";
 
 /**
- * CloseSignDialog — Task 8.7
+ * CloseCampaignDialog — Task 16 (soft close, spec §4/§5).
  *
- * Confirms client-side: ≥1 result, ≥1 channel.
- * Summary card + toggle for publishesCollection.
- *
- * E-signature step: useReauthenticate() does not exist in this codebase.
- * STUB: user types their name; signatureId = crypto.randomUUID().
- * TODO: replace with real re-authentication hook when available.
+ * Confirms client-side: ≥1 result, ≥1 channel — mirrors the aggregate's own
+ * `close()` guard so the chemist sees why before round-tripping a 422.
+ * Just an optional note; no signature, no publish toggle.
  */
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,7 +15,6 @@ import { useState } from "react";
 
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -27,9 +23,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Separator } from "@/shared/components/ui/separator";
+import { Textarea } from "@/shared/components/ui/textarea";
 
 import { useCloseCampaignApiV1CampaignsCampaignIdClosePost } from "@/shared/lib/api/campaigns/campaigns";
 import { campaignKeys } from "../hooks/use-campaigns";
@@ -37,21 +33,17 @@ import type { CampaignResponse } from "../types";
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-interface CloseSignDialogProps {
+interface CloseCampaignDialogProps {
   campaign: CampaignResponse;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialogProps) {
+export function CloseCampaignDialog({ campaign, open, onOpenChange }: CloseCampaignDialogProps) {
   const router = useRouter();
   const qc = useQueryClient();
 
-  const [publishCollection, setPublishCollection] = useState(campaign.publishes_collection);
-  const [signerName, setSignerName] = useState("");
-  const [sigMeaning, setSigMeaning] = useState(
-    "I certify that this campaign data is accurate and complete.",
-  );
+  const [note, setNote] = useState("");
 
   const closeMutation = useCloseCampaignApiV1CampaignsCampaignIdClosePost({
     mutation: {
@@ -66,7 +58,7 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
 
   const hasResults = campaign.results.length > 0;
   const hasChannels = campaign.channels.length > 0;
-  const canClose = hasResults && hasChannels && signerName.trim().length > 0;
+  const canClose = hasResults && hasChannels;
 
   const decisionCounts = campaign.results.reduce<Record<string, number>>((acc, r) => {
     acc[r.decision] = (acc[r.decision] ?? 0) + 1;
@@ -75,21 +67,9 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
 
   const handleClose = () => {
     if (!canClose) return;
-
-    // STUB: useReauthenticate() is not available — generate a random signatureId.
-    // TODO: replace with actual re-auth hook once implemented.
-    const signatureId = crypto.randomUUID();
-
     closeMutation.mutate({
       campaignId: campaign.id,
-      data: {
-        signature_id: signatureId,
-        signature_meaning: sigMeaning,
-        // Override the campaign's stored value at sign time — chemists pick
-        // this fresh on close instead of trying to remember the create-time
-        // toggle.
-        publishes_collection: publishCollection,
-      },
+      data: { note: note.trim() || null },
     });
   };
 
@@ -99,11 +79,10 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="h-5 w-5" />
-            Close &amp; Sign Campaign
+            Close campaign
           </DialogTitle>
           <DialogDescription>
-            This action is irreversible. The campaign will be locked and a frozen Collection will be
-            published if enabled.
+            Closing makes the campaign read-only. You can reopen it later with a reason.
           </DialogDescription>
         </DialogHeader>
 
@@ -148,45 +127,16 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
           )}
         </div>
 
-        {/* Publish collection toggle */}
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="publish-collection-close"
-            checked={publishCollection}
-            onCheckedChange={(v) => setPublishCollection(v === true)}
+        {/* Optional note */}
+        <div className="space-y-1">
+          <Label htmlFor="close-note">Note (optional)</Label>
+          <Textarea
+            id="close-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Optional context for whoever reopens or reviews this campaign…"
+            rows={3}
           />
-          <Label htmlFor="publish-collection-close" className="cursor-pointer">
-            Publish frozen Collection on close
-          </Label>
-        </div>
-
-        {/* E-signature step (stub) */}
-        <div className="space-y-2 rounded border p-3">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            Electronic Signature
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {/* TODO: replace with useReauthenticate() when available */}
-            Type your full name to sign. A unique signature ID is generated client-side as a stub —
-            integrate with the re-authentication service in a follow-up.
-          </p>
-          <div className="space-y-1">
-            <Label htmlFor="signer-name">Full name</Label>
-            <Input
-              id="signer-name"
-              value={signerName}
-              onChange={(e) => setSignerName(e.target.value)}
-              placeholder="Your full name"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="sig-meaning">Signature meaning</Label>
-            <Input
-              id="sig-meaning"
-              value={sigMeaning}
-              onChange={(e) => setSigMeaning(e.target.value)}
-            />
-          </div>
         </div>
 
         {closeMutation.error && (
@@ -205,7 +155,7 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
             onClick={handleClose}
           >
             <Lock className="mr-2 h-4 w-4" />
-            {closeMutation.isPending ? "Closing…" : "Close & Sign"}
+            {closeMutation.isPending ? "Closing…" : "Close campaign"}
           </Button>
         </DialogFooter>
       </DialogContent>

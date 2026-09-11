@@ -26,7 +26,6 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -66,7 +65,6 @@ def _make_campaign_with_channel(
     *,
     selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
     qc_filter: dict | None = None,
-    hit_threshold: HitCriterion | None = None,
     add_measurement: bool = True,
     manual_override: bool = False,
 ) -> tuple[Campaign, CampaignChannel, CampaignResult]:
@@ -75,7 +73,6 @@ def _make_campaign_with_channel(
         project_id=uuid.uuid4(),
         name="Campaign",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
     channel = CampaignChannel(
@@ -88,7 +85,6 @@ def _make_campaign_with_channel(
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
         qc_filter=qc_filter,
-        hit_threshold=hit_threshold,
     )
     campaign.add_channel(channel)
     mol_id = uuid.uuid4()
@@ -139,7 +135,7 @@ class TestUpdateCampaignChannel:
             campaign_id=campaign.id,
             channel_id=channel.id,
             label="New Label",
-            # selection_rule, qc_filter, hit_threshold stay UNSET
+            # selection_rule, qc_filter stay UNSET
         )
         result_out = await uc(cmd, auth=auth)
 
@@ -237,31 +233,6 @@ class TestUpdateCampaignChannel:
 
         assert len(resolver.calls) == 1
         assert campaign.channels[0].qc_filter is None
-
-    @pytest.mark.asyncio
-    async def test_hit_threshold_cleared_to_none_triggers_re_resolution(self) -> None:
-        auth = fake_auth()
-        campaign, channel, result = _make_campaign_with_channel(
-            auth.workspace_id,
-            hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=10.0),
-        )
-        resolver = FakeResolver(factory=_new_measurement)
-        uc = UpdateCampaignChannel(
-            uow=FakeUnitOfWork(),
-            campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
-            dispatcher=AsyncMock(),
-        )
-        cmd = UpdateCampaignChannelCommand(
-            workspace_id=auth.workspace_id,
-            campaign_id=campaign.id,
-            channel_id=channel.id,
-            hit_threshold=None,  # explicitly clearing
-        )
-        await uc(cmd, auth=auth)
-
-        assert len(resolver.calls) == 1
-        assert campaign.channels[0].hit_threshold is None
 
     @pytest.mark.asyncio
     async def test_campaign_not_in_draft_returns_validation_failure(self) -> None:

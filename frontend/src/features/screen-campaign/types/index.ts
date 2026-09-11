@@ -17,6 +17,7 @@ export type {
   AddChannelRequest,
   UpdateChannelRequest,
   CloseCampaignRequest,
+  ReopenCampaignRequest,
   SupersedeRequest,
   SetResultDecisionRequest,
   OverrideCellRequest,
@@ -24,6 +25,12 @@ export type {
   AddFromCampaignRequest,
   AddFromRunRequest,
   AddResultsOutcomeResponse,
+  CampaignStageResponse,
+  StageCriterionDTO,
+  StageOutcomeResponse,
+  AddStageRequest,
+  UpdateStageRequest,
+  SetStageOverrideRequest,
 } from "@/shared/lib/api/model";
 
 // ─── Domain enums ────────────────────────────────────────────────────────────
@@ -35,7 +42,9 @@ export type CampaignStatus = "draft" | "closed" | "superseded";
 
 export type CampaignDecision = "selected" | "deferred" | "rejected";
 
-export type HitCall = "hit" | "miss" | "inconclusive";
+export type StageOutcome = "hit" | "miss" | "untested" | "not_in_stage";
+
+export type CheckVerdict = "pass" | "fail" | "untested";
 
 export type SelectionRule =
   | "latest_approved_run"

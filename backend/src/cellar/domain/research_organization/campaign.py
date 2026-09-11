@@ -17,14 +17,22 @@ from typing import Any
 
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import (
+    MAX_STAGE_CRITERIA,
+    UNSET,
+    CampaignStage,
+    StageCriterion,
+    normalize_stage_name,
+)
 from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.domain.research_organization.events import (
     CampaignClosed,
     CampaignCreated,
+    CampaignReopened,
     CampaignSuperseded,
 )
 from cellar.domain.shared.entity import AggregateRoot
-from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 
 
 class Campaign(AggregateRoot):
@@ -47,20 +55,19 @@ class Campaign(AggregateRoot):
         name: str,
         description: str | None = None,
         status: CampaignStatus = CampaignStatus.DRAFT,
-        publishes_collection: bool = True,
         source_protocols: list[dict[str, Any]] | None = None,
         closed_at: datetime | None = None,
         closed_by: uuid.UUID | None = None,
-        signature_id: uuid.UUID | None = None,
         supersedes_campaign_id: uuid.UUID | None = None,
         superseded_by_campaign_id: uuid.UUID | None = None,
-        published_collection_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
         channels: list[CampaignChannel] | None = None,
         results: list[CampaignResult] | None = None,
+        stages: list[CampaignStage] | None = None,
+        close_note: str | None = None,
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at, version=version)
         if not name or not name.strip():
@@ -70,17 +77,16 @@ class Campaign(AggregateRoot):
         self.name = name.strip()
         self.description = description
         self.status = status
-        self.publishes_collection = publishes_collection
         self.source_protocols: list[dict[str, Any]] = source_protocols or []
         self.closed_at = closed_at
         self.closed_by = closed_by
-        self.signature_id = signature_id
         self.supersedes_campaign_id = supersedes_campaign_id
         self.superseded_by_campaign_id = superseded_by_campaign_id
-        self.published_collection_id = published_collection_id
         self.created_by = created_by
         self.channels: list[CampaignChannel] = channels or []
         self.results: list[CampaignResult] = results or []
+        self.stages: list[CampaignStage] = stages or []
+        self.close_note = close_note
 
     # ----- factory -----
 
@@ -92,7 +98,6 @@ class Campaign(AggregateRoot):
         project_id: uuid.UUID,
         name: str,
         description: str | None,
-        publishes_collection: bool,
         created_by: uuid.UUID,
         supersedes_campaign_id: uuid.UUID | None = None,
     ) -> Campaign:
@@ -101,7 +106,6 @@ class Campaign(AggregateRoot):
             project_id=project_id,
             name=name,
             description=description,
-            publishes_collection=publishes_collection,
             supersedes_campaign_id=supersedes_campaign_id,
             created_by=created_by,
         )
@@ -141,6 +145,8 @@ class Campaign(AggregateRoot):
         self.channels = [c for c in self.channels if c.id != channel_id]
         for r in self.results:
             r.remove_measurement_for_channel(channel_id)
+        for stage in self.stages:
+            stage.criteria = [c for c in stage.criteria if c.channel_id != channel_id]
         self.updated_at = datetime.now(UTC)
 
     # ----- results -----
@@ -184,6 +190,118 @@ class Campaign(AggregateRoot):
             self.updated_at = datetime.now(UTC)
         return added, skipped
 
+    # ----- stages -----
+
+    def find_stage(self, stage_id: uuid.UUID) -> CampaignStage | None:
+        for s in self.stages:
+            if s.id == stage_id:
+                return s
+        return None
+
+    def _check_stage_name_available(
+        self, name: str, *, exclude_stage_id: uuid.UUID | None
+    ) -> None:
+        normalized = name.lower()
+        for other in self.stages:
+            if other.id == exclude_stage_id:
+                continue
+            if other.name.lower() == normalized:
+                raise ValidationError(f"CampaignStage name '{name}' already used on this campaign")
+
+    def _check_stage_parent(
+        self, parent_stage_id: uuid.UUID | None, *, stage_id: uuid.UUID
+    ) -> None:
+        if parent_stage_id is None:
+            return
+        if parent_stage_id == stage_id:
+            raise ValidationError("CampaignStage cannot be its own parent")
+        parent = self.find_stage(parent_stage_id)
+        if parent is None:
+            raise ValidationError(
+                f"CampaignStage parent {parent_stage_id} not found on this campaign"
+            )
+        # Walk the parent chain upward from the proposed parent; if it leads
+        # back to stage_id, attaching here would create a cycle.
+        current: CampaignStage | None = parent
+        while current is not None:
+            if current.id == stage_id:
+                raise ValidationError("stage parent would create a cycle")
+            current = self.find_stage(current.parent_stage_id) if current.parent_stage_id else None
+
+    def _check_stage_criteria_channels(self, criteria: list[StageCriterion]) -> None:
+        channel_ids = {c.id for c in self.channels}
+        for criterion in criteria:
+            if criterion.channel_id not in channel_ids:
+                raise ValidationError(
+                    f"StageCriterion channel {criterion.channel_id} is not a channel "
+                    "of this campaign"
+                )
+
+    def add_stage(self, stage: CampaignStage) -> None:
+        self._ensure_draft("add stage")
+        if stage.campaign_id != self.id:
+            raise ValidationError(
+                f"stage.campaign_id ({stage.campaign_id}) does not match Campaign.id ({self.id})"
+            )
+        if any(s.id == stage.id for s in self.stages):
+            raise ValidationError(f"CampaignStage {stage.id} already on campaign")
+        self._check_stage_name_available(stage.name, exclude_stage_id=None)
+        self._check_stage_parent(stage.parent_stage_id, stage_id=stage.id)
+        self._check_stage_criteria_channels(stage.criteria)
+        self.stages.append(stage)
+        self.updated_at = datetime.now(UTC)
+
+    def update_stage(
+        self,
+        stage_id: uuid.UUID,
+        *,
+        name: str | object = UNSET,
+        parent_stage_id: uuid.UUID | object | None = UNSET,
+        criteria: list[StageCriterion] | object = UNSET,
+        display_order: int | object = UNSET,
+    ) -> CampaignStage:
+        """Update a stage's mutable fields. `criteria` is replaced whole — never
+        patched per item. Unsupplied (UNSET) fields are left as-is; `None` is a
+        meaningful value only for `parent_stage_id` (clears it)."""
+        self._ensure_draft("update stage")
+        stage = self.find_stage(stage_id)
+        if stage is None:
+            raise NotFoundError("CampaignStage", str(stage_id))
+
+        new_name = stage.name if name is UNSET else normalize_stage_name(name)  # type: ignore[arg-type]
+        new_parent = stage.parent_stage_id if parent_stage_id is UNSET else parent_stage_id
+        new_criteria = stage.criteria if criteria is UNSET else criteria
+        new_display_order = stage.display_order if display_order is UNSET else display_order
+
+        if new_display_order < 0:  # type: ignore[operator]
+            raise ValidationError("CampaignStage.display_order must be >= 0")
+        if len(new_criteria) > MAX_STAGE_CRITERIA:  # type: ignore[arg-type]
+            raise ValidationError(
+                f"Maximum {MAX_STAGE_CRITERIA} stage criteria allowed, got {len(new_criteria)}"  # type: ignore[arg-type]
+            )
+        self._check_stage_name_available(new_name, exclude_stage_id=stage.id)
+        self._check_stage_parent(new_parent, stage_id=stage.id)  # type: ignore[arg-type]
+        self._check_stage_criteria_channels(new_criteria)  # type: ignore[arg-type]
+
+        stage.name = new_name
+        stage.parent_stage_id = new_parent  # type: ignore[assignment]
+        stage.criteria = new_criteria  # type: ignore[assignment]
+        stage.display_order = new_display_order  # type: ignore[assignment]
+        self.updated_at = datetime.now(UTC)
+        return stage
+
+    def remove_stage(self, stage_id: uuid.UUID) -> None:
+        self._ensure_draft("remove stage")
+        stage = self.find_stage(stage_id)
+        if stage is None:
+            raise NotFoundError("CampaignStage", str(stage_id))
+        if any(s.parent_stage_id == stage_id for s in self.stages):
+            raise ConflictError(f"CampaignStage {stage_id} has child stages; remove them first")
+        self.stages = [s for s in self.stages if s.id != stage_id]
+        for result in self.results:
+            result.clear_stage_override(stage_id)
+        self.updated_at = datetime.now(UTC)
+
     # ----- maintenance helpers -----
 
     def repair_placeholder_units(
@@ -221,7 +339,7 @@ class Campaign(AggregateRoot):
         self,
         *,
         closed_by: uuid.UUID,
-        signature_id: uuid.UUID,
+        note: str | None,
         source_protocols: list[dict[str, Any]],
     ) -> None:
         self._ensure_draft("close")
@@ -232,7 +350,7 @@ class Campaign(AggregateRoot):
         self.status = CampaignStatus.CLOSED
         self.closed_at = datetime.now(UTC)
         self.closed_by = closed_by
-        self.signature_id = signature_id
+        self.close_note = note
         self.source_protocols = source_protocols
         self.updated_at = self.closed_at
         self.register_event(
@@ -241,14 +359,29 @@ class Campaign(AggregateRoot):
                 aggregate_type="Campaign",
                 workspace_id=self.workspace_id,
                 closed_by=closed_by,
-                signature_id=signature_id,
+                note=note,
             )
         )
 
-    def set_published_collection(self, collection_id: uuid.UUID) -> None:
+    def reopen(self, *, reopened_by: uuid.UUID, reason: str) -> None:
         if self.status != CampaignStatus.CLOSED:
-            raise ValidationError("Published collection can only be set on closed campaigns")
-        self.published_collection_id = collection_id
+            raise ValidationError(f"Cannot reopen: campaign is {self.status.value}")
+        if not reason or not reason.strip():
+            raise ValidationError("Campaign.reopen requires a reason")
+        self.status = CampaignStatus.DRAFT
+        self.closed_at = None
+        self.closed_by = None
+        self.close_note = None
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            CampaignReopened(
+                aggregate_id=self.id,
+                aggregate_type="Campaign",
+                workspace_id=self.workspace_id,
+                reopened_by=reopened_by,
+                reason=reason.strip(),
+            )
+        )
 
     def mark_superseded_by(self, new_campaign_id: uuid.UUID) -> None:
         if self.status != CampaignStatus.CLOSED:

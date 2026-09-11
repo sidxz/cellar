@@ -9,6 +9,7 @@ from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.research_organization.add_campaign_channel import AddCampaignChannel
+from cellar.application.research_organization.add_campaign_stage import AddCampaignStage
 from cellar.application.research_organization.add_result_row import AddResultRow
 from cellar.application.research_organization.add_results_from_campaign import (
     AddResultsFromCampaign as AddResultsFromCampaignUC,
@@ -86,8 +87,11 @@ from cellar.application.research_organization.refresh_campaign_from_sources impo
     RefreshFromSources,
 )
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
+from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
+from cellar.application.research_organization.reopen_campaign import ReopenCampaign
 from cellar.application.research_organization.set_result_decision import SetResultDecision
+from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaign as SupersedeCampaignUC,
 )
@@ -95,6 +99,7 @@ from cellar.application.research_organization.update_campaign_channel import Upd
 from cellar.application.research_organization.update_campaign_metadata import (
     UpdateCampaignMetadata,
 )
+from cellar.application.research_organization.update_campaign_stage import UpdateCampaignStage
 from cellar.application.research_organization.update_collection import UpdateCollection
 from cellar.application.research_organization.update_project import UpdateProject
 from cellar.application.research_organization.update_saved_search import UpdateSavedSearch
@@ -114,6 +119,7 @@ from ._core import _get_use_case, get_container
 
 __all__ = [
     "AddCampaignChannelDep",
+    "AddCampaignStageDep",
     "AddMoleculeToProjectDep",
     "AddMoleculesToCollectionDep",
     # Project members + molecule-project links
@@ -164,14 +170,18 @@ __all__ = [
     "RecomputeChannelDep",
     "RefreshFromSourcesDep",
     "RemoveCampaignChannelDep",
+    "RemoveCampaignStageDep",
     "RemoveMoleculeFromProjectDep",
     "RemoveMoleculesFromCollectionDep",
     "RemoveProjectMemberDep",
     "RemoveResultRowDep",
+    "ReopenCampaignDep",
     "SetResultDecisionDep",
+    "SetStageOverrideDep",
     "SupersedeCampaignDep",
     "UpdateCampaignChannelDep",
     "UpdateCampaignMetadataDep",
+    "UpdateCampaignStageDep",
     "UpdateCollectionDep",
     "UpdateCollectionImportTemplateDep",
     "UpdateProjectDep",
@@ -303,6 +313,14 @@ MirrorProtocolChannelsDep = Annotated[
 RemoveCampaignChannelDep = Annotated[
     RemoveCampaignChannel, Depends(_get_use_case(RemoveCampaignChannel))
 ]
+AddCampaignStageDep = Annotated[AddCampaignStage, Depends(_get_use_case(AddCampaignStage))]
+UpdateCampaignStageDep = Annotated[
+    UpdateCampaignStage, Depends(_get_use_case(UpdateCampaignStage))
+]
+RemoveCampaignStageDep = Annotated[
+    RemoveCampaignStage, Depends(_get_use_case(RemoveCampaignStage))
+]
+SetStageOverrideDep = Annotated[SetStageOverride, Depends(_get_use_case(SetStageOverride))]
 SetResultDecisionDep = Annotated[SetResultDecision, Depends(_get_use_case(SetResultDecision))]
 BulkSetResultDecisionsDep = Annotated[
     BulkSetResultDecisions, Depends(_get_use_case(BulkSetResultDecisions))
@@ -312,6 +330,7 @@ AddResultRowDep = Annotated[AddResultRow, Depends(_get_use_case(AddResultRow))]
 RemoveResultRowDep = Annotated[RemoveResultRow, Depends(_get_use_case(RemoveResultRow))]
 RefreshFromSourcesDep = Annotated[RefreshFromSources, Depends(_get_use_case(RefreshFromSources))]
 CloseCampaignDep = Annotated[CloseCampaign, Depends(_get_use_case(CloseCampaign))]
+ReopenCampaignDep = Annotated[ReopenCampaign, Depends(_get_use_case(ReopenCampaign))]
 SupersedeCampaignDep = Annotated[SupersedeCampaignUC, Depends(_get_use_case(SupersedeCampaignUC))]
 GetPublishedCampaignDep = Annotated[
     GetPublishedCampaign, Depends(_get_use_case(GetPublishedCampaign))

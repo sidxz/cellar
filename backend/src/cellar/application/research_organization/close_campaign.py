@@ -1,4 +1,4 @@
-"""CloseCampaign — lock a DRAFT campaign and optionally publish a frozen Collection.
+"""CloseCampaign — lock a DRAFT campaign (soft close, no signature, no collection).
 
 Pipeline:
   1. ``require_editor`` auth guard.
@@ -9,21 +9,12 @@ Pipeline:
   5. Materialize ``source_protocols`` snapshot from distinct protocol_ids on channels.
   6. Repair ND placeholder units: non-override measurements with ``unit=="-"`` get the
      real ``ReadoutDefinition.unit`` from the loaded protocols when it is non-empty.
-  7. Call ``campaign.close(closed_by=..., signature_id=..., source_protocols=...)``.
+  7. Call ``campaign.close(closed_by=..., note=..., source_protocols=...)``.
      ``ValidationError`` from the aggregate (no results / no channels) → ``Failure``.
-  8. Save the campaign (so the FK from collections → campaign is satisfiable).
-  9. If ``campaign.publishes_collection is True``:
-       - Create and freeze a ``Collection``.
-       - Save the collection.
-       - ``add_molecules`` for SELECTED molecule_ids (when non-empty).
-       - ``campaign.set_published_collection`` + register ``CampaignPublishedCollectionCreated``.
-       - Save campaign again (published_collection_id changed).
-  10. ``uow.commit()``; dispatch events; return ``Success(campaign)``.
+  8. Save the campaign; ``uow.commit()``; dispatch events; return ``Success(campaign)``.
 
-NOTE: Signature is caller-supplied (stub mode) — the API layer will integrate a
-SignatureService later. The use case takes ``signature_id`` and ``signature_meaning``
-in the command; ``signature_meaning`` is reserved for the audit log when
-``SignatureService`` lands and is not used here.
+No signature, no published Collection — see spec §4/§5. ``ReopenCampaign``
+reverses a close back to DRAFT.
 """
 
 from __future__ import annotations
@@ -42,18 +33,11 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
-from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
-    CollectionType,
-)
-from cellar.domain.research_organization.events import (
-    CampaignPublishedCollectionCreated,
 )
 from cellar.domain.research_organization.repository import (
     CampaignRepository,
-    CollectionRepository,
 )
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import ProtocolRepository
@@ -69,37 +53,23 @@ class CloseCampaignCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
     user_id: uuid.UUID
-    signature_id: uuid.UUID
-    signature_meaning: str | None = (
-        None  # placeholder — for the audit log when SignatureService lands
-    )
-    #: Override the campaign's stored ``publishes_collection`` at close time.
-    #: When None, keep whatever was set at campaign creation. Lets chemists
-    #: choose at sign time instead of having to remember the create-time
-    #: toggle.
-    publishes_collection: bool | None = None
+    note: str | None = None
 
 
 class CloseCampaign:
-    """Lock a DRAFT campaign and optionally emit a frozen Collection of SELECTED molecules.
-
-    Signature is caller-supplied (stub mode). The constructor accepts no
-    ``signature_service`` dep — the API layer will inject one later.
-    """
+    """Lock a DRAFT campaign. No signature, no published Collection (spec §4/§5)."""
 
     def __init__(
         self,
         *,
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
-        collection_repo: CollectionRepository,
         protocol_repo: ProtocolRepository,
         resolver: ChannelResolver,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
-        self._collection_repo = collection_repo
         self._protocol_repo = protocol_repo
         self._resolver = resolver
         self._dispatcher = dispatcher
@@ -216,63 +186,15 @@ class CloseCampaign:
             await self._campaign_repo.save(campaign)
             await self._uow.session.flush()  # type: ignore[attr-defined]
 
-            # Allow the caller to override `publishes_collection` at close
-            # time — chemists shouldn't have to remember a toggle they set
-            # weeks ago at campaign creation.
-            if input.publishes_collection is not None:
-                campaign.publishes_collection = input.publishes_collection
-
             # Now close the aggregate in memory.
             campaign.close(
                 closed_by=input.user_id,
-                signature_id=input.signature_id,
+                note=input.note,
                 source_protocols=source_protocols,
             )
 
-            # Step 8 — save the closed status so the FK from
-            # collections.derived_from_campaign_id → campaign.id is satisfiable.
+            # Step 8 — save the closed status.
             await self._campaign_repo.save(campaign)
-
-            # Step 9 — optionally publish a frozen Collection.
-            if campaign.publishes_collection:
-                coll = Collection.create(
-                    workspace_id=campaign.workspace_id,
-                    name=f"Hits — {campaign.name}",
-                    description=(f'Frozen output of campaign "{campaign.name}"'),
-                    project_id=campaign.project_id,
-                    created_by=input.user_id,
-                    type=CollectionType.HIT_LIST,
-                )
-                # Save BEFORE freeze so membership can be written while the
-                # persisted row is still mutable — add_molecules checks
-                # the persisted is_frozen flag, not the in-memory flag.
-                await self._collection_repo.save(coll)
-
-                selected_mol_ids = [
-                    r.molecule_id
-                    for r in campaign.results
-                    if r.decision == CampaignDecision.SELECTED
-                ]
-                if selected_mol_ids:
-                    await self._collection_repo.add_molecules(
-                        campaign.workspace_id, coll.id, selected_mol_ids
-                    )
-
-                # Now freeze (in-memory) and persist the frozen state.
-                coll.freeze(derived_from_campaign_id=campaign.id)
-                await self._collection_repo.save(coll)
-
-                campaign.set_published_collection(coll.id)
-                campaign.register_event(
-                    CampaignPublishedCollectionCreated(
-                        aggregate_id=campaign.id,
-                        aggregate_type="Campaign",
-                        workspace_id=campaign.workspace_id,
-                        collection_id=coll.id,
-                    )
-                )
-                # Save again — published_collection_id changed.
-                await self._campaign_repo.save(campaign)
 
             events = await self._uow.commit()
 

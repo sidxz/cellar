@@ -24,7 +24,6 @@ from cellar.domain.research_organization.campaign_measurement import (
 )
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
-    HitCall,
     ValueQualifier,
 )
 from cellar.domain.research_organization.repository import CampaignRepository
@@ -44,7 +43,6 @@ class OverrideResultCellCommand(Command):
     value: float | None
     value_qualifier: ValueQualifier
     unit: str
-    hit_call: HitCall | None = None
     reason: str | None = None  # B8 audit defensibility — captured at override time
 
 
@@ -117,7 +115,6 @@ class OverrideResultCell:
                     value=input.value,
                     value_qualifier=input.value_qualifier,
                     unit=input.unit,
-                    hit_call=input.hit_call,
                     is_manual_override=True,
                     protocol_name_snapshot=existing.protocol_name_snapshot,
                     protocol_version_snapshot=existing.protocol_version_snapshot,

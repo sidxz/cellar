@@ -54,17 +54,27 @@ const VERB: Record<Decision, string> = {
 interface BulkDecisionMenuProps {
   campaign: CampaignResponse;
   filters: CampaignFilters;
+  /** Selected hit stage, or null for "All" — the stage chips only filter
+   *  against a selection, so the bulk target has to know it too. */
+  selectedStageId: string | null;
   readOnly: boolean;
 }
 
-export function BulkDecisionMenu({ campaign, filters, readOnly }: BulkDecisionMenuProps) {
+export function BulkDecisionMenu({
+  campaign,
+  filters,
+  selectedStageId,
+  readOnly,
+}: BulkDecisionMenuProps) {
   const qc = useQueryClient();
   const [pending, setPending] = useState<Decision | null>(null);
 
   // Filtered result ids — recomputed only when the inputs change.
   const visibleIds = useMemo(() => {
-    return (campaign.results ?? []).filter((r) => rowPassesFilters(r, filters)).map((r) => r.id);
-  }, [campaign.results, filters]);
+    return (campaign.results ?? [])
+      .filter((r) => rowPassesFilters(r, filters, selectedStageId))
+      .map((r) => r.id);
+  }, [campaign.results, filters, selectedStageId]);
 
   const visibleCount = visibleIds.length;
 

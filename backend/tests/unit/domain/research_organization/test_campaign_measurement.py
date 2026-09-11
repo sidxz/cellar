@@ -6,7 +6,7 @@ import pytest
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
-from cellar.domain.research_organization.enums import HitCall, ValueQualifier
+from cellar.domain.research_organization.enums import ValueQualifier
 from cellar.domain.shared.errors import ValidationError
 
 
@@ -21,7 +21,6 @@ def test_minimum_measurement():
         protocol_version_snapshot=3,
     )
     assert m.value == 42.0
-    assert m.hit_call is None
     assert m.is_manual_override is False
     assert m.id is not None
 
@@ -139,7 +138,7 @@ def test_mark_manual_override_with_reason():
     assert m.override_reason == "QC fail on plate 3"
 
 
-def test_with_hit_call_and_source():
+def test_with_source_and_run_date():
     m = CampaignMeasurement(
         result_id=uuid.uuid4(),
         channel_id=uuid.uuid4(),
@@ -148,12 +147,10 @@ def test_with_hit_call_and_source():
         unit="nM",
         protocol_name_snapshot="x",
         protocol_version_snapshot=2,
-        hit_call=HitCall.HIT,
         source_run_id=uuid.uuid4(),
         source_curve_id=uuid.uuid4(),
         run_date_snapshot=date(2026, 5, 1),
     )
-    assert m.hit_call == HitCall.HIT
     assert m.run_date_snapshot == date(2026, 5, 1)
 
 

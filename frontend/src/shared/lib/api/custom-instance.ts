@@ -130,9 +130,13 @@ export const customInstance = async <T>({
     let detail: string | undefined;
     try {
       body = await response.json();
-      const parsed = body as { detail?: unknown } | null;
+      const parsed = body as { detail?: unknown; message?: unknown } | null;
       if (typeof parsed?.detail === "string") {
         detail = parsed.detail;
+      } else if (typeof parsed?.message === "string") {
+        // Domain errors mapped by result_to_response carry the human text
+        // under `message` (`{error, message, detail?}`), not `detail`.
+        detail = parsed.message;
       } else if (Array.isArray(parsed?.detail)) {
         detail = parsed.detail
           .map((d: { loc?: unknown; msg?: unknown }) => {
