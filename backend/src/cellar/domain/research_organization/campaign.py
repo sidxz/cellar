@@ -69,6 +69,7 @@ class Campaign(AggregateRoot):
         channels: list[CampaignChannel] | None = None,
         results: list[CampaignResult] | None = None,
         stages: list[CampaignStage] | None = None,
+        close_note: str | None = None,
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at, version=version)
         if not name or not name.strip():
@@ -90,6 +91,7 @@ class Campaign(AggregateRoot):
         self.channels: list[CampaignChannel] = channels or []
         self.results: list[CampaignResult] = results or []
         self.stages: list[CampaignStage] = stages or []
+        self.close_note = close_note
 
     # ----- factory -----
 
