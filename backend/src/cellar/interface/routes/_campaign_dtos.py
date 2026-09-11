@@ -22,6 +22,7 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import CampaignStage, StageCriterion
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     SelectionRule,
@@ -177,6 +178,41 @@ class UpdateChannelRequest(BaseModel):
     label: str | None = None
     selection_rule: str | None = None
     qc_filter: dict[str, Any] | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class StageCriterionDTO(BaseModel):
+    channel_id: uuid.UUID
+    operator: str  # lt, lte, gt, gte, between
+    value: float | list[float]
+
+    def to_domain(self) -> StageCriterion:
+        return StageCriterion(channel_id=self.channel_id, operator=self.operator, value=self.value)
+
+    @classmethod
+    def from_domain(cls, c: StageCriterion) -> StageCriterionDTO:
+        return cls(channel_id=c.channel_id, operator=c.operator, value=c.value)
+
+
+class AddStageRequest(BaseModel):
+    name: str
+    parent_stage_id: uuid.UUID | None = None
+    criteria: list[StageCriterionDTO] = []
+
+
+class UpdateStageRequest(BaseModel):
+    """Partial update — omitted fields are not changed; null clears parent_stage_id.
+
+    The UC uses the domain-owned UNSET sentinel to distinguish "omit" from
+    None. We map Pydantic's model_fields_set to thread the sentinel through
+    correctly, exactly as ``UpdateChannelRequest`` does.
+    """
+
+    name: str | None = None
+    parent_stage_id: uuid.UUID | None = None
+    criteria: list[StageCriterionDTO] | None = None
+    display_order: int | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -352,6 +388,24 @@ class CampaignChannelResponse(BaseModel):
         )
 
 
+class CampaignStageResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    parent_stage_id: uuid.UUID | None = None
+    display_order: int
+    criteria: list[StageCriterionDTO]
+
+    @classmethod
+    def from_domain(cls, s: CampaignStage) -> CampaignStageResponse:
+        return cls(
+            id=s.id,
+            name=s.name,
+            parent_stage_id=s.parent_stage_id,
+            display_order=s.display_order,
+            criteria=[StageCriterionDTO.from_domain(c) for c in s.criteria],
+        )
+
+
 def _derive_compound_sources(
     results: list[CampaignResult],
     scientist_by_run_id: dict[uuid.UUID, str] | None = None,
@@ -418,6 +472,7 @@ class CampaignResponse(BaseModel):
     version: int
     channels: list[CampaignChannelResponse]
     results: list[CampaignResultResponse]
+    stages: list[CampaignStageResponse]
     #: Distinct targets unioned from the runs this campaign's measurements
     #: reference — a derived, read-time field (never stored), like
     #: ``compound_sources``. Defaults to ``[]`` for callers that don't project
@@ -451,6 +506,7 @@ class CampaignResponse(BaseModel):
             version=c.version,
             channels=[CampaignChannelResponse.from_domain(ch) for ch in c.channels],
             results=[CampaignResultResponse.from_domain(r) for r in c.results],
+            stages=[CampaignStageResponse.from_domain(s) for s in c.stages],
             targets=[TargetRefResponse.from_ref(t) for t in (targets or [])],
         )
 

@@ -117,6 +117,9 @@ def _create_test_app(
     from cellar.interface.routes.campaigns_results import (
         router as campaign_results_router,
     )
+    from cellar.interface.routes.campaigns_stages import (
+        router as campaign_stages_router,
+    )
     from cellar.interface.routes.batches import router as batch_router
     from cellar.interface.routes.dose_response_curves import router as drc_batch_router
     from cellar.interface.routes.readout_data import router as readout_data_router
@@ -183,6 +186,7 @@ def _create_test_app(
     app.include_router(admin_delete_router)
     app.include_router(campaign_router)
     app.include_router(campaign_channels_router)
+    app.include_router(campaign_stages_router)
     app.include_router(campaign_results_router)
     app.include_router(campaign_publishing_router)
     app.include_router(drc_batch_router)

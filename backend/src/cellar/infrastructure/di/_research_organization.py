@@ -11,6 +11,7 @@ from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.research_organization.add_campaign_channel import AddCampaignChannel
+from cellar.application.research_organization.add_campaign_stage import AddCampaignStage
 from cellar.application.research_organization.add_result_row import AddResultRow
 from cellar.application.research_organization.add_results_from_campaign import (
     AddResultsFromCampaign as AddResultsFromCampaignUC,
@@ -92,6 +93,7 @@ from cellar.application.research_organization.refresh_campaign_from_sources impo
     RefreshFromSources,
 )
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
+from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
 from cellar.application.research_organization.set_result_decision import SetResultDecision
@@ -102,6 +104,7 @@ from cellar.application.research_organization.update_campaign_channel import Upd
 from cellar.application.research_organization.update_campaign_metadata import (
     UpdateCampaignMetadata,
 )
+from cellar.application.research_organization.update_campaign_stage import UpdateCampaignStage
 from cellar.application.research_organization.update_collection import UpdateCollection
 from cellar.application.research_organization.update_project import UpdateProject
 from cellar.application.research_organization.update_saved_search import UpdateSavedSearch
@@ -503,6 +506,30 @@ def register_research_organization(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
+    def _add_stage(c: Container) -> AddCampaignStage:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddCampaignStage(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _update_stage(c: Container) -> UpdateCampaignStage:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateCampaignStage(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _remove_stage(c: Container) -> RemoveCampaignStage:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemoveCampaignStage(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
     def _mirror_protocol_channels(c: Container) -> MirrorProtocolChannels:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return MirrorProtocolChannels(
@@ -641,6 +668,9 @@ def register_research_organization(container: Container) -> None:
     container.define(AddCampaignChannel, _add_channel)
     container.define(UpdateCampaignChannel, _update_channel)
     container.define(RemoveCampaignChannel, _remove_channel)
+    container.define(AddCampaignStage, _add_stage)
+    container.define(UpdateCampaignStage, _update_stage)
+    container.define(RemoveCampaignStage, _remove_stage)
     container.define(MirrorProtocolChannels, _mirror_protocol_channels)
     container.define(SetResultDecision, _set_decision)
     container.define(BulkSetResultDecisions, _bulk_set_decisions)

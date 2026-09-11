@@ -425,6 +425,147 @@ class TestCampaignChannels:
 
 
 # ---------------------------------------------------------------------------
+# Stages
+# ---------------------------------------------------------------------------
+
+
+class TestCampaignStages:
+    async def test_add_stage_returns_200_with_criteria_echoed(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+
+        channel_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "IC50",
+                "protocol_id": protocol_id,
+                "readout_definition_id": rd_id,
+                "source_kind": "readout_data",
+                "selection_rule": "latest_approved_run",
+                "qualifier_handling": "include_qualified",
+                "display_order": 0,
+            },
+        )
+        assert channel_resp.status_code == 200, channel_resp.text
+        channel_id = channel_resp.json()["channels"][0]["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={
+                "name": "Primary Hit",
+                "criteria": [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert len(data["stages"]) == 1
+        stage = data["stages"][0]
+        assert stage["name"] == "Primary Hit"
+        assert stage["parent_stage_id"] is None
+        assert stage["display_order"] == 0
+        assert stage["criteria"] == [
+            {"channel_id": channel_id, "operator": "lt", "value": 10.0}
+        ]
+
+    async def test_add_stage_unknown_channel_in_criteria_422(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={
+                "name": "Bad Stage",
+                "criteria": [
+                    {"channel_id": str(uuid.uuid4()), "operator": "lt", "value": 10.0}
+                ],
+            },
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_update_stage_rename_and_clear_parent(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+
+        parent_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Parent Stage"}
+        )
+        assert parent_resp.status_code == 200, parent_resp.text
+        parent_id = parent_resp.json()["stages"][0]["id"]
+
+        child_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={"name": "Child Stage", "parent_stage_id": parent_id},
+        )
+        assert child_resp.status_code == 200, child_resp.text
+        child = next(s for s in child_resp.json()["stages"] if s["name"] == "Child Stage")
+        assert child["parent_stage_id"] == parent_id
+
+        resp = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/stages/{child['id']}",
+            json={"name": "Renamed Child", "parent_stage_id": None},
+        )
+        assert resp.status_code == 200, resp.text
+        updated = next(s for s in resp.json()["stages"] if s["id"] == child["id"])
+        assert updated["name"] == "Renamed Child"
+        assert updated["parent_stage_id"] is None
+
+    async def test_remove_stage_409_with_child_then_200_after_reparent(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+
+        parent_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Parent Stage"}
+        )
+        parent_id = parent_resp.json()["stages"][0]["id"]
+        child_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={"name": "Child Stage", "parent_stage_id": parent_id},
+        )
+        child_id = next(
+            s for s in child_resp.json()["stages"] if s["name"] == "Child Stage"
+        )["id"]
+
+        conflict = await client.delete(f"/api/v1/campaigns/{campaign_id}/stages/{parent_id}")
+        assert conflict.status_code == 409, conflict.text
+
+        reparent = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/stages/{child_id}",
+            json={"parent_stage_id": None},
+        )
+        assert reparent.status_code == 200, reparent.text
+
+        resp = await client.delete(f"/api/v1/campaigns/{campaign_id}/stages/{parent_id}")
+        assert resp.status_code == 200, resp.text
+        remaining_ids = {s["id"] for s in resp.json()["stages"]}
+        assert parent_id not in remaining_ids
+        assert child_id in remaining_ids
+
+    async def test_stage_write_on_closed_campaign_423(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-stage-locked")
+        campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+
+        close_resp = await client.post(f"/api/v1/campaigns/{campaign_id}/close", json={})
+        assert close_resp.status_code == 200, close_resp.text
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Too Late"}
+        )
+        assert resp.status_code == 423, resp.text
+
+
+# ---------------------------------------------------------------------------
 # Results
 # ---------------------------------------------------------------------------
 
