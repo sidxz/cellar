@@ -13,10 +13,9 @@ Selection rules:
 - GEOMETRIC_MEAN: log-space mean over strictly positive candidate values.
 - MANUAL_PICK: leaves the cell as ND so the user can fill it.
 
-Empty candidates yield an ND measurement (no value, no hit_call). The
-domain invariant requires a non-empty ``unit`` even for ND cells, so a
-single-char placeholder is used when no candidate is available to
-contribute one.
+Empty candidates yield an ND measurement (no value). The domain invariant
+requires a non-empty ``unit`` even for ND cells, so a single-char
+placeholder is used when no candidate is available to contribute one.
 """
 
 from __future__ import annotations
@@ -47,11 +46,9 @@ from cellar.domain.research_organization.campaign_measurement import (
 )
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
-    HitCall,
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
 
 # Back-compat alias — channel_resolution callers still type ResolvedCandidate.
 # Remove in a follow-up commit once consumers migrate.
@@ -70,7 +67,6 @@ __all__ = [
     # Re-exported for tests / channel-side callers
     "_build_aggregate_curve_snapshot",
     "_build_curve_snapshot",
-    "_compute_hit_call",
     "_intercept_scalar",
     "_max_dose_from_raw",
     "_resolve_intercept",
@@ -125,46 +121,6 @@ def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
     return not (min_z is not None and (c.z_prime is None or c.z_prime < min_z))
 
 
-def _threshold_input_value(c: ResolvedCandidate, threshold: HitCriterion | None) -> float | None:
-    """Back-compat shim: scalar for the threshold's intercept_key.
-
-    Pre-Option-A callers pass a ``HitCriterion`` whose ``intercept_key``
-    carried the channel's intercept identity. Post-Option-A, channel
-    identity lives on the channel itself; this shim still exists for
-    protocol-level criterion evaluation paths that haven't been
-    rewired (e.g. evaluating ``recommended_hit_criteria`` outside of a
-    campaign channel).
-    """
-    return _intercept_scalar(c, threshold.intercept_key if threshold else None)
-
-
-def _compute_hit_call(value: float | None, threshold: HitCriterion | None) -> HitCall | None:
-    if value is None or threshold is None:
-        return None
-    op = threshold.operator
-    target = threshold.value
-    if op == "between":
-        if not (isinstance(target, list) and len(target) == 2):
-            return None
-        low, high = target
-        if not (isinstance(low, (int, float)) and isinstance(high, (int, float))):
-            return None
-        return HitCall.HIT if (low <= value <= high) else HitCall.MISS
-    if isinstance(target, list):
-        # 'in' operator targets a set of strings — not applicable to a
-        # numeric measurement cell. Leave hit_call unset.
-        return None
-    if op == "lt":
-        return HitCall.HIT if value < target else HitCall.MISS
-    if op == "lte":
-        return HitCall.HIT if value <= target else HitCall.MISS
-    if op == "gt":
-        return HitCall.HIT if value > target else HitCall.MISS
-    if op == "gte":
-        return HitCall.HIT if value >= target else HitCall.MISS
-    return None
-
-
 def _nd_measurement(
     *,
     result_id: uuid.UUID,
@@ -181,7 +137,6 @@ def _nd_measurement(
         unit=unit or _ND_UNIT_PLACEHOLDER,
         protocol_name_snapshot=protocol_name or "-",
         protocol_version_snapshot=protocol_version,
-        hit_call=None,
     )
 
 
@@ -276,7 +231,6 @@ class ChannelResolver:
             value=result.value,
             value_qualifier=qualifier,
             unit=pick.unit or _ND_UNIT_PLACEHOLDER,
-            hit_call=_compute_hit_call(result.value, channel.hit_threshold),
             source_run_id=source_run,
             source_curve_id=source_curve,
             source_readout_id=source_readout,

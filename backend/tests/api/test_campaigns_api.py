@@ -375,36 +375,42 @@ class TestCampaignChannels:
     ) -> None:
         """Adding a channel to a campaign with results resolves measurements.
 
-        This is a shallow test — no real protocol exists so no screening data
-        is found; the measurement still exists (ND placeholder).  The important
-        assertion is that the channel appears in the response.
+        AddCampaignChannel no longer validates protocol/readout existence
+        (that was only ever a side effect of the removed hit_threshold
+        carry-forward — see campaign-hit-stages spec §5); it just resolves
+        a cell per result. This is a shallow test — no real screening data
+        exists for the freshly-published protocol, so the measurement
+        resolves to an ND placeholder. The important assertion is that the
+        channel appears in the response with a 200.
         """
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-chan")
         campaign = await _create_draft_campaign(client, project_id, [mol_id])
         campaign_id = campaign["id"]
-
-        # We need real protocol + readout definition IDs for a full test.
-        # For the API-layer smoke we just verify validation errors from missing
-        # protocol_id surface correctly as 404/422, not 500.
-        fake_protocol_id = str(uuid.uuid4())
-        fake_rd_id = str(uuid.uuid4())
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
 
         resp = await client.post(
             f"/api/v1/campaigns/{campaign_id}/channels",
             json={
                 "label": "IC50 Channel",
-                "protocol_id": fake_protocol_id,
-                "readout_definition_id": fake_rd_id,
+                "protocol_id": protocol_id,
+                "readout_definition_id": rd_id,
                 "source_kind": "readout_data",
                 "selection_rule": "latest_approved_run",
                 "qualifier_handling": "include_qualified",
                 "display_order": 0,
             },
         )
-        # Expect 404 (protocol not found) — not 500
-        assert resp.status_code == 404, resp.text
-        assert "Protocol" in resp.json().get("message", "")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert len(data["channels"]) == 1
+        assert data["channels"][0]["label"] == "IC50 Channel"
+        channel_id = data["channels"][0]["id"]
+
+        measurement = data["results"][0]["measurements"][0]
+        assert measurement["channel_id"] == channel_id
+        assert measurement["value"] is None
+        assert measurement["value_qualifier"] == "nd"
 
     async def test_remove_channel_not_found_404(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)

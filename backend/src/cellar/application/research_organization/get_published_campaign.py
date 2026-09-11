@@ -316,10 +316,6 @@ def _serialize_channel(
             "data_type": None,
         }
 
-    hit_threshold: dict[str, Any] | None = None
-    if channel.hit_threshold is not None:
-        hit_threshold = channel.hit_threshold.to_dict()
-
     qc_filter: dict[str, Any] | None = channel.qc_filter
 
     return {
@@ -331,7 +327,6 @@ def _serialize_channel(
         "source_kind": channel.source_kind.value,
         "selection_rule": channel.selection_rule.value,
         "qc_filter": qc_filter,
-        "hit_threshold": hit_threshold,
     }
 
 
@@ -406,7 +401,6 @@ def _serialize_measurement(m: Any) -> dict[str, Any]:
         "value": m.value,
         "value_qualifier": m.value_qualifier.value,
         "unit": m.unit,
-        "hit_call": m.hit_call.value if m.hit_call is not None else None,
         "is_manual_override": m.is_manual_override,
         "override_reason": m.override_reason,
         "test_concentration": test_concentration,

@@ -314,11 +314,12 @@ class TestAddResultsFromRuns:
         outcome = out.unwrap()
         assert outcome.channels_reused == 1
         assert outcome.channels_created == 0
-        # Original channel still exists (id stable); rule + threshold updated
+        # Original channel still exists (id stable); selection rule updated.
+        # The threshold is import-time filtering only — never persisted to
+        # the channel record.
         assert len(campaign.channels) == 1
         assert campaign.channels[0].id == existing.id
         assert campaign.channels[0].selection_rule == SelectionRule.MEAN_ACROSS_RUNS
-        assert campaign.channels[0].hit_threshold == new_threshold
 
     @pytest.mark.asyncio
     async def test_idempotent_rerun_does_not_duplicate(self) -> None:

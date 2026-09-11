@@ -25,7 +25,6 @@ from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
-    HitCall,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
@@ -86,7 +85,6 @@ def _make_measurement(
         unit=unit,
         protocol_name_snapshot="EGFR Binding Assay",
         protocol_version_snapshot=3,
-        hit_call=HitCall.HIT,
         source_run_id=source_run_id or uuid.uuid4(),
         run_date_snapshot=date(2026, 5, 1),
     )

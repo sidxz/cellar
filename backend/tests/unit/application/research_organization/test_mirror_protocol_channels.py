@@ -142,8 +142,7 @@ async def test_mirror_creates_one_channel_per_intercept() -> None:
     """Multi-intercept DR readout (EC50 + EC90) yields two channels.
 
     Primary stores intercept_key=None; secondary stores explicit
-    InterceptKey. The recommended criteria for EC50 (primary) and EC90
-    (secondary) are carried forward as the channels' hit_threshold.
+    InterceptKey.
     """
     auth = fake_auth()
     campaign = _make_draft_campaign(auth.workspace_id)
@@ -154,19 +153,7 @@ async def test_mirror_creates_one_channel_per_intercept() -> None:
             InterceptSpec(kind=InterceptKind.EC, level=90.0),
         ],
     )
-    protocol = _make_protocol(
-        auth.workspace_id,
-        readouts=[rd],
-        recommended=[
-            HitCriterion(readout_name="Resazurin", operator="lt", value=50.0),
-            HitCriterion(
-                readout_name="Resazurin",
-                operator="lt",
-                value=150.0,
-                intercept_key=InterceptKey(kind="ec", level=90.0),
-            ),
-        ],
-    )
+    protocol = _make_protocol(auth.workspace_id, readouts=[rd])
 
     saved: list[Campaign] = []
     uc = MirrorProtocolChannels(
@@ -197,15 +184,9 @@ async def test_mirror_creates_one_channel_per_intercept() -> None:
 
     assert primary.label == "Resazurin EC50"
     assert primary.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE
-    assert primary.hit_threshold is not None
-    assert primary.hit_threshold.value == 50.0
-    assert primary.hit_threshold.intercept_key is None
 
     assert secondary.label == "Resazurin EC90"
     assert secondary.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE
-    assert secondary.hit_threshold is not None
-    assert secondary.hit_threshold.value == 150.0
-    assert secondary.hit_threshold.intercept_key == InterceptKey(kind="ec", level=90.0)
 
 
 @pytest.mark.asyncio

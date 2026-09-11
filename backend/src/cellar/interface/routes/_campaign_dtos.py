@@ -157,7 +157,6 @@ class AddChannelRequest(BaseModel):
     selection_rule: str
     qualifier_handling: str
     qc_filter: dict[str, Any] | None = None
-    hit_threshold: HitCriterionDTO | None = None
     display_order: int = 0
     #: Normalization layer for ``readout_data`` source. Ignored for dose-response.
     normalization_applied: str | None = None
@@ -178,7 +177,6 @@ class UpdateChannelRequest(BaseModel):
     label: str | None = None
     selection_rule: str | None = None
     qc_filter: dict[str, Any] | None = None
-    hit_threshold: HitCriterionDTO | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -209,7 +207,6 @@ class OverrideCellRequest(BaseModel):
     value: float | None = None
     value_qualifier: str
     unit: str
-    hit_call: str | None = None
     reason: str | None = None  # B8 — required when value differs from auto-resolved
 
 
@@ -252,7 +249,6 @@ class CampaignMeasurementResponse(BaseModel):
     value: float | None = None
     value_qualifier: str
     unit: str
-    hit_call: str | None = None
     is_manual_override: bool
     source_run_id: uuid.UUID | None = None
     source_curve_id: uuid.UUID | None = None
@@ -281,7 +277,6 @@ class CampaignMeasurementResponse(BaseModel):
             value=m.value,
             value_qualifier=m.value_qualifier.value,
             unit=m.unit,
-            hit_call=m.hit_call.value if m.hit_call is not None else None,
             is_manual_override=m.is_manual_override,
             source_run_id=m.source_run_id,
             source_curve_id=m.source_curve_id,
@@ -332,7 +327,6 @@ class CampaignChannelResponse(BaseModel):
     selection_rule: str
     qualifier_handling: str
     qc_filter: dict[str, Any] | None = None
-    hit_threshold: HitCriterionDTO | None = None
     display_order: int
     normalization_applied: str | None = None
     #: Identifies which intercept of a DR curve this channel surfaces.
@@ -350,9 +344,6 @@ class CampaignChannelResponse(BaseModel):
             selection_rule=ch.selection_rule.value,
             qualifier_handling=ch.qualifier_handling.value,
             qc_filter=ch.qc_filter,
-            hit_threshold=HitCriterionDTO.from_domain(ch.hit_threshold)
-            if ch.hit_threshold is not None
-            else None,
             display_order=ch.display_order,
             normalization_applied=ch.normalization_applied,
             intercept_key=InterceptKeyDTO.from_domain(ch.intercept_key)

@@ -128,12 +128,6 @@
               { "type": "object" },
               { "type": "null" }
             ]
-          },
-          "hit_threshold": {
-            "oneOf": [
-              { "type": "object" },
-              { "type": "null" }
-            ]
           }
         }
       }
@@ -185,7 +179,6 @@
                 "value":             { "type": ["number", "integer", "null"] },
                 "value_qualifier":   { "type": "string" },
                 "unit":              { "type": "string" },
-                "hit_call":          { "type": ["string", "null"] },
                 "is_manual_override":{ "type": "boolean" },
                 "override_reason":   { "type": ["string", "null"] },
                 "test_concentration": {

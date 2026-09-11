@@ -1,9 +1,10 @@
 """CampaignChannel — owned entity defining one column in a campaign snapshot.
 
 A Channel binds a protocol's readout to a selection rule (which run/value to
-pick), an optional QC filter, optional qualifier handling, and an optional
-hit-threshold (typically carried forward from the protocol's HitCriterion).
-At close, the channel produces one CampaignMeasurement per CampaignResult.
+pick), an optional QC filter, and optional qualifier handling. At close, the
+channel produces one CampaignMeasurement per CampaignResult. Hit/miss
+criteria live on ``CampaignStage`` instead of the channel (see the
+campaign-hit-stages spec §5).
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
 )
 from cellar.domain.shared.errors import ValidationError
-from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.shared.hit_criterion import InterceptKey
 
 
 @dataclass
@@ -33,7 +34,6 @@ class CampaignChannel:
     display_order: int
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     qc_filter: dict[str, Any] | None = None
-    hit_threshold: HitCriterion | None = None
     #: Which normalization layer of the readout this channel reads. None for
     #: the raw layer (``normalization_applied IS NULL``); set to a formula
     #: name (e.g. ``"percent_inhibition"``) to pick the computed layer.
@@ -46,8 +46,7 @@ class CampaignChannel:
     #: EC50). ``None`` means the curve's primary intercept — preserves
     #: legacy single-intercept channels. Channel identity is set at
     #: creation and never changes (a chemist wanting a different intercept
-    #: creates a new channel). The threshold's ``intercept_key`` is treated
-    #: as informational; the channel's value is authoritative.
+    #: creates a new channel).
     intercept_key: InterceptKey | None = None
 
     def __post_init__(self) -> None:

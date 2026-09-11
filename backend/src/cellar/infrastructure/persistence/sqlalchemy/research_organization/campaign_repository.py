@@ -21,14 +21,13 @@ from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
-    HitCall,
     QualifierHandling,
     SelectionRule,
     StageOutcome,
     ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import SourceRef
-from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.shared.hit_criterion import InterceptKey
 from cellar.domain.shared.target_ref import TargetRef
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -183,9 +182,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             selection_rule=SelectionRule(model.selection_rule),
             qualifier_handling=QualifierHandling(model.qualifier_handling),
             qc_filter=model.qc_filter,
-            hit_threshold=(
-                HitCriterion.from_dict(model.hit_threshold) if model.hit_threshold else None
-            ),
             normalization_applied=model.normalization_applied,
             intercept_key=(
                 InterceptKey.from_dict(model.intercept_key) if model.intercept_key else None
@@ -205,7 +201,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             selection_rule=ch.selection_rule.value,
             qualifier_handling=ch.qualifier_handling.value,
             qc_filter=ch.qc_filter,
-            hit_threshold=ch.hit_threshold.to_dict() if ch.hit_threshold else None,
             normalization_applied=ch.normalization_applied,
             intercept_key=ch.intercept_key.to_dict() if ch.intercept_key else None,
         )
@@ -220,7 +215,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.selection_rule = ch.selection_rule.value
         model.qualifier_handling = ch.qualifier_handling.value
         model.qc_filter = ch.qc_filter
-        model.hit_threshold = ch.hit_threshold.to_dict() if ch.hit_threshold else None
         model.normalization_applied = ch.normalization_applied
         model.intercept_key = ch.intercept_key.to_dict() if ch.intercept_key else None
 
@@ -379,7 +373,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             value=model.value,
             value_qualifier=ValueQualifier(model.value_qualifier),
             unit=model.unit,
-            hit_call=HitCall(model.hit_call) if model.hit_call else None,
             is_manual_override=model.is_manual_override,
             source_run_id=model.source_run_id,
             source_curve_id=model.source_curve_id,
@@ -405,7 +398,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             value=m.value,
             value_qualifier=m.value_qualifier.value,
             unit=m.unit,
-            hit_call=m.hit_call.value if m.hit_call else None,
             is_manual_override=m.is_manual_override,
             source_run_id=m.source_run_id,
             source_curve_id=m.source_curve_id,
@@ -430,7 +422,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.value = m.value
         model.value_qualifier = m.value_qualifier.value
         model.unit = m.unit
-        model.hit_call = m.hit_call.value if m.hit_call else None
         model.is_manual_override = m.is_manual_override
         model.source_run_id = m.source_run_id
         model.source_curve_id = m.source_curve_id

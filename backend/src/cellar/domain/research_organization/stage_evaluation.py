@@ -65,8 +65,8 @@ def _check_criterion(result: CampaignResult, criterion: StageCriterion) -> Stage
     ):
         return StageCheck(channel_id=criterion.channel_id, verdict=CheckVerdict.UNTESTED)
     # ponytail: censored values (`<`/`>` qualifiers) are compared by their
-    # plain numeric value, same as the pre-stages `_compute_hit_call` did —
-    # a reported "< 5" is just 5.0 against the criterion. The channel's
+    # plain numeric value, same as the pre-stages per-cell hit computation
+    # did — a reported "< 5" is just 5.0 against the criterion. The channel's
     # `qualifier_handling` (exclude/clamp) is the existing knob for callers
     # that want censored-aware filtering instead; upgrade here if a stage
     # ever needs to treat "< 5" as automatically meeting "< 10".

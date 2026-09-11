@@ -482,7 +482,6 @@ def register_research_organization(container: Container) -> None:
         return AddCampaignChannel(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            protocol_repo=SQLAlchemyProtocolRepository(uow),
             resolver=c[ChannelResolver],
             dispatcher=c[EventDispatcher],
         )

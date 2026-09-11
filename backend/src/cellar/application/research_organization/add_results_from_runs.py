@@ -4,8 +4,10 @@ Replaces the single-run ``AddResultsFromRun`` use case. The same pipeline now
 accepts a list of run_ids plus per-readout ``ChannelImportConfig`` entries.
 Either reuses an existing campaign channel (when ``(protocol_id, readout_def_id)``
 already matches one) or creates a new one. Cells are computed by the same
-``_compute_hit_call`` + selection-rule path that powers PreviewRunImport, so
-the values committed match what the user saw in the preview.
+threshold-evaluation + selection-rule path that powers PreviewRunImport, so
+the values committed match what the user saw in the preview. The threshold
+is import-time filtering only (``ChannelImportConfig.hit_threshold``) — it is
+never persisted onto the channel; hit/miss criteria live on ``CampaignStage``.
 
 Behavioral notes:
 - DRAFT-only (campaign lock guard).
@@ -13,7 +15,7 @@ Behavioral notes:
 - ``default_decision`` controls the initial decision on NEW results only.
 - ``refresh_existing_cells`` updates non-override cells for molecules already in
   the campaign; override cells are preserved (matches RefreshFromSources).
-- Reusing a channel **applies the user's updated rule/threshold** to the
+- Reusing a channel **applies the user's updated selection rule** to the
   channel record. Existing cells against that channel are NOT auto-refreshed
   (the screener can hit "Refresh from sources" if they want to).
 - Snapshot fields populated on every new/updated measurement:
@@ -35,7 +37,6 @@ from cellar.application.research_organization.add_results_from_collection import
 )
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolutionQuery,
-    _compute_hit_call,
 )
 from cellar.application.research_organization.preview_run_import import (
     ChannelImportConfig,
@@ -96,10 +97,11 @@ class AddResultsFromRuns:
       4. Resolve channels:
          - For each config, look up existing channel by
            ``(protocol_id, readout_definition_id)``.
-         - If exists: apply updated selection_rule + hit_threshold.
+         - If exists: apply the updated selection_rule.
          - If new: ``campaign.add_channel(...)``.
       5. For each (channel, run set): fetch per-molecule candidate lists.
-      6. Apply selection_rule to pick a value per molecule; compute hit_call.
+      6. Apply selection_rule to pick a value per molecule; evaluate the
+         config's hit_threshold against it (import-time filter only).
       7. Aggregate per-molecule cells; decide is_hit per filter_mode +
          active filter set (channels with ``use_for_filter=True`` AND a
          hit_threshold).
@@ -196,11 +198,11 @@ class AddResultsFromRuns:
                 )
                 existing = existing_by_key.get(key)
                 if existing:
-                    # Reuse — apply updated selection rule + threshold.
-                    # Intercept identity is locked at creation; chemist
-                    # editing the threshold doesn't move the channel.
+                    # Reuse — apply the updated selection rule. Intercept
+                    # identity is locked at creation; the chemist changing
+                    # config fields doesn't move the channel to a different
+                    # intercept.
                     existing.selection_rule = cfg.selection_rule
-                    existing.hit_threshold = cfg.hit_threshold
                     channel_by_config[key] = existing
                     channels_reused += 1
                 else:
@@ -213,7 +215,6 @@ class AddResultsFromRuns:
                         selection_rule=cfg.selection_rule,
                         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
                         display_order=next_display_order,
-                        hit_threshold=cfg.hit_threshold,
                         normalization_applied=norm,
                         intercept_key=cfg.intercept_key,
                     )
@@ -271,16 +272,18 @@ class AddResultsFromRuns:
                         continue  # Skip ND cells — don't add a measurement
                     # picked.value IS the channel's intercept value (primary
                     # if intercept_key=None, intercept-specific otherwise);
-                    # threshold compares directly against it.
-                    hit = (
-                        _compute_hit_call(picked.value, cfg.hit_threshold)
-                        if cfg.hit_threshold
+                    # threshold compares directly against it. picked.value
+                    # can still be None (e.g. an aggregate rule with no
+                    # positive contributors) even though picked is not None.
+                    is_hit = (
+                        cfg.hit_threshold.is_met(picked.value)
+                        if cfg.hit_threshold and picked.value is not None
                         else None
                     )
                     qc_pass_all = all(_qc_pass(c) for c in candidates)
                     cells_by_mol_channel[(mol_id, channel.id)] = _CellData(
                         picked=picked,
-                        hit_call_str=hit.value if hit else None,
+                        is_hit=is_hit,
                         qc_pass=qc_pass_all,
                     )
 
@@ -292,7 +295,7 @@ class AddResultsFromRuns:
             mol_is_hit: dict[uuid.UUID, bool] = {}
             for mol_id, ch_cells in cells_by_mol.items():
                 active_hits = [
-                    ch_cells[ch_id].hit_call_str == "hit"
+                    bool(ch_cells[ch_id].is_hit)
                     for ch_id in ch_cells
                     if ch_id in active_channel_ids
                 ]
@@ -406,10 +409,10 @@ class AddResultsFromRuns:
 
 @dataclass(frozen=True)
 class _CellData:
-    """Internal carrier — bundles a selection-rule pick with hit_call and qc_pass."""
+    """Internal carrier — bundles a selection-rule pick with is_hit and qc_pass."""
 
     picked: object  # _Picked from preview_run_import
-    hit_call_str: str | None
+    is_hit: bool | None
     qc_pass: bool
 
 
@@ -422,11 +425,6 @@ def _build_measurement(
 ) -> CampaignMeasurement:
     """Construct a CampaignMeasurement carrying every snapshot field."""
     picked = cell.picked
-    from cellar.domain.research_organization.enums import HitCall
-
-    hit_call: HitCall | None = None
-    if cell.hit_call_str is not None:
-        hit_call = HitCall(cell.hit_call_str)
 
     kwargs = dict(
         result_id=result_id,
@@ -440,7 +438,6 @@ def _build_measurement(
         unit=picked.unit,
         protocol_name_snapshot=picked.protocol_name,
         protocol_version_snapshot=picked.protocol_version,
-        hit_call=hit_call,
         source_run_id=picked.source_run_id,
         source_curve_id=picked.source_curve_id,
         source_readout_id=picked.source_readout_id,

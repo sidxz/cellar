@@ -124,6 +124,10 @@ def _primary_normalization(rd: ReadoutDefinition) -> str | None:
     return None
 
 
+# Unused by MirrorProtocolChannels since the mirror stopped copying
+# hit_threshold onto channels (campaign-hit-stages spec §5). Kept for a
+# later task that surfaces protocol-recommended criteria when a chemist
+# builds a CampaignStage.
 def _match_recommended_threshold(
     recommended: list,
     readout_name: str,
@@ -204,7 +208,6 @@ class MirrorProtocolChannels:
             }
             next_order = max((ch.display_order for ch in campaign.channels), default=-1) + 1
 
-            recommended = list(protocol.recommended_hit_criteria or [])
             channels_created = 0
             channels_skipped = 0
 
@@ -245,7 +248,6 @@ class MirrorProtocolChannels:
                         continue
 
                     label = _channel_label(rd, spec, is_multi, primary_spec) if spec else rd.name
-                    threshold = _match_recommended_threshold(recommended, rd.name, intercept_key)
 
                     try:
                         channel = CampaignChannel(
@@ -257,7 +259,6 @@ class MirrorProtocolChannels:
                             selection_rule=SelectionRule.LATEST_APPROVED_RUN,
                             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
                             display_order=next_order,
-                            hit_threshold=threshold,
                             normalization_applied=normalization,
                             intercept_key=intercept_key,
                         )

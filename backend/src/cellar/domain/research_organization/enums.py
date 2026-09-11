@@ -53,12 +53,6 @@ class ChannelSourceKind(StrEnum):
     DOSE_RESPONSE_CURVE = "dose_response_curve"
 
 
-class HitCall(StrEnum):
-    HIT = "hit"
-    MISS = "miss"
-    INCONCLUSIVE = "inconclusive"
-
-
 class CampaignDecision(StrEnum):
     SELECTED = "selected"
     DEFERRED = "deferred"
@@ -97,7 +91,6 @@ __all__ = [
     "CollectionBooleanOp",
     "CollectionType",
     "CollectionVisibility",
-    "HitCall",
     "ProjectStatus",
     "QualifierHandling",
     "SearchVisibility",
