@@ -10,6 +10,7 @@ from enum import StrEnum
 class SummaryRole(StrEnum):
     COMPOUND_REF = "compound_ref"
     BATCH_REF = "batch_ref"
+    STRUCTURE = "structure"  # SMILES column; fallback resolution only, never stored
     READOUT = "readout"
     IGNORE = "ignore"
 
@@ -29,8 +30,20 @@ class SummaryColumnMapping:
 
     compound_ref: str | None = None  # header providing registration numbers
     batch_ref: str | None = None  # header providing batch numbers
+    # header providing SMILES. Used ONLY to resolve compound refs that miss
+    # the identifier lookup (mirrors the collection importer). Never stored.
+    structure: str | None = None
     # header -> readout_definition_id
     readout_columns: dict[str, uuid.UUID] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class UnmatchedCompound:
+    """One file row whose compound ref resolved by neither identifier nor structure."""
+
+    ref: str
+    row: int  # 1-based file row
+    structure: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

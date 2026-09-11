@@ -62,6 +62,15 @@ _BATCH_HEADERS = frozenset(
         "lot_number",
     }
 )
+_STRUCTURE_HEADERS = frozenset(
+    {
+        "smiles",
+        "structure",
+        "canonical_smiles",
+        "isomeric_smiles",
+        "smiles_string",
+    }
+)
 
 _SAMPLE_N = 10
 # Hard cap mirrors the run-file sync-import limit.
@@ -170,11 +179,12 @@ def _infer_suggestions(
 ) -> list[SummaryHeaderSuggestion]:
     """Build a role suggestion per header.
 
-    First-match-wins for compound_ref / batch_ref so only one column claims
-    each ref role; readout matches are independent of that gate.
+    First-match-wins for compound_ref / structure / batch_ref so only one
+    column claims each ref role; readout matches are independent of that gate.
     """
     suggestions: list[SummaryHeaderSuggestion] = []
     compound_assigned = False
+    structure_assigned = False
     batch_assigned = False
 
     for header in headers:
@@ -198,6 +208,17 @@ def _infer_suggestions(
                 SummaryHeaderSuggestion(
                     header=header,
                     role=SummaryRole.COMPOUND_REF,
+                    confidence="high",
+                )
+            )
+            continue
+
+        if norm in _STRUCTURE_HEADERS and not structure_assigned:
+            structure_assigned = True
+            suggestions.append(
+                SummaryHeaderSuggestion(
+                    header=header,
+                    role=SummaryRole.STRUCTURE,
                     confidence="high",
                 )
             )

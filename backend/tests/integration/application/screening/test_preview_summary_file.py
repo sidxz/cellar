@@ -239,6 +239,27 @@ class TestPreviewSummaryFile:
         assert name.role == SummaryRole.READOUT
         assert name.readout_definition_id == name_rd_id
 
+    async def test_smiles_column_suggests_structure(self, session_factory, workspace_id) -> None:
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            run_id, _ic50_id, _notes_id = await _seed(seed_uow, workspace_id=workspace_id)
+            await seed_uow.commit()
+
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            workspace_id=workspace_id,
+            run_id=run_id,
+            filename="summary.csv",
+            content=b"Compound,SMILES,IC50\nCMP-1,CCO,5.2\n",
+            auth=auth,
+        )
+        assert isinstance(result, Success)
+        by_header = {s.header: s for s in result.unwrap().suggestions}
+        assert by_header["Compound"].role == SummaryRole.COMPOUND_REF
+        assert by_header["SMILES"].role == SummaryRole.STRUCTURE
+        assert by_header["SMILES"].confidence == "high"
+
     async def test_missing_run_returns_not_found(
         self, session_factory, workspace_id
     ) -> None:
