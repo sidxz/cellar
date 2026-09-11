@@ -19,7 +19,6 @@ function makeResult(overrides: Partial<CampaignResultResponse>): CampaignResultR
   return {
     id: "result-default",
     molecule_id: "mol-default",
-    decision: "deferred",
     measurements: [],
     stage_outcomes: [],
     ...overrides,

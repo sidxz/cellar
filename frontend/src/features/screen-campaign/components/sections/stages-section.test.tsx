@@ -49,7 +49,6 @@ function makeResult(
   return {
     id,
     molecule_id: `mol-${id}`,
-    decision: "deferred",
     measurements: [],
     stage_outcomes: outcomes.map((o) => ({
       stage_id: o.stage_id,

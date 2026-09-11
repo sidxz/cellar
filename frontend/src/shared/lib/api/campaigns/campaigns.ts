@@ -31,8 +31,6 @@ import type {
   AddResultRowRequest,
   AddResultsOutcomeResponse,
   AddStageRequest,
-  BulkSetResultDecisionsRequest,
-  BulkSetResultDecisionsResponse,
   CampaignResponse,
   CloseCampaignRequest,
   CreateCampaignRequest,
@@ -49,7 +47,7 @@ import type {
   PreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost200,
   PreviewRunImportRequest,
   ReopenCampaignRequest,
-  SetResultDecisionRequest,
+  SetResultNotesRequest,
   SetStageOverrideRequest,
   SupersedeRequest,
   UpdateCampaignRequest,
@@ -1517,100 +1515,31 @@ export const useClearStageOverrideApiV1CampaignsCampaignIdResultsResultIdStagesS
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Bulk-set decision for many CampaignResult rows in one transaction.
-
-The frontend posts the currently-filtered ``result_ids`` so chemists can
-"Mark all visible as Selected/Deferred/Rejected" without hitting the
-per-row endpoint 100+ times.
- * @summary Bulk Set Result Decisions
+ * Set (or, with ``null``, clear) the free-text notes on one result row.
+ * @summary Set Result Notes
  */
-export const bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch = (
-    campaignId: string,
-    bulkSetResultDecisionsRequest: BulkSetResultDecisionsRequest,
- ) => {
-      
-      
-      return customInstance<BulkSetResultDecisionsResponse>(
-      {url: `/api/v1/campaigns/${campaignId}/results/bulk-decision`, method: 'PATCH',
-      headers: {'Content-Type': 'application/json', },
-      data: bulkSetResultDecisionsRequest
-    },
-      );
-    }
-  
-
-
-export const getBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>, TError,{campaignId: string;data: BulkSetResultDecisionsRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>, TError,{campaignId: string;data: BulkSetResultDecisionsRequest}, TContext> => {
-
-const mutationKey = ['bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch'];
-const {mutation: mutationOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }};
-
-      
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>, {campaignId: string;data: BulkSetResultDecisionsRequest}> = (props) => {
-          const {campaignId,data} = props ?? {};
-
-          return  bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch(campaignId,data,)
-        }
-
-        
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type BulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationResult = NonNullable<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>>
-    export type BulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationBody = BulkSetResultDecisionsRequest
-    export type BulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationError = HTTPValidationError
-
-    /**
- * @summary Bulk Set Result Decisions
- */
-export const useBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>, TError,{campaignId: string;data: BulkSetResultDecisionsRequest}, TContext>, }
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof bulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatch>>,
-        TError,
-        {campaignId: string;data: BulkSetResultDecisionsRequest},
-        TContext
-      > => {
-
-      const mutationOptions = getBulkSetResultDecisionsApiV1CampaignsCampaignIdResultsBulkDecisionPatchMutationOptions(options);
-
-      return useMutation(mutationOptions, queryClient);
-    }
-    /**
- * Set a screener's per-compound decision (SELECTED / DEFERRED / REJECTED).
- * @summary Set Result Decision
- */
-export const setResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch = (
+export const setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch = (
     campaignId: string,
     resultId: string,
-    setResultDecisionRequest: SetResultDecisionRequest,
+    setResultNotesRequest: SetResultNotesRequest,
  ) => {
       
       
       return customInstance<CampaignResponse>(
       {url: `/api/v1/campaigns/${campaignId}/results/${resultId}`, method: 'PATCH',
       headers: {'Content-Type': 'application/json', },
-      data: setResultDecisionRequest
+      data: setResultNotesRequest
     },
       );
     }
   
 
 
-export const getSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatchMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch>>, TError,{campaignId: string;resultId: string;data: SetResultDecisionRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof setResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch>>, TError,{campaignId: string;resultId: string;data: SetResultDecisionRequest}, TContext> => {
+export const getSetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatchMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch>>, TError,{campaignId: string;resultId: string;data: SetResultNotesRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch>>, TError,{campaignId: string;resultId: string;data: SetResultNotesRequest}, TContext> => {
 
-const mutationKey = ['setResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch'];
+const mutationKey = ['setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch'];
 const {mutation: mutationOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1620,10 +1549,10 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch>>, {campaignId: string;resultId: string;data: SetResultDecisionRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch>>, {campaignId: string;resultId: string;data: SetResultNotesRequest}> = (props) => {
           const {campaignId,resultId,data} = props ?? {};
 
-          return  setResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch(campaignId,resultId,data,)
+          return  setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch(campaignId,resultId,data,)
         }
 
         
@@ -1631,23 +1560,23 @@ const {mutation: mutationOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type SetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatchMutationResult = NonNullable<Awaited<ReturnType<typeof setResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch>>>
-    export type SetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatchMutationBody = SetResultDecisionRequest
-    export type SetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatchMutationError = HTTPValidationError
+    export type SetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatchMutationResult = NonNullable<Awaited<ReturnType<typeof setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch>>>
+    export type SetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatchMutationBody = SetResultNotesRequest
+    export type SetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatchMutationError = HTTPValidationError
 
     /**
- * @summary Set Result Decision
+ * @summary Set Result Notes
  */
-export const useSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch>>, TError,{campaignId: string;resultId: string;data: SetResultDecisionRequest}, TContext>, }
+export const useSetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch>>, TError,{campaignId: string;resultId: string;data: SetResultNotesRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof setResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatch>>,
+        Awaited<ReturnType<typeof setResultNotesApiV1CampaignsCampaignIdResultsResultIdPatch>>,
         TError,
-        {campaignId: string;resultId: string;data: SetResultDecisionRequest},
+        {campaignId: string;resultId: string;data: SetResultNotesRequest},
         TContext
       > => {
 
-      const mutationOptions = getSetResultDecisionApiV1CampaignsCampaignIdResultsResultIdPatchMutationOptions(options);
+      const mutationOptions = getSetResultNotesApiV1CampaignsCampaignIdResultsResultIdPatchMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

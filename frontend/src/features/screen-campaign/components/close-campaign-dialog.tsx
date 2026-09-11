@@ -13,7 +13,6 @@ import { AlertTriangle, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -24,7 +23,6 @@ import {
   DialogTitle,
 } from "@/shared/components/ui/dialog";
 import { Label } from "@/shared/components/ui/label";
-import { Separator } from "@/shared/components/ui/separator";
 import { Textarea } from "@/shared/components/ui/textarea";
 
 import { useCloseCampaignApiV1CampaignsCampaignIdClosePost } from "@/shared/lib/api/campaigns/campaigns";
@@ -59,11 +57,6 @@ export function CloseCampaignDialog({ campaign, open, onOpenChange }: CloseCampa
   const hasResults = campaign.results.length > 0;
   const hasChannels = campaign.channels.length > 0;
   const canClose = hasResults && hasChannels;
-
-  const decisionCounts = campaign.results.reduce<Record<string, number>>((acc, r) => {
-    acc[r.decision] = (acc[r.decision] ?? 0) + 1;
-    return acc;
-  }, {});
 
   const handleClose = () => {
     if (!canClose) return;
@@ -111,20 +104,6 @@ export function CloseCampaignDialog({ campaign, open, onOpenChange }: CloseCampa
             <span>Source protocols</span>
             <span className="text-foreground font-medium">{campaign.source_protocols.length}</span>
           </div>
-
-          {/* Decision breakdown */}
-          {Object.entries(decisionCounts).length > 0 && (
-            <>
-              <Separator />
-              <div className="flex flex-wrap gap-1">
-                {Object.entries(decisionCounts).map(([d, count]) => (
-                  <Badge key={d} variant="secondary" className="text-xs">
-                    {count} {d}
-                  </Badge>
-                ))}
-              </div>
-            </>
-          )}
         </div>
 
         {/* Optional note */}

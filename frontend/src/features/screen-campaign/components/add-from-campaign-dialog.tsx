@@ -3,13 +3,14 @@
 /**
  * AddFromCampaignDialog
  *
- * Lets the user pick a source campaign (any status) and a decision filter
- * (selected / deferred / rejected), then bulk-adds matching compounds to
- * the current campaign. Shows {added, skipped} in a toast on success.
+ * Lets the user pick a source campaign (any status) and — optionally — one of
+ * its hit stages, then bulk-adds the matching compounds to the current
+ * campaign. No stage means every compound on the source; a stage means the
+ * compounds whose evaluated outcome at that stage is a hit (overrides
+ * honoured server-side). Shows {added, skipped} in a toast on success.
  */
 
 import { Button } from "@/shared/components/ui/button";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -31,13 +32,10 @@ import { useAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost } 
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { campaignKeys, useCampaigns } from "../hooks/use-campaigns";
+import { campaignKeys, useCampaign, useCampaigns } from "../hooks/use-campaigns";
 
-const DECISION_OPTIONS = [
-  { value: "selected", label: "Selected" },
-  { value: "deferred", label: "Deferred" },
-  { value: "rejected", label: "Rejected" },
-] as const;
+/** Sentinel for "no stage" — Radix <Select> forbids an empty-string value. */
+const ALL_COMPOUNDS = "__all__";
 
 interface AddFromCampaignDialogProps {
   campaignId: string;
@@ -54,7 +52,7 @@ export function AddFromCampaignDialog({
 }: AddFromCampaignDialogProps) {
   const qc = useQueryClient();
   const [sourceCampaignId, setSourceCampaignId] = useState("");
-  const [decisionFilter, setDecisionFilter] = useState<string[]>(["selected"]);
+  const [stageId, setStageId] = useState(ALL_COMPOUNDS);
   const [description, setDescription] = useState("");
 
   const { data: allCampaigns, isLoading: campaignsLoading } = useCampaigns(projectId, {
@@ -63,6 +61,12 @@ export function AddFromCampaignDialog({
 
   // Exclude current campaign from picker
   const sourceCampaigns = allCampaigns?.filter((c) => c.id !== campaignId) ?? [];
+
+  // The source campaign's stages only arrive with its detail payload.
+  const { data: sourceCampaign, isLoading: stagesLoading } = useCampaign(sourceCampaignId, {
+    enabled: !!sourceCampaignId,
+  });
+  const stages = sourceCampaign?.stages ?? [];
 
   const mutation = useAddResultsFromCampaignApiV1CampaignsCampaignIdAddFromCampaignPost({
     mutation: {
@@ -84,24 +88,25 @@ export function AddFromCampaignDialog({
 
   const handleClose = () => {
     setSourceCampaignId("");
-    setDecisionFilter(["selected"]);
+    setStageId(ALL_COMPOUNDS);
     setDescription("");
     onOpenChange(false);
   };
 
-  const toggleDecision = (value: string) => {
-    setDecisionFilter((prev) =>
-      prev.includes(value) ? prev.filter((d) => d !== value) : [...prev, value],
-    );
+  // A stage belongs to exactly one campaign — changing the source invalidates
+  // the pick, so fall back to "all compounds" rather than send a 422.
+  const handleSourceChange = (id: string) => {
+    setSourceCampaignId(id);
+    setStageId(ALL_COMPOUNDS);
   };
 
   const handleSubmit = () => {
-    if (!sourceCampaignId || decisionFilter.length === 0) return;
+    if (!sourceCampaignId) return;
     mutation.mutate({
       campaignId,
       data: {
         source_campaign_id: sourceCampaignId,
-        decision_filter: decisionFilter,
+        stage_id: stageId === ALL_COMPOUNDS ? null : stageId,
         description: description.trim() || undefined,
       },
     });
@@ -113,8 +118,8 @@ export function AddFromCampaignDialog({
         <DialogHeader>
           <DialogTitle>Add compounds from another Campaign</DialogTitle>
           <DialogDescription>
-            Pick a source campaign and which decisions to include. Duplicates are skipped
-            automatically.
+            Pick a source campaign, and optionally a stage to take only its hits. Duplicates are
+            skipped automatically.
           </DialogDescription>
         </DialogHeader>
 
@@ -123,7 +128,7 @@ export function AddFromCampaignDialog({
             <Label>Source campaign *</Label>
             <Select
               value={sourceCampaignId}
-              onValueChange={setSourceCampaignId}
+              onValueChange={handleSourceChange}
               disabled={campaignsLoading}
             >
               <SelectTrigger>
@@ -147,24 +152,29 @@ export function AddFromCampaignDialog({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Include compounds with decision</Label>
-            <div className="flex gap-4">
-              {DECISION_OPTIONS.map((opt) => (
-                <div key={opt.value} className="flex items-center gap-1.5">
-                  <Checkbox
-                    id={`decision-${opt.value}`}
-                    checked={decisionFilter.includes(opt.value)}
-                    onCheckedChange={() => toggleDecision(opt.value)}
-                  />
-                  <label htmlFor={`decision-${opt.value}`} className="text-sm cursor-pointer">
-                    {opt.label}
-                  </label>
-                </div>
-              ))}
-            </div>
-            {decisionFilter.length === 0 && (
-              <p className="text-xs text-destructive">Select at least one decision type.</p>
+          <div className="space-y-1.5">
+            <Label>Compounds to include</Label>
+            <Select
+              value={stageId}
+              onValueChange={setStageId}
+              disabled={!sourceCampaignId || stagesLoading}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={stagesLoading ? "Loading…" : "All compounds"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_COMPOUNDS}>All compounds</SelectItem>
+                {stages.map((st) => (
+                  <SelectItem key={st.id} value={st.id}>
+                    Hits at "{st.name}"
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!!sourceCampaignId && !stagesLoading && stages.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                That campaign has no hit stages — all its compounds will be added.
+              </p>
             )}
           </div>
 
@@ -172,7 +182,7 @@ export function AddFromCampaignDialog({
             <Label htmlFor="add-campaign-desc">Note (optional)</Label>
             <Textarea
               id="add-campaign-desc"
-              placeholder="e.g. Selected hits from EGFR round 1"
+              placeholder="e.g. Confirmed hits from EGFR round 1"
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -186,7 +196,7 @@ export function AddFromCampaignDialog({
           </Button>
           <Button
             size="sm"
-            disabled={!sourceCampaignId || decisionFilter.length === 0 || mutation.isPending}
+            disabled={!sourceCampaignId || mutation.isPending}
             onClick={handleSubmit}
           >
             {mutation.isPending ? "Adding…" : "Add compounds"}

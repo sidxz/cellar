@@ -3,8 +3,7 @@
 /**
  * CampaignFilterBar — chip-driven filter row above the results grid (B5).
  *
- * Three chip groups:
- * - Decision: selected / deferred / rejected (toggle each)
+ * Two chip groups:
  * - Stage outcome (only when a hit stage is selected): hit / miss / untested /
  *   not in stage, tallied from `stage_outcomes` for that stage
  * - Audit: "Overridden" boolean toggle — a cell override, or an override on
@@ -18,10 +17,7 @@
 import { outcomeFor, tallyStage } from "../lib/stage-outcomes";
 import type { CampaignResponse, CampaignResultResponse, StageOutcome } from "../types";
 
-export type CampaignDecisionFilter = "selected" | "deferred" | "rejected";
-
 export interface CampaignFilters {
-  decisions: Set<CampaignDecisionFilter>;
   /** Only applied when a stage is selected — see `rowPassesFilters`. */
   stageOutcomes: Set<StageOutcome>;
   overriddenOnly: boolean;
@@ -29,30 +25,13 @@ export interface CampaignFilters {
 
 export function emptyFilters(): CampaignFilters {
   return {
-    decisions: new Set(),
-    stageOutcomes: new Set(),
-    overriddenOnly: false,
-  };
-}
-
-/** Default filter state for the read-only closed-campaign view: only the
- *  Selected molecules. Closed campaigns are decision-frozen — the chemist
- *  almost always wants to see "what made the cut" first; rejected/deferred
- *  rows are still one chip-toggle away. */
-export function closedCampaignFilters(): CampaignFilters {
-  return {
-    decisions: new Set(["selected"]),
     stageOutcomes: new Set(),
     overriddenOnly: false,
   };
 }
 
 export function filtersActive(f: CampaignFilters, selectedStageId: string | null): boolean {
-  return (
-    f.decisions.size > 0 ||
-    f.overriddenOnly ||
-    (selectedStageId != null && f.stageOutcomes.size > 0)
-  );
+  return f.overriddenOnly || (selectedStageId != null && f.stageOutcomes.size > 0);
 }
 
 /** A row counts as overridden when any of its cells was manually overridden,
@@ -67,12 +46,6 @@ export function rowPassesFilters(
   filters: CampaignFilters,
   selectedStageId: string | null,
 ): boolean {
-  if (
-    filters.decisions.size > 0 &&
-    !filters.decisions.has(result.decision as CampaignDecisionFilter)
-  ) {
-    return false;
-  }
   if (selectedStageId != null && filters.stageOutcomes.size > 0) {
     // A result carrying no entry for the stage was never evaluated against
     // it — same practical meaning as being gated out of its population.
@@ -96,38 +69,12 @@ interface CampaignFilterBarProps {
   resultCount?: number;
 }
 
-interface CountByDecision {
-  selected: number;
-  deferred: number;
-  rejected: number;
-}
-
-function tallyCounts(
+function tallyOverridden(
   results: CampaignResultResponse[],
   selectedStageId: string | null,
-): { byDecision: CountByDecision; overridden: number } {
-  const byDecision: CountByDecision = { selected: 0, deferred: 0, rejected: 0 };
-  let overridden = 0;
-  for (const r of results) {
-    if (r.decision in byDecision) {
-      byDecision[r.decision as keyof CountByDecision]++;
-    }
-    if (rowIsOverridden(r, selectedStageId)) overridden++;
-  }
-  return { byDecision, overridden };
+): number {
+  return results.filter((r) => rowIsOverridden(r, selectedStageId)).length;
 }
-
-const DECISION_CHIP_STYLE: Record<CampaignDecisionFilter, string> = {
-  selected: "bg-green-50 text-green-800 border-green-200 hover:bg-green-100",
-  deferred: "bg-yellow-50 text-yellow-800 border-yellow-200 hover:bg-yellow-100",
-  rejected: "bg-red-50 text-red-800 border-red-200 hover:bg-red-100",
-};
-
-const DECISION_ACTIVE_STYLE: Record<CampaignDecisionFilter, string> = {
-  selected: "bg-green-600 text-white border-green-700",
-  deferred: "bg-yellow-600 text-white border-yellow-700",
-  rejected: "bg-red-600 text-white border-red-700",
-};
 
 const OUTCOME_ORDER: StageOutcome[] = ["hit", "miss", "untested", "not_in_stage"];
 
@@ -162,14 +109,8 @@ export function CampaignFilterBar({
   selectedStageId,
   resultCount,
 }: CampaignFilterBarProps) {
-  const { byDecision, overridden } = tallyCounts(campaign.results, selectedStageId);
+  const overridden = tallyOverridden(campaign.results, selectedStageId);
   const stageTally = selectedStageId ? tallyStage(campaign.results, selectedStageId) : null;
-
-  function toggleDecision(d: CampaignDecisionFilter) {
-    const next = new Set(filters.decisions);
-    next.has(d) ? next.delete(d) : next.add(d);
-    onChange({ ...filters, decisions: next });
-  }
 
   function toggleOutcome(o: StageOutcome) {
     const next = new Set(filters.stageOutcomes);
@@ -191,40 +132,21 @@ export function CampaignFilterBar({
     <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2 text-xs">
       <span className="text-muted-foreground font-medium">Filter:</span>
 
-      {(["selected", "deferred", "rejected"] as CampaignDecisionFilter[]).map((d) => {
-        const isActive = filters.decisions.has(d);
-        return (
-          <button
-            key={d}
-            type="button"
-            onClick={() => toggleDecision(d)}
-            className={`${CHIP_BASE} ${isActive ? DECISION_ACTIVE_STYLE[d] : DECISION_CHIP_STYLE[d]}`}
-          >
-            <span className="capitalize">{d}</span>
-            <span className="font-semibold tabular-nums">{byDecision[d]}</span>
-          </button>
-        );
-      })}
-
-      {stageTally && (
-        <>
-          <span className="text-muted-foreground/50 mx-1">·</span>
-          {OUTCOME_ORDER.map((o) => {
-            const isActive = filters.stageOutcomes.has(o);
-            return (
-              <button
-                key={o}
-                type="button"
-                onClick={() => toggleOutcome(o)}
-                className={`${CHIP_BASE} ${isActive ? OUTCOME_ACTIVE_STYLE[o] : OUTCOME_CHIP_STYLE[o]}`}
-              >
-                <span>{OUTCOME_LABELS[o]}</span>
-                <span className="font-semibold tabular-nums">{stageTally[o]}</span>
-              </button>
-            );
-          })}
-        </>
-      )}
+      {stageTally &&
+        OUTCOME_ORDER.map((o) => {
+          const isActive = filters.stageOutcomes.has(o);
+          return (
+            <button
+              key={o}
+              type="button"
+              onClick={() => toggleOutcome(o)}
+              className={`${CHIP_BASE} ${isActive ? OUTCOME_ACTIVE_STYLE[o] : OUTCOME_CHIP_STYLE[o]}`}
+            >
+              <span>{OUTCOME_LABELS[o]}</span>
+              <span className="font-semibold tabular-nums">{stageTally[o]}</span>
+            </button>
+          );
+        })}
 
       <span className="text-muted-foreground/50 mx-1">·</span>
 
