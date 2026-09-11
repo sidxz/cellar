@@ -20,6 +20,9 @@ Behavioral notes:
   (the screener can hit "Refresh from sources" if they want to).
 - Snapshot fields populated on every new/updated measurement:
   ``replicate_count``, ``qc_pass``, ``contributing_run_ids``.
+- ``stage_name`` (optional) creates a CampaignStage from every config that
+  opts into import-time filtering (``use_for_filter`` + ``hit_threshold``);
+  no qualifying config means no stage (not an error).
 """
 
 from __future__ import annotations
@@ -50,6 +53,10 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import (
+    CampaignStage,
+    StageCriterion,
+)
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
@@ -77,6 +84,11 @@ class AddResultsFromRunsCommand(Command):
     default_decision: CampaignDecision = CampaignDecision.SELECTED
     description: str | None = None
     refresh_existing_cells: bool = False
+    #: When set, creates a top-level CampaignStage named ``stage_name`` from
+    #: every config's import-time filter (``use_for_filter`` + a
+    #: ``hit_threshold``), one StageCriterion per such config bound to its
+    #: resolved channel. No qualifying config -> no stage (not an error).
+    stage_name: str | None = None
 
 
 @dataclass
@@ -225,6 +237,46 @@ class AddResultsFromRuns:
                         return Failure(e)
                     channel_by_config[key] = new_ch
                     channels_created += 1
+
+            # Step 1b — optional hit stage from import-time filter criteria.
+            # Purely config-driven (doesn't need any resolved cell value):
+            # one StageCriterion per config that opts into filtering, bound
+            # to that config's resolved channel.
+            if input.stage_name:
+                stage_criteria: list[StageCriterion] = []
+                try:
+                    for cfg in input.channel_configs:
+                        if not (cfg.use_for_filter and cfg.hit_threshold is not None):
+                            continue
+                        norm = (
+                            cfg.normalization_applied
+                            if cfg.source_kind == ChannelSourceKind.READOUT_DATA
+                            else None
+                        )
+                        channel = channel_by_config[
+                            (cfg.protocol_id, cfg.readout_definition_id, norm, cfg.intercept_key)
+                        ]
+                        stage_criteria.append(
+                            StageCriterion(
+                                channel_id=channel.id,
+                                operator=cfg.hit_threshold.operator,
+                                value=cfg.hit_threshold.value,
+                            )
+                        )
+                    if stage_criteria:
+                        next_stage_order = (
+                            max((s.display_order for s in campaign.stages), default=-1) + 1
+                        )
+                        campaign.add_stage(
+                            CampaignStage(
+                                campaign_id=campaign.id,
+                                name=input.stage_name,
+                                display_order=next_stage_order,
+                                criteria=stage_criteria,
+                            )
+                        )
+                except ValidationError as e:
+                    return Failure(e)
 
             # Step 2 — fetch candidates per channel
             cells_by_mol_channel: dict[

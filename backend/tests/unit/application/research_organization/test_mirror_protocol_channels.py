@@ -355,3 +355,169 @@ async def test_mirror_label_dedups_cdd_style_readout_name() -> None:
     assert isinstance(out, Success)
     labels = sorted(ch.label for ch in campaign.channels)
     assert labels == ["EC50", "EC90"]
+
+
+# ---------------------------------------------------------------------------
+# stage_name (Task 12)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mirror_creates_stage_from_recommended_criteria() -> None:
+    """stage_name + a recommendation that matches a mirrored readout ->
+    one CampaignStage with one criterion bound to that channel."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(
+        auth.workspace_id,
+        readouts=[rd],
+        recommended=[HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+    )
+
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=FakeResolver(factory=_fake_measurement),
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+            stage_name="Primary Hits",
+        ),
+        auth=auth,
+    )
+
+    assert isinstance(out, Success)
+    outcome = out.unwrap()
+    assert outcome.stage_created is True
+    assert len(campaign.stages) == 1
+    stage = campaign.stages[0]
+    assert stage.name == "Primary Hits"
+    assert len(stage.criteria) == 1
+    assert stage.criteria[0].channel_id == campaign.channels[0].id
+    assert stage.criteria[0].operator == "lt"
+    assert stage.criteria[0].value == 10.0
+
+
+@pytest.mark.asyncio
+async def test_mirror_no_recommendations_stage_not_created() -> None:
+    """stage_name given but the protocol has no recommended_hit_criteria ->
+    stage_created is False and no stage is added."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(auth.workspace_id, readouts=[rd])
+
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=FakeResolver(factory=_fake_measurement),
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+            stage_name="Primary Hits",
+        ),
+        auth=auth,
+    )
+
+    assert isinstance(out, Success)
+    outcome = out.unwrap()
+    assert outcome.stage_created is False
+    assert campaign.stages == []
+
+
+@pytest.mark.asyncio
+async def test_mirror_none_stage_name_creates_no_stage() -> None:
+    """stage_name omitted (None) -> no stage even though a recommendation
+    would otherwise map onto the mirrored channel."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(
+        auth.workspace_id,
+        readouts=[rd],
+        recommended=[HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+    )
+
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=FakeResolver(factory=_fake_measurement),
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+        ),
+        auth=auth,
+    )
+
+    assert isinstance(out, Success)
+    outcome = out.unwrap()
+    assert outcome.stage_created is False
+    assert campaign.stages == []
+
+
+@pytest.mark.asyncio
+async def test_mirror_saves_when_only_stage_created_no_new_channels() -> None:
+    """Re-mirroring an already-fully-mirrored protocol creates zero new
+    channels; a stage_name that maps onto the pre-existing channel must
+    still be persisted (channels_created==0 must not skip the save)."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(
+        auth.workspace_id,
+        readouts=[rd],
+        recommended=[HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+    )
+
+    saved: list[Campaign] = []
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(saved=saved, find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=FakeResolver(factory=_fake_measurement),
+        dispatcher=_make_dispatcher(),
+    )
+
+    out1 = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+        ),
+        auth=auth,
+    )
+    assert isinstance(out1, Success)
+    assert out1.unwrap().channels_created == 1
+    saved.clear()
+
+    out2 = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+            stage_name="Primary Hits",
+        ),
+        auth=auth,
+    )
+    assert isinstance(out2, Success)
+    outcome2 = out2.unwrap()
+    assert outcome2.channels_created == 0
+    assert outcome2.stage_created is True
+    assert len(campaign.stages) == 1
+    assert len(saved) == 1

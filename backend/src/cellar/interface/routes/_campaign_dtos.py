@@ -148,6 +148,10 @@ class AddFromRunsRequest(PreviewRunImportRequest):
     default_decision: str = "selected"
     description: str | None = None
     refresh_existing_cells: bool = False
+    #: When set, creates a CampaignStage from the configs that opt into
+    #: import-time filtering (use_for_filter + hit_threshold). No qualifying
+    #: config -> no stage.
+    stage_name: str | None = None
 
 
 class AddChannelRequest(BaseModel):
@@ -260,6 +264,10 @@ class ReopenCampaignRequest(BaseModel):
 
 class MirrorProtocolRequest(BaseModel):
     protocol_id: uuid.UUID
+    #: When set, creates a CampaignStage from the protocol's
+    #: recommended_hit_criteria mapped onto the mirrored channels. No
+    #: recommendation maps -> no stage.
+    stage_name: str | None = None
 
 
 class MirrorProtocolOutcomeResponse(BaseModel):
@@ -267,6 +275,7 @@ class MirrorProtocolOutcomeResponse(BaseModel):
 
     channels_created: int
     channels_skipped: int
+    stage_created: bool
     campaign: CampaignResponse
 
 

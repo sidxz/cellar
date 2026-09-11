@@ -129,11 +129,13 @@ async def mirror_protocol_channels(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         protocol_id=body.protocol_id,
+        stage_name=body.stage_name,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
     return MirrorProtocolOutcomeResponse(
         channels_created=outcome.channels_created,
         channels_skipped=outcome.channels_skipped,
+        stage_created=outcome.stage_created,
         campaign=CampaignResponse.from_domain(outcome.campaign),
     )
 

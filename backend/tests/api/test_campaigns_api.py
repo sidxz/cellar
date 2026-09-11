@@ -22,6 +22,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 # Force ORM model registration so FK resolution works in test DB.
@@ -31,6 +32,7 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CampaignChannelModel,
     CampaignMeasurementModel,
     CampaignResultModel,
+    CampaignStageModel,
 )
 
 
@@ -158,6 +160,33 @@ async def _make_published_protocol_with_readout(client: AsyncClient) -> tuple[st
     pub = await client.post(f"/api/v1/protocols/{pid}/publish")
     assert pub.status_code in (200, 201), pub.text
     return pid, rd_id
+
+
+async def _make_protocol_with_recommended_hit_criteria(client: AsyncClient) -> str:
+    """Draft protocol with one numeric readout + a matching recommended hit
+    criterion, published. Used to smoke-test stage_name on mirror-protocol."""
+    resp = await client.post(
+        "/api/v1/protocols",
+        json={
+            "name": "Stage Mirror Proto",
+            "protocol_type": "biochemical",
+            "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
+        },
+    )
+    assert resp.status_code in (200, 201), resp.text
+    pid = resp.json()["id"]
+    patch = await client.patch(
+        f"/api/v1/protocols/{pid}",
+        json={
+            "recommended_hit_criteria": [
+                {"readout_name": "IC50", "operator": "lt", "value": 10.0}
+            ]
+        },
+    )
+    assert patch.status_code == 200, patch.text
+    pub = await client.post(f"/api/v1/protocols/{pid}/publish")
+    assert pub.status_code in (200, 201), pub.text
+    return pid
 
 
 async def _seed_closeable_campaign(
@@ -880,6 +909,60 @@ class TestRunImport:
         )
         assert resp.status_code == 422, resp.text
 
+    async def test_add_from_runs_stage_name_creates_stage(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """stage_name + a filtering channel_config -> a CampaignStage is
+        persisted, bound to the channel the import created. Stage creation
+        is config-driven (no matching readout data needed), so a run_id
+        that resolves to zero candidates still exercises the field."""
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id, name="Stage Import")
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/add-from-runs",
+            json={
+                "run_ids": [str(uuid.uuid4())],
+                "channel_configs": [
+                    {
+                        "protocol_id": protocol_id,
+                        "readout_definition_id": rd_id,
+                        "label": "IC50",
+                        "source_kind": "readout_data",
+                        "selection_rule": "latest_approved_run",
+                        "hit_threshold": {
+                            "readout_name": "IC50",
+                            "operator": "lt",
+                            "value": 10.0,
+                        },
+                        "use_for_filter": True,
+                    }
+                ],
+                "scope": "all",
+                "stage_name": "Primary Hits",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        channel_id = uuid.UUID(resp.json()["campaign"]["channels"][0]["id"])
+
+        async with session_factory() as s:
+            rows = (
+                await s.execute(
+                    select(CampaignStageModel).where(
+                        CampaignStageModel.campaign_id == uuid.UUID(campaign_id)
+                    )
+                )
+            ).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].name == "Primary Hits"
+        assert rows[0].criteria == [
+            {"channel_id": str(channel_id), "operator": "lt", "value": 10.0}
+        ]
+
     async def test_old_add_from_run_route_returns_404(
         self, client: AsyncClient
     ) -> None:
@@ -894,6 +977,49 @@ class TestRunImport:
             json={"run_id": str(uuid.uuid4())},
         )
         assert resp.status_code == 404, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Mirror protocol — stage_name smoke (Task 12)
+# ---------------------------------------------------------------------------
+
+
+class TestMirrorProtocolStage:
+    async def test_mirror_with_stage_name_creates_stage(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Mirroring a protocol with recommended_hit_criteria + stage_name
+        creates the stage and reports stage_created=true."""
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id, name="Mirror Stage")
+        campaign_id = campaign["id"]
+        protocol_id = await _make_protocol_with_recommended_hit_criteria(client)
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels/mirror-protocol",
+            json={"protocol_id": protocol_id, "stage_name": "Primary Hits"},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["stage_created"] is True
+        assert body["channels_created"] == 1
+        channel_id = uuid.UUID(body["campaign"]["channels"][0]["id"])
+
+        async with session_factory() as s:
+            rows = (
+                await s.execute(
+                    select(CampaignStageModel).where(
+                        CampaignStageModel.campaign_id == uuid.UUID(campaign_id)
+                    )
+                )
+            ).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].name == "Primary Hits"
+        assert rows[0].criteria == [
+            {"channel_id": str(channel_id), "operator": "lt", "value": 10.0}
+        ]
 
 
 # ---------------------------------------------------------------------------

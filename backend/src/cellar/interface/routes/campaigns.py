@@ -250,6 +250,7 @@ async def add_results_from_runs(
         default_decision=CampaignDecision(body.default_decision),
         description=body.description,
         refresh_existing_cells=body.refresh_existing_cells,
+        stage_name=body.stage_name,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
     return AddResultsOutcomeResponse.from_outcome(outcome)
