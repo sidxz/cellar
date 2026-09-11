@@ -72,28 +72,30 @@ class ImportRowErrorModel(BaseModel):
 class ImportOutcomeModel(BaseModel):
     """Fields every importer returns from BOTH its preview and its import."""
 
+    # Counts are REQUIRED (no defaults) so the generated client types them as
+    # always-present numbers; lists default so the wire stays compact.
     total_rows: int
-    matched_compound_count: int = 0
+    matched_compound_count: int
     unmatched_compound_refs: list[str] = Field(default_factory=list)
     unmatched_batch_refs: list[str] = Field(default_factory=list)
     # Rows dropped before resolution (no well on the plate path; neither ref on
     # the summary path). Unmatched refs are NOT counted here — see errors/refs.
-    rows_skipped: int = 0
+    rows_skipped: int
     errors: list[ImportRowErrorModel] = Field(default_factory=list)
 
 
 class ImportForecastModel(ImportOutcomeModel):
     """Preview tier: what an import WOULD write. Nothing is written."""
 
-    values_to_insert: int = 0
-    values_to_update: int = 0
+    values_to_insert: int
+    values_to_update: int
 
 
 class ImportResultModel(ImportOutcomeModel):
     """Import tier: what was written, plus the raw-file attachment outcome."""
 
-    values_inserted: int = 0
-    values_updated: int = 0
+    values_inserted: int
+    values_updated: int
     attachment_id: uuid.UUID | None = None
     attachment_warning: str | None = None
 
@@ -280,6 +282,7 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
         will_create_plates=preview.will_create_plates,
         will_create_wells=preview.will_create_wells,
         values_to_insert=preview.values_to_insert,
+        values_to_update=0,  # plate import never overwrites; see readout_conflicts
         well_conflicts=[
             WellConflictModel(
                 plate_name=c.plate_name,
@@ -443,6 +446,7 @@ async def import_run_file(
         plates_created=out.plates_created,
         wells_created=out.wells_created,
         values_inserted=out.values_inserted,
+        values_updated=0,  # plate import never overwrites; see readout_conflicts
         matched_compound_count=out.matched_compound_count,
         unmatched_batch_refs=out.unmatched_batch_refs,
         unmatched_compound_refs=out.unmatched_compound_refs,
