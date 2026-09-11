@@ -4,8 +4,9 @@
  * Cellar
  * OpenAPI spec version: 1.1.0-14-gdd8a8c7e-dirty
  */
+import type { SetStageOverrideRequestOutcome } from './setStageOverrideRequestOutcome';
 
 export interface SetStageOverrideRequest {
-  outcome: string;
+  outcome: SetStageOverrideRequestOutcome;
   reason: string;
 }

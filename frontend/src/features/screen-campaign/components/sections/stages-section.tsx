@@ -201,6 +201,13 @@ export function StagesSection({
                 const protocolName = channel
                   ? (protocolNameById.get(channel.protocol_id) ?? "Protocol")
                   : null;
+                // Unit lives on measurements, not the channel/criterion —
+                // same derivation as stage-popover.tsx's channelOptions.
+                const unit = results
+                  .map(
+                    (r) => r.measurements?.find((m) => m.channel_id === c.channel_id)?.unit ?? "",
+                  )
+                  .find((u) => u && u !== "-");
                 return (
                   <li
                     // Criteria are frozen values with no id of their own —
@@ -218,6 +225,7 @@ export function StagesSection({
                     </span>
                     <span className="font-mono tabular-nums text-muted-foreground">
                       {criterionValueText(c)}
+                      {unit ? ` ${unit}` : ""}
                     </span>
                   </li>
                 );

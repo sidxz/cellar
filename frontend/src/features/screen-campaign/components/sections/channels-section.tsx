@@ -82,6 +82,7 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
             <MirrorProtocolPopover
               campaignId={campaign.id}
               projectId={projectId}
+              existingStageNames={campaign.stages.map((s) => s.name)}
               open={mirrorOpen}
               onOpenChange={setMirrorOpen}
             />
@@ -221,18 +222,25 @@ function ChannelRow({
 function MirrorProtocolPopover({
   campaignId,
   projectId,
+  existingStageNames,
   open,
   onOpenChange,
 }: {
   campaignId: string;
   projectId: string;
+  /** Existing stage names on this campaign — defaults "also create a stage"
+   *  off (and blocks Mirror) when the auto-derived name collides
+   *  (case-insensitive), so re-mirroring the same protocol doesn't 422. */
+  existingStageNames: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const qc = useQueryClient();
   const setOpen = onOpenChange;
   const [protocolId, setProtocolId] = useState<string>("");
-  const [createStage, setCreateStage] = useState(true);
+  // Inert until a protocol is chosen (handleProtocolChange derives the real
+  // default below) — the checkbox isn't shown before then.
+  const [createStage, setCreateStage] = useState(false);
   const [stageName, setStageName] = useState("");
   const { data: protocols } = useProtocolSummaries([projectId]);
   const { data: chosenProtocol } = useProtocol(protocolId, {
@@ -260,7 +268,7 @@ function MirrorProtocolPopover({
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
         setOpen(false);
         setProtocolId("");
-        setCreateStage(true);
+        setCreateStage(false);
         setStageName("");
       },
       onError: (err: unknown) => {
@@ -276,8 +284,15 @@ function MirrorProtocolPopover({
   function handleProtocolChange(id: string) {
     setProtocolId(id);
     const proto = protocols?.find((p) => p.id === id);
-    setStageName(proto ? `${proto.name} hits` : "");
-    setCreateStage(true);
+    const defaultName = proto ? `${proto.name} hits` : "";
+    setStageName(defaultName);
+    // Off by default when the auto-derived name already exists on this
+    // campaign — re-mirroring the same protocol (the documented idempotent
+    // path) would otherwise submit a duplicate stage_name and 422.
+    setCreateStage(
+      defaultName !== "" &&
+        !existingStageNames.some((n) => n.toLowerCase() === defaultName.toLowerCase()),
+    );
   }
 
   const handleMirror = () => {
@@ -292,7 +307,13 @@ function MirrorProtocolPopover({
     });
   };
 
-  const stageNameMissing = hasRecommendedCriteria && createStage && !stageName.trim();
+  const trimmedStageName = stageName.trim();
+  const stageNameMissing = hasRecommendedCriteria && createStage && !trimmedStageName;
+  const stageNameCollides =
+    hasRecommendedCriteria &&
+    createStage &&
+    trimmedStageName !== "" &&
+    existingStageNames.some((n) => n.toLowerCase() === trimmedStageName.toLowerCase());
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -346,6 +367,11 @@ function MirrorProtocolPopover({
                   onChange={(e) => setStageName(e.target.value)}
                   placeholder="e.g. Screening Hits"
                 />
+                {stageNameCollides && (
+                  <p className="text-xs text-destructive">
+                    A stage named "{trimmedStageName}" already exists on this campaign.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -359,7 +385,7 @@ function MirrorProtocolPopover({
             type="button"
             size="sm"
             onClick={handleMirror}
-            disabled={!protocolId || stageNameMissing || mutation.isPending}
+            disabled={!protocolId || stageNameMissing || stageNameCollides || mutation.isPending}
           >
             {mutation.isPending ? "Mirroring…" : "Mirror"}
           </Button>

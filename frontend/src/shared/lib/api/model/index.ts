@@ -1281,6 +1281,7 @@ export * from './setResultDecisionRequest';
 export * from './setResultDecisionRequestNotes';
 export * from './setResultDecisionRequestReason';
 export * from './setStageOverrideRequest';
+export * from './setStageOverrideRequestOutcome';
 export * from './setUpRunPlateRequest';
 export * from './setUpRunPlateRequestConcentrationSeries';
 export * from './setUpRunPlateResponse';
