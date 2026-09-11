@@ -9,6 +9,33 @@ from cellar.domain.shared.errors import ValidationError
 _VALID_OPERATORS = {"gt", "lt", "gte", "lte", "in", "between"}
 _VALID_INTERCEPT_KINDS = {"ec", "ic"}
 _MAX_CRITERIA = 3
+_COMPARISON_OPERATORS = {"lt", "lte", "gt", "gte", "between"}
+
+
+def compare(operator: str, value: float, target: float | list[float]) -> bool:
+    """Evaluate one numeric comparison. The one shared implementation used by
+    both :meth:`HitCriterion.is_met` and ``StageCriterion.is_met``.
+
+    ``operator`` is one of ``lt``/``lte``/``gt``/``gte`` (``target`` a single
+    number) or ``between`` (``target`` a ``[low, high]`` pair, inclusive on
+    both ends). Any other operator — including HitCriterion's string-based
+    ``in``, which callers must special-case before calling this — raises
+    ``ValidationError``.
+    """
+    if operator == "lt":
+        return value < target
+    if operator == "lte":
+        return value <= target
+    if operator == "gt":
+        return value > target
+    if operator == "gte":
+        return value >= target
+    if operator == "between":
+        low, high = target  # type: ignore[misc]
+        return low <= value <= high
+    raise ValidationError(
+        f"compare() operator must be one of {_COMPARISON_OPERATORS}, got '{operator}'"
+    )
 
 
 @dataclass(frozen=True)
@@ -93,6 +120,17 @@ class HitCriterion:
                 raise ValidationError(
                     f"HitCriterion with '{self.operator}' operator requires a numeric value"
                 )
+
+    def is_met(self, value: float) -> bool | None:
+        """Evaluate ``value`` against this criterion.
+
+        Returns ``None`` for the ``in`` operator — string-based, not
+        applicable to a numeric channel cell; callers (the campaign hit-call
+        evaluator) treat ``None`` as "skip this criterion".
+        """
+        if self.operator == "in":
+            return None
+        return compare(self.operator, value, self.value)  # type: ignore[arg-type]
 
     def to_dict(self) -> dict:
         d: dict = {

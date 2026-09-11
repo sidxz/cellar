@@ -65,6 +65,23 @@ class CampaignDecision(StrEnum):
     REJECTED = "rejected"
 
 
+class StageOutcome(StrEnum):
+    """Per-(result, stage) verdict computed by `stage_evaluation.evaluate_stages`."""
+
+    HIT = "hit"
+    MISS = "miss"
+    UNTESTED = "untested"
+    NOT_IN_STAGE = "not_in_stage"
+
+
+class CheckVerdict(StrEnum):
+    """Per-(result, criterion) verdict — one component of a StageOutcome."""
+
+    PASS = "pass"
+    FAIL = "fail"
+    UNTESTED = "untested"
+
+
 # Re-exports — the canonical definitions live in domain.shared.aggregation_types
 # (consumed by both research_organization and screening_assay; the bounded-
 # context-independence contract requires the canonical home to be in shared).
@@ -76,6 +93,7 @@ __all__ = [
     "CampaignDecision",
     "CampaignStatus",
     "ChannelSourceKind",
+    "CheckVerdict",
     "CollectionBooleanOp",
     "CollectionType",
     "CollectionVisibility",
@@ -84,5 +102,6 @@ __all__ = [
     "QualifierHandling",
     "SearchVisibility",
     "SelectionRule",
+    "StageOutcome",
     "ValueQualifier",
 ]
