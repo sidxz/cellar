@@ -91,6 +91,7 @@ from cellar.application.research_organization.remove_campaign_stage import Remov
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
 from cellar.application.research_organization.set_result_decision import SetResultDecision
+from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaign as SupersedeCampaignUC,
 )
@@ -176,6 +177,7 @@ __all__ = [
     "RemoveResultRowDep",
     "ReopenCampaignDep",
     "SetResultDecisionDep",
+    "SetStageOverrideDep",
     "SupersedeCampaignDep",
     "UpdateCampaignChannelDep",
     "UpdateCampaignMetadataDep",
@@ -318,6 +320,7 @@ UpdateCampaignStageDep = Annotated[
 RemoveCampaignStageDep = Annotated[
     RemoveCampaignStage, Depends(_get_use_case(RemoveCampaignStage))
 ]
+SetStageOverrideDep = Annotated[SetStageOverride, Depends(_get_use_case(SetStageOverride))]
 SetResultDecisionDep = Annotated[SetResultDecision, Depends(_get_use_case(SetResultDecision))]
 BulkSetResultDecisionsDep = Annotated[
     BulkSetResultDecisions, Depends(_get_use_case(BulkSetResultDecisions))

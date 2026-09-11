@@ -97,6 +97,7 @@ from cellar.application.research_organization.remove_campaign_stage import Remov
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
 from cellar.application.research_organization.set_result_decision import SetResultDecision
+from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaign as SupersedeCampaignUC,
 )
@@ -530,6 +531,14 @@ def register_research_organization(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
+    def _set_stage_override(c: Container) -> SetStageOverride:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetStageOverride(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=c[EventDispatcher],
+        )
+
     def _mirror_protocol_channels(c: Container) -> MirrorProtocolChannels:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return MirrorProtocolChannels(
@@ -671,6 +680,7 @@ def register_research_organization(container: Container) -> None:
     container.define(AddCampaignStage, _add_stage)
     container.define(UpdateCampaignStage, _update_stage)
     container.define(RemoveCampaignStage, _remove_stage)
+    container.define(SetStageOverride, _set_stage_override)
     container.define(MirrorProtocolChannels, _mirror_protocol_channels)
     container.define(SetResultDecision, _set_decision)
     container.define(BulkSetResultDecisions, _bulk_set_decisions)

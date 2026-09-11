@@ -28,6 +28,11 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
 )
 from cellar.domain.research_organization.source_ref import ManualRef, source_group_key
+from cellar.domain.research_organization.stage_evaluation import (
+    StageCheck,
+    StageResultOutcome,
+    evaluate_stages,
+)
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.domain.shared.target_ref import TargetRef
 from cellar.interface.routes._target_refs import TargetRefResponse
@@ -221,6 +226,11 @@ class UpdateStageRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class SetStageOverrideRequest(BaseModel):
+    outcome: str  # "hit" | "miss"
+    reason: str
+
+
 class SetResultDecisionRequest(BaseModel):
     decision: str
     reason: str | None = None
@@ -341,6 +351,33 @@ class CampaignMeasurementResponse(BaseModel):
         )
 
 
+class StageCheckResponse(BaseModel):
+    channel_id: uuid.UUID
+    verdict: str  # pass | fail | untested
+
+    @classmethod
+    def from_domain(cls, c: StageCheck) -> StageCheckResponse:
+        return cls(channel_id=c.channel_id, verdict=c.verdict.value)
+
+
+class StageOutcomeResponse(BaseModel):
+    stage_id: uuid.UUID
+    outcome: str  # hit | miss | untested | not_in_stage
+    overridden: bool
+    override_reason: str | None = None
+    checks: list[StageCheckResponse]
+
+    @classmethod
+    def from_domain(cls, o: StageResultOutcome) -> StageOutcomeResponse:
+        return cls(
+            stage_id=o.stage_id,
+            outcome=o.outcome.value,
+            overridden=o.overridden,
+            override_reason=o.override_reason,
+            checks=[StageCheckResponse.from_domain(c) for c in o.checks],
+        )
+
+
 class CampaignResultResponse(BaseModel):
     id: uuid.UUID
     molecule_id: uuid.UUID
@@ -349,9 +386,14 @@ class CampaignResultResponse(BaseModel):
     decision_reason: str | None = None
     notes: str | None = None
     measurements: list[CampaignMeasurementResponse]
+    stage_outcomes: list[StageOutcomeResponse]
 
     @classmethod
-    def from_domain(cls, r: CampaignResult) -> CampaignResultResponse:
+    def from_domain(
+        cls,
+        r: CampaignResult,
+        outcomes: dict[uuid.UUID, StageResultOutcome] | None = None,
+    ) -> CampaignResultResponse:
         return cls(
             id=r.id,
             molecule_id=r.molecule_id,
@@ -360,6 +402,9 @@ class CampaignResultResponse(BaseModel):
             decision_reason=r.decision_reason,
             notes=r.notes,
             measurements=[CampaignMeasurementResponse.from_domain(m) for m in r.measurements],
+            stage_outcomes=[
+                StageOutcomeResponse.from_domain(o) for o in (outcomes or {}).values()
+            ],
         )
 
 
@@ -495,6 +540,12 @@ class CampaignResponse(BaseModel):
         scientist_by_run_id: dict[uuid.UUID, str] | None = None,
         targets: list[TargetRef] | None = None,
     ) -> CampaignResponse:
+        # Evaluate the hit-stage funnel once (pure, cheap: results x stages x
+        # criteria) and thread each result's outcomes through in declared
+        # stage order — evaluate_stages inserts entries in parent-first
+        # recursive-evaluation order, which need not match campaign.stages
+        # (a child stage can be declared before its parent).
+        stage_outcomes = evaluate_stages(c)
         return cls(
             id=c.id,
             workspace_id=c.workspace_id,
@@ -514,7 +565,12 @@ class CampaignResponse(BaseModel):
             updated_at=c.updated_at,
             version=c.version,
             channels=[CampaignChannelResponse.from_domain(ch) for ch in c.channels],
-            results=[CampaignResultResponse.from_domain(r) for r in c.results],
+            results=[
+                CampaignResultResponse.from_domain(
+                    r, {s.id: stage_outcomes[r.id][s.id] for s in c.stages}
+                )
+                for r in c.results
+            ],
             stages=[CampaignStageResponse.from_domain(s) for s in c.stages],
             targets=[TargetRefResponse.from_ref(t) for t in (targets or [])],
         )

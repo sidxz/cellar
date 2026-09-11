@@ -189,6 +189,15 @@ async def _make_protocol_with_recommended_hit_criteria(client: AsyncClient) -> s
     return pid
 
 
+def _find_result_id(campaign: dict, molecule_id: str) -> str:
+    return next(r["id"] for r in campaign["results"] if r["molecule_id"] == molecule_id)
+
+
+def _find_stage_outcome(campaign: dict, result_id: str, stage_id: str) -> dict:
+    result = next(r for r in campaign["results"] if r["id"] == result_id)
+    return next(o for o in result["stage_outcomes"] if o["stage_id"] == stage_id)
+
+
 async def _seed_closeable_campaign(
     client: AsyncClient, project_id: str, molecule_id: str
 ) -> str:
@@ -592,6 +601,201 @@ class TestCampaignStages:
             f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Too Late"}
         )
         assert resp.status_code == 423, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Stage overrides
+# ---------------------------------------------------------------------------
+
+
+class TestStageOverride:
+    async def test_put_then_get_shows_overridden_true_then_delete_clears(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-stage-override")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "No-Criteria Stage"}
+        )
+        assert stage_resp.status_code == 200, stage_resp.text
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        # A zero-criteria stage always computes "hit" (spec §3.1) — force
+        # "miss" so the override is visibly distinct from the base verdict.
+        override_url = (
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}/stages/{stage_id}/override"
+        )
+        put_resp = await client.put(
+            override_url, json={"outcome": "miss", "reason": "Chemist call: artifact"}
+        )
+        assert put_resp.status_code == 200, put_resp.text
+        outcome = _find_stage_outcome(put_resp.json(), result_id, stage_id)
+        assert outcome["outcome"] == "miss"
+        assert outcome["overridden"] is True
+        assert outcome["override_reason"] == "Chemist call: artifact"
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert get_resp.status_code == 200, get_resp.text
+        outcome = _find_stage_outcome(get_resp.json(), result_id, stage_id)
+        assert outcome["outcome"] == "miss"
+        assert outcome["overridden"] is True
+        assert outcome["override_reason"] == "Chemist call: artifact"
+
+        delete_resp = await client.delete(override_url)
+        assert delete_resp.status_code == 200, delete_resp.text
+        outcome = _find_stage_outcome(delete_resp.json(), result_id, stage_id)
+        assert outcome["outcome"] == "hit"
+        assert outcome["overridden"] is False
+        assert outcome["override_reason"] is None
+
+        # Clearing again (nothing to clear) is a no-op success, not a 404.
+        second_delete = await client.delete(override_url)
+        assert second_delete.status_code == 200, second_delete.text
+
+    async def test_override_unknown_stage_404(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-stage-override-404")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        resp = await client.put(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
+            f"/stages/{uuid.uuid4()}/override",
+            json={"outcome": "hit", "reason": "x"},
+        )
+        assert resp.status_code == 404, resp.text
+
+    async def test_override_empty_reason_422(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-stage-override-422")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Stage"}
+        )
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        resp = await client.put(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}/stages/{stage_id}/override",
+            json={"outcome": "hit", "reason": "   "},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_funnel_scenario_hit_miss_not_in_stage(self, client: AsyncClient) -> None:
+        """Stage A (root) on channel X, Stage B (parent A) on channel Y.
+
+        Result 1 passes both -> A hit, B hit.
+        Result 2 passes A, fails B -> A hit, B miss.
+        Result 3 fails A -> A miss, B not_in_stage (parent gate, spec §3.6).
+        """
+        project_id = await _create_project(client)
+        mol_hit = await _register_molecule(client, ASPIRIN_SMILES, "Funnel-hit")
+        mol_miss_b = await _register_molecule(client, CAFFEINE_SMILES, "Funnel-miss-b")
+        mol_miss_a = await _register_molecule(client, "c1ccccc1", "Funnel-miss-a")
+        campaign = await _create_draft_campaign(
+            client, project_id, [mol_hit, mol_miss_b, mol_miss_a]
+        )
+        campaign_id = campaign["id"]
+
+        protocol_x, rd_x = await _make_published_protocol_with_readout(client)
+        protocol_y, rd_y = await _make_published_protocol_with_readout(client)
+
+        channel_x_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "Channel X",
+                "protocol_id": protocol_x,
+                "readout_definition_id": rd_x,
+                "source_kind": "readout_data",
+                "selection_rule": "latest_approved_run",
+                "qualifier_handling": "include_qualified",
+                "display_order": 0,
+            },
+        )
+        assert channel_x_resp.status_code == 200, channel_x_resp.text
+        channel_x_id = channel_x_resp.json()["channels"][0]["id"]
+
+        channel_y_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "Channel Y",
+                "protocol_id": protocol_y,
+                "readout_definition_id": rd_y,
+                "source_kind": "readout_data",
+                "selection_rule": "latest_approved_run",
+                "qualifier_handling": "include_qualified",
+                "display_order": 1,
+            },
+        )
+        assert channel_y_resp.status_code == 200, channel_y_resp.text
+        channel_y_id = next(
+            c for c in channel_y_resp.json()["channels"] if c["label"] == "Channel Y"
+        )["id"]
+
+        campaign = channel_y_resp.json()
+        result_hit = _find_result_id(campaign, mol_hit)
+        result_miss_b = _find_result_id(campaign, mol_miss_b)
+        result_miss_a = _find_result_id(campaign, mol_miss_a)
+
+        # (channel X value, channel Y value) per result.
+        cell_values = {
+            result_hit: {channel_x_id: 80.0, channel_y_id: 5.0},
+            result_miss_b: {channel_x_id: 80.0, channel_y_id: 20.0},
+            result_miss_a: {channel_x_id: 10.0, channel_y_id: 5.0},
+        }
+        for result_id, by_channel in cell_values.items():
+            for channel_id, value in by_channel.items():
+                resp = await client.patch(
+                    f"/api/v1/campaigns/{campaign_id}/results/{result_id}/cells/{channel_id}",
+                    json={"value": value, "value_qualifier": "=", "unit": "uM"},
+                )
+                assert resp.status_code == 200, resp.text
+
+        stage_a_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={
+                "name": "Stage A",
+                "criteria": [{"channel_id": channel_x_id, "operator": "gte", "value": 50.0}],
+            },
+        )
+        assert stage_a_resp.status_code == 200, stage_a_resp.text
+        stage_a_id = next(
+            s["id"] for s in stage_a_resp.json()["stages"] if s["name"] == "Stage A"
+        )
+
+        stage_b_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={
+                "name": "Stage B",
+                "parent_stage_id": stage_a_id,
+                "criteria": [{"channel_id": channel_y_id, "operator": "lt", "value": 10.0}],
+            },
+        )
+        assert stage_b_resp.status_code == 200, stage_b_resp.text
+        stage_b_id = next(
+            s["id"] for s in stage_b_resp.json()["stages"] if s["name"] == "Stage B"
+        )
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert get_resp.status_code == 200, get_resp.text
+        final = get_resp.json()
+
+        def _outcome(result_id: str, stage_id: str) -> str:
+            return _find_stage_outcome(final, result_id, stage_id)["outcome"]
+
+        assert _outcome(result_hit, stage_a_id) == "hit"
+        assert _outcome(result_hit, stage_b_id) == "hit"
+        assert _outcome(result_miss_b, stage_a_id) == "hit"
+        assert _outcome(result_miss_b, stage_b_id) == "miss"
+        assert _outcome(result_miss_a, stage_a_id) == "miss"
+        assert _outcome(result_miss_a, stage_b_id) == "not_in_stage"
 
 
 # ---------------------------------------------------------------------------
