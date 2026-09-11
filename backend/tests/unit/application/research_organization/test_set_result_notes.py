@@ -101,6 +101,30 @@ class TestSetResultNotes:
         assert out.unwrap().results[0].notes is None
 
     @pytest.mark.asyncio
+    async def test_whitespace_only_notes_are_stored_as_null(self) -> None:
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        result.notes = "old"
+        campaign.add_result(result)
+
+        uc = SetResultNotes(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            dispatcher=AsyncMock(),
+        )
+        cmd = SetResultNotesCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            result_id=result.id,
+            notes="   \n ",
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Success)
+        assert out.unwrap().results[0].notes is None
+
+    @pytest.mark.asyncio
     async def test_result_not_found_returns_not_found_failure(self) -> None:
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)

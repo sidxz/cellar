@@ -848,6 +848,78 @@ class TestCampaignResults:
         updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
         assert updated_result["notes"] is None
 
+    async def test_set_result_notes_missing_key_422(self, client: AsyncClient) -> None:
+        """An empty PATCH body is rejected — it must never silently clear notes."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-notes3")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        resp = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
+            json={},
+        )
+        assert resp.status_code == 422, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Add from campaign
+# ---------------------------------------------------------------------------
+
+
+class TestAddFromCampaign:
+    async def test_add_from_campaign_no_stage_adds_every_source_result(
+        self, client: AsyncClient
+    ) -> None:
+        """``stage_id: null`` pulls every source result; re-adding is skipped."""
+        project_id = await _create_project(client)
+        mol1 = await _register_molecule(client, ASPIRIN_SMILES, "Asp-afc1")
+        mol2 = await _register_molecule(client, CAFFEINE_SMILES, "Caf-afc2")
+        source = await _create_draft_campaign(client, project_id, [mol1, mol2], name="Source")
+        source_id = source["id"]
+
+        # Give the source a stage so the happy path covers a staged campaign.
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{source_id}/stages", json={"name": "Primary Hit"}
+        )
+        assert stage_resp.status_code == 200, stage_resp.text
+
+        target = await _create_empty_campaign(client, project_id, name="Target")
+        target_id = target["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{target_id}/add-from-campaign",
+            json={"source_campaign_id": source_id, "stage_id": None},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["added"] == 2
+        assert data["skipped"] == 0
+        assert {r["molecule_id"] for r in data["campaign"]["results"]} == {mol1, mol2}
+
+        # Idempotent: a second pull adds nothing.
+        again = await client.post(
+            f"/api/v1/campaigns/{target_id}/add-from-campaign",
+            json={"source_campaign_id": source_id, "stage_id": None},
+        )
+        assert again.status_code == 200, again.text
+        assert again.json()["added"] == 0
+        assert again.json()["skipped"] == 2
+
+    async def test_add_from_campaign_foreign_stage_422(self, client: AsyncClient) -> None:
+        """A stage_id that belongs to no source-campaign stage is rejected."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-afc3")
+        source = await _create_draft_campaign(client, project_id, [mol_id], name="Source2")
+        target = await _create_empty_campaign(client, project_id, name="Target2")
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{target['id']}/add-from-campaign",
+            json={"source_campaign_id": source["id"], "stage_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 422, resp.text
+
 
 # ---------------------------------------------------------------------------
 # Close / Lock guard

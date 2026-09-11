@@ -27,6 +27,7 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    StageOutcome,
     ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import CampaignRef
@@ -174,6 +175,35 @@ class TestAddResultsFromCampaign:
         added_from = outcome.campaign.results[0].added_from
         assert isinstance(added_from, CampaignRef)
         assert added_from.to_dict()["stage_id"] == str(stage.id)
+
+    @pytest.mark.asyncio
+    async def test_stage_filter_honours_manual_override(self) -> None:
+        """A computed miss forced to HIT by a manual override is pulled."""
+        auth = fake_auth()
+        campaign = _make_campaign(auth)
+        source, stage = _make_source_campaign(auth, [60.0, 10.0])
+        miss = source.results[1]
+        miss.set_stage_override(
+            stage_id=stage.id,
+            forced_outcome=StageOutcome.HIT,
+            reason="Confirmed by orthogonal assay",
+            overridden_by=auth.user_id,
+        )
+        uc = _make_uc(make_campaign_repo(find_dispatch={campaign.id: campaign, source.id: source}))
+        cmd = AddResultsFromCampaignCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            source_campaign_id=source.id,
+            stage_id=stage.id,
+        )
+        result = await uc(cmd, auth=auth)
+
+        assert isinstance(result, Success)
+        outcome = result.unwrap()
+        assert outcome.added == 2
+        assert {r.molecule_id for r in outcome.campaign.results} == {
+            r.molecule_id for r in source.results
+        }
 
     @pytest.mark.asyncio
     async def test_stage_from_another_campaign_is_rejected(self) -> None:

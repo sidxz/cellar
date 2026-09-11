@@ -44,7 +44,7 @@ class SetResultNotes:
       2. Load campaign (workspace-scoped); NotFoundError if missing.
       3. Inline DRAFT check — Failure(ValidationError) if not DRAFT.
       4. Find the result by id on ``campaign.results``; NotFoundError if missing.
-      5. Assign ``result.notes``.
+      5. Assign ``result.notes`` — whitespace-only collapses to ``None``.
       6. Bump ``campaign.updated_at``.
       7. Save + commit inside UoW; dispatch events; return ``Success(campaign)``.
     """
@@ -84,7 +84,8 @@ class SetResultNotes:
             if result is None:
                 return Failure(NotFoundError("CampaignResult", str(input.result_id)))
 
-            result.notes = input.notes
+            # Whitespace-only notes are stored as NULL, same as an explicit clear.
+            result.notes = (input.notes or "").strip() or None
             campaign.updated_at = datetime.now(UTC)
 
             await self._campaign_repo.save(campaign)

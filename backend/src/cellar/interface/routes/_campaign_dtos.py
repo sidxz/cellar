@@ -232,9 +232,13 @@ class SetStageOverrideRequest(BaseModel):
 
 
 class SetResultNotesRequest(BaseModel):
-    """Set (or, with ``null``, clear) the free-text notes on one result row."""
+    """Set (or, with ``null``, clear) the free-text notes on one result row.
 
-    notes: str | None = None
+    ``notes`` is a required key: an omitted key is a 422, so an empty PATCH
+    body can never silently clear a note. Explicit ``null`` still clears.
+    """
+
+    notes: str | None
 
     model_config = {"extra": "forbid"}
 
