@@ -148,7 +148,7 @@ export function CampaignFilterBar({
           );
         })}
 
-      <span className="text-muted-foreground/50 mx-1">·</span>
+      {stageTally && <span className="text-muted-foreground/50 mx-1">·</span>}
 
       <button
         type="button"

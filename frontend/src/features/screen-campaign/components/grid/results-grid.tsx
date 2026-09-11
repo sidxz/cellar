@@ -276,6 +276,10 @@ export function ResultsGridV2({
       field: "result.molecule_id",
       pinned: "left",
       width: 270,
+      // DataGrid calls sizeColumnsToFit, which would otherwise squeeze this
+      // column below the 160px structure drawing.
+      minWidth: 270,
+      suppressSizeToFit: true,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
@@ -528,6 +532,7 @@ export function ResultsGridV2({
       colId: "notes",
       pinned: "right",
       width: 220,
+      minWidth: 160,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
