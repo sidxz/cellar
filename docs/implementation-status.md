@@ -158,6 +158,18 @@ Plan: `docs/superpowers/plans/2026-05-10-screen-campaign.md`
 - [x] SC-Phase-8 — Frontend builder UI: channel configurator panel, compound pivot AG Grid (per-compound rows × per-channel columns), result decision panel, re-resolve trigger, status badge, close-campaign dialog with e-sig confirmation.
 - [x] SC-Phase-9 — Frontend closed view + supersede flow. Playwright E2E deferred — `frontend/tests/e2e/screen-campaign.spec.ts.TODO` stub left for follow-up (Playwright setup not present in CI).
 - [x] SC-Phase-10 — Documentation: Campaign aggregate section in `docs/domain-model/05-research-organization.md`, spec back-link added, implementation-status updated (this entry).
+- [ ] SC-Phase-11 — **Campaign Hit Stages + Soft Close (IN PROGRESS, 2026-09-11).** Named hit
+  stages (`CampaignStage`/`StageCriterion`, a parent-chain funnel) replace the per-channel
+  `hit_threshold` / per-cell `hit_call`; per-stage manual promote/demote (`StageOverride`) with a
+  required reason; Close & Sign replaced by a plain close/reopen toggle (no e-signature, no
+  auto-published Collection). Spec:
+  `docs/superpowers/specs/2026-09-11-campaign-hit-stages-and-soft-close-spec.md`. Backend done
+  through domain + persistence + soft close: `CampaignStage`/`StageCriterion`/`StageOverride`,
+  the pure `evaluate_stages`/`tally_stage_counts` evaluator, `Campaign.close`/`reopen`,
+  `CampaignReopened` event, ORM models + migration 074 (additive: tables, backfill, triggers,
+  `close_note`). Still pending: stages CRUD use cases + API router, dropping the retired
+  columns (migration 075), published-JSON stages, and the whole frontend (readouts grouping,
+  stages section, filter bar, grid Stage column, close/reopen dialogs).
 
 ### Open Follow-ups (carry to next iteration)
 

@@ -559,3 +559,31 @@ pnpm test`) and committed with explicit pathspecs.
 - Removing `Collection.freeze` / `is_frozen` / `derived_from_campaign_id` and the
   `is_frozen` fields on the collections API.
 - A real reopen/close history view (the audit trail already records both events).
+
+---
+
+## 14. Implementation notes
+
+Deviations from this spec found while implementing (§8, §11):
+
+- **Migration split.** §8 describes migration 074 as one migration that both creates the stage
+  tables/backfill/triggers/`close_note` *and* drops the five retired columns
+  (`campaign_channel.hit_threshold`, `campaign_measurement.hit_call`, `campaign.signature_id`,
+  `campaign.publishes_collection`, `campaign.published_collection_id`). Implemented as two
+  migrations instead: `074_campaign_hit_stages` is additive only — it creates `campaign_stage` /
+  `campaign_stage_override`, backfills stages from existing thresholds, extends
+  `reject_locked_campaign_write()` with the two new table branches, and adds `campaign.close_note`.
+  A follow-on `075` migration drops the five retired columns once the application/API/frontend
+  layers that still read them are updated. Splitting them keeps each migration independently
+  revertible and avoids one migration that both adds new tables and removes columns still read by
+  not-yet-updated code partway through the multi-session rollout.
+- **Migration data-step test.** §11 calls for an integration test of the migration 074 data step
+  ("seed two channels with thresholds … run the upgrade, assert two stages with suffixed names").
+  Implemented instead as a unit test
+  (`backend/tests/unit/infrastructure/persistence/test_migration_074_stage_backfill.py`) that
+  imports `build_stage_rows` directly from the migration module and asserts its output (naming,
+  case-insensitive suffixing, skip on the `in` operator, skip when there's no threshold) against
+  plain dict input — no DB, no testcontainers. `build_stage_rows` is a pure function factored out
+  of `upgrade()` specifically so the row-shaping logic is unit-testable; the surrounding SQL
+  create/backfill/trigger steps stay exercised indirectly by every other integration test that
+  migrates to head.
