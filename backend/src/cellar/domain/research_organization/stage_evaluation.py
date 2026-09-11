@@ -88,16 +88,29 @@ def _evaluate_stage(
     result: CampaignResult,
     stages_by_id: dict[uuid.UUID, CampaignStage],
     memo: dict[uuid.UUID, StageResultOutcome],
+    visiting: set[uuid.UUID] | None = None,
 ) -> StageResultOutcome:
     cached = memo.get(stage.id)
     if cached is not None:
         return cached
+    if visiting is None:
+        visiting = set()
 
-    if stage.parent_stage_id is None:
+    parent = stages_by_id.get(stage.parent_stage_id) if stage.parent_stage_id else None
+    if parent is None or parent.id in visiting:
+        # Root, a dangling/cross-campaign parent id, or a cycle back onto a
+        # stage already being resolved on this call chain: treat as root.
+        # All three are unreachable through the aggregate (Campaign.add_stage
+        # validates parent existence and walks the chain to refuse cycles)
+        # but the FK doesn't constrain the parent to the same campaign and
+        # nothing at the DB level prevents cycles — stay defensive rather
+        # than KeyError or recurse forever (memo is written only after
+        # recursion returns).
         in_stage = True
     else:
-        parent = stages_by_id[stage.parent_stage_id]
-        parent_outcome = _evaluate_stage(parent, result, stages_by_id, memo)
+        visiting.add(stage.id)
+        parent_outcome = _evaluate_stage(parent, result, stages_by_id, memo, visiting)
+        visiting.discard(stage.id)
         in_stage = parent_outcome.outcome == StageOutcome.HIT
 
     if in_stage:

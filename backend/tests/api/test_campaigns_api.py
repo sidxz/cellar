@@ -935,6 +935,33 @@ class TestCloseCampaign:
         )
         assert resp.status_code == 422, resp.text
 
+    async def test_reopen_422_on_superseded(self, client: AsyncClient) -> None:
+        """Reopening a SUPERSEDED campaign (closed, then superseded by a
+        successor) returns 422 — spec §11 also lists superseded, alongside
+        draft, as a status reopen must refuse."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-reopen-sup")
+        old_campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+
+        close_resp = await client.post(f"/api/v1/campaigns/{old_campaign_id}/close", json={})
+        assert close_resp.status_code == 200, close_resp.text
+
+        new_campaign = await _create_empty_campaign(
+            client, project_id, name="Successor", supersedes_campaign_id=old_campaign_id
+        )
+        supersede_resp = await client.post(
+            f"/api/v1/campaigns/{old_campaign_id}/supersede",
+            json={"new_campaign_id": new_campaign["id"]},
+        )
+        assert supersede_resp.status_code == 200, supersede_resp.text
+        assert supersede_resp.json()["status"] == "superseded"
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{old_campaign_id}/reopen",
+            json={"reason": "oops"},
+        )
+        assert resp.status_code == 422, resp.text
+
     async def test_patch_after_close_423(self, client: AsyncClient) -> None:
         """Mutating a closed campaign via PATCH returns 423 (DataLockedError)."""
         project_id = await _create_project(client)

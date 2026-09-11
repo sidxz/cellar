@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -227,7 +227,7 @@ class UpdateStageRequest(BaseModel):
 
 
 class SetStageOverrideRequest(BaseModel):
-    outcome: str  # "hit" | "miss"
+    outcome: Literal["hit", "miss"]
     reason: str
 
 
@@ -579,6 +579,10 @@ class CampaignResponse(BaseModel):
 class AddResultsOutcomeResponse(BaseModel):
     added: int
     skipped: int
+    #: True only for the add-from-runs outcome when a stage was actually
+    #: created from the requested stage_name; other add-results outcomes
+    #: (collection, campaign) never create a stage.
+    stage_created: bool = False
     campaign: CampaignResponse
 
     @classmethod
@@ -586,6 +590,7 @@ class AddResultsOutcomeResponse(BaseModel):
         return cls(
             added=outcome.added,
             skipped=outcome.skipped,
+            stage_created=getattr(outcome, "stage_created", False),
             campaign=CampaignResponse.from_domain(outcome.campaign),
         )
 

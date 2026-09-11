@@ -201,11 +201,11 @@ class Campaign(AggregateRoot):
     def _check_stage_name_available(
         self, name: str, *, exclude_stage_id: uuid.UUID | None
     ) -> None:
-        normalized = name.casefold()
+        normalized = name.lower()
         for other in self.stages:
             if other.id == exclude_stage_id:
                 continue
-            if other.name.casefold() == normalized:
+            if other.name.lower() == normalized:
                 raise ValidationError(f"CampaignStage name '{name}' already used on this campaign")
 
     def _check_stage_parent(

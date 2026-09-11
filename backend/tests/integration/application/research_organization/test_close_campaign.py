@@ -319,3 +319,126 @@ async def test_reopen_campaign_integration(session_factory) -> None:
     assert reloaded.closed_at is None
     assert reloaded.closed_by is None
     assert reloaded.close_note is None
+
+
+@pytest.mark.asyncio
+async def test_stage_writes_blocked_while_closed_then_allowed_after_reopen(
+    session_factory,
+) -> None:
+    """spec §11: the migration-074 DB triggers are the last line of defence
+    behind the application-level DataLockedError check — assert them
+    directly. A raw INSERT into campaign_stage / campaign_stage_override
+    against a closed campaign fails with check_violation ("writes
+    blocked"); after ReopenCampaign, the same inserts succeed. Each attempt
+    uses its own UoW: Postgres aborts the whole transaction on the first
+    error, so a second statement on the same session would fail regardless
+    of the trigger."""
+    ws_id, campaign_id, _protocol_id, user_id = await _seed_and_close_campaign(
+        session_factory, note="closing for trigger test"
+    )
+
+    async with AsyncUnitOfWork(session_factory) as uow_check:
+        camp_repo = SQLAlchemyCampaignRepository(uow_check)
+        reloaded = await camp_repo.find_by_id_in_workspace(ws_id, campaign_id)
+    result_id = reloaded.results[0].id
+
+    # --- blocked: campaign_stage --------------------------------------
+    async with AsyncUnitOfWork(session_factory) as uow:
+        with pytest.raises(sa.exc.IntegrityError) as exc_info:
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO campaign_stage (id, campaign_id, name) "
+                    "VALUES (:id, :campaign_id, 'Trigger Test Stage')"
+                ),
+                {"id": uuid.uuid4(), "campaign_id": campaign_id},
+            )
+        assert "writes blocked" in str(exc_info.value)
+        await uow.rollback()
+
+    # --- blocked: campaign_stage_override ------------------------------
+    # stage_id need not reference a real row: the trigger only joins
+    # campaign_result -> campaign on result_id and fires before any FK is
+    # checked, so it raises before the (nonexistent) stage_id ever matters.
+    async with AsyncUnitOfWork(session_factory) as uow:
+        with pytest.raises(sa.exc.IntegrityError) as exc_info:
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO campaign_stage_override "
+                    "(id, result_id, stage_id, forced_outcome, reason, overridden_by, "
+                    "overridden_at) "
+                    "VALUES (:id, :result_id, :stage_id, 'hit', 'trigger test', "
+                    ":overridden_by, now())"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "result_id": result_id,
+                    "stage_id": uuid.uuid4(),
+                    "overridden_by": user_id,
+                },
+            )
+        assert "writes blocked" in str(exc_info.value)
+        await uow.rollback()
+
+    # --- reopen ---------------------------------------------------------
+    reopen_cmd = ReopenCampaignCommand(
+        workspace_id=ws_id,
+        campaign_id=campaign_id,
+        user_id=user_id,
+        reason="reopen for trigger test",
+    )
+    uow_reopen = AsyncUnitOfWork(session_factory)
+    reopen_uc = ReopenCampaign(
+        uow=uow_reopen,
+        campaign_repo=SQLAlchemyCampaignRepository(uow_reopen),
+        dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
+    )
+    auth = _make_fake_auth(user_id, ws_id)
+    out = await reopen_uc(reopen_cmd, auth=auth)
+    assert isinstance(out, Success), f"Expected Success, got {out}"
+
+    # --- allowed: campaign_stage ----------------------------------------
+    new_stage_id = uuid.uuid4()
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO campaign_stage (id, campaign_id, name) "
+                "VALUES (:id, :campaign_id, 'Trigger Test Stage')"
+            ),
+            {"id": new_stage_id, "campaign_id": campaign_id},
+        )
+        await uow.commit()
+
+    # --- allowed: campaign_stage_override, referencing the real stage ---
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await uow.session.execute(
+            sa.text(
+                "INSERT INTO campaign_stage_override "
+                "(id, result_id, stage_id, forced_outcome, reason, overridden_by, "
+                "overridden_at) "
+                "VALUES (:id, :result_id, :stage_id, 'hit', 'trigger test', "
+                ":overridden_by, now())"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "result_id": result_id,
+                "stage_id": new_stage_id,
+                "overridden_by": user_id,
+            },
+        )
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow_verify:
+        stage_count = (
+            await uow_verify.session.execute(
+                sa.text("SELECT count(*) FROM campaign_stage WHERE id = :id"),
+                {"id": new_stage_id},
+            )
+        ).scalar_one()
+        override_count = (
+            await uow_verify.session.execute(
+                sa.text("SELECT count(*) FROM campaign_stage_override WHERE stage_id = :id"),
+                {"id": new_stage_id},
+            )
+        ).scalar_one()
+    assert stage_count == 1
+    assert override_count == 1

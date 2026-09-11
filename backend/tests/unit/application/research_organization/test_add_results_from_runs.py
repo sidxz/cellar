@@ -629,6 +629,7 @@ class TestAddResultsFromRuns:
         )
         out = await uc(cmd, auth=auth)
         assert isinstance(out, Success)
+        assert out.unwrap().stage_created is True
         assert len(campaign.stages) == 1
         stage = campaign.stages[0]
         assert stage.name == "Primary Hits"
@@ -682,7 +683,66 @@ class TestAddResultsFromRuns:
         )
         out = await uc(cmd, auth=auth)
         assert isinstance(out, Success)
+        assert out.unwrap().stage_created is False
         assert campaign.stages == []
+
+    @pytest.mark.asyncio
+    async def test_stage_skips_in_operator_configs(self) -> None:
+        """A config whose hit_threshold uses the string-based 'in' operator
+        contributes no StageCriterion (StageCriterion — unlike HitCriterion —
+        doesn't support it, same as the mirror-protocol path); the stage is
+        still built from the remaining numeric config(s)."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto1, readout1, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        proto2, readout2 = uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+        candidates = {
+            (proto1, readout1): {mol: [_candidate(value=42.0, run_id=run_id)]},
+            (proto2, readout2): {mol: [_candidate(value=7.0, run_id=run_id)]},
+        }
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto1,
+                    readout_definition_id=readout1,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
+                ),
+                ChannelImportConfig(
+                    protocol_id=proto2,
+                    readout_definition_id=readout2,
+                    label="Curve Class",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="Curve Class", operator="in", value=["full"]
+                    ),
+                ),
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is True
+        assert len(campaign.stages) == 1
+        stage = campaign.stages[0]
+        assert len(stage.criteria) == 1  # the 'in' config contributed nothing
+        ic50_channel = next(ch for ch in campaign.channels if ch.readout_definition_id == readout1)
+        assert stage.criteria[0].channel_id == ic50_channel.id
 
     @pytest.mark.asyncio
     async def test_stage_name_collision_returns_failure(self) -> None:

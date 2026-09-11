@@ -97,6 +97,7 @@ class AddFromRunsOutcome(AddResultsOutcome):
 
     channels_created: int = 0
     channels_reused: int = 0
+    stage_created: bool = False
 
 
 class AddResultsFromRuns:
@@ -241,12 +242,17 @@ class AddResultsFromRuns:
             # Step 1b — optional hit stage from import-time filter criteria.
             # Purely config-driven (doesn't need any resolved cell value):
             # one StageCriterion per config that opts into filtering, bound
-            # to that config's resolved channel.
+            # to that config's resolved channel. Numeric-only, like the
+            # mirror path: a config using the string-based ``in`` operator
+            # contributes nothing (StageCriterion doesn't accept it).
+            stage_created = False
             if input.stage_name:
                 stage_criteria: list[StageCriterion] = []
                 try:
                     for cfg in input.channel_configs:
                         if not (cfg.use_for_filter and cfg.hit_threshold is not None):
+                            continue
+                        if cfg.hit_threshold.operator == "in":
                             continue
                         norm = (
                             cfg.normalization_applied
@@ -275,6 +281,7 @@ class AddResultsFromRuns:
                                 criteria=stage_criteria,
                             )
                         )
+                        stage_created = True
                 except ValidationError as e:
                     return Failure(e)
 
@@ -455,6 +462,7 @@ class AddResultsFromRuns:
             skipped=len(mols_to_add) - added,
             channels_created=channels_created,
             channels_reused=channels_reused,
+            stage_created=stage_created,
         )
         return Success(outcome)
 

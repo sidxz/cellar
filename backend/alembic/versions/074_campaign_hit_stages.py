@@ -21,8 +21,8 @@ campaign_measurement) and attaches it to both new tables. The backfill
 INSERT runs before the trigger exists on campaign_stage, so channels
 belonging to closed/superseded campaigns backfill too.
 
-Also adds campaign.close_note (Text, nullable) — plain attribute only;
-behavior lands in a later task.
+Also adds campaign.close_note (Text, nullable), recorded by CloseCampaign
+and cleared by ReopenCampaign.
 
 Revision ID: 074_campaign_hit_stages
 Revises: 073_molecules_inchi_key_unique
@@ -260,7 +260,7 @@ def upgrade() -> None:
         )
 
     # ------------------------------------------------------------------
-    # campaign.close_note — plain attribute; behavior lands in a later task.
+    # campaign.close_note — recorded by CloseCampaign, cleared by ReopenCampaign.
     # ------------------------------------------------------------------
     op.add_column("campaign", sa.Column("close_note", sa.Text(), nullable=True))
 

@@ -188,7 +188,7 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         Uuid(as_uuid=True), nullable=True
     )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
-    # Migration 074 — freeform note recorded at close time (behavior in a later task).
+    # Migration 074 — freeform note recorded by CloseCampaign, cleared by ReopenCampaign.
     close_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     channels: Mapped[list[CampaignChannelModel]] = relationship(
@@ -240,9 +240,10 @@ class CampaignChannelModel(Base, EntityModelMixin):
     normalization_applied: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Identifies which intercept of a DR curve this channel surfaces (e.g.
     # EC90 on a curve that also reports EC50). NULL = primary intercept.
-    # JSONB shape: {"kind": "ec"|"ic", "level": float}. Channel identity is
-    # set at creation; threshold's intercept_key (under hit_threshold) is
-    # informational only after migration 035.
+    # JSONB shape: {"kind": "ec"|"ic", "level": float}. Channel identity —
+    # including which intercept it targets — is fixed at creation; it is
+    # not affected by later import-time hit-threshold changes (hit_threshold
+    # is import-time-only, on ChannelImportConfig, and never persisted here).
     intercept_key: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 

@@ -507,3 +507,56 @@ def test_worked_example_tally_matches_spec():
         "not_in_stage": 56,
         "overridden": 0,
     }
+
+
+# ---------- defensive guards: dangling parent / cycle (M-1) ----------
+#
+# Both scenarios are unreachable through the aggregate (Campaign.add_stage
+# validates parent existence and walks the chain to refuse cycles) but not
+# enforced by the FK (doesn't constrain the parent to the same campaign) or
+# the DB — constructed here by mutating `campaign.stages` directly, the same
+# way test_parent_listed_after_child_still_evaluated_first bypasses add_stage.
+
+
+def test_dangling_parent_treated_as_root():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    orphan = CampaignStage(
+        campaign_id=c.id,
+        name="Orphan",
+        display_order=0,
+        parent_stage_id=uuid.uuid4(),  # no stage with this id exists anywhere
+        criteria=[StageCriterion(channel_id=ch.id, operator="gte", value=50.0)],
+    )
+    c.stages = [orphan]
+    r = _make_result(c)
+    _add_measurement(r, ch, value=60.0)
+
+    outcomes = evaluate_stages(c)
+
+    # No KeyError; the missing parent is treated as "always in stage".
+    assert outcomes[r.id][orphan.id].outcome == StageOutcome.HIT
+
+
+def test_cycle_guard_terminates_instead_of_recursing_forever():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    a = CampaignStage(
+        campaign_id=c.id,
+        name="A",
+        display_order=0,
+        criteria=[StageCriterion(channel_id=ch.id, operator="gte", value=50.0)],
+    )
+    b = CampaignStage(campaign_id=c.id, name="B", display_order=1, parent_stage_id=a.id)
+    a.parent_stage_id = b.id  # close the cycle: a -> b -> a
+    c.stages = [a, b]
+    r = _make_result(c)
+    _add_measurement(r, ch, value=60.0)
+
+    outcomes = evaluate_stages(c)
+
+    # Terminates instead of RecursionError: the guard breaks the cycle by
+    # treating whichever stage is re-entered as root, so b (no criteria)
+    # resolves hit, and a's own (passing) criterion then also hits.
+    assert outcomes[r.id][b.id].outcome == StageOutcome.HIT
+    assert outcomes[r.id][a.id].outcome == StageOutcome.HIT
