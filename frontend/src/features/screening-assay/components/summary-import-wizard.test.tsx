@@ -152,7 +152,8 @@ describe("SummaryImportWizard", () => {
     hookState.value = baseHook({
       step: 4,
       result: {
-        rows_processed: 1,
+        total_rows: 1,
+        matched_compound_count: 1,
         values_inserted: 1,
         values_updated: 0,
         rows_skipped: 0,
@@ -170,7 +171,8 @@ describe("SummaryImportWizard", () => {
     hookState.value = baseHook({
       step: 4,
       result: {
-        rows_processed: 1,
+        total_rows: 1,
+        matched_compound_count: 1,
         values_inserted: 1,
         values_updated: 0,
         rows_skipped: 0,

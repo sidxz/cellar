@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useRef } from "react";
 
 import { CsvDropzone } from "@/shared/components/csv-dropzone";
@@ -22,7 +22,6 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
-import { cn } from "@/shared/lib/utils";
 import type {
   SummaryImportResponse,
   SummaryPreviewResponse,
@@ -31,13 +30,16 @@ import type {
 } from "../hooks/use-summary-import";
 import { useSummaryImportWizard } from "../hooks/use-summary-import-wizard";
 import type { SummaryMappingDraft } from "../lib/summary-import-mapping";
+import { RowErrorsCard, StatCard, UnmatchedRefsCard } from "./import-outcome-cards";
 
-// Summary import recognizes only these four roles — no Well / Plate /
-// Concentration (those are plate-import concepts). Compound/Batch ref plus
+// Summary import recognizes only these roles — no Well / Plate / Concentration
+// (those are plate-import concepts). Compound/Batch ref, an optional Structure
+// (SMILES) column used only to resolve refs the identifier lookup misses, plus
 // one or more readout columns is the entire mapping surface.
 const ROLE_OPTIONS: Array<{ value: SummaryRole; label: string }> = [
   { value: "compound_ref", label: "Compound Ref" },
   { value: "batch_ref", label: "Batch Ref" },
+  { value: "structure", label: "Structure (SMILES)" },
   { value: "readout", label: "Readout" },
   { value: "ignore", label: "Ignore" },
 ];
@@ -296,40 +298,11 @@ function MappingStep({
 
 // ─── Step 3 — Preview (dry-run forecast) ─────────────────────────────────────
 
-function UnmatchedRefsCard({
-  count,
-  refs,
-  title,
-  help,
-}: {
-  count: number;
-  refs: string[];
-  title: string;
-  help: string;
-}) {
-  const shown = refs.slice(0, 20);
-  const extra = refs.length - shown.length;
-  return (
-    <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-      <div className="mb-1 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
-        <AlertCircle className="h-4 w-4" />
-        {count} {title}
-      </div>
-      <p className="text-xs text-muted-foreground">{help}</p>
-      <p className="mt-2 break-words font-mono text-xs">
-        {shown.join(", ")}
-        {extra > 0 && ` … +${extra} more`}
-      </p>
-    </div>
-  );
-}
-
 function PreviewStep({ preview }: { preview: SummaryResolveResponse }) {
   const unmatchedCompounds = preview.unmatched_compound_refs ?? [];
   const unmatchedBatches = preview.unmatched_batch_refs ?? [];
   const errors = preview.errors ?? [];
   const willWrite = preview.values_to_insert + preview.values_to_update;
-  const shownErrors = errors.slice(0, 20);
 
   return (
     <div className="space-y-4 py-2">
@@ -346,16 +319,14 @@ function PreviewStep({ preview }: { preview: SummaryResolveResponse }) {
 
       {unmatchedCompounds.length > 0 && (
         <UnmatchedRefsCard
-          count={unmatchedCompounds.length}
           refs={unmatchedCompounds}
           title={`unmatched compound ref${unmatchedCompounds.length === 1 ? "" : "s"}`}
-          help="No molecule matches these identifiers. Their rows will be skipped. Register the compounds first if they should be included."
+          help="No molecule matches these identifiers (or structures). Their rows will be skipped. Register the compounds first if they should be included."
         />
       )}
 
       {unmatchedBatches.length > 0 && (
         <UnmatchedRefsCard
-          count={unmatchedBatches.length}
           refs={unmatchedBatches}
           title={`unmatched batch ref${unmatchedBatches.length === 1 ? "" : "s"}`}
           help="No batch matches these identifiers. Their rows will be skipped. Register the batches first if they should be included."
@@ -364,17 +335,17 @@ function PreviewStep({ preview }: { preview: SummaryResolveResponse }) {
 
       {/* Value forecast */}
       <div className="grid grid-cols-3 gap-3">
-        <ResultCard
+        <StatCard
           label="New values"
           value={preview.values_to_insert}
           accent={preview.values_to_insert > 0 ? "ok" : undefined}
         />
-        <ResultCard
+        <StatCard
           label="Overwrites"
           value={preview.values_to_update}
           accent={preview.values_to_update > 0 ? "warn" : undefined}
         />
-        <ResultCard
+        <StatCard
           label="Rows skipped"
           value={preview.rows_skipped}
           accent={preview.rows_skipped > 0 ? "warn" : undefined}
@@ -387,27 +358,7 @@ function PreviewStep({ preview }: { preview: SummaryResolveResponse }) {
         </p>
       )}
 
-      {errors.length > 0 && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-          <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
-            <AlertCircle className="h-4 w-4" />
-            {errors.length} row error{errors.length === 1 ? "" : "s"}
-          </div>
-          <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
-            {shownErrors.map((e, i) => (
-              <li key={`${e.row}-${i}`}>
-                <span className="text-foreground">Row {e.row}</span>
-                <span className="ml-2 text-muted-foreground">— {e.error}</span>
-              </li>
-            ))}
-            {errors.length > shownErrors.length && (
-              <li className="text-muted-foreground">
-                …and {errors.length - shownErrors.length} more
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
+      {errors.length > 0 && <RowErrorsCard errors={errors} />}
     </div>
   );
 }
@@ -424,7 +375,7 @@ function ConfirmStep({ result }: { result: SummaryImportResponse }) {
           <p className="font-medium">Import complete</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {result.values_inserted} inserted · {result.values_updated} updated ·{" "}
-            {result.rows_skipped} skipped · {result.rows_processed} rows processed
+            {result.rows_skipped} skipped · {result.total_rows} rows processed
           </p>
           {result.attachment_id && (
             <p className="mt-1 text-xs text-muted-foreground">
@@ -440,55 +391,17 @@ function ConfirmStep({ result }: { result: SummaryImportResponse }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <ResultCard label="Inserted" value={result.values_inserted} accent="ok" />
-        <ResultCard label="Updated" value={result.values_updated} accent="ok" />
-        <ResultCard
+        <StatCard label="Inserted" value={result.values_inserted} accent="ok" />
+        <StatCard label="Updated" value={result.values_updated} accent="ok" />
+        <StatCard
           label="Skipped"
           value={result.rows_skipped}
           accent={result.rows_skipped > 0 ? "warn" : undefined}
         />
-        <ResultCard label="Rows processed" value={result.rows_processed} />
+        <StatCard label="Rows processed" value={result.total_rows} />
       </div>
 
-      {errors.length > 0 && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-          <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
-            <AlertCircle className="h-4 w-4" />
-            {errors.length} row error{errors.length === 1 ? "" : "s"}
-          </div>
-          <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
-            {errors.map((e, i) => (
-              <li key={`${e.row}-${i}`}>
-                <span className="text-foreground">Row {e.row}</span>
-                <span className="ml-2 text-muted-foreground">— {e.error}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ResultCard({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: number;
-  accent?: "ok" | "warn";
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-md border p-3",
-        accent === "warn" && "border-amber-500/30 bg-amber-500/5",
-        accent === "ok" && value > 0 && "border-green-500/30 bg-green-500/5",
-      )}
-    >
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-2xl font-semibold">{value}</div>
+      {errors.length > 0 && <RowErrorsCard errors={errors} max={errors.length} />}
     </div>
   );
 }

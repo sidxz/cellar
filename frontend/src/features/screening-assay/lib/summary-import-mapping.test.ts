@@ -56,6 +56,7 @@ describe("buildMapping", () => {
     expect(mapping).toEqual({
       compound_ref: "Compound",
       batch_ref: null,
+      structure: null,
       readout_columns: { IC50: "def-1" },
     });
   });
@@ -96,7 +97,16 @@ describe("buildMapping", () => {
     expect(mapping).toEqual({
       compound_ref: null,
       batch_ref: "Batch",
+      structure: null,
       readout_columns: { IC50: "def-1" },
     });
+  });
+
+  it("buildMapping carries the first structure column", () => {
+    const mapping = buildMapping({
+      roles: { Compound: "compound_ref", SMILES: "structure", IC50: "readout" },
+      readoutDefByHeader: { IC50: "def-1" },
+    });
+    expect(mapping?.structure).toBe("SMILES");
   });
 });

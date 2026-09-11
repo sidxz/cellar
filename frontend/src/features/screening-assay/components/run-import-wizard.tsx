@@ -25,7 +25,6 @@ import {
 } from "@/shared/components/ui/select";
 import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
 import { formatDate } from "@/shared/lib/format-date";
-import { cn } from "@/shared/lib/utils";
 import type {
   ImportRole,
   PreviewRunFileResponse,
@@ -33,6 +32,7 @@ import type {
 } from "../hooks/use-run-import";
 import { useRunImportWizard } from "../hooks/use-run-import-wizard";
 import type { MappingDraft } from "../lib/run-import-mapping";
+import { RowErrorsCard, StatCard, UnmatchedRefsCard } from "./import-outcome-cards";
 
 const ROLE_OPTIONS: Array<{ value: ImportRole | "ignore"; label: string }> = [
   { value: "well", label: "Well" },
@@ -203,7 +203,7 @@ export function RunImportWizard({ runId, protocolId, open, onOpenChange }: RunIm
               disabled={
                 importMutation.isPending ||
                 (preview?.validation_errors?.length ?? 0) > 0 ||
-                (preview?.row_conflicts?.length ?? 0) > 0 ||
+                (preview?.errors?.length ?? 0) > 0 ||
                 (preview?.ambiguous_compounds ?? []).some((a) => !compoundPicks[a.molecule_id])
               }
             >
@@ -211,7 +211,7 @@ export function RunImportWizard({ runId, protocolId, open, onOpenChange }: RunIm
                 ? "Importing…"
                 : (preview?.will_create_plates ?? 0) +
                       (preview?.will_create_wells ?? 0) +
-                      (preview?.will_create_readouts ?? 0) ===
+                      (preview?.values_to_insert ?? 0) ===
                     0
                   ? "Attach file"
                   : "Import"}
@@ -371,13 +371,16 @@ function PreviewStep({
   // previews); normalize to zeros/empties once so the render below stays flat.
   const willCreatePlates = preview.will_create_plates ?? 0;
   const willCreateWells = preview.will_create_wells ?? 0;
-  const willCreateReadouts = preview.will_create_readouts ?? 0;
-  const willSkipWells = preview.will_skip_wells ?? [];
-  const willSkipReadouts = preview.will_skip_readouts ?? [];
+  // Readout cells = "values" in the shared import vocabulary.
+  const willCreateReadouts = preview.values_to_insert;
+  const willSkipWells = preview.well_conflicts ?? [];
+  const willSkipReadouts = preview.readout_conflicts ?? [];
   const validationErrors = preview.validation_errors ?? [];
+  const unmatchedBatchRefs = preview.unmatched_batch_refs ?? [];
   const unmatchedCompoundRefs = preview.unmatched_compound_refs ?? [];
   const ambiguousCompounds = preview.ambiguous_compounds ?? [];
-  const rowConflicts = preview.row_conflicts ?? [];
+  const errors = preview.errors ?? [];
+  const rowsSkipped = preview.rows_skipped;
 
   const willCreateTotal = willCreatePlates + willCreateWells + willCreateReadouts;
   const willSkipTotal = willSkipWells.length + willSkipReadouts.length;
@@ -385,22 +388,28 @@ function PreviewStep({
   return (
     <div className="space-y-4 py-2">
       <div className="grid grid-cols-3 gap-3">
-        <SummaryCard
+        <StatCard
           label="Will create"
           value={willCreateTotal}
           accent={willCreateTotal > 0 ? "ok" : undefined}
         />
-        <SummaryCard
+        <StatCard
           label="Will skip"
           value={willSkipTotal}
           accent={willSkipTotal > 0 ? "warn" : undefined}
         />
-        <SummaryCard
+        <StatCard
           label="Will fail"
           value={validationErrors.length}
           accent={validationErrors.length > 0 ? "fail" : undefined}
         />
       </div>
+
+      {rowsSkipped > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {rowsSkipped} row{rowsSkipped === 1 ? "" : "s"} without a valid well skipped.
+        </p>
+      )}
 
       {willCreateTotal > 0 && (
         <div className="rounded-md border border-green-500/30 bg-green-500/5 p-3 text-xs text-muted-foreground">
@@ -474,20 +483,12 @@ function PreviewStep({
         </div>
       )}
 
-      {preview.unmatched_batches.length > 0 && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-          <div className="mb-1 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
-            <AlertCircle className="h-4 w-4" />
-            {preview.unmatched_batches.length} unmatched batch ref(s)
-          </div>
-          <p className="text-xs text-muted-foreground">
-            These wells will be skipped. Register the batches first if they should be included.
-          </p>
-          <p className="mt-2 break-words font-mono text-xs">
-            {preview.unmatched_batches.slice(0, 20).join(", ")}
-            {preview.unmatched_batches.length > 20 && "…"}
-          </p>
-        </div>
+      {unmatchedBatchRefs.length > 0 && (
+        <UnmatchedRefsCard
+          refs={unmatchedBatchRefs}
+          title="unmatched batch ref(s)"
+          help="These wells will be skipped. Register the batches first if they should be included."
+        />
       )}
 
       <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
@@ -507,20 +508,11 @@ function PreviewStep({
       </label>
 
       {unmatchedCompoundRefs.length > 0 && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-          <div className="mb-1 flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
-            <AlertCircle className="h-4 w-4" />
-            {unmatchedCompoundRefs.length} unmatched compound ref(s)
-          </div>
-          <p className="text-xs text-muted-foreground">
-            No molecule matches these identifiers (or the molecule has no registered batches). Wells
-            will be skipped.
-          </p>
-          <p className="mt-2 break-words font-mono text-xs">
-            {unmatchedCompoundRefs.slice(0, 20).join(", ")}
-            {unmatchedCompoundRefs.length > 20 && "…"}
-          </p>
-        </div>
+        <UnmatchedRefsCard
+          refs={unmatchedCompoundRefs}
+          title="unmatched compound ref(s)"
+          help="No molecule matches these identifiers (or the molecule has no registered batches). Wells will be skipped."
+        />
       )}
 
       {ambiguousCompounds.length > 0 && (
@@ -531,25 +523,13 @@ function PreviewStep({
         />
       )}
 
-      {rowConflicts.length > 0 && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-          <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
-            <AlertCircle className="h-4 w-4" />
-            Batch Ref / Compound Ref disagree on {rowConflicts.length} row(s)
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Each row's Batch Ref and Compound Ref point to different molecules. Fix the file (drop
-            one column or correct the values) and re-upload.
-          </p>
-          <ul className="ml-2 mt-2 space-y-1 font-mono text-xs">
-            {rowConflicts.slice(0, 10).map((line, i) => (
-              <li key={i}>{line}</li>
-            ))}
-            {rowConflicts.length > 10 && (
-              <li className="text-muted-foreground">…and {rowConflicts.length - 10} more</li>
-            )}
-          </ul>
-        </div>
+      {errors.length > 0 && (
+        <RowErrorsCard
+          errors={errors}
+          max={10}
+          title={`Batch Ref / Compound Ref disagree on ${errors.length} row(s)`}
+          help="Each row's Batch Ref and Compound Ref point to different molecules. Fix the file (drop one column or correct the values) and re-upload."
+        />
       )}
     </div>
   );
@@ -710,30 +690,6 @@ function ConflictPanel({
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: number;
-  accent?: "ok" | "warn" | "fail";
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-md border p-3",
-        accent === "warn" && "border-amber-500/30 bg-amber-500/5",
-        accent === "ok" && "border-green-500/30 bg-green-500/5",
-        accent === "fail" && "border-destructive/40 bg-destructive/5",
-      )}
-    >
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-2xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
 // ─── Step 4 ────────────────────────────────────────────────────────────────
 
 function ConfirmStep({
@@ -752,8 +708,9 @@ function ConfirmStep({
   templateAlreadySaved: boolean;
 }) {
   // The backend marks these conflict lists optional (omitted when empty).
-  const conflictsWellMetadata = result.conflicts_well_metadata ?? [];
-  const conflictsReadout = result.conflicts_readout ?? [];
+  const conflictsWellMetadata = result.well_conflicts ?? [];
+  const conflictsReadout = result.readout_conflicts ?? [];
+  const unmatchedBatchRefs = result.unmatched_batch_refs ?? [];
 
   return (
     <div className="space-y-4 py-2">
@@ -762,9 +719,8 @@ function ConfirmStep({
         <div className="text-green-300">
           <p className="font-medium">Import complete</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {result.plates_created} plates · {result.wells_created} wells ·{" "}
-            {result.readouts_created} readouts · {result.controls_from_template} controls from
-            layout
+            {result.plates_created} plates · {result.wells_created} wells · {result.values_inserted}{" "}
+            readouts · {result.controls_from_template} controls from layout
             {result.controls_unclassified > 0 && (
               <> · {result.controls_unclassified} blank wells unclassified</>
             )}
@@ -782,8 +738,8 @@ function ConfirmStep({
                 {conflictsReadout.length === 1 ? "" : "s"} skipped (already present)
               </>
             )}
-            {result.unmatched_batches.length > 0 && (
-              <> · {result.unmatched_batches.length} unmatched batch refs skipped</>
+            {unmatchedBatchRefs.length > 0 && (
+              <> · {unmatchedBatchRefs.length} unmatched batch refs skipped</>
             )}
           </p>
           {result.attachment_id && (
