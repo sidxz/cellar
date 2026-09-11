@@ -8,7 +8,10 @@ import type { SetResultNotesRequestNotes } from './setResultNotesRequestNotes';
 
 /**
  * Set (or, with ``null``, clear) the free-text notes on one result row.
+
+``notes`` is a required key: an omitted key is a 422, so an empty PATCH
+body can never silently clear a note. Explicit ``null`` still clears.
  */
 export interface SetResultNotesRequest {
-  notes?: SetResultNotesRequestNotes;
+  notes: SetResultNotesRequestNotes;
 }
