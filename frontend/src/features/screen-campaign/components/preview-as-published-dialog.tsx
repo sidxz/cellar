@@ -48,11 +48,9 @@ interface PublishedShape {
       channel_id: string;
       value: number | null;
       unit: string;
-      hit_call: string | null;
     }[];
   }[];
   source_protocols: { name?: string; version?: number | null }[];
-  published_collection: { name: string; size: number } | null;
 }
 
 export function PreviewAsPublishedDialog({
@@ -145,21 +143,6 @@ export function PreviewAsPublishedDialog({
                 </div>
               </section>
 
-              {/* Published collection */}
-              {doc.published_collection && (
-                <section className="space-y-1">
-                  <div className="text-xs uppercase text-muted-foreground">
-                    Published collection
-                  </div>
-                  <span className="text-sm">
-                    {doc.published_collection.name}{" "}
-                    <span className="text-muted-foreground">
-                      ({doc.published_collection.size} molecules)
-                    </span>
-                  </span>
-                </section>
-              )}
-
               {/* Results table */}
               <section className="space-y-1">
                 <div className="text-xs uppercase text-muted-foreground">
@@ -204,11 +187,6 @@ export function PreviewAsPublishedDialog({
                             return (
                               <td key={c.id} className="p-2">
                                 {formatMeasurementValue(m.value)} {m.unit !== "-" ? m.unit : ""}
-                                {m.hit_call === "hit" && (
-                                  <Badge className="ml-1 bg-orange-100 text-orange-800 text-[9px] px-1 py-0">
-                                    HIT
-                                  </Badge>
-                                )}
                               </td>
                             );
                           })}

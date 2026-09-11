@@ -5,10 +5,10 @@
  *
  * Reuses the same V2 sections as the draft builder (HeaderStrip,
  * SourcesSection, ChannelsSection, CampaignFilterBar, CampaignToolbar,
- * ResultsGridV2) with `readOnly={true}`. The closed-only details
- * (source protocols, published collection) are surfaced as a small
- * cards row below the channels section. The supersede dialog is
- * preserved and triggered from the HeaderStrip Supersede action.
+ * ResultsGridV2) with `readOnly={true}`. The closed-only detail
+ * (source protocols) is surfaced as a small card below the channels
+ * section. The supersede dialog is preserved and triggered from the
+ * HeaderStrip Supersede action.
  */
 
 import { useAuthzHasRole } from "@duar-auth/nextjs";
@@ -18,7 +18,6 @@ import { TagTable } from "@/features/tagging/components/tag-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
 import { ResultsGridV2 } from "../grid/results-grid";
-import { PublishedCollectionLink } from "./published-collection-link";
 import { SourceProtocolsList } from "./source-protocols-list";
 import { SupersedeDialog } from "./supersede-dialog";
 
@@ -69,10 +68,8 @@ export function CampaignView({ campaign }: CampaignViewProps) {
   const supersedesId = campaign.supersedes_campaign_id as string | undefined | null;
   const closedAt = campaign.closed_at as string | undefined | null;
   const closedBy = campaign.closed_by as string | undefined | null;
-  const signatureId = campaign.signature_id as string | undefined | null;
 
   const sourceProtocols = (campaign.source_protocols as Array<Record<string, unknown>>) ?? [];
-  const publishedCollectionId = campaign.published_collection_id as string | undefined | null;
 
   return (
     <div className="flex flex-col">
@@ -85,7 +82,6 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         onCloseAndSign={() => {}}
         closedAt={closedAt}
         closedBy={closedBy}
-        signatureId={signatureId}
         supersedesId={supersedesId}
         supersededBy={supersededBy}
         projectId={campaign.project_id}
@@ -97,23 +93,14 @@ export function CampaignView({ campaign }: CampaignViewProps) {
       <SourcesSection campaign={campaign} projectId={campaign.project_id} readOnly />
       <ChannelsSection campaign={campaign} projectId={campaign.project_id} readOnly />
 
-      {/* Closed-campaign-only details row */}
-      <section className="grid grid-cols-1 gap-4 border-b px-6 py-4 md:grid-cols-2">
+      {/* Closed-campaign-only detail */}
+      <section className="border-b px-6 py-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Source protocols</CardTitle>
           </CardHeader>
           <CardContent>
             <SourceProtocolsList protocols={sourceProtocols} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Published collection</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PublishedCollectionLink id={publishedCollectionId} />
           </CardContent>
         </Card>
       </section>

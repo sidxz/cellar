@@ -3,9 +3,8 @@
 /**
  * CampaignFilterBar — chip-driven filter row above the results grid (B5).
  *
- * Three chip groups:
+ * Two chip groups:
  * - Decision: selected / deferred / rejected (toggle each)
- * - Hit status: hits / non_hits / nd  (derived from hit_call across cells, any-hit semantics)
  * - Audit: "Overridden only" boolean toggle
  *
  * The filter state lives in <CampaignBuilder> and is consumed by both this bar
@@ -15,18 +14,15 @@
 import type { CampaignResponse, CampaignResultResponse } from "../types";
 
 export type CampaignDecisionFilter = "selected" | "deferred" | "rejected";
-export type CampaignHitStatusFilter = "hit" | "non_hit" | "nd";
 
 export interface CampaignFilters {
   decisions: Set<CampaignDecisionFilter>;
-  hitStatus: Set<CampaignHitStatusFilter>;
   overriddenOnly: boolean;
 }
 
 export function emptyFilters(): CampaignFilters {
   return {
     decisions: new Set(),
-    hitStatus: new Set(),
     overriddenOnly: false,
   };
 }
@@ -38,26 +34,12 @@ export function emptyFilters(): CampaignFilters {
 export function closedCampaignFilters(): CampaignFilters {
   return {
     decisions: new Set(["selected"]),
-    hitStatus: new Set(),
     overriddenOnly: false,
   };
 }
 
 export function filtersActive(f: CampaignFilters): boolean {
-  return f.decisions.size > 0 || f.hitStatus.size > 0 || f.overriddenOnly;
-}
-
-/** Any-hit semantics: hit if any measurement is a hit; non_hit if all are miss; nd otherwise. */
-export function computeRowHitStatus(result: CampaignResultResponse): CampaignHitStatusFilter {
-  let hasHit = false;
-  let hasMiss = false;
-  for (const m of result.measurements) {
-    if (m.hit_call === "hit") hasHit = true;
-    else if (m.hit_call === "miss") hasMiss = true;
-  }
-  if (hasHit) return "hit";
-  if (hasMiss) return "non_hit";
-  return "nd";
+  return f.decisions.size > 0 || f.overriddenOnly;
 }
 
 export function rowPassesFilters(
@@ -69,10 +51,6 @@ export function rowPassesFilters(
     !filters.decisions.has(result.decision as CampaignDecisionFilter)
   ) {
     return false;
-  }
-  if (filters.hitStatus.size > 0) {
-    const hitStatus = computeRowHitStatus(result);
-    if (!filters.hitStatus.has(hitStatus)) return false;
   }
   if (filters.overriddenOnly) {
     if (!result.measurements.some((m) => m.is_manual_override)) return false;
@@ -98,28 +76,19 @@ interface CountByDecision {
   rejected: number;
 }
 
-interface CountByHit {
-  hit: number;
-  non_hit: number;
-  nd: number;
-}
-
 function tallyCounts(results: CampaignResultResponse[]): {
   byDecision: CountByDecision;
-  byHit: CountByHit;
   overridden: number;
 } {
   const byDecision: CountByDecision = { selected: 0, deferred: 0, rejected: 0 };
-  const byHit: CountByHit = { hit: 0, non_hit: 0, nd: 0 };
   let overridden = 0;
   for (const r of results) {
     if (r.decision in byDecision) {
       byDecision[r.decision as keyof CountByDecision]++;
     }
-    byHit[computeRowHitStatus(r)]++;
     if (r.measurements.some((m) => m.is_manual_override)) overridden++;
   }
-  return { byDecision, byHit, overridden };
+  return { byDecision, overridden };
 }
 
 const DECISION_CHIP_STYLE: Record<CampaignDecisionFilter, string> = {
@@ -134,36 +103,18 @@ const DECISION_ACTIVE_STYLE: Record<CampaignDecisionFilter, string> = {
   rejected: "bg-red-600 text-white border-red-700",
 };
 
-const HIT_CHIP_STYLE: Record<CampaignHitStatusFilter, string> = {
-  hit: "bg-orange-50 text-orange-800 border-orange-200 hover:bg-orange-100",
-  non_hit: "bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100",
-  nd: "bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100",
-};
-
-const HIT_ACTIVE_STYLE: Record<CampaignHitStatusFilter, string> = {
-  hit: "bg-orange-600 text-white border-orange-700",
-  non_hit: "bg-blue-600 text-white border-blue-700",
-  nd: "bg-gray-600 text-white border-gray-700",
-};
-
 export function CampaignFilterBar({
   campaign,
   filters,
   onChange,
   resultCount,
 }: CampaignFilterBarProps) {
-  const { byDecision, byHit, overridden } = tallyCounts(campaign.results);
+  const { byDecision, overridden } = tallyCounts(campaign.results);
 
   function toggleDecision(d: CampaignDecisionFilter) {
     const next = new Set(filters.decisions);
     next.has(d) ? next.delete(d) : next.add(d);
     onChange({ ...filters, decisions: next });
-  }
-
-  function toggleHit(h: CampaignHitStatusFilter) {
-    const next = new Set(filters.hitStatus);
-    next.has(h) ? next.delete(h) : next.add(h);
-    onChange({ ...filters, hitStatus: next });
   }
 
   function toggleOverridden() {
@@ -193,26 +144,6 @@ export function CampaignFilterBar({
           >
             <span className="capitalize">{d}</span>
             <span className="font-semibold tabular-nums">{byDecision[d]}</span>
-          </button>
-        );
-      })}
-
-      <span className="text-muted-foreground/50 mx-1">·</span>
-
-      {(["hit", "non_hit", "nd"] as CampaignHitStatusFilter[]).map((h) => {
-        const isActive = filters.hitStatus.has(h);
-        const label = h === "non_hit" ? "Non-hit" : h === "nd" ? "ND" : "Hit";
-        return (
-          <button
-            key={h}
-            type="button"
-            onClick={() => toggleHit(h)}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border transition-colors ${
-              isActive ? HIT_ACTIVE_STYLE[h] : HIT_CHIP_STYLE[h]
-            }`}
-          >
-            <span>{label}</span>
-            <span className="font-semibold tabular-nums">{byHit[h]}</span>
           </button>
         );
       })}

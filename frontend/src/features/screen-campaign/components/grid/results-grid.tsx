@@ -97,25 +97,13 @@ function curveSnapshotFromMeasurement(
   };
 }
 
-// ── Inline hit chip + value cell ─────────────────────────────────────────────
-
-function HitChip({ call }: { call: string | null | undefined }) {
-  if (!call) return null;
-  const cls =
-    call === "hit"
-      ? "border-success/40 bg-success/10 text-success"
-      : call === "miss"
-        ? "border-muted text-muted-foreground"
-        : "border-warning/40 bg-warning/10 text-warning";
-  return <span className={`ml-1 rounded-sm border px-1 py-px text-[10px] ${cls}`}>{call}</span>;
-}
+// ── Inline value cell ─────────────────────────────────────────────────────────
 
 interface CompoundValueCellProps {
   prefix: string;
   value: number | null;
   unit: string | null | undefined;
   replicates: number | null;
-  hitCall: string | null | undefined;
   overridden: boolean | undefined;
   overrideReason: string | null | undefined;
   readOnly: boolean;
@@ -127,7 +115,6 @@ function CompoundValueCell({
   value,
   unit,
   replicates,
-  hitCall,
   overridden,
   overrideReason,
   readOnly,
@@ -141,7 +128,6 @@ function CompoundValueCell({
           {formatMeasurementValue(value)}
           {unit ? ` ${unit}` : ""}
         </span>
-        <HitChip call={hitCall} />
         {overridden && (
           <Badge
             variant="outline"
@@ -384,7 +370,6 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
                 value={m.value ?? null}
                 unit={m.unit}
                 replicates={m.replicate_count ?? null}
-                hitCall={m.hit_call}
                 overridden={m.is_manual_override}
                 overrideReason={m.override_reason}
                 readOnly={readOnly}

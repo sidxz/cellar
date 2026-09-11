@@ -30,8 +30,6 @@ interface HeaderStripProps {
   /** UUID from `campaign.closed_by`. Name resolution via Duar is a known
    *  follow-up (A2); show the first 8 chars as a stable placeholder. */
   closedBy?: string | null;
-  /** UUID from `campaign.signature_id`. Per the no-UUID rule we show a slice. */
-  signatureId?: string | null;
   /** UUID from `campaign.supersedes_campaign_id`. Renders a link if present. */
   supersedesId?: string | null;
   /** UUID from `campaign.superseded_by_campaign_id`. Renders the amber banner. */
@@ -56,7 +54,6 @@ export function HeaderStrip({
   onCloseAndSign,
   closedAt,
   closedBy,
-  signatureId,
   supersedesId,
   supersededBy,
   projectId,
@@ -69,10 +66,8 @@ export function HeaderStrip({
   const compoundCount = campaign.results?.length ?? 0;
 
   // Closed-metadata muted line. Resolves closed_by (Duar UUID) to the
-  // member's display name via <MemberName />; the e-signature UUID is hidden
-  // from the visible header and surfaced only via a hover tooltip so it
-  // stays auditable without polluting the chemist's reading line.
-  const hasClosedMeta = !!(closedAt || closedBy || signatureId);
+  // member's display name via <MemberName />.
+  const hasClosedMeta = !!(closedAt || closedBy);
 
   return (
     <header className="flex flex-col gap-1 border-b px-6 py-4">
@@ -172,14 +167,6 @@ export function HeaderStrip({
           {closedBy && (
             <span>
               by <MemberName id={closedBy} />
-            </span>
-          )}
-          {signatureId && (
-            <span
-              className="cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-2"
-              title={`E-signature ID (audit only): ${signatureId}`}
-            >
-              Signed
             </span>
           )}
         </p>

@@ -18,7 +18,6 @@ import { useState } from "react";
 
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -47,7 +46,6 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
   const router = useRouter();
   const qc = useQueryClient();
 
-  const [publishCollection, setPublishCollection] = useState(campaign.publishes_collection);
   const [signerName, setSignerName] = useState("");
   const [sigMeaning, setSigMeaning] = useState(
     "I certify that this campaign data is accurate and complete.",
@@ -76,20 +74,13 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
   const handleClose = () => {
     if (!canClose) return;
 
-    // STUB: useReauthenticate() is not available — generate a random signatureId.
-    // TODO: replace with actual re-auth hook once implemented.
-    const signatureId = crypto.randomUUID();
-
+    // TODO(task 16): this dialog is getting rewritten to close-campaign-dialog.tsx
+    // (title + optional note + Close button, no signature/publish step).
+    // Minimal fix for now: the backend no longer accepts signature_id /
+    // signature_meaning / publishes_collection at all.
     closeMutation.mutate({
       campaignId: campaign.id,
-      data: {
-        signature_id: signatureId,
-        signature_meaning: sigMeaning,
-        // Override the campaign's stored value at sign time — chemists pick
-        // this fresh on close instead of trying to remember the create-time
-        // toggle.
-        publishes_collection: publishCollection,
-      },
+      data: {},
     });
   };
 
@@ -146,18 +137,6 @@ export function CloseSignDialog({ campaign, open, onOpenChange }: CloseSignDialo
               </div>
             </>
           )}
-        </div>
-
-        {/* Publish collection toggle */}
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="publish-collection-close"
-            checked={publishCollection}
-            onCheckedChange={(v) => setPublishCollection(v === true)}
-          />
-          <Label htmlFor="publish-collection-close" className="cursor-pointer">
-            Publish frozen Collection on close
-          </Label>
         </div>
 
         {/* E-signature step (stub) */}
