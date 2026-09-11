@@ -440,6 +440,7 @@ class TestImportRunFile:
             b"P1,A1,100,LG-1,0.5\n"
             b"P1,A2,50,LG-1,0.4\n"
             b"P1,A3,,,0.9\n"
+            b"P1,,,,0.1\n"  # no well -> dropped at normalization, counted in rows_skipped
         )
         preview_id = _seed_preview(
             store,
@@ -475,6 +476,10 @@ class TestImportRunFile:
         result = await uc(cmd, auth=auth)
         assert isinstance(result, Success), result
         out = result.unwrap()
+        # Same vocabulary as the preview: total_rows is the RAW file row count,
+        # rows_skipped the rows dropped at normalization (no parseable well).
+        assert out.total_rows == 4
+        assert out.rows_skipped == 1
         assert out.plates_created == 1
         # Sample wells (A1, A2) + blank (A3) — all 3 wells created
         assert out.wells_created == 3

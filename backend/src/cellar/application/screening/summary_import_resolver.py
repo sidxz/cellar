@@ -385,8 +385,11 @@ def _resolve_row(
     """
     batch_hit = batch_index.get(batch_ref) if batch_ref else None
     compound_hit = compound_index.get(compound_ref) if compound_ref else None
-    if compound_hit is None and compound_ref and structure and structure_index:
+    if not batch_ref and compound_hit is None and compound_ref and structure and structure_index:
         # Identifier missed — fall back to the row's structure (STRUCTURE role).
+        # Compound-only rows ONLY: when a batch ref is present the batch is
+        # authoritative, and consulting the structure there could turn a row
+        # that resolves via its batch into a row_conflict it never was before.
         compound_hit = structure_index.get(structure)
 
     # --- Both refs set -----------------------------------------------------

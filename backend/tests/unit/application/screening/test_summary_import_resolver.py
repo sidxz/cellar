@@ -386,6 +386,37 @@ def test_unmatched_compounds_reports_row_and_structure():
     ]
 
 
+def test_structure_never_consulted_when_batch_ref_present():
+    """Batch is authoritative: a structure that resolves ELSEWHERE must not turn a
+    batch-resolved row into a row_conflict, and must not rescue a batch miss."""
+    # Batch resolves, compound identifier misses, SMILES matches a different molecule.
+    rows = [{"Compound": "NEW-1", "Batch": "CV-1-001", "SMILES": "CCO", "IC50": "1.0"}]
+    plan = _plan(
+        rows,
+        batch_ref_header="Batch",
+        structure_header="SMILES",
+        compound_index={},
+        batch_index={"CV-1-001": (BATCH_1, MOL_B)},
+        structure_index={"CCO": MOL_A},
+    )
+    assert plan.row_conflicts == []
+    assert [(i.molecule_id, i.batch_id) for i in plan.items] == [(MOL_B, BATCH_1)]
+    assert plan.unmatched_compound_refs == frozenset({"NEW-1"})
+
+    # Batch misses: row stays unmatched even though the SMILES would resolve.
+    plan = _plan(
+        rows,
+        batch_ref_header="Batch",
+        structure_header="SMILES",
+        compound_index={},
+        batch_index={},
+        structure_index={"CCO": MOL_A},
+    )
+    assert plan.items == []
+    assert plan.unmatched_batch_refs == frozenset({"CV-1-001"})
+    assert plan.unmatched_compound_refs == frozenset({"NEW-1"})
+
+
 def test_no_structure_header_means_no_fallback():
     rows = [{"Compound": "NEW-1", "SMILES": "CCO", "IC50": "1.0"}]
     plan = _plan(rows, compound_index={}, structure_index={"CCO": MOL_A})
