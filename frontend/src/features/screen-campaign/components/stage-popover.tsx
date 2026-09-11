@@ -307,7 +307,7 @@ export function StagePopoverForm({
             errors.criteria?.[index]?.high?.message;
           return (
             <div key={field.id} className="space-y-1 rounded-md border p-2">
-              <div className="flex items-end gap-2">
+              <div className="flex items-start gap-2">
                 <div className="flex-1 space-y-1 min-w-0">
                   <Label className="text-xs">Readout</Label>
                   <Controller
