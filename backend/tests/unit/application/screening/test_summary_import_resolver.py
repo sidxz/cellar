@@ -449,3 +449,25 @@ async def test_build_structure_index_empty_without_structure_mapping():
     )
     assert index == {}
     assert resolver.asked == []
+
+
+# ---------------------------------------------------------------------------
+# Both refs mapped, neither resolves → BOTH reported (resolution unchanged)
+# ---------------------------------------------------------------------------
+
+
+def test_both_refs_neither_resolves_reports_compound_too():
+    rows = [{"Compound": "NEW-1", "Batch": "NEW-1-001", "IC50": "1.0"}]
+    plan = _plan(rows, batch_ref_header="Batch", compound_index={}, batch_index={})
+    assert plan.items == []
+    assert plan.unmatched_batch_refs == frozenset({"NEW-1-001"})
+    assert plan.unmatched_compound_refs == frozenset({"NEW-1"})
+    assert [(u.ref, u.row) for u in plan.unmatched_compounds] == [("NEW-1", 1)]
+
+
+def test_both_refs_batch_misses_compound_hits_reports_batch_only():
+    rows = [{"Compound": "CMP-1", "Batch": "GHOST", "IC50": "1.0"}]
+    plan = _plan(rows, batch_ref_header="Batch", compound_index={"CMP-1": MOL_A}, batch_index={})
+    assert plan.items == []  # batch stays authoritative: the row still skips
+    assert plan.unmatched_batch_refs == frozenset({"GHOST"})
+    assert plan.unmatched_compound_refs == frozenset()

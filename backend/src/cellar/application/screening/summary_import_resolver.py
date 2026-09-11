@@ -399,6 +399,10 @@ def _resolve_row(
                 batch_id=None,
                 error={"row": str(source_row), "error": f"unmatched batch ref {batch_ref!r}"},
                 unmatched_batch_ref=batch_ref,
+                # Reporting only: when the compound ref ALSO missed, say so —
+                # a brand-new compound has no batches, and hiding the compound
+                # miss made the two unmatched lists disagree about the same file.
+                unmatched_compound_ref=compound_ref if compound_hit is None else "",
             )
         if compound_hit is None:
             # Batch resolves; compound ref doesn't. Batch's molecule is
