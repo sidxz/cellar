@@ -5,7 +5,6 @@
  * OpenAPI spec version: 1.1.0-14-gdd8a8c7e-dirty
  */
 import type { CampaignResultResponseRepresentativeBatchId } from './campaignResultResponseRepresentativeBatchId';
-import type { CampaignResultResponseDecisionReason } from './campaignResultResponseDecisionReason';
 import type { CampaignResultResponseNotes } from './campaignResultResponseNotes';
 import type { CampaignMeasurementResponse } from './campaignMeasurementResponse';
 import type { StageOutcomeResponse } from './stageOutcomeResponse';
@@ -14,8 +13,6 @@ export interface CampaignResultResponse {
   id: string;
   molecule_id: string;
   representative_batch_id?: CampaignResultResponseRepresentativeBatchId;
-  decision: string;
-  decision_reason?: CampaignResultResponseDecisionReason;
   notes?: CampaignResultResponseNotes;
   measurements: CampaignMeasurementResponse[];
   stage_outcomes: StageOutcomeResponse[];

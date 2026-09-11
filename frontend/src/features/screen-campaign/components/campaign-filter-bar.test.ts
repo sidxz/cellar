@@ -40,7 +40,6 @@ function makeResult(overrides: Partial<CampaignResultResponse> = {}): CampaignRe
   return {
     id: "r-default",
     molecule_id: "mol-default",
-    decision: "deferred",
     measurements: [],
     stage_outcomes: [],
     ...overrides,
@@ -65,7 +64,6 @@ const gatedRow = makeResult({
 });
 const cellOverrideRow = makeResult({
   id: "r-cell-override",
-  decision: "selected",
   measurements: [makeMeasurement({ is_manual_override: true })],
   stage_outcomes: [makeOutcome({ outcome: "miss" })],
 });
@@ -107,9 +105,9 @@ describe("filtersActive", () => {
     expect(filtersActive(f, null)).toBe(false);
   });
 
-  it("counts decisions and the overridden toggle regardless of stage", () => {
-    expect(filtersActive(withFilters({ decisions: new Set(["selected"]) }), null)).toBe(true);
+  it("counts the overridden toggle regardless of stage", () => {
     expect(filtersActive(withFilters({ overriddenOnly: true }), null)).toBe(true);
+    expect(filtersActive(withFilters({ overriddenOnly: true }), STAGE)).toBe(true);
   });
 });
 
@@ -145,10 +143,10 @@ describe("rowPassesFilters — stage outcomes", () => {
     ]);
   });
 
-  it("intersects with the decision chips", () => {
+  it("intersects with the overridden toggle", () => {
     const f = withFilters({
-      decisions: new Set(["selected"]),
-      stageOutcomes: new Set(["hit", "miss", "untested"]),
+      overriddenOnly: true,
+      stageOutcomes: new Set(["miss"]),
     });
     expect(passing(f, STAGE)).toEqual(["r-cell-override"]);
   });

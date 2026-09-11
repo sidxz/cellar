@@ -19,7 +19,7 @@ export type {
   CloseCampaignRequest,
   ReopenCampaignRequest,
   SupersedeRequest,
-  SetResultDecisionRequest,
+  SetResultNotesRequest,
   OverrideCellRequest,
   AddFromCollectionRequest,
   AddFromCampaignRequest,
@@ -39,8 +39,6 @@ export type {
 // any of these, change the corresponding StrEnum first and regenerate orval.
 
 export type CampaignStatus = "draft" | "closed" | "superseded";
-
-export type CampaignDecision = "selected" | "deferred" | "rejected";
 
 export type StageOutcome = "hit" | "miss" | "untested" | "not_in_stage";
 
@@ -74,10 +72,4 @@ export const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, string> = {
   draft: "Draft",
   closed: "Closed",
   superseded: "Superseded",
-};
-
-export const CAMPAIGN_DECISION_LABELS: Record<CampaignDecision, string> = {
-  selected: "Selected",
-  deferred: "Deferred",
-  rejected: "Rejected",
 };

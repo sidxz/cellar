@@ -32,7 +32,6 @@ from cellar.domain.research_organization.campaign_stage import (
     StageCriterion,
 )
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
@@ -215,7 +214,6 @@ class TestAddResultsFromRuns:
                 )
             ],
             scope="hits_only",
-            default_decision=CampaignDecision.SELECTED,
         )
         out = await uc(cmd, auth=auth)
         assert isinstance(out, Success)
@@ -223,11 +221,10 @@ class TestAddResultsFromRuns:
         assert outcome.added == 1
         assert outcome.channels_created == 1
         assert outcome.channels_reused == 0
-        only = next(r for r in campaign.results if r.molecule_id == mol_hit)
-        assert only.decision == CampaignDecision.SELECTED
+        assert any(r.molecule_id == mol_hit for r in campaign.results)
 
     @pytest.mark.asyncio
-    async def test_scope_all_adds_everyone_with_caller_decision(self) -> None:
+    async def test_scope_all_adds_everyone(self) -> None:
         auth = fake_auth()
         campaign = _draft_campaign(auth.workspace_id)
         proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
@@ -259,13 +256,11 @@ class TestAddResultsFromRuns:
                 )
             ],
             scope="all",
-            default_decision=CampaignDecision.DEFERRED,
         )
         out = await uc(cmd, auth=auth)
         assert isinstance(out, Success)
         assert out.unwrap().added == 2
-        decisions = {r.decision for r in campaign.results}
-        assert decisions == {CampaignDecision.DEFERRED}
+        assert {r.molecule_id for r in campaign.results} == {m1, m2}
 
     @pytest.mark.asyncio
     async def test_channel_reuse_when_matching_exists(self) -> None:

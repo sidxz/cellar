@@ -287,7 +287,7 @@ def _derive_compound_sources(results: list[Any]) -> list[dict[str, Any]]:
         ref = {k: v for k, v in d.items() if k not in ("kind", "description")}
         # Shared identity key — distinguishes two runs/collections that
         # differ only by entity id (description=None), and stays hashable
-        # for list-valued refs like CampaignRef.decision_filter.
+        # for any list-valued ref field.
         key = source_group_key(d)
         if key not in groups:
             groups[key] = {"kind": kind, "ref": ref, "description": description, "count": 0}
@@ -413,8 +413,6 @@ def _serialize_result(
     return {
         "molecule": molecule_dict,
         "representative_batch": rep_batch,
-        "decision": result.decision.value,
-        "decision_reason": result.decision_reason,
         "notes": result.notes,
         "measurements": measurements,
         "stage_outcomes": [_serialize_stage_outcome(o) for o in stage_outcomes],

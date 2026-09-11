@@ -22,9 +22,6 @@ from cellar.application.research_organization.add_results_from_runs import (
 )
 from cellar.application.research_organization.archive_project import ArchiveProject
 from cellar.application.research_organization.bulk_add_to_collection import BulkAddToCollection
-from cellar.application.research_organization.bulk_set_result_decisions import (
-    BulkSetResultDecisions,
-)
 from cellar.application.research_organization.close_campaign import CloseCampaign
 from cellar.application.research_organization.collection_import_templates import (
     CreateCollectionImportTemplate,
@@ -90,7 +87,7 @@ from cellar.application.research_organization.remove_campaign_channel import Rem
 from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
-from cellar.application.research_organization.set_result_decision import SetResultDecision
+from cellar.application.research_organization.set_result_notes import SetResultNotes
 from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaign as SupersedeCampaignUC,
@@ -130,7 +127,6 @@ __all__ = [
     "AddResultsFromRunsDep",
     "ArchiveProjectDep",
     "BulkAddToCollectionDep",
-    "BulkSetResultDecisionsDep",
     "CampaignRepositoryDep",
     "CloseCampaignDep",
     "CollectionRepoUoWDep",
@@ -176,7 +172,7 @@ __all__ = [
     "RemoveProjectMemberDep",
     "RemoveResultRowDep",
     "ReopenCampaignDep",
-    "SetResultDecisionDep",
+    "SetResultNotesDep",
     "SetStageOverrideDep",
     "SupersedeCampaignDep",
     "UpdateCampaignChannelDep",
@@ -321,10 +317,7 @@ RemoveCampaignStageDep = Annotated[
     RemoveCampaignStage, Depends(_get_use_case(RemoveCampaignStage))
 ]
 SetStageOverrideDep = Annotated[SetStageOverride, Depends(_get_use_case(SetStageOverride))]
-SetResultDecisionDep = Annotated[SetResultDecision, Depends(_get_use_case(SetResultDecision))]
-BulkSetResultDecisionsDep = Annotated[
-    BulkSetResultDecisions, Depends(_get_use_case(BulkSetResultDecisions))
-]
+SetResultNotesDep = Annotated[SetResultNotes, Depends(_get_use_case(SetResultNotes))]
 OverrideResultCellDep = Annotated[OverrideResultCell, Depends(_get_use_case(OverrideResultCell))]
 AddResultRowDep = Annotated[AddResultRow, Depends(_get_use_case(AddResultRow))]
 RemoveResultRowDep = Annotated[RemoveResultRow, Depends(_get_use_case(RemoveResultRow))]

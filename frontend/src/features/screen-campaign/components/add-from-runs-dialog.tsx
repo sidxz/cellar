@@ -6,14 +6,14 @@
  * 2-step flow:
  *   Step 1 "configure" — pick a protocol, multi-select runs, edit per-readout
  *                        channel configs (rule + hit threshold + use-for-filter),
- *                        global toggles (AND/OR, hits-only, default decision).
+ *                        global toggles (AND/OR, hits-only).
  *   Step 2 "preview"   — debounced preview (~300ms) renders a chip header +
  *                        molecule table with structure thumbnails + per-channel
  *                        cells. Commit posts /add-from-runs and closes.
  *
  * Backend invariants this dialog mirrors:
  *   - filter_mode default = "all"  (AND across active hit-criteria)
- *   - scope         default = "hits_only" (default_decision = SELECTED)
+ *   - scope         default = "hits_only"
  *   - At least one run AND at least one channel_config required to enable Next.
  */
 
@@ -165,9 +165,6 @@ export function AddFromRunsDialog({
   // — Global toggles —
   const [filterMode, setFilterMode] = useState<"any" | "all">("all");
   const [scope, setScope] = useState<"hits_only" | "all">("hits_only");
-  const [defaultDecision, setDefaultDecision] = useState<"selected" | "deferred" | "rejected">(
-    "selected",
-  );
   const [refreshExisting, setRefreshExisting] = useState(false);
   const [approvedOnly, setApprovedOnly] = useState(true);
   // "Save these criteria as a hit stage" — shown once any channel config has
@@ -403,7 +400,6 @@ export function AddFromRunsDialog({
     setUserEditedConfigs(new Map());
     setFilterMode("all");
     setScope("hits_only");
-    setDefaultDecision("selected");
     setRefreshExisting(false);
     setApprovedOnly(true);
     setSaveStage(false);
@@ -525,8 +521,6 @@ export function AddFromRunsDialog({
             onFilterModeChange={setFilterMode}
             scope={scope}
             onScopeChange={setScope}
-            defaultDecision={defaultDecision}
-            onDefaultDecisionChange={setDefaultDecision}
             refreshExisting={refreshExisting}
             onRefreshExistingChange={setRefreshExisting}
             hasThreshold={hasThreshold}
@@ -558,7 +552,6 @@ export function AddFromRunsDialog({
                   data: {
                     ...payload,
                     scope,
-                    default_decision: defaultDecision,
                     refresh_existing_cells: refreshExisting,
                     stage_name: hasThreshold && saveStage ? trimmedStageName : null,
                   } as never,
@@ -609,8 +602,6 @@ interface ConfigureStepProps {
   onFilterModeChange: (v: "any" | "all") => void;
   scope: "hits_only" | "all";
   onScopeChange: (v: "hits_only" | "all") => void;
-  defaultDecision: "selected" | "deferred" | "rejected";
-  onDefaultDecisionChange: (v: "selected" | "deferred" | "rejected") => void;
   refreshExisting: boolean;
   onRefreshExistingChange: (v: boolean) => void;
   /** Whether at least one channel config has a threshold — gates the
@@ -942,30 +933,6 @@ function ConfigureStep(p: ConfigureStepProps) {
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <RadioGroupItem value="all" id="scope-all" />
                   <span>Add all compounds</span>
-                </label>
-              </RadioGroup>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Default decision on new rows</Label>
-              <RadioGroup
-                value={p.defaultDecision}
-                onValueChange={(v) =>
-                  p.onDefaultDecisionChange(v as ConfigureStepProps["defaultDecision"])
-                }
-                className="flex gap-4 text-xs"
-              >
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <RadioGroupItem value="selected" id="dec-sel" />
-                  <span>Selected</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <RadioGroupItem value="deferred" id="dec-def" />
-                  <span>Deferred</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <RadioGroupItem value="rejected" id="dec-rej" />
-                  <span>Rejected</span>
                 </label>
               </RadioGroup>
             </div>

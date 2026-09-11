@@ -105,7 +105,8 @@ class AddFromCollectionRequest(BaseModel):
 
 class AddFromCampaignRequest(BaseModel):
     source_campaign_id: uuid.UUID
-    decision_filter: list[str] = ["selected"]
+    #: Pull only the source campaign's hits at this stage. ``None`` = every result.
+    stage_id: uuid.UUID | None = None
     description: str | None = None
 
 
@@ -150,7 +151,6 @@ class PreviewRunImportRequest(BaseModel):
 
 class AddFromRunsRequest(PreviewRunImportRequest):
     scope: str = "hits_only"  # "hits_only" | "all"
-    default_decision: str = "selected"
     description: str | None = None
     refresh_existing_cells: bool = False
     #: When set, creates a CampaignStage from the configs that opt into
@@ -231,24 +231,14 @@ class SetStageOverrideRequest(BaseModel):
     reason: str
 
 
-class SetResultDecisionRequest(BaseModel):
-    decision: str
-    reason: str | None = None
-    notes: str | None = None
+class SetResultNotesRequest(BaseModel):
+    """Set (or, with ``null``, clear) the free-text notes on one result row.
 
-    model_config = {"extra": "forbid"}
-
-
-class BulkSetResultDecisionsRequest(BaseModel):
-    """Bulk-set decision for many CampaignResult rows in one transaction.
-
-    ``result_ids`` is typically the frontend's currently-filtered subset so a
-    chemist can "Mark all visible as Selected" / "Reject all non-hits" / etc.
+    ``notes`` is a required key: an omitted key is a 422, so an empty PATCH
+    body can never silently clear a note. Explicit ``null`` still clears.
     """
 
-    result_ids: list[uuid.UUID]
-    decision: str
-    reason: str | None = None
+    notes: str | None
 
     model_config = {"extra": "forbid"}
 
@@ -382,8 +372,6 @@ class CampaignResultResponse(BaseModel):
     id: uuid.UUID
     molecule_id: uuid.UUID
     representative_batch_id: uuid.UUID | None = None
-    decision: str
-    decision_reason: str | None = None
     notes: str | None = None
     measurements: list[CampaignMeasurementResponse]
     stage_outcomes: list[StageOutcomeResponse]
@@ -398,8 +386,6 @@ class CampaignResultResponse(BaseModel):
             id=r.id,
             molecule_id=r.molecule_id,
             representative_batch_id=r.representative_batch_id,
-            decision=r.decision.value,
-            decision_reason=r.decision_reason,
             notes=r.notes,
             measurements=[CampaignMeasurementResponse.from_domain(m) for m in r.measurements],
             stage_outcomes=[
@@ -593,11 +579,3 @@ class AddResultsOutcomeResponse(BaseModel):
             stage_created=getattr(outcome, "stage_created", False),
             campaign=CampaignResponse.from_domain(outcome.campaign),
         )
-
-
-class BulkSetResultDecisionsResponse(BaseModel):
-    """Bulk-decision outcome: refreshed campaign + applied/missing counts."""
-
-    campaign: CampaignResponse
-    updated_count: int
-    missing_ids: list[uuid.UUID]

@@ -60,7 +60,6 @@ interface PublishedShape {
   stages: PublishedStageShape[];
   results: {
     molecule: { registration_number: string | null; name: string | null };
-    decision: string;
     measurements: {
       channel_id: string;
       value: number | null;
@@ -214,7 +213,6 @@ export function PreviewAsPublishedDialog({
                     <thead className="bg-muted/50">
                       <tr>
                         <th className="text-left p-2">Compound</th>
-                        <th className="text-left p-2">Decision</th>
                         {doc.channels.map((c) => (
                           <th key={c.id} className="text-left p-2">
                             {c.label}
@@ -232,9 +230,6 @@ export function PreviewAsPublishedDialog({
                                 {r.molecule.name}
                               </div>
                             )}
-                          </td>
-                          <td className="p-2">
-                            <Badge variant="outline">{r.decision}</Badge>
                           </td>
                           {doc.channels.map((c) => {
                             const m = r.measurements.find((mm) => mm.channel_id === c.id);

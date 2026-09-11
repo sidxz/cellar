@@ -13,7 +13,6 @@ export interface AddFromRunsRequest {
   channel_configs: ChannelImportConfigDTO[];
   filter_mode?: string;
   scope?: string;
-  default_decision?: string;
   description?: AddFromRunsRequestDescription;
   refresh_existing_cells?: boolean;
   stage_name?: AddFromRunsRequestStageName;

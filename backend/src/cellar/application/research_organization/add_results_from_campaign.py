@@ -1,8 +1,10 @@
 """AddResultsFromCampaign — pull molecules from another Campaign into this Campaign.
 
 Accepts ANY source campaign status (draft / closed / superseded). The curator
-decides what is valid. Results are filtered by the specified decision_filter.
-Idempotent: re-adding molecules already in the campaign is silently skipped.
+decides what is valid. ``stage_id`` optionally narrows the pull to the source
+campaign's hits at that stage (manual overrides honoured); ``None`` pulls every
+result. Idempotent: re-adding molecules already in the campaign is silently
+skipped.
 """
 
 from __future__ import annotations
@@ -23,9 +25,10 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign_result import CampaignResult
-from cellar.domain.research_organization.enums import CampaignDecision
+from cellar.domain.research_organization.enums import StageOutcome
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.research_organization.source_ref import CampaignRef
+from cellar.domain.research_organization.stage_evaluation import evaluate_stages
 from cellar.domain.shared.errors import (
     DomainError,
     NotFoundError,
@@ -38,7 +41,9 @@ class AddResultsFromCampaignCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
     source_campaign_id: uuid.UUID
-    decision_filter: list[CampaignDecision]
+    #: Narrow the pull to hits at this stage of the SOURCE campaign.
+    #: ``None`` pulls every source result.
+    stage_id: uuid.UUID | None = None
     description: str | None = None
 
 
@@ -52,7 +57,7 @@ class AddResultsFromCampaign:
       1. require_editor auth guard.
       2. Load target campaign; NotFoundError if missing.
       3. Load source campaign; NotFoundError if missing.
-      4. Filter source results by decision_filter.
+      4. Filter source results to hits at ``stage_id`` (when given).
       5. Build CampaignResult rows attributed to CampaignRef.
       6. campaign.add_results() — idempotent.
       7. Resolve measurements for newly added results.
@@ -93,10 +98,24 @@ class AddResultsFromCampaign:
             if source is None:
                 return Failure(NotFoundError("Campaign", str(input.source_campaign_id)))
 
-            allowed_decisions: set[CampaignDecision] = set(input.decision_filter)
+            selected = source.results
+            if input.stage_id is not None:
+                if not any(s.id == input.stage_id for s in source.stages):
+                    return Failure(
+                        ValidationError(
+                            f"Stage {input.stage_id} does not belong to source campaign"
+                        )
+                    )
+                outcomes = evaluate_stages(source)
+                selected = [
+                    r
+                    for r in source.results
+                    if outcomes[r.id][input.stage_id].outcome == StageOutcome.HIT
+                ]
+
             source_ref = CampaignRef(
                 campaign_id=input.source_campaign_id,
-                decision_filter=list(input.decision_filter),
+                stage_id=input.stage_id,
                 description=input.description,
             )
             new_results = [
@@ -105,8 +124,7 @@ class AddResultsFromCampaign:
                     molecule_id=r.molecule_id,
                     added_from=source_ref,
                 )
-                for r in source.results
-                if r.decision in allowed_decisions
+                for r in selected
             ]
 
             try:

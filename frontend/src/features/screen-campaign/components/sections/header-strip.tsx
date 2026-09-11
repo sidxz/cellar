@@ -1,6 +1,7 @@
 "use client";
 
 import { TargetChips } from "@/features/screening-assay/components/target-chips";
+import { TagChips } from "@/features/tagging/components/tag-chips";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,6 +20,8 @@ interface HeaderStripProps {
   campaign: CampaignResponse;
   /** Show draft-mode action buttons (Refresh / Preview / Close). */
   isDraft: boolean;
+  /** Editors may tag campaigns in any status; the chips row sits under the description. */
+  canEditTags?: boolean;
   refreshing?: boolean;
   onRefresh: () => void;
   onPreview: () => void;
@@ -50,6 +53,7 @@ interface HeaderStripProps {
 export function HeaderStrip({
   campaign,
   isDraft,
+  canEditTags = false,
   refreshing,
   onRefresh,
   onPreview,
@@ -162,6 +166,7 @@ export function HeaderStrip({
         </div>
       </div>
       <DescriptionRow campaign={campaign} editable={isDraft} />
+      <TagChips entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />
       {!isDraft && hasClosedMeta && (
         <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2">
           {closedAt && (

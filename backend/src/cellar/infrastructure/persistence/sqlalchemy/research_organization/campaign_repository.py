@@ -18,7 +18,6 @@ from cellar.domain.research_organization.campaign_stage import (
     StageOverride,
 )
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
@@ -300,8 +299,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             campaign_id=model.campaign_id,
             molecule_id=model.molecule_id,
             representative_batch_id=model.representative_batch_id,
-            decision=CampaignDecision(model.decision),
-            decision_reason=model.decision_reason,
             notes=model.notes,
             added_from=added_from,
             measurements=[self._measurement_to_domain(mm) for mm in model.measurements],
@@ -316,8 +313,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             campaign_id=r.campaign_id,
             molecule_id=r.molecule_id,
             representative_batch_id=r.representative_batch_id,
-            decision=r.decision.value,
-            decision_reason=r.decision_reason,
             notes=r.notes,
             added_from=r.added_from.to_dict() if r.added_from is not None else None,
             measurements=[self._measurement_to_model(m) for m in r.measurements],
@@ -327,8 +322,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
     def _result_update_model(self, model: CampaignResultModel, r: CampaignResult) -> None:
         model.molecule_id = r.molecule_id
         model.representative_batch_id = r.representative_batch_id
-        model.decision = r.decision.value
-        model.decision_reason = r.decision_reason
         model.notes = r.notes
         # added_from is immutable after first write — only set if not already persisted
         if model.added_from is None and r.added_from is not None:

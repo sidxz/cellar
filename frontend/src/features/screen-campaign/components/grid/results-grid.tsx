@@ -11,7 +11,7 @@
  *         stage's pass/fail verdict chip + OVR badge
  *       - Curve (150, DR only) — <DoseResponseSparkline>
  *   - Stage (pinned-right, 150, only while a stage is selected) — <StageOutcomeCell>
- *   - Decision (pinned-right, 160) — <DecisionChipCell>
+ *   - Notes (pinned-right, 220) — <NotesCell>
  *
  * Override editing survives inline in the value cell: an OVR badge + a
  * hover pencil-edit affordance launch the shared OverrideModal.
@@ -43,7 +43,7 @@ import { type CampaignFilters, filtersActive, rowPassesFilters } from "../campai
 import { OverrideModal } from "../override-modal";
 
 import { CurveExpandDialog, type ExpandedCurve } from "./curve-expand-dialog";
-import { DecisionChipCell } from "./decision-chip-cell";
+import { NotesCell } from "./notes-cell";
 import { StageOutcomeCell } from "./stage-outcome-cell";
 
 import type {
@@ -276,6 +276,10 @@ export function ResultsGridV2({
       field: "result.molecule_id",
       pinned: "left",
       width: 270,
+      // DataGrid calls sizeColumnsToFit, which would otherwise squeeze this
+      // column below the 160px structure drawing.
+      minWidth: 270,
+      suppressSizeToFit: true,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
@@ -497,7 +501,7 @@ export function ResultsGridV2({
       });
     }
 
-    // 4. Stage (pinned right, before Decision) — only while a stage is
+    // 4. Stage (pinned right, before Notes) — only while a stage is
     //    selected. The outcome chip doubles as the override affordance.
     if (selectedStage) {
       cols.push({
@@ -522,18 +526,18 @@ export function ResultsGridV2({
       });
     }
 
-    // 5. Decision (pinned right) — wider than a bare chip would need so the
-    //    inline reason/notes strip in DecisionChipCell has room to breathe.
+    // 5. Notes (pinned right) — clamped free text, click-to-edit in draft.
     cols.push({
-      headerName: "Decision",
-      colId: "decision",
+      headerName: "Notes",
+      colId: "notes",
       pinned: "right",
-      width: 240,
+      width: 220,
+      minWidth: 160,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
         if (!r) return null;
-        return <DecisionChipCell campaignId={campaign.id} result={r} readOnly={readOnly} />;
+        return <NotesCell campaignId={campaign.id} result={r} readOnly={readOnly} />;
       },
     });
 

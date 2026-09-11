@@ -1,9 +1,8 @@
 """CampaignResult — one snapshot row per compound within a campaign.
 
-Owns N CampaignMeasurements (one per channel). Carries the screener's
-per-compound decision (selected / deferred / rejected). At close, the
-collection of CampaignResults with decision=SELECTED feeds the emitted
-frozen output Collection.
+Owns N CampaignMeasurements (one per channel). Triage lives entirely in
+the stage funnel — see `stage_evaluation.evaluate_stages` and
+``stage_overrides`` below; the only free-text field here is ``notes``.
 
 ``added_from`` records how the compound entered the campaign. It is
 ``None`` for results added manually via ``AddResultRow`` without explicit
@@ -22,7 +21,7 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_stage import StageOverride
-from cellar.domain.research_organization.enums import CampaignDecision, StageOutcome
+from cellar.domain.research_organization.enums import StageOutcome
 from cellar.domain.shared.errors import ValidationError
 
 if TYPE_CHECKING:
@@ -35,8 +34,6 @@ class CampaignResult:
     molecule_id: uuid.UUID
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     representative_batch_id: uuid.UUID | None = None
-    decision: CampaignDecision = CampaignDecision.DEFERRED
-    decision_reason: str | None = None
     notes: str | None = None
     added_from: SourceRef | None = None
     measurements: list[CampaignMeasurement] = field(default_factory=list)
@@ -55,10 +52,6 @@ class CampaignResult:
 
     def remove_measurement_for_channel(self, channel_id: uuid.UUID) -> None:
         self.measurements = [m for m in self.measurements if m.channel_id != channel_id]
-
-    def set_decision(self, decision: CampaignDecision, *, reason: str | None = None) -> None:
-        self.decision = decision
-        self.decision_reason = reason
 
     def find_measurement(self, channel_id: uuid.UUID) -> CampaignMeasurement | None:
         for m in self.measurements:

@@ -262,8 +262,6 @@ class CampaignResultModel(Base, EntityModelMixin):
     representative_batch_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
     )
-    decision: Mapped[str] = mapped_column(String(32), nullable=False, server_default="deferred")
-    decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     added_from: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
