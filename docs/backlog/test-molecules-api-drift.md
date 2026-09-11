@@ -1,10 +1,8 @@
-# `tests/api/test_molecules.py` has 3 pre-existing failures
+# `tests/api/test_molecules.py` has 2 pre-existing failures
 
 **Found:** 2026-09-11, running the full API suite before finishing `feat/remove-campaign-decisions`
 (that branch never touches molecules; failures reproduce independently of it).
 
-- `TestRegisterMolecule::test_register_disclosed_molecule` — asserts `registration_number.startswith("CV-")`;
-  the workspace prefix is now `CC-` (ChemCellar branding). Update the assertion to the configured prefix.
 - `TestMoleculeTestCounts::test_tested_molecule_returns_count` and `::test_project_scoped_count` —
   fixture inserts a `dose_response_curves` row with `batch_id = NULL`, which violates the column's
   NOT NULL constraint. The fixture predates the batch-required DRC change; give it a batch.
