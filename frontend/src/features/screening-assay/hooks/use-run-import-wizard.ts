@@ -297,7 +297,7 @@ export function useRunImportWizard({
       },
       {
         onSuccess: (data) => {
-          showSuccess(`Imported ${data.wells_created} wells / ${data.readouts_created} readouts`);
+          showSuccess(`Imported ${data.wells_created} wells / ${data.values_inserted} readouts`);
           if (saveAsTemplate && templateName.trim()) {
             const column_mapping: Record<string, unknown> = {
               well: mapping.well,

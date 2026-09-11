@@ -6,8 +6,8 @@ import { DOSE_RESPONSE_KEY, READOUT_DATA_KEY, RUNS_KEY, RUN_KEY } from "./query-
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
+  ImportRowErrorModel,
   SummaryHeaderSuggestionModel,
-  SummaryImportErrorModel,
   SummaryImportResponse,
   SummaryPreviewResponse,
   SummaryResolveResponse,
@@ -17,8 +17,8 @@ import type {
 // NEVER redefine these shapes by hand — they mirror the backend response models
 // and are kept in sync by `pnpm generate:api`.
 export type {
+  ImportRowErrorModel,
   SummaryHeaderSuggestionModel,
-  SummaryImportErrorModel,
   SummaryImportResponse,
   SummaryPreviewResponse,
   SummaryResolveResponse,
@@ -29,11 +29,13 @@ export type {
 // endpoint receives the mapping as a JSON-stringified `mapping` FormData field, so
 // orval does not emit a model for it — we own this shape on the FE.
 
-export type SummaryRole = "compound_ref" | "batch_ref" | "readout" | "ignore";
+export type SummaryRole = "compound_ref" | "batch_ref" | "structure" | "readout" | "ignore";
 
 export interface SummaryColumnMapping {
   compound_ref?: string | null;
   batch_ref?: string | null;
+  /** Header providing SMILES — fallback resolution when the compound ref misses. */
+  structure?: string | null;
   /** Map of source-header -> readout_definition_id for each readout column. */
   readout_columns: Record<string, string>;
 }

@@ -48,6 +48,7 @@ export function suggestionsToDraft(
 export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping | null {
   let compoundRef: string | null = null;
   let batchRef: string | null = null;
+  let structure: string | null = null;
   const readoutColumns: Record<string, string> = {};
 
   for (const [header, role] of Object.entries(draft.roles)) {
@@ -55,6 +56,8 @@ export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping |
       if (compoundRef === null) compoundRef = header;
     } else if (role === "batch_ref") {
       if (batchRef === null) batchRef = header;
+    } else if (role === "structure") {
+      if (structure === null) structure = header;
     } else if (role === "readout") {
       const defId = draft.readoutDefByHeader[header];
       if (!defId) return null;
@@ -68,6 +71,7 @@ export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping |
   return {
     compound_ref: compoundRef,
     batch_ref: batchRef,
+    structure,
     readout_columns: readoutColumns,
   };
 }

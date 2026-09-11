@@ -345,6 +345,7 @@ class TestPreviewRunFile:
             b"P1,A1,100,LG-1,0.5\n"
             b"P1,A2,50,LG-1,0.4\n"
             b"P1,A3,,,0.9\n"  # blank
+            b"P1,,,,0.1\n"  # no well -> dropped at normalization, counted in rows_skipped
         )
         result = await uc(
             PreviewRunFileQuery(
@@ -357,14 +358,15 @@ class TestPreviewRunFile:
         )
         assert isinstance(result, Success), result
         preview = result.unwrap()
-        assert preview.total_rows == 3
+        assert preview.total_rows == 4
+        assert preview.rows_skipped == 1
         assert len(preview.plates) == 1
         plate = preview.plates[0]
         assert plate.plate_name == "P1"
         assert plate.sample_count == 2
         assert plate.blank_count == 1
-        assert preview.matched_batches == 1
-        assert preview.unmatched_batches == ()
+        assert preview.matched_batch_count == 1
+        assert preview.unmatched_batch_refs == ()
         # Cached for follow-up import
         assert preview.preview_id in store._items  # noqa: SLF001
 
@@ -384,8 +386,8 @@ class TestPreviewRunFile:
             auth=auth,
         )
         preview = result.unwrap()
-        assert preview.unmatched_batches == ("LG-MISSING",)
-        assert preview.matched_batches == 0
+        assert preview.unmatched_batch_refs == ("LG-MISSING",)
+        assert preview.matched_batch_count == 0
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +440,7 @@ class TestImportRunFile:
             b"P1,A1,100,LG-1,0.5\n"
             b"P1,A2,50,LG-1,0.4\n"
             b"P1,A3,,,0.9\n"
+            b"P1,,,,0.1\n"  # no well -> dropped at normalization, counted in rows_skipped
         )
         preview_id = _seed_preview(
             store,
@@ -473,12 +476,16 @@ class TestImportRunFile:
         result = await uc(cmd, auth=auth)
         assert isinstance(result, Success), result
         out = result.unwrap()
+        # Same vocabulary as the preview: total_rows is the RAW file row count,
+        # rows_skipped the rows dropped at normalization (no parseable well).
+        assert out.total_rows == 4
+        assert out.rows_skipped == 1
         assert out.plates_created == 1
         # Sample wells (A1, A2) + blank (A3) — all 3 wells created
         assert out.wells_created == 3
         # Readouts written for all wells with values, including the blank
         # (control wells need raw values for plate normalization).
-        assert out.readouts_created == 3
+        assert out.values_inserted == 3
         assert len(saved) == 3
         # Protocol has no control layout + normalization is NONE → blank row
         # falls through to SAMPLE; counted as unclassified rather than typed.
@@ -654,12 +661,12 @@ class TestImportRunFile:
             auth=auth,
         )
         out = result.unwrap()
-        assert out.unmatched_batches == ["LG-MISSING"]
+        assert out.unmatched_batch_refs == ["LG-MISSING"]
         # A1 was skipped (unmatched), A2 is a blank — only one well created.
         assert out.wells_created == 1
         # The blank well still gets its readout written (non-sample readouts
         # have None molecule/batch and feed plate normalization).
-        assert out.readouts_created == 1
+        assert out.values_inserted == 1
 
     @pytest.mark.asyncio
     async def test_normalization_without_control_layout_fails(self) -> None:
@@ -1097,10 +1104,10 @@ class TestConflictAwareReimport:
         # one readout conflict reported (A1's Raw Data).
         assert out.plates_created == 0
         assert out.wells_created == 1
-        assert out.readouts_created == 1
+        assert out.values_inserted == 1
         assert len(saved) == 1
-        assert len(out.conflicts_readout) == 1
-        c = out.conflicts_readout[0]
+        assert len(out.readout_conflicts) == 1
+        c = out.readout_conflicts[0]
         assert c.plate_name == "P1"
         assert c.well_position == "A1"
         assert c.readout_definition_id == rd_id
@@ -1178,10 +1185,10 @@ class TestConflictAwareReimport:
 
         # Whole row skipped — no readout written, no well created.
         assert out.wells_created == 0
-        assert out.readouts_created == 0
+        assert out.values_inserted == 0
         assert len(saved) == 0
-        assert len(out.conflicts_well_metadata) == 1
-        wc = out.conflicts_well_metadata[0]
+        assert len(out.well_conflicts) == 1
+        wc = out.well_conflicts[0]
         assert wc.plate_name == "P1"
         assert wc.well_position == "A1"
         assert "dose" in wc.reason
@@ -1255,7 +1262,7 @@ class TestConflictAwareReimport:
 
         assert out.plates_created == 1
         assert out.wells_created == 1
-        assert out.readouts_created == 1
+        assert out.values_inserted == 1
         # Run aggregate now has both plates
         assert len(run.plates) == 2
         plate_names = {(p.plate_map or {}).get("name") for p in run.plates}
@@ -1345,9 +1352,9 @@ class TestConflictAwareReimport:
         out = result.unwrap()
 
         # Raw Data conflict; Scientist writes.
-        assert out.readouts_created == 1
-        assert len(out.conflicts_readout) == 1
-        assert out.conflicts_readout[0].readout_definition_id == raw_rd_id
+        assert out.values_inserted == 1
+        assert len(out.readout_conflicts) == 1
+        assert out.readout_conflicts[0].readout_definition_id == raw_rd_id
         # The one saved row is the Scientist text readout.
         assert len(saved) == 1
         assert saved[0].readout_definition_id == scientist_rd_id
@@ -1509,7 +1516,7 @@ class TestRepreviewRunFile:
         # Same preview_id reused — caller can keep referring to it.
         assert preview.preview_id == preview_id
         # Mapping change took effect: no batch_ref column was used.
-        assert preview.unmatched_batches == ()
+        assert preview.unmatched_batch_refs == ()
         assert "MMV2215819" in preview.unmatched_compound_refs
 
     @pytest.mark.asyncio
@@ -1656,8 +1663,8 @@ class TestAutoCreateMissingBatches:
         assert "test.csv" in call_cmd.source_label
 
         # After auto-create, the ref resolved → not in unmatched list.
-        assert "MISSING-BATCH-X" not in preview.unmatched_batches
-        assert preview.matched_batches == 1
+        assert "MISSING-BATCH-X" not in preview.unmatched_batch_refs
+        assert preview.matched_batch_count == 1
         assert preview.auto_created_batches == 1
 
     @pytest.mark.asyncio
@@ -1714,7 +1721,7 @@ class TestAutoCreateMissingBatches:
         assert isinstance(result, Success), result
         preview = result.unwrap()
         ensure_uc.assert_not_called()
-        assert "MISSING-BATCH-X" in preview.unmatched_batches
+        assert "MISSING-BATCH-X" in preview.unmatched_batch_refs
         assert preview.auto_created_batches == 0
 
     @pytest.mark.asyncio
@@ -1816,7 +1823,7 @@ class TestAutoCreateMissingBatches:
 
         assert out.auto_created_batches == 1
         # The batch resolved → not in unmatched list.
-        assert "MISSING-BATCH-X" not in out.unmatched_batches
+        assert "MISSING-BATCH-X" not in out.unmatched_batch_refs
 
     @pytest.mark.asyncio
     async def test_auto_create_skipped_when_compound_unresolved(self) -> None:
@@ -1871,7 +1878,7 @@ class TestAutoCreateMissingBatches:
         preview = result.unwrap()
         # compound unresolved → no auto-create
         ensure_uc.assert_not_called()
-        assert "MISSING-BATCH-X" in preview.unmatched_batches
+        assert "MISSING-BATCH-X" in preview.unmatched_batch_refs
         assert preview.auto_created_batches == 0
 
 

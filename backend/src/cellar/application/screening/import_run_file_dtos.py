@@ -83,20 +83,24 @@ class PreviewRunFileResult:
     suggestions: tuple[HeaderSuggestion, ...]
     sample_rows: tuple[dict[str, str], ...]
     plates: tuple[PlatePreview, ...]
-    matched_batches: int
-    unmatched_batches: tuple[str, ...]
+    matched_batch_count: int
+    unmatched_batch_refs: tuple[str, ...]
     total_rows: int
     expires_in_seconds: int
     validation_errors: tuple[str, ...] = ()
     will_create_plates: int = 0
     will_create_wells: int = 0
-    will_create_readouts: int = 0
-    will_skip_wells: tuple[WellConflict, ...] = ()
-    will_skip_readouts: tuple[ReadoutConflict, ...] = ()
-    matched_compounds: int = 0
+    # Readout cells that would be written — one "value" in the shared vocabulary.
+    values_to_insert: int = 0
+    well_conflicts: tuple[WellConflict, ...] = ()
+    readout_conflicts: tuple[ReadoutConflict, ...] = ()
+    matched_compound_count: int = 0
     unmatched_compound_refs: tuple[str, ...] = ()
     ambiguous_compounds: tuple[AmbiguousCompoundDTO, ...] = ()
-    row_conflicts: tuple[str, ...] = ()
+    # Batch Ref / Compound Ref disagreements, {"row": "<plate> <well>", "error": reason}.
+    errors: tuple[dict[str, str], ...] = ()
+    # Rows dropped at normalization (no parseable well). Same meaning as on import.
+    rows_skipped: int = 0
     # Number of placeholder batches auto-created during this preview pass.
     # Always 0 when auto_create_unmatched_batches=False on the query.
     auto_created_batches: int = 0
@@ -135,17 +139,20 @@ class ImportRunFileCommand(Command):
 
 @dataclass
 class ImportRunFileResult:
-    rows_total: int = 0
+    total_rows: int = 0
     plates_created: int = 0
     wells_created: int = 0
-    readouts_created: int = 0
-    unmatched_batches: list[str] = field(default_factory=list)
+    # Readout cells written — one "value" in the shared vocabulary.
+    values_inserted: int = 0
+    matched_compound_count: int = 0
+    unmatched_batch_refs: list[str] = field(default_factory=list)
     unmatched_compound_refs: list[str] = field(default_factory=list)
     controls_from_template: int = 0
     controls_unclassified: int = 0
-    skipped_rows: int = 0
-    conflicts_well_metadata: list[WellConflict] = field(default_factory=list)
-    conflicts_readout: list[ReadoutConflict] = field(default_factory=list)
+    # Rows dropped at normalization (no parseable well). Same meaning as on preview.
+    rows_skipped: int = 0
+    well_conflicts: list[WellConflict] = field(default_factory=list)
+    readout_conflicts: list[ReadoutConflict] = field(default_factory=list)
     attachment_id: uuid.UUID | None = None
     # Non-fatal warnings. ``compute_warning`` covers normalization /
     # aggregation failures (e.g. missing controls). ``attachment_warning``

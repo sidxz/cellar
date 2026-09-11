@@ -21,6 +21,7 @@ from cellar.application.screening.import_summary_file import (
     ImportSummaryFileCommand,
 )
 from cellar.application.screening.summary_import_models import SummaryColumnMapping
+from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
@@ -40,6 +41,8 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository
     SQLAlchemyRunRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.rdkit.scaffold_calculator import MurckoScaffoldCalculator
+from cellar.infrastructure.rdkit.structure_processor import StructureProcessor
 from tests.fakes.fake_auth import FakeAuth
 from tests.fixtures.dose_response_curves import (
     _insert_org,
@@ -181,6 +184,10 @@ def _build_use_case(
         parser=TabularFileParser(),
         bulk_uc=bulk,
         upload_attachment=upload_attachment or _ok_upload,
+        molecule_resolver=MoleculeResolver(
+            SQLAlchemyMoleculeRepository(read_uow),
+            StructureProcessor(scaffold_calculator=MurckoScaffoldCalculator()),
+        ),
     )
 
 
@@ -241,9 +248,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         first = await _run_import(
             session_factory,
@@ -426,9 +431,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         result = await _run_import(
             session_factory,
@@ -470,9 +473,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         result = await _run_import(
             session_factory,
@@ -520,9 +521,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         first = await _run_import(
             session_factory,
@@ -590,9 +589,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         result = await _run_import(
             session_factory,
@@ -614,9 +611,7 @@ class TestImportSummaryFile:
         assert len(rows) == 1
         assert rows[0].value.value == 5.2
 
-    async def test_multiple_readout_columns_one_row(
-        self, session_factory, workspace_id
-    ) -> None:
+    async def test_multiple_readout_columns_one_row(self, session_factory, workspace_id) -> None:
         """A single row with two readout columns stores two values for the
         compound (one per readout definition)."""
         molecule_id = uuid.uuid4()
@@ -703,9 +698,7 @@ class TestImportSummaryFile:
             )
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         # compound_ref carries the CUSTOM identifier, not the reg number.
         result = await _run_import(

@@ -49,9 +49,11 @@ from cellar.application.screening.summary_import_models import (
 from cellar.application.screening.summary_import_resolver import (
     build_batch_index,
     build_compound_index,
+    build_structure_index,
     plan_summary_rows,
 )
 from cellar.application.shared.command import Command
+from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.enums import AttachableType
@@ -95,6 +97,7 @@ class ImportSummaryFile:
         parser: TabularParser,
         bulk_uc: BulkCreateReadoutData,
         upload_attachment: UploadAttachment,
+        molecule_resolver: MoleculeResolver,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -105,6 +108,7 @@ class ImportSummaryFile:
         self._parser = parser
         self._bulk = bulk_uc
         self._upload_attachment = upload_attachment
+        self._molecule_resolver = molecule_resolver
 
     async def __call__(
         self,
@@ -207,6 +211,16 @@ class ImportSummaryFile:
 
         compound_index = await build_compound_index(compound_refs, ws, self._molecule_repo)
         batch_index = await build_batch_index(batch_refs, ws, self._batch_repo)
+        # STRUCTURE fallback: distinct SMILES for refs that missed the identifier
+        # index (empty when no structure column is mapped). Resolution only —
+        # nothing is registered or stored; the column never reaches the write.
+        structure_index = await build_structure_index(
+            rows,
+            mapping=mapping,
+            compound_index=compound_index,
+            workspace_id=ws,
+            molecule_resolver=self._molecule_resolver,
+        )
 
         # Pure planner: resolves each row, routes values, dedups on the resolved
         # key (last-wins), and collects cell-level + unmatched-ref errors.
@@ -216,6 +230,7 @@ class ImportSummaryFile:
             defs_by_id=defs_by_id,
             compound_index=compound_index,
             batch_index=batch_index,
+            structure_index=structure_index,
         )
 
         # Build bulk items from the RESOLVED ids — no registration_number /
@@ -271,7 +286,7 @@ class ImportSummaryFile:
             "summary_file.imported",
             workspace_id=str(ws),
             run_id=str(run_id),
-            rows_processed=table.row_count,
+            total_rows=table.row_count,
             values_inserted=values_inserted,
             values_updated=values_updated,
             rows_skipped=plan.rows_skipped,
@@ -280,7 +295,11 @@ class ImportSummaryFile:
 
         return Success(
             SummaryImportResult(
-                rows_processed=table.row_count,
+                total_rows=table.row_count,
+                matched_compound_count=plan.matched_compound_count,
+                unmatched_compound_refs=sorted(plan.unmatched_compound_refs),
+                unmatched_batch_refs=sorted(plan.unmatched_batch_refs),
+                unmatched_compounds=list(plan.unmatched_compounds),
                 values_inserted=values_inserted,
                 values_updated=values_updated,
                 rows_skipped=plan.rows_skipped,

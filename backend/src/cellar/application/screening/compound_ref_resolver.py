@@ -99,6 +99,10 @@ class RowResolution:
     molecule_id: uuid.UUID | None
     source: Literal["batch_ref", "compound_ref", "override"] | None
     error: ResolveError | None
+    # Reporting only: set when ``error`` is an unmatched batch ref AND the
+    # row's compound ref missed too. Resolution is unchanged (batch stays
+    # authoritative); this just keeps ``unmatched_compound_refs`` truthful.
+    also_unmatched_compound: bool = False
 
 
 @dataclass(frozen=True)
@@ -199,6 +203,8 @@ def resolve_rows(
 
         if err.kind == "unmatched_batch_ref" and row.batch_ref:
             unmatched_batches.add(row.batch_ref)
+            if resolution.also_unmatched_compound and row.compound_ref:
+                unmatched_compounds.add(row.compound_ref)
         elif err.kind == "unmatched_compound_ref" and row.compound_ref:
             unmatched_compounds.add(row.compound_ref)
         elif err.kind == "ambiguous_compound" and row.compound_ref:
@@ -286,6 +292,7 @@ def _resolve_one(
                 molecule_id=None,
                 source=None,
                 error=ResolveError(kind="unmatched_batch_ref"),
+                also_unmatched_compound=compound_candidate is None,
             )
         if compound_candidate is None:
             # Batch ref resolves; compound ref doesn't. The batch's
