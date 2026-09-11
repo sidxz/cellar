@@ -215,7 +215,7 @@ class ImportRunFile:
         # has already succeeded if we got here.
         if isinstance(result, Success):
             unwrapped = result.unwrap()
-            if unwrapped.readouts_created > 0 or unwrapped.wells_created > 0:
+            if unwrapped.values_inserted > 0 or unwrapped.wells_created > 0:
                 await self._maybe_run_calc_engine(input, unwrapped)
             await self._maybe_attach_raw_file(input, preview, unwrapped, auth)
         return result
@@ -404,13 +404,14 @@ class ImportRunFile:
         # 8. Apply plan: create new plates, attach new wells, write new
         # readouts. Existing entities are reused as-is.
         result = ImportRunFileResult(
-            rows_total=len(normalized.rows),
-            skipped_rows=normalized.skipped_rows,
-            conflicts_well_metadata=list(plan.well_conflicts),
-            conflicts_readout=list(plan.readout_conflicts),
+            total_rows=preview.table.row_count,
+            rows_skipped=normalized.skipped_rows,
+            well_conflicts=list(plan.well_conflicts),
+            readout_conflicts=list(plan.readout_conflicts),
             controls_from_template=plan.controls_from_template,
             controls_unclassified=plan.controls_unclassified,
-            unmatched_batches=sorted(resolutions.unmatched_batch_refs),
+            matched_compound_count=resolutions.matched_compound_count,
+            unmatched_batch_refs=sorted(resolutions.unmatched_batch_refs),
             unmatched_compound_refs=sorted(resolutions.unmatched_compound_refs),
             auto_created_batches=auto_created_batches,
         )
@@ -456,7 +457,7 @@ class ImportRunFile:
         await self._run_repo.save(run)
         if new_readouts:
             await self._readout_data_repo.save_bulk(new_readouts)
-            result.readouts_created = len(new_readouts)
+            result.values_inserted = len(new_readouts)
 
         await self._uow.commit()
         return Success(result)

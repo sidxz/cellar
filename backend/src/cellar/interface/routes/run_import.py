@@ -104,6 +104,14 @@ class UnmatchedCompoundModel(BaseModel):
     structure: str | None = None
 
 
+def _row_errors(errors: list[dict[str, str]]) -> list[ImportRowErrorModel]:
+    return [ImportRowErrorModel(row=e.get("row", ""), error=e.get("error", "")) for e in errors]
+
+
+def _unmatched_compounds(items: list[UnmatchedCompound]) -> list[UnmatchedCompoundModel]:
+    return [UnmatchedCompoundModel(ref=u.ref, row=u.row, structure=u.structure) for u in items]
+
+
 # ---------------------------------------------------------------------------
 # Preview
 # ---------------------------------------------------------------------------
@@ -157,26 +165,24 @@ class AmbiguousCompoundModel(BaseModel):
     affected_row_count: int
 
 
-class PreviewRunFileResponse(BaseModel):
+class PreviewRunFileResponse(ImportForecastModel):
+    """Plate-file preview. Shared vocabulary from ``ImportForecastModel`` plus the
+    plate-specific extras. ``values_to_update`` stays 0: the plate importer never
+    overwrites — a cell that already exists lands in ``readout_conflicts``."""
+
     preview_id: uuid.UUID
     headers: list[str]
     suggestions: list[HeaderSuggestionModel]
     sample_rows: list[dict[str, str]]
     plates: list[PlatePreviewModel]
-    matched_batches: int
-    unmatched_batches: list[str]
-    total_rows: int
+    matched_batch_count: int
     expires_in_seconds: int
     validation_errors: list[str] = Field(default_factory=list)
     will_create_plates: int = 0
     will_create_wells: int = 0
-    will_create_readouts: int = 0
-    will_skip_wells: list[WellConflictModel] = Field(default_factory=list)
-    will_skip_readouts: list[ReadoutConflictModel] = Field(default_factory=list)
-    matched_compounds: int = 0
-    unmatched_compound_refs: list[str] = Field(default_factory=list)
+    well_conflicts: list[WellConflictModel] = Field(default_factory=list)
+    readout_conflicts: list[ReadoutConflictModel] = Field(default_factory=list)
     ambiguous_compounds: list[AmbiguousCompoundModel] = Field(default_factory=list)
-    row_conflicts: list[str] = Field(default_factory=list)
     # Number of placeholder batches that would be auto-created if
     # auto_create_unmatched_batches=True is passed to the import step.
     # Always 0 when the preview query doesn't set that flag.
@@ -214,79 +220,7 @@ async def preview_run_file(
     )
     result = await uc(query, auth=auth)
     preview: PreviewRunFileResult = result_to_response(result)
-    return PreviewRunFileResponse(
-        preview_id=preview.preview_id,
-        headers=list(preview.headers),
-        suggestions=[
-            HeaderSuggestionModel(
-                header=s.header,
-                role=s.role,
-                confidence=s.confidence,
-                reason=s.reason,
-                readout_definition_id=s.readout_definition_id,
-            )
-            for s in preview.suggestions
-        ],
-        sample_rows=list(preview.sample_rows),
-        plates=[
-            PlatePreviewModel(
-                plate_name=p.plate_name,
-                plate_format=p.plate_format,
-                well_count=p.well_count,
-                sample_count=p.sample_count,
-                blank_count=p.blank_count,
-            )
-            for p in preview.plates
-        ],
-        matched_batches=preview.matched_batches,
-        unmatched_batches=list(preview.unmatched_batches),
-        total_rows=preview.total_rows,
-        expires_in_seconds=preview.expires_in_seconds,
-        validation_errors=list(preview.validation_errors),
-        will_create_plates=preview.will_create_plates,
-        will_create_wells=preview.will_create_wells,
-        will_create_readouts=preview.will_create_readouts,
-        will_skip_wells=[
-            WellConflictModel(
-                plate_name=c.plate_name,
-                well_position=c.well_position,
-                reason=c.reason,
-            )
-            for c in preview.will_skip_wells
-        ],
-        will_skip_readouts=[
-            ReadoutConflictModel(
-                plate_name=c.plate_name,
-                well_position=c.well_position,
-                readout_definition_id=c.readout_definition_id,
-                readout_name=c.readout_name,
-            )
-            for c in preview.will_skip_readouts
-        ],
-        matched_compounds=preview.matched_compounds,
-        unmatched_compound_refs=list(preview.unmatched_compound_refs),
-        ambiguous_compounds=[
-            AmbiguousCompoundModel(
-                compound_ref=a.compound_ref,
-                molecule_id=a.molecule_id,
-                molecule_name=a.molecule_name,
-                batch_options=[
-                    BatchOptionModel(
-                        batch_id=b.batch_id,
-                        batch_number=b.batch_number,
-                        salt_form=b.salt_form,
-                        purity=b.purity,
-                        created_at=b.created_at,
-                    )
-                    for b in a.batch_options
-                ],
-                affected_row_count=a.affected_row_count,
-            )
-            for a in preview.ambiguous_compounds
-        ],
-        row_conflicts=list(preview.row_conflicts),
-        auto_created_batches=preview.auto_created_batches,
-    )
+    return _to_preview_response(preview)
 
 
 # ---------------------------------------------------------------------------
@@ -338,32 +272,32 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
             )
             for p in preview.plates
         ],
-        matched_batches=preview.matched_batches,
-        unmatched_batches=list(preview.unmatched_batches),
+        matched_batch_count=preview.matched_batch_count,
+        unmatched_batch_refs=list(preview.unmatched_batch_refs),
         total_rows=preview.total_rows,
         expires_in_seconds=preview.expires_in_seconds,
         validation_errors=list(preview.validation_errors),
         will_create_plates=preview.will_create_plates,
         will_create_wells=preview.will_create_wells,
-        will_create_readouts=preview.will_create_readouts,
-        will_skip_wells=[
+        values_to_insert=preview.values_to_insert,
+        well_conflicts=[
             WellConflictModel(
                 plate_name=c.plate_name,
                 well_position=c.well_position,
                 reason=c.reason,
             )
-            for c in preview.will_skip_wells
+            for c in preview.well_conflicts
         ],
-        will_skip_readouts=[
+        readout_conflicts=[
             ReadoutConflictModel(
                 plate_name=c.plate_name,
                 well_position=c.well_position,
                 readout_definition_id=c.readout_definition_id,
                 readout_name=c.readout_name,
             )
-            for c in preview.will_skip_readouts
+            for c in preview.readout_conflicts
         ],
-        matched_compounds=preview.matched_compounds,
+        matched_compound_count=preview.matched_compound_count,
         unmatched_compound_refs=list(preview.unmatched_compound_refs),
         ambiguous_compounds=[
             AmbiguousCompoundModel(
@@ -384,7 +318,8 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
             )
             for a in preview.ambiguous_compounds
         ],
-        row_conflicts=list(preview.row_conflicts),
+        errors=_row_errors(list(preview.errors)),
+        rows_skipped=preview.rows_skipped,
         auto_created_batches=preview.auto_created_batches,
     )
 
@@ -451,21 +386,18 @@ class ImportRunFileRequest(BaseModel):
     auto_create_unmatched_batches: bool = False
 
 
-class ImportRunFileResponse(BaseModel):
-    rows_total: int
+class ImportRunFileResponse(ImportResultModel):
+    """Plate-file import outcome. Shared vocabulary from ``ImportResultModel`` plus
+    the plate-specific extras. ``values_updated`` stays 0 (never overwrites) and
+    ``errors`` is empty: a conflicting or ambiguous file is refused before any write."""
+
     plates_created: int
     wells_created: int
-    readouts_created: int
-    unmatched_batches: list[str]
-    unmatched_compound_refs: list[str] = Field(default_factory=list)
     controls_from_template: int
     controls_unclassified: int
-    skipped_rows: int
-    conflicts_well_metadata: list[WellConflictModel] = Field(default_factory=list)
-    conflicts_readout: list[ReadoutConflictModel] = Field(default_factory=list)
-    attachment_id: uuid.UUID | None = None
+    well_conflicts: list[WellConflictModel] = Field(default_factory=list)
+    readout_conflicts: list[ReadoutConflictModel] = Field(default_factory=list)
     compute_warning: str | None = None
-    attachment_warning: str | None = None
     fit_warnings: list[str] = Field(default_factory=list)
     # Number of placeholder batches auto-created during this import.
     # Always 0 when auto_create_unmatched_batches=False on the request.
@@ -507,31 +439,32 @@ async def import_run_file(
     result = await uc(cmd, auth=auth)
     out: ImportRunFileResult = result_to_response(result)
     return ImportRunFileResponse(
-        rows_total=out.rows_total,
+        total_rows=out.total_rows,
         plates_created=out.plates_created,
         wells_created=out.wells_created,
-        readouts_created=out.readouts_created,
-        unmatched_batches=out.unmatched_batches,
+        values_inserted=out.values_inserted,
+        matched_compound_count=out.matched_compound_count,
+        unmatched_batch_refs=out.unmatched_batch_refs,
         unmatched_compound_refs=out.unmatched_compound_refs,
         controls_from_template=out.controls_from_template,
         controls_unclassified=out.controls_unclassified,
-        skipped_rows=out.skipped_rows,
-        conflicts_well_metadata=[
+        rows_skipped=out.rows_skipped,
+        well_conflicts=[
             WellConflictModel(
                 plate_name=c.plate_name,
                 well_position=c.well_position,
                 reason=c.reason,
             )
-            for c in out.conflicts_well_metadata
+            for c in out.well_conflicts
         ],
-        conflicts_readout=[
+        readout_conflicts=[
             ReadoutConflictModel(
                 plate_name=c.plate_name,
                 well_position=c.well_position,
                 readout_definition_id=c.readout_definition_id,
                 readout_name=c.readout_name,
             )
-            for c in out.conflicts_readout
+            for c in out.readout_conflicts
         ],
         attachment_id=out.attachment_id,
         compute_warning=out.compute_warning,
@@ -691,14 +624,6 @@ class SummaryPreviewResponse(BaseModel):
             unmatched_refs=list(preview.unmatched_refs),
             validation_errors=list(preview.validation_errors),
         )
-
-
-def _row_errors(errors: list[dict[str, str]]) -> list[ImportRowErrorModel]:
-    return [ImportRowErrorModel(row=e.get("row", ""), error=e.get("error", "")) for e in errors]
-
-
-def _unmatched_compounds(items: list[UnmatchedCompound]) -> list[UnmatchedCompoundModel]:
-    return [UnmatchedCompoundModel(ref=u.ref, row=u.row, structure=u.structure) for u in items]
 
 
 class SummaryImportResponse(ImportResultModel):
