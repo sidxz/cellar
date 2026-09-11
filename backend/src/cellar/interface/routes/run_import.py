@@ -34,6 +34,7 @@ from cellar.application.screening.summary_import_models import (
     SummaryImportPlanPreview,
     SummaryImportResult,
     SummaryPreviewResult,
+    UnmatchedCompound,
 )
 from cellar.domain.shared.errors import ValidationError
 from cellar.interface.dependencies import (
@@ -53,6 +54,54 @@ from cellar.interface.dependencies import (
 from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["run-import"])
+
+
+# ---------------------------------------------------------------------------
+# Shared result vocabulary (plate + summary; preview + import)
+# ---------------------------------------------------------------------------
+
+
+class ImportRowErrorModel(BaseModel):
+    """One row that could not be planned/written. ``row`` is a file row number
+    on the summary path and ``"<plate> <well>"`` on the plate path."""
+
+    row: str
+    error: str
+
+
+class ImportOutcomeModel(BaseModel):
+    """Fields every importer returns from BOTH its preview and its import."""
+
+    total_rows: int
+    matched_compound_count: int = 0
+    unmatched_compound_refs: list[str] = Field(default_factory=list)
+    unmatched_batch_refs: list[str] = Field(default_factory=list)
+    # Rows dropped before resolution (no well on the plate path; neither ref on
+    # the summary path). Unmatched refs are NOT counted here — see errors/refs.
+    rows_skipped: int = 0
+    errors: list[ImportRowErrorModel] = Field(default_factory=list)
+
+
+class ImportForecastModel(ImportOutcomeModel):
+    """Preview tier: what an import WOULD write. Nothing is written."""
+
+    values_to_insert: int = 0
+    values_to_update: int = 0
+
+
+class ImportResultModel(ImportOutcomeModel):
+    """Import tier: what was written, plus the raw-file attachment outcome."""
+
+    values_inserted: int = 0
+    values_updated: int = 0
+    attachment_id: uuid.UUID | None = None
+    attachment_warning: str | None = None
+
+
+class UnmatchedCompoundModel(BaseModel):
+    ref: str
+    row: int
+    structure: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -644,48 +693,40 @@ class SummaryPreviewResponse(BaseModel):
         )
 
 
-class SummaryImportErrorModel(BaseModel):
-    row: str
-    error: str
+def _row_errors(errors: list[dict[str, str]]) -> list[ImportRowErrorModel]:
+    return [ImportRowErrorModel(row=e.get("row", ""), error=e.get("error", "")) for e in errors]
 
 
-class SummaryImportResponse(BaseModel):
-    rows_processed: int
-    values_inserted: int
-    values_updated: int
-    rows_skipped: int
-    errors: list[SummaryImportErrorModel] = Field(default_factory=list)
-    # Raw upload attached to the run; mirrors ``ImportRunFileResponse``.
-    attachment_id: uuid.UUID | None = None
-    attachment_warning: str | None = None
+def _unmatched_compounds(items: list[UnmatchedCompound]) -> list[UnmatchedCompoundModel]:
+    return [UnmatchedCompoundModel(ref=u.ref, row=u.row, structure=u.structure) for u in items]
+
+
+class SummaryImportResponse(ImportResultModel):
+    """Outcome of a committed summary import. Same shape as the preview forecast."""
+
+    unmatched_compounds: list[UnmatchedCompoundModel] = Field(default_factory=list)
 
     @classmethod
     def from_result(cls, out: SummaryImportResult) -> SummaryImportResponse:
         return cls(
-            rows_processed=out.rows_processed,
+            total_rows=out.total_rows,
+            matched_compound_count=out.matched_compound_count,
+            unmatched_compound_refs=list(out.unmatched_compound_refs),
+            unmatched_batch_refs=list(out.unmatched_batch_refs),
+            unmatched_compounds=_unmatched_compounds(out.unmatched_compounds),
             values_inserted=out.values_inserted,
             values_updated=out.values_updated,
             rows_skipped=out.rows_skipped,
-            errors=[
-                SummaryImportErrorModel(row=e.get("row", ""), error=e.get("error", ""))
-                for e in out.errors
-            ],
+            errors=_row_errors(out.errors),
             attachment_id=out.attachment_id,
             attachment_warning=out.attachment_warning,
         )
 
 
-class SummaryResolveResponse(BaseModel):
+class SummaryResolveResponse(ImportForecastModel):
     """Dry-run forecast of a summary import — resolve refs + count writes (no writes)."""
 
-    total_rows: int
-    matched_compound_count: int
-    unmatched_compound_refs: list[str] = Field(default_factory=list)
-    unmatched_batch_refs: list[str] = Field(default_factory=list)
-    values_to_insert: int
-    values_to_update: int
-    rows_skipped: int
-    errors: list[SummaryImportErrorModel] = Field(default_factory=list)
+    unmatched_compounds: list[UnmatchedCompoundModel] = Field(default_factory=list)
 
     @classmethod
     def from_result(cls, result: SummaryImportPlanPreview) -> SummaryResolveResponse:
@@ -694,13 +735,11 @@ class SummaryResolveResponse(BaseModel):
             matched_compound_count=result.matched_compound_count,
             unmatched_compound_refs=list(result.unmatched_compound_refs),
             unmatched_batch_refs=list(result.unmatched_batch_refs),
+            unmatched_compounds=_unmatched_compounds(result.unmatched_compounds),
             values_to_insert=result.values_to_insert,
             values_to_update=result.values_to_update,
             rows_skipped=result.rows_skipped,
-            errors=[
-                SummaryImportErrorModel(row=e.get("row", ""), error=e.get("error", ""))
-                for e in result.errors
-            ],
+            errors=_row_errors(result.errors),
         )
 
 
@@ -714,12 +753,16 @@ class SummaryColumnMappingRequest(BaseModel):
 
     compound_ref: str | None = None
     batch_ref: str | None = None
+    # SMILES column: fallback resolution for compound refs that miss the
+    # identifier lookup. Never stored, never registers.
+    structure: str | None = None
     readout_columns: dict[str, uuid.UUID] = Field(default_factory=dict)
 
     def to_domain(self) -> SummaryColumnMapping:
         return SummaryColumnMapping(
             compound_ref=self.compound_ref,
             batch_ref=self.batch_ref,
+            structure=self.structure,
             readout_columns=dict(self.readout_columns),
         )
 
@@ -738,7 +781,7 @@ async def preview_summary_file(
     """Parse a wide-format summary file and suggest a per-column role mapping.
 
     Accepts ``.xlsx`` or ``.csv`` uploads. Returns the headers, a suggested
-    role per column (compound_ref / batch_ref / readout / ignore, with the
+    role per column (compound_ref / batch_ref / structure / readout / ignore, with the
     matched ``readout_definition_id`` when a header name lines up with a
     protocol readout), and a few sample rows. No writes — the chemist confirms
     the mapping and POSTs ``import-summary-file`` to commit.
