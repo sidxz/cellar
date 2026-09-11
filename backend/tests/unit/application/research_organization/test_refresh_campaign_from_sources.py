@@ -105,7 +105,6 @@ def _build_pre_populated_campaign(
         project_id=uuid.uuid4(),
         name="Test Campaign",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
 
@@ -233,7 +232,6 @@ class TestRefreshFromSources:
             project_id=uuid.uuid4(),
             name="C",
             description=None,
-            publishes_collection=True,
             created_by=uuid.uuid4(),
         )
         ch = _make_channel(campaign.id)
@@ -365,7 +363,6 @@ class TestRefreshFromSources:
             project_id=uuid.uuid4(),
             name="Empty",
             description=None,
-            publishes_collection=True,
             created_by=uuid.uuid4(),
         )
         # Add a result but no channels

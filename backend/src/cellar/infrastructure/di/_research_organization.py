@@ -93,6 +93,7 @@ from cellar.application.research_organization.refresh_campaign_from_sources impo
 )
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
+from cellar.application.research_organization.reopen_campaign import ReopenCampaign
 from cellar.application.research_organization.set_result_decision import SetResultDecision
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaign as SupersedeCampaignUC,
@@ -585,9 +586,16 @@ def register_research_organization(container: Container) -> None:
         return CloseCampaign(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            collection_repo=SQLAlchemyCollectionRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             resolver=c[ChannelResolver],
+            dispatcher=c[EventDispatcher],
+        )
+
+    def _reopen_campaign(c: Container) -> ReopenCampaign:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ReopenCampaign(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
             dispatcher=c[EventDispatcher],
         )
 
@@ -606,7 +614,6 @@ def register_research_organization(container: Container) -> None:
             campaign_repo=SQLAlchemyCampaignRepository(uow),
             project_repo=SQLAlchemyProjectRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
-            collection_repo=SQLAlchemyCollectionRepository(uow),
             molecule_repo=SQLAlchemyMoleculeRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
         )
@@ -645,6 +652,7 @@ def register_research_organization(container: Container) -> None:
     container.define(UpdateCampaignMetadata, _update_campaign_metadata)
     container.define(RefreshFromSources, _refresh)
     container.define(CloseCampaign, _close_campaign)
+    container.define(ReopenCampaign, _reopen_campaign)
     container.define(SupersedeCampaignUC, _supersede)
     container.define(GetPublishedCampaign, _get_published)
     container.define(CampaignScientistReader, _campaign_scientist_reader)

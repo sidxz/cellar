@@ -46,7 +46,6 @@ def _make_campaign(**overrides) -> Campaign:
         project_id=uuid.uuid4(),
         name="Stage Evaluation",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
     defaults.update(overrides)

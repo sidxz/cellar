@@ -50,7 +50,6 @@ def _make_draft_campaign(workspace_id: uuid.UUID, *, name: str = "Test") -> Camp
         project_id=uuid.uuid4(),
         name=name,
         description=None,
-        publishes_collection=False,
         created_by=uuid.uuid4(),
     )
 
@@ -63,11 +62,9 @@ def _make_closed_campaign(workspace_id: uuid.UUID, *, name: str = "Old") -> Camp
         name=name,
         description=None,
         status=CampaignStatus.CLOSED,
-        publishes_collection=False,
         created_by=uuid.uuid4(),
         closed_at=None,
         closed_by=uuid.uuid4(),
-        signature_id=uuid.uuid4(),
     )
 
 
@@ -79,7 +76,6 @@ def _make_superseded_campaign(workspace_id: uuid.UUID) -> Campaign:
         name="Already Superseded",
         description=None,
         status=CampaignStatus.SUPERSEDED,
-        publishes_collection=False,
         created_by=uuid.uuid4(),
         superseded_by_campaign_id=uuid.uuid4(),
     )

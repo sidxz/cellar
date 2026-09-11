@@ -82,7 +82,6 @@ class CreateCampaignRequest(BaseModel):
     name: str
     description: str | None = None
     project_id: uuid.UUID
-    publishes_collection: bool = True
     supersedes_campaign_id: uuid.UUID | None = None
 
 
@@ -219,11 +218,11 @@ class AddResultRowRequest(BaseModel):
 
 
 class CloseCampaignRequest(BaseModel):
-    signature_id: uuid.UUID
-    signature_meaning: str | None = None
-    #: Override the campaign's stored publishes_collection at close time.
-    #: None ⇒ keep the create-time value (default behaviour).
-    publishes_collection: bool | None = None
+    note: str | None = None
+
+
+class ReopenCampaignRequest(BaseModel):
+    reason: str
 
 
 class MirrorProtocolRequest(BaseModel):
@@ -416,13 +415,11 @@ class CampaignResponse(BaseModel):
     description: str | None = None
     status: str
     compound_sources: list[dict[str, Any]]
-    publishes_collection: bool
     supersedes_campaign_id: uuid.UUID | None = None
     superseded_by_campaign_id: uuid.UUID | None = None
-    published_collection_id: uuid.UUID | None = None
     closed_at: datetime | None = None
     closed_by: uuid.UUID | None = None
-    signature_id: uuid.UUID | None = None
+    close_note: str | None = None
     source_protocols: list[dict[str, Any]]
     created_by: uuid.UUID
     created_at: datetime
@@ -451,13 +448,11 @@ class CampaignResponse(BaseModel):
             description=c.description,
             status=c.status.value,
             compound_sources=_derive_compound_sources(c.results, scientist_by_run_id),
-            publishes_collection=c.publishes_collection,
             supersedes_campaign_id=c.supersedes_campaign_id,
             superseded_by_campaign_id=c.superseded_by_campaign_id,
-            published_collection_id=c.published_collection_id,
             closed_at=c.closed_at,
             closed_by=c.closed_by,
-            signature_id=c.signature_id,
+            close_note=c.close_note,
             source_protocols=c.source_protocols,
             created_by=c.created_by,
             created_at=c.created_at,

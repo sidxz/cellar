@@ -49,7 +49,6 @@ def _make_campaign(auth) -> Campaign:
         project_id=uuid.uuid4(),
         name="Target Campaign",
         description=None,
-        publishes_collection=True,
         created_by=auth.user_id,
     )
 
@@ -60,7 +59,6 @@ def _make_source_campaign(auth, decisions: list[CampaignDecision]) -> Campaign:
         project_id=uuid.uuid4(),
         name="Source Campaign",
         description=None,
-        publishes_collection=False,
         created_by=auth.user_id,
     )
     for d in decisions:
@@ -242,7 +240,7 @@ class TestAddResultsFromCampaign:
         )
         campaign.add_channel(ch)
         campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
-        campaign.close(closed_by=auth.user_id, signature_id=uuid.uuid4(), source_protocols=[])
+        campaign.close(closed_by=auth.user_id, note=None, source_protocols=[])
 
         source = _make_source_campaign(auth, [CampaignDecision.SELECTED])
         campaign_repo = make_campaign_repo(

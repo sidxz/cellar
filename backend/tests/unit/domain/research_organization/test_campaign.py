@@ -23,6 +23,7 @@ from cellar.domain.research_organization.enums import (
 from cellar.domain.research_organization.events import (
     CampaignClosed,
     CampaignCreated,
+    CampaignReopened,
     CampaignSuperseded,
 )
 from cellar.domain.research_organization.source_ref import CollectionRef
@@ -35,7 +36,6 @@ def _make_campaign(**overrides) -> Campaign:
         project_id=uuid.uuid4(),
         name="EGFR Round 2",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
     defaults.update(overrides)
@@ -213,7 +213,7 @@ def test_add_results_draft_guard():
     ch = _make_channel(c)
     c.add_channel(ch)
     c.add_result(_make_result(c))
-    c.close(closed_by=uuid.uuid4(), signature_id=uuid.uuid4(), source_protocols=[])
+    c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
     with pytest.raises(ValidationError):
         c.add_results([_make_result(c)])
 
@@ -300,7 +300,7 @@ def test_add_stage_draft_guard():
     c = _make_campaign()
     c.add_channel(_make_channel(c))
     c.add_result(_make_result(c))
-    c.close(closed_by=uuid.uuid4(), signature_id=uuid.uuid4(), source_protocols=[])
+    c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
     with pytest.raises(ValidationError):
         c.add_stage(_make_stage(c))
 
@@ -348,7 +348,7 @@ def test_update_stage_draft_guard():
     c.add_result(_make_result(c))
     stage = _make_stage(c)
     c.add_stage(stage)
-    c.close(closed_by=uuid.uuid4(), signature_id=uuid.uuid4(), source_protocols=[])
+    c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
     with pytest.raises(ValidationError):
         c.update_stage(stage.id, name="Renamed")
 
@@ -392,7 +392,7 @@ def test_remove_stage_draft_guard():
     c.add_result(_make_result(c))
     stage = _make_stage(c)
     c.add_stage(stage)
-    c.close(closed_by=uuid.uuid4(), signature_id=uuid.uuid4(), source_protocols=[])
+    c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
     with pytest.raises(ValidationError):
         c.remove_stage(stage.id)
 
@@ -435,7 +435,7 @@ def test_close_requires_at_least_one_result():
     with pytest.raises(ValidationError, match="no results"):
         c.close(
             closed_by=uuid.uuid4(),
-            signature_id=uuid.uuid4(),
+            note=None,
             source_protocols=[],
         )
 
@@ -446,7 +446,7 @@ def test_close_requires_at_least_one_channel():
     with pytest.raises(ValidationError, match="no channels"):
         c.close(
             closed_by=uuid.uuid4(),
-            signature_id=uuid.uuid4(),
+            note=None,
             source_protocols=[],
         )
 
@@ -456,19 +456,28 @@ def test_close_transitions_and_emits_event():
     c.add_channel(_make_channel(c))
     c.add_result(_make_result(c))
     closer = uuid.uuid4()
-    sig = uuid.uuid4()
     c.collect_events()  # clear CampaignCreated
     c.close(
         closed_by=closer,
-        signature_id=sig,
+        note="Confirmed by wet lab",
         source_protocols=[{"id": "p1", "name": "X", "version": 1}],
     )
     assert c.status == CampaignStatus.CLOSED
     assert c.closed_by == closer
-    assert c.signature_id == sig
+    assert c.close_note == "Confirmed by wet lab"
     assert c.source_protocols == [{"id": "p1", "name": "X", "version": 1}]
     events = c.collect_events()
-    assert any(isinstance(e, CampaignClosed) for e in events)
+    closed_events = [e for e in events if isinstance(e, CampaignClosed)]
+    assert len(closed_events) == 1
+    assert closed_events[0].note == "Confirmed by wet lab"
+
+
+def test_close_with_no_note_leaves_close_note_none():
+    c = _make_campaign()
+    c.add_channel(_make_channel(c))
+    c.add_result(_make_result(c))
+    c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
+    assert c.close_note is None
 
 
 def test_cannot_mutate_after_close():
@@ -477,7 +486,7 @@ def test_cannot_mutate_after_close():
     c.add_result(_make_result(c))
     c.close(
         closed_by=uuid.uuid4(),
-        signature_id=uuid.uuid4(),
+        note=None,
         source_protocols=[],
     )
     with pytest.raises(ValidationError):
@@ -488,13 +497,54 @@ def test_cannot_mutate_after_close():
         c.remove_channel(uuid.uuid4())
 
 
-# ---------- publish + supersede ----------
+# ---------- reopen ----------
 
 
-def test_set_published_collection_requires_closed():
+def test_reopen_from_closed_clears_metadata_and_emits_event():
     c = _make_campaign()
-    with pytest.raises(ValidationError, match="closed campaigns"):
-        c.set_published_collection(uuid.uuid4())
+    c.add_channel(_make_channel(c))
+    c.add_result(_make_result(c))
+    c.close(closed_by=uuid.uuid4(), note="first pass", source_protocols=[])
+    c.collect_events()  # clear CampaignClosed
+    reopener = uuid.uuid4()
+    c.reopen(reopened_by=reopener, reason="late confirmation result")
+    assert c.status == CampaignStatus.DRAFT
+    assert c.closed_at is None
+    assert c.closed_by is None
+    assert c.close_note is None
+    events = c.collect_events()
+    reopened_events = [e for e in events if isinstance(e, CampaignReopened)]
+    assert len(reopened_events) == 1
+    assert reopened_events[0].reopened_by == reopener
+    assert reopened_events[0].reason == "late confirmation result"
+
+
+def test_reopen_refused_from_draft():
+    c = _make_campaign()
+    with pytest.raises(ValidationError, match="draft"):
+        c.reopen(reopened_by=uuid.uuid4(), reason="oops")
+
+
+def test_reopen_refused_from_superseded():
+    c = _make_campaign()
+    c.add_channel(_make_channel(c))
+    c.add_result(_make_result(c))
+    c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
+    c.mark_superseded_by(uuid.uuid4())
+    with pytest.raises(ValidationError, match="superseded"):
+        c.reopen(reopened_by=uuid.uuid4(), reason="oops")
+
+
+def test_reopen_rejects_empty_reason():
+    c = _make_campaign()
+    c.add_channel(_make_channel(c))
+    c.add_result(_make_result(c))
+    c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
+    with pytest.raises(ValidationError, match="reason"):
+        c.reopen(reopened_by=uuid.uuid4(), reason="   ")
+
+
+# ---------- supersede ----------
 
 
 def test_supersede_requires_closed():
@@ -507,7 +557,7 @@ def test_supersede_transitions_and_emits_event():
     c = _make_campaign()
     c.add_channel(_make_channel(c))
     c.add_result(_make_result(c))
-    c.close(closed_by=uuid.uuid4(), signature_id=uuid.uuid4(), source_protocols=[])
+    c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
     new_id = uuid.uuid4()
     c.collect_events()
     c.mark_superseded_by(new_id)

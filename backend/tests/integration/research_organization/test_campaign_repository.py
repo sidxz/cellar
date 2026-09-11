@@ -45,7 +45,6 @@ def _build_campaign(
         project_id=project_id,
         name="Test Campaign",
         description="x",
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
     c.collect_events()  # discard CampaignCreated for test cleanliness
@@ -170,7 +169,7 @@ async def test_is_locked_returns_true_for_closed(
         assert loaded is not None
         loaded.close(
             closed_by=uuid.uuid4(),
-            signature_id=uuid.uuid4(),
+            note=None,
             source_protocols=[{"id": "p1", "name": "X", "version": 1}],
         )
         loaded.collect_events()  # discard CampaignClosed

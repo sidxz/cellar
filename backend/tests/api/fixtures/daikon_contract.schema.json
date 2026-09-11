@@ -3,7 +3,7 @@
   "title": "DAIKON Published Campaign Contract",
   "description": "JSON Schema for GET /api/v1/campaigns/{id}/published — spec §6.",
   "type": "object",
-  "required": ["campaign", "compound_sources", "source_protocols", "channels", "results", "published_collection"],
+  "required": ["campaign", "compound_sources", "source_protocols", "channels", "results"],
   "additionalProperties": false,
   "properties": {
     "campaign": {
@@ -44,20 +44,7 @@
             { "type": "null" }
           ]
         },
-        "signature": {
-          "oneOf": [
-            {
-              "type": "object",
-              "required": ["id"],
-              "additionalProperties": false,
-              "properties": {
-                "id":        { "type": "string", "format": "uuid" },
-                "signed_at": { "type": ["string", "null"] }
-              }
-            },
-            { "type": "null" }
-          ]
-        },
+        "close_note":                  { "type": ["string", "null"] },
         "supersedes_campaign_id":      { "type": ["string", "null"] },
         "superseded_by_campaign_id":   { "type": ["string", "null"] }
       }
@@ -247,22 +234,6 @@
           }
         }
       }
-    },
-
-    "published_collection": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": ["id", "name", "size"],
-          "additionalProperties": false,
-          "properties": {
-            "id":   { "type": "string", "format": "uuid" },
-            "name": { "type": "string" },
-            "size": { "type": "integer" }
-          }
-        },
-        { "type": "null" }
-      ]
     },
 
     "pagination": {

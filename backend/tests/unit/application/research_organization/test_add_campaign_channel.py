@@ -49,7 +49,6 @@ def _make_draft_campaign(workspace_id: uuid.UUID, *, user_id: uuid.UUID | None =
         project_id=uuid.uuid4(),
         name="Test Campaign",
         description=None,
-        publishes_collection=True,
         created_by=user_id or uuid.uuid4(),
     )
     # Seed one result so we can assert measurements are added

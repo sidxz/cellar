@@ -87,6 +87,7 @@ from cellar.application.research_organization.refresh_campaign_from_sources impo
 )
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
+from cellar.application.research_organization.reopen_campaign import ReopenCampaign
 from cellar.application.research_organization.set_result_decision import SetResultDecision
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaign as SupersedeCampaignUC,
@@ -168,6 +169,7 @@ __all__ = [
     "RemoveMoleculesFromCollectionDep",
     "RemoveProjectMemberDep",
     "RemoveResultRowDep",
+    "ReopenCampaignDep",
     "SetResultDecisionDep",
     "SupersedeCampaignDep",
     "UpdateCampaignChannelDep",
@@ -312,6 +314,7 @@ AddResultRowDep = Annotated[AddResultRow, Depends(_get_use_case(AddResultRow))]
 RemoveResultRowDep = Annotated[RemoveResultRow, Depends(_get_use_case(RemoveResultRow))]
 RefreshFromSourcesDep = Annotated[RefreshFromSources, Depends(_get_use_case(RefreshFromSources))]
 CloseCampaignDep = Annotated[CloseCampaign, Depends(_get_use_case(CloseCampaign))]
+ReopenCampaignDep = Annotated[ReopenCampaign, Depends(_get_use_case(ReopenCampaign))]
 SupersedeCampaignDep = Annotated[SupersedeCampaignUC, Depends(_get_use_case(SupersedeCampaignUC))]
 GetPublishedCampaignDep = Annotated[
     GetPublishedCampaign, Depends(_get_use_case(GetPublishedCampaign))

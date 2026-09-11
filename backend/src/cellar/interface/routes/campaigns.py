@@ -39,6 +39,9 @@ from cellar.application.research_organization.preview_run_import import (
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSourcesCommand,
 )
+from cellar.application.research_organization.reopen_campaign import (
+    ReopenCampaignCommand,
+)
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaignCommand,
 )
@@ -57,6 +60,7 @@ from cellar.interface.dependencies import (
     ListCampaignsDep,
     PreviewRunImportDep,
     RefreshFromSourcesDep,
+    ReopenCampaignDep,
     SupersedeCampaignDep,
     UpdateCampaignMetadataDep,
 )
@@ -71,6 +75,7 @@ from cellar.interface.routes._campaign_dtos import (
     CloseCampaignRequest,
     CreateCampaignRequest,
     PreviewRunImportRequest,
+    ReopenCampaignRequest,
     SupersedeRequest,
     UpdateCampaignRequest,
 )
@@ -90,7 +95,6 @@ async def create_campaign(
         project_id=body.project_id,
         name=body.name,
         description=body.description,
-        publishes_collection=body.publishes_collection,
         created_by=auth.user_id,
         supersedes_campaign_id=body.supersedes_campaign_id,
     )
@@ -273,14 +277,30 @@ async def close_campaign(
     auth: AuthDep,
     uc: CloseCampaignDep,
 ) -> CampaignResponse:
-    """Lock a DRAFT campaign and optionally publish a frozen Collection."""
+    """Lock a DRAFT campaign. No signature, no published Collection."""
     cmd = CloseCampaignCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         user_id=auth.user_id,
-        signature_id=body.signature_id,
-        signature_meaning=body.signature_meaning,
-        publishes_collection=body.publishes_collection,
+        note=body.note,
+    )
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
+
+
+@router.post("/{campaign_id}/reopen", response_model=CampaignResponse)
+async def reopen_campaign(
+    campaign_id: uuid.UUID,
+    body: ReopenCampaignRequest,
+    auth: AuthDep,
+    uc: ReopenCampaignDep,
+) -> CampaignResponse:
+    """Move a CLOSED campaign back to DRAFT. Superseded campaigns refuse this."""
+    cmd = ReopenCampaignCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        user_id=auth.user_id,
+        reason=body.reason,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

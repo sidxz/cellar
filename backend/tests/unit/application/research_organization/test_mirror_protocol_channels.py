@@ -74,7 +74,6 @@ def _make_draft_campaign(workspace_id: uuid.UUID) -> Campaign:
         project_id=uuid.uuid4(),
         name="Test Campaign",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
 
@@ -286,7 +285,7 @@ async def test_mirror_handles_non_dr_readout_with_normalization() -> None:
 async def test_mirror_requires_draft_campaign() -> None:
     auth = fake_auth()
     campaign = _make_draft_campaign(auth.workspace_id)
-    # Force-close: bypass close() since it requires signature_id; just mutate status
+    # Force-close: bypass close() since it requires >=1 channel and result; just mutate status
     campaign.status = CampaignStatus.CLOSED
 
     rd = _numeric_readout(name="RSZ", normalizations=[ReadoutNormalization.NONE])

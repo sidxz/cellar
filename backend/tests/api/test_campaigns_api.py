@@ -79,14 +79,12 @@ async def _create_empty_campaign(
     client: AsyncClient,
     project_id: str,
     name: str = "Test Campaign",
-    publishes_collection: bool = False,
     supersedes_campaign_id: str | None = None,
 ) -> dict:
     """Create an empty draft campaign (no compound_source needed)."""
     body: dict = {
         "name": name,
         "project_id": project_id,
-        "publishes_collection": publishes_collection,
     }
     if supersedes_campaign_id is not None:
         body["supersedes_campaign_id"] = supersedes_campaign_id
@@ -100,7 +98,6 @@ async def _create_campaign_with_molecules(
     project_id: str,
     molecule_ids: list[str],
     name: str = "Test Campaign",
-    publishes_collection: bool = False,
 ) -> dict:
     """Create a draft campaign then add a collection of molecules via add-from-collection.
 
@@ -108,9 +105,7 @@ async def _create_campaign_with_molecules(
     temporary collection, adds the molecules to it, then calls add-from-collection.
     """
     # Create the campaign empty first
-    campaign = await _create_empty_campaign(
-        client, project_id, name=name, publishes_collection=publishes_collection
-    )
+    campaign = await _create_empty_campaign(client, project_id, name=name)
     campaign_id = campaign["id"]
 
     # Add each molecule directly via add-result-row (simplest integration path
@@ -144,6 +139,54 @@ async def _make_published_protocol(client: AsyncClient) -> str:
     pub = await client.post(f"/api/v1/protocols/{pid}/publish")
     assert pub.status_code in (200, 201), pub.text
     return pid
+
+
+async def _make_published_protocol_with_readout(client: AsyncClient) -> tuple[str, str]:
+    """Like ``_make_published_protocol`` but also returns the readout_definition_id."""
+    resp = await client.post(
+        "/api/v1/protocols",
+        json={
+            "name": "Close Test Proto",
+            "protocol_type": "biochemical",
+            "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
+        },
+    )
+    assert resp.status_code in (200, 201), resp.text
+    body = resp.json()
+    pid = body["id"]
+    rd_id = body["readout_definitions"][0]["id"]
+    pub = await client.post(f"/api/v1/protocols/{pid}/publish")
+    assert pub.status_code in (200, 201), pub.text
+    return pid, rd_id
+
+
+async def _seed_closeable_campaign(
+    client: AsyncClient, project_id: str, molecule_id: str
+) -> str:
+    """Create a draft campaign with 1 real protocol-backed channel + 1 result —
+    satisfies CloseCampaign's prerequisites (>=1 channel, >=1 result). No real
+    screening data backs the channel, so re-resolution falls back to an ND cell
+    (empty candidates -> ND measurement; see channel_resolution.py). Returns
+    the campaign id.
+    """
+    protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+    campaign = await _create_campaign_with_molecules(client, project_id, [molecule_id])
+    campaign_id = campaign["id"]
+
+    resp = await client.post(
+        f"/api/v1/campaigns/{campaign_id}/channels",
+        json={
+            "label": "IC50",
+            "protocol_id": protocol_id,
+            "readout_definition_id": rd_id,
+            "source_kind": "readout_data",
+            "selection_rule": "latest_approved_run",
+            "qualifier_handling": "include_qualified",
+            "display_order": 0,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return campaign_id
 
 
 async def _make_run_with_target(client: AsyncClient, protocol_id: str, target_id: str) -> str:
@@ -239,7 +282,6 @@ class TestCreateCampaign:
             json={
                 "name": "Blank Canvas",
                 "project_id": project_id,
-                "publishes_collection": False,
             },
         )
         assert resp.status_code == 201, resp.text
@@ -261,7 +303,6 @@ class TestCreateCampaign:
             json={
                 "name": "Successor Campaign",
                 "project_id": project_id,
-                "publishes_collection": False,
                 "supersedes_campaign_id": fake_old_id,
             },
         )
@@ -496,7 +537,54 @@ class TestCloseCampaign:
 
         resp = await client.post(
             f"/api/v1/campaigns/{campaign_id}/close",
-            json={"signature_id": str(uuid.uuid4())},
+            json={},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_close_happy_path_200(self, client: AsyncClient) -> None:
+        """Closing a valid campaign (>=1 channel, >=1 result) succeeds; note is persisted."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-close-ok")
+        campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/close",
+            json={"note": "Confirmed by wet lab"},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["status"] == "closed"
+        assert data["close_note"] == "Confirmed by wet lab"
+
+    async def test_reopen_200_from_closed(self, client: AsyncClient) -> None:
+        """Reopening a CLOSED campaign clears close metadata and returns to draft."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-reopen-ok")
+        campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+
+        close_resp = await client.post(f"/api/v1/campaigns/{campaign_id}/close", json={})
+        assert close_resp.status_code == 200, close_resp.text
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/reopen",
+            json={"reason": "late confirmation result"},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["status"] == "draft"
+        assert data["closed_at"] is None
+        assert data["close_note"] is None
+
+    async def test_reopen_422_on_draft(self, client: AsyncClient) -> None:
+        """Reopening a DRAFT campaign (never closed) returns 422."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-reopen-draft")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/reopen",
+            json={"reason": "oops"},
         )
         assert resp.status_code == 422, resp.text
 

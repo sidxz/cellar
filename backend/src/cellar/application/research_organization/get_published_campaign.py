@@ -3,7 +3,8 @@
 Loads a closed (or superseded) campaign and serializes it into the JSON shape
 consumed by DAIKON: one self-contained document per campaign that includes the
 campaign header, compound source, source-protocol snapshot, channel definitions,
-per-compound result rows (with measurements), and the published Collection.
+and per-compound result rows (with measurements). No signature, no published
+Collection (spec §4/§5).
 
 Uses a single UoW to wrap all repository calls in one read-only transaction.
 No event registration.
@@ -27,7 +28,6 @@ from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.domain.research_organization.repository import (
     CampaignRepository,
-    CollectionRepository,
     ProjectRepository,
 )
 from cellar.domain.research_organization.source_ref import ManualRef, source_group_key
@@ -88,7 +88,6 @@ class GetPublishedCampaign:
         campaign_repo: CampaignRepository,
         project_repo: ProjectRepository,
         protocol_repo: ProtocolRepository,
-        collection_repo: CollectionRepository,
         molecule_repo: MoleculeRepository,
         batch_repo: BatchRepository,
     ) -> None:
@@ -96,7 +95,6 @@ class GetPublishedCampaign:
         self._campaign_repo = campaign_repo
         self._project_repo = project_repo
         self._protocol_repo = protocol_repo
-        self._collection_repo = collection_repo
         self._molecule_repo = molecule_repo
         self._batch_repo = batch_repo
 
@@ -159,22 +157,6 @@ class GetPublishedCampaign:
             for rd in p.readout_definitions:
                 readout_lookup[rd.id] = rd
 
-        # Step 6 — load published collection + size (if any).
-        published_collection_dict: dict[str, Any] | None = None
-        if campaign.published_collection_id is not None:
-            coll = await self._collection_repo.find_by_id_in_workspace(
-                input.workspace_id, campaign.published_collection_id
-            )
-            if coll is not None:
-                coll_size = await self._collection_repo.count_molecules(
-                    input.workspace_id, coll.id
-                )
-                published_collection_dict = {
-                    "id": str(coll.id),
-                    "name": coll.name,
-                    "size": coll_size,
-                }
-
         # Step 7 — apply pagination to results list.
         all_results = list(campaign.results)
         offset = _decode_cursor(input.cursor, 0)
@@ -214,7 +196,6 @@ class GetPublishedCampaign:
                 _serialize_channel(ch, protocol_lookup, readout_lookup) for ch in campaign.channels
             ],
             "results": [_serialize_result(r, mol_lookup, batch_lookup) for r in page],
-            "published_collection": published_collection_dict,
         }
         if pagination is not None:
             doc["pagination"] = pagination
@@ -237,14 +218,6 @@ def _serialize_campaign(campaign: Any, project: Any | None) -> dict[str, Any]:
             "name": None,  # TODO Duar-resolved user name
         }
 
-    # TODO audit signature: load from AuditCompliance context when SignatureService lands.
-    signature_dict: dict[str, Any] | None = None
-    if campaign.signature_id is not None:
-        signature_dict = {
-            "id": str(campaign.signature_id),
-            "signed_at": None,  # TODO audit signature lookup
-        }
-
     return {
         "id": str(campaign.id),
         "name": campaign.name,
@@ -255,7 +228,7 @@ def _serialize_campaign(campaign: Any, project: Any | None) -> dict[str, Any]:
         "status": campaign.status.value,
         "closed_at": campaign.closed_at.isoformat() if campaign.closed_at is not None else None,
         "closed_by": closed_by_dict,
-        "signature": signature_dict,
+        "close_note": campaign.close_note,
         "supersedes_campaign_id": (
             str(campaign.supersedes_campaign_id)
             if campaign.supersedes_campaign_id is not None

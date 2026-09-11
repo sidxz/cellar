@@ -29,7 +29,6 @@ class CreateCampaignCommand(Command):
     project_id: uuid.UUID
     name: str
     description: str | None
-    publishes_collection: bool
     created_by: uuid.UUID
     supersedes_campaign_id: uuid.UUID | None = None
 
@@ -69,7 +68,6 @@ class CreateCampaign:
                 project_id=input.project_id,
                 name=input.name,
                 description=input.description,
-                publishes_collection=input.publishes_collection,
                 created_by=input.created_by,
                 supersedes_campaign_id=input.supersedes_campaign_id,
             )

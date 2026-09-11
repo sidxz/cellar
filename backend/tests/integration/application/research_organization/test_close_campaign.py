@@ -1,10 +1,13 @@
-"""Integration test for CloseCampaign use case.
+"""Integration test for CloseCampaign / ReopenCampaign use cases.
 
 Exercises the full SQL+session+flush path:
   - inserts a Molecule + Protocol + Campaign in DRAFT,
   - runs CloseCampaign with a FakeResolver (no real runs/curves needed),
-  - asserts campaign is CLOSED, source_protocols populated, Collection
-    published and frozen, Collection membership contains the molecule.
+  - asserts campaign is CLOSED, source_protocols populated, close_note
+    persisted, and no Collection row is created (soft close publishes
+    nothing — spec §4/§5),
+  - reopens the closed campaign via ReopenCampaign and asserts it round-trips
+    back to DRAFT with close metadata cleared.
 """
 
 from __future__ import annotations
@@ -14,10 +17,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 import sqlalchemy as sa
+from returns.result import Success
 
 from cellar.application.research_organization.close_campaign import (
     CloseCampaign,
     CloseCampaignCommand,
+)
+from cellar.application.research_organization.reopen_campaign import (
+    ReopenCampaign,
+    ReopenCampaignCommand,
 )
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
@@ -25,18 +33,15 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
-
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
-    CollectionType,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
 from cellar.domain.screening_assay.enums import (
-    ProtocolStatus,
     ProtocolType,
     ReadoutAggregation,
     ReadoutDataType,
@@ -44,9 +49,6 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
-    SQLAlchemyCollectionRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
@@ -156,16 +158,25 @@ class _NoOpDispatcher:
         pass
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+def _make_fake_auth(user_id: uuid.UUID, ws_id: uuid.UUID) -> AsyncMock:
+    """Minimal editor AuthContext double."""
+    auth = AsyncMock()
+    auth.user_id = user_id
+    auth.workspace_id = ws_id
+    auth.workspace_role = "editor"
+    auth.is_admin = False
+    rank = {"viewer": 0, "editor": 1, "admin": 2}
+    auth.has_role = lambda min_role: rank.get("editor", 0) >= rank.get(min_role, 0)
+    return auth
 
 
-@pytest.mark.asyncio
-async def test_close_campaign_integration(
+async def _seed_and_close_campaign(
     session_factory,
-) -> None:
-    """Full DB round-trip: close a campaign and verify Collection is published+frozen."""
+    *,
+    note: str | None = None,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Seed a DRAFT campaign (1 channel/result/measurement) and close it via
+    the real use case. Returns (workspace_id, campaign_id, protocol_id, user_id)."""
     ws_id = uuid.uuid4()
     mol_id = uuid.uuid4()
     protocol_id = uuid.uuid4()
@@ -173,19 +184,15 @@ async def test_close_campaign_integration(
     project_id = uuid.uuid4()
 
     uow = AsyncUnitOfWork(session_factory)
-
-    # Insert prerequisites
     await _insert_molecule(uow, mol_id, ws_id)
     await _insert_project(uow, project_id, ws_id)
     await _insert_protocol(uow, ws_id, protocol_id, readout_id, readout_unit="uM")
 
-    # Build a Campaign in DRAFT with 1 channel + 1 result + 1 measurement
     campaign = Campaign.create(
         workspace_id=ws_id,
         project_id=project_id,
         name="Integration Close Test",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
     ch = CampaignChannel(
@@ -221,66 +228,94 @@ async def test_close_campaign_integration(
 
     # --- Execute CloseCampaign use case ---
     user_id = uuid.uuid4()
-    sig_id = uuid.uuid4()
     cmd = CloseCampaignCommand(
         workspace_id=ws_id,
         campaign_id=campaign.id,
         user_id=user_id,
-        signature_id=sig_id,
+        note=note,
     )
 
     uow_uc = AsyncUnitOfWork(session_factory)
     uc = CloseCampaign(
         uow=uow_uc,
         campaign_repo=SQLAlchemyCampaignRepository(uow_uc),
-        collection_repo=SQLAlchemyCollectionRepository(uow_uc),
         protocol_repo=SQLAlchemyProtocolRepository(uow_uc),
         resolver=_FakeResolver(),
         dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
     )
-
-    # Build a minimal fake auth (editor)
-    auth = AsyncMock()
-    auth.user_id = user_id
-    auth.workspace_id = ws_id
-    auth.workspace_role = "editor"
-    auth.is_admin = False
-    rank = {"viewer": 0, "editor": 1, "admin": 2}
-    auth.has_role = lambda min_role: rank.get("editor", 0) >= rank.get(min_role, 0)
-
-    from returns.result import Success
+    auth = _make_fake_auth(user_id, ws_id)
     out = await uc(cmd, auth=auth)
     assert isinstance(out, Success), f"Expected Success, got {out}"
 
-    closed_campaign = out.unwrap()
-    assert closed_campaign.status == CampaignStatus.CLOSED
+    return ws_id, campaign.id, protocol_id, user_id
 
-    # --- Verify persisted state ---
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_close_campaign_integration(session_factory) -> None:
+    """Full DB round-trip: close persists status/source_protocols/close_note
+    and creates no Collection row — soft close publishes nothing."""
+    ws_id, campaign_id, protocol_id, _user_id = await _seed_and_close_campaign(
+        session_factory, note="Confirmed by wet lab"
+    )
 
     async with AsyncUnitOfWork(session_factory) as uow_check:
         camp_repo = SQLAlchemyCampaignRepository(uow_check)
-        reloaded = await camp_repo.find_by_id_in_workspace(ws_id, campaign.id)
+        reloaded = await camp_repo.find_by_id_in_workspace(ws_id, campaign_id)
 
     assert reloaded is not None
     assert reloaded.status == CampaignStatus.CLOSED
     assert len(reloaded.source_protocols) == 1
     assert reloaded.source_protocols[0]["id"] == str(protocol_id)
-    assert reloaded.published_collection_id is not None
+    assert reloaded.close_note == "Confirmed by wet lab"
 
-    coll_id = reloaded.published_collection_id
-
+    # No Collection row was created for this campaign — soft close publishes
+    # nothing (spec §4/§5).
     async with AsyncUnitOfWork(session_factory) as uow_coll:
-        coll_repo = SQLAlchemyCollectionRepository(uow_coll)
-        coll = await coll_repo.find_by_id_in_workspace(ws_id, coll_id)
+        row_count = (
+            await uow_coll.session.execute(
+                sa.text(
+                    "SELECT count(*) FROM collections WHERE derived_from_campaign_id = :cid"
+                ),
+                {"cid": campaign_id},
+            )
+        ).scalar_one()
+    assert row_count == 0
 
-    assert coll is not None
-    assert coll.is_frozen is True
-    assert coll.derived_from_campaign_id == campaign.id
-    assert coll.type is CollectionType.HIT_LIST
 
-    # Collection membership contains the SELECTED molecule
-    async with AsyncUnitOfWork(session_factory) as uow_members:
-        coll_repo2 = SQLAlchemyCollectionRepository(uow_members)
-        member_ids = await coll_repo2.get_molecule_ids(ws_id, coll_id)
+@pytest.mark.asyncio
+async def test_reopen_campaign_integration(session_factory) -> None:
+    """close -> ReopenCampaign round-trips the campaign back to DRAFT in the DB."""
+    ws_id, campaign_id, _protocol_id, user_id = await _seed_and_close_campaign(
+        session_factory, note="first pass"
+    )
 
-    assert mol_id in member_ids
+    reopen_cmd = ReopenCampaignCommand(
+        workspace_id=ws_id,
+        campaign_id=campaign_id,
+        user_id=user_id,
+        reason="late confirmation result",
+    )
+    uow_reopen = AsyncUnitOfWork(session_factory)
+    reopen_uc = ReopenCampaign(
+        uow=uow_reopen,
+        campaign_repo=SQLAlchemyCampaignRepository(uow_reopen),
+        dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
+    )
+    auth = _make_fake_auth(user_id, ws_id)
+    out = await reopen_uc(reopen_cmd, auth=auth)
+    assert isinstance(out, Success), f"Expected Success, got {out}"
+
+    async with AsyncUnitOfWork(session_factory) as uow_check:
+        camp_repo = SQLAlchemyCampaignRepository(uow_check)
+        reloaded = await camp_repo.find_by_id_in_workspace(ws_id, campaign_id)
+
+    assert reloaded is not None
+    assert reloaded.status == CampaignStatus.DRAFT
+    assert reloaded.closed_at is None
+    assert reloaded.closed_by is None
+    assert reloaded.close_note is None

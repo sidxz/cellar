@@ -83,14 +83,11 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             name=model.name,
             description=model.description,
             status=CampaignStatus(model.status),
-            publishes_collection=model.publishes_collection,
             source_protocols=list(model.source_protocols or []),
             closed_at=model.closed_at,
             closed_by=model.closed_by,
-            signature_id=model.signature_id,
             supersedes_campaign_id=model.supersedes_campaign_id,
             superseded_by_campaign_id=model.superseded_by_campaign_id,
-            published_collection_id=model.published_collection_id,
             created_by=model.created_by,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -109,14 +106,11 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             name=aggregate.name,
             description=aggregate.description,
             status=aggregate.status.value,
-            publishes_collection=aggregate.publishes_collection,
             source_protocols=list(aggregate.source_protocols),
             closed_at=aggregate.closed_at,
             closed_by=aggregate.closed_by,
-            signature_id=aggregate.signature_id,
             supersedes_campaign_id=aggregate.supersedes_campaign_id,
             superseded_by_campaign_id=aggregate.superseded_by_campaign_id,
-            published_collection_id=aggregate.published_collection_id,
             created_by=aggregate.created_by,
             version=aggregate.version,
             channels=[self._channel_to_model(c) for c in aggregate.channels],
@@ -129,14 +123,11 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.name = aggregate.name
         model.description = aggregate.description
         model.status = aggregate.status.value
-        model.publishes_collection = aggregate.publishes_collection
         model.source_protocols = list(aggregate.source_protocols)
         model.closed_at = aggregate.closed_at
         model.closed_by = aggregate.closed_by
-        model.signature_id = aggregate.signature_id
         model.supersedes_campaign_id = aggregate.supersedes_campaign_id
         model.superseded_by_campaign_id = aggregate.superseded_by_campaign_id
-        model.published_collection_id = aggregate.published_collection_id
         model.close_note = aggregate.close_note
 
         # Reconcile channels by id

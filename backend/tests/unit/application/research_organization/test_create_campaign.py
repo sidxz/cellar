@@ -41,7 +41,6 @@ class TestCreateCampaign:
             project_id=uuid.uuid4(),
             name="EGFR Round 2",
             description="kick-off",
-            publishes_collection=True,
             created_by=auth.user_id,
             supersedes_campaign_id=None,
         )
@@ -72,7 +71,6 @@ class TestCreateCampaign:
             project_id=uuid.uuid4(),
             name="blocked",
             description=None,
-            publishes_collection=True,
             created_by=auth.user_id,
             supersedes_campaign_id=None,
         )

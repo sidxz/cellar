@@ -80,10 +80,18 @@ class CampaignCreated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class CampaignClosed(DomainEvent):
-    """Fired when a campaign is closed (locked) with an electronic signature."""
+    """Fired when a campaign is closed (locked)."""
 
     closed_by: uuid.UUID
-    signature_id: uuid.UUID
+    note: str | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignReopened(DomainEvent):
+    """Fired when a closed campaign is reopened back to draft."""
+
+    reopened_by: uuid.UUID
+    reason: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -91,10 +99,3 @@ class CampaignSuperseded(DomainEvent):
     """Fired when a closed campaign is replaced by a new one."""
 
     superseded_by_campaign_id: uuid.UUID
-
-
-@dataclass(frozen=True, kw_only=True)
-class CampaignPublishedCollectionCreated(DomainEvent):
-    """Fired when a campaign publishes its selected molecules as a collection."""
-
-    collection_id: uuid.UUID

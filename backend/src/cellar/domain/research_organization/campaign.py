@@ -28,6 +28,7 @@ from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.domain.research_organization.events import (
     CampaignClosed,
     CampaignCreated,
+    CampaignReopened,
     CampaignSuperseded,
 )
 from cellar.domain.shared.entity import AggregateRoot
@@ -54,14 +55,11 @@ class Campaign(AggregateRoot):
         name: str,
         description: str | None = None,
         status: CampaignStatus = CampaignStatus.DRAFT,
-        publishes_collection: bool = True,
         source_protocols: list[dict[str, Any]] | None = None,
         closed_at: datetime | None = None,
         closed_by: uuid.UUID | None = None,
-        signature_id: uuid.UUID | None = None,
         supersedes_campaign_id: uuid.UUID | None = None,
         superseded_by_campaign_id: uuid.UUID | None = None,
-        published_collection_id: uuid.UUID | None = None,
         created_by: uuid.UUID,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -79,14 +77,11 @@ class Campaign(AggregateRoot):
         self.name = name.strip()
         self.description = description
         self.status = status
-        self.publishes_collection = publishes_collection
         self.source_protocols: list[dict[str, Any]] = source_protocols or []
         self.closed_at = closed_at
         self.closed_by = closed_by
-        self.signature_id = signature_id
         self.supersedes_campaign_id = supersedes_campaign_id
         self.superseded_by_campaign_id = superseded_by_campaign_id
-        self.published_collection_id = published_collection_id
         self.created_by = created_by
         self.channels: list[CampaignChannel] = channels or []
         self.results: list[CampaignResult] = results or []
@@ -103,7 +98,6 @@ class Campaign(AggregateRoot):
         project_id: uuid.UUID,
         name: str,
         description: str | None,
-        publishes_collection: bool,
         created_by: uuid.UUID,
         supersedes_campaign_id: uuid.UUID | None = None,
     ) -> Campaign:
@@ -112,7 +106,6 @@ class Campaign(AggregateRoot):
             project_id=project_id,
             name=name,
             description=description,
-            publishes_collection=publishes_collection,
             supersedes_campaign_id=supersedes_campaign_id,
             created_by=created_by,
         )
@@ -346,7 +339,7 @@ class Campaign(AggregateRoot):
         self,
         *,
         closed_by: uuid.UUID,
-        signature_id: uuid.UUID,
+        note: str | None,
         source_protocols: list[dict[str, Any]],
     ) -> None:
         self._ensure_draft("close")
@@ -357,7 +350,7 @@ class Campaign(AggregateRoot):
         self.status = CampaignStatus.CLOSED
         self.closed_at = datetime.now(UTC)
         self.closed_by = closed_by
-        self.signature_id = signature_id
+        self.close_note = note
         self.source_protocols = source_protocols
         self.updated_at = self.closed_at
         self.register_event(
@@ -366,14 +359,29 @@ class Campaign(AggregateRoot):
                 aggregate_type="Campaign",
                 workspace_id=self.workspace_id,
                 closed_by=closed_by,
-                signature_id=signature_id,
+                note=note,
             )
         )
 
-    def set_published_collection(self, collection_id: uuid.UUID) -> None:
+    def reopen(self, *, reopened_by: uuid.UUID, reason: str) -> None:
         if self.status != CampaignStatus.CLOSED:
-            raise ValidationError("Published collection can only be set on closed campaigns")
-        self.published_collection_id = collection_id
+            raise ValidationError(f"Cannot reopen: campaign is {self.status.value}")
+        if not reason or not reason.strip():
+            raise ValidationError("Campaign.reopen requires a reason")
+        self.status = CampaignStatus.DRAFT
+        self.closed_at = None
+        self.closed_by = None
+        self.close_note = None
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            CampaignReopened(
+                aggregate_id=self.id,
+                aggregate_type="Campaign",
+                workspace_id=self.workspace_id,
+                reopened_by=reopened_by,
+                reason=reason.strip(),
+            )
+        )
 
     def mark_superseded_by(self, new_campaign_id: uuid.UUID) -> None:
         if self.status != CampaignStatus.CLOSED:
