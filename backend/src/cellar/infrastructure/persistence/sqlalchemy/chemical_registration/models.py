@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -117,6 +118,14 @@ class MoleculeModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     __table_args__ = (
         UniqueConstraint("workspace_id", "registration_number", name="uq_mol_ws_regnum"),
         Index("ix_molecules_inchi_key", "workspace_id", "inchi_key"),
+        # One live disclosed molecule per structure per workspace (migration 073).
+        Index(
+            "uq_molecules_ws_inchi_active",
+            "workspace_id",
+            "inchi_key",
+            unique=True,
+            postgresql_where=text("merged_into_id IS NULL AND inchi_key IS NOT NULL"),
+        ),
         Index("ix_molecules_merged_into_id", "merged_into_id"),
     )
 

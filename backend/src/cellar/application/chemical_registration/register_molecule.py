@@ -268,8 +268,8 @@ class RegisterMolecule:
 
         # Single UoW: read + branch + write happen in one transaction so
         # concurrent registrations of the same InChIKey can't both succeed
-        # (the second one will hit a unique-constraint violation on commit
-        # rather than silently double-registering).
+        # (the loser hits uq_molecules_ws_inchi_active on commit, surfaced as
+        # a 409 by the UoW, rather than silently double-registering).
         delegate_to_disclosure: Molecule | None = None
         outcome: RegistrationOutcome | None = None
         events: list = []
