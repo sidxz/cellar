@@ -113,7 +113,7 @@ function VerdictChip({ verdict }: { verdict: CheckVerdict | null }) {
     verdict === "pass"
       ? "border-success/40 bg-success/10 text-success"
       : "border-muted text-muted-foreground";
-  return <span className={`ml-1 rounded-sm border px-1 py-px text-[10px] ${cls}`}>{verdict}</span>;
+  return <span className={`rounded-sm border px-1 py-px text-[10px] ${cls}`}>{verdict}</span>;
 }
 
 interface CompoundValueCellProps {
@@ -147,15 +147,22 @@ function CompoundValueCell({
           {formatMeasurementValue(value)}
           {unit ? ` ${unit}` : ""}
         </span>
-        <VerdictChip verdict={verdict} />
-        {overridden && (
-          <Badge
-            variant="outline"
-            className="ml-1 text-[10px]"
-            title={overrideReason ?? "Manually overridden"}
-          >
-            OVR
-          </Badge>
+        {/* Verdict + override markers sit on their own line so they never
+            push past the 120px value column (a "pass" chip inline after
+            "13.6 uM" clipped to "pa"). */}
+        {(verdict === "pass" || verdict === "fail" || overridden) && (
+          <div className="mt-0.5 flex items-center gap-1">
+            <VerdictChip verdict={verdict} />
+            {overridden && (
+              <Badge
+                variant="outline"
+                className="text-[10px]"
+                title={overrideReason ?? "Manually overridden"}
+              >
+                OVR
+              </Badge>
+            )}
+          </div>
         )}
         {replicates != null && replicates > 1 && (
           <div className="text-[10px] text-muted-foreground">n={replicates}</div>
