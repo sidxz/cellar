@@ -65,6 +65,9 @@ class SummaryImportPlanPreview:
     matched_compound_count: int
     unmatched_compound_refs: list[str] = field(default_factory=list)
     unmatched_batch_refs: list[str] = field(default_factory=list)
+    # Per-row detail beside the flat list: which row, and the structure it
+    # carried (None when no STRUCTURE column or an empty cell).
+    unmatched_compounds: list[UnmatchedCompound] = field(default_factory=list)
     values_to_insert: int = 0
     values_to_update: int = 0
     rows_skipped: int = 0
@@ -73,7 +76,13 @@ class SummaryImportPlanPreview:
 
 @dataclass(frozen=True, kw_only=True)
 class SummaryImportResult:
-    rows_processed: int = 0
+    """Outcome of a committed summary import. Same vocabulary as the preview."""
+
+    total_rows: int = 0
+    matched_compound_count: int = 0
+    unmatched_compound_refs: list[str] = field(default_factory=list)
+    unmatched_batch_refs: list[str] = field(default_factory=list)
+    unmatched_compounds: list[UnmatchedCompound] = field(default_factory=list)
     values_inserted: int = 0
     values_updated: int = 0
     rows_skipped: int = 0

@@ -28,6 +28,7 @@ from cellar.application.screening.preview_summary_import import (
     PreviewSummaryImportCommand,
 )
 from cellar.application.screening.summary_import_models import SummaryColumnMapping
+from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
@@ -46,6 +47,8 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository
     SQLAlchemyRunRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.rdkit.scaffold_calculator import MurckoScaffoldCalculator
+from cellar.infrastructure.rdkit.structure_processor import StructureProcessor
 from tests.fakes.fake_auth import FakeAuth
 from tests.fixtures.dose_response_curves import (
     _insert_org,
@@ -110,6 +113,7 @@ async def _insert_molecule(
     reg: str,
     *,
     identifier: str | None = None,
+    inchi_key: str | None = None,
 ) -> None:
     org_id = uuid.uuid4()
     await uow.session.execute(
@@ -124,11 +128,18 @@ async def _insert_molecule(
             "INSERT INTO molecules "
             "(id, workspace_id, name, molecule_type, structure_status, "
             "registration_status, synthesis_status, lifecycle_stage, "
-            "registration_number, originating_org_id, version) "
+            "registration_number, originating_org_id, inchi_key, version) "
             "VALUES (:id, :ws, :name, 'small_molecule', 'undisclosed', "
-            "'approved', 'virtual', 'registered', :reg, :org, 1)"
+            "'approved', 'virtual', 'registered', :reg, :org, :inchi, 1)"
         ),
-        {"id": mol_id, "ws": ws_id, "name": f"M-{reg}", "reg": reg, "org": org_id},
+        {
+            "id": mol_id,
+            "ws": ws_id,
+            "name": f"M-{reg}",
+            "reg": reg,
+            "org": org_id,
+            "inchi": inchi_key,
+        },
     )
     await _insert_molecule_identifier(
         uow, mol_id, ws_id, identifier if identifier is not None else reg
@@ -144,6 +155,14 @@ def _build_preview(read_uow: AsyncUnitOfWork) -> PreviewSummaryImport:
         batch_repo=SQLAlchemyBatchRepository(read_uow),
         parser=TabularFileParser(),
         uow=read_uow,
+        molecule_resolver=_molecule_resolver(read_uow),
+    )
+
+
+def _molecule_resolver(read_uow: AsyncUnitOfWork) -> MoleculeResolver:
+    return MoleculeResolver(
+        SQLAlchemyMoleculeRepository(read_uow),
+        StructureProcessor(scaffold_calculator=MurckoScaffoldCalculator()),
     )
 
 
@@ -173,6 +192,7 @@ def _build_import(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummaryFi
         parser=TabularFileParser(),
         bulk_uc=bulk,
         upload_attachment=_no_attach,
+        molecule_resolver=_molecule_resolver(read_uow),
     )
 
 
@@ -220,9 +240,7 @@ async def _seed(session_factory, workspace_id, *, identifier=None):
             seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
         )
         await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
-        await _insert_molecule(
-            seed_uow, molecule_id, workspace_id, reg, identifier=identifier
-        )
+        await _insert_molecule(seed_uow, molecule_id, workspace_id, reg, identifier=identifier)
         await seed_uow.commit()
     ref = identifier if identifier is not None else reg
     return run_id, ic50_id, molecule_id, ref
@@ -262,9 +280,7 @@ class TestPreviewSummaryImport:
         after = await _readout_count(session_factory)
         assert after == before
 
-    async def test_existing_rows_forecast_updates(
-        self, session_factory, workspace_id
-    ) -> None:
+    async def test_existing_rows_forecast_updates(self, session_factory, workspace_id) -> None:
         auth = FakeAuth(role="editor", workspace_id=workspace_id)
         run_id, ic50_id, _mol, ref = await _seed(session_factory, workspace_id)
         mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
@@ -334,6 +350,54 @@ class TestPreviewSummaryImport:
 
         after = await _readout_count(session_factory)
         assert after == before
+
+    async def test_structure_fallback_resolves_identifier_miss(
+        self, session_factory, workspace_id
+    ) -> None:
+        """A ref with no identifier match resolves via its SMILES column (STRUCTURE role)."""
+        processor = StructureProcessor(scaffold_calculator=MurckoScaffoldCalculator())
+        inchi_key = processor.process("CCO").unwrap().structure.inchi_key
+        assert inchi_key
+
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        # File-level seed: org + protocol + IC50 def + run + one identifier-known molecule.
+        run_id, ic50_id, _mol, _ref = await _seed(session_factory, workspace_id)
+        # A second molecule known ONLY by structure (no identifier the file uses).
+        mol_id = uuid.uuid4()
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_molecule(
+                seed_uow,
+                mol_id,
+                workspace_id,
+                f"REG-ETH-{uuid.uuid4().hex[:6]}",
+                inchi_key=inchi_key,
+            )
+            await seed_uow.commit()
+
+        uc = _build_preview(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            PreviewSummaryImportCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=b"Compound,SMILES,IC50\nNEW-1,CCO,5.2\nNEW-2,,1.0\n",
+                mapping=SummaryColumnMapping(
+                    compound_ref="Compound",
+                    structure="SMILES",
+                    readout_columns={"IC50": ic50_id},
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        out = result.unwrap()
+        assert out.matched_compound_count == 1
+        assert out.values_to_insert == 1
+        assert out.unmatched_compound_refs == ["NEW-2"]
+        assert [(u.ref, u.row, u.structure) for u in out.unmatched_compounds] == [
+            ("NEW-2", 2, None)
+        ]
 
     async def test_bad_numeric_in_errors(self, session_factory, workspace_id) -> None:
         auth = FakeAuth(role="editor", workspace_id=workspace_id)

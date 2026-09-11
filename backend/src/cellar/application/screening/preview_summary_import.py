@@ -35,9 +35,11 @@ from cellar.application.screening.summary_import_models import (
 from cellar.application.screening.summary_import_resolver import (
     build_batch_index,
     build_compound_index,
+    build_structure_index,
     plan_summary_rows,
 )
 from cellar.application.shared.command import Command
+from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
@@ -78,6 +80,7 @@ class PreviewSummaryImport:
         batch_repo: BatchRepository,
         parser: TabularParser,
         uow: UnitOfWork,
+        molecule_resolver: MoleculeResolver,
     ) -> None:
         self._run_repo = run_repo
         self._protocol_repo = protocol_repo
@@ -86,6 +89,7 @@ class PreviewSummaryImport:
         self._batch_repo = batch_repo
         self._parser = parser
         self._uow = uow
+        self._molecule_resolver = molecule_resolver
 
     async def __call__(
         self,
@@ -144,6 +148,16 @@ class PreviewSummaryImport:
 
         compound_index = await build_compound_index(compound_refs, ws, self._molecule_repo)
         batch_index = await build_batch_index(batch_refs, ws, self._batch_repo)
+        # STRUCTURE fallback: distinct SMILES for refs that missed the identifier
+        # index (empty when no structure column is mapped). Resolution only —
+        # nothing is registered or stored.
+        structure_index = await build_structure_index(
+            rows,
+            mapping=mapping,
+            compound_index=compound_index,
+            workspace_id=ws,
+            molecule_resolver=self._molecule_resolver,
+        )
 
         plan = plan_summary_rows(
             rows,
@@ -151,6 +165,7 @@ class PreviewSummaryImport:
             defs_by_id=defs_by_id,
             compound_index=compound_index,
             batch_index=batch_index,
+            structure_index=structure_index,
         )
 
         # Per-row errors: ``plan.errors`` already covers BOTH cell-level errors
@@ -196,6 +211,7 @@ class PreviewSummaryImport:
                 matched_compound_count=plan.matched_compound_count,
                 unmatched_compound_refs=sorted(plan.unmatched_compound_refs),
                 unmatched_batch_refs=sorted(plan.unmatched_batch_refs),
+                unmatched_compounds=list(plan.unmatched_compounds),
                 values_to_insert=values_to_insert,
                 values_to_update=values_to_update,
                 rows_skipped=plan.rows_skipped,
