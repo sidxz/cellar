@@ -34,7 +34,7 @@ import { StagesSection } from "../sections/stages-section";
 import { useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet } from "@/shared/lib/api/campaigns/campaigns";
 import { saveText } from "@/shared/lib/api/download";
 
-import type { CampaignResponse } from "../../types";
+import type { CampaignResponse, StageOutcome } from "../../types";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -55,6 +55,16 @@ export function CampaignView({ campaign }: CampaignViewProps) {
   const effectiveStageId = campaign.stages.some((s) => s.id === selectedStageId)
     ? selectedStageId
     : null;
+
+  // Same lens as the draft builder: a stage tab pre-selects its population
+  // (hit + miss + untested); "All" clears the outcome chips.
+  function selectStage(id: string | null) {
+    setSelectedStageId(id);
+    setFilters((f) => ({
+      ...f,
+      stageOutcomes: new Set<StageOutcome>(id ? ["hit", "miss", "untested"] : []),
+    }));
+  }
 
   // Published endpoint — fetched lazily on download click.
   const { refetch: fetchPublished, isFetching: isDownloading } =
@@ -103,7 +113,7 @@ export function CampaignView({ campaign }: CampaignViewProps) {
       <StagesSection
         campaign={campaign}
         selectedStageId={effectiveStageId}
-        onSelectStage={setSelectedStageId}
+        onSelectStage={selectStage}
         readOnly
       />
 
@@ -123,9 +133,15 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         campaign={campaign}
         filters={filters}
         onChange={setFilters}
+        selectedStageId={effectiveStageId}
         resultCount={campaign.results?.length ?? 0}
       />
-      <ResultsGridV2 campaign={campaign} filters={filters} readOnly />
+      <ResultsGridV2
+        campaign={campaign}
+        filters={filters}
+        selectedStageId={effectiveStageId}
+        readOnly
+      />
 
       <section className="border-t px-6 py-4">
         <TagTable entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />

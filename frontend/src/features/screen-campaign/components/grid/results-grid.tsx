@@ -7,8 +7,10 @@
  *   - Compound (pinned-left, flex, min 230) — reg# + molecule name
  *   - Structure (130) — <StructureThumbnail size={104}>
  *   - per channel:
- *       - Value (120) — formatMeasurementValue + n=replicate_count + inline hit chip + OVR badge
+ *       - Value (120) — formatMeasurementValue + n=replicate_count + the selected
+ *         stage's pass/fail verdict chip + OVR badge
  *       - Curve (150, DR only) — <DoseResponseSparkline>
+ *   - Stage (pinned-right, 150, only while a stage is selected) — <StageOutcomeCell>
  *   - Decision (pinned-right, 160) — <DecisionChipCell>
  *
  * Override editing survives inline in the value cell: an OVR badge + a
@@ -35,17 +37,20 @@ import { type CurveClass, READOUT_NORMALIZATION_LABELS } from "@/features/screen
 
 import { useMoleculesByIds } from "@/features/chemical-registration";
 import { useCampaignCurves } from "../../hooks/use-campaign-curves";
+import { outcomeFor } from "../../lib/stage-outcomes";
 import { type CampaignFilters, filtersActive, rowPassesFilters } from "../campaign-filter-bar";
 import { OverrideModal } from "../override-modal";
 
 import { CurveExpandDialog, type ExpandedCurve } from "./curve-expand-dialog";
 import { DecisionChipCell } from "./decision-chip-cell";
+import { StageOutcomeCell } from "./stage-outcome-cell";
 
 import type {
   CampaignChannelResponse,
   CampaignMeasurementResponse,
   CampaignResponse,
   CampaignResultResponse,
+  CheckVerdict,
 } from "../../types";
 
 import type { CurveSnapshot } from "@/features/screening-assay";
@@ -97,13 +102,26 @@ function curveSnapshotFromMeasurement(
   };
 }
 
-// ── Inline value cell ─────────────────────────────────────────────────────────
+// ── Inline verdict chip + value cell ─────────────────────────────────────────
+
+/** The selected stage's verdict for this cell's channel. `untested` renders
+ *  nothing — the cell already shows ND/excluded/blank, so a chip would only
+ *  repeat it. */
+function VerdictChip({ verdict }: { verdict: CheckVerdict | null }) {
+  if (verdict !== "pass" && verdict !== "fail") return null;
+  const cls =
+    verdict === "pass"
+      ? "border-success/40 bg-success/10 text-success"
+      : "border-muted text-muted-foreground";
+  return <span className={`ml-1 rounded-sm border px-1 py-px text-[10px] ${cls}`}>{verdict}</span>;
+}
 
 interface CompoundValueCellProps {
   prefix: string;
   value: number | null;
   unit: string | null | undefined;
   replicates: number | null;
+  verdict: CheckVerdict | null;
   overridden: boolean | undefined;
   overrideReason: string | null | undefined;
   readOnly: boolean;
@@ -115,6 +133,7 @@ function CompoundValueCell({
   value,
   unit,
   replicates,
+  verdict,
   overridden,
   overrideReason,
   readOnly,
@@ -128,6 +147,7 @@ function CompoundValueCell({
           {formatMeasurementValue(value)}
           {unit ? ` ${unit}` : ""}
         </span>
+        <VerdictChip verdict={verdict} />
         {overridden && (
           <Badge
             variant="outline"
@@ -160,6 +180,9 @@ function CompoundValueCell({
 interface ResultsGridV2Props {
   campaign: CampaignResponse;
   filters: CampaignFilters;
+  /** Selected hit stage, or null for "All". Drives the per-cell verdict
+   *  chips, the Stage column and the stage half of the chip filters. */
+  selectedStageId: string | null;
   readOnly: boolean;
 }
 
@@ -168,7 +191,12 @@ interface ResultsGridV2Props {
 // stack carries 3-4 lines vertically inside this space.
 const ROW_HEIGHT = 170;
 
-export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Props) {
+export function ResultsGridV2({
+  campaign,
+  filters,
+  selectedStageId,
+  readOnly,
+}: ResultsGridV2Props) {
   const [overrideTarget, setOverrideTarget] = useState<{
     result: CampaignResultResponse;
     channel: CampaignChannelResponse;
@@ -207,6 +235,19 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
   const rowData = useMemo<RowData[]>(
     () => (campaign.results ?? []).map((r) => ({ result: r })),
     [campaign.results],
+  );
+
+  // ── Selected stage ──────────────────────────────────────────────────────────
+
+  const selectedStage = useMemo(
+    () =>
+      selectedStageId ? (campaign.stages.find((s) => s.id === selectedStageId) ?? null) : null,
+    [campaign.stages, selectedStageId],
+  );
+  // Readout labels for the override popover's failing-check lines.
+  const channelLabelById = useMemo(
+    () => new Map((campaign.channels ?? []).map((c) => [c.id, c.label] as const)),
+    [campaign.channels],
   );
 
   // ── Column defs ─────────────────────────────────────────────────────────────
@@ -364,12 +405,19 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
               );
             }
             const prefix = q === "<" || q === ">" ? `${q} ` : "";
+            // Verdict for this cell under the selected stage — null when no
+            // stage is selected or the stage doesn't check this readout.
+            const verdict = selectedStage
+              ? ((outcomeFor(r, selectedStage.id)?.checks.find((c) => c.channel_id === ch.id)
+                  ?.verdict as CheckVerdict | undefined) ?? null)
+              : null;
             return (
               <CompoundValueCell
                 prefix={prefix}
                 value={m.value ?? null}
                 unit={m.unit}
                 replicates={m.replicate_count ?? null}
+                verdict={verdict}
                 overridden={m.is_manual_override}
                 overrideReason={m.override_reason}
                 readOnly={readOnly}
@@ -446,7 +494,32 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
       });
     }
 
-    // 4. Decision (pinned right) — wider than a bare chip would need so the
+    // 4. Stage (pinned right, before Decision) — only while a stage is
+    //    selected. The outcome chip doubles as the override affordance.
+    if (selectedStage) {
+      cols.push({
+        headerName: "Stage",
+        colId: "stage",
+        pinned: "right",
+        width: 150,
+        sortable: false,
+        cellRenderer: (params: ICellRendererParams<RowData>) => {
+          const r = params.data?.result;
+          if (!r) return null;
+          return (
+            <StageOutcomeCell
+              campaignId={campaign.id}
+              result={r}
+              stage={selectedStage}
+              channelLabelById={channelLabelById}
+              readOnly={readOnly}
+            />
+          );
+        },
+      });
+    }
+
+    // 5. Decision (pinned right) — wider than a bare chip would need so the
     //    inline reason/notes strip in DecisionChipCell has room to breathe.
     cols.push({
       headerName: "Decision",
@@ -470,18 +543,25 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
     curveMap,
     moleculesById,
     readOnly,
+    // Every input the cell renderers read has to be here or the memoised
+    // column defs keep rendering the previous stage's verdicts/chips.
+    selectedStage,
+    channelLabelById,
   ]);
 
   // ── External (chip) filters ─────────────────────────────────────────────────
 
-  const isExternalFilterPresent = useCallback(() => filtersActive(filters), [filters]);
+  const isExternalFilterPresent = useCallback(
+    () => filtersActive(filters, selectedStageId),
+    [filters, selectedStageId],
+  );
 
   const doesExternalFilterPass = useCallback(
     (node: IRowNode<RowData>) => {
       const r = node.data?.result;
-      return r ? rowPassesFilters(r, filters) : true;
+      return r ? rowPassesFilters(r, filters, selectedStageId) : true;
     },
-    [filters],
+    [filters, selectedStageId],
   );
 
   // ── Empty state ─────────────────────────────────────────────────────────────

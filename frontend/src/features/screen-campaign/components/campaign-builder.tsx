@@ -26,7 +26,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost } from "@/shared/lib/api/campaigns/campaigns";
 import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
 import { campaignKeys, useCampaign } from "../hooks/use-campaigns";
-import type { CampaignResponse } from "../types";
+import type { CampaignResponse, StageOutcome } from "../types";
 import { CampaignFilterBar, type CampaignFilters, emptyFilters } from "./campaign-filter-bar";
 import { CampaignView } from "./campaign-view";
 import { CloseSignDialog } from "./close-sign-dialog";
@@ -120,6 +120,17 @@ function CampaignBuilderV2({
     ? selectedStageId
     : null;
 
+  // Picking a stage tab lenses the grid onto that stage's population
+  // (hit + miss + untested) and hides the rows gated out of it; "All"
+  // clears the outcome chips again.
+  function selectStage(id: string | null) {
+    setSelectedStageId(id);
+    setFilters((f) => ({
+      ...f,
+      stageOutcomes: new Set<StageOutcome>(id ? ["hit", "miss", "untested"] : []),
+    }));
+  }
+
   const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
     mutation: {
       onSuccess: () => {
@@ -153,21 +164,28 @@ function CampaignBuilderV2({
       <StagesSection
         campaign={campaign}
         selectedStageId={effectiveStageId}
-        onSelectStage={setSelectedStageId}
+        onSelectStage={selectStage}
         readOnly={campaign.status !== "draft"}
       />
       <CampaignFilterBar
         campaign={campaign}
         filters={filters}
         onChange={setFilters}
+        selectedStageId={effectiveStageId}
         resultCount={campaign.results?.length ?? 0}
       />
       <CampaignToolbar
         campaign={campaign}
         filters={filters}
+        selectedStageId={effectiveStageId}
         readOnly={campaign.status !== "draft"}
       />
-      <ResultsGridV2 campaign={campaign} filters={filters} readOnly={campaign.status !== "draft"} />
+      <ResultsGridV2
+        campaign={campaign}
+        filters={filters}
+        selectedStageId={effectiveStageId}
+        readOnly={campaign.status !== "draft"}
+      />
 
       <section className="border-t px-6 py-4">
         <TagTable entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />
