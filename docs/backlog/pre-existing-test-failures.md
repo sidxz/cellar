@@ -97,3 +97,7 @@ All fail with `cellar.domain.shared.errors.NotFoundError: Entity not found` rais
 **Pre-existing:** the file is unmodified by the migration (`git diff HEAD -- …streaming_rgroup_decomposer.py` is empty); the migration's own touched modules are ruff-clean. These errors are on the committed `design-7` HEAD.
 
 **Recommended fix:** add `strict=...` to the `zip()` at line 109 and wrap the long line at 112 — trivial. Left untouched to keep the migration branch scoped (CI's ruff gate was already red on this file independent of this work).
+
+## 7. `tests/unit/application/export/renderers/test_pdf_renderer.py::test_pdf_renders_a_small_report` — WeasyPrint native libs missing on the workstation (environment, not code)
+
+> Observed 2026-09-10 during the registration-number race fix (full `tests/unit` run: `1 failed, 3043 passed`). Failure: `OSError: cannot load library 'libgobject-2.0-0'` raised from WeasyPrint's ctypes loader; `ctypes.util.find_library()` finds nothing either. Root cause: the GObject/Pango/Cairo shared libraries WeasyPrint dlopens are not installed on this Mac, or not on the dyld search path of the uv-managed CPython. The renderer and its test were untouched by that change. Likely workstation fix: `brew install pango glib` (or `brew install weasyprint`, which pulls the same set) and, if dlopen still misses them, `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib` for the test run. Not fixed inline: environment-only.
