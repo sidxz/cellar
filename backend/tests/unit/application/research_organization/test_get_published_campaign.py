@@ -21,6 +21,10 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import (
+    CampaignStage,
+    StageCriterion,
+)
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
     CampaignStatus,
@@ -585,3 +589,108 @@ class TestGetPublishedCampaign:
         assert result["molecule"]["primary_id"] == "CVT-000142"
         assert result["molecule"]["structure_smiles"] == "CCO"
         assert result["representative_batch"]["name"] == "BAT-000171"
+
+    # ------------------------------------------------------------------
+    # 13. Stages: parent/child funnel, per-result outcomes hit/miss/not_in_stage
+    # ------------------------------------------------------------------
+    @pytest.mark.asyncio
+    async def test_stages_and_stage_outcomes(self) -> None:
+        auth = fake_auth()
+        pid = uuid.uuid4()
+        rdid = uuid.uuid4()
+
+        campaign, ch = _make_closed_campaign(
+            auth.workspace_id, n_results=0, protocol_id=pid, readout_definition_id=rdid
+        )
+
+        parent_stage = CampaignStage(
+            campaign_id=campaign.id,
+            name="Screening Hits",
+            display_order=0,
+            criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=100.0)],
+        )
+        child_stage = CampaignStage(
+            campaign_id=campaign.id,
+            name="Confirmed Hits",
+            display_order=1,
+            parent_stage_id=parent_stage.id,
+            criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=10.0)],
+        )
+        campaign.stages.append(parent_stage)
+        campaign.stages.append(child_stage)
+
+        # A: hits both stages (5 < 100 and 5 < 10).
+        result_a = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        result_a.measurements.append(_make_measurement(result_a.id, ch.id, value=5.0))
+        # B: hits parent, misses child (50 < 100 but not < 10).
+        result_b = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        result_b.measurements.append(_make_measurement(result_b.id, ch.id, value=50.0))
+        # C: misses parent -> child is not_in_stage (500 is not < 100).
+        result_c = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        result_c.measurements.append(_make_measurement(result_c.id, ch.id, value=500.0))
+        campaign.results.extend([result_a, result_b, result_c])
+
+        uc, _ = _build_use_case(campaign, protocol_id=pid, readout_definition_id=rdid)
+        q = _make_query(auth.workspace_id, campaign.id)
+        out = await uc(q, auth=auth)
+
+        assert isinstance(out, Success)
+        doc = out.unwrap()
+
+        # --- stages[] with counts, ids as strings ---
+        assert len(doc["stages"]) == 2
+        stages_by_name = {s["name"]: s for s in doc["stages"]}
+        parent_doc = stages_by_name["Screening Hits"]
+        child_doc = stages_by_name["Confirmed Hits"]
+
+        assert parent_doc["id"] == str(parent_stage.id)
+        assert parent_doc["parent_stage_id"] is None
+        assert parent_doc["criteria"] == [
+            {"channel_id": str(ch.id), "operator": "lt", "value": 100.0}
+        ]
+        assert parent_doc["counts"] == {
+            "population": 3,
+            "hit": 2,
+            "miss": 1,
+            "untested": 0,
+            "not_in_stage": 0,
+            "overridden": 0,
+        }
+
+        assert child_doc["parent_stage_id"] == str(parent_stage.id)
+        assert child_doc["counts"] == {
+            "population": 2,
+            "hit": 1,
+            "miss": 1,
+            "untested": 0,
+            "not_in_stage": 1,
+            "overridden": 0,
+        }
+
+        # --- results[].stage_outcomes, ordered like campaign.stages ---
+        results_by_mol = {r["molecule"]["id"]: r for r in doc["results"]}
+        a_outcomes = results_by_mol[str(result_a.molecule_id)]["stage_outcomes"]
+        b_outcomes = results_by_mol[str(result_b.molecule_id)]["stage_outcomes"]
+        c_outcomes = results_by_mol[str(result_c.molecule_id)]["stage_outcomes"]
+
+        assert [o["stage_id"] for o in a_outcomes] == [
+            str(parent_stage.id),
+            str(child_stage.id),
+        ]
+
+        # A: hit on both stages.
+        assert a_outcomes[0]["outcome"] == "hit"
+        assert a_outcomes[1]["outcome"] == "hit"
+        assert a_outcomes[1]["overridden"] is False
+        assert a_outcomes[1]["override_reason"] is None
+        assert a_outcomes[1]["checks"] == [{"channel_id": str(ch.id), "verdict": "pass"}]
+
+        # B: hit on parent, miss on child.
+        assert b_outcomes[0]["outcome"] == "hit"
+        assert b_outcomes[1]["outcome"] == "miss"
+        assert b_outcomes[1]["checks"] == [{"channel_id": str(ch.id), "verdict": "fail"}]
+
+        # C: miss on parent, not_in_stage on child (no checks run).
+        assert c_outcomes[0]["outcome"] == "miss"
+        assert c_outcomes[1]["outcome"] == "not_in_stage"
+        assert c_outcomes[1]["checks"] == []

@@ -3,7 +3,7 @@
   "title": "DAIKON Published Campaign Contract",
   "description": "JSON Schema for GET /api/v1/campaigns/{id}/published — spec §6.",
   "type": "object",
-  "required": ["campaign", "compound_sources", "source_protocols", "channels", "results"],
+  "required": ["campaign", "compound_sources", "source_protocols", "channels", "stages", "results"],
   "additionalProperties": false,
   "properties": {
     "campaign": {
@@ -133,11 +133,57 @@
       }
     },
 
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "parent_stage_id", "display_order", "criteria", "counts"],
+        "additionalProperties": false,
+        "properties": {
+          "id":              { "type": "string", "format": "uuid" },
+          "name":            { "type": "string" },
+          "parent_stage_id": { "type": ["string", "null"] },
+          "display_order":   { "type": "integer" },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["channel_id", "operator", "value"],
+              "additionalProperties": false,
+              "properties": {
+                "channel_id": { "type": "string", "format": "uuid" },
+                "operator":   { "type": "string", "enum": ["lt", "lte", "gt", "gte", "between"] },
+                "value": {
+                  "oneOf": [
+                    { "type": "number" },
+                    { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }
+                  ]
+                }
+              }
+            }
+          },
+          "counts": {
+            "type": "object",
+            "required": ["population", "hit", "miss", "untested", "not_in_stage", "overridden"],
+            "additionalProperties": false,
+            "properties": {
+              "population":   { "type": "integer" },
+              "hit":          { "type": "integer" },
+              "miss":         { "type": "integer" },
+              "untested":     { "type": "integer" },
+              "not_in_stage": { "type": "integer" },
+              "overridden":   { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+
     "results": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["molecule", "decision", "measurements"],
+        "required": ["molecule", "decision", "measurements", "stage_outcomes"],
         "additionalProperties": false,
         "properties": {
           "molecule": {
@@ -221,6 +267,32 @@
                     },
                     { "type": "null" }
                   ]
+                }
+              }
+            }
+          },
+          "stage_outcomes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["stage_id", "outcome", "overridden", "checks"],
+              "additionalProperties": false,
+              "properties": {
+                "stage_id":        { "type": "string", "format": "uuid" },
+                "outcome":         { "type": "string", "enum": ["hit", "miss", "untested", "not_in_stage"] },
+                "overridden":      { "type": "boolean" },
+                "override_reason": { "type": ["string", "null"] },
+                "checks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["channel_id", "verdict"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "channel_id": { "type": "string", "format": "uuid" },
+                      "verdict":    { "type": "string", "enum": ["pass", "fail", "untested"] }
+                    }
+                  }
                 }
               }
             }

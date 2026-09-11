@@ -43,6 +43,10 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import (
+    CampaignStage,
+    StageCriterion,
+)
 from cellar.domain.research_organization.enums import (
     CampaignDecision,
     ChannelSourceKind,
@@ -215,6 +219,16 @@ async def _seed_closed_campaign(
     )
     campaign.add_channel(ch)
 
+    # One stage with one criterion on the seeded channel — the seeded
+    # measurement value (10.0) is < 100, so this stage's outcome is "hit".
+    stage = CampaignStage(
+        campaign_id=campaign.id,
+        name="Contract Test Stage",
+        display_order=0,
+        criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=100.0)],
+    )
+    campaign.add_stage(stage)
+
     result = CampaignResult(
         campaign_id=campaign.id,
         molecule_id=mol_id,
@@ -344,3 +358,8 @@ async def test_published_endpoint_matches_daikon_schema(
     # source_protocols snapshot is populated at close time.
     assert len(body["source_protocols"]) == 1
     assert body["source_protocols"][0]["id"] == str(protocol_id)
+    # Hit stages: one stage, one criterion, seeded measurement (10.0 < 100) hits.
+    assert len(body["stages"]) == 1
+    assert body["stages"][0]["counts"]["hit"] == 1
+    assert len(body["results"][0]["stage_outcomes"]) == 1
+    assert body["results"][0]["stage_outcomes"][0]["outcome"] == "hit"

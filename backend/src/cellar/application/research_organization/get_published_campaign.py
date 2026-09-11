@@ -31,6 +31,10 @@ from cellar.domain.research_organization.repository import (
     ProjectRepository,
 )
 from cellar.domain.research_organization.source_ref import ManualRef, source_group_key
+from cellar.domain.research_organization.stage_evaluation import (
+    evaluate_stages,
+    tally_stage_counts,
+)
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import (
     DomainError,
@@ -187,6 +191,12 @@ class GetPublishedCampaign:
                 "total": len(all_results),
             }
 
+        # Step 9c — evaluate hit stages once (pure, cheap: results x stages x
+        # criteria). Outcomes are never persisted (spec §7) — recomputed on
+        # every read from the live campaign, results, and stages.
+        stage_outcomes = evaluate_stages(campaign)
+        stage_counts = tally_stage_counts(campaign, stage_outcomes)
+
         # Step 10 — serialize.
         doc: dict[str, Any] = {
             "campaign": _serialize_campaign(campaign, project),
@@ -195,7 +205,16 @@ class GetPublishedCampaign:
             "channels": [
                 _serialize_channel(ch, protocol_lookup, readout_lookup) for ch in campaign.channels
             ],
-            "results": [_serialize_result(r, mol_lookup, batch_lookup) for r in page],
+            "stages": [_serialize_stage(s, stage_counts[s.id]) for s in campaign.stages],
+            "results": [
+                _serialize_result(
+                    r,
+                    mol_lookup,
+                    batch_lookup,
+                    [stage_outcomes[r.id][s.id] for s in campaign.stages],
+                )
+                for r in page
+            ],
         }
         if pagination is not None:
             doc["pagination"] = pagination
@@ -330,10 +349,36 @@ def _serialize_channel(
     }
 
 
+def _serialize_stage(stage: Any, counts: dict[str, int]) -> dict[str, Any]:
+    return {
+        "id": str(stage.id),
+        "name": stage.name,
+        "parent_stage_id": (
+            str(stage.parent_stage_id) if stage.parent_stage_id is not None else None
+        ),
+        "display_order": stage.display_order,
+        "criteria": [c.to_dict() for c in stage.criteria],
+        "counts": counts,
+    }
+
+
+def _serialize_stage_outcome(o: Any) -> dict[str, Any]:
+    return {
+        "stage_id": str(o.stage_id),
+        "outcome": o.outcome.value,
+        "overridden": o.overridden,
+        "override_reason": o.override_reason,
+        "checks": [
+            {"channel_id": str(c.channel_id), "verdict": c.verdict.value} for c in o.checks
+        ],
+    }
+
+
 def _serialize_result(
     result: Any,
     mol_lookup: dict[uuid.UUID, Any],
     batch_lookup: dict[uuid.UUID, Any],
+    stage_outcomes: list[Any],
 ) -> dict[str, Any]:
     mol = mol_lookup.get(result.molecule_id)
     if mol is not None:
@@ -372,6 +417,7 @@ def _serialize_result(
         "decision_reason": result.decision_reason,
         "notes": result.notes,
         "measurements": measurements,
+        "stage_outcomes": [_serialize_stage_outcome(o) for o in stage_outcomes],
     }
 
 
