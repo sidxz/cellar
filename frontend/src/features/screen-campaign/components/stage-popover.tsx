@@ -315,7 +315,10 @@ export function StagePopoverForm({
                     control={control}
                     render={({ field: f }) => (
                       <Select value={f.value} onValueChange={f.onChange}>
-                        <SelectTrigger className="h-8 text-xs">
+                        <SelectTrigger
+                          className="h-8 w-full min-w-0 text-xs *:data-[slot=select-value]:block *:data-[slot=select-value]:truncate"
+                          title={channelOptions.find((o) => o.id === f.value)?.label}
+                        >
                           <SelectValue placeholder="Select readout..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -337,7 +340,7 @@ export function StagePopoverForm({
                     control={control}
                     render={({ field: f }) => (
                       <Select value={f.value} onValueChange={f.onChange}>
-                        <SelectTrigger className="h-8 text-xs">
+                        <SelectTrigger className="h-8 w-full text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
