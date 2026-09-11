@@ -11,7 +11,7 @@
  *   the selected stage
  *
  * The filter state lives in <CampaignBuilderV2> / <CampaignView> next to
- * `selectedStageId` and is consumed by this bar, the BulkDecisionMenu and the
+ * `selectedStageId` and is consumed by this bar and the
  * AG Grid via its `isExternalFilterPresent` + `doesExternalFilterPass`.
  */
 
@@ -92,9 +92,7 @@ interface CampaignFilterBarProps {
   onChange: (next: CampaignFilters) => void;
   /** Selected hit stage, or null for "All" — gates the outcome chips. */
   selectedStageId: string | null;
-  /** Optional result count rendered right-aligned. When supplied, replaces
-   *  the standalone "N results" line that used to live in CampaignToolbar
-   *  — saves a full row of vertical space above the grid. */
+  /** Optional result count rendered right-aligned. */
   resultCount?: number;
 }
 

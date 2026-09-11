@@ -103,7 +103,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("StagesSection", () => {
-  it("renders All plus one tab per stage sorted by display_order, each with its hit count", () => {
+  it("renders All plus one tile per stage, each with hits, population, and hit rate", () => {
     render(
       <StagesSection
         campaign={campaign}
@@ -115,8 +115,14 @@ describe("StagesSection", () => {
     );
 
     expect(screen.getByRole("button", { name: /^All 3$/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Screening Hits 2$/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Confirmed Hits 1/ })).toBeInTheDocument();
+    // 2 of 3 hit, criteria summarized on the tile itself.
+    expect(
+      screen.getByRole("button", { name: /^Screening Hits 2 of 3 67% % Inhibition >= 50$/ }),
+    ).toBeInTheDocument();
+    // Child population is its parent's hits (r3 is gated out as not_in_stage).
+    expect(
+      screen.getByRole("button", { name: /^↳ after Screening Hits Confirmed Hits 1 of 2 50%$/ }),
+    ).toBeInTheDocument();
   });
 
   it("shows the parent subline on a child stage's tab", () => {
@@ -132,7 +138,9 @@ describe("StagesSection", () => {
 
     expect(screen.getByText(/↳ after Screening Hits/)).toBeInTheDocument();
     // The root stage's tab carries no subline.
-    expect(screen.getByRole("button", { name: /^Screening Hits 2$/ })).not.toHaveTextContent("↳");
+    expect(screen.getByRole("button", { name: /^Screening Hits 2 of 3/ })).not.toHaveTextContent(
+      "↳",
+    );
   });
 
   it("calls onSelectStage with the clicked stage's id, and null for All", () => {
@@ -147,7 +155,7 @@ describe("StagesSection", () => {
       { wrapper },
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /^Confirmed Hits 1/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Confirmed Hits 1 of 2/ }));
     expect(onSelectStage).toHaveBeenCalledWith("stage-confirmed");
 
     fireEvent.click(screen.getByRole("button", { name: /^All 3$/ }));

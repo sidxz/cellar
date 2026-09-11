@@ -4,12 +4,13 @@
  * StagesSection — Task 14.
  *
  * Uppercase-header section block (mirrors ChannelsSection) that renders the
- * campaign's hit-stage funnel as a tab strip — "All <n>" plus one pill per
- * stage sorted by display_order, each showing its hit count tallied from
- * `stage_outcomes` regardless of selection. A child stage's pill also shows
- * "↳ after <parent name>". Selecting a tab is purely a notify-parent
- * affordance (`onSelectStage`) — the grid/filter-bar lens on the selection
- * is wired in a later task.
+ * campaign's hit-stage funnel as a row of tiles — "All <n>" plus one tile
+ * per stage sorted by display_order. Each tile shows the hit count as the
+ * big number, the population it was drawn from ("of N"), the hit rate, and
+ * the stage's criteria as a one-line summary, all tallied from
+ * `stage_outcomes` regardless of selection. A child stage's tile carries
+ * "↳ after <parent name>" as its eyebrow. Selecting a tile is purely a
+ * notify-parent affordance (`onSelectStage`).
  *
  * The panel below the tabs shows the *selected* stage's criteria (read-only
  * rows) plus its parent and, when editable, a MoreHorizontal menu opening
@@ -22,6 +23,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
+import { protocolColorById } from "../../lib/protocol-colors";
 import { tallyStage } from "../../lib/stage-outcomes";
 import type { CampaignResponse, StageCriterionDTO } from "../../types";
 import { StagePopoverForm } from "../stage-popover";
@@ -44,10 +46,10 @@ const SECTION_HEADING = "text-sm font-semibold uppercase tracking-wide text-mute
 const ADD_PILL =
   "inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/20 transition-colors";
 
-const TAB_BASE =
-  "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors";
-const TAB_INACTIVE = "bg-muted/50 text-foreground border-transparent hover:bg-muted";
-const TAB_ACTIVE = "bg-primary text-primary-foreground border-primary";
+const TILE_BASE =
+  "grid min-w-[160px] gap-0.5 rounded-lg border px-3.5 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-primary";
+const TILE_INACTIVE = "bg-muted/50 border-border hover:border-primary/40";
+const TILE_ACTIVE = "bg-primary/10 border-primary ring-1 ring-inset ring-primary";
 
 // ── Operator formatting ───────────────────────────────────────────────────────
 
@@ -101,6 +103,20 @@ export function StagesSection({
     () => new Map((campaign.channels ?? []).map((c) => [c.id, c] as const)),
     [campaign.channels],
   );
+  const colorByProtocol = useMemo(
+    () => protocolColorById(campaign.channels ?? []),
+    [campaign.channels],
+  );
+  // Unit lives on measurements, not the channel/criterion — same derivation
+  // as stage-popover.tsx's channelOptions.
+  const unitForChannel = (channelId: string) =>
+    results
+      .map((r) => r.measurements?.find((m) => m.channel_id === channelId)?.unit ?? "")
+      .find((u) => u && u !== "-");
+  const criterionText = (c: StageCriterionDTO) => {
+    const unit = unitForChannel(c.channel_id);
+    return `${channelById.get(c.channel_id)?.label ?? "Unknown readout"} ${criterionValueText(c)}${unit ? ` ${unit}` : ""}`;
+  };
 
   const selectedStage = selectedStageId ? (stageById.get(selectedStageId) ?? null) : null;
   const selectedParent = selectedStage?.parent_stage_id
@@ -133,29 +149,52 @@ export function StagesSection({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-stretch gap-2.5">
         <button
           type="button"
           onClick={() => onSelectStage(null)}
-          className={`${TAB_BASE} ${selectedStageId == null ? TAB_ACTIVE : TAB_INACTIVE}`}
+          className={`${TILE_BASE} min-w-[120px] ${selectedStageId == null ? TILE_ACTIVE : TILE_INACTIVE}`}
         >
-          <span>All</span>
-          <span className="font-semibold tabular-nums">{results.length}</span>
+          <span className="text-sm font-semibold leading-tight">All</span>
+          <span className="text-2xl font-semibold leading-none tabular-nums">{results.length}</span>
         </button>
 
         {stages.map((stage) => {
           const parent = stage.parent_stage_id ? stageById.get(stage.parent_stage_id) : undefined;
           const tally = tallies.get(stage.id);
+          const hit = tally?.hit ?? 0;
+          const population = tally?.population ?? 0;
+          const summary = stage.criteria.map(criterionText).join(" · ");
           return (
             <button
               key={stage.id}
               type="button"
               onClick={() => onSelectStage(stage.id)}
-              className={`${TAB_BASE} ${selectedStageId === stage.id ? TAB_ACTIVE : TAB_INACTIVE}`}
+              className={`${TILE_BASE} ${selectedStageId === stage.id ? TILE_ACTIVE : TILE_INACTIVE}`}
             >
-              <span>{stage.name}</span>
-              <span className="font-semibold tabular-nums">{tally?.hit ?? 0}</span>
-              {parent && <span className="text-[10px] opacity-75">↳ after {parent.name}</span>}
+              {parent && (
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  ↳ after {parent.name}
+                </span>
+              )}
+              <span className="text-sm font-semibold leading-tight">{stage.name}</span>
+              <span className="flex items-baseline gap-1.5 tabular-nums">
+                <span className="text-2xl font-semibold leading-none">{hit}</span>
+                <span className="text-xs text-muted-foreground">of {population}</span>
+                {population > 0 && (
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    {Math.round((hit / population) * 100)}%
+                  </span>
+                )}
+              </span>
+              {summary && (
+                <span
+                  className="mt-0.5 max-w-[240px] truncate font-mono text-[11px] text-muted-foreground"
+                  title={summary}
+                >
+                  {summary}
+                </span>
+              )}
             </button>
           );
         })}
@@ -201,13 +240,7 @@ export function StagesSection({
                 const protocolName = channel
                   ? (protocolNameById.get(channel.protocol_id) ?? "Protocol")
                   : null;
-                // Unit lives on measurements, not the channel/criterion —
-                // same derivation as stage-popover.tsx's channelOptions.
-                const unit = results
-                  .map(
-                    (r) => r.measurements?.find((m) => m.channel_id === c.channel_id)?.unit ?? "",
-                  )
-                  .find((u) => u && u !== "-");
+                const unit = unitForChannel(c.channel_id);
                 return (
                   <li
                     // Criteria are frozen values with no id of their own —
@@ -219,8 +252,11 @@ export function StagesSection({
                   >
                     <span>
                       <span className="font-medium">{channel?.label ?? "Unknown readout"}</span>
-                      {protocolName && (
-                        <span className="text-muted-foreground"> · {protocolName}</span>
+                      {protocolName && channel && (
+                        <span style={{ color: colorByProtocol.get(channel.protocol_id) }}>
+                          {" "}
+                          · {protocolName}
+                        </span>
                       )}
                     </span>
                     <span className="font-mono tabular-nums text-muted-foreground">

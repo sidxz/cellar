@@ -4,7 +4,7 @@
  * CampaignBuilder — V2 single-column layout
  *
  * Renders the V2 layout (HeaderStrip + SourcesSection + ChannelsSection +
- * CampaignFilterBar + CampaignToolbar + ResultsGridV2) for draft campaigns.
+ * CampaignFilterBar + ResultsGridV2) for draft campaigns.
  * Closed/superseded campaigns dispatch to CampaignView.
  *
  * Note: Path B was chosen over DetailShell wrapping because HeaderStrip IS the
@@ -33,7 +33,6 @@ import { CloseCampaignDialog } from "./close-campaign-dialog";
 import { ResultsGridV2 } from "./grid/results-grid";
 import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
 
-import { CampaignToolbar } from "./sections/campaign-toolbar";
 import { ChannelsSection } from "./sections/channels-section";
 // ── V2 section imports ────────────────────────────────────────────────────────
 import { HeaderStrip } from "./sections/header-strip";
@@ -173,12 +172,6 @@ function CampaignBuilderV2({
         onChange={setFilters}
         selectedStageId={effectiveStageId}
         resultCount={campaign.results?.length ?? 0}
-      />
-      <CampaignToolbar
-        campaign={campaign}
-        filters={filters}
-        selectedStageId={effectiveStageId}
-        readOnly={campaign.status !== "draft"}
       />
       <ResultsGridV2
         campaign={campaign}

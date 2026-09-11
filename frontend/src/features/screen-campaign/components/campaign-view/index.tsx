@@ -4,8 +4,7 @@
  * CampaignView — V2 single-column layout, read-only.
  *
  * Reuses the same V2 sections as the draft builder (HeaderStrip,
- * SourcesSection, ChannelsSection, CampaignFilterBar, CampaignToolbar,
- * ResultsGridV2) with `readOnly={true}`. The closed-only detail
+ * SourcesSection, ChannelsSection, CampaignFilterBar, ResultsGridV2) with `readOnly={true}`. The closed-only detail
  * (source protocols) is surfaced as a small card below the channels
  * section. The supersede dialog is preserved and triggered from the
  * HeaderStrip Supersede action.

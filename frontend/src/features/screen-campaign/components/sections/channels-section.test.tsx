@@ -31,6 +31,7 @@ function makeChannel(overrides: Partial<CampaignChannelResponse>): CampaignChann
 
 const campaign = {
   id: "c1",
+  stages: [],
   channels: [
     makeChannel({
       id: "ch-1",
@@ -64,5 +65,30 @@ describe("ChannelsSection", () => {
     expect(screen.getByText("IC50")).toBeInTheDocument();
     expect(screen.getByText("% Viability")).toBeInTheDocument();
     expect(screen.queryByText(/hit if/i)).not.toBeInTheDocument();
+  });
+
+  it("renders chips: DR mark on curve readouts, rule only when non-default", () => {
+    render(<ChannelsSection campaign={campaign} projectId="p1" readOnly />, { wrapper });
+
+    const ic50 = screen.getByText("IC50").closest("[title]");
+    expect(ic50).toHaveTextContent("DR");
+    expect(ic50).toHaveAttribute("title", "Dose-response curve · latest approved run");
+    expect(screen.queryByText("latest approved run")).not.toBeInTheDocument();
+
+    const viability = screen.getByText("% Viability").closest("[title]");
+    expect(viability).toHaveTextContent("mean across runs");
+    expect(viability).not.toHaveTextContent("DR");
+  });
+
+  it("chips are edit buttons in draft mode and inert in read-only mode", () => {
+    const { unmount } = render(
+      <ChannelsSection campaign={campaign} projectId="p1" readOnly={false} />,
+      { wrapper },
+    );
+    expect(screen.getByRole("button", { name: /IC50/ })).toBeInTheDocument();
+    unmount();
+
+    render(<ChannelsSection campaign={campaign} projectId="p1" readOnly />, { wrapper });
+    expect(screen.queryByRole("button", { name: /IC50/ })).not.toBeInTheDocument();
   });
 });

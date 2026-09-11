@@ -37,6 +37,7 @@ import { type CurveClass, READOUT_NORMALIZATION_LABELS } from "@/features/screen
 
 import { useMoleculesByIds } from "@/features/chemical-registration";
 import { useCampaignCurves } from "../../hooks/use-campaign-curves";
+import { protocolColorById } from "../../lib/protocol-colors";
 import { outcomeFor } from "../../lib/stage-outcomes";
 import { type CampaignFilters, filtersActive, rowPassesFilters } from "../campaign-filter-bar";
 import { OverrideModal } from "../override-modal";
@@ -263,24 +264,27 @@ export function ResultsGridV2({
     const sortedChannels = [...(campaign.channels ?? [])].sort(
       (a, b) => a.display_order - b.display_order,
     );
+    const colorByProtocol = protocolColorById(sortedChannels);
 
     const cols: (ColDef<RowData> | ColGroupDef<RowData>)[] = [];
 
-    // 1. Compound (pinned left, flex)
+    // 1. Compound (pinned left) — structure thumbnail beside the id/name
+    //    stack, one cell instead of two so the drawing gets the row's full
+    //    height while the pinned area stays narrow.
     cols.push({
       headerName: "Compound",
       field: "result.molecule_id",
       pinned: "left",
-      width: 180,
+      width: 270,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
         if (!r) return null;
         const m = moleculesById.get(r.molecule_id);
         const label = m?.registration_number ?? shortId(r.molecule_id);
-        // Stack id → name → synonyms vertically. Saves horizontal space and
-        // makes use of the taller row. Synonyms are deduped against the
-        // primary name so we don't repeat the same string.
+        const smiles = m?.structure?.smiles ?? null;
+        // Synonyms are deduped against the primary name so we don't repeat
+        // the same string.
         const synonyms =
           m?.identifiers
             ?.map((idn) => idn.identifier)
@@ -288,44 +292,35 @@ export function ResultsGridV2({
         const visibleSynonyms = synonyms.slice(0, 3);
         const extra = synonyms.length - visibleSynonyms.length;
         return (
-          <div className="flex flex-col py-2 leading-tight">
-            <EntityLink
-              type="compound"
-              id={r.molecule_id}
-              label={label}
-              className="text-sm font-medium"
-            />
-            {m?.name && <span className="text-xs text-muted-foreground truncate">{m.name}</span>}
-            {visibleSynonyms.map((s) => (
-              <span key={s} className="text-[11px] text-muted-foreground truncate">
-                {s}
-              </span>
-            ))}
-            {extra > 0 && (
-              <span className="text-[10px] text-muted-foreground/70 italic">+{extra} more</span>
-            )}
-          </div>
-        );
-      },
-    });
-
-    // 2. Structure — matches the search-page default thumbnail size (104px).
-    cols.push({
-      headerName: "Structure",
-      colId: "structure",
-      width: 150,
-      sortable: false,
-      cellRenderer: (params: ICellRendererParams<RowData>) => {
-        const r = params.data?.result;
-        if (!r) return null;
-        const m = moleculesById.get(r.molecule_id);
-        const smiles = m?.structure?.smiles ?? null;
-        if (!smiles) {
-          return <span className="text-muted-foreground">--</span>;
-        }
-        return (
-          <div className="flex h-full items-center justify-center py-1">
-            <StructureThumbnail smiles={smiles} size={130} />
+          <div className="flex h-full items-center gap-2">
+            <div className="flex h-[160px] w-[160px] shrink-0 items-center justify-center">
+              {smiles ? (
+                <StructureThumbnail smiles={smiles} size={160} />
+              ) : (
+                <span className="text-muted-foreground">--</span>
+              )}
+            </div>
+            <div className="flex min-w-0 flex-col leading-tight">
+              <EntityLink
+                type="compound"
+                id={r.molecule_id}
+                label={label}
+                className="text-sm font-medium"
+              />
+              {m?.name && (
+                <span className="text-xs text-muted-foreground truncate" title={m.name}>
+                  {m.name}
+                </span>
+              )}
+              {visibleSynonyms.map((s) => (
+                <span key={s} className="text-[11px] text-muted-foreground truncate" title={s}>
+                  {s}
+                </span>
+              ))}
+              {extra > 0 && (
+                <span className="text-[10px] text-muted-foreground/70 italic">+{extra} more</span>
+              )}
+            </div>
           </div>
         );
       },
@@ -497,6 +492,7 @@ export function ResultsGridV2({
       cols.push({
         headerName: protoName,
         headerClass: "ag-protocol-group-header",
+        headerStyle: { color: colorByProtocol.get(protoId) ?? "inherit" },
         children: groupChildren,
       });
     }

@@ -6,14 +6,15 @@
  * Uppercase-header section block that lists campaign channels, grouped by
  * their source protocol (a sub-heading per protocol — two protocols can
  * each define a readout named "IC50", so the group disambiguates which is
- * which, matching the grid's protocol-grouped columns). Each channel is a
- * detail row with label, source badge, and selection rule. Non-read-only
- * mode shows a "+ Channel" pill (add) and a MoreHorizontal icon per row
- * (edit) — both open ChannelPopoverForm in a Popover.
+ * which, matching the grid's protocol-grouped columns). Each protocol is one
+ * wrapping line of chips — one chip per channel. Dose-response chips carry a
+ * "DR" mark; the selection rule is shown only when it differs from the
+ * default (latest approved run), the full description lives in the chip's
+ * title. Non-read-only mode shows a "+ Readout" pill (add) and makes each
+ * chip a button (edit) — both open ChannelPopoverForm in a Popover.
  */
 
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
-import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Input } from "@/shared/components/ui/input";
@@ -30,9 +31,10 @@ import { useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocol
 import { groupBy } from "@/shared/lib/group-by";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, MoreHorizontal, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Copy, Plus } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
 import { campaignKeys } from "../../hooks/use-campaigns";
+import { protocolColorById } from "../../lib/protocol-colors";
 import type { CampaignChannelResponse, CampaignResponse } from "../../types";
 import { ChannelPopoverForm } from "../channel-popover";
 
@@ -72,6 +74,7 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
     [protocolSummaries],
   );
   const groupedChannels = groupBy(channels, (ch) => ch.protocol_id);
+  const colorByProtocol = useMemo(() => protocolColorById(channels), [channels]);
 
   return (
     <section className="border-b px-6 py-4">
@@ -126,15 +129,18 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
           </p>
         )
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2">
           {[...groupedChannels].map(([protocolId, protocolChannels]) => (
-            <div key={protocolId}>
-              <h3 className="text-xs font-medium text-muted-foreground mb-1">
+            <Fragment key={protocolId}>
+              <h3
+                className="text-xs font-medium whitespace-nowrap"
+                style={{ color: colorByProtocol.get(protocolId) }}
+              >
                 {protocolNameById.get(protocolId) ?? "Protocol"}
               </h3>
-              <ul className="space-y-1">
+              <ul className="flex flex-wrap gap-1.5">
                 {protocolChannels.map((c) => (
-                  <ChannelRow
+                  <ChannelChip
                     key={c.id}
                     channel={c}
                     campaign={campaign}
@@ -143,7 +149,7 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
                   />
                 ))}
               </ul>
-            </div>
+            </Fragment>
           ))}
         </div>
       )}
@@ -151,9 +157,16 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
   );
 }
 
-// ── ChannelRow ────────────────────────────────────────────────────────────────
+// ── ChannelChip ───────────────────────────────────────────────────────────────
 
-function ChannelRow({
+const CHIP =
+  "inline-flex items-center gap-1.5 rounded-md border border-border bg-muted px-2 py-0.5 text-[13px] font-medium leading-snug";
+const CHIP_EDITABLE =
+  "cursor-pointer transition-colors hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary";
+
+const DEFAULT_RULE = "latest_approved_run";
+
+function ChannelChip({
   channel,
   campaign,
   projectId,
@@ -166,41 +179,53 @@ function ChannelRow({
 }) {
   const [editOpen, setEditOpen] = useState(false);
 
-  const sourceKind = channel.source_kind === "dose_response_curve" ? "DR" : "RD";
-
+  const isDR = channel.source_kind === "dose_response_curve";
   const rule = channel.selection_rule.replace(/_/g, " ");
+  const title = `${isDR ? "Dose-response curve" : "Readout data"} · ${rule}`;
+
+  const content = (
+    <>
+      {channel.label}
+      {isDR && (
+        <span className="self-start text-[9px] font-bold tracking-wider leading-none text-violet-700 dark:text-violet-300">
+          DR
+        </span>
+      )}
+      {channel.selection_rule !== DEFAULT_RULE && (
+        <span className="text-xs font-normal text-muted-foreground">· {rule}</span>
+      )}
+    </>
+  );
+
+  if (readOnly) {
+    return (
+      <li className={CHIP} title={title}>
+        {content}
+      </li>
+    );
+  }
 
   return (
-    <li className="flex items-center justify-between rounded-md border bg-card px-3 py-1.5">
-      <span className="text-sm flex items-center gap-1.5 flex-wrap">
-        <span className="font-medium">{channel.label}</span>
-        <Badge variant="secondary" className="text-[10px]">
-          {sourceKind}
-        </Badge>
-        <span className="text-muted-foreground">{rule}</span>
-      </span>
-
-      {!readOnly && (
-        <Popover open={editOpen} onOpenChange={setEditOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0">
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            className="w-[420px] p-4 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
-          >
-            <h4 className="text-sm font-semibold mb-3">Edit readout</h4>
-            <ChannelPopoverForm
-              campaignId={campaign.id}
-              projectId={projectId}
-              existing={channel}
-              onClose={() => setEditOpen(false)}
-            />
-          </PopoverContent>
-        </Popover>
-      )}
+    <li>
+      <Popover open={editOpen} onOpenChange={setEditOpen}>
+        <PopoverTrigger asChild>
+          <button type="button" className={`${CHIP} ${CHIP_EDITABLE}`} title={title}>
+            {content}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-[420px] p-4 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+        >
+          <h4 className="text-sm font-semibold mb-3">Edit readout</h4>
+          <ChannelPopoverForm
+            campaignId={campaign.id}
+            projectId={projectId}
+            existing={channel}
+            onClose={() => setEditOpen(false)}
+          />
+        </PopoverContent>
+      </Popover>
     </li>
   );
 }
