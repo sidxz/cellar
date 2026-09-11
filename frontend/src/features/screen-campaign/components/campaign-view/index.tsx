@@ -13,7 +13,6 @@
 import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { useState } from "react";
 
-import { TagTable } from "@/features/tagging/components/tag-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
 import { ResultsGridV2 } from "../grid/results-grid";
@@ -90,6 +89,7 @@ export function CampaignView({ campaign }: CampaignViewProps) {
     <div className="flex flex-col">
       <HeaderStrip
         campaign={campaign}
+        canEditTags={canEditTags}
         isDraft={false}
         refreshing={false}
         onRefresh={() => {}}
@@ -140,10 +140,6 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         selectedStageId={effectiveStageId}
         readOnly
       />
-
-      <section className="border-t px-6 py-4">
-        <TagTable entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />
-      </section>
 
       <SupersedeDialog open={supersedeOpen} onOpenChange={setSupersedeOpen} campaign={campaign} />
       <ReopenDialog campaign={campaign} open={reopenOpen} onOpenChange={setReopenOpen} />
