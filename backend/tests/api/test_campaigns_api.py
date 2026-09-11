@@ -178,9 +178,7 @@ async def _make_protocol_with_recommended_hit_criteria(client: AsyncClient) -> s
     patch = await client.patch(
         f"/api/v1/protocols/{pid}",
         json={
-            "recommended_hit_criteria": [
-                {"readout_name": "IC50", "operator": "lt", "value": 10.0}
-            ]
+            "recommended_hit_criteria": [{"readout_name": "IC50", "operator": "lt", "value": 10.0}]
         },
     )
     assert patch.status_code == 200, patch.text
@@ -198,9 +196,7 @@ def _find_stage_outcome(campaign: dict, result_id: str, stage_id: str) -> dict:
     return next(o for o in result["stage_outcomes"] if o["stage_id"] == stage_id)
 
 
-async def _seed_closeable_campaign(
-    client: AsyncClient, project_id: str, molecule_id: str
-) -> str:
+async def _seed_closeable_campaign(client: AsyncClient, project_id: str, molecule_id: str) -> str:
     """Create a draft campaign with 1 real protocol-backed channel + 1 result —
     satisfies CloseCampaign's prerequisites (>=1 channel, >=1 result). No real
     screening data backs the channel, so re-resolution falls back to an ND cell
@@ -408,9 +404,7 @@ class TestListGetCampaign:
 
 
 class TestCampaignChannels:
-    async def test_add_channel_returns_200_with_channel(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_add_channel_returns_200_with_channel(self, client: AsyncClient) -> None:
         """Adding a channel to a campaign with results resolves measurements.
 
         AddCampaignChannel no longer validates protocol/readout existence
@@ -456,9 +450,7 @@ class TestCampaignChannels:
         campaign = await _create_draft_campaign(client, project_id, [mol_id])
         campaign_id = campaign["id"]
 
-        resp = await client.delete(
-            f"/api/v1/campaigns/{campaign_id}/channels/{uuid.uuid4()}"
-        )
+        resp = await client.delete(f"/api/v1/campaigns/{campaign_id}/channels/{uuid.uuid4()}")
         assert resp.status_code == 404
 
 
@@ -468,9 +460,7 @@ class TestCampaignChannels:
 
 
 class TestCampaignStages:
-    async def test_add_stage_returns_200_with_criteria_echoed(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_add_stage_returns_200_with_criteria_echoed(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
         campaign = await _create_empty_campaign(client, project_id)
         campaign_id = campaign["id"]
@@ -505,13 +495,9 @@ class TestCampaignStages:
         assert stage["name"] == "Primary Hit"
         assert stage["parent_stage_id"] is None
         assert stage["display_order"] == 0
-        assert stage["criteria"] == [
-            {"channel_id": channel_id, "operator": "lt", "value": 10.0}
-        ]
+        assert stage["criteria"] == [{"channel_id": channel_id, "operator": "lt", "value": 10.0}]
 
-    async def test_add_stage_unknown_channel_in_criteria_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_add_stage_unknown_channel_in_criteria_422(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
         campaign = await _create_empty_campaign(client, project_id)
         campaign_id = campaign["id"]
@@ -520,9 +506,7 @@ class TestCampaignStages:
             f"/api/v1/campaigns/{campaign_id}/stages",
             json={
                 "name": "Bad Stage",
-                "criteria": [
-                    {"channel_id": str(uuid.uuid4()), "operator": "lt", "value": 10.0}
-                ],
+                "criteria": [{"channel_id": str(uuid.uuid4()), "operator": "lt", "value": 10.0}],
             },
         )
         assert resp.status_code == 422, resp.text
@@ -570,9 +554,7 @@ class TestCampaignStages:
             f"/api/v1/campaigns/{campaign_id}/stages",
             json={"name": "Child Stage", "parent_stage_id": parent_id},
         )
-        child_id = next(
-            s for s in child_resp.json()["stages"] if s["name"] == "Child Stage"
-        )["id"]
+        child_id = next(s for s in child_resp.json()["stages"] if s["name"] == "Child Stage")["id"]
 
         conflict = await client.delete(f"/api/v1/campaigns/{campaign_id}/stages/{parent_id}")
         assert conflict.status_code == 409, conflict.text
@@ -664,8 +646,7 @@ class TestStageOverride:
         result_id = campaign["results"][0]["id"]
 
         resp = await client.put(
-            f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
-            f"/stages/{uuid.uuid4()}/override",
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}/stages/{uuid.uuid4()}/override",
             json={"outcome": "hit", "reason": "x"},
         )
         assert resp.status_code == 404, resp.text
@@ -766,9 +747,7 @@ class TestStageOverride:
             },
         )
         assert stage_a_resp.status_code == 200, stage_a_resp.text
-        stage_a_id = next(
-            s["id"] for s in stage_a_resp.json()["stages"] if s["name"] == "Stage A"
-        )
+        stage_a_id = next(s["id"] for s in stage_a_resp.json()["stages"] if s["name"] == "Stage A")
 
         stage_b_resp = await client.post(
             f"/api/v1/campaigns/{campaign_id}/stages",
@@ -779,9 +758,7 @@ class TestStageOverride:
             },
         )
         assert stage_b_resp.status_code == 200, stage_b_resp.text
-        stage_b_id = next(
-            s["id"] for s in stage_b_resp.json()["stages"] if s["name"] == "Stage B"
-        )
+        stage_b_id = next(s["id"] for s in stage_b_resp.json()["stages"] if s["name"] == "Stage B")
 
         get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
         assert get_resp.status_code == 200, get_resp.text
@@ -827,13 +804,9 @@ class TestCampaignResults:
         campaign_id = campaign["id"]
 
         # Find result_id for mol2
-        result_id = next(
-            r["id"] for r in campaign["results"] if r["molecule_id"] == mol2
-        )
+        result_id = next(r["id"] for r in campaign["results"] if r["molecule_id"] == mol2)
 
-        resp = await client.delete(
-            f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
-        )
+        resp = await client.delete(f"/api/v1/campaigns/{campaign_id}/results/{result_id}")
         assert resp.status_code == 200, resp.text
         remaining = {r["molecule_id"] for r in resp.json()["results"]}
         assert mol2 not in remaining
@@ -850,9 +823,7 @@ class TestCampaignResults:
             json={"decision": "selected", "reason": "Great potency"},
         )
         assert resp.status_code == 200, resp.text
-        updated_result = next(
-            r for r in resp.json()["results"] if r["id"] == result_id
-        )
+        updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
         assert updated_result["decision"] == "selected"
         assert updated_result["decision_reason"] == "Great potency"
 
@@ -869,9 +840,7 @@ class TestCampaignResults:
             json={"decision": "selected", "reason": "Strong hit", "notes": "Watch hERG"},
         )
         assert resp.status_code == 200, resp.text
-        updated_result = next(
-            r for r in resp.json()["results"] if r["id"] == result_id
-        )
+        updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
         assert updated_result["notes"] == "Watch hERG"
 
     async def test_set_result_decision_omit_notes_preserves_existing(
@@ -896,9 +865,7 @@ class TestCampaignResults:
             json={"decision": "deferred"},
         )
         assert resp.status_code == 200, resp.text
-        updated_result = next(
-            r for r in resp.json()["results"] if r["id"] == result_id
-        )
+        updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
         assert updated_result["notes"] == "keep me"
 
 
@@ -998,12 +965,8 @@ class TestCloseCampaign:
         """Superseding a DRAFT campaign (not CLOSED) returns 422."""
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-sup2")
-        old_campaign = await _create_draft_campaign(
-            client, project_id, [mol_id], name="OldDraft"
-        )
-        new_campaign = await _create_draft_campaign(
-            client, project_id, [mol_id], name="NewDraft"
-        )
+        old_campaign = await _create_draft_campaign(client, project_id, [mol_id], name="OldDraft")
+        new_campaign = await _create_draft_campaign(client, project_id, [mol_id], name="NewDraft")
 
         # new_campaign doesn't have supersedes_campaign_id set to old_campaign.id
         resp = await client.post(
@@ -1017,9 +980,7 @@ class TestCloseCampaign:
         """PATCH name on a DRAFT campaign succeeds."""
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-upd")
-        campaign = await _create_draft_campaign(
-            client, project_id, [mol_id], name="Original"
-        )
+        campaign = await _create_draft_campaign(client, project_id, [mol_id], name="Original")
         campaign_id = campaign["id"]
 
         resp = await client.patch(
@@ -1085,9 +1046,7 @@ class TestGetPublishedCampaign:
 
 
 class TestRunImport:
-    async def test_preview_run_import_empty_runs_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_preview_run_import_empty_runs_returns_422(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-runprev")
         campaign = await _create_draft_campaign(client, project_id, [mol_id])
@@ -1099,9 +1058,7 @@ class TestRunImport:
         )
         assert resp.status_code == 422, resp.text
 
-    async def test_add_from_runs_empty_runs_returns_422(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_add_from_runs_empty_runs_returns_422(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-runadd")
         campaign = await _create_draft_campaign(client, project_id, [mol_id])
@@ -1155,21 +1112,23 @@ class TestRunImport:
 
         async with session_factory() as s:
             rows = (
-                await s.execute(
-                    select(CampaignStageModel).where(
-                        CampaignStageModel.campaign_id == uuid.UUID(campaign_id)
+                (
+                    await s.execute(
+                        select(CampaignStageModel).where(
+                            CampaignStageModel.campaign_id == uuid.UUID(campaign_id)
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         assert len(rows) == 1
         assert rows[0].name == "Primary Hits"
         assert rows[0].criteria == [
             {"channel_id": str(channel_id), "operator": "lt", "value": 10.0}
         ]
 
-    async def test_old_add_from_run_route_returns_404(
-        self, client: AsyncClient
-    ) -> None:
+    async def test_old_add_from_run_route_returns_404(self, client: AsyncClient) -> None:
         """The deprecated single-run /add-from-run is removed."""
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-old")
@@ -1213,12 +1172,16 @@ class TestMirrorProtocolStage:
 
         async with session_factory() as s:
             rows = (
-                await s.execute(
-                    select(CampaignStageModel).where(
-                        CampaignStageModel.campaign_id == uuid.UUID(campaign_id)
+                (
+                    await s.execute(
+                        select(CampaignStageModel).where(
+                            CampaignStageModel.campaign_id == uuid.UUID(campaign_id)
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         assert len(rows) == 1
         assert rows[0].name == "Primary Hits"
         assert rows[0].criteria == [
