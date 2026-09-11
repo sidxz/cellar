@@ -18,6 +18,7 @@ import { TagTable } from "@/features/tagging/components/tag-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
 import { ResultsGridV2 } from "../grid/results-grid";
+import { ReopenDialog } from "./reopen-dialog";
 import { SourceProtocolsList } from "./source-protocols-list";
 import { SupersedeDialog } from "./supersede-dialog";
 
@@ -46,6 +47,7 @@ interface CampaignViewProps {
 
 export function CampaignView({ campaign }: CampaignViewProps) {
   const [supersedeOpen, setSupersedeOpen] = useState(false);
+  const [reopenOpen, setReopenOpen] = useState(false);
   const canEditTags = useAuthzHasRole("editor");
   const [filters, setFilters] = useState<CampaignFilters>(() => closedCampaignFilters());
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
@@ -97,7 +99,7 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         refreshing={false}
         onRefresh={() => {}}
         onPreview={() => {}}
-        onCloseAndSign={() => {}}
+        onClose={() => {}}
         closedAt={closedAt}
         closedBy={closedBy}
         supersedesId={supersedesId}
@@ -107,6 +109,7 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         downloadDisabled={isDownloading}
         downloadLabel={isDownloading ? "Downloading…" : undefined}
         onSupersede={campaign.status !== "superseded" ? () => setSupersedeOpen(true) : undefined}
+        onReopen={() => setReopenOpen(true)}
       />
       <SourcesSection campaign={campaign} projectId={campaign.project_id} readOnly />
       <ChannelsSection campaign={campaign} projectId={campaign.project_id} readOnly />
@@ -148,6 +151,7 @@ export function CampaignView({ campaign }: CampaignViewProps) {
       </section>
 
       <SupersedeDialog open={supersedeOpen} onOpenChange={setSupersedeOpen} campaign={campaign} />
+      <ReopenDialog campaign={campaign} open={reopenOpen} onOpenChange={setReopenOpen} />
     </div>
   );
 }

@@ -55,6 +55,7 @@ import {
 import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { formatDate } from "@/shared/lib/format-date";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
+import { showSuccess } from "@/shared/lib/toast";
 
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
@@ -164,6 +165,10 @@ export function AddFromRunsDialog({
   );
   const [refreshExisting, setRefreshExisting] = useState(false);
   const [approvedOnly, setApprovedOnly] = useState(true);
+  // "Save these criteria as a hit stage" — shown once any channel config has
+  // a threshold. Name defaults per-protocol (see onProtocolChange below).
+  const [saveStage, setSaveStage] = useState(true);
+  const [stageName, setStageName] = useState("Imported hits");
 
   // — Data —
   const { data: protocolsData } = useProtocolSummaries([projectId]);
@@ -283,8 +288,11 @@ export function AddFromRunsDialog({
   const previewMutation = usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost();
   const addMutation = useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data) => {
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+        const stageNote =
+          saveStage && stageName.trim() ? ` and created stage "${stageName.trim()}"` : "";
+        showSuccess(`Added ${data.added} compound${data.added === 1 ? "" : "s"}${stageNote}`);
         handleClose();
       },
     },
@@ -387,6 +395,8 @@ export function AddFromRunsDialog({
     setDefaultDecision("selected");
     setRefreshExisting(false);
     setApprovedOnly(true);
+    setSaveStage(true);
+    setStageName("Imported hits");
     onOpenChange(false);
   }
 
@@ -458,6 +468,9 @@ export function AddFromRunsDialog({
               setProtocolId(id);
               runSelection.clear();
               setUserEditedConfigs(new Map());
+              const proto = protocols.find((pr) => pr.id === id);
+              setStageName(proto ? `${proto.name} hits` : "Imported hits");
+              setSaveStage(true);
             }}
             runs={filteredRuns}
             selectedRunIds={selectedRunIds}
@@ -487,6 +500,11 @@ export function AddFromRunsDialog({
             onDefaultDecisionChange={setDefaultDecision}
             refreshExisting={refreshExisting}
             onRefreshExistingChange={setRefreshExisting}
+            hasThreshold={channelConfigs.some((c) => c.hit_operator !== "")}
+            saveStage={saveStage}
+            onSaveStageChange={setSaveStage}
+            stageName={stageName}
+            onStageNameChange={setStageName}
           />
         ) : (
           <PreviewStep data={previewData} isLoading={previewMutation.isPending && !previewData} />
@@ -512,6 +530,7 @@ export function AddFromRunsDialog({
                     scope,
                     default_decision: defaultDecision,
                     refresh_existing_cells: refreshExisting,
+                    stage_name: saveStage ? stageName.trim() : null,
                   } as never,
                 });
               }}
@@ -564,6 +583,13 @@ interface ConfigureStepProps {
   onDefaultDecisionChange: (v: "selected" | "deferred" | "rejected") => void;
   refreshExisting: boolean;
   onRefreshExistingChange: (v: boolean) => void;
+  /** Whether at least one channel config has a threshold — gates the
+   *  "Save as hit stage" checkbox below. */
+  hasThreshold: boolean;
+  saveStage: boolean;
+  onSaveStageChange: (v: boolean) => void;
+  stageName: string;
+  onStageNameChange: (v: string) => void;
 }
 
 function ConfigureStep(p: ConfigureStepProps) {
@@ -915,6 +941,32 @@ function ConfigureStep(p: ConfigureStepProps) {
               <Switch checked={p.refreshExisting} onCheckedChange={p.onRefreshExistingChange} />
               Refresh non-override cells for molecules already in this campaign
             </label>
+
+            {p.hasThreshold && (
+              <div className="space-y-2 border-t pt-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="save-stage"
+                    checked={p.saveStage}
+                    onCheckedChange={(v) => p.onSaveStageChange(v === true)}
+                  />
+                  <Label htmlFor="save-stage" className="text-xs cursor-pointer">
+                    Save these criteria as a hit stage
+                  </Label>
+                </div>
+                {p.saveStage && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Stage name</Label>
+                    <Input
+                      value={p.stageName}
+                      onChange={(e) => p.onStageNameChange(e.target.value)}
+                      placeholder="e.g. Screening hits"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}

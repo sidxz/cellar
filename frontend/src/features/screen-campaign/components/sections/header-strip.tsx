@@ -4,7 +4,7 @@ import { TargetChips } from "@/features/screening-assay/components/target-chips"
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Download, FileText, Lock, Pencil, RefreshCw } from "lucide-react";
+import { AlertTriangle, Download, FileText, Lock, Pencil, RefreshCw, Unlock } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -17,12 +17,12 @@ import { CampaignStatusChip } from "../campaign-status-chip";
 
 interface HeaderStripProps {
   campaign: CampaignResponse;
-  /** Show draft-mode action buttons (Refresh / Preview / Close & Sign). */
+  /** Show draft-mode action buttons (Refresh / Preview / Close). */
   isDraft: boolean;
   refreshing?: boolean;
   onRefresh: () => void;
   onPreview: () => void;
-  onCloseAndSign: () => void;
+  onClose: () => void;
 
   // ── Closed-mode metadata + actions (optional; surfaced when !isDraft) ────────
   /** ISO timestamp from `campaign.closed_at` (when status is closed/superseded). */
@@ -43,6 +43,8 @@ interface HeaderStripProps {
   downloadLabel?: string;
   /** Supersede action — only relevant for closed campaigns that aren't yet superseded. */
   onSupersede?: () => void;
+  /** Reopen action — only rendered when `campaign.status === "closed"` (not superseded). */
+  onReopen?: () => void;
 }
 
 export function HeaderStrip({
@@ -51,7 +53,7 @@ export function HeaderStrip({
   refreshing,
   onRefresh,
   onPreview,
-  onCloseAndSign,
+  onClose,
   closedAt,
   closedBy,
   supersedesId,
@@ -61,13 +63,14 @@ export function HeaderStrip({
   downloadDisabled,
   downloadLabel,
   onSupersede,
+  onReopen,
 }: HeaderStripProps) {
   const channelCount = campaign.channels?.length ?? 0;
   const compoundCount = campaign.results?.length ?? 0;
 
   // Closed-metadata muted line. Resolves closed_by (Duar UUID) to the
   // member's display name via <MemberName />.
-  const hasClosedMeta = !!(closedAt || closedBy);
+  const hasClosedMeta = !!(closedAt || closedBy || campaign.close_note);
 
   return (
     <header className="flex flex-col gap-1 border-b px-6 py-4">
@@ -124,9 +127,9 @@ export function HeaderStrip({
                 <FileText className="h-4 w-4" />
                 Preview as published
               </Button>
-              <Button size="sm" onClick={onCloseAndSign}>
+              <Button size="sm" onClick={onClose}>
                 <Lock className="h-4 w-4" />
-                Close &amp; Sign
+                Close
               </Button>
             </>
           ) : (
@@ -140,6 +143,12 @@ export function HeaderStrip({
                 >
                   <Download className="h-4 w-4" />
                   {downloadLabel ?? "Download JSON"}
+                </Button>
+              )}
+              {onReopen && campaign.status === "closed" && (
+                <Button variant="outline" size="sm" onClick={onReopen}>
+                  <Unlock className="h-4 w-4" />
+                  Reopen
                 </Button>
               )}
               {onSupersede && (
@@ -169,6 +178,7 @@ export function HeaderStrip({
               by <MemberName id={closedBy} />
             </span>
           )}
+          {campaign.close_note && <span>· Note: {campaign.close_note}</span>}
         </p>
       )}
     </header>

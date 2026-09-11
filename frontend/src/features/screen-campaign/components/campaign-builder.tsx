@@ -29,7 +29,7 @@ import { campaignKeys, useCampaign } from "../hooks/use-campaigns";
 import type { CampaignResponse, StageOutcome } from "../types";
 import { CampaignFilterBar, type CampaignFilters, emptyFilters } from "./campaign-filter-bar";
 import { CampaignView } from "./campaign-view";
-import { CloseSignDialog } from "./close-sign-dialog";
+import { CloseCampaignDialog } from "./close-campaign-dialog";
 import { ResultsGridV2 } from "./grid/results-grid";
 import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
 
@@ -111,7 +111,7 @@ function CampaignBuilderV2({
 
   const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [closeSignOpen, setCloseSignOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   // The selection can point at a stage that was just deleted (its popover's
   // own delete flow only closes itself, it doesn't know about this state) —
@@ -149,7 +149,7 @@ function CampaignBuilderV2({
         refreshing={refreshing}
         onRefresh={onRefresh}
         onPreview={() => setPreviewOpen(true)}
-        onCloseAndSign={() => setCloseSignOpen(true)}
+        onClose={() => setCloseOpen(true)}
       />
       <SourcesSection
         campaign={campaign}
@@ -197,7 +197,7 @@ function CampaignBuilderV2({
         open={previewOpen}
         onOpenChange={setPreviewOpen}
       />
-      <CloseSignDialog campaign={campaign} open={closeSignOpen} onOpenChange={setCloseSignOpen} />
+      <CloseCampaignDialog campaign={campaign} open={closeOpen} onOpenChange={setCloseOpen} />
     </div>
   );
 }
