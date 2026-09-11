@@ -29,6 +29,7 @@ import {
 import { ChannelsSection } from "../sections/channels-section";
 import { HeaderStrip } from "../sections/header-strip";
 import { SourcesSection } from "../sections/sources-section";
+import { StagesSection } from "../sections/stages-section";
 
 import { useGetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet } from "@/shared/lib/api/campaigns/campaigns";
 import { saveText } from "@/shared/lib/api/download";
@@ -47,6 +48,13 @@ export function CampaignView({ campaign }: CampaignViewProps) {
   const [supersedeOpen, setSupersedeOpen] = useState(false);
   const canEditTags = useAuthzHasRole("editor");
   const [filters, setFilters] = useState<CampaignFilters>(() => closedCampaignFilters());
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  // Closed campaigns are read-only, but a superseding refresh can still
+  // drop a stage out from under the current selection — derive back to
+  // "All" the moment that happens rather than pointing at a stale id.
+  const effectiveStageId = campaign.stages.some((s) => s.id === selectedStageId)
+    ? selectedStageId
+    : null;
 
   // Published endpoint — fetched lazily on download click.
   const { refetch: fetchPublished, isFetching: isDownloading } =
@@ -92,6 +100,12 @@ export function CampaignView({ campaign }: CampaignViewProps) {
       />
       <SourcesSection campaign={campaign} projectId={campaign.project_id} readOnly />
       <ChannelsSection campaign={campaign} projectId={campaign.project_id} readOnly />
+      <StagesSection
+        campaign={campaign}
+        selectedStageId={effectiveStageId}
+        onSelectStage={setSelectedStageId}
+        readOnly
+      />
 
       {/* Closed-campaign-only detail */}
       <section className="border-b px-6 py-4">

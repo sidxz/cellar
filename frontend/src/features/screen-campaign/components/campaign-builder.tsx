@@ -38,6 +38,7 @@ import { ChannelsSection } from "./sections/channels-section";
 // ── V2 section imports ────────────────────────────────────────────────────────
 import { HeaderStrip } from "./sections/header-strip";
 import { SourcesSection } from "./sections/sources-section";
+import { StagesSection } from "./sections/stages-section";
 
 // ── Builder ───────────────────────────────────────────────────────────────────
 
@@ -111,6 +112,13 @@ function CampaignBuilderV2({
   const [filters, setFilters] = useState<CampaignFilters>(() => emptyFilters());
   const [previewOpen, setPreviewOpen] = useState(false);
   const [closeSignOpen, setCloseSignOpen] = useState(false);
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  // The selection can point at a stage that was just deleted (its popover's
+  // own delete flow only closes itself, it doesn't know about this state) —
+  // derive back to "All" the moment the campaign refetch confirms it's gone.
+  const effectiveStageId = campaign.stages.some((s) => s.id === selectedStageId)
+    ? selectedStageId
+    : null;
 
   const refreshMutation = useRefreshCampaignApiV1CampaignsCampaignIdRefreshPost({
     mutation: {
@@ -140,6 +148,12 @@ function CampaignBuilderV2({
       <ChannelsSection
         campaign={campaign}
         projectId={projectId}
+        readOnly={campaign.status !== "draft"}
+      />
+      <StagesSection
+        campaign={campaign}
+        selectedStageId={effectiveStageId}
+        onSelectStage={setSelectedStageId}
         readOnly={campaign.status !== "draft"}
       />
       <CampaignFilterBar
