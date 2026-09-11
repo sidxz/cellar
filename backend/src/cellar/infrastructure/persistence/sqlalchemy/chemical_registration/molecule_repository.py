@@ -416,6 +416,16 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
     async def next_registration_number(
         self, workspace_id: uuid.UUID, *, prefix: str, width: int
     ) -> RegistrationNumber:
+        # Serialize minting per workspace. The MAX+1 read below and the INSERT
+        # that uses it share this transaction, and the advisory lock is released
+        # at commit/rollback, so a concurrent registrant blocks here until our
+        # row is committed and then reads past it. Without it two registrants
+        # read the same MAX and the loser dies on uq_mol_ws_regnum.
+        # ponytail: one registration commit at a time per workspace; a
+        # per-workspace SEQUENCE if minting throughput ever matters.
+        await self._session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtext(f"molecule_regnum:{workspace_id}")))
+        )
         # Extract the trailing integer from each registration_number via regex,
         # take MAX, +1, zero-pad to `width`, prefix with `prefix`.
         # Robust to mixed prefix lengths and zero-pad widths across history.

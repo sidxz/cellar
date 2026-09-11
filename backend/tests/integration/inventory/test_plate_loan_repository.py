@@ -6,7 +6,6 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 from cellar.application.inventory.plate_loans import (
     ApproveLoanItems,
@@ -16,6 +15,7 @@ from cellar.application.inventory.plate_loans import (
 from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.domain.inventory.enums import LoanItemStatus, LoanStatus
 from cellar.domain.inventory.plate_loan import PlateLoan
+from cellar.domain.shared.errors import ConflictError
 from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
     SQLAlchemyOrgPlatePolicyRepository,
 )
@@ -112,7 +112,7 @@ async def test_partial_unique_index_blocks_second_active_loan_on_same_plate(
     await _save(session_factory, loan_a)
 
     loan_b = _request(ws, plate_ids=[plate], auto_approved=True)
-    with pytest.raises(IntegrityError):
+    with pytest.raises(ConflictError):
         await _save(session_factory, loan_b)
 
 

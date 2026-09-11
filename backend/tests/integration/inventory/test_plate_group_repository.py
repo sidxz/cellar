@@ -5,13 +5,13 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 from cellar.domain.inventory.enums import PlateType
 from cellar.domain.inventory.plate_group import PlateGroup
 from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.research_organization.collection import Collection
 from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.errors import ConflictError
 from cellar.domain.shared.value_objects import Barcode
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
     SQLAlchemyPlateGroupRepository,
@@ -69,7 +69,7 @@ async def test_root_name_unique_nulls_not_distinct(session_factory) -> None:
         repo = SQLAlchemyPlateGroupRepository(uow)
         await repo.save(a)
         await uow.commit()
-    with pytest.raises(IntegrityError):
+    with pytest.raises(ConflictError):
         async with AsyncUnitOfWork(session_factory) as uow:
             repo = SQLAlchemyPlateGroupRepository(uow)
             await repo.save(b)

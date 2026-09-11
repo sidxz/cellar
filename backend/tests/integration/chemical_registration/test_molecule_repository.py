@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
@@ -11,7 +12,6 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
     SQLAlchemyMoleculeRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -257,3 +257,24 @@ class TestNextRegistrationNumber:
             repo = SQLAlchemyMoleculeRepository(uow)
             reg = await repo.next_registration_number(ws, prefix="MTB-", width=7)
         assert reg.value == "MTB-0000001"
+
+    async def test_concurrent_mints_never_collide(self, session_factory) -> None:
+        """Registrants minting at the same time each get their own number.
+
+        Every task mints, yields to the others, then inserts and commits — the
+        interleaving that let two live registrations both compute one number
+        and lose to uq_mol_ws_regnum.
+        """
+        ws = uuid.uuid4()
+
+        async def register_one() -> str:
+            async with AsyncUnitOfWork(session_factory) as uow:
+                repo = SQLAlchemyMoleculeRepository(uow)
+                reg = await repo.next_registration_number(ws, prefix="CC-", width=6)
+                await asyncio.sleep(0.05)
+                await _insert_molecule_raw(uow, uuid.uuid4(), ws, reg.value)
+                await uow.commit()
+            return reg.value
+
+        minted = await asyncio.gather(*(register_one() for _ in range(4)))
+        assert sorted(minted) == [f"CC-{n:06d}" for n in range(1, 5)]

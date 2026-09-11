@@ -5,9 +5,11 @@ from __future__ import annotations
 from types import TracebackType
 
 import structlog
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.domain.shared.entity import AggregateRoot
+from cellar.domain.shared.errors import ConflictError
 from cellar.domain.shared.events import DomainEvent
 
 logger = structlog.get_logger(__name__)
@@ -93,3 +95,18 @@ class AsyncUnitOfWork:
             await self._session.close()
         self._session = None
         self._tracked_aggregates = []
+        if isinstance(exc_val, IntegrityError):
+            # The database refused a write that violates a constraint (unique,
+            # FK, check) — at flush inside commit() or at a direct execute.
+            # Surface it as the domain's ConflictError so the HTTP layer renders
+            # a 409 carrying the constraint name and Postgres DETAIL instead of
+            # a bare 500. asyncpg's error sits behind SQLAlchemy's DBAPI shim as
+            # ``orig.__cause__``.
+            # ponytail: every integrity error is a 409; split by sqlstate if a
+            # FK/check violation from bad input ever needs to be a 422.
+            pg = getattr(exc_val.orig, "__cause__", None)
+            constraint = getattr(pg, "constraint_name", None) or "unknown constraint"
+            raise ConflictError(
+                f"Database constraint violated: {constraint}",
+                detail=getattr(pg, "detail", None),
+            ) from exc_val

@@ -82,6 +82,12 @@ class SQLAlchemyBatchRepository(SQLAlchemyRepository[Batch, BatchModel]):
     async def next_batch_number(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, *, width: int
     ) -> BatchNumber:
+        # Serialize minting per molecule (same race as next_registration_number:
+        # an unlocked MAX+1 read lets two concurrent batch creations mint one
+        # number). Transaction-scoped, released at commit/rollback.
+        await self._session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtext(f"batch_number:{molecule_id}")))
+        )
         # Batch number = {molecule_reg_number}-{seq}, where seq is one more than
         # MAX(trailing_int) across this molecule's existing batches. Using MAX
         # not COUNT means a deleted batch sequence number is never re-issued —

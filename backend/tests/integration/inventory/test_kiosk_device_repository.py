@@ -5,9 +5,9 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 from cellar.domain.inventory.kiosk_device import KioskDevice
+from cellar.domain.shared.errors import ConflictError
 from cellar.infrastructure.persistence.sqlalchemy.inventory.kiosk_device_repository import (
     SQLAlchemyKioskDeviceRepository,
 )
@@ -97,18 +97,18 @@ async def test_find_active_by_token_hash_then_none_after_revoke(session_factory)
 
 
 # ---------------------------------------------------------------------------
-# (c) duplicate (workspace, name) insert raises IntegrityError
+# (c) duplicate (workspace, name) insert raises ConflictError
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.integration
-async def test_duplicate_workspace_name_raises_integrity_error(session_factory) -> None:
+async def test_duplicate_workspace_name_raises_conflict_error(session_factory) -> None:
     ws = uuid.uuid4()
     first = _make(ws, name="Shared name")
     await _save(session_factory, first)
 
     second = _make(ws, name="Shared name")
-    with pytest.raises(IntegrityError):
+    with pytest.raises(ConflictError):
         await _save(session_factory, second)
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
@@ -11,7 +12,6 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository imp
     SQLAlchemyBatchRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -95,6 +95,26 @@ class TestNextBatchNumber:
             repo = SQLAlchemyBatchRepository(uow)
             bn = await repo.next_batch_number(ws, mol, width=3)
         assert bn.value == "CC-000001-001"
+
+    async def test_concurrent_mints_never_collide(self, session_factory) -> None:
+        """Batches created for one molecule at the same time each get their own number."""
+        ws = uuid.uuid4()
+        mol = uuid.uuid4()
+        async with AsyncUnitOfWork(session_factory) as uow:
+            await _insert_molecule(uow, mol, ws, "CC-000001")
+            await uow.commit()
+
+        async def create_one() -> str:
+            async with AsyncUnitOfWork(session_factory) as uow:
+                repo = SQLAlchemyBatchRepository(uow)
+                bn = await repo.next_batch_number(ws, mol, width=3)
+                await asyncio.sleep(0.05)
+                await _insert_batch(uow, mol, ws, bn.value)
+                await uow.commit()
+            return bn.value
+
+        minted = await asyncio.gather(*(create_one() for _ in range(4)))
+        assert sorted(minted) == [f"CC-000001-{n:03d}" for n in range(1, 5)]
 
     async def test_continues_after_existing_batches(self, uow: AsyncUnitOfWork) -> None:
         ws = uuid.uuid4()

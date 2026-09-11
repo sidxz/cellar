@@ -11,8 +11,8 @@ from datetime import date
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy.exc import IntegrityError
 
+from cellar.domain.shared.errors import ConflictError
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
 )
@@ -157,7 +157,7 @@ class TestTargetLinks:
             await rrepo.add_target(workspace_id, r, t)
             await uow.commit()
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(ConflictError):
             async with uow:
                 await uow.session.execute(
                     sa.text("DELETE FROM targets WHERE id = :id"), {"id": t}

@@ -13,7 +13,6 @@ import uuid
 import pytest
 import sqlalchemy as sa
 from returns.result import Success
-from sqlalchemy.exc import IntegrityError
 
 from cellar.application.screening.bulk_create_readout_data import (
     BulkCreateReadoutData,
@@ -21,6 +20,7 @@ from cellar.application.screening.bulk_create_readout_data import (
     ReadoutDataItem,
 )
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
+from cellar.domain.shared.errors import ConflictError
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
@@ -232,7 +232,7 @@ class TestBulkCreateReadoutDataUpsert:
         assert isinstance(first, Success)
 
         uc = _build_use_case(AsyncUnitOfWork(session_factory))
-        with pytest.raises(IntegrityError):
+        with pytest.raises(ConflictError):
             await uc(
                 BulkCreateReadoutDataCommand(
                     workspace_id=workspace_id,
