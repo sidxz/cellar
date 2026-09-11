@@ -176,22 +176,15 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="draft")
-    publishes_collection: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
-    )
     source_protocols: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
-    signature_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     supersedes_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
     )
     superseded_by_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), nullable=True
-    )
-    published_collection_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
     )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
@@ -241,7 +234,6 @@ class CampaignChannelModel(Base, EntityModelMixin):
     selection_rule: Mapped[str] = mapped_column(String(32), nullable=False)
     qualifier_handling: Mapped[str] = mapped_column(String(32), nullable=False)
     qc_filter: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    hit_threshold: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Picks which `normalization_applied` layer the channel reads from
     # readout_data. NULL = raw layer; any string filters to that formula
     # (e.g. "percent_inhibition"). Ignored when source_kind="dose_response_curve".
@@ -335,7 +327,6 @@ class CampaignMeasurementModel(Base, EntityModelMixin):
     value: Mapped[float | None] = mapped_column(Float, nullable=True)
     value_qualifier: Mapped[str] = mapped_column(String(16), nullable=False)
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
-    hit_call: Mapped[str | None] = mapped_column(String(16), nullable=True)
     is_manual_override: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
