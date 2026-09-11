@@ -8,7 +8,6 @@ from cellar.domain.research_organization.campaign_measurement import (
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.campaign_stage import StageOverride
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     StageOutcome,
     ValueQualifier,
 )
@@ -29,12 +28,12 @@ def _make_measurement(
     )
 
 
-def test_default_decision_deferred():
+def test_notes_default_none():
     r = CampaignResult(
         campaign_id=uuid.uuid4(),
         molecule_id=uuid.uuid4(),
     )
-    assert r.decision == CampaignDecision.DEFERRED
+    assert r.notes is None
     assert r.measurements == []
     assert r.id is not None
     assert r.stage_overrides == {}
@@ -45,20 +44,6 @@ def test_add_measurement():
     m = _make_measurement(r.id)
     r.add_measurement(m)
     assert len(r.measurements) == 1
-
-
-def test_set_decision_updates_field():
-    r = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
-    r.set_decision(CampaignDecision.SELECTED, reason="Best in series")
-    assert r.decision == CampaignDecision.SELECTED
-    assert r.decision_reason == "Best in series"
-
-
-def test_set_decision_without_reason_clears_existing_reason():
-    r = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
-    r.set_decision(CampaignDecision.SELECTED, reason="One")
-    r.set_decision(CampaignDecision.REJECTED)  # no reason -> None
-    assert r.decision_reason is None
 
 
 def test_reject_measurement_for_wrong_result():

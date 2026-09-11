@@ -24,9 +24,6 @@ from cellar.application.research_organization.add_results_from_runs import (
 )
 from cellar.application.research_organization.archive_project import ArchiveProject
 from cellar.application.research_organization.bulk_add_to_collection import BulkAddToCollection
-from cellar.application.research_organization.bulk_set_result_decisions import (
-    BulkSetResultDecisions,
-)
 from cellar.application.research_organization.campaign_scientist_reader import (
     CampaignScientistReader,
 )
@@ -96,7 +93,7 @@ from cellar.application.research_organization.remove_campaign_channel import Rem
 from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
-from cellar.application.research_organization.set_result_decision import SetResultDecision
+from cellar.application.research_organization.set_result_notes import SetResultNotes
 from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaign as SupersedeCampaignUC,
@@ -549,17 +546,9 @@ def register_research_organization(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         )
 
-    def _set_decision(c: Container) -> SetResultDecision:
+    def _set_result_notes(c: Container) -> SetResultNotes:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return SetResultDecision(
-            uow=uow,
-            campaign_repo=SQLAlchemyCampaignRepository(uow),
-            dispatcher=c[EventDispatcher],
-        )
-
-    def _bulk_set_decisions(c: Container) -> BulkSetResultDecisions:
-        uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return BulkSetResultDecisions(
+        return SetResultNotes(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
             dispatcher=c[EventDispatcher],
@@ -682,8 +671,7 @@ def register_research_organization(container: Container) -> None:
     container.define(RemoveCampaignStage, _remove_stage)
     container.define(SetStageOverride, _set_stage_override)
     container.define(MirrorProtocolChannels, _mirror_protocol_channels)
-    container.define(SetResultDecision, _set_decision)
-    container.define(BulkSetResultDecisions, _bulk_set_decisions)
+    container.define(SetResultNotes, _set_result_notes)
     container.define(OverrideResultCell, _override_cell)
     container.define(AddResultRow, _add_result_row)
     container.define(RemoveResultRow, _remove_result_row)

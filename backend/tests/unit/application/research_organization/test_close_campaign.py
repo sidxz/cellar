@@ -20,7 +20,6 @@ from cellar.domain.research_organization.campaign_measurement import (
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
@@ -95,7 +94,6 @@ def _build_campaign(
     protocol_id: uuid.UUID | None = None,
     readout_definition_id: uuid.UUID | None = None,
     override_indices: set[tuple[int, int]] | None = None,
-    decision: CampaignDecision = CampaignDecision.SELECTED,
 ) -> tuple[Campaign, list[CampaignChannel], list[CampaignResult]]:
     """Build a DRAFT campaign with channels/results/measurements."""
     if override_indices is None:
@@ -127,7 +125,6 @@ def _build_campaign(
             is_override = (ri, ci) in override_indices
             m = _make_measurement(result.id, ch.id, is_manual_override=is_override)
             result.add_measurement(m)
-        result.decision = decision  # type: ignore[misc]
         campaign.add_result(result)
         results.append(result)
 
@@ -280,10 +277,9 @@ class TestCloseCampaign:
         ch = _make_channel(campaign.id, protocol_id=pid, readout_definition_id=rdid)
         campaign.add_channel(ch)
 
-        for i in range(3):
+        for _ in range(3):
             r = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
             r.add_measurement(_make_measurement(r.id, ch.id))
-            r.decision = CampaignDecision.SELECTED if i < 2 else CampaignDecision.REJECTED  # type: ignore[misc]
             campaign.add_result(r)
 
         uc, campaign_repo, protocol_repo, resolver = _make_use_case(

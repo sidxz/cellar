@@ -26,7 +26,6 @@ from cellar.domain.research_organization.campaign_stage import (
     StageCriterion,
 )
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
@@ -120,7 +119,6 @@ def _make_closed_campaign(
     n_results: int = 2,
     protocol_id: uuid.UUID | None = None,
     readout_definition_id: uuid.UUID | None = None,
-    decisions: list[CampaignDecision] | None = None,
     close_note: str | None = None,
 ) -> tuple[Campaign, CampaignChannel]:
     """Build a CLOSED campaign with 1 channel and n_results results."""
@@ -152,14 +150,10 @@ def _make_closed_campaign(
     ch = _make_channel(campaign.id, protocol_id=pid, readout_definition_id=rdid)
     campaign.channels.append(ch)
 
-    if decisions is None:
-        decisions = [CampaignDecision.SELECTED if i == 0 else CampaignDecision.REJECTED for i in range(n_results)]
-
-    for i, mol_id in enumerate(mol_ids[:n_results]):
+    for mol_id in mol_ids[:n_results]:
         result = CampaignResult(campaign_id=campaign.id, molecule_id=mol_id)
         m = _make_measurement(result.id, ch.id)
         result.measurements.append(m)
-        result.decision = decisions[i] if i < len(decisions) else CampaignDecision.DEFERRED
         campaign.results.append(result)
 
     return campaign, ch
@@ -265,7 +259,6 @@ class TestGetPublishedCampaign:
             n_results=2,
             protocol_id=pid,
             readout_definition_id=rdid,
-            decisions=[CampaignDecision.SELECTED, CampaignDecision.REJECTED],
             close_note="Confirmed by wet lab",
         )
 
@@ -421,7 +414,6 @@ class TestGetPublishedCampaign:
         campaign, _ = _make_closed_campaign(
             auth.workspace_id,
             n_results=5,
-            decisions=[CampaignDecision.SELECTED] * 5,
         )
 
         uc, _ = _build_use_case(campaign)
@@ -557,7 +549,6 @@ class TestGetPublishedCampaign:
         campaign, _ = _make_closed_campaign(
             auth.workspace_id,
             n_results=1,
-            decisions=[CampaignDecision.SELECTED],
         )
         # Override the molecule_id on the single result and set batch.
         campaign.results[0].molecule_id = mol_id

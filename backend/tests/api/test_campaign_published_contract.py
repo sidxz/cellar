@@ -48,7 +48,6 @@ from cellar.domain.research_organization.campaign_stage import (
     StageCriterion,
 )
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
@@ -245,7 +244,6 @@ async def _seed_closed_campaign(
             protocol_version_snapshot=1,
         )
     )
-    result.decision = CampaignDecision.SELECTED  # type: ignore[misc]
     campaign.add_result(result)
 
     # Save DRAFT
@@ -347,7 +345,6 @@ async def test_published_endpoint_matches_daikon_schema(
     assert len(body["channels"]) == 1
     assert body["channels"][0]["label"] == "IC50 (target binding)"
     assert len(body["results"]) == 1
-    assert body["results"][0]["decision"] == "selected"
     assert len(body["results"][0]["measurements"]) == 1
     assert body["results"][0]["measurements"][0]["unit"] == "uM"
     # Soft close: no signature, no published collection (spec §4/§5); close_note

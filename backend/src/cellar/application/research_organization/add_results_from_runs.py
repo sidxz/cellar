@@ -12,7 +12,6 @@ never persisted onto the channel; hit/miss criteria live on ``CampaignStage``.
 Behavioral notes:
 - DRAFT-only (campaign lock guard).
 - ``scope='hits_only'`` filters molecules out at commit time per ``filter_mode``.
-- ``default_decision`` controls the initial decision on NEW results only.
 - ``refresh_existing_cells`` updates non-override cells for molecules already in
   the campaign; override cells are preserved (matches RefreshFromSources).
 - Reusing a channel **applies the user's updated selection rule** to the
@@ -58,7 +57,6 @@ from cellar.domain.research_organization.campaign_stage import (
     StageCriterion,
 )
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
@@ -81,7 +79,6 @@ class AddResultsFromRunsCommand(Command):
     channel_configs: list[ChannelImportConfig]
     filter_mode: Literal["any", "all"] = "all"
     scope: Literal["hits_only", "all"] = "hits_only"
-    default_decision: CampaignDecision = CampaignDecision.SELECTED
     description: str | None = None
     refresh_existing_cells: bool = False
     #: When set, creates a top-level CampaignStage named ``stage_name`` from
@@ -119,8 +116,8 @@ class AddResultsFromRuns:
          active filter set (channels with ``use_for_filter=True`` AND a
          hit_threshold).
       8. ``scope == 'hits_only'`` drops non-hits.
-      9. For new molecules: create CampaignResult with default_decision +
-         RunRef attribution; ``campaign.add_results`` (idempotent).
+      9. For new molecules: create CampaignResult with RunRef attribution;
+         ``campaign.add_results`` (idempotent).
      10. For each result × channel: persist a CampaignMeasurement carrying
          all snapshot fields.
      11. ``refresh_existing_cells=True`` updates non-override cells for
@@ -403,7 +400,6 @@ class AddResultsFromRuns:
                 CampaignResult(
                     campaign_id=campaign.id,
                     molecule_id=mol_id,
-                    decision=input.default_decision,
                     added_from=source_ref_by_mol[mol_id],
                 )
                 for mol_id in new_mols

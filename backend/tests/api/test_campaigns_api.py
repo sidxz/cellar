@@ -6,7 +6,7 @@ Coverage:
 - Add-from-collection, add-from-campaign, add-from-run endpoints
 - Add / update / delete channel
 - Add / remove result rows
-- Set result decision
+- Set result notes
 - Override result cell (is_manual_override assertion)
 - Refresh (non-override cells re-resolved)
 - Close empty campaign → 422
@@ -359,7 +359,7 @@ class TestCreateCampaign:
         data = resp.json()
         assert len(data["results"]) == 1
         assert data["results"][0]["molecule_id"] == mol_id
-        assert data["results"][0]["decision"] == "deferred"
+        assert data["results"][0]["notes"] is None
         # compound_sources must now reflect a manual entry
         assert len(data["compound_sources"]) == 1
         assert data["compound_sources"][0]["kind"] == "manual"
@@ -811,23 +811,7 @@ class TestCampaignResults:
         remaining = {r["molecule_id"] for r in resp.json()["results"]}
         assert mol2 not in remaining
 
-    async def test_set_result_decision_200(self, client: AsyncClient) -> None:
-        project_id = await _create_project(client)
-        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-dec")
-        campaign = await _create_draft_campaign(client, project_id, [mol_id])
-        campaign_id = campaign["id"]
-        result_id = campaign["results"][0]["id"]
-
-        resp = await client.patch(
-            f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
-            json={"decision": "selected", "reason": "Great potency"},
-        )
-        assert resp.status_code == 200, resp.text
-        updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
-        assert updated_result["decision"] == "selected"
-        assert updated_result["decision_reason"] == "Great potency"
-
-    async def test_set_result_decision_with_notes(self, client: AsyncClient) -> None:
+    async def test_set_result_notes_200(self, client: AsyncClient) -> None:
         """Notes sent in the PATCH body are persisted on the result."""
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-notes")
@@ -837,36 +821,32 @@ class TestCampaignResults:
 
         resp = await client.patch(
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
-            json={"decision": "selected", "reason": "Strong hit", "notes": "Watch hERG"},
+            json={"notes": "Watch hERG"},
         )
         assert resp.status_code == 200, resp.text
         updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
         assert updated_result["notes"] == "Watch hERG"
+        assert "decision" not in updated_result
 
-    async def test_set_result_decision_omit_notes_preserves_existing(
-        self, client: AsyncClient
-    ) -> None:
-        """Omitting notes from the PATCH body leaves any prior notes value intact."""
+    async def test_set_result_notes_null_clears(self, client: AsyncClient) -> None:
+        """``{"notes": null}`` clears a previously set note."""
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-notes2")
         campaign = await _create_draft_campaign(client, project_id, [mol_id])
         campaign_id = campaign["id"]
         result_id = campaign["results"][0]["id"]
 
-        # First PATCH sets notes
         await client.patch(
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
-            json={"decision": "selected", "notes": "keep me"},
+            json={"notes": "clear me"},
         )
-
-        # Second PATCH omits notes — value must be preserved
         resp = await client.patch(
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
-            json={"decision": "deferred"},
+            json={"notes": None},
         )
         assert resp.status_code == 200, resp.text
         updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
-        assert updated_result["notes"] == "keep me"
+        assert updated_result["notes"] is None
 
 
 # ---------------------------------------------------------------------------

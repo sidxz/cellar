@@ -48,7 +48,6 @@ from cellar.application.research_organization.supersede_campaign import (
 from cellar.application.research_organization.update_campaign_metadata import (
     UpdateCampaignMetadataCommand,
 )
-from cellar.domain.research_organization.enums import CampaignDecision
 from cellar.interface.dependencies import (
     AddResultsFromCampaignDep,
     AddResultsFromCollectionDep,
@@ -199,7 +198,7 @@ async def add_results_from_campaign(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         source_campaign_id=body.source_campaign_id,
-        decision_filter=[CampaignDecision(d) for d in body.decision_filter],
+        stage_id=body.stage_id,
         description=body.description,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
@@ -247,7 +246,6 @@ async def add_results_from_runs(
         channel_configs=[c.to_domain() for c in body.channel_configs],
         filter_mode=body.filter_mode,
         scope=body.scope,
-        default_decision=CampaignDecision(body.default_decision),
         description=body.description,
         refresh_existing_cells=body.refresh_existing_cells,
         stage_name=body.stage_name,

@@ -34,7 +34,6 @@ from cellar.domain.research_organization.campaign_measurement import (
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
@@ -218,7 +217,6 @@ async def _seed_and_close_campaign(
             protocol_version_snapshot=1,
         )
     )
-    result.decision = CampaignDecision.SELECTED  # type: ignore[misc]
     campaign.add_result(result)
 
     async with AsyncUnitOfWork(session_factory) as uow_seed:

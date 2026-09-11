@@ -183,7 +183,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["molecule", "decision", "measurements", "stage_outcomes"],
+        "required": ["molecule", "measurements", "stage_outcomes"],
         "additionalProperties": false,
         "properties": {
           "molecule": {
@@ -211,8 +211,6 @@
               { "type": "null" }
             ]
           },
-          "decision":        { "type": "string", "enum": ["selected", "deferred", "rejected"] },
-          "decision_reason": { "type": ["string", "null"] },
           "notes":           { "type": ["string", "null"] },
           "measurements": {
             "type": "array",

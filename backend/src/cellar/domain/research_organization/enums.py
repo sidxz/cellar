@@ -53,12 +53,6 @@ class ChannelSourceKind(StrEnum):
     DOSE_RESPONSE_CURVE = "dose_response_curve"
 
 
-class CampaignDecision(StrEnum):
-    SELECTED = "selected"
-    DEFERRED = "deferred"
-    REJECTED = "rejected"
-
-
 class StageOutcome(StrEnum):
     """Per-(result, stage) verdict computed by `stage_evaluation.evaluate_stages`."""
 
@@ -84,7 +78,6 @@ class CheckVerdict(StrEnum):
 # names from here; declare them in __all__ so the re-export is explicit (and
 # so F401 doesn't flag the import block).
 __all__ = [
-    "CampaignDecision",
     "CampaignStatus",
     "ChannelSourceKind",
     "CheckVerdict",
