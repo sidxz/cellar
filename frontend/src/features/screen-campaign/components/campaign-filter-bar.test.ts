@@ -58,6 +58,10 @@ const untestedRow = makeResult({
   id: "r-untested",
   stage_outcomes: [makeOutcome({ outcome: "untested" })],
 });
+const pendingRow = makeResult({
+  id: "r-pending",
+  stage_outcomes: [makeOutcome({ outcome: "pending" })],
+});
 const gatedRow = makeResult({
   id: "r-gated",
   stage_outcomes: [makeOutcome({ outcome: "not_in_stage" })],
@@ -83,6 +87,7 @@ const allRows = [
   hitRow,
   missRow,
   untestedRow,
+  pendingRow,
   gatedRow,
   cellOverrideRow,
   stageOverrideRow,
@@ -120,6 +125,22 @@ describe("rowPassesFilters — stage outcomes", () => {
       "r-untested",
       "r-cell-override",
       "r-stage-override",
+    ]);
+  });
+
+  // A manual stage's rows sit at "pending" until triaged; the tab-change
+  // default turns the chip on so they aren't invisible on arrival.
+  it("passes a pending row when the Pending chip is on, and hides it when off", () => {
+    const on = withFilters({ stageOutcomes: new Set(["hit", "miss", "untested", "pending"]) });
+    expect(passing(on, STAGE)).toContain("r-pending");
+
+    const off = withFilters({ stageOutcomes: new Set(["hit", "miss", "untested"]) });
+    expect(passing(off, STAGE)).not.toContain("r-pending");
+  });
+
+  it("narrows to pending rows alone when only that chip is on", () => {
+    expect(passing(withFilters({ stageOutcomes: new Set(["pending"]) }), STAGE)).toEqual([
+      "r-pending",
     ]);
   });
 
@@ -174,10 +195,11 @@ describe("rowPassesFilters — overridden", () => {
 describe("chip counts", () => {
   it("tallies the chips the filter bar renders for the selected stage", () => {
     expect(tallyStage(allRows, STAGE)).toEqual({
-      population: 5,
+      population: 6,
       hit: 2,
       miss: 2,
       untested: 1,
+      pending: 1,
       not_in_stage: 1,
       overridden: 1,
     });

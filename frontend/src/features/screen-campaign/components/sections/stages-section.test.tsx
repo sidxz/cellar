@@ -7,6 +7,7 @@ import type {
   CampaignResponse,
   CampaignResultResponse,
   CampaignStageResponse,
+  StageCountsResponse,
 } from "../../types";
 import { StagesSection } from "./stages-section";
 
@@ -31,13 +32,28 @@ function makeChannel(overrides: Partial<CampaignChannelResponse>): CampaignChann
   };
 }
 
+function makeCounts(overrides: Partial<StageCountsResponse> = {}): StageCountsResponse {
+  const c = {
+    hit: 0,
+    miss: 0,
+    untested: 0,
+    pending: 0,
+    not_in_stage: 0,
+    overridden: 0,
+    ...overrides,
+  };
+  return { ...c, population: c.hit + c.miss + c.untested + c.pending };
+}
+
 function makeStage(overrides: Partial<CampaignStageResponse>): CampaignStageResponse {
   return {
     id: "stage-default",
     name: "Stage",
     parent_stage_id: null,
     display_order: 0,
+    kind: "criteria",
     criteria: [],
+    counts: makeCounts(),
     ...overrides,
   };
 }
@@ -59,14 +75,17 @@ function makeResult(
   };
 }
 
-// Screening Hits (root, 2/3 hit) -> Confirmed Hits (child, 1/3 hit, one
+// Screening Hits (root, 2/3 hit) -> Confirmed Hits (child, 1/2 hit, one
 // gated out as not_in_stage) — mirrors the spec's worked funnel example at
-// a size a test fixture can hand-check.
+// a size a test fixture can hand-check. Tile numbers come from the server's
+// `counts`, deliberately NOT derivable from the `results` fixture below, so
+// a regression back to client-side tallying fails these assertions.
 const screeningStage = makeStage({
   id: "stage-screen",
   name: "Screening Hits",
   display_order: 0,
   criteria: [{ channel_id: "ch-1", operator: "gte", value: 50 }],
+  counts: makeCounts({ hit: 2, miss: 1, untested: 1 }),
 });
 const confirmedStage = makeStage({
   id: "stage-confirmed",
@@ -74,7 +93,24 @@ const confirmedStage = makeStage({
   parent_stage_id: "stage-screen",
   display_order: 1,
   criteria: [],
+  counts: makeCounts({ hit: 1, miss: 1, not_in_stage: 1 }),
 });
+// Hand-picked follow-up: one promoted, two still awaiting triage.
+const manualStage = makeStage({
+  id: "stage-manual",
+  name: "Take Forward",
+  display_order: 2,
+  kind: "manual",
+  criteria: [],
+  counts: makeCounts({ hit: 1, pending: 2 }),
+});
+
+const manualCampaign = {
+  id: "c2",
+  channels: [],
+  stages: [manualStage],
+  results: [],
+} as unknown as CampaignResponse;
 
 const campaign = {
   id: "c1",
@@ -102,7 +138,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("StagesSection", () => {
-  it("renders All plus one tile per stage, each with hits, population, and hit rate", () => {
+  it("renders tile numbers from the server's counts, not a client-side tally of the rows", () => {
     render(
       <StagesSection
         campaign={campaign}
@@ -114,9 +150,10 @@ describe("StagesSection", () => {
     );
 
     expect(screen.getByRole("button", { name: /^All 3$/ })).toBeInTheDocument();
-    // 2 of 3 hit, criteria summarized on the tile itself.
+    // counts say hit 2 of population 4; tallying the three rows below would
+    // have said "2 of 3". Criteria are summarized on the tile itself.
     expect(
-      screen.getByRole("button", { name: /^Screening Hits 2 of 3 67% % Inhibition >= 50$/ }),
+      screen.getByRole("button", { name: /^Screening Hits 2 of 4 50% % Inhibition >= 50$/ }),
     ).toBeInTheDocument();
     // Child population is its parent's hits (r3 is gated out as not_in_stage).
     expect(
@@ -137,7 +174,7 @@ describe("StagesSection", () => {
 
     expect(screen.getByText(/↳ after Screening Hits/)).toBeInTheDocument();
     // The root stage's tab carries no subline.
-    expect(screen.getByRole("button", { name: /^Screening Hits 2 of 3/ })).not.toHaveTextContent(
+    expect(screen.getByRole("button", { name: /^Screening Hits 2 of 4/ })).not.toHaveTextContent(
       "↳",
     );
   });
@@ -195,6 +232,38 @@ describe("StagesSection", () => {
     expect(screen.getByText("root")).toBeInTheDocument();
     expect(screen.getByText("% Inhibition")).toBeInTheDocument();
     expect(screen.getByText(">= 50")).toBeInTheDocument();
+  });
+
+  it("marks a manual stage with a manual eyebrow and counts its pending rows in the population", () => {
+    render(
+      <StagesSection
+        campaign={manualCampaign}
+        selectedStageId={null}
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+
+    // hit 1, pending 2 -> "1 of 3", with the kind called out above the name.
+    expect(
+      screen.getByRole("button", { name: /^manual Take Forward 1 of 3 33%$/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("explains a selected manual stage instead of showing 'No criteria yet'", () => {
+    render(
+      <StagesSection
+        campaign={manualCampaign}
+        selectedStageId="stage-manual"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByText(/compounds start pending/)).toBeInTheDocument();
+    expect(screen.queryByText(/No criteria yet/)).not.toBeInTheDocument();
   });
 
   it("hides add/edit affordances when read-only", () => {

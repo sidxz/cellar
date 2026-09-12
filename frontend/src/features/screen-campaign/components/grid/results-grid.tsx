@@ -14,20 +14,35 @@
  *   - Notes (pinned-right, 220) — <NotesCell>
  *
  * Override editing survives inline in the value cell: an OVR badge + a
- * hover pencil-edit affordance launch the shared OverrideModal.
+ * hover pencil-edit affordance launch the shared OverrideModal. In draft,
+ * checkbox multi-select surfaces a "Remove selected (n)" toolbar that drops
+ * the picked compounds from the campaign in one save.
  *
  * External chip filters wire through CampaignFilterBar helpers. Row expansion
  * and the per-row detail renderer are removed.
  */
 
+import { useQueryClient } from "@tanstack/react-query";
 import type { ColDef, ColGroupDef, ICellRendererParams, IRowNode } from "ag-grid-community";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/shared/components/ui/alert-dialog";
 import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
+import { useBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost } from "@/shared/lib/api/campaigns/campaigns";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { groupBy } from "@/shared/lib/group-by";
 import { shortId } from "@/shared/lib/utils";
@@ -36,8 +51,11 @@ import { DoseResponseSparkline, useProtocolSummaries } from "@/features/screenin
 import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import { type CurveClass, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
 
+import { showError, showSuccess } from "@/shared/lib/toast";
+
 import { useMoleculesByIds } from "@/features/chemical-registration";
 import { useCampaignCurves } from "../../hooks/use-campaign-curves";
+import { campaignKeys } from "../../hooks/use-campaigns";
 import { protocolColorById } from "../../lib/protocol-colors";
 import { outcomeFor } from "../../lib/stage-outcomes";
 import { type CampaignFilters, filtersActive, rowPassesFilters } from "../campaign-filter-bar";
@@ -612,6 +630,11 @@ export function ResultsGridV2({
         isExternalFilterPresent={isExternalFilterPresent}
         doesExternalFilterPass={doesExternalFilterPass}
         searchPlaceholder={false}
+        selectionToolbar={
+          readOnly
+            ? undefined
+            : (rows) => <RemoveSelectedButton campaignId={campaign.id} rows={rows} />
+        }
         suppressCellFocus
         animateRows={false}
       />
@@ -633,6 +656,69 @@ export function ResultsGridV2({
           if (!open) setExpandedCurve(null);
         }}
       />
+    </>
+  );
+}
+
+// ── Bulk remove ───────────────────────────────────────────────────────────────
+
+/** Selection toolbar for the draft grid: drops the checked compounds from the
+ *  campaign in one save. Removal only takes the rows out of *this* campaign —
+ *  no molecule, batch or readout data is touched — but it's not undoable from
+ *  here, hence the confirm. */
+function RemoveSelectedButton({ campaignId, rows }: { campaignId: string; rows: RowData[] }) {
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const ids = rows.map((r) => r.result.id);
+  const n = ids.length;
+
+  const mutation = useBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+        showSuccess(`Removed ${n} ${n === 1 ? "compound" : "compounds"}`);
+      },
+      onError: (err) => {
+        showError(`Couldn't remove rows: ${err instanceof Error ? err.message : String(err)}`);
+      },
+    },
+  });
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+        disabled={n === 0 || mutation.isPending}
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+        Remove selected ({n})
+      </Button>
+
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove {n} {n === 1 ? "compound" : "compounds"} from this campaign?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The rows leave this campaign along with any notes and overrides recorded on them. The
+              molecules, batches and readout data behind them are untouched, and they can be added
+              back from their source.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => mutation.mutate({ campaignId, data: { result_ids: ids } })}
+            >
+              Remove {n}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

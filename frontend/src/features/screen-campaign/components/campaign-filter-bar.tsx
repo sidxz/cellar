@@ -5,7 +5,9 @@
  *
  * Two chip groups:
  * - Stage outcome (only when a hit stage is selected): hit / miss / untested /
- *   not in stage, tallied from `stage_outcomes` for that stage
+ *   pending / not in stage, tallied from `stage_outcomes` for that stage.
+ *   The "pending" chip only appears where pending can occur — a manual
+ *   stage, or any stage the server still reports pending rows for.
  * - Audit: "Overridden" boolean toggle — a cell override, or an override on
  *   the selected stage
  *
@@ -76,12 +78,13 @@ function tallyOverridden(
   return results.filter((r) => rowIsOverridden(r, selectedStageId)).length;
 }
 
-const OUTCOME_ORDER: StageOutcome[] = ["hit", "miss", "untested", "not_in_stage"];
+const OUTCOME_ORDER: StageOutcome[] = ["hit", "miss", "untested", "pending", "not_in_stage"];
 
 const OUTCOME_LABELS: Record<StageOutcome, string> = {
   hit: "Hit",
   miss: "Miss",
   untested: "Untested",
+  pending: "Pending",
   not_in_stage: "Not in stage",
 };
 
@@ -89,6 +92,7 @@ const OUTCOME_CHIP_STYLE: Record<StageOutcome, string> = {
   hit: "bg-green-50 text-green-800 border-green-200 hover:bg-green-100",
   miss: "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100",
   untested: "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100",
+  pending: "bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100",
   not_in_stage: "bg-muted text-muted-foreground border-transparent hover:bg-muted/70",
 };
 
@@ -96,6 +100,7 @@ const OUTCOME_ACTIVE_STYLE: Record<StageOutcome, string> = {
   hit: "bg-green-600 text-white border-green-700",
   miss: "bg-slate-600 text-white border-slate-700",
   untested: "bg-amber-600 text-white border-amber-700",
+  pending: "bg-blue-600 text-white border-blue-700",
   not_in_stage: "bg-foreground/70 text-background border-transparent",
 };
 
@@ -111,6 +116,12 @@ export function CampaignFilterBar({
 }: CampaignFilterBarProps) {
   const overridden = tallyOverridden(campaign.results, selectedStageId);
   const stageTally = selectedStageId ? tallyStage(campaign.results, selectedStageId) : null;
+  const selectedStage = selectedStageId
+    ? (campaign.stages ?? []).find((s) => s.id === selectedStageId)
+    : undefined;
+  // "Pending" is dead weight on an ordinary criteria stage that can never
+  // produce one — show it only where the outcome is reachable.
+  const showPending = selectedStage?.kind === "manual" || (selectedStage?.counts?.pending ?? 0) > 0;
 
   function toggleOutcome(o: StageOutcome) {
     const next = new Set(filters.stageOutcomes);
@@ -133,7 +144,7 @@ export function CampaignFilterBar({
       <span className="text-muted-foreground font-medium">Filter:</span>
 
       {stageTally &&
-        OUTCOME_ORDER.map((o) => {
+        OUTCOME_ORDER.filter((o) => o !== "pending" || showPending).map((o) => {
           const isActive = filters.stageOutcomes.has(o);
           return (
             <button

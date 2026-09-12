@@ -37,6 +37,7 @@ const OUTCOME_LABELS: Record<StageOutcome, string> = {
   hit: "Hit",
   miss: "Miss",
   untested: "Untested",
+  pending: "Pending",
   not_in_stage: "Not in stage",
 };
 
@@ -92,6 +93,9 @@ export function StageOverridePopover({
     });
 
   const busy = setMutation.isPending || clearMutation.isPending;
+  // A manual stage has no criteria to promote *past*, so the buttons drop
+  // the "to hit"/"to miss" tail and read as the gesture itself.
+  const isManual = stage.kind === "manual";
   const current = (outcome?.outcome ?? "not_in_stage") as StageOutcome;
   const overridden = outcome?.overridden ?? false;
   const reasonOk = reason.trim().length > 0;
@@ -170,12 +174,12 @@ export function StageOverridePopover({
             disabled={busy || !reasonOk}
             onClick={() => force("miss")}
           >
-            Demote to miss
+            {isManual ? "Demote" : "Demote to miss"}
           </Button>
         )}
         {(current !== "hit" || overridden) && (
           <Button size="sm" disabled={busy || !reasonOk} onClick={() => force("hit")}>
-            Promote to hit
+            {isManual ? "Promote" : "Promote to hit"}
           </Button>
         )}
       </div>

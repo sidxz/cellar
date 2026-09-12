@@ -21,6 +21,7 @@ const CHIP_CLASS: Record<StageOutcome, string> = {
   hit: "border-success/40 bg-success/10 text-success",
   miss: "border-muted text-muted-foreground",
   untested: "border-warning/40 bg-warning/10 text-warning",
+  pending: "border-blue-300 bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200",
   not_in_stage: "border-transparent bg-muted/60 text-muted-foreground/70",
 };
 
@@ -28,6 +29,7 @@ const CHIP_LABEL: Record<StageOutcome, string> = {
   hit: "hit",
   miss: "miss",
   untested: "untested",
+  pending: "pending",
   not_in_stage: "not in stage",
 };
 

@@ -5,6 +5,11 @@
  * ChannelPopoverForm (react-hook-form + zod, one explicit Save, AlertDialog
  * delete). Lives inside a Popover opened by StagesSection.
  *
+ * A stage is either `criteria` (evaluated from its own rules) or `manual`
+ * (hand-picked — every row starts `pending` until an override promotes or
+ * demotes it). A manual stage carries no criteria and is always submitted
+ * with `criteria: []`; the backend rejects manual + criteria with a 422.
+ *
  * The criteria list is a react-hook-form field array — each row picks one of
  * the campaign's own channels (never a raw protocol readout: a stage checks
  * a *channel*, the same value the grid and filters already key off) plus an
@@ -47,13 +52,22 @@ import {
 import { showError } from "@/shared/lib/toast";
 import { Plus, Trash2 } from "lucide-react";
 import { campaignKeys } from "../hooks/use-campaigns";
-import type { CampaignResponse, CampaignStageResponse, StageCriterionDTO } from "../types";
+import type {
+  CampaignResponse,
+  CampaignStageResponse,
+  StageCriterionDTO,
+  StageKind,
+} from "../types";
 
 // ── Sentinel ──────────────────────────────────────────────────────────────────
 // Radix Select forbids an empty-string item value, hence the explicit
 // sentinel for "no parent" (mirrors ChannelPopoverForm's normalization_applied
 // "raw" sentinel).
 const ROOT_SENTINEL = "__root__";
+
+/** Shown wherever a manual stage would otherwise explain its criteria. */
+export const MANUAL_STAGE_HELP =
+  "Hand-picked: compounds start pending; promote the ones to take forward.";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -81,6 +95,7 @@ const criterionRowSchema = z
 const stageFormSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Max 120 characters"),
   parent_stage_id: z.string().min(1),
+  kind: z.enum(["criteria", "manual"]),
   criteria: z.array(criterionRowSchema).max(10, "At most 10 criteria per stage"),
 });
 
@@ -181,6 +196,7 @@ export function StagePopoverForm({
     defaultValues: {
       name: existing?.name ?? "",
       parent_stage_id: existing?.parent_stage_id ?? ROOT_SENTINEL,
+      kind: (existing?.kind as StageKind | undefined) ?? "criteria",
       criteria: (existing?.criteria ?? []).map((c) => ({
         channel_id: c.channel_id,
         operator: c.operator,
@@ -195,6 +211,8 @@ export function StagePopoverForm({
   // live values — the operator Select's own onChange doesn't update it, so
   // reading it here would show stale "between" layout. `watch` does.
   const criteriaValues = watch("criteria");
+  const kind = watch("kind");
+  const isManual = kind === "manual";
 
   function onMutationError(prefix: string) {
     return (err: unknown) => {
@@ -234,11 +252,20 @@ export function StagePopoverForm({
   const isPending = addMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   const onSubmit = (values: StageFormValues) => {
-    const criteria: StageCriterionDTO[] = values.criteria.map((row) => ({
-      channel_id: row.channel_id,
-      operator: row.operator,
-      value: row.operator === "between" ? [Number(row.value), Number(row.high)] : Number(row.value),
-    }));
+    // A manual stage never carries criteria — the backend 422s on the pair,
+    // and the hidden field array can still hold rows typed before the
+    // Criteria/Manual toggle was flipped.
+    const criteria: StageCriterionDTO[] =
+      values.kind === "manual"
+        ? []
+        : values.criteria.map((row) => ({
+            channel_id: row.channel_id,
+            operator: row.operator,
+            value:
+              row.operator === "between"
+                ? [Number(row.value), Number(row.high)]
+                : Number(row.value),
+          }));
     const parent_stage_id =
       values.parent_stage_id === ROOT_SENTINEL ? null : values.parent_stage_id;
 
@@ -246,12 +273,12 @@ export function StagePopoverForm({
       updateMutation.mutate({
         campaignId,
         stageId: existing.id,
-        data: { name: values.name, parent_stage_id, criteria },
+        data: { name: values.name, parent_stage_id, kind: values.kind, criteria },
       });
     } else {
       addMutation.mutate({
         campaignId,
-        data: { name: values.name, parent_stage_id, criteria },
+        data: { name: values.name, parent_stage_id, kind: values.kind, criteria },
       });
     }
   };
@@ -287,78 +314,131 @@ export function StagePopoverForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>Criteria</Label>
-          <span className="text-[11px] text-muted-foreground tabular-nums">{fields.length}/10</span>
-        </div>
+      <div className="space-y-1">
+        <Label>How compounds enter</Label>
+        <Controller
+          name="kind"
+          control={control}
+          render={({ field }) => (
+            <div className="inline-flex rounded-md border" role="radiogroup">
+              {(["criteria", "manual"] as StageKind[]).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  role="radio"
+                  aria-checked={field.value === opt}
+                  onClick={() => field.onChange(opt)}
+                  className={`px-3 py-1 text-xs capitalize first:rounded-l-md last:rounded-r-md ${
+                    field.value === opt
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background hover:bg-muted"
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
+        />
+      </div>
 
-        {fields.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            No criteria — this stage passes its whole population.
-          </p>
-        )}
+      {isManual ? (
+        <p className="text-xs text-muted-foreground">{MANUAL_STAGE_HELP}</p>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Criteria</Label>
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {fields.length}/10
+            </span>
+          </div>
 
-        {fields.map((field, index) => {
-          const operator = criteriaValues[index]?.operator ?? field.operator;
-          const rowError =
-            errors.criteria?.[index]?.channel_id?.message ??
-            errors.criteria?.[index]?.value?.message ??
-            errors.criteria?.[index]?.high?.message;
-          return (
-            <div key={field.id} className="space-y-1 rounded-md border p-2">
-              <div className="flex items-start gap-2">
-                <div className="flex-1 space-y-1 min-w-0">
-                  <Label className="text-xs">Readout</Label>
-                  <Controller
-                    name={`criteria.${index}.channel_id`}
-                    control={control}
-                    render={({ field: f }) => (
-                      <Select value={f.value} onValueChange={f.onChange}>
-                        <SelectTrigger
-                          className="h-8 w-full min-w-0 text-xs *:data-[slot=select-value]:block *:data-[slot=select-value]:truncate"
-                          title={channelOptions.find((o) => o.id === f.value)?.label}
-                        >
-                          <SelectValue placeholder="Select readout..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {channelOptions.map((opt) => (
-                            <SelectItem key={opt.id} value={opt.id}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                </div>
+          {fields.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              No criteria — this stage passes its whole population.
+            </p>
+          )}
 
-                <div className="w-[92px] space-y-1 shrink-0">
-                  <Label className="text-xs">Operator</Label>
-                  <Controller
-                    name={`criteria.${index}.operator`}
-                    control={control}
-                    render={({ field: f }) => (
-                      <Select value={f.value} onValueChange={f.onChange}>
-                        <SelectTrigger className="h-8 w-full text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="lt">{"<"}</SelectItem>
-                          <SelectItem value="lte">{"<="}</SelectItem>
-                          <SelectItem value="gt">{">"}</SelectItem>
-                          <SelectItem value="gte">{">="}</SelectItem>
-                          <SelectItem value="between">between</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                </div>
+          {fields.map((field, index) => {
+            const operator = criteriaValues[index]?.operator ?? field.operator;
+            const rowError =
+              errors.criteria?.[index]?.channel_id?.message ??
+              errors.criteria?.[index]?.value?.message ??
+              errors.criteria?.[index]?.high?.message;
+            return (
+              <div key={field.id} className="space-y-1 rounded-md border p-2">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <Label className="text-xs">Readout</Label>
+                    <Controller
+                      name={`criteria.${index}.channel_id`}
+                      control={control}
+                      render={({ field: f }) => (
+                        <Select value={f.value} onValueChange={f.onChange}>
+                          <SelectTrigger
+                            className="h-8 w-full min-w-0 text-xs *:data-[slot=select-value]:block *:data-[slot=select-value]:truncate"
+                            title={channelOptions.find((o) => o.id === f.value)?.label}
+                          >
+                            <SelectValue placeholder="Select readout..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {channelOptions.map((opt) => (
+                              <SelectItem key={opt.id} value={opt.id}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
 
-                {operator === "between" ? (
-                  <>
+                  <div className="w-[92px] space-y-1 shrink-0">
+                    <Label className="text-xs">Operator</Label>
+                    <Controller
+                      name={`criteria.${index}.operator`}
+                      control={control}
+                      render={({ field: f }) => (
+                        <Select value={f.value} onValueChange={f.onChange}>
+                          <SelectTrigger className="h-8 w-full text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="lt">{"<"}</SelectItem>
+                            <SelectItem value="lte">{"<="}</SelectItem>
+                            <SelectItem value="gt">{">"}</SelectItem>
+                            <SelectItem value="gte">{">="}</SelectItem>
+                            <SelectItem value="between">between</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
+
+                  {operator === "between" ? (
+                    <>
+                      <div className="w-[72px] space-y-1 shrink-0">
+                        <Label className="text-xs">Low</Label>
+                        <Input
+                          className="h-8 text-xs"
+                          type="number"
+                          step="any"
+                          {...register(`criteria.${index}.value`)}
+                        />
+                      </div>
+                      <div className="w-[72px] space-y-1 shrink-0">
+                        <Label className="text-xs">High</Label>
+                        <Input
+                          className="h-8 text-xs"
+                          type="number"
+                          step="any"
+                          {...register(`criteria.${index}.high`)}
+                        />
+                      </div>
+                    </>
+                  ) : (
                     <div className="w-[72px] space-y-1 shrink-0">
-                      <Label className="text-xs">Low</Label>
+                      <Label className="text-xs">Value</Label>
                       <Input
                         className="h-8 text-xs"
                         type="number"
@@ -366,54 +446,35 @@ export function StagePopoverForm({
                         {...register(`criteria.${index}.value`)}
                       />
                     </div>
-                    <div className="w-[72px] space-y-1 shrink-0">
-                      <Label className="text-xs">High</Label>
-                      <Input
-                        className="h-8 text-xs"
-                        type="number"
-                        step="any"
-                        {...register(`criteria.${index}.high`)}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <div className="w-[72px] space-y-1 shrink-0">
-                    <Label className="text-xs">Value</Label>
-                    <Input
-                      className="h-8 text-xs"
-                      type="number"
-                      step="any"
-                      {...register(`criteria.${index}.value`)}
-                    />
-                  </div>
-                )}
+                  )}
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => remove(index)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => remove(index)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {rowError && <p className="text-[11px] text-destructive">{rowError}</p>}
               </div>
-              {rowError && <p className="text-[11px] text-destructive">{rowError}</p>}
-            </div>
-          );
-        })}
+            );
+          })}
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() => append(emptyCriterionRow())}
-          disabled={fields.length >= 10}
-        >
-          <Plus className="mr-1.5 h-3.5 w-3.5" /> Criterion
-        </Button>
-      </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => append(emptyCriterionRow())}
+            disabled={fields.length >= 10}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Criterion
+          </Button>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-2 pt-1">
         {isEdit ? (
