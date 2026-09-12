@@ -108,6 +108,31 @@ describe("ChannelsSection", () => {
     expect(viability).not.toHaveTextContent("DR");
   });
 
+  it("marks only the readouts that resolve from all runs of their protocol", () => {
+    const mixed = {
+      id: "c1",
+      stages: [],
+      channels: [
+        makeChannel({ id: "ch-1", label: "IC50", display_order: 0 }),
+        makeChannel({
+          id: "ch-2",
+          label: "Counter-screen",
+          display_order: 1,
+          resolve_from_all_runs: true,
+        }),
+      ],
+    } as unknown as CampaignResponse;
+    render(<ChannelsSection campaign={mixed} projectId="p1" readOnly />, { wrapper });
+
+    expect(screen.getByText("IC50").closest("li")).not.toHaveTextContent("all runs");
+    const marker = screen.getByText("all runs");
+    expect(screen.getByText("Counter-screen").closest("li")).toContainElement(marker);
+    expect(marker).toHaveAttribute(
+      "title",
+      "Resolves from all runs of the protocol. Off: only the runs this campaign was seeded from.",
+    );
+  });
+
   it("chips are edit buttons in draft mode and inert in read-only mode", () => {
     const { unmount } = render(
       <ChannelsSection campaign={campaign} projectId="p1" readOnly={false} />,

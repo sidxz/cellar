@@ -196,7 +196,7 @@ export function StagePopoverForm({
     defaultValues: {
       name: existing?.name ?? "",
       parent_stage_id: existing?.parent_stage_id ?? ROOT_SENTINEL,
-      kind: (existing?.kind as StageKind | undefined) ?? "criteria",
+      kind: existing?.kind ?? "criteria",
       criteria: (existing?.criteria ?? []).map((c) => ({
         channel_id: c.channel_id,
         operator: c.operator,

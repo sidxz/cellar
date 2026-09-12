@@ -81,6 +81,10 @@ const channelSchema = z.object({
   // Locked at create-time — Radix Select forbids empty-string values, hence
   // the explicit sentinel.
   normalization_applied: z.string(),
+  /** Opt out of the campaign's run scope: by default a readout resolves only
+   *  from the runs the campaign was seeded from; on, it resolves from every
+   *  run of its protocol (a counter-screen measured whenever). */
+  resolve_from_all_runs: z.boolean(),
 });
 
 type ChannelFormValues = z.infer<typeof channelSchema>;
@@ -173,6 +177,7 @@ export function ChannelPopoverForm({
       // reads or writes this, so there's no existing-channel default to derive.
       intercept_key_id: "",
       normalization_applied: existing?.normalization_applied ?? "raw",
+      resolve_from_all_runs: existing?.resolve_from_all_runs ?? false,
     },
   });
 
@@ -223,6 +228,7 @@ export function ChannelPopoverForm({
           label: values.label,
           selection_rule: values.selection_rule,
           qc_filter: qcFilter ?? null,
+          resolve_from_all_runs: values.resolve_from_all_runs,
         },
       });
       return;
@@ -268,6 +274,7 @@ export function ChannelPopoverForm({
         // creation — a chemist wanting a different intercept creates a new
         // channel.
         intercept_key: computeInterceptKey(),
+        resolve_from_all_runs: values.resolve_from_all_runs,
       },
     });
   };
@@ -564,6 +571,32 @@ export function ChannelPopoverForm({
             <span>0.5</span>
             <span>1</span>
           </div>
+        </div>
+      </div>
+
+      {/* Run scope. A campaign resolves from the runs it was seeded from;
+          this opts one readout out of that, so it pulls from every run of
+          its protocol — the counter-screen that gets measured whenever. */}
+      <div className="flex items-start gap-2">
+        <Controller
+          name="resolve_from_all_runs"
+          control={control}
+          render={({ field }) => (
+            <Checkbox
+              checked={field.value}
+              onCheckedChange={(v) => field.onChange(v === true)}
+              id="resolve-from-all-runs"
+              className="mt-0.5"
+            />
+          )}
+        />
+        <div className="space-y-0.5">
+          <label htmlFor="resolve-from-all-runs" className="text-sm cursor-pointer">
+            Resolve from all runs of the protocol
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Off: only the runs this campaign was seeded from.
+          </p>
         </div>
       </div>
 

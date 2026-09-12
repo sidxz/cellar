@@ -245,6 +245,16 @@ function ChannelChip({
       {channel.selection_rule !== DEFAULT_RULE && (
         <span className="text-xs font-normal text-muted-foreground">· {rule}</span>
       )}
+      {/* Opted out of the campaign's run scope — resolves from every run of
+          its protocol, not only the ones the campaign was seeded from. */}
+      {channel.resolve_from_all_runs && (
+        <span
+          className="text-[10px] font-normal italic text-muted-foreground"
+          title="Resolves from all runs of the protocol. Off: only the runs this campaign was seeded from."
+        >
+          all runs
+        </span>
+      )}
     </>
   );
 
