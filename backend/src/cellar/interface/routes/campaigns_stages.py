@@ -30,6 +30,7 @@ from cellar.interface.dependencies import (
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.routes._campaign_dtos import (
     AddStageRequest,
+    BulkStageOverrideRequest,
     CampaignResponse,
     SetStageOverrideRequest,
     UpdateStageRequest,
@@ -141,7 +142,7 @@ async def set_stage_override(
     cmd = SetStageOverrideCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
-        result_id=result_id,
+        result_ids=[result_id],
         stage_id=stage_id,
         user_id=auth.user_id,
         forced_outcome=StageOutcome(body.outcome),
@@ -166,11 +167,38 @@ async def clear_stage_override(
     cmd = SetStageOverrideCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
-        result_id=result_id,
+        result_ids=[result_id],
         stage_id=stage_id,
         user_id=auth.user_id,
         forced_outcome=None,
         reason=None,
+    )
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
+
+
+@router.put("/{campaign_id}/stages/{stage_id}/overrides", response_model=CampaignResponse)
+async def set_stage_overrides(
+    campaign_id: uuid.UUID,
+    stage_id: uuid.UUID,
+    body: BulkStageOverrideRequest,
+    auth: AuthDep,
+    uc: SetStageOverrideDep,
+) -> CampaignResponse:
+    """Force (or, with ``outcome: null``, clear) one stage's verdict for N results.
+
+    Same command as the per-result routes, so one code path; the whole batch
+    lands in a single aggregate save (404 on the first unknown result id,
+    nothing applied).
+    """
+    cmd = SetStageOverrideCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        result_ids=body.result_ids,
+        stage_id=stage_id,
+        user_id=auth.user_id,
+        forced_outcome=StageOutcome(body.outcome) if body.outcome else None,
+        reason=body.reason,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

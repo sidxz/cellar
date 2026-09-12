@@ -1,7 +1,7 @@
 """Campaign result-row endpoints.
 
-Covers per-row CRUD (add / remove), per-row notes edits, and per-cell
-manual overrides.
+Covers per-row CRUD (add / remove), bulk row removal, per-row notes edits,
+and per-cell manual overrides.
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ from cellar.interface.dependencies import (
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.routes._campaign_dtos import (
     AddResultRowRequest,
+    BulkRemoveResultsRequest,
     CampaignResponse,
     OverrideCellRequest,
     SetResultNotesRequest,
@@ -115,7 +116,28 @@ async def remove_result_row(
     cmd = RemoveResultRowCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
-        result_id=result_id,
+        result_ids=[result_id],
+    )
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
+
+
+@router.post("/{campaign_id}/results/bulk-remove", response_model=CampaignResponse)
+async def bulk_remove_result_rows(
+    campaign_id: uuid.UUID,
+    body: BulkRemoveResultsRequest,
+    auth: AuthDep,
+    uc: RemoveResultRowDep,
+) -> CampaignResponse:
+    """Remove N compound result rows from a DRAFT campaign in one save.
+
+    POST rather than DELETE because some proxies drop DELETE bodies. 404 on
+    the first unknown result id, with nothing removed.
+    """
+    cmd = RemoveResultRowCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        result_ids=body.result_ids,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

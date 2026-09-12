@@ -743,6 +743,74 @@ class TestStageOverride:
         second_delete = await client.delete(override_url)
         assert second_delete.status_code == 200, second_delete.text
 
+    async def test_bulk_overrides_put_promotes_two_results_then_null_clears(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol1 = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-override")
+        mol2 = await _register_molecule(client, CAFFEINE_SMILES, "Caf-bulk-override")
+        campaign = await _create_draft_campaign(client, project_id, [mol1, mol2])
+        campaign_id = campaign["id"]
+        result_ids = [r["id"] for r in campaign["results"]]
+        assert len(result_ids) == 2
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Bulk Stage"}
+        )
+        assert stage_resp.status_code == 200, stage_resp.text
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        bulk_url = f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}/overrides"
+        put_resp = await client.put(
+            bulk_url,
+            json={
+                "result_ids": result_ids,
+                "outcome": "hit",
+                "reason": "Batch promote after re-assay",
+            },
+        )
+        assert put_resp.status_code == 200, put_resp.text
+        for result_id in result_ids:
+            outcome = _find_stage_outcome(put_resp.json(), result_id, stage_id)
+            assert outcome["outcome"] == "hit"
+            assert outcome["overridden"] is True
+            assert outcome["override_reason"] == "Batch promote after re-assay"
+
+        clear_resp = await client.put(bulk_url, json={"result_ids": result_ids, "outcome": None})
+        assert clear_resp.status_code == 200, clear_resp.text
+        for result_id in result_ids:
+            outcome = _find_stage_outcome(clear_resp.json(), result_id, stage_id)
+            assert outcome["overridden"] is False
+            assert outcome["override_reason"] is None
+
+    async def test_bulk_overrides_unknown_result_404_and_nothing_applied(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-override-404")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Bulk Stage 404"}
+        )
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        resp = await client.put(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}/overrides",
+            json={
+                "result_ids": [result_id, str(uuid.uuid4())],
+                "outcome": "hit",
+                "reason": "Batch promote",
+            },
+        )
+        assert resp.status_code == 404, resp.text
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        outcome = _find_stage_outcome(get_resp.json(), result_id, stage_id)
+        assert outcome["overridden"] is False
+
     async def test_override_unknown_stage_404(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-stage-override-404")
@@ -915,6 +983,41 @@ class TestCampaignResults:
         assert resp.status_code == 200, resp.text
         remaining = {r["molecule_id"] for r in resp.json()["results"]}
         assert mol2 not in remaining
+
+    async def test_bulk_remove_result_rows_200(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        mol1 = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-rm1")
+        mol2 = await _register_molecule(client, CAFFEINE_SMILES, "Caf-bulk-rm2")
+        mol3 = await _register_molecule(client, "c1ccccc1", "Benz-bulk-rm3")
+        campaign = await _create_draft_campaign(client, project_id, [mol1, mol2, mol3])
+        campaign_id = campaign["id"]
+        to_remove = [_find_result_id(campaign, mol1), _find_result_id(campaign, mol3)]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/results/bulk-remove",
+            json={"result_ids": to_remove},
+        )
+        assert resp.status_code == 200, resp.text
+        remaining = {r["molecule_id"] for r in resp.json()["results"]}
+        assert remaining == {mol2}
+
+    async def test_bulk_remove_unknown_result_404_and_nothing_removed(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol1 = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-rm-404")
+        campaign = await _create_draft_campaign(client, project_id, [mol1])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/results/bulk-remove",
+            json={"result_ids": [result_id, str(uuid.uuid4())]},
+        )
+        assert resp.status_code == 404, resp.text
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert len(get_resp.json()["results"]) == 1
 
     async def test_set_result_notes_200(self, client: AsyncClient) -> None:
         """Notes sent in the PATCH body are persisted on the result."""

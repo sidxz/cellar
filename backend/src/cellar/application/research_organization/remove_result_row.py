@@ -1,7 +1,9 @@
-"""RemoveResultRow — remove a compound result row from a DRAFT campaign.
+"""RemoveResultRow — remove compound result rows from a DRAFT campaign.
 
-Looks up the result by id, then delegates to
+Looks up each result by id, then delegates to
 ``campaign.remove_result_by_molecule`` which also enforces DRAFT status.
+The command takes a *list* of result ids: the per-row route is a one-element
+call, and a bulk removal is one load + one save.
 """
 
 from __future__ import annotations
@@ -30,19 +32,20 @@ from cellar.domain.shared.errors import (
 class RemoveResultRowCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
-    result_id: uuid.UUID
+    result_ids: list[uuid.UUID]
 
 
 class RemoveResultRow:
-    """Remove a compound row (and all its measurements) from a DRAFT campaign.
+    """Remove compound rows (and all their measurements) from a DRAFT campaign.
 
     Pipeline:
       1. ``require_editor`` auth guard.
       2. Load campaign (workspace-scoped); NotFoundError if missing.
       3. Inline DRAFT check — Failure(ValidationError) if not DRAFT.
-      4. Find the result by id on ``campaign.results``; NotFoundError if missing.
-      5. ``campaign.remove_result_by_molecule(result.molecule_id)`` removes the
-         row and all associated measurements.
+      4. Resolve *every* result id on ``campaign.results`` before removing
+         anything; the first unknown id -> NotFoundError (all-or-nothing).
+      5. ``campaign.remove_result_by_molecule(result.molecule_id)`` per id —
+         removes the row and all associated measurements.
       6. Bump ``campaign.updated_at``. Save + commit; dispatch; return ``Success``.
     """
 
@@ -77,11 +80,13 @@ class RemoveResultRow:
                     ValidationError(f"Cannot remove result: campaign is {campaign.status.value}")
                 )
 
-            result = next((r for r in campaign.results if r.id == input.result_id), None)
-            if result is None:
-                return Failure(NotFoundError("CampaignResult", str(input.result_id)))
+            by_id = {r.id: r for r in campaign.results}
+            missing = next((rid for rid in input.result_ids if rid not in by_id), None)
+            if missing is not None:
+                return Failure(NotFoundError("CampaignResult", str(missing)))
 
-            campaign.remove_result_by_molecule(result.molecule_id)
+            for result_id in input.result_ids:
+                campaign.remove_result_by_molecule(by_id[result_id].molecule_id)
             campaign.updated_at = datetime.now(UTC)
 
             await self._campaign_repo.save(campaign)

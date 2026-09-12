@@ -233,6 +233,19 @@ class SetStageOverrideRequest(BaseModel):
     reason: str
 
 
+class BulkStageOverrideRequest(BaseModel):
+    """Force (or, with ``outcome: null``, clear) one stage's verdict for N results.
+
+    ``outcome`` is a required key so a body can never silently mean "clear".
+    """
+
+    result_ids: list[uuid.UUID]
+    outcome: Literal["hit", "miss"] | None
+    reason: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+
 class SetResultNotesRequest(BaseModel):
     """Set (or, with ``null``, clear) the free-text notes on one result row.
 
@@ -254,6 +267,10 @@ class OverrideCellRequest(BaseModel):
 
 class AddResultRowRequest(BaseModel):
     molecule_id: uuid.UUID
+
+
+class BulkRemoveResultsRequest(BaseModel):
+    result_ids: list[uuid.UUID]
 
 
 class CloseCampaignRequest(BaseModel):
