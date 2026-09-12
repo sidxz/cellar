@@ -86,6 +86,81 @@ def _extract_min_z_prime(qc_metrics: dict | None) -> float | None:
     return None
 
 
+def _readout_stmt(
+    *,
+    workspace_id: uuid.UUID,
+    readout_definition_id: uuid.UUID,
+    normalization_applied: str | None,
+):
+    """Base SELECT over readout_data candidates; callers add the scoping clause.
+
+    Shared by the single-molecule and run-scoped endpoint queries so the two
+    can't drift on which rows count as a candidate.
+    """
+    return (
+        select(
+            ReadoutDataModel.id,
+            ReadoutDataModel.molecule_id,
+            ReadoutDataModel.value_numeric,
+            ReadoutDataModel.value_qualifier,
+            RunModel.id.label("run_id"),
+            RunModel.run_date,
+            RunModel.status,
+            RunModel.qc_metrics,
+            ProtocolModel.name,
+            ProtocolModel.protocol_version,
+            ReadoutDefinitionModel.unit,
+        )
+        .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
+        .join(ProtocolModel, RunModel.protocol_id == ProtocolModel.id)
+        .join(
+            ReadoutDefinitionModel,
+            ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
+        )
+        .where(
+            ReadoutDataModel.workspace_id == workspace_id,
+            ReadoutDataModel.readout_definition_id == readout_definition_id,
+            # Skip rows with no numeric value — qualitative-only text
+            # readouts can't be averaged or compared to numeric hit
+            # thresholds.
+            ReadoutDataModel.value_numeric.is_not(None),
+            # Skip outliers — they would otherwise corrupt MEAN / GEOMEAN
+            # aggregations.
+            ReadoutDataModel.is_outlier.is_(False),
+            # Control / blank wells carry molecule_id=NULL on readout_data —
+            # they're not attributable to a compound and would crash the
+            # downstream CampaignResult insert (campaign_result.molecule_id
+            # is NOT NULL).
+            ReadoutDataModel.molecule_id.is_not(None),
+            # Restrict to one normalization layer so a raw readout's computed
+            # siblings (percent_inhibition / z_score) don't bleed into the
+            # aggregate.
+            _normalization_clause(normalization_applied),
+        )
+    )
+
+
+def _readout_candidate(row, normalization_applied: str | None) -> ResolvedCandidate:
+    """Map one ``_readout_stmt`` row onto a candidate."""
+    try:
+        qualifier = ValueQualifier(row.value_qualifier or "=")
+    except ValueError:
+        qualifier = ValueQualifier.EQ
+    return ResolvedCandidate(
+        value=float(row.value_numeric),
+        qualifier=qualifier,
+        unit=unit_for_normalization(normalization_applied, row.unit) or "",
+        run_id=row.run_id,
+        run_date=row.run_date,
+        run_approved=row.status == "approved",
+        z_prime=_extract_min_z_prime(row.qc_metrics),
+        protocol_name=row.name,
+        protocol_version=row.protocol_version,
+        curve_id=None,
+        readout_id=row.id,
+    )
+
+
 class SQLAlchemyChannelResolutionQuery:
     """Production implementation of ChannelResolutionQuery."""
 
@@ -101,7 +176,9 @@ class SQLAlchemyChannelResolutionQuery:
     ) -> list[ResolvedCandidate]:
         if channel.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
             return await self._fetch_curve_candidates(workspace_id, channel, molecule_id)
-        return await self._fetch_readout_candidates(workspace_id, channel, molecule_id)
+        return await self.fetch_endpoint_candidates(
+            workspace_id=workspace_id, channel=channel, molecule_id=molecule_id
+        )
 
     async def _fetch_curve_candidates(
         self,
@@ -200,89 +277,61 @@ class SQLAlchemyChannelResolutionQuery:
         """
         if not run_ids:
             return {}
-        if source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
-            stmt = (
-                select(
-                    DoseResponseCurveModel.id,
-                    DoseResponseCurveModel.molecule_id,
-                    DoseResponseCurveModel.fitted_value,
-                    DoseResponseCurveModel.curve_class,
-                    DoseResponseCurveModel.curve_type,
-                    DoseResponseCurveModel.top,
-                    DoseResponseCurveModel.bottom,
-                    DoseResponseCurveModel.hill_slope,
-                    DoseResponseCurveModel.r_squared,
-                    DoseResponseCurveModel.confidence_interval_low,
-                    DoseResponseCurveModel.confidence_interval_high,
-                    DoseResponseCurveModel.fit_quality_warnings,
-                    DoseResponseCurveModel.raw_data,
-                    DoseResponseCurveModel.excluded_points,
-                    DoseResponseCurveModel.intercept_values,
-                    DoseResponseCurveModel.run_id,
-                    RunModel.run_date,
-                    RunModel.status,
-                    RunModel.qc_metrics,
-                    ProtocolModel.name,
-                    ProtocolModel.protocol_version,
-                    ProtocolModel.dose_unit,
-                )
-                .join(RunModel, DoseResponseCurveModel.run_id == RunModel.id)
-                .join(
-                    ProtocolModel,
-                    DoseResponseCurveModel.protocol_id == ProtocolModel.id,
-                )
-                .where(
-                    DoseResponseCurveModel.workspace_id == workspace_id,
-                    DoseResponseCurveModel.protocol_id == protocol_id,
-                    DoseResponseCurveModel.run_id.in_(run_ids),
-                    # Pin to the channel's readout-def — see _fetch_curve_candidates
-                    # for why this matters on multi-DR protocols.
-                    DoseResponseCurveModel.readout_definition_id == readout_definition_id,
-                )
-            )
-        else:
-            stmt = (
-                select(
-                    ReadoutDataModel.id,
-                    ReadoutDataModel.molecule_id,
-                    ReadoutDataModel.value_numeric,
-                    ReadoutDataModel.value_qualifier,
-                    RunModel.id.label("run_id"),
-                    RunModel.run_date,
-                    RunModel.status,
-                    RunModel.qc_metrics,
-                    ProtocolModel.name,
-                    ProtocolModel.protocol_version,
-                    ReadoutDefinitionModel.unit,
-                )
-                .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
-                .join(ProtocolModel, RunModel.protocol_id == ProtocolModel.id)
-                .join(
-                    ReadoutDefinitionModel,
-                    ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
-                )
-                .where(
-                    ReadoutDataModel.workspace_id == workspace_id,
-                    ReadoutDataModel.readout_definition_id == readout_definition_id,
-                    ReadoutDataModel.run_id.in_(run_ids),
-                    ReadoutDataModel.value_numeric.is_not(None),
-                    ReadoutDataModel.is_outlier.is_(False),
-                    # Control / blank wells carry molecule_id=NULL on
-                    # readout_data — they're not attributable to a compound
-                    # and would crash the downstream CampaignResult insert
-                    # (campaign_result.molecule_id is NOT NULL).
-                    ReadoutDataModel.molecule_id.is_not(None),
-                    _normalization_clause(normalization_applied),
-                )
+        if source_kind != ChannelSourceKind.DOSE_RESPONSE_CURVE:
+            return await self.fetch_endpoint_candidates_for_runs(
+                workspace_id=workspace_id,
+                run_ids=run_ids,
+                protocol_id=protocol_id,
+                readout_definition_id=readout_definition_id,
+                normalization_applied=normalization_applied,
             )
 
+        stmt = (
+            select(
+                DoseResponseCurveModel.id,
+                DoseResponseCurveModel.molecule_id,
+                DoseResponseCurveModel.fitted_value,
+                DoseResponseCurveModel.curve_class,
+                DoseResponseCurveModel.curve_type,
+                DoseResponseCurveModel.top,
+                DoseResponseCurveModel.bottom,
+                DoseResponseCurveModel.hill_slope,
+                DoseResponseCurveModel.r_squared,
+                DoseResponseCurveModel.confidence_interval_low,
+                DoseResponseCurveModel.confidence_interval_high,
+                DoseResponseCurveModel.fit_quality_warnings,
+                DoseResponseCurveModel.raw_data,
+                DoseResponseCurveModel.excluded_points,
+                DoseResponseCurveModel.intercept_values,
+                DoseResponseCurveModel.run_id,
+                RunModel.run_date,
+                RunModel.status,
+                RunModel.qc_metrics,
+                ProtocolModel.name,
+                ProtocolModel.protocol_version,
+                ProtocolModel.dose_unit,
+            )
+            .join(RunModel, DoseResponseCurveModel.run_id == RunModel.id)
+            .join(
+                ProtocolModel,
+                DoseResponseCurveModel.protocol_id == ProtocolModel.id,
+            )
+            .where(
+                DoseResponseCurveModel.workspace_id == workspace_id,
+                DoseResponseCurveModel.protocol_id == protocol_id,
+                DoseResponseCurveModel.run_id.in_(run_ids),
+                # Pin to the channel's readout-def — see _fetch_curve_candidates
+                # for why this matters on multi-DR protocols.
+                DoseResponseCurveModel.readout_definition_id == readout_definition_id,
+            )
+        )
         async with self._sf() as session:
             rows = (await session.execute(stmt)).all()
 
         out: dict[uuid.UUID, list[ResolvedCandidate]] = defaultdict(list)
         for row in rows:
-            if source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
-                cand = ResolvedCandidate(
+            out[row.molecule_id].append(
+                ResolvedCandidate(
                     value=row.fitted_value,
                     qualifier=ValueQualifier.EQ,
                     unit=row.dose_unit or "",
@@ -307,92 +356,60 @@ class SQLAlchemyChannelResolutionQuery:
                     curve_confidence_interval_high=row.confidence_interval_high,
                     curve_fit_quality_warnings=row.fit_quality_warnings,
                 )
-            else:
-                qualifier_str = row.value_qualifier or "="
-                try:
-                    qualifier = ValueQualifier(qualifier_str)
-                except ValueError:
-                    qualifier = ValueQualifier.EQ
-                cand = ResolvedCandidate(
-                    value=float(row.value_numeric),
-                    qualifier=qualifier,
-                    unit=unit_for_normalization(normalization_applied, row.unit) or "",
-                    run_id=row.run_id,
-                    run_date=row.run_date,
-                    run_approved=row.status == "approved",
-                    z_prime=_extract_min_z_prime(row.qc_metrics),
-                    protocol_name=row.name,
-                    protocol_version=row.protocol_version,
-                    curve_id=None,
-                    readout_id=row.id,
-                )
-            out[row.molecule_id].append(cand)
+            )
         return dict(out)
 
-    async def _fetch_readout_candidates(
+    async def fetch_endpoint_candidates_for_runs(
         self,
+        *,
+        workspace_id: uuid.UUID,
+        run_ids: list[uuid.UUID],
+        protocol_id: uuid.UUID,
+        readout_definition_id: uuid.UUID,
+        normalization_applied: str | None = None,
+    ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
+        """Per-molecule readout_data candidates restricted to a set of run_ids.
+
+        Serves both the READOUT_DATA branch of ``fetch_candidates_for_runs``
+        and the dose-response reported-endpoint fallback in AddResultsFromRuns.
+        ``protocol_id`` is accepted for parity with the sibling method — the
+        readout definition already pins the protocol.
+        """
+        if not run_ids:
+            return {}
+        stmt = _readout_stmt(
+            workspace_id=workspace_id,
+            readout_definition_id=readout_definition_id,
+            normalization_applied=normalization_applied,
+        ).where(ReadoutDataModel.run_id.in_(run_ids))
+        async with self._sf() as session:
+            rows = (await session.execute(stmt)).all()
+
+        out: dict[uuid.UUID, list[ResolvedCandidate]] = defaultdict(list)
+        for row in rows:
+            out[row.molecule_id].append(_readout_candidate(row, normalization_applied))
+        return dict(out)
+
+    async def fetch_endpoint_candidates(
+        self,
+        *,
         workspace_id: uuid.UUID,
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
     ) -> list[ResolvedCandidate]:
-        stmt = (
-            select(
-                ReadoutDataModel.id,
-                ReadoutDataModel.value_numeric,
-                ReadoutDataModel.value_qualifier,
-                RunModel.id.label("run_id"),
-                RunModel.run_date,
-                RunModel.status,
-                RunModel.qc_metrics,
-                ProtocolModel.name,
-                ProtocolModel.protocol_version,
-                ReadoutDefinitionModel.unit,
-            )
-            .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
-            .join(ProtocolModel, RunModel.protocol_id == ProtocolModel.id)
-            .join(
-                ReadoutDefinitionModel,
-                ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
-            )
-            .where(
-                ReadoutDataModel.workspace_id == workspace_id,
-                ReadoutDataModel.molecule_id == molecule_id,
-                ReadoutDataModel.readout_definition_id == channel.readout_definition_id,
-                # Skip rows with no numeric value — qualitative-only
-                # text readouts can't be averaged or compared to
-                # numeric hit thresholds.
-                ReadoutDataModel.value_numeric.is_not(None),
-                # Skip outliers — they would otherwise corrupt MEAN/
-                # GEOMEAN aggregations.
-                ReadoutDataModel.is_outlier.is_(False),
-                # Restrict to the channel's normalization layer so a raw
-                # readout's computed siblings (percent_inhibition / z_score)
-                # don't bleed into the aggregate.
-                _normalization_clause(channel.normalization_applied),
-            )
-        )
+        """readout_data candidates for the channel's readout definition.
+
+        The READOUT_DATA implementation of ``fetch_candidates``, and — on a
+        dose-response channel — the reported-endpoint fallback the resolver
+        reaches for when no curve survives QC. A DR channel carries no
+        ``normalization_applied``, so it lands on the raw layer, which is
+        where a summary-imported reported IC50 lives.
+        """
+        stmt = _readout_stmt(
+            workspace_id=workspace_id,
+            readout_definition_id=channel.readout_definition_id,
+            normalization_applied=channel.normalization_applied,
+        ).where(ReadoutDataModel.molecule_id == molecule_id)
         async with self._sf() as session:
             rows = (await session.execute(stmt)).all()
-        candidates: list[ResolvedCandidate] = []
-        for row in rows:
-            qualifier_str = row.value_qualifier or "="
-            try:
-                qualifier = ValueQualifier(qualifier_str)
-            except ValueError:
-                qualifier = ValueQualifier.EQ
-            candidates.append(
-                ResolvedCandidate(
-                    value=float(row.value_numeric),
-                    qualifier=qualifier,
-                    unit=unit_for_normalization(channel.normalization_applied, row.unit) or "",
-                    run_id=row.run_id,
-                    run_date=row.run_date,
-                    run_approved=row.status == "approved",
-                    z_prime=_extract_min_z_prime(row.qc_metrics),
-                    protocol_name=row.name,
-                    protocol_version=row.protocol_version,
-                    curve_id=None,
-                    readout_id=row.id,
-                )
-            )
-        return candidates
+        return [_readout_candidate(row, channel.normalization_applied) for row in rows]

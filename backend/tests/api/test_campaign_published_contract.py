@@ -76,6 +76,12 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 _SCHEMA_PATH = Path(__file__).parent / "fixtures" / "daikon_contract.schema.json"
 
 
+#: Provenance ids the resolver stamps on the sole measurement, asserted
+#: on the published document.
+_MEASUREMENT_RUN_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000002")
+_MEASUREMENT_READOUT_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000001")
+
+
 @pytest.fixture(scope="module")
 def daikon_schema() -> dict[str, Any]:
     return json.loads(_SCHEMA_PATH.read_text())
@@ -98,6 +104,10 @@ class _FakeResolver:
             value=42.0,
             value_qualifier=ValueQualifier.EQ,
             unit="uM",
+            # Provenance (D8) — a reported-endpoint cell: the published
+            # `source` block must carry both id keys.
+            source_run_id=_MEASUREMENT_RUN_ID,
+            source_readout_id=_MEASUREMENT_READOUT_ID,
             protocol_name_snapshot="Test Protocol",
             protocol_version_snapshot=1,
         )
@@ -347,6 +357,9 @@ async def test_published_endpoint_matches_daikon_schema(
     assert len(body["results"]) == 1
     assert len(body["results"][0]["measurements"]) == 1
     assert body["results"][0]["measurements"][0]["unit"] == "uM"
+    source = body["results"][0]["measurements"][0]["source"]
+    assert source["readout_id"] == str(_MEASUREMENT_READOUT_ID)
+    assert source["curve_id"] is None
     # Soft close: no signature, no published collection (spec §4/§5); close_note
     # is persisted and surfaced instead.
     assert "signature" not in body["campaign"]

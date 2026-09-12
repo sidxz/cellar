@@ -429,6 +429,10 @@ def _serialize_measurement(m: Any) -> dict[str, Any]:
             else None,
             "protocol_name": m.protocol_name_snapshot,
             "protocol_version": m.protocol_version_snapshot,
+            # D8 — which layer the value came from: a fitted curve, or a
+            # reported endpoint row (the dose-response fallback).
+            "curve_id": str(m.source_curve_id) if m.source_curve_id else None,
+            "readout_id": str(m.source_readout_id) if m.source_readout_id else None,
         }
 
     # Migration 029 — snapshot + audit fields. Flat schema: emit nulls when absent

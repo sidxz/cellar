@@ -25,11 +25,19 @@ from cellar.domain.shared.hit_criterion import InterceptKey
 
 
 class _FakeQuery:
-    def __init__(self, candidates: list[ResolvedCandidate]) -> None:
+    def __init__(
+        self,
+        candidates: list[ResolvedCandidate],
+        endpoints: list[ResolvedCandidate] | None = None,
+    ) -> None:
         self._c = candidates
+        self._e = endpoints or []
 
     async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
         return list(self._c)
+
+    async def fetch_endpoint_candidates(self, *, workspace_id, channel, molecule_id):
+        return list(self._e)
 
 
 def _channel(
@@ -38,13 +46,14 @@ def _channel(
     qc: dict | None = None,
     qualifier_handling: QualifierHandling | None = None,
     intercept_key: InterceptKey | None = None,
+    source_kind: ChannelSourceKind = ChannelSourceKind.DOSE_RESPONSE_CURVE,
 ) -> CampaignChannel:
     return CampaignChannel(
         campaign_id=uuid.uuid4(),
         label="L",
         protocol_id=uuid.uuid4(),
         readout_definition_id=uuid.uuid4(),
-        source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+        source_kind=source_kind,
         selection_rule=rule,
         qualifier_handling=qualifier_handling or QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
@@ -781,3 +790,123 @@ async def test_resolver_latest_mode_snapshot_has_no_aggregate_fields():
     assert "additional_curves" not in m.curve_snapshot
     assert "aggregate" not in m.curve_snapshot
     assert m.curve_snapshot["fitted_value"] == 20.0
+
+
+# ---------------------------------------------------------------------------
+# D1 — reported-endpoint fallback on dose-response channels
+# ---------------------------------------------------------------------------
+
+
+def _endpoint_candidate(
+    value: float,
+    *,
+    qualifier: ValueQualifier = ValueQualifier.EQ,
+    approved: bool = True,
+    z_prime: float | None = 0.7,
+) -> ResolvedCandidate:
+    """A raw readout_data row — the shape a summary-imported reported IC50 takes."""
+    return ResolvedCandidate(
+        value=value,
+        qualifier=qualifier,
+        unit="uM",
+        run_id=uuid.uuid4(),
+        run_date=date(2026, 3, 1),
+        run_approved=approved,
+        z_prime=z_prime,
+        protocol_name="X",
+        protocol_version=1,
+        curve_id=None,
+        readout_id=uuid.uuid4(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_dr_channel_with_no_curves_falls_back_to_reported_endpoint():
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    endpoint = _endpoint_candidate(32.0, qualifier=ValueQualifier.GT)
+    resolver = ChannelResolver(_FakeQuery([], endpoints=[endpoint]))
+    m = await resolver.resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert m.value == 32.0
+    assert m.value_qualifier is ValueQualifier.GT
+    assert m.source_readout_id == endpoint.readout_id
+    assert m.source_curve_id is None
+
+
+@pytest.mark.asyncio
+async def test_dr_channel_endpoint_wins_when_the_only_curve_fails_qc():
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN, qc={"require_approved": True})
+    endpoint = _endpoint_candidate(7.5)
+    resolver = ChannelResolver(
+        _FakeQuery([_candidate(1.0, approved=False)], endpoints=[endpoint])
+    )
+    m = await resolver.resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert m.value == 7.5
+    assert m.source_readout_id == endpoint.readout_id
+
+
+@pytest.mark.asyncio
+async def test_dr_channel_qc_passing_inactive_curve_beats_an_endpoint():
+    """A curve of any class that survives QC wins — an inactive one still
+    resolves ND rather than letting the reported endpoint through."""
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    resolver = ChannelResolver(
+        _FakeQuery(
+            [_dr_candidate(0.013, run_date=date(2026, 1, 1), curve_class="inactive")],
+            endpoints=[_endpoint_candidate(7.5)],
+        )
+    )
+    m = await resolver.resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert m.value is None
+    assert m.value_qualifier is ValueQualifier.ND
+    assert m.source_readout_id is None
+
+
+@pytest.mark.asyncio
+async def test_dr_channel_endpoint_resolves_even_with_an_intercept_key():
+    """Regression for resolve_intercept: a readout row carries no
+    intercept_values, so the channel's intercept key must not force ND."""
+    ch = _channel(
+        SelectionRule.LATEST_APPROVED_RUN,
+        intercept_key=InterceptKey(kind="ic", level=50.0),
+    )
+    resolver = ChannelResolver(_FakeQuery([], endpoints=[_endpoint_candidate(12.0)]))
+    m = await resolver.resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert m.value == 12.0
+    assert m.value_qualifier is ValueQualifier.EQ
+
+
+@pytest.mark.asyncio
+async def test_readout_channel_does_not_reach_for_the_endpoint_fallback():
+    ch = _channel(
+        SelectionRule.LATEST_APPROVED_RUN,
+        source_kind=ChannelSourceKind.READOUT_DATA,
+    )
+    resolver = ChannelResolver(_FakeQuery([], endpoints=[_endpoint_candidate(7.5)]))
+    m = await resolver.resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert m.value is None
+    assert m.value_qualifier is ValueQualifier.ND

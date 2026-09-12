@@ -111,6 +111,39 @@ class ChannelResolutionQuery(Protocol):
         """
         ...
 
+    async def fetch_endpoint_candidates(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        channel: CampaignChannel,
+        molecule_id: uuid.UUID,
+    ) -> list[ResolvedCandidate]:
+        """Raw-layer ``readout_data`` rows for the channel's readout definition.
+
+        Returned regardless of the channel's ``source_kind``. Used as the
+        reported-endpoint fallback on a dose-response channel when no curve
+        survives QC: a summary-imported "reported IC50" lands on the readout
+        layer, not as a fitted curve.
+        """
+        ...
+
+    async def fetch_endpoint_candidates_for_runs(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        run_ids: list[uuid.UUID],
+        protocol_id: uuid.UUID,
+        readout_definition_id: uuid.UUID,
+        normalization_applied: str | None = None,
+    ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
+        """Run-scoped twin of :meth:`fetch_endpoint_candidates`.
+
+        Also the READOUT_DATA implementation of
+        :meth:`fetch_candidates_for_runs`. Returns
+        ``dict[molecule_id, list[ResolvedCandidate]]``.
+        """
+        ...
+
 
 def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
     if not qc:
@@ -158,6 +191,16 @@ class ChannelResolver:
             workspace_id=workspace_id, channel=channel, molecule_id=molecule_id
         )
         candidates = [c for c in candidates if _passes_qc(c, channel.qc_filter)]
+
+        # D1 — a QC-passing curve of any class wins, including an inactive one
+        # (which still resolves ND). Reported endpoints — summary-imported
+        # readout_data rows on the same readout definition — are considered
+        # only when no curve survives QC.
+        if not candidates and channel.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
+            endpoints = await self._q.fetch_endpoint_candidates(
+                workspace_id=workspace_id, channel=channel, molecule_id=molecule_id
+            )
+            candidates = [c for c in endpoints if _passes_qc(c, channel.qc_filter)]
 
         if not candidates:
             return _nd_measurement(

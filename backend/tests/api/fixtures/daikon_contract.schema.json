@@ -260,7 +260,9 @@
                         "run_id":            { "type": "string", "format": "uuid" },
                         "run_date":          { "type": ["string", "null"] },
                         "protocol_name":     { "type": ["string", "null"] },
-                        "protocol_version":  { "type": ["integer", "number", "null"] }
+                        "protocol_version":  { "type": ["integer", "number", "null"] },
+                        "curve_id":          { "type": ["string", "null"] },
+                        "readout_id":        { "type": ["string", "null"] }
                       }
                     },
                     { "type": "null" }

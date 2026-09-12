@@ -311,6 +311,20 @@ class AddResultsFromRuns:
                     source_kind=cfg.source_kind,
                     normalization_applied=norm,
                 )
+                if cfg.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
+                    # D1 — a dose-response channel falls back to reported
+                    # endpoint rows (summary-imported readout_data on the same
+                    # readout definition) for molecules with no fitted curve in
+                    # the selected runs. A molecule that has a curve keeps its
+                    # curve, even if allowed_curve_classes then drops it.
+                    endpoints_by_mol = await self._query.fetch_endpoint_candidates_for_runs(
+                        workspace_id=input.workspace_id,
+                        run_ids=input.run_ids,
+                        protocol_id=cfg.protocol_id,
+                        readout_definition_id=cfg.readout_definition_id,
+                    )
+                    for mol_id, endpoints in endpoints_by_mol.items():
+                        candidates_by_mol.setdefault(mol_id, endpoints)
                 for mol_id, candidates in candidates_by_mol.items():
                     if cfg.allowed_curve_classes:
                         allowed = set(cfg.allowed_curve_classes)

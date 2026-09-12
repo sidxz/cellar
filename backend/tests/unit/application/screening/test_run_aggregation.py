@@ -103,6 +103,27 @@ def test_resolve_intercept_missing_intercept_returns_nd():
     assert q is ValueQualifier.ND
 
 
+def test_resolve_intercept_readout_row_ignores_intercept_key():
+    """A readout row (no curve) has no intercept to resolve — its own value is
+    the reported endpoint, even on a channel that carries an intercept key."""
+    run = ResolvedRun(
+        run_id=uuid.uuid4(),
+        run_date=date(2026, 1, 1),
+        run_approved=True,
+        curve_id=None,
+        value=32.0,
+        qualifier=ValueQualifier.GT,
+        unit="uM",
+        z_prime=None,
+        protocol_name="Test",
+        protocol_version=1,
+        readout_id=uuid.uuid4(),
+    )
+    value, q = resolve_intercept(run, InterceptKey(kind="ic", level=50.0))
+    assert value == 32.0
+    assert q is ValueQualifier.EQ
+
+
 # ---- apply_selection_rule ----
 
 

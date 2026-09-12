@@ -58,6 +58,20 @@ class FakeChannelQuery:
     async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
         return []
 
+    async def fetch_endpoint_candidates(self, *, workspace_id, channel, molecule_id):
+        return []
+
+    async def fetch_endpoint_candidates_for_runs(
+        self,
+        *,
+        workspace_id,
+        run_ids,
+        protocol_id,
+        readout_definition_id,
+        normalization_applied=None,
+    ):
+        return {}
+
     async def fetch_candidates_for_runs(
         self,
         *,
@@ -753,8 +767,10 @@ class TestPreviewRunImport:
                 value=base.value, qualifier=base.qualifier, unit=base.unit,
                 run_id=base.run_id, run_date=base.run_date, run_approved=base.run_approved,
                 z_prime=base.z_prime, protocol_name=base.protocol_name,
-                protocol_version=base.protocol_version, curve_id=base.curve_id,
-                readout_id=base.readout_id,
+                protocol_version=base.protocol_version,
+                # intercept_values only ever exist on a fitted curve row.
+                curve_id=uuid.uuid4(),
+                readout_id=None,
                 intercept_values=[
                     {"spec": {"kind": "ec", "level": 50}, "value": primary},
                     {"spec": {"kind": "ec", "level": 90}, "value": ec90},
@@ -871,8 +887,10 @@ class TestPreviewRunImport:
                 value=base.value, qualifier=base.qualifier, unit=base.unit,
                 run_id=base.run_id, run_date=base.run_date, run_approved=base.run_approved,
                 z_prime=base.z_prime, protocol_name=base.protocol_name,
-                protocol_version=base.protocol_version, curve_id=base.curve_id,
-                readout_id=base.readout_id,
+                protocol_version=base.protocol_version,
+                # intercept_values only ever exist on a fitted curve row.
+                curve_id=uuid.uuid4(),
+                readout_id=None,
                 intercept_values=[
                     {"spec": {"kind": "ec", "level": 50}, "value": primary},
                     {"spec": {"kind": "ec", "level": 90}, "value": ec90},

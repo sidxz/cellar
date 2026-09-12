@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -53,10 +53,24 @@ from tests.unit.application.research_organization._helpers import (
 
 
 class FakeChannelQuery:
-    def __init__(self, candidates_by_channel=None) -> None:
+    def __init__(self, candidates_by_channel=None, endpoints_by_channel=None) -> None:
         self._data = candidates_by_channel or {}
+        self._endpoints = endpoints_by_channel or {}
+
+    @staticmethod
+    def _scoped(data, protocol_id, readout_definition_id, run_ids):
+        run_set = set(run_ids)
+        out: dict[uuid.UUID, list[ResolvedCandidate]] = {}
+        for mol_id, cands in data.get((protocol_id, readout_definition_id), {}).items():
+            kept = [c for c in cands if c.run_id in run_set]
+            if kept:
+                out[mol_id] = kept
+        return out
 
     async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
+        return []
+
+    async def fetch_endpoint_candidates(self, *, workspace_id, channel, molecule_id):
         return []
 
     async def fetch_candidates_for_runs(
@@ -69,15 +83,18 @@ class FakeChannelQuery:
         source_kind,
         normalization_applied=None,
     ):
-        run_set = set(run_ids)
-        out: dict[uuid.UUID, list[ResolvedCandidate]] = {}
-        for mol_id, cands in self._data.get(
-            (protocol_id, readout_definition_id), {}
-        ).items():
-            kept = [c for c in cands if c.run_id in run_set]
-            if kept:
-                out[mol_id] = kept
-        return out
+        return self._scoped(self._data, protocol_id, readout_definition_id, run_ids)
+
+    async def fetch_endpoint_candidates_for_runs(
+        self,
+        *,
+        workspace_id,
+        run_ids,
+        protocol_id,
+        readout_definition_id,
+        normalization_applied=None,
+    ):
+        return self._scoped(self._endpoints, protocol_id, readout_definition_id, run_ids)
 
 
 def _candidate(
@@ -800,3 +817,104 @@ class TestAddResultsFromRuns:
         assert isinstance(out.failure(), ValidationError)
         # The colliding stage attempt must not have appended a duplicate.
         assert len(campaign.stages) == 1
+
+    # ---- D1: dose-response fallback to reported endpoint rows ----
+
+    @staticmethod
+    def _curve_candidate(*, value: float, run_id: uuid.UUID) -> ResolvedCandidate:
+        c = _candidate(value=value, run_id=run_id)
+        return replace(c, curve_id=uuid.uuid4(), readout_id=None, curve_class="full")
+
+    @pytest.mark.asyncio
+    async def test_dr_config_falls_back_to_endpoint_when_molecule_has_no_curve(
+        self,
+    ) -> None:
+        """A DR channel imports a molecule that only has a summary-imported
+        reported endpoint; a molecule with a fitted curve keeps its curve."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol_curve, mol_endpoint = uuid.uuid4(), uuid.uuid4()
+        curve = self._curve_candidate(value=10.0, run_id=run_id)
+        curve_mol_endpoint = _candidate(value=999.0, run_id=run_id)
+        endpoint = _candidate(value=32.0, run_id=run_id)
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(
+                {(proto, readout): {mol_curve: [curve]}},
+                {
+                    (proto, readout): {
+                        mol_curve: [curve_mol_endpoint],
+                        mol_endpoint: [endpoint],
+                    }
+                },
+            ),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                )
+            ],
+            scope="all",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 2
+
+        by_mol = {r.molecule_id: r for r in campaign.results}
+        endpoint_cell = by_mol[mol_endpoint].measurements[0]
+        assert endpoint_cell.value == 32.0
+        assert endpoint_cell.source_readout_id == endpoint.readout_id
+        assert endpoint_cell.source_curve_id is None
+
+        # The molecule with a curve keeps the curve — its endpoint row is ignored.
+        curve_cell = by_mol[mol_curve].measurements[0]
+        assert curve_cell.value == 10.0
+        assert curve_cell.source_curve_id == curve.curve_id
+        assert curve_cell.source_readout_id is None
+
+    @pytest.mark.asyncio
+    async def test_readout_config_does_not_fetch_endpoint_fallback(self) -> None:
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(
+                {},
+                {(proto, readout): {mol: [_candidate(value=32.0, run_id=run_id)]}},
+            ),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                )
+            ],
+            scope="all",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 0
