@@ -75,6 +75,8 @@ import {
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 
 import { campaignKeys } from "../hooks/use-campaigns";
+import type { CampaignStageResponse } from "../types";
+import { ROOT_SENTINEL } from "./stage-popover";
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -132,10 +134,11 @@ function channelConfigKey(readoutDefId: string, interceptKey: InterceptKey | nul
 interface AddFromRunsDialogProps {
   campaignId: string;
   projectId: string;
-  /** Existing stage names on this campaign — used to default the "Save as
-   *  hit stage" checkbox off (and to block Add) when the auto-derived
-   *  `<Protocol> hits` name would collide (case-insensitive). */
-  existingStageNames: string[];
+  /** This campaign's stages — they name the "Save as hit stage" collision
+   *  check (the checkbox defaults off, and Add is blocked, when the
+   *  auto-derived `<Protocol> hits` name collides case-insensitively) and
+   *  fill the parent picker. */
+  stages: CampaignStageResponse[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -145,10 +148,15 @@ interface AddFromRunsDialogProps {
 export function AddFromRunsDialog({
   campaignId,
   projectId,
-  existingStageNames,
+  stages,
   open,
   onOpenChange,
 }: AddFromRunsDialogProps) {
+  const existingStageNames = useMemo(() => stages.map((s) => s.name), [stages]);
+  const parentOptions = useMemo(
+    () => [...stages].sort((a, b) => a.display_order - b.display_order),
+    [stages],
+  );
   const qc = useQueryClient();
   const [step, setStep] = useState<"configure" | "preview">("configure");
 
@@ -174,6 +182,8 @@ export function AddFromRunsDialog({
   // protocol is chosen.
   const [saveStage, setSaveStage] = useState(false);
   const [stageName, setStageName] = useState("Imported hits");
+  // ROOT_SENTINEL = "no parent" (Radix Select forbids an empty item value).
+  const [stageParentId, setStageParentId] = useState<string>(ROOT_SENTINEL);
 
   // — Data —
   const { data: protocolsData } = useProtocolSummaries([projectId]);
@@ -404,6 +414,7 @@ export function AddFromRunsDialog({
     setApprovedOnly(true);
     setSaveStage(false);
     setStageName("Imported hits");
+    setStageParentId(ROOT_SENTINEL);
     onOpenChange(false);
   }
 
@@ -529,6 +540,9 @@ export function AddFromRunsDialog({
             stageNameCollides={stageNameCollides}
             stageName={stageName}
             onStageNameChange={setStageName}
+            parentOptions={parentOptions}
+            stageParentId={stageParentId}
+            onStageParentChange={setStageParentId}
           />
         ) : (
           <PreviewStep data={previewData} isLoading={previewMutation.isPending && !previewData} />
@@ -554,6 +568,10 @@ export function AddFromRunsDialog({
                     scope,
                     refresh_existing_cells: refreshExisting,
                     stage_name: hasThreshold && saveStage ? trimmedStageName : null,
+                    parent_stage_id:
+                      hasThreshold && saveStage && stageParentId !== ROOT_SENTINEL
+                        ? stageParentId
+                        : null,
                   } as never,
                 });
               }}
@@ -614,6 +632,10 @@ interface ConfigureStepProps {
   stageNameCollides: boolean;
   stageName: string;
   onStageNameChange: (v: string) => void;
+  /** Stages the new one can hang under, in display order. */
+  parentOptions: CampaignStageResponse[];
+  stageParentId: string;
+  onStageParentChange: (v: string) => void;
 }
 
 function ConfigureStep(p: ConfigureStepProps) {
@@ -955,19 +977,37 @@ function ConfigureStep(p: ConfigureStepProps) {
                   </Label>
                 </div>
                 {p.saveStage && (
-                  <div className="space-y-1">
-                    <Label className="text-xs">Stage name</Label>
-                    <Input
-                      value={p.stageName}
-                      onChange={(e) => p.onStageNameChange(e.target.value)}
-                      placeholder="e.g. Screening hits"
-                      className="h-8 text-sm"
-                    />
-                    {p.stageNameCollides && (
-                      <p className="text-xs text-destructive">
-                        A stage named "{p.stageName.trim()}" already exists on this campaign.
-                      </p>
-                    )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Stage name</Label>
+                      <Input
+                        value={p.stageName}
+                        onChange={(e) => p.onStageNameChange(e.target.value)}
+                        placeholder="e.g. Screening hits"
+                        className="h-8 text-sm"
+                      />
+                      {p.stageNameCollides && (
+                        <p className="text-xs text-destructive">
+                          A stage named "{p.stageName.trim()}" already exists on this campaign.
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Parent stage</Label>
+                      <Select value={p.stageParentId} onValueChange={p.onStageParentChange}>
+                        <SelectTrigger className="h-8 text-sm" aria-label="Parent stage">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ROOT_SENTINEL}>None (root)</SelectItem>
+                          {p.parentOptions.map((st) => (
+                            <SelectItem key={st.id} value={st.id}>
+                              {st.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
               </div>

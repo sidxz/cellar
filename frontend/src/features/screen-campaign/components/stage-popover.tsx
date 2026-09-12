@@ -63,7 +63,7 @@ import type {
 // Radix Select forbids an empty-string item value, hence the explicit
 // sentinel for "no parent" (mirrors ChannelPopoverForm's normalization_applied
 // "raw" sentinel).
-const ROOT_SENTINEL = "__root__";
+export const ROOT_SENTINEL = "__root__";
 
 /** Shown wherever a manual stage would otherwise explain its criteria. */
 export const MANUAL_STAGE_HELP =

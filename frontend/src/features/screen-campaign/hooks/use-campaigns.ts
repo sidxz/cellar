@@ -10,9 +10,20 @@
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 
-import { getCampaignApiV1CampaignsCampaignIdGet } from "@/shared/lib/api/campaigns/campaigns";
+import {
+  getCampaignApiV1CampaignsCampaignIdGet,
+  getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet,
+} from "@/shared/lib/api/campaigns/campaigns";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
-import type { CampaignResponse, PaginatedResponseCampaignResponse } from "@/shared/lib/api/model";
+import type {
+  CampaignResponse,
+  CampaignSummaryResponse,
+  ListCampaignsApiV1CampaignsGetParams,
+  PaginatedResponseCampaignSummaryResponse,
+} from "@/shared/lib/api/model";
+
+/** The lifecycle states the list endpoint can be narrowed to. */
+export type CampaignStatusFilter = NonNullable<ListCampaignsApiV1CampaignsGetParams["status"]>;
 
 // ─── Query key factory ───────────────────────────────────────────────────────
 
@@ -20,6 +31,7 @@ export const campaignKeys = {
   all: ["campaigns"] as const,
   byProject: (projectId: string) => ["campaigns", "by-project", projectId] as const,
   detail: (campaignId: string) => ["campaigns", campaignId] as const,
+  summary: (campaignId: string) => ["campaigns", campaignId, "summary"] as const,
 } as const;
 
 // ─── List hook ───────────────────────────────────────────────────────────────
@@ -29,7 +41,11 @@ export const campaignKeys = {
  * If `projectId` is provided the query is workspace-scoped to that project
  * by the auth middleware on the backend.
  * `tags` + `tagLogic` filter campaigns by assigned tags (passed to the
- * backend `tags` / `tag_logic` query params).
+ * backend `tags` / `tag_logic` query params); `status` narrows to one
+ * lifecycle state.
+ *
+ * Items are summaries — every campaign field except the result rows, plus
+ * `result_count` and stage `counts`.
  */
 export function useCampaigns(
   projectId?: string,
@@ -38,21 +54,29 @@ export function useCampaigns(
     tagLogic?: "any" | "all";
     targets?: string[];
     targetLogic?: "any" | "all";
-  } & Partial<UseQueryOptions<CampaignResponse[], Error, CampaignResponse[]>>,
+    status?: CampaignStatusFilter;
+  } & Partial<UseQueryOptions<CampaignSummaryResponse[], Error, CampaignSummaryResponse[]>>,
 ) {
   const {
     tags: rawTags,
     tagLogic,
     targets: rawTargets,
     targetLogic,
+    status,
     ...queryOptions
   } = options ?? {};
   const tags = rawTags?.length ? rawTags : null;
   const targets = rawTargets?.length ? rawTargets : null;
 
   const filterKey =
-    tags || targets
-      ? { tags, tagLogic: tagLogic ?? "any", targets, targetLogic: targetLogic ?? "any" }
+    tags || targets || status
+      ? {
+          tags,
+          tagLogic: tagLogic ?? "any",
+          targets,
+          targetLogic: targetLogic ?? "any",
+          status: status ?? null,
+        }
       : null;
   const baseKey = projectId ? campaignKeys.byProject(projectId) : campaignKeys.all;
   const queryKey = filterKey ? [...baseKey, filterKey] : baseKey;
@@ -70,7 +94,8 @@ export function useCampaigns(
         params.targets = targets;
         params.target_logic = targetLogic ?? "any";
       }
-      const page = await customInstance<PaginatedResponseCampaignResponse>({
+      if (status) params.status = status;
+      const page = await customInstance<PaginatedResponseCampaignSummaryResponse>({
         url: `${API_V1}/campaigns`,
         method: "GET",
         ...(Object.keys(params).length ? { params } : {}),
@@ -94,6 +119,25 @@ export function useCampaign(
   return useQuery({
     queryKey: campaignKeys.detail(campaignId),
     queryFn: () => getCampaignApiV1CampaignsCampaignIdGet(campaignId),
+    enabled: !!campaignId,
+    ...options,
+  });
+}
+
+// ─── Summary hook ────────────────────────────────────────────────────────────
+
+/**
+ * Fetches a campaign without its result rows — stages (with their funnel
+ * counts) and channels, plus `result_count`. Use it wherever the rows aren't
+ * rendered; `useCampaign` is the full draft view.
+ */
+export function useCampaignSummary(
+  campaignId: string,
+  options?: Partial<UseQueryOptions<CampaignSummaryResponse, Error, CampaignSummaryResponse>>,
+) {
+  return useQuery({
+    queryKey: campaignKeys.summary(campaignId),
+    queryFn: () => getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet(campaignId),
     enabled: !!campaignId,
     ...options,
   });

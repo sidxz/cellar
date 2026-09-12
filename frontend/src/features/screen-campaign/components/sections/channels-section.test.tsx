@@ -1,9 +1,25 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CampaignChannelResponse, CampaignResponse } from "../../types";
 import { ChannelsSection } from "./channels-section";
+
+const { mutateAsync, mirrorMutate } = vi.hoisted(() => ({
+  mutateAsync: vi.fn(async () => ({})),
+  mirrorMutate: vi.fn(),
+}));
+vi.mock("@/shared/lib/api/campaigns/campaigns", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useUpdateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch: () => ({
+    mutateAsync,
+    isPending: false,
+  }),
+  useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost: () => ({
+    mutate: mirrorMutate,
+    isPending: false,
+  }),
+}));
 
 vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
   useProtocolSummaries: () => ({
@@ -12,8 +28,20 @@ vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
       { id: "proto-2", name: "Resazurin Viability" },
     ],
   }),
-  useProtocol: () => ({ data: undefined }),
+  // Every protocol here recommends criteria, so the mirror popover offers
+  // its "also create a stage" block.
+  useProtocol: () => ({
+    data: { recommended_hit_criteria: [{ readout_definition_id: "rd-1", operator: "lt" }] },
+  }),
 }));
+
+// Radix Select portals a listbox whose items call scrollIntoView +
+// hasPointerCapture — jsdom ships neither.
+beforeAll(() => {
+  Element.prototype.scrollIntoView ??= vi.fn();
+  Element.prototype.hasPointerCapture ??= vi.fn(() => false);
+  Element.prototype.releasePointerCapture ??= vi.fn();
+});
 
 function makeChannel(overrides: Partial<CampaignChannelResponse>): CampaignChannelResponse {
   return {
@@ -85,10 +113,120 @@ describe("ChannelsSection", () => {
       <ChannelsSection campaign={campaign} projectId="p1" readOnly={false} />,
       { wrapper },
     );
-    expect(screen.getByRole("button", { name: /IC50/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^IC50/ })).toBeInTheDocument();
     unmount();
 
     render(<ChannelsSection campaign={campaign} projectId="p1" readOnly />, { wrapper });
-    expect(screen.queryByRole("button", { name: /IC50/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^IC50/ })).not.toBeInTheDocument();
+  });
+});
+
+// ── Reorder ──────────────────────────────────────────────────────────────────
+
+/** Two readouts on one protocol, so a row has a neighbour to swap with. */
+const twoOnOneProtocol = {
+  id: "c1",
+  stages: [],
+  channels: [
+    makeChannel({ id: "ch-a", label: "IC50", protocol_id: "proto-1", display_order: 0 }),
+    makeChannel({ id: "ch-b", label: "IC90", protocol_id: "proto-1", display_order: 3 }),
+  ],
+} as unknown as CampaignResponse;
+
+describe("ChannelsSection reorder", () => {
+  beforeEach(() => mutateAsync.mockClear());
+
+  it("swaps display_order with the neighbour, one PATCH at a time", async () => {
+    render(<ChannelsSection campaign={twoOnOneProtocol} projectId="p1" readOnly={false} />, {
+      wrapper,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Move IC50 later" }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    expect(mutateAsync).toHaveBeenNthCalledWith(1, {
+      campaignId: "c1",
+      channelId: "ch-a",
+      data: { display_order: 3 },
+    });
+    expect(mutateAsync).toHaveBeenNthCalledWith(2, {
+      campaignId: "c1",
+      channelId: "ch-b",
+      data: { display_order: 0 },
+    });
+  });
+
+  it("disables the arrows at the ends of the row", () => {
+    render(<ChannelsSection campaign={twoOnOneProtocol} projectId="p1" readOnly={false} />, {
+      wrapper,
+    });
+
+    expect(screen.getByRole("button", { name: "Move IC50 earlier" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move IC50 later" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Move IC90 earlier" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Move IC90 later" })).toBeDisabled();
+  });
+
+  it("shows no arrows in read-only mode", () => {
+    render(<ChannelsSection campaign={twoOnOneProtocol} projectId="p1" readOnly />, { wrapper });
+
+    expect(screen.queryByRole("button", { name: /^Move / })).not.toBeInTheDocument();
+  });
+});
+
+// ── Mirror protocol ──────────────────────────────────────────────────────────
+
+const withStage = {
+  id: "c1",
+  stages: [{ id: "st-1", name: "Primary", display_order: 0, kind: "criteria" }],
+  // One channel, so the empty state's own "Mirror protocol" link stays away
+  // and the pill is the only trigger.
+  channels: [makeChannel({ id: "ch-a", label: "IC50" })],
+} as unknown as CampaignResponse;
+
+/** Open the Nth <Select> and click the option whose text matches. */
+function pick(comboboxIndex: number, optionText: string | RegExp) {
+  fireEvent.click(screen.getAllByRole("combobox")[comboboxIndex]);
+  fireEvent.click(within(screen.getByRole("listbox")).getByText(optionText));
+}
+
+describe("MirrorProtocolPopover", () => {
+  beforeEach(() => mirrorMutate.mockClear());
+
+  it("sends the picked parent stage alongside stage_name", async () => {
+    render(<ChannelsSection campaign={withStage} projectId="p1" readOnly={false} />, { wrapper });
+
+    fireEvent.click(screen.getByRole("button", { name: /Mirror protocol/ }));
+    pick(0, "Kinase Panel");
+    await screen.findByLabelText("Parent stage");
+    pick(1, "Primary");
+    fireEvent.click(screen.getByRole("button", { name: "Mirror" }));
+
+    expect(mirrorMutate).toHaveBeenCalledWith({
+      campaignId: "c1",
+      data: {
+        protocol_id: "proto-1",
+        stage_name: "Kinase Panel hits",
+        parent_stage_id: "st-1",
+      },
+    });
+  });
+
+  it("leaves parent_stage_id off when the stage stays at the root", async () => {
+    render(<ChannelsSection campaign={withStage} projectId="p1" readOnly={false} />, { wrapper });
+
+    fireEvent.click(screen.getByRole("button", { name: /Mirror protocol/ }));
+    pick(0, "Kinase Panel");
+    await screen.findByLabelText("Parent stage");
+    fireEvent.click(screen.getByRole("button", { name: "Mirror" }));
+
+    expect(mirrorMutate).toHaveBeenCalledWith({
+      campaignId: "c1",
+      data: {
+        protocol_id: "proto-1",
+        stage_name: "Kinase Panel hits",
+        parent_stage_id: undefined,
+      },
+    });
   });
 });

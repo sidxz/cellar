@@ -86,7 +86,7 @@ export function AddCompoundsPills({
       <AddFromRunsDialog
         campaignId={campaign.id}
         projectId={projectId}
-        existingStageNames={campaign.stages.map((s) => s.name)}
+        stages={campaign.stages}
         open={open === "run"}
         onOpenChange={(v) => !v && setOpen(null)}
       />
