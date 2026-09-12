@@ -178,11 +178,17 @@ class SQLAlchemyChannelResolutionQuery:
         workspace_id: uuid.UUID,
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
+        run_ids: list[uuid.UUID] | None = None,
     ) -> list[ResolvedCandidate]:
+        """``run_ids`` narrows the sweep to those runs; ``None`` = every run
+        of the protocol."""
         if channel.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
-            return await self._fetch_curve_candidates(workspace_id, channel, molecule_id)
+            return await self._fetch_curve_candidates(workspace_id, channel, molecule_id, run_ids)
         return await self.fetch_endpoint_candidates(
-            workspace_id=workspace_id, channel=channel, molecule_id=molecule_id
+            workspace_id=workspace_id,
+            channel=channel,
+            molecule_id=molecule_id,
+            run_ids=run_ids,
         )
 
     async def _fetch_curve_candidates(
@@ -190,6 +196,7 @@ class SQLAlchemyChannelResolutionQuery:
         workspace_id: uuid.UUID,
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
+        run_ids: list[uuid.UUID] | None = None,
     ) -> list[ResolvedCandidate]:
         stmt = (
             select(
@@ -231,6 +238,9 @@ class SQLAlchemyChannelResolutionQuery:
                 # share a curve_type would both surface here and the
                 # selection rule below would silently pick the wrong one.
                 DoseResponseCurveModel.readout_definition_id == channel.readout_definition_id,
+                # Campaign run scope (spec D4) — None leaves the sweep
+                # protocol-wide.
+                *([DoseResponseCurveModel.run_id.in_(run_ids)] if run_ids is not None else []),
             )
         )
         async with self._sf() as session:
@@ -405,6 +415,7 @@ class SQLAlchemyChannelResolutionQuery:
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
         wellless_only: bool = False,
+        run_ids: list[uuid.UUID] | None = None,
     ) -> list[ResolvedCandidate]:
         """readout_data candidates for the channel's readout definition.
 
@@ -419,13 +430,19 @@ class SQLAlchemyChannelResolutionQuery:
         per-well response readings, which carry a well_id — can never be
         averaged into a fake endpoint. A numeric readout channel legitimately
         reads per-well rows and leaves it off.
+
+        ``run_ids`` narrows the sweep to the campaign's run scope (spec D4);
+        ``None`` = every run of the protocol.
         """
         stmt = _readout_stmt(
             workspace_id=workspace_id,
             readout_definition_id=channel.readout_definition_id,
             normalization_applied=channel.normalization_applied,
             wellless_only=wellless_only,
-        ).where(ReadoutDataModel.molecule_id == molecule_id)
+        ).where(
+            ReadoutDataModel.molecule_id == molecule_id,
+            *([ReadoutDataModel.run_id.in_(run_ids)] if run_ids is not None else []),
+        )
         async with self._sf() as session:
             rows = (await session.execute(stmt)).all()
         return [_readout_candidate(row, channel.normalization_applied) for row in rows]

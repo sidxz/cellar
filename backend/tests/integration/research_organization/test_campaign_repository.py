@@ -595,3 +595,30 @@ async def test_close_note_round_trip(
         reloaded = await repo2.find_by_id(c.id)
     assert reloaded is not None
     assert reloaded.close_note == "closed after triage review"
+
+
+@pytest.mark.asyncio
+async def test_channel_resolve_from_all_runs_round_trips(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The run-scope opt-out (spec D4) survives insert, reload, and update."""
+    c = _build_campaign(add_result=False, add_measurement=False)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        loaded = await repo.find_by_id(c.id)
+        assert loaded is not None
+        assert loaded.channels[0].resolve_from_all_runs is False  # column default
+        loaded.channels[0].resolve_from_all_runs = True
+        await repo.save(loaded)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        again = await repo.find_by_id(c.id)
+    assert again is not None
+    assert again.channels[0].resolve_from_all_runs is True

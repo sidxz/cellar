@@ -618,3 +618,176 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
         workspace_id=ws_id, channel=channel, molecule_id=mol_welled_id
     )
     assert [c.readout_id for c in welled] == [welled_row_id]
+
+
+@pytest.mark.asyncio
+async def test_run_scope_excludes_other_runs_on_both_branches(session_factory):
+    """Spec D4 — ``run_ids`` narrows the single-molecule sweep to the
+    campaign's own runs, on the dose-response branch and the readout branch
+    alike. ``None`` keeps the pre-D4 protocol-wide behaviour.
+    """
+    from cellar.domain.research_organization.campaign_channel import CampaignChannel
+    from cellar.domain.research_organization.enums import (
+        ChannelSourceKind,
+        QualifierHandling,
+        SelectionRule,
+    )
+    from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
+        SQLAlchemyChannelResolutionQuery,
+    )
+
+    ws_id = uuid.uuid4()
+    org_id = uuid.uuid4()
+    user_id = uuid.UUID("eeeeeeee-0000-0000-0000-000000000004")
+    protocol_id = uuid.uuid4()
+    run_a_id = uuid.uuid4()
+    run_b_id = uuid.uuid4()
+    molecule_id = uuid.uuid4()
+    batch_id = uuid.uuid4()
+    rd_id = uuid.uuid4()
+    curve_a_id = uuid.uuid4()
+    curve_b_id = uuid.uuid4()
+    row_a_id = uuid.uuid4()
+    row_b_id = uuid.uuid4()
+
+    async with session_factory() as session, session.begin():
+        await session.execute(
+            sa.text(
+                "INSERT INTO organizations "
+                "(id, workspace_id, name, org_type, is_active, version) "
+                "VALUES (:id, :ws, 'Test Org', 'internal', true, 1) "
+                "ON CONFLICT DO NOTHING"
+            ),
+            {"id": org_id, "ws": ws_id},
+        )
+        await session.execute(
+            sa.text(
+                "INSERT INTO protocols "
+                "(id, workspace_id, name, protocol_type, status, "
+                "is_locked, dose_unit, pos_control_signal, version, "
+                "protocol_version, created_by) "
+                "VALUES (:id, :ws, 'Run Scope', 'biochemical', 'active', "
+                "false, 'uM', 'high', 1, 1, :user)"
+            ),
+            {"id": protocol_id, "ws": ws_id, "user": user_id},
+        )
+        await session.execute(
+            sa.text(
+                "INSERT INTO readout_definitions "
+                "(id, protocol_id, name, data_type, display_order, "
+                "is_calculated, unit) "
+                "VALUES (:id, :proto, 'IC50', 'dose_response', 0, false, 'uM')"
+            ),
+            {"id": rd_id, "proto": protocol_id},
+        )
+        for run_id, run_date in ((run_a_id, date(2026, 1, 1)), (run_b_id, date(2026, 6, 1))):
+            await session.execute(
+                sa.text(
+                    "INSERT INTO runs "
+                    "(id, workspace_id, protocol_id, run_date, operator, "
+                    "status, is_locked, version, notes) "
+                    "VALUES (:id, :ws, :proto, :run_date, :user, 'approved', "
+                    "false, 1, NULL)"
+                ),
+                {
+                    "id": run_id,
+                    "ws": ws_id,
+                    "proto": protocol_id,
+                    "run_date": run_date,
+                    "user": user_id,
+                },
+            )
+        # One curve and one well-less readout row per run, same molecule.
+        for curve_id, run_id, fitted in ((curve_a_id, run_a_id, 1.0), (curve_b_id, run_b_id, 9.0)):
+            await session.execute(
+                sa.text(
+                    "INSERT INTO dose_response_curves "
+                    "(id, workspace_id, molecule_id, batch_id, protocol_id, "
+                    "run_id, readout_definition_id, curve_type, fitted_value, "
+                    "hill_slope, top, bottom, r_squared, num_points) "
+                    "VALUES (:id, :ws, :mol, :batch, :proto, :run, :rd, "
+                    "'ic50', :fitted, 1.0, 100.0, 0.0, 0.97, 8)"
+                ),
+                {
+                    "id": curve_id,
+                    "ws": ws_id,
+                    "mol": molecule_id,
+                    "batch": batch_id,
+                    "proto": protocol_id,
+                    "run": run_id,
+                    "rd": rd_id,
+                    "fitted": fitted,
+                },
+            )
+        for row_id, run_id, value in ((row_a_id, run_a_id, 1.0), (row_b_id, run_b_id, 9.0)):
+            await session.execute(
+                sa.text(
+                    "INSERT INTO readout_data "
+                    "(id, workspace_id, run_id, well_id, molecule_id, "
+                    "batch_id, readout_definition_id, value_numeric, "
+                    "value_qualifier, is_outlier, is_computed, "
+                    "normalization_applied) "
+                    "VALUES (:id, :ws, :run, NULL, :mol, :batch, :rd, "
+                    ":value, '=', false, false, NULL)"
+                ),
+                {
+                    "id": row_id,
+                    "ws": ws_id,
+                    "run": run_id,
+                    "mol": molecule_id,
+                    "batch": batch_id,
+                    "rd": rd_id,
+                    "value": value,
+                },
+            )
+
+    query = SQLAlchemyChannelResolutionQuery(session_factory)
+
+    def _channel(source_kind: ChannelSourceKind) -> CampaignChannel:
+        return CampaignChannel(
+            campaign_id=uuid.uuid4(),
+            label="IC50",
+            protocol_id=protocol_id,
+            readout_definition_id=rd_id,
+            source_kind=source_kind,
+            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+            display_order=0,
+        )
+
+    dr_channel = _channel(ChannelSourceKind.DOSE_RESPONSE_CURVE)
+    readout_channel = _channel(ChannelSourceKind.READOUT_DATA)
+
+    # Dose-response branch of fetch_candidates.
+    scoped = await query.fetch_candidates(
+        workspace_id=ws_id, channel=dr_channel, molecule_id=molecule_id, run_ids=[run_a_id]
+    )
+    assert [c.curve_id for c in scoped] == [curve_a_id]
+    unscoped = await query.fetch_candidates(
+        workspace_id=ws_id, channel=dr_channel, molecule_id=molecule_id
+    )
+    assert sorted(c.curve_id for c in unscoped) == sorted([curve_a_id, curve_b_id])
+
+    # Readout branch of fetch_candidates.
+    scoped = await query.fetch_candidates(
+        workspace_id=ws_id, channel=readout_channel, molecule_id=molecule_id, run_ids=[run_a_id]
+    )
+    assert [c.readout_id for c in scoped] == [row_a_id]
+    unscoped = await query.fetch_candidates(
+        workspace_id=ws_id, channel=readout_channel, molecule_id=molecule_id
+    )
+    assert sorted(c.readout_id for c in unscoped) == sorted([row_a_id, row_b_id])
+
+    # The D1 reported-endpoint fallback takes the same scope.
+    scoped = await query.fetch_endpoint_candidates(
+        workspace_id=ws_id,
+        channel=dr_channel,
+        molecule_id=molecule_id,
+        wellless_only=True,
+        run_ids=[run_b_id],
+    )
+    assert [c.readout_id for c in scoped] == [row_b_id]
+    unscoped = await query.fetch_endpoint_candidates(
+        workspace_id=ws_id, channel=dr_channel, molecule_id=molecule_id, wellless_only=True
+    )
+    assert sorted(c.readout_id for c in unscoped) == sorted([row_a_id, row_b_id])

@@ -181,6 +181,9 @@ class AddChannelRequest(BaseModel):
     #: does not accept this field (a chemist wanting a different intercept
     #: creates a new channel).
     intercept_key: InterceptKeyDTO | None = None
+    #: Opt out of the campaign's run scope — resolve protocol-wide even when
+    #: the campaign was seeded from runs (spec D4).
+    resolve_from_all_runs: bool = False
 
 
 class UpdateChannelRequest(BaseModel):
@@ -196,6 +199,9 @@ class UpdateChannelRequest(BaseModel):
     #: Column position in the campaign grid. Reorder = PATCH each moved
     #: channel with its new index.
     display_order: int | None = None
+    #: Opt out of the campaign's run scope. Omitted = unchanged; flipping it
+    #: re-resolves every cell of the channel.
+    resolve_from_all_runs: bool | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -442,6 +448,7 @@ class CampaignChannelResponse(BaseModel):
     #: Identifies which intercept of a DR curve this channel surfaces.
     #: ``None`` = primary intercept (legacy single-intercept channels).
     intercept_key: InterceptKeyDTO | None = None
+    resolve_from_all_runs: bool = False
 
     @classmethod
     def from_domain(cls, ch: CampaignChannel) -> CampaignChannelResponse:
@@ -459,6 +466,7 @@ class CampaignChannelResponse(BaseModel):
             intercept_key=InterceptKeyDTO.from_domain(ch.intercept_key)
             if ch.intercept_key is not None
             else None,
+            resolve_from_all_runs=ch.resolve_from_all_runs,
         )
 
 

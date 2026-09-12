@@ -25,7 +25,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import ManualRef
+from cellar.domain.research_organization.source_ref import ManualRef, RunRef
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -285,3 +285,53 @@ class TestAddResultRow:
         assert isinstance(out, Success)
         result = out.unwrap().results[0]
         assert isinstance(result.added_from, ManualRef)
+
+    @pytest.mark.asyncio
+    async def test_resolution_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — a hand-added row in a run-seeded campaign is restricted
+        to the campaign's runs like every other row; an opt-out channel is not."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        channel = _make_channel(campaign.id)
+        campaign.add_channel(channel)
+        run_id = uuid.uuid4()
+        campaign.add_result(
+            CampaignResult(
+                campaign_id=campaign.id,
+                molecule_id=uuid.uuid4(),
+                added_from=RunRef(run_id=run_id),
+            )
+        )
+
+        def _run(resolver) -> None:
+            return AddResultRow(
+                uow=FakeUnitOfWork(),
+                campaign_repo=make_campaign_repo(find_in_ws=campaign),
+                resolver=resolver,
+                dispatcher=AsyncMock(),
+            )
+
+        resolver = FakeResolver(factory=_add_result_measurement_factory)
+        out = await _run(resolver)(
+            AddResultRowCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                molecule_id=uuid.uuid4(),
+            ),
+            auth=auth,
+        )
+        assert isinstance(out, Success)
+        assert resolver.run_ids_seen == [[run_id]]
+
+        channel.resolve_from_all_runs = True
+        opted_out = FakeResolver(factory=_add_result_measurement_factory)
+        out = await _run(opted_out)(
+            AddResultRowCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                molecule_id=uuid.uuid4(),
+            ),
+            auth=auth,
+        )
+        assert isinstance(out, Success)
+        assert opted_out.run_ids_seen == [None]

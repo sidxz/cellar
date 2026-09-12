@@ -31,6 +31,7 @@ from cellar.domain.research_organization.events import (
     CampaignReopened,
     CampaignSuperseded,
 )
+from cellar.domain.research_organization.source_ref import RunRef
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 
@@ -189,6 +190,14 @@ class Campaign(AggregateRoot):
         if added > 0:
             self.updated_at = datetime.now(UTC)
         return added, skipped
+
+    def source_run_ids(self) -> set[uuid.UUID]:
+        """Runs this campaign was seeded from: the RunRef run ids over every
+        result's added_from. Empty for a campaign seeded only by hand, from a
+        collection, or from another campaign — such a campaign resolves
+        protocol-wide until its first add-from-runs, after which it narrows
+        to those runs (spec D4)."""
+        return {r.added_from.run_id for r in self.results if isinstance(r.added_from, RunRef)}
 
     # ----- stages -----
 

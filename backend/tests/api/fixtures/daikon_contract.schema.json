@@ -94,7 +94,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "label", "display_order", "protocol_ref", "readout", "source_kind", "selection_rule"],
+        "required": ["id", "label", "display_order", "protocol_ref", "readout", "source_kind", "selection_rule", "resolve_from_all_runs"],
         "additionalProperties": false,
         "properties": {
           "id":             { "type": "string", "format": "uuid" },
@@ -123,6 +123,7 @@
           },
           "source_kind":     { "type": "string" },
           "selection_rule":  { "type": "string" },
+          "resolve_from_all_runs": { "type": "boolean" },
           "qc_filter": {
             "oneOf": [
               { "type": "object" },

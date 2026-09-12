@@ -25,6 +25,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from cellar.domain.research_organization.source_ref import RunRef
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -390,3 +391,35 @@ class TestRefreshFromSources:
         assert resolver.calls == []
         campaign_repo.save.assert_awaited_once()
         dispatcher.dispatch_all.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_resolution_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — refresh re-resolves against the campaign's own runs, so a
+        later unrelated run of the same protocol can't move the numbers."""
+        auth = fake_auth()
+        campaign, channels, results = _build_pre_populated_campaign(
+            auth.workspace_id, n_channels=1, n_results=2
+        )
+        run_a, run_b = sorted([uuid.uuid4(), uuid.uuid4()])
+        results[0].added_from = RunRef(run_id=run_a)
+        results[1].added_from = RunRef(run_id=run_b)
+
+        def _uc(resolver):
+            return RefreshFromSources(
+                uow=FakeUnitOfWork(),
+                campaign_repo=make_campaign_repo(find_in_ws=campaign),
+                resolver=resolver,
+                dispatcher=AsyncMock(),
+            )
+
+        cmd = RefreshFromSourcesCommand(
+            workspace_id=auth.workspace_id, campaign_id=campaign.id
+        )
+        resolver = FakeResolver(factory=_new_measurement)
+        assert isinstance(await _uc(resolver)(cmd, auth=auth), Success)
+        assert resolver.run_ids_seen == [[run_a, run_b]] * 2
+
+        channels[0].resolve_from_all_runs = True
+        opted_out = FakeResolver(factory=_new_measurement)
+        assert isinstance(await _uc(opted_out)(cmd, auth=auth), Success)
+        assert opted_out.run_ids_seen == [None] * 2

@@ -20,6 +20,7 @@ from cellar.application.research_organization.add_results_from_collection import
 )
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
+    resolution_run_ids,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -143,6 +144,7 @@ class AddResultsFromCampaign:
                             channel=channel,
                             result_id=result.id,
                             molecule_id=result.molecule_id,
+                            run_ids=resolution_run_ids(campaign, channel),
                         )
                         result.add_measurement(measurement)
 

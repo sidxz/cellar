@@ -10,17 +10,21 @@ import pytest
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
     ResolvedCandidate,
+    resolution_run_ids,
     _build_aggregate_curve_snapshot,
     _max_dose_from_raw,
     _resolve_intercept,
 )
+from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
+from cellar.domain.research_organization.source_ref import RunRef
 from cellar.domain.shared.hit_criterion import InterceptKey
 
 
@@ -32,13 +36,18 @@ class _FakeQuery:
     ) -> None:
         self._c = candidates
         self._e = endpoints or []
+        #: Run scope each fetch received (``None`` = unrestricted).
+        self.candidate_run_ids: list = []
+        self.endpoint_run_ids: list = []
 
-    async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
+    async def fetch_candidates(self, *, workspace_id, channel, molecule_id, run_ids=None):
+        self.candidate_run_ids.append(run_ids)
         return list(self._c)
 
     async def fetch_endpoint_candidates(
-        self, *, workspace_id, channel, molecule_id, wellless_only=False
+        self, *, workspace_id, channel, molecule_id, wellless_only=False, run_ids=None
     ):
+        self.endpoint_run_ids.append(run_ids)
         return list(self._e)
 
 
@@ -912,3 +921,94 @@ async def test_readout_channel_does_not_reach_for_the_endpoint_fallback():
     )
     assert m.value is None
     assert m.value_qualifier is ValueQualifier.ND
+
+
+# ---------------------------------------------------------------------------
+# Run scope (spec D4)
+# ---------------------------------------------------------------------------
+
+
+def _campaign_with_runs(*run_ids: uuid.UUID) -> Campaign:
+    """A campaign seeded from the given runs (one result per run)."""
+    c = Campaign.create(
+        workspace_id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
+        name="C",
+        description=None,
+        created_by=uuid.uuid4(),
+    )
+    for rid in run_ids:
+        c.add_result(
+            CampaignResult(
+                campaign_id=c.id, molecule_id=uuid.uuid4(), added_from=RunRef(run_id=rid)
+            )
+        )
+    return c
+
+
+@pytest.mark.asyncio
+async def test_resolve_forwards_run_ids_to_the_candidate_fetch():
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    q = _FakeQuery([_candidate(1.0)])
+    run_ids = [uuid.uuid4(), uuid.uuid4()]
+    await ChannelResolver(q).resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+        run_ids=run_ids,
+    )
+    assert q.candidate_run_ids == [run_ids]
+
+
+@pytest.mark.asyncio
+async def test_resolve_forwards_run_ids_to_the_endpoint_fallback():
+    """The D1 reported-endpoint fallback must be scoped too — otherwise a
+    run-scoped DR channel with no surviving curve silently reads every run."""
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    q = _FakeQuery([], endpoints=[_endpoint_candidate(12.0)])
+    run_ids = [uuid.uuid4()]
+    m = await ChannelResolver(q).resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+        run_ids=run_ids,
+    )
+    assert m.value == 12.0
+    assert q.candidate_run_ids == [run_ids]
+    assert q.endpoint_run_ids == [run_ids]
+
+
+@pytest.mark.asyncio
+async def test_resolve_defaults_to_unrestricted():
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    q = _FakeQuery([], endpoints=[_endpoint_candidate(12.0)])
+    await ChannelResolver(q).resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert q.candidate_run_ids == [None]
+    assert q.endpoint_run_ids == [None]
+
+
+def test_resolution_run_ids_returns_sorted_source_runs():
+    r1, r2 = sorted([uuid.uuid4(), uuid.uuid4()])
+    campaign = _campaign_with_runs(r2, r1)
+    assert resolution_run_ids(campaign, _channel(SelectionRule.LATEST_APPROVED_RUN)) == [r1, r2]
+
+
+def test_resolution_run_ids_is_none_without_run_sources():
+    """A campaign seeded by hand / from a collection resolves protocol-wide."""
+    campaign = _campaign_with_runs()
+    campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
+    assert resolution_run_ids(campaign, _channel(SelectionRule.LATEST_APPROVED_RUN)) is None
+
+
+def test_resolution_run_ids_is_none_when_the_channel_opts_out():
+    campaign = _campaign_with_runs(uuid.uuid4())
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch.resolve_from_all_runs = True
+    assert resolution_run_ids(campaign, ch) is None

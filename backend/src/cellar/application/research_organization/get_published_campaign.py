@@ -349,6 +349,7 @@ def _serialize_channel(
         "source_kind": channel.source_kind.value,
         "selection_rule": channel.selection_rule.value,
         "qc_filter": qc_filter,
+        "resolve_from_all_runs": channel.resolve_from_all_runs,
     }
 
 

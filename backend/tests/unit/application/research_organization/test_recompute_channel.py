@@ -25,6 +25,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from cellar.domain.research_organization.source_ref import RunRef
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -344,3 +345,37 @@ class TestRecomputeChannel:
         assert rebuilt is not None
         assert rebuilt.value == 99.0  # genuinely replaced
         assert rebuilt.id == original_id  # id preserved for UPDATE semantics
+
+    @pytest.mark.asyncio
+    async def test_resolution_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — recompute honours the campaign's runs, and the channel's
+        opt-out lifts the restriction."""
+        auth = fake_auth()
+        campaign, ch_a, _, results = _build_campaign_two_channels_three_results(
+            auth.workspace_id
+        )
+        run_a, run_b = sorted([uuid.uuid4(), uuid.uuid4()])
+        results[0].added_from = RunRef(run_id=run_b)
+        results[1].added_from = RunRef(run_id=run_a)
+
+        def _uc(resolver):
+            return RecomputeChannel(
+                uow=FakeUnitOfWork(),
+                campaign_repo=make_campaign_repo(find_in_ws=campaign),
+                resolver=resolver,
+                dispatcher=AsyncMock(),
+            )
+
+        cmd = RecomputeChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=ch_a.id,
+        )
+        resolver = FakeResolver(factory=_new_measurement)
+        assert isinstance(await _uc(resolver)(cmd, auth=auth), Success)
+        assert resolver.run_ids_seen == [[run_a, run_b]] * 3
+
+        ch_a.resolve_from_all_runs = True
+        opted_out = FakeResolver(factory=_new_measurement)
+        assert isinstance(await _uc(opted_out)(cmd, auth=auth), Success)
+        assert opted_out.run_ids_seen == [None] * 3

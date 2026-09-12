@@ -27,6 +27,7 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.events import CampaignClosed
+from cellar.domain.research_organization.source_ref import RunRef
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -603,3 +604,28 @@ class TestCloseCampaign:
         # Dedup: find_by_ids called once with that one id
         protocol_repo.find_by_ids.assert_awaited_once()
         assert set(protocol_repo.find_by_ids.call_args.args[1]) == {shared_pid}
+
+    @pytest.mark.asyncio
+    async def test_resolution_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — the close-time re-resolve honours the campaign's runs."""
+        auth = fake_auth()
+        campaign, channels, results = _build_campaign(auth.workspace_id)
+        run_id = uuid.uuid4()
+        results[0].added_from = RunRef(run_id=run_id)
+
+        uc, _, _, resolver = _make_use_case(campaign)
+        out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
+        assert isinstance(out, Success)
+        assert resolver.run_ids_seen == [[run_id]]
+
+    @pytest.mark.asyncio
+    async def test_close_opt_out_channel_resolves_unrestricted(self) -> None:
+        auth = fake_auth()
+        campaign, channels, results = _build_campaign(auth.workspace_id)
+        results[0].added_from = RunRef(run_id=uuid.uuid4())
+        channels[0].resolve_from_all_runs = True
+
+        uc, _, _, resolver = _make_use_case(campaign)
+        out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
+        assert isinstance(out, Success)
+        assert resolver.run_ids_seen == [None]

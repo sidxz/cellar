@@ -503,6 +503,64 @@ class TestCampaignChannels:
         )
         assert bad.status_code == 422, bad.text
 
+    async def test_channel_resolve_from_all_runs_round_trips_through_the_api(
+        self, client: AsyncClient
+    ) -> None:
+        """POST accepts the run-scope opt-out, PATCH flips it, GET reports it."""
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "Counter-screen",
+                "protocol_id": protocol_id,
+                "readout_definition_id": rd_id,
+                "source_kind": "readout_data",
+                "selection_rule": "latest_approved_run",
+                "qualifier_handling": "include_qualified",
+                "display_order": 0,
+                "resolve_from_all_runs": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        channel = resp.json()["channels"][0]
+        assert channel["resolve_from_all_runs"] is True
+
+        resp = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/channels/{channel['id']}",
+            json={"resolve_from_all_runs": False},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["channels"][0]["resolve_from_all_runs"] is False
+
+        reread = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert reread.json()["channels"][0]["resolve_from_all_runs"] is False
+
+    async def test_channel_defaults_to_run_scoped(self, client: AsyncClient) -> None:
+        """Omitting the flag leaves the channel bound to the campaign's runs."""
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "IC50",
+                "protocol_id": protocol_id,
+                "readout_definition_id": rd_id,
+                "source_kind": "readout_data",
+                "selection_rule": "latest_approved_run",
+                "qualifier_handling": "include_qualified",
+                "display_order": 0,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["channels"][0]["resolve_from_all_runs"] is False
+
     async def test_remove_channel_not_found_404(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-rmchan")

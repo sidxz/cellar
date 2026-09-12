@@ -186,6 +186,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             intercept_key=(
                 InterceptKey.from_dict(model.intercept_key) if model.intercept_key else None
             ),
+            resolve_from_all_runs=model.resolve_from_all_runs,
         )
 
     @staticmethod
@@ -203,6 +204,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             qc_filter=ch.qc_filter,
             normalization_applied=ch.normalization_applied,
             intercept_key=ch.intercept_key.to_dict() if ch.intercept_key else None,
+            resolve_from_all_runs=ch.resolve_from_all_runs,
         )
 
     @staticmethod
@@ -217,6 +219,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.qc_filter = ch.qc_filter
         model.normalization_applied = ch.normalization_applied
         model.intercept_key = ch.intercept_key.to_dict() if ch.intercept_key else None
+        model.resolve_from_all_runs = ch.resolve_from_all_runs
 
     # ------------------------------------------------------------------
     # Stage mapping

@@ -68,3 +68,23 @@ def test_channel_qc_filter_jsonable():
         qc_filter={"min_z_prime": 0.5, "require_approved": True},
     )
     assert ch.qc_filter == {"min_z_prime": 0.5, "require_approved": True}
+
+
+def test_channel_resolve_from_all_runs_defaults_false_and_round_trips():
+    """The run-scope opt-out (spec D4) is off unless the curator asks for it."""
+
+    def _channel(**kw) -> CampaignChannel:
+        return CampaignChannel(
+            campaign_id=uuid.uuid4(),
+            label="IC50",
+            protocol_id=uuid.uuid4(),
+            readout_definition_id=uuid.uuid4(),
+            source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+            display_order=0,
+            **kw,
+        )
+
+    assert _channel().resolve_from_all_runs is False
+    assert _channel(resolve_from_all_runs=True).resolve_from_all_runs is True

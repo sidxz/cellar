@@ -27,7 +27,12 @@ from cellar.domain.research_organization.events import (
     CampaignReopened,
     CampaignSuperseded,
 )
-from cellar.domain.research_organization.source_ref import CollectionRef
+from cellar.domain.research_organization.source_ref import (
+    CampaignRef,
+    CollectionRef,
+    ManualRef,
+    RunRef,
+)
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 
 
@@ -596,3 +601,43 @@ def test_supersede_transitions_and_emits_event():
     assert c.superseded_by_campaign_id == new_id
     events = c.collect_events()
     assert any(isinstance(e, CampaignSuperseded) for e in events)
+
+
+# ---------------------------------------------------------------------------
+# source_run_ids — the campaign's resolution run scope (spec D4)
+# ---------------------------------------------------------------------------
+
+
+def _result(campaign: Campaign, added_from=None) -> CampaignResult:
+    return CampaignResult(
+        campaign_id=campaign.id, molecule_id=uuid.uuid4(), added_from=added_from
+    )
+
+
+def test_source_run_ids_empty_for_non_run_sources():
+    """Hand-added / collection / campaign rows carry no run scope of their own."""
+    c = _make_campaign()
+    c.add_result(_result(c))
+    c.add_result(_result(c, ManualRef()))
+    c.add_result(_result(c, CollectionRef(collection_id=uuid.uuid4())))
+    c.add_result(_result(c, CampaignRef(campaign_id=uuid.uuid4())))
+    assert c.source_run_ids() == set()
+
+
+def test_source_run_ids_unions_run_refs():
+    c = _make_campaign()
+    run_a, run_b = uuid.uuid4(), uuid.uuid4()
+    for ref in (RunRef(run_id=run_a), RunRef(run_id=run_b), RunRef(run_id=run_a)):
+        c.add_result(_result(c, ref))
+    assert c.source_run_ids() == {run_a, run_b}
+
+
+def test_source_run_ids_ignores_non_run_rows_in_a_mixed_campaign():
+    """A hand-added row in a run-seeded campaign does not widen the scope —
+    it is restricted to the campaign's runs like every other row."""
+    c = _make_campaign()
+    run_a = uuid.uuid4()
+    c.add_result(_result(c, RunRef(run_id=run_a)))
+    c.add_result(_result(c, CollectionRef(collection_id=uuid.uuid4())))
+    c.add_result(_result(c))
+    assert c.source_run_ids() == {run_a}

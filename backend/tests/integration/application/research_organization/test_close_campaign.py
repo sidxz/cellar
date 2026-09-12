@@ -13,15 +13,21 @@ Exercises the full SQL+session+flush path:
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
 import sqlalchemy as sa
 from returns.result import Success
 
+from cellar.application.research_organization.channel_resolution import ChannelResolver
 from cellar.application.research_organization.close_campaign import (
     CloseCampaign,
     CloseCampaignCommand,
+)
+from cellar.application.research_organization.refresh_campaign_from_sources import (
+    RefreshFromSources,
+    RefreshFromSourcesCommand,
 )
 from cellar.application.research_organization.reopen_campaign import (
     ReopenCampaign,
@@ -40,6 +46,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from cellar.domain.research_organization.source_ref import RunRef
 from cellar.domain.screening_assay.enums import (
     ProtocolType,
     ReadoutAggregation,
@@ -48,6 +55,9 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
+    SQLAlchemyChannelResolutionQuery,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
@@ -139,7 +149,7 @@ class _FakeResolver:
     """Returns a fresh measurement (value=99.0, unit='uM') for any cell."""
 
     async def resolve(
-        self, *, workspace_id, channel, result_id, molecule_id
+        self, *, workspace_id, channel, result_id, molecule_id, run_ids=None
     ) -> CampaignMeasurement:
         return CampaignMeasurement(
             result_id=result_id,
@@ -440,3 +450,138 @@ async def test_stage_writes_blocked_while_closed_then_allowed_after_reopen(
         ).scalar_one()
     assert stage_count == 1
     assert override_count == 1
+
+
+@pytest.mark.asyncio
+async def test_refresh_resolves_only_the_campaigns_source_runs(session_factory) -> None:
+    """Spec D4, end to end against real SQL: a campaign seeded from run A keeps
+    run A's number when a newer run B of the same protocol lands. Flipping the
+    channel's ``resolve_from_all_runs`` opt-out lets run B win.
+    """
+    ws_id = uuid.uuid4()
+    mol_id = uuid.uuid4()
+    protocol_id = uuid.uuid4()
+    readout_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+    run_a_id = uuid.uuid4()
+    run_b_id = uuid.uuid4()
+    batch_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    uow = AsyncUnitOfWork(session_factory)
+    await _insert_molecule(uow, mol_id, ws_id)
+    await _insert_project(uow, project_id, ws_id)
+    await _insert_protocol(uow, ws_id, protocol_id, readout_id, readout_unit="uM")
+
+    # Run A (older) reports 1.0; run B (newer) reports 9.0 for the same molecule.
+    async with session_factory() as session, session.begin():
+        for run_id, run_date, value, row_id in (
+            (run_a_id, date(2026, 1, 1), 1.0, uuid.uuid4()),
+            (run_b_id, date(2026, 6, 1), 9.0, uuid.uuid4()),
+        ):
+            await session.execute(
+                sa.text(
+                    "INSERT INTO runs "
+                    "(id, workspace_id, protocol_id, run_date, operator, "
+                    "status, is_locked, version, notes) "
+                    "VALUES (:id, :ws, :proto, :run_date, :user, 'approved', "
+                    "false, 1, NULL)"
+                ),
+                {
+                    "id": run_id,
+                    "ws": ws_id,
+                    "proto": protocol_id,
+                    "run_date": run_date,
+                    "user": user_id,
+                },
+            )
+            await session.execute(
+                sa.text(
+                    "INSERT INTO readout_data "
+                    "(id, workspace_id, run_id, well_id, molecule_id, "
+                    "batch_id, readout_definition_id, value_numeric, "
+                    "value_qualifier, is_outlier, is_computed, "
+                    "normalization_applied) "
+                    "VALUES (:id, :ws, :run, NULL, :mol, :batch, :rd, "
+                    ":value, '=', false, false, NULL)"
+                ),
+                {
+                    "id": row_id,
+                    "ws": ws_id,
+                    "run": run_id,
+                    "mol": mol_id,
+                    "batch": batch_id,
+                    "rd": readout_id,
+                    "value": value,
+                },
+            )
+
+    campaign = Campaign.create(
+        workspace_id=ws_id,
+        project_id=project_id,
+        name="Run Scope",
+        description=None,
+        created_by=user_id,
+    )
+    channel = CampaignChannel(
+        campaign_id=campaign.id,
+        label="IC50",
+        protocol_id=protocol_id,
+        readout_definition_id=readout_id,
+        source_kind=ChannelSourceKind.READOUT_DATA,
+        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        display_order=0,
+    )
+    campaign.add_channel(channel)
+    # Seeded from run A only — as add-from-runs would attribute it.
+    campaign.add_result(
+        CampaignResult(
+            campaign_id=campaign.id,
+            molecule_id=mol_id,
+            added_from=RunRef(run_id=run_a_id),
+        )
+    )
+    async with AsyncUnitOfWork(session_factory) as uow_seed:
+        await SQLAlchemyCampaignRepository(uow_seed).save(campaign)
+        await uow_seed.commit()
+
+    auth = _make_fake_auth(user_id, ws_id)
+    resolver = ChannelResolver(SQLAlchemyChannelResolutionQuery(session_factory))
+
+    async def _refresh() -> None:
+        uow_uc = AsyncUnitOfWork(session_factory)
+        uc = RefreshFromSources(
+            uow=uow_uc,
+            campaign_repo=SQLAlchemyCampaignRepository(uow_uc),
+            resolver=resolver,
+            dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
+        )
+        out = await uc(
+            RefreshFromSourcesCommand(workspace_id=ws_id, campaign_id=campaign.id),
+            auth=auth,
+        )
+        assert isinstance(out, Success), f"Expected Success, got {out}"
+
+    async def _cell_value() -> float | None:
+        async with AsyncUnitOfWork(session_factory) as uow_check:
+            reloaded = await SQLAlchemyCampaignRepository(uow_check).find_by_id_in_workspace(
+                ws_id, campaign.id
+            )
+        assert reloaded is not None
+        return reloaded.results[0].measurements[0].value
+
+    await _refresh()
+    assert await _cell_value() == 1.0, "Run B is outside the campaign's run scope"
+
+    # Opt the channel out of the run scope — now the latest run wins.
+    async with AsyncUnitOfWork(session_factory) as uow_flip:
+        repo = SQLAlchemyCampaignRepository(uow_flip)
+        loaded = await repo.find_by_id_in_workspace(ws_id, campaign.id)
+        assert loaded is not None
+        loaded.channels[0].resolve_from_all_runs = True
+        await repo.save(loaded)
+        await uow_flip.commit()
+
+    await _refresh()
+    assert await _cell_value() == 9.0

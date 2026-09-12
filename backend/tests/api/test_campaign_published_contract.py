@@ -96,7 +96,13 @@ class _FakeResolver:
     """Returns a real measurement for any (channel, molecule) pair."""
 
     async def resolve(
-        self, *, workspace_id: Any, channel: Any, result_id: Any, molecule_id: Any
+        self,
+        *,
+        workspace_id: Any,
+        channel: Any,
+        result_id: Any,
+        molecule_id: Any,
+        run_ids: Any = None,
     ) -> CampaignMeasurement:
         return CampaignMeasurement(
             result_id=result_id,

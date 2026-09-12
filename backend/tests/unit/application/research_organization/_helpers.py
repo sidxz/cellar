@@ -172,7 +172,12 @@ class FakeResolver:
     def __init__(self, factory: Callable) -> None:
         self._factory = factory
         self.calls: list = []
+        #: Run scope each ``resolve`` received, in call order (``None`` =
+        #: unrestricted). Lets a use-case test assert the campaign's run
+        #: scope reached the resolver.
+        self.run_ids_seen: list = []
 
-    async def resolve(self, *, workspace_id, channel, result_id, molecule_id):
+    async def resolve(self, *, workspace_id, channel, result_id, molecule_id, run_ids=None):
         self.calls.append((channel.id, result_id, molecule_id))
+        self.run_ids_seen.append(run_ids)
         return self._factory(channel, result_id, molecule_id)

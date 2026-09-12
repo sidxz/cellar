@@ -251,6 +251,12 @@ class CampaignChannelModel(Base, EntityModelMixin):
     # not affected by later import-time hit-threshold changes (hit_threshold
     # is import-time-only, on ChannelImportConfig, and never persisted here).
     intercept_key: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Opt out of the campaign's run scope (spec D4). A campaign seeded from
+    # runs resolves its channels against only those runs; a channel with this
+    # flag set resolves protocol-wide instead.
+    resolve_from_all_runs: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
 
 class CampaignResultModel(Base, EntityModelMixin):

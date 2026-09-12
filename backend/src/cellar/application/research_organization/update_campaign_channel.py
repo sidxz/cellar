@@ -3,7 +3,8 @@
 Uses the UNSET sentinel to distinguish "don't touch this field" from
 ``None`` (which is a meaningful value for ``qc_filter`` — it clears it).
 
-When a gating field (selection_rule, qc_filter) actually changes value,
+When a gating field (selection_rule, qc_filter, resolve_from_all_runs)
+actually changes value,
 every non-manual-override measurement for this channel across all results
 is re-resolved via ``ChannelResolver``.
 """
@@ -19,6 +20,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
+    resolution_run_ids,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -63,6 +65,8 @@ class UpdateCampaignChannelCommand(Command):
     selection_rule: SelectionRule | object = UNSET
     qc_filter: dict | object | None = UNSET
     display_order: int | object = UNSET
+    #: Opt out of the campaign's run scope — gating, like selection_rule.
+    resolve_from_all_runs: bool | object = UNSET
 
 
 class UpdateCampaignChannel:
@@ -74,7 +78,8 @@ class UpdateCampaignChannel:
       3. Locate the channel by id.
       4. Detect which fields are changing (sentinel-aware).
       5. Mutate label / display_order in-place when supplied.
-      6. If any gating field (selection_rule, qc_filter) changed, re-resolve
+      6. If any gating field (selection_rule, qc_filter, resolve_from_all_runs)
+         changed, re-resolve
          every non-manual-override measurement for this channel.
       7. Bump ``campaign.updated_at``.
       8. Save + commit; dispatch events; return ``Success(campaign)``.
@@ -130,6 +135,11 @@ class UpdateCampaignChannel:
                     gating_changed = True
                 channel.qc_filter = input.qc_filter  # type: ignore[assignment]
 
+            if not isinstance(input.resolve_from_all_runs, _Unset):
+                if input.resolve_from_all_runs != channel.resolve_from_all_runs:
+                    gating_changed = True
+                channel.resolve_from_all_runs = bool(input.resolve_from_all_runs)
+
             if not isinstance(input.label, _Unset):
                 label = input.label
                 if not isinstance(label, str) or not label.strip():
@@ -155,6 +165,7 @@ class UpdateCampaignChannel:
                         channel=channel,
                         result_id=result.id,
                         molecule_id=result.molecule_id,
+                        run_ids=resolution_run_ids(campaign, channel),
                     )
                     new_measurement.id = measurement.id  # preserve id → UPDATE not DELETE+INSERT
                     result.remove_measurement_for_channel(channel.id)
