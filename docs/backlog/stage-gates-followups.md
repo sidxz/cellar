@@ -13,3 +13,8 @@
 - **No test harness for the add-from-runs dialog**, so its parent select is covered only by the shared `stage-name-notice` helper and the mirror path.
 - **Reorder chevrons are disabled on single-readout protocol rows** (nothing to swap with); cross-protocol moves are not offered.
 - See also `campaign-channel-reorder-atomic.md` and `campaign-list-hydrates-results.md` (written by the fix wave).
+
+## Residual minors from the fix-wave re-review (2026-09-11)
+- Generated `CampaignStageResponse.kind` is still `string` because the Literal landed after the regen; batch 3's regen picks it up and the cast in `stage-popover.tsx` can go.
+- "Remove selected (0)" renders disabled while checkboxes are ticked when every selected row is chip-hidden; clearing the selection on chip change would be clearer.
+- `stages` are projected in aggregate order while `channels` are sorted `(display_order, id)` in the DTO; the ORM already orders stages, so this only matters on mutation responses.
