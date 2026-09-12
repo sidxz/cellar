@@ -56,6 +56,7 @@ from cellar.application.screening.long_format_normalizer import (
     normalize,
 )
 from cellar.application.screening.readout_entry_guard import calculated_readout_error
+from cellar.application.screening.run_shape import refuse_if_wellless
 from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
@@ -127,6 +128,10 @@ class PreviewRunFile:
         run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
         if run is None:
             return Failure(NotFoundError("Run", str(input.run_id)))
+
+        wellless = await refuse_if_wellless(self._readout_data_repo, input.workspace_id, run.id)
+        if wellless is not None:
+            return Failure(wellless)
 
         try:
             table = self._parser.parse(input.file_content, input.filename)
@@ -380,6 +385,10 @@ class RepreviewRunFile:
         run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
         if run is None:
             return Failure(NotFoundError("Run", str(input.run_id)))
+
+        wellless = await refuse_if_wellless(self._readout_data_repo, input.workspace_id, run.id)
+        if wellless is not None:
+            return Failure(wellless)
 
         protocol = await self._protocol_repo.find_by_id_in_workspace(
             input.workspace_id, run.protocol_id

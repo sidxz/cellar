@@ -43,6 +43,7 @@ from cellar.application.screening.bulk_create_readout_data import (
 )
 from cellar.application.screening.import_run_file_preview_store import _guess_content_type
 from cellar.application.screening.readout_entry_guard import calculated_readout_error
+from cellar.application.screening.run_shape import refuse_if_welled
 from cellar.application.screening.summary_import_models import (
     SummaryColumnMapping,
     SummaryImportResult,
@@ -178,6 +179,9 @@ class ImportSummaryFile:
         run = await self._run_repo.find_by_id_in_workspace(ws, run_id)
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))
+
+        if (welled := refuse_if_welled(run)) is not None:
+            return Failure(welled)
 
         protocol = await self._protocol_repo.find_by_id_in_workspace(ws, run.protocol_id)
         if protocol is None:

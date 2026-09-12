@@ -102,6 +102,7 @@ from cellar.application.screening.readout_calculation_engine import (
     ReadoutCalculationEngine,
 )
 from cellar.application.screening.readout_entry_guard import calculated_readout_error
+from cellar.application.screening.run_shape import refuse_if_wellless
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.enums import AttachableType
@@ -233,6 +234,10 @@ class ImportRunFile:
             return Failure(NotFoundError("Run", str(cmd.run_id)))
         if run.is_locked:
             return Failure(ConflictError("Cannot import into a locked run"))
+
+        wellless = await refuse_if_wellless(self._readout_data_repo, cmd.workspace_id, run.id)
+        if wellless is not None:
+            return Failure(wellless)
 
         # 2. Load protocol — its dose_unit is the canonical unit.
         protocol = await self._protocol_repo.find_by_id_in_workspace(

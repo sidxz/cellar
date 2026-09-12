@@ -24,7 +24,7 @@ from cellar.application.screening.summary_import_models import SummaryColumnMapp
 from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
-from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.errors import ConflictError, ValidationError
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
@@ -238,7 +238,56 @@ async def _seed_one_readout(session_factory, workspace_id):
     return run_id, ic50_id, reg
 
 
+async def _insert_plate_with_well(session_factory, run_id: uuid.UUID) -> None:
+    """Give a run one plate carrying one well — i.e. make it welled."""
+    plate_id = uuid.uuid4()
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        await uow.session.execute(
+            sa.text("INSERT INTO plates (id, run_id, plate_number) VALUES (:id, :run, 1)"),
+            {"id": plate_id, "run": run_id},
+        )
+        await uow.session.execute(
+            sa.text(
+                'INSERT INTO wells (id, plate_id, "row", "column", well_type) '
+                "VALUES (:id, :plate, 'A', 1, 'sample')"
+            ),
+            {"id": uuid.uuid4(), "plate": plate_id},
+        )
+        await uow.commit()
+
+
 class TestImportSummaryFile:
+    async def test_import_onto_a_welled_run_is_refused(
+        self, session_factory, workspace_id
+    ) -> None:
+        """A run whose measurements live in wells keeps that shape — a well-less
+        summary file is refused and nothing is written."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        run_id, ic50_id, reg = await _seed_one_readout(session_factory, workspace_id)
+        await _insert_plate_with_well(session_factory, run_id)
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},5.2\n".encode(),
+                mapping=SummaryColumnMapping(
+                    compound_ref="Compound", readout_columns={"IC50": ic50_id}
+                ),
+            ),
+            auth,
+        )
+
+        assert isinstance(result, Failure), result
+        error = result.failure()
+        assert isinstance(error, ConflictError)
+        assert "1 plate(s) with wells" in str(error)
+
+        assert await _wellless(session_factory, workspace_id, run_id) == []
+
     async def test_insert_then_update_accounting(self, session_factory, workspace_id) -> None:
         molecule_id = uuid.uuid4()
         reg = f"REG-{uuid.uuid4().hex[:8]}"

@@ -189,6 +189,7 @@ def _build_preview_uc(
     protocol: Protocol | None = None,
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
     existing_readouts: list | None = None,
+    has_wellless_rows: bool = False,
 ) -> tuple[PreviewRunFile, InMemoryPreviewStore]:
     run_repo = AsyncMock()
     run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
@@ -215,6 +216,7 @@ def _build_preview_uc(
 
     readout_data_repo = AsyncMock()
     readout_data_repo.find_by_run = AsyncMock(return_value=existing_readouts or [])
+    readout_data_repo.has_wellless_rows = AsyncMock(return_value=has_wellless_rows)
 
     store = store or InMemoryPreviewStore(ttl_seconds=60)
     return (
@@ -246,6 +248,7 @@ def _build_import_uc(
     upload_attachment=None,
     plate_repo=None,
     plate_visibility=None,
+    has_wellless_rows: bool = False,
 ) -> tuple[ImportRunFile, FakeUoW, AsyncMock]:
     uow = FakeUoW()
 
@@ -258,6 +261,7 @@ def _build_import_uc(
 
     readout_data_repo = AsyncMock()
     readout_data_repo.find_by_run = AsyncMock(return_value=existing_readouts or [])
+    readout_data_repo.has_wellless_rows = AsyncMock(return_value=has_wellless_rows)
     saved_list = save_bulk if save_bulk is not None else []
 
     async def _save_bulk(entities):
@@ -389,6 +393,28 @@ class TestPreviewRunFile:
         assert preview.unmatched_batch_refs == ("LG-MISSING",)
         assert preview.matched_batch_count == 0
 
+    @pytest.mark.asyncio
+    async def test_preview_onto_a_wellless_run_is_refused(self) -> None:
+        """A run already holding summary rows has no plates to preview into."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        uc, _ = _build_preview_uc(run=run, has_wellless_rows=True)
+
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=b"Plate Name,Well,Raw Data\nP1,A1,0.5\n",
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        error = result.failure()
+        assert isinstance(error, ConflictError)
+        assert "well-less summary results" in str(error)
+
 
 # ---------------------------------------------------------------------------
 # ImportRunFile
@@ -499,6 +525,56 @@ class TestImportRunFile:
         # Run aggregate state
         assert len(run.plates) == 1
         assert len(run.wells) == 3
+
+    @pytest.mark.asyncio
+    async def test_import_onto_a_wellless_run_is_refused(self) -> None:
+        """Plate-shaped import must not land on a run holding summary rows."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = b"Plate Name,Well,Raw Data\nP1,A1,0.5\n"
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+
+        saved: list = []
+        uc, uow, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={},
+            store=store,
+            save_bulk=saved,
+            has_wellless_rows=True,
+        )
+
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate Name",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ConflictError)
+        assert saved == []
+        assert not uow.committed
+        assert run.plates == []
 
     @pytest.mark.asyncio
     async def test_mapping_onto_a_calculated_readout_is_refused(self) -> None:
@@ -1510,6 +1586,7 @@ def _build_repreview_uc(
 
     readout_data_repo = AsyncMock()
     readout_data_repo.find_by_run = AsyncMock(return_value=[])
+    readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
 
     return RepreviewRunFile(
         uow=FakeUoW(),
@@ -1677,6 +1754,7 @@ class TestAutoCreateMissingBatches:
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_run = AsyncMock(return_value=[])
+        readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
 
         store = InMemoryPreviewStore(ttl_seconds=60)
 
@@ -1747,6 +1825,7 @@ class TestAutoCreateMissingBatches:
         protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_run = AsyncMock(return_value=[])
+        readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
 
         store = InMemoryPreviewStore(ttl_seconds=60)
         uc = PreviewRunFile(
@@ -1826,6 +1905,7 @@ class TestAutoCreateMissingBatches:
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_run = AsyncMock(return_value=[])
+        readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
         async def _save_bulk(entities):
             saved.extend(entities)
         readout_data_repo.save_bulk = _save_bulk
@@ -1903,6 +1983,7 @@ class TestAutoCreateMissingBatches:
         protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_run = AsyncMock(return_value=[])
+        readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
 
         store = InMemoryPreviewStore(ttl_seconds=60)
         uc = PreviewRunFile(

@@ -252,13 +252,18 @@ class BulkCreateReadoutData:
             return Failure(ValidationError("No items provided"))
 
         async with self._uow:
-            # Verify all referenced runs belong to this workspace
+            # Verify all referenced runs belong to this workspace, and record
+            # each run's shape — welled runs take well-bound rows, well-less
+            # runs take summary rows. A run missing from the map (no run_repo
+            # wired) is simply not shape-checked.
             run_ids = {item.run_id for item in input.items}
+            run_has_wells: dict[uuid.UUID, bool] = {}
             if self._run_repo is not None:
                 for run_id in run_ids:
                     run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, run_id)
                     if run is None:
                         return Failure(NotFoundError("Run", str(run_id)))
+                    run_has_wells[run_id] = bool(run.wells)
 
             # Check locks for all unique run IDs — reject entire batch if any locked
             for run_id in run_ids:
@@ -288,6 +293,23 @@ class BulkCreateReadoutData:
                     result.error_count += 1
                     result.errors.append(
                         {"index": idx, "error": f"Item {idx}: a molecule or batch is required"}
+                    )
+                    continue
+
+                has_wells = run_has_wells.get(item.run_id)
+                if has_wells is True and item.well_id is None:
+                    result.error_count += 1
+                    result.errors.append(
+                        {"index": idx, "error": f"Item {idx}: run has plates; well_id is required"}
+                    )
+                    continue
+                if has_wells is False and item.well_id is not None:
+                    result.error_count += 1
+                    result.errors.append(
+                        {
+                            "index": idx,
+                            "error": f"Item {idx}: run has no plates; well_id must be omitted",
+                        }
                     )
                     continue
 

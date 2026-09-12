@@ -702,6 +702,7 @@ def register_screening(container: Container) -> None:
             batch_repo=SQLAlchemyBatchRepository(uow),
             molecule_resolver=resolver,
             dispatcher=c[EventDispatcher],
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
         )
 
     container.define(SetUpRunPlate, _set_up_run_plate)

@@ -33,7 +33,7 @@ from cellar.domain.screening_assay.enums import (
 )
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.run import Run
-from cellar.domain.shared.errors import AuthorizationError
+from cellar.domain.shared.errors import AuthorizationError, ConflictError
 from cellar.domain.shared.events import DomainEvent
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 
@@ -268,6 +268,7 @@ class TestSetUpRunPlate:
         resolved: list[ResolvedMolecule] | None = None,
         unresolved: list[UnresolvedMolecule] | None = None,
         batches_by_mol: dict[uuid.UUID, list[FakeBatch]] | None = None,
+        has_wellless_rows: bool = False,
     ):
         """Build the use case with fakes/mocks."""
         uow = FakeUoW()
@@ -290,6 +291,9 @@ class TestSetUpRunPlate:
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
+        readout_data_repo = AsyncMock()
+        readout_data_repo.has_wellless_rows = AsyncMock(return_value=has_wellless_rows)
+
         uc = SetUpRunPlate(
             uow=uow,
             run_repo=run_repo,
@@ -297,6 +301,7 @@ class TestSetUpRunPlate:
             batch_repo=batch_repo,
             molecule_resolver=resolver,
             dispatcher=dispatcher,
+            readout_data_repo=readout_data_repo,
         )
         return uc, uow, run_repo, resolver
 
@@ -427,6 +432,39 @@ class TestSetUpRunPlate:
         assert isinstance(result, Failure)
         error = result.failure()
         assert "Run" in str(error)
+
+    @pytest.mark.asyncio
+    async def test_fails_if_run_holds_wellless_rows(self):
+        """A run already carrying summary results cannot grow a plate."""
+        ws_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        auth = FakeAuth(user_id=user_id, workspace_id=ws_id)
+
+        protocol = _make_protocol(ws_id, user_id)
+        run = _make_run(ws_id, protocol.id, user_id)
+
+        uc, uow, run_repo, resolver = self._build(
+            run=run, protocol=protocol, has_wellless_rows=True
+        )
+
+        cmd = SetUpRunPlateCommand(
+            workspace_id=ws_id,
+            run_id=run.id,
+            compound_assignments=[
+                CompoundAssignment(molecule_ref="Aspirin", well_positions=["A1"]),
+            ],
+            concentration_series=[1000.0],
+        )
+
+        result = await uc(cmd, auth=auth)
+
+        assert isinstance(result, Failure)
+        error = result.failure()
+        assert isinstance(error, ConflictError)
+        assert "well-less summary results" in str(error)
+        resolver.resolve.assert_not_awaited()
+        run_repo.save.assert_not_awaited()
+        assert not uow.committed
 
     @pytest.mark.asyncio
     async def test_uses_default_dose_series_when_none_provided(self):

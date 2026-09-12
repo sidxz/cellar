@@ -13,6 +13,7 @@ from cellar.application.auth import (
     require_editor,
     require_same_workspace,
 )
+from cellar.application.screening.run_shape import refuse_if_wellless
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.molecule_resolver import (
@@ -28,7 +29,11 @@ from cellar.application.shared.parsers import (
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.enums import ReadoutDataType, WellType
-from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
+from cellar.domain.screening_assay.repository import (
+    ProtocolRepository,
+    ReadoutDataRepository,
+    RunRepository,
+)
 from cellar.domain.screening_assay.run import Plate, Well
 from cellar.domain.shared.errors import (
     DomainError,
@@ -226,6 +231,7 @@ class SetUpRunPlate:
         batch_repo: BatchRepository,
         molecule_resolver: MoleculeResolver,
         dispatcher: EventDispatcherProtocol,
+        readout_data_repo: ReadoutDataRepository,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -233,6 +239,7 @@ class SetUpRunPlate:
         self._batch_repo = batch_repo
         self._molecule_resolver = molecule_resolver
         self._dispatcher = dispatcher
+        self._readout_data_repo = readout_data_repo
 
     async def __call__(
         self,
@@ -248,6 +255,12 @@ class SetUpRunPlate:
             run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
                 return Failure(NotFoundError("Run", str(input.run_id)))
+
+            wellless = await refuse_if_wellless(
+                self._readout_data_repo, input.workspace_id, run.id
+            )
+            if wellless is not None:
+                return Failure(wellless)
 
             # 2. Load protocol -> find dose response config for default series
             conc_series = input.concentration_series

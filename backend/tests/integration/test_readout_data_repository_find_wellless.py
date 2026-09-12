@@ -288,3 +288,65 @@ class TestFindWelllessByKeys:
             )
 
         assert found is None
+
+
+@pytest.mark.asyncio
+class TestHasWelllessRows:
+    """Shape probe: does this run hold raw summary rows?"""
+
+    async def test_false_for_run_without_readout_data(self, uow, workspace_id):
+        async with uow:
+            run_id, _ = await _seed_run_and_def(uow, workspace_id=workspace_id)
+            await uow.commit()
+
+        repo = SQLAlchemyReadoutDataRepository(uow)
+        async with uow:
+            assert await repo.has_wellless_rows(workspace_id, run_id) is False
+
+    async def test_false_when_only_computed_wellless_rows_exist(self, uow, workspace_id):
+        """The calculation engine writes computed rows well-less on welled runs."""
+        async with uow:
+            run_id, rd_id = await _seed_run_and_def(uow, workspace_id=workspace_id)
+            repo = SQLAlchemyReadoutDataRepository(uow)
+            await repo.save(
+                ReadoutData(
+                    workspace_id=workspace_id,
+                    run_id=run_id,
+                    well_id=None,
+                    molecule_id=uuid.uuid4(),
+                    batch_id=uuid.uuid4(),
+                    readout_definition_id=rd_id,
+                    value=QualifiedValue(value=42.0, qualifier=Qualifier.EQUAL),
+                    is_computed=True,
+                )
+            )
+            await uow.commit()
+
+        repo = SQLAlchemyReadoutDataRepository(uow)
+        async with uow:
+            assert await repo.has_wellless_rows(workspace_id, run_id) is False
+
+    async def test_true_after_a_raw_wellless_row(self, uow, workspace_id):
+        async with uow:
+            run_id, rd_id = await _seed_run_and_def(uow, workspace_id=workspace_id)
+            repo = SQLAlchemyReadoutDataRepository(uow)
+            await repo.save(
+                ReadoutData(
+                    workspace_id=workspace_id,
+                    run_id=run_id,
+                    well_id=None,
+                    molecule_id=uuid.uuid4(),
+                    batch_id=uuid.uuid4(),
+                    readout_definition_id=rd_id,
+                    value=QualifiedValue(value=12.5, qualifier=Qualifier.EQUAL),
+                    is_computed=False,
+                )
+            )
+            await uow.commit()
+
+        repo = SQLAlchemyReadoutDataRepository(uow)
+        async with uow:
+            assert await repo.has_wellless_rows(workspace_id, run_id) is True
+            # Scoped: another workspace / another run sees nothing.
+            assert await repo.has_wellless_rows(uuid.uuid4(), run_id) is False
+            assert await repo.has_wellless_rows(workspace_id, uuid.uuid4()) is False

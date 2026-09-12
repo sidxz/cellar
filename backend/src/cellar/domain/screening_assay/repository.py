@@ -334,6 +334,15 @@ class ReadoutDataRepository(Protocol):
         """
         ...
 
+    async def has_wellless_rows(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+        """True if the run holds raw (non-computed) readout rows with no well.
+
+        Computed rows are excluded: the calculation engine writes calculated
+        readouts well-less on welled runs, so they say nothing about the shape
+        the run was imported in.
+        """
+        ...
+
     async def find_grouped_by_condition(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID, condition_name: str
     ) -> list: ...

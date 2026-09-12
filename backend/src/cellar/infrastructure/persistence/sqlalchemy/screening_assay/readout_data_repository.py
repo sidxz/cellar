@@ -325,6 +325,23 @@ class SQLAlchemyReadoutDataRepository:
         model = result.scalars().first()
         return self._to_domain(model) if model is not None else None
 
+    async def has_wellless_rows(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+        """True if the run holds raw (non-computed) readout rows with no well.
+
+        Computed rows are excluded: the calculation engine writes calculated
+        readouts well-less on welled runs, so they say nothing about the shape
+        the run was imported in.
+        """
+        stmt = select(
+            sa.exists().where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.run_id == run_id,
+                ReadoutDataModel.well_id.is_(None),
+                ReadoutDataModel.is_computed.is_(False),
+            )
+        )
+        return bool(await self._uow.session.scalar(stmt))
+
     async def find_grouped_by_condition(
         self,
         workspace_id: uuid.UUID,

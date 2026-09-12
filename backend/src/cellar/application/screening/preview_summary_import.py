@@ -29,6 +29,7 @@ from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.screening.readout_entry_guard import calculated_readout_error
+from cellar.application.screening.run_shape import refuse_if_welled
 from cellar.application.screening.summary_import_models import (
     SummaryColumnMapping,
     SummaryImportPlanPreview,
@@ -116,6 +117,9 @@ class PreviewSummaryImport:
         run = await self._run_repo.find_by_id_in_workspace(ws, run_id)
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))
+
+        if (welled := refuse_if_welled(run)) is not None:
+            return Failure(welled)
 
         protocol = await self._protocol_repo.find_by_id_in_workspace(ws, run.protocol_id)
         if protocol is None:
