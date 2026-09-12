@@ -7,7 +7,10 @@ import { ShipmentListPage } from "./shipment-list";
 
 vi.mock("@/shared/lib/api/custom-instance", () => ({ API_V1: "/api/v1", customInstance: vi.fn() }));
 vi.mock("@/shared/lib/toast", () => ({ showSuccess: vi.fn(), showError: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
 // AG Grid needs a layout engine; stub it so column defs and row data are observable
 // (verbatim from plate-list.test.tsx).
 vi.mock("@/shared/components/data-grid/data-grid", () => ({

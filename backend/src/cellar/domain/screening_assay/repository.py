@@ -301,7 +301,14 @@ class ReadoutDataRepository(Protocol):
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
         specs: list[tuple[uuid.UUID, str | None]],
-    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]: ...
+        *,
+        wellless_only: bool = False,
+    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]:
+        """``wellless_only`` restricts to ``well_id IS NULL`` — the
+        reported-endpoint fallback's guard, so per-well response readings on a
+        dose-response definition can't be averaged into a fake endpoint."""
+        ...
+
     async def find_aggregated_by_molecules_and_names(
         self,
         workspace_id: uuid.UUID,
@@ -331,6 +338,15 @@ class ReadoutDataRepository(Protocol):
         overwrite an existing endpoint value instead of inserting a duplicate.
         Outlier-flagged rows are intentionally NOT filtered out, so a re-import can
         overwrite an existing endpoint value even if it was previously flagged.
+        """
+        ...
+
+    async def has_wellless_rows(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+        """True if the run holds raw (non-computed) readout rows with no well.
+
+        Computed rows are excluded: the calculation engine writes calculated
+        readouts well-less on welled runs, so they say nothing about the shape
+        the run was imported in.
         """
         ...
 

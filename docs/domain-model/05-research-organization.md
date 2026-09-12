@@ -147,15 +147,15 @@ Reusable templates for standardized notebook entries. A configuration entity.
 
 ### Campaign
 
-A curated, per-compound pivot of screening results drawn from one or more Protocols / Runs. Campaigns produce an immutable artifact recording what was tested, what survived, and what was decided at a point in time. They drive the screening cascade by optionally emitting a frozen `Collection` of selected compounds for the next downstream campaign. Campaigns are the read contract for the DAIKON portfolio dashboard.
+A curated, per-compound pivot of screening results drawn from one or more Protocols / Runs, triaged through named **hit stages** — a funnel of AND-combined rules over the shared readout pool (e.g. Screening Hits → Confirmed Hits) — rather than one implicit per-readout hit flag. Campaigns produce a snapshot recording what was tested, what survived each stage, and what was decided at a point in time. Closing a campaign locks it read-only — no e-signature, no auto-published Collection — and a closed campaign can be reopened back to `draft` with a required reason, corrected, and closed again. Campaigns are the read contract for the DAIKON portfolio dashboard.
 
-Full design spec: `docs/superpowers/specs/2026-05-10-screen-campaign-design.md`
+Full design spec: `docs/superpowers/specs/2026-05-10-screen-campaign-design.md`. Hit stages and soft close are specified in `docs/superpowers/specs/2026-09-11-campaign-hit-stages-and-soft-close-spec.md`, which supersedes that spec's §3 lifecycle, §5 close/e-signature, §6 published surface, and channel `hit_threshold`.
 
 **Aggregate Root:** Campaign
 
-**Inside boundary:** CampaignChannel[], CampaignResult[], CampaignMeasurement[]
+**Inside boundary:** CampaignChannel[], CampaignResult[] (CampaignMeasurement[] and StageOverride{} owned per-result), CampaignStage[] (StageCriterion[] embedded per stage)
 
-**References (by ID):** Project (project_id), Protocol (via channels), Collection (published_collection_id), User (created_by, closed_by), ElectronicSignature (signature_id), Campaign (supersedes_campaign_id, superseded_by_campaign_id)
+**References (by ID):** Project (project_id), Protocol (via channels), User (created_by, closed_by), Campaign (supersedes_campaign_id, superseded_by_campaign_id)
 
 #### Properties
 
@@ -167,15 +167,12 @@ Full design spec: `docs/superpowers/specs/2026-05-10-screen-campaign-design.md`
 | name | string | Human-readable campaign name |
 | description | text? | Optional free-text description |
 | status | enum | `draft`, `closed`, `superseded` |
-| compound_source | CompoundSource | Discriminated VO describing where compounds come from |
-| publishes_collection | bool | Whether closing emits a frozen Collection |
 | source_protocols | UUID[] | Snapshot of protocol_ids at close time (materialised from channels) |
-| closed_at | timestamp? | Set when status → closed |
-| closed_by | UUID? | FK → User who closed |
-| signature_id | UUID? | FK → ElectronicSignature for close attestation |
+| closed_at | timestamp? | Set when status → closed; cleared on reopen |
+| closed_by | UUID? | FK → User who closed; cleared on reopen |
+| close_note | text? | Optional note recorded at close; cleared on reopen |
 | supersedes_campaign_id | UUID? | FK → Campaign this one replaces |
 | superseded_by_campaign_id | UUID? | FK → Campaign that supersedes this one |
-| published_collection_id | UUID? | FK → frozen Collection emitted on close |
 | created_by | UUID | FK → User |
 | created_at | timestamp | |
 | updated_at | timestamp | |
@@ -183,7 +180,7 @@ Full design spec: `docs/superpowers/specs/2026-05-10-screen-campaign-design.md`
 
 #### CampaignChannel
 
-An assay channel (one Protocol + one readout) that contributes a column of data to the Campaign pivot.
+An assay channel (one Protocol + one readout) that contributes a column of data to the Campaign pivot. Channels no longer carry a hit rule — stages (below) define what counts as a hit.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -193,8 +190,8 @@ An assay channel (one Protocol + one readout) that contributes a column of data 
 | readout_definition_id | UUID | FK → ReadoutDefinition within that Protocol |
 | label | string | Display label for the column header |
 | unit | string | Unit of measure (e.g. µM, %) |
-| threshold | float? | Optional pass/fail threshold |
-| z_prime | float? | QC metric — populated by ChannelResolver |
+| normalization_applied | string? | Which normalization layer of the readout this channel reads (e.g. `percent_inhibition`); `None` = the raw layer. Meaningful only when `source_kind = READOUT_DATA` |
+| intercept_key | string? | Which intercept of a dose-response curve this channel surfaces (e.g. `EC90`); `None` = the curve's primary intercept. Meaningful only when `source_kind = DOSE_RESPONSE_CURVE` |
 | display_order | int | Column ordering in the pivot view |
 
 #### CampaignResult
@@ -207,8 +204,9 @@ One row in the Campaign pivot — one compound's aggregated results across all c
 | campaign_id | UUID | FK → Campaign |
 | molecule_id | UUID | FK → Molecule |
 | batch_id | UUID? | FK → Batch (most relevant batch) |
-| decision | enum? | `selected`, `deprioritised`, `undecided` |
+| decision | enum | `selected`, `deferred`, `rejected` |
 | notes | text? | Reviewer notes on the compound |
+| stage_overrides | map[UUID, StageOverride] | Manual per-stage hit/miss overrides, keyed by `stage_id` — see StageOverride below |
 
 #### CampaignMeasurement
 
@@ -226,6 +224,73 @@ One cell in the Campaign pivot — a single channel value for a single compound.
 | is_manual_override | bool | True if a reviewer manually set this value (preserved across re-resolve) |
 | source_readout_data_ids | UUID[] | Source ReadoutData rows used by ChannelResolver |
 
+Hit/miss is no longer stored on the cell. It is computed per (result, stage) by Stage evaluation, below, and is never persisted.
+
+#### CampaignStage
+
+A named, ordered AND-combination of rules over the campaign's channels — the unit of the hit-triage funnel (e.g. "Screening Hits" → "Confirmed Hits"). Stages don't own channels: any stage may reference any channel, including the same readout with a different cutoff in a later stage. Owned by Campaign; mutable only while the campaign is `draft`.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| id | UUID | |
+| campaign_id | UUID | FK → Campaign |
+| name | string | Trimmed, non-empty, ≤ 120 chars; unique per campaign, case-insensitive |
+| parent_stage_id | UUID? | FK → CampaignStage in the same campaign; optional — see Stage evaluation |
+| display_order | int | ≥ 0; new stages append at max + 1 |
+| criteria | StageCriterion[] | 0–10 criteria. A stage with zero criteria passes its whole population — a scaffold state, flagged in the UI as "no criteria yet" |
+
+**Invariants:**
+- Every `criteria[].channel_id` must be a channel of the same campaign; removing a channel strips any criterion referencing it from every stage.
+- `parent_stage_id` must name a stage of the same campaign, may not be the stage itself, and may not create a cycle (checked by walking the parent chain up from the proposed parent).
+- A stage that is another stage's parent cannot be removed (`ConflictError`) until its children are removed first. Removing a stage also clears every result's `StageOverride` for it.
+
+#### StageCriterion
+
+Frozen value object — one AND-ed rule inside a `CampaignStage`.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| channel_id | UUID | FK → CampaignChannel; must belong to the same campaign |
+| operator | string | One of `lt`, `lte`, `gt`, `gte`, `between` — unlike `HitCriterion`, the string-based `in` operator is not accepted |
+| value | float \| [float, float] | Numeric for the four comparisons; `[low, high]` with `low <= high` for `between` |
+
+`is_met(value)` delegates to the shared `domain.shared.hit_criterion.compare(operator, value, target)` function — one comparison implementation reused by both `StageCriterion` and `HitCriterion` (still used by run-import filtering and protocol recommendations). Duplicate criteria on the same channel within one stage are allowed (equivalent to a `between`, expressed as two bounds).
+
+#### StageOverride
+
+Frozen value object, owned by `CampaignResult` and keyed by `stage_id` — a manual, audited promote/demote of one compound's outcome for one stage.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| result_id | UUID | FK → CampaignResult (the owning result) |
+| stage_id | UUID | FK → CampaignStage |
+| forced_outcome | enum | `hit` or `miss` only |
+| reason | string | Required, non-empty |
+| overridden_by | UUID | FK → User |
+| overridden_at | timestamp | UTC |
+
+`CampaignResult.stage_overrides` is a `dict[stage_id, StageOverride]`. `set_stage_override(...)` replaces any existing override for the stage; `clear_stage_override(stage_id)` removes one.
+
+#### Stage evaluation
+
+Pure, unpersisted computation (`domain/research_organization/stage_evaluation.py::evaluate_stages`), recomputed on every read from the live campaign, results, and stages — nothing here is written to the database.
+
+Per (result, stage), stages are visited parents-first (the parent links form a forest, so this always terminates):
+
+1. **Population.** A root stage (no parent) evaluates every result. A child stage evaluates only compounds whose parent's *final* outcome (after any override) is `hit`; every other compound is `not_in_stage`, with no checks recorded.
+2. **Checks.** For a result in play, each criterion is checked against the result's measurement on its channel: a missing measurement, an `nd`/`excluded` qualifier, or a `None` value all read as `untested`; otherwise the check is `pass`/`fail` from `StageCriterion.is_met`. Censored values (`<`, `>` qualifiers) compare by their plain numeric value — the same simplification the pre-stages hit-call logic used.
+3. **Combine (AND).** Any `fail` → `miss`; else any `untested` → `untested`; else `hit`.
+4. **Override.** A `StageOverride` on the result for this stage replaces the computed outcome with its `forced_outcome` (`overridden = true`) — even when the computed outcome was `not_in_stage`, so a forced hit pulls the compound into the stage's own population and into its children's evaluation.
+
+| Outcome | Meaning |
+|---------|---------|
+| `hit` | All criteria passed, or overridden to hit |
+| `miss` | At least one criterion failed, or overridden to miss |
+| `untested` | In the stage's population but missing data for at least one criterion, with none failing |
+| `not_in_stage` | Excluded by the parent chain (not a hit on the parent) and not overridden in |
+
+Funnel counts (`tally_stage_counts`) read `population = hit + miss + untested` (for a root stage, every result) alongside `not_in_stage` and an `overridden` tally — e.g. "of 12 screening hits: 7 hit, 3 miss, 2 untested."
+
 #### CompoundSource
 
 Discriminated value object describing where Campaign compounds come from. One of:
@@ -241,27 +306,40 @@ Discriminated value object describing where Campaign compounds come from. One of
 
 #### Invariants
 
-1. Only DRAFT campaigns are mutable — CLOSED and SUPERSEDED campaigns reject all mutating operations (enforced at domain layer and by a database trigger from migration 027 as defense-in-depth).
+1. Only DRAFT campaigns are mutable — CLOSED and SUPERSEDED campaigns reject all mutating operations (enforced at the domain layer and by a database trigger from migration 027, extended by migration 074 to cover stages and overrides, as defense-in-depth).
 2. Closing requires at least one channel and at least one result.
 3. Closing materialises the `source_protocols` snapshot from `campaign.channels[].protocol_id`.
-4. Closing optionally emits a frozen `Collection` containing molecule_ids where `decision = SELECTED`, if `publishes_collection = True`.
+4. Reopening a closed campaign requires a non-empty reason, returns status to `draft`, and clears `closed_at` / `closed_by` / `close_note`. Superseded campaigns cannot be reopened.
 5. Closed campaigns are NOT rewired on molecule merge; draft campaigns ARE (merge side-effect rewrites molecule_id references).
 6. Manual-override measurements (`is_manual_override = True`) are preserved across re-resolve — the resolver skips those cells.
 7. All channels are workspace-scoped via the parent Campaign's workspace_id.
 
+#### Lifecycle
+
+Statuses stay `draft → closed → superseded`, plus a `closed → draft` reopen edge:
+
+| Action | From → To | Input | Notes |
+|--------|-----------|-------|-------|
+| Close | `draft → closed` | `note: string?` | Requires ≥ 1 result and ≥ 1 channel; snapshots `source_protocols`; no signature, no published Collection |
+| Reopen | `closed → draft` | `reason: string` (required) | Clears `closed_at`, `closed_by`, `close_note`; emits `CampaignReopened` |
+| Supersede | `closed → superseded` | — | Unchanged. Superseded is terminal — a superseded campaign cannot be reopened |
+
+`closed` still means read-only: writes to results, measurements, stages, and stage overrides are rejected by the domain guard (`Campaign._ensure_draft`), the application-layer `CampaignLockGuard` (raises `DataLockedError` → HTTP 423), and a database trigger (migration 027, extended by 074 for the two new tables) as defense-in-depth. Close and reopen are each recorded as a domain event (`CampaignClosed`, `CampaignReopened`) for the audit trail; there is no dedicated reopen/close history view beyond that trail.
+
 #### State Transitions
 
 ```
-draft ──[close + e-sig]──> closed
-closed ──[supersede + e-sig]──> superseded
+draft ──[close]──> closed
+closed ──[supersede]──> superseded
+closed ──[reopen]──> draft
 ```
 
 #### Domain Events
 
 - `CampaignCreated` { project_id, name }
-- `CampaignClosed` { closed_by, signature_id }
+- `CampaignClosed` { closed_by, note }
+- `CampaignReopened` { reopened_by, reason }
 - `CampaignSuperseded` { superseded_by_campaign_id }
-- `CampaignPublishedCollectionCreated` { collection_id }
 
 #### Repository
 
@@ -274,5 +352,6 @@ closed ──[supersede + e-sig]──> superseded
 
 #### Persistence notes
 
-- **Migration 027 DB trigger** — a PG trigger blocks any INSERT/UPDATE/DELETE on the `campaign` table (and its child entity tables) when `status != 'draft'`, providing defense-in-depth beyond the domain guard.
+- **Migration 027 DB trigger** (extended by migration 074 to cover `campaign_stage` / `campaign_stage_override`) — a PG trigger blocks any INSERT/UPDATE/DELETE on the `campaign` table (and its child entity tables) when `status` is not `draft`, providing defense-in-depth beyond the domain guard.
 - **Non-deferrable unique index** on `(result_id, channel_id)` in `campaign_measurement` drives the id-preservation pattern: the SQL `INSERT … ON CONFLICT DO UPDATE` path in `SQLAlchemyCampaignRepository.save` matches existing measurements by this index, preserving their `id` so manual overrides survive re-resolve without a separate lookup table.
+- **Stages and overrides reconcile the same way as channels/measurements** — `campaign_stage` rows are matched by `id` (ordered by `display_order`, cascade delete-orphan), `campaign_stage_override` rows by `(result_id, stage_id)` — both on `Campaign.save`, no dedicated stage repository.

@@ -26,7 +26,7 @@ from cellar.domain.screening_assay.enums import (
 )
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.run import Plate, Run, Well
-from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 from cellar.domain.shared.events import DomainEvent
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 
@@ -149,6 +149,7 @@ def _build_use_case(
     protocol: Protocol | None = None,
     batch: FakeBatch | None = None,
     save_bulk_called: list | None = None,
+    has_wellless_rows: bool = False,
 ) -> tuple[ImportRunReadouts, FakeUoW, AsyncMock]:
     uow = FakeUoW()
 
@@ -159,6 +160,7 @@ def _build_use_case(
     protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
 
     readout_data_repo = AsyncMock()
+    readout_data_repo.has_wellless_rows = AsyncMock(return_value=has_wellless_rows)
     _saved: list = save_bulk_called if save_bulk_called is not None else []
 
     async def _save_bulk(entities):
@@ -297,6 +299,32 @@ class TestImportRunReadouts:
         error = result.failure()
         assert isinstance(error, ValidationError)
         assert "no wells" in str(error).lower()
+
+    @pytest.mark.asyncio
+    async def test_run_holding_wellless_rows_is_refused(self):
+        """A summary run keeps its shape — well-bound readouts are refused."""
+        ws_id, auth = _make_ws_and_auth()
+
+        plate_id = uuid.uuid4()
+        run = _make_run_with_wells(ws_id, wells=[_make_well(plate_id, "A", 1)])
+        protocol = _make_protocol(ws_id)
+
+        uc, uow, _ = _build_use_case(run=run, protocol=protocol, has_wellless_rows=True)
+
+        cmd = ImportRunReadoutsCommand(
+            workspace_id=ws_id,
+            run_id=run.id,
+            file_content=b"Well,Value\nA1,2.3\n",
+            readout_definition_id=protocol.readout_definitions[0].id,
+        )
+
+        result = await uc(cmd, auth=auth)
+
+        assert isinstance(result, Failure)
+        error = result.failure()
+        assert isinstance(error, ConflictError)
+        assert "well-less summary results" in str(error)
+        assert not uow.committed
 
     @pytest.mark.asyncio
     async def test_run_not_found_returns_not_found_error(self):

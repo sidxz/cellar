@@ -152,7 +152,10 @@ class ProtocolActivitySummary:
     protocol_id: uuid.UUID
     protocol_name: str
     protocol_type: str
-    readouts: list[AggregatedReadout] = field(default_factory=list)
+    # Reported endpoints: values the molecule has on this protocol with no
+    # fitted curve behind them (``source="readout"``). The curve-only fields
+    # on each entry stay None.
+    readouts: list[ActivityValue] = field(default_factory=list)
     best_curves: list[dict[str, Any]] = field(default_factory=list)
     # Protocol-declared intercept specs (EC50, EC90, IC10, ...). Drives the
     # per-Card dynamic column set on the molecule activity tab. Empty when

@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
 import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
+import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import {
   findInterceptValue,
   formatInterceptDisplay,
@@ -199,6 +200,10 @@ export function InterceptCell({ av, spec, isPrimary, mode }: InterceptCellProps)
           renderNullAs="nothing"
         />
       )}
+      {/* No fitted curve behind this cell — the BE fell back to the reported
+          endpoint on the raw readout layer. Only the primary column carries
+          the value, so only it carries the marker. */}
+      {isPrimary && av.source === "readout" && <ReportedEndpointBadge className="ml-1" />}
     </span>
   );
 

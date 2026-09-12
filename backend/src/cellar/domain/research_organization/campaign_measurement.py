@@ -1,9 +1,11 @@
 """CampaignMeasurement — one frozen cell owned by a CampaignResult.
 
 The atomic unit of the snapshot: (compound, channel) -> (value, qualifier,
-unit, hit_call, source FKs, protocol snapshot fields). At close, every
-auto-resolved cell is locked in. Manual edits flip is_manual_override so
-the cell is preserved through subsequent recomputes.
+unit, source FKs, protocol snapshot fields). At close, every auto-resolved
+cell is locked in. Manual edits flip is_manual_override so the cell is
+preserved through subsequent recomputes. Hit/miss verdicts are computed at
+read time by ``stage_evaluation`` against ``CampaignStage`` criteria — no
+per-cell hit call is stored here (see the campaign-hit-stages spec §5).
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from cellar.domain.research_organization.enums import HitCall, ValueQualifier
+from cellar.domain.research_organization.enums import ValueQualifier
 from cellar.domain.shared.errors import ValidationError
 
 
@@ -27,7 +29,6 @@ class CampaignMeasurement:
     protocol_name_snapshot: str
     protocol_version_snapshot: int
     id: uuid.UUID = field(default_factory=uuid.uuid4)
-    hit_call: HitCall | None = None
     is_manual_override: bool = False
     source_run_id: uuid.UUID | None = None
     source_curve_id: uuid.UUID | None = None

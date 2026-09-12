@@ -5,6 +5,7 @@ import { Header } from "@/shared/components/layout/header";
 import { SidebarInset, SidebarProvider } from "@/shared/components/ui/sidebar";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { usePreferencesSync } from "@/shared/hooks/use-preferences-sync";
+import { usePreferencesStore } from "@/shared/lib/stores/preferences-store";
 import { useAuthz } from "@duar-auth/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -25,6 +26,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { authState, isLoading } = useAuthz();
   const router = useRouter();
   usePreferencesSync();
+  const { sidebarCollapsed, setSidebarCollapsed } = usePreferencesStore();
 
   useEffect(() => {
     // Only bounce to login when the session is truly gone. During `needs_reauth`
@@ -40,7 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider open={!sidebarCollapsed} onOpenChange={(open) => setSidebarCollapsed(!open)}>
       <AppSidebar />
       <SidebarInset>
         <Header />

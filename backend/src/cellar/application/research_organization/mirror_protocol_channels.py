@@ -20,6 +20,12 @@ duplicates.
 The single-channel ``AddCampaignChannel`` use case stays the authoritative
 path for one-at-a-time creation; this just iterates the same shape inside
 one UoW for atomicity.
+
+An optional ``stage_name`` additionally creates one CampaignStage, mapping
+the protocol's ``recommended_hit_criteria`` onto the channels this mirror
+touched (created or already present) via ``_match_recommended_threshold``.
+Numeric-only — a recommendation using the string-based ``in`` operator is
+skipped. No recommendation maps -> no stage (not an error).
 """
 
 from __future__ import annotations
@@ -38,6 +44,10 @@ from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_stage import (
+    CampaignStage,
+    StageCriterion,
+)
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
@@ -61,6 +71,11 @@ class MirrorProtocolChannelsCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
     protocol_id: uuid.UUID
+    #: When set, creates a top-level CampaignStage named ``stage_name`` from
+    #: the protocol's ``recommended_hit_criteria``, mapped onto the mirrored
+    #: (created or already-present) channels via ``_match_recommended_threshold``.
+    #: No recommendation maps -> no stage (not an error).
+    stage_name: str | None = None
 
 
 @dataclass
@@ -68,6 +83,7 @@ class MirrorProtocolChannelsOutcome:
     campaign: Campaign
     channels_created: int
     channels_skipped: int
+    stage_created: bool
 
 
 def _intercept_label(spec) -> str:
@@ -122,6 +138,12 @@ def _primary_normalization(rd: ReadoutDefinition) -> str | None:
         if v != "none":
             return v
     return None
+
+
+# Stage criteria are numeric-only (StageCriterion forbids the string-based
+# ``in`` operator); a recommended criterion using it is skipped when mapping
+# onto a mirrored stage.
+_NUMERIC_STAGE_OPERATORS = {"lt", "lte", "gt", "gte", "between"}
 
 
 def _match_recommended_threshold(
@@ -193,20 +215,23 @@ class MirrorProtocolChannels:
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
 
-            existing_keys = {
+            existing_channels = {
                 (
                     ch.protocol_id,
                     ch.readout_definition_id,
                     ch.normalization_applied,
                     ch.intercept_key,
-                )
+                ): ch
                 for ch in campaign.channels
             }
             next_order = max((ch.display_order for ch in campaign.channels), default=-1) + 1
 
-            recommended = list(protocol.recommended_hit_criteria or [])
             channels_created = 0
             channels_skipped = 0
+            # (readout_name, intercept_key, channel) for every readout this
+            # mirror touched — created just now or already present — so a
+            # requested stage_name can map recommended criteria onto either.
+            channel_targets: list[tuple[str, InterceptKey | None, CampaignChannel]] = []
 
             for rd in protocol.readout_definitions:
                 is_dr = rd.data_type == ReadoutDataType.DOSE_RESPONSE
@@ -240,12 +265,13 @@ class MirrorProtocolChannels:
                 primary_spec = specs[0] if specs else None
                 for intercept_key, spec in items:
                     key = (protocol.id, rd.id, normalization, intercept_key)
-                    if key in existing_keys:
+                    existing = existing_channels.get(key)
+                    if existing is not None:
                         channels_skipped += 1
+                        channel_targets.append((rd.name, intercept_key, existing))
                         continue
 
                     label = _channel_label(rd, spec, is_multi, primary_spec) if spec else rd.name
-                    threshold = _match_recommended_threshold(recommended, rd.name, intercept_key)
 
                     try:
                         channel = CampaignChannel(
@@ -257,7 +283,6 @@ class MirrorProtocolChannels:
                             selection_rule=SelectionRule.LATEST_APPROVED_RUN,
                             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
                             display_order=next_order,
-                            hit_threshold=threshold,
                             normalization_applied=normalization,
                             intercept_key=intercept_key,
                         )
@@ -265,8 +290,9 @@ class MirrorProtocolChannels:
                     except ValidationError as e:
                         return Failure(e)
                     next_order += 1
-                    existing_keys.add(key)
+                    existing_channels[key] = channel
                     channels_created += 1
+                    channel_targets.append((rd.name, intercept_key, channel))
 
                     for result in campaign.results:
                         measurement = await self._resolver.resolve(
@@ -277,7 +303,45 @@ class MirrorProtocolChannels:
                         )
                         result.add_measurement(measurement)
 
-            if channels_created > 0:
+            # Optional hit stage — maps the protocol's recommended criteria
+            # onto the channels this mirror just touched (created or already
+            # present). Numeric-only; a recommendation with no match, or
+            # using the string-based ``in`` operator, contributes nothing.
+            stage_created = False
+            if input.stage_name:
+                recommended = protocol.recommended_hit_criteria or []
+                stage_criteria: list[StageCriterion] = []
+                for readout_name, intercept_key, channel in channel_targets:
+                    matched = _match_recommended_threshold(
+                        recommended, readout_name, intercept_key
+                    )
+                    if matched is None or matched.operator not in _NUMERIC_STAGE_OPERATORS:
+                        continue
+                    stage_criteria.append(
+                        StageCriterion(
+                            channel_id=channel.id,
+                            operator=matched.operator,
+                            value=matched.value,
+                        )
+                    )
+                if stage_criteria:
+                    next_stage_order = (
+                        max((s.display_order for s in campaign.stages), default=-1) + 1
+                    )
+                    try:
+                        campaign.add_stage(
+                            CampaignStage(
+                                campaign_id=campaign.id,
+                                name=input.stage_name,
+                                display_order=next_stage_order,
+                                criteria=stage_criteria,
+                            )
+                        )
+                    except ValidationError as e:
+                        return Failure(e)
+                    stage_created = True
+
+            if channels_created > 0 or stage_created:
                 await self._campaign_repo.save(campaign)
             events = await self._uow.commit()
 
@@ -287,5 +351,6 @@ class MirrorProtocolChannels:
                 campaign=campaign,
                 channels_created=channels_created,
                 channels_skipped=channels_skipped,
+                stage_created=stage_created,
             )
         )

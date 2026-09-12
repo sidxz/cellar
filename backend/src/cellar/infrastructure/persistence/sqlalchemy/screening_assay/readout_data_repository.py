@@ -81,6 +81,8 @@ class SQLAlchemyReadoutDataRepository:
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
         specs: list[tuple[uuid.UUID, str | None]],
+        *,
+        wellless_only: bool = False,
     ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]:
         """Batch query: molecule_id -> (readout_def_id, normalization) -> aggregated value.
 
@@ -93,6 +95,12 @@ class SQLAlchemyReadoutDataRepository:
         share the same ``readout_definition_id``.
 
         Aggregation method comes from ``readout_definition.aggregation``.
+
+        ``wellless_only`` narrows to rows with no ``well_id``. The
+        dose-response reported-endpoint fallback passes it: a summary-imported
+        endpoint records no plate position, while a plate column mapped onto
+        the same dose-response definition produces per-well response readings
+        that must never be averaged into a fake endpoint.
         """
         from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
             ReadoutDefinitionModel,
@@ -126,6 +134,7 @@ class SQLAlchemyReadoutDataRepository:
                 ReadoutDataModel.molecule_id.in_(molecule_ids),
                 ReadoutDataModel.readout_definition_id.in_(rd_def_ids),
                 ReadoutDataModel.is_outlier == False,  # noqa: E712
+                *([ReadoutDataModel.well_id.is_(None)] if wellless_only else []),
             )
             .group_by(
                 ReadoutDataModel.molecule_id,
@@ -324,6 +333,23 @@ class SQLAlchemyReadoutDataRepository:
         result = await self._uow.session.execute(stmt)
         model = result.scalars().first()
         return self._to_domain(model) if model is not None else None
+
+    async def has_wellless_rows(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+        """True if the run holds raw (non-computed) readout rows with no well.
+
+        Computed rows are excluded: the calculation engine writes calculated
+        readouts well-less on welled runs, so they say nothing about the shape
+        the run was imported in.
+        """
+        stmt = select(
+            sa.exists().where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.run_id == run_id,
+                ReadoutDataModel.well_id.is_(None),
+                ReadoutDataModel.is_computed.is_(False),
+            )
+        )
+        return bool(await self._uow.session.scalar(stmt))
 
     async def find_grouped_by_condition(
         self,

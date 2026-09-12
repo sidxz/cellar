@@ -1,9 +1,10 @@
 """DAIKON published-contract schema validation.
 
-JSON Schema (Draft-07) fixture captures spec §6 shape: campaign +
-compound_sources (list, plural) + source_protocols snapshot +
-channels (live protocol+readout refs) + results with nested measurements +
-optional published_collection + optional pagination envelope.
+JSON Schema (Draft-07) fixture captures spec §6 shape: campaign (with
+close_note, no signature) + compound_sources (list, plural) + source_protocols
+snapshot + channels (live protocol+readout refs) + results with nested
+measurements + optional pagination envelope. No published_collection — soft
+close publishes nothing (spec §4/§5).
 
 Test seeds a closed campaign directly into the DB (bypassing the API
 close endpoint, which requires real protocol/readout/run data for
@@ -42,8 +43,11 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import (
+    CampaignStage,
+    StageCriterion,
+)
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
@@ -51,7 +55,6 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.source_ref import ManualRef
 from cellar.domain.screening_assay.enums import (
-    ProtocolStatus,
     ProtocolType,
     ReadoutAggregation,
     ReadoutDataType,
@@ -59,9 +62,6 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (
-    SQLAlchemyCollectionRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
@@ -74,6 +74,12 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 # ---------------------------------------------------------------------------
 
 _SCHEMA_PATH = Path(__file__).parent / "fixtures" / "daikon_contract.schema.json"
+
+
+#: Provenance ids the resolver stamps on the sole measurement, asserted
+#: on the published document.
+_MEASUREMENT_RUN_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000002")
+_MEASUREMENT_READOUT_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000001")
 
 
 @pytest.fixture(scope="module")
@@ -98,6 +104,10 @@ class _FakeResolver:
             value=42.0,
             value_qualifier=ValueQualifier.EQ,
             unit="uM",
+            # Provenance (D8) — a reported-endpoint cell: the published
+            # `source` block must carry both id keys.
+            source_run_id=_MEASUREMENT_RUN_ID,
+            source_readout_id=_MEASUREMENT_READOUT_ID,
             protocol_name_snapshot="Test Protocol",
             protocol_version_snapshot=1,
         )
@@ -192,6 +202,8 @@ async def _seed_closed_campaign(
     project_id: uuid.UUID,
     mol_id: uuid.UUID,
     user_id: uuid.UUID,
+    *,
+    close_note: str | None = "Contract test close note",
 ) -> uuid.UUID:
     """Create a DRAFT campaign and close it via the CloseCampaign use case.
 
@@ -202,7 +214,6 @@ async def _seed_closed_campaign(
         project_id=project_id,
         name="Contract Test Campaign",
         description="Schema validation fixture",
-        publishes_collection=True,
         created_by=user_id,
     )
     ch = CampaignChannel(
@@ -216,6 +227,16 @@ async def _seed_closed_campaign(
         display_order=0,
     )
     campaign.add_channel(ch)
+
+    # One stage with one criterion on the seeded channel — the seeded
+    # measurement value (10.0) is < 100, so this stage's outcome is "hit".
+    stage = CampaignStage(
+        campaign_id=campaign.id,
+        name="Contract Test Stage",
+        display_order=0,
+        criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=100.0)],
+    )
+    campaign.add_stage(stage)
 
     result = CampaignResult(
         campaign_id=campaign.id,
@@ -233,7 +254,6 @@ async def _seed_closed_campaign(
             protocol_version_snapshot=1,
         )
     )
-    result.decision = CampaignDecision.SELECTED  # type: ignore[misc]
     campaign.add_result(result)
 
     # Save DRAFT
@@ -243,12 +263,11 @@ async def _seed_closed_campaign(
         await uow_seed.commit()
 
     # Close via use case
-    sig_id = uuid.uuid4()
     cmd = CloseCampaignCommand(
         workspace_id=ws_id,
         campaign_id=campaign.id,
         user_id=user_id,
-        signature_id=sig_id,
+        note=close_note,
     )
 
     uow_uc = AsyncUnitOfWork(session_factory)
@@ -263,7 +282,6 @@ async def _seed_closed_campaign(
     uc = CloseCampaign(
         uow=uow_uc,
         campaign_repo=SQLAlchemyCampaignRepository(uow_uc),
-        collection_repo=SQLAlchemyCollectionRepository(uow_uc),
         protocol_repo=SQLAlchemyProtocolRepository(uow_uc),
         resolver=_FakeResolver(),
         dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
@@ -337,13 +355,21 @@ async def test_published_endpoint_matches_daikon_schema(
     assert len(body["channels"]) == 1
     assert body["channels"][0]["label"] == "IC50 (target binding)"
     assert len(body["results"]) == 1
-    assert body["results"][0]["decision"] == "selected"
     assert len(body["results"][0]["measurements"]) == 1
     assert body["results"][0]["measurements"][0]["unit"] == "uM"
-    # published_collection must be non-null because publishes_collection=True and
-    # at least one SELECTED result exists.
-    assert body["published_collection"] is not None
-    assert body["published_collection"]["size"] == 1
+    source = body["results"][0]["measurements"][0]["source"]
+    assert source["readout_id"] == str(_MEASUREMENT_READOUT_ID)
+    assert source["curve_id"] is None
+    # Soft close: no signature, no published collection (spec §4/§5); close_note
+    # is persisted and surfaced instead.
+    assert "signature" not in body["campaign"]
+    assert "published_collection" not in body
+    assert body["campaign"]["close_note"] == "Contract test close note"
     # source_protocols snapshot is populated at close time.
     assert len(body["source_protocols"]) == 1
     assert body["source_protocols"][0]["id"] == str(protocol_id)
+    # Hit stages: one stage, one criterion, seeded measurement (10.0 < 100) hits.
+    assert len(body["stages"]) == 1
+    assert body["stages"][0]["counts"]["hit"] == 1
+    assert len(body["results"][0]["stage_outcomes"]) == 1
+    assert body["results"][0]["stage_outcomes"][0]["outcome"] == "hit"

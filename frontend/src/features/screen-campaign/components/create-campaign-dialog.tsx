@@ -3,7 +3,7 @@
 /**
  * CreateCampaignDialog — Task 8.1 (updated for per-result attribution model)
  *
- * RHF + Zod form. Fields: name, description, publishes_collection.
+ * RHF + Zod form. Fields: name, description.
  * Campaigns are created empty; compounds are added incrementally via
  * the "Add compounds" menu in the builder.
  *
@@ -13,11 +13,10 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { Button } from "@/shared/components/ui/button";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -38,7 +37,6 @@ import { useCreateCampaignApiV1CampaignsPost } from "@/shared/lib/api/campaigns/
 const schema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   description: z.string().optional(),
-  publishes_collection: z.boolean(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -75,7 +73,6 @@ export function CreateCampaignDialog({
   const {
     register,
     handleSubmit,
-    control,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -83,7 +80,6 @@ export function CreateCampaignDialog({
     defaultValues: {
       name: "",
       description: "",
-      publishes_collection: true,
     },
   });
 
@@ -100,7 +96,6 @@ export function CreateCampaignDialog({
         name: values.name,
         description: values.description || undefined,
         project_id: projectId,
-        publishes_collection: values.publishes_collection,
         supersedes_campaign_id: defaultSupersedesCampaignId ?? undefined,
       },
     });
@@ -142,24 +137,6 @@ export function CreateCampaignDialog({
               rows={2}
               {...register("description")}
             />
-          </div>
-
-          {/* Publishes collection */}
-          <div className="flex items-center gap-2">
-            <Controller
-              name="publishes_collection"
-              control={control}
-              render={({ field }) => (
-                <Checkbox
-                  id="publishes-collection"
-                  checked={field.value}
-                  onCheckedChange={(v) => field.onChange(v === true)}
-                />
-              )}
-            />
-            <Label htmlFor="publishes-collection" className="cursor-pointer">
-              Publish a frozen Collection on close
-            </Label>
           </div>
 
           {mutation.error && (

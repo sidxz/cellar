@@ -48,7 +48,6 @@ def _make_draft_campaign(
         name=name,
         description=description,
         status=status,
-        publishes_collection=False,
         created_by=uuid.uuid4(),
     )
     c.clear_events()

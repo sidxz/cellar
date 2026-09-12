@@ -28,6 +28,8 @@ import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.screening.readout_entry_guard import calculated_readout_error
+from cellar.application.screening.run_shape import refuse_if_welled
 from cellar.application.screening.summary_import_models import (
     SummaryColumnMapping,
     SummaryImportPlanPreview,
@@ -116,11 +118,18 @@ class PreviewSummaryImport:
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))
 
+        if (welled := refuse_if_welled(run)) is not None:
+            return Failure(welled)
+
         protocol = await self._protocol_repo.find_by_id_in_workspace(ws, run.protocol_id)
         if protocol is None:
             return Failure(NotFoundError("Protocol", str(run.protocol_id)))
 
         defs_by_id = {d.id: d for d in protocol.readout_definitions}
+
+        calculated = calculated_readout_error(mapping.readout_columns.items(), defs_by_id)
+        if calculated is not None:
+            return Failure(calculated)
 
         try:
             table = self._parser.parse(command.content, command.filename)

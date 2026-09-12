@@ -102,7 +102,6 @@ def _build_campaign_two_channels_three_results(
         project_id=uuid.uuid4(),
         name="Test Campaign",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
 

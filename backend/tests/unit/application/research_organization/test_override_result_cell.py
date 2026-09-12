@@ -20,7 +20,6 @@ from cellar.domain.research_organization.campaign_measurement import (
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
-    HitCall,
     ValueQualifier,
 )
 from cellar.domain.shared.errors import (
@@ -45,7 +44,6 @@ def _make_draft_campaign(workspace_id: uuid.UUID) -> Campaign:
         project_id=uuid.uuid4(),
         name="Test Campaign",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
 
@@ -131,7 +129,6 @@ class TestOverrideResultCell:
             value=1.5,
             value_qualifier=ValueQualifier.EQ,
             unit="nM",
-            hit_call=HitCall.HIT,
         )
         out = await uc(cmd, auth=auth)
 
@@ -143,7 +140,6 @@ class TestOverrideResultCell:
         assert new_m.value == 1.5
         assert new_m.value_qualifier == ValueQualifier.EQ
         assert new_m.unit == "nM"
-        assert new_m.hit_call == HitCall.HIT
         # Override flag set
         assert new_m.is_manual_override is True
         # Source FKs carried forward

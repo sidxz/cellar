@@ -18,6 +18,7 @@ import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
+from cellar.application.screening.run_shape import refuse_if_welled
 from cellar.application.screening.summary_import_models import (
     SummaryHeaderSuggestion,
     SummaryPreviewResult,
@@ -129,6 +130,11 @@ class PreviewSummaryFile:
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))
 
+        # One run, one shape — refuse at upload time rather than letting the
+        # chemist map columns first and hit the refusal at the dry-run step.
+        if (welled := refuse_if_welled(run)) is not None:
+            return Failure(welled)
+
         protocol = await self._protocol_repo.find_by_id_in_workspace(workspace_id, run.protocol_id)
         if protocol is None:
             return Failure(NotFoundError("Protocol", str(run.protocol_id)))
@@ -146,8 +152,10 @@ class PreviewSummaryFile:
             )
 
         # Index protocol readout-defs by normalized name for O(1) lookup.
+        # Calculated readouts are derived from their formula, so they are never
+        # a valid import target — leave them out so nothing suggests one.
         readout_by_name: dict[str, uuid.UUID] = {
-            _norm(rd.name): rd.id for rd in protocol.readout_definitions
+            _norm(rd.name): rd.id for rd in protocol.readout_definitions if not rd.is_calculated
         }
 
         suggestions = _infer_suggestions(table.headers, readout_by_name)

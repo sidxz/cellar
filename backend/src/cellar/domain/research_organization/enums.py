@@ -53,16 +53,21 @@ class ChannelSourceKind(StrEnum):
     DOSE_RESPONSE_CURVE = "dose_response_curve"
 
 
-class HitCall(StrEnum):
+class StageOutcome(StrEnum):
+    """Per-(result, stage) verdict computed by `stage_evaluation.evaluate_stages`."""
+
     HIT = "hit"
     MISS = "miss"
-    INCONCLUSIVE = "inconclusive"
+    UNTESTED = "untested"
+    NOT_IN_STAGE = "not_in_stage"
 
 
-class CampaignDecision(StrEnum):
-    SELECTED = "selected"
-    DEFERRED = "deferred"
-    REJECTED = "rejected"
+class CheckVerdict(StrEnum):
+    """Per-(result, criterion) verdict — one component of a StageOutcome."""
+
+    PASS = "pass"
+    FAIL = "fail"
+    UNTESTED = "untested"
 
 
 # Re-exports — the canonical definitions live in domain.shared.aggregation_types
@@ -73,16 +78,16 @@ class CampaignDecision(StrEnum):
 # names from here; declare them in __all__ so the re-export is explicit (and
 # so F401 doesn't flag the import block).
 __all__ = [
-    "CampaignDecision",
     "CampaignStatus",
     "ChannelSourceKind",
+    "CheckVerdict",
     "CollectionBooleanOp",
     "CollectionType",
     "CollectionVisibility",
-    "HitCall",
     "ProjectStatus",
     "QualifierHandling",
     "SearchVisibility",
     "SelectionRule",
+    "StageOutcome",
     "ValueQualifier",
 ]

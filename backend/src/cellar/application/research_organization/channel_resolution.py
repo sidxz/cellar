@@ -13,10 +13,9 @@ Selection rules:
 - GEOMETRIC_MEAN: log-space mean over strictly positive candidate values.
 - MANUAL_PICK: leaves the cell as ND so the user can fill it.
 
-Empty candidates yield an ND measurement (no value, no hit_call). The
-domain invariant requires a non-empty ``unit`` even for ND cells, so a
-single-char placeholder is used when no candidate is available to
-contribute one.
+Empty candidates yield an ND measurement (no value). The domain invariant
+requires a non-empty ``unit`` even for ND cells, so a single-char
+placeholder is used when no candidate is available to contribute one.
 """
 
 from __future__ import annotations
@@ -47,11 +46,9 @@ from cellar.domain.research_organization.campaign_measurement import (
 )
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
-    HitCall,
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
 
 # Back-compat alias — channel_resolution callers still type ResolvedCandidate.
 # Remove in a follow-up commit once consumers migrate.
@@ -70,7 +67,6 @@ __all__ = [
     # Re-exported for tests / channel-side callers
     "_build_aggregate_curve_snapshot",
     "_build_curve_snapshot",
-    "_compute_hit_call",
     "_intercept_scalar",
     "_max_dose_from_raw",
     "_resolve_intercept",
@@ -115,6 +111,47 @@ class ChannelResolutionQuery(Protocol):
         """
         ...
 
+    async def fetch_endpoint_candidates(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        channel: CampaignChannel,
+        molecule_id: uuid.UUID,
+        wellless_only: bool = False,
+    ) -> list[ResolvedCandidate]:
+        """Raw-layer ``readout_data`` rows for the channel's readout definition.
+
+        Returned regardless of the channel's ``source_kind``. Used as the
+        reported-endpoint fallback on a dose-response channel when no curve
+        survives QC: a summary-imported "reported IC50" lands on the readout
+        layer, not as a fitted curve.
+
+        ``wellless_only`` restricts to rows with no ``well_id``. The
+        dose-response fallback passes it — a reported endpoint is well-less by
+        construction, and per-well response readings on the same definition
+        would otherwise average into a fake endpoint. Numeric readout channels
+        leave it off and keep reading per-well rows.
+        """
+        ...
+
+    async def fetch_endpoint_candidates_for_runs(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        run_ids: list[uuid.UUID],
+        readout_definition_id: uuid.UUID,
+        normalization_applied: str | None = None,
+        wellless_only: bool = False,
+    ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
+        """Run-scoped twin of :meth:`fetch_endpoint_candidates`.
+
+        Also the READOUT_DATA implementation of
+        :meth:`fetch_candidates_for_runs`. The readout definition already pins
+        the protocol, so no ``protocol_id`` is taken. Returns
+        ``dict[molecule_id, list[ResolvedCandidate]]``.
+        """
+        ...
+
 
 def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
     if not qc:
@@ -123,46 +160,6 @@ def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
         return False
     min_z = qc.get("min_z_prime")
     return not (min_z is not None and (c.z_prime is None or c.z_prime < min_z))
-
-
-def _threshold_input_value(c: ResolvedCandidate, threshold: HitCriterion | None) -> float | None:
-    """Back-compat shim: scalar for the threshold's intercept_key.
-
-    Pre-Option-A callers pass a ``HitCriterion`` whose ``intercept_key``
-    carried the channel's intercept identity. Post-Option-A, channel
-    identity lives on the channel itself; this shim still exists for
-    protocol-level criterion evaluation paths that haven't been
-    rewired (e.g. evaluating ``recommended_hit_criteria`` outside of a
-    campaign channel).
-    """
-    return _intercept_scalar(c, threshold.intercept_key if threshold else None)
-
-
-def _compute_hit_call(value: float | None, threshold: HitCriterion | None) -> HitCall | None:
-    if value is None or threshold is None:
-        return None
-    op = threshold.operator
-    target = threshold.value
-    if op == "between":
-        if not (isinstance(target, list) and len(target) == 2):
-            return None
-        low, high = target
-        if not (isinstance(low, (int, float)) and isinstance(high, (int, float))):
-            return None
-        return HitCall.HIT if (low <= value <= high) else HitCall.MISS
-    if isinstance(target, list):
-        # 'in' operator targets a set of strings — not applicable to a
-        # numeric measurement cell. Leave hit_call unset.
-        return None
-    if op == "lt":
-        return HitCall.HIT if value < target else HitCall.MISS
-    if op == "lte":
-        return HitCall.HIT if value <= target else HitCall.MISS
-    if op == "gt":
-        return HitCall.HIT if value > target else HitCall.MISS
-    if op == "gte":
-        return HitCall.HIT if value >= target else HitCall.MISS
-    return None
 
 
 def _nd_measurement(
@@ -181,7 +178,6 @@ def _nd_measurement(
         unit=unit or _ND_UNIT_PLACEHOLDER,
         protocol_name_snapshot=protocol_name or "-",
         protocol_version_snapshot=protocol_version,
-        hit_call=None,
     )
 
 
@@ -203,6 +199,19 @@ class ChannelResolver:
             workspace_id=workspace_id, channel=channel, molecule_id=molecule_id
         )
         candidates = [c for c in candidates if _passes_qc(c, channel.qc_filter)]
+
+        # D1 — a QC-passing curve of any class wins, including an inactive one
+        # (which still resolves ND). Reported endpoints — summary-imported
+        # readout_data rows on the same readout definition — are considered
+        # only when no curve survives QC.
+        if not candidates and channel.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
+            endpoints = await self._q.fetch_endpoint_candidates(
+                workspace_id=workspace_id,
+                channel=channel,
+                molecule_id=molecule_id,
+                wellless_only=True,
+            )
+            candidates = [c for c in endpoints if _passes_qc(c, channel.qc_filter)]
 
         if not candidates:
             return _nd_measurement(
@@ -276,7 +285,6 @@ class ChannelResolver:
             value=result.value,
             value_qualifier=qualifier,
             unit=pick.unit or _ND_UNIT_PLACEHOLDER,
-            hit_call=_compute_hit_call(result.value, channel.hit_threshold),
             source_run_id=source_run,
             source_curve_id=source_curve,
             source_readout_id=source_readout,

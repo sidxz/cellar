@@ -103,7 +103,8 @@ export function useRunImportWizard({
   const { data: templates = [] } = useRunImportTemplates();
   const { data: protocol } = useProtocol(protocolId);
 
-  const readoutDefs = protocol?.readout_definitions ?? [];
+  // A calculated readout is computed from its formula — never an import target.
+  const readoutDefs = (protocol?.readout_definitions ?? []).filter((rd) => !rd.is_calculated);
 
   // TanStack Query returns a fresh mutation object on every render, so
   // depending on the mutation in a useCallback would re-create reset every

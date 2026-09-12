@@ -51,12 +51,38 @@ class FakeChannelQuery:
     def __init__(
         self,
         candidates_by_channel: dict[tuple[uuid.UUID, uuid.UUID], dict[uuid.UUID, list[ResolvedCandidate]]] | None = None,
+        endpoints_by_readout: dict[uuid.UUID, dict[uuid.UUID, list[ResolvedCandidate]]] | None = None,
     ) -> None:
         self._data = candidates_by_channel or {}
+        self._endpoints = endpoints_by_readout or {}
         self.calls: list = []
+        self.endpoint_calls: list = []
 
     async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
         return []
+
+    async def fetch_endpoint_candidates(
+        self, *, workspace_id, channel, molecule_id, wellless_only=False
+    ):
+        return []
+
+    async def fetch_endpoint_candidates_for_runs(
+        self,
+        *,
+        workspace_id,
+        run_ids,
+        readout_definition_id,
+        normalization_applied=None,
+        wellless_only=False,
+    ):
+        self.endpoint_calls.append((run_ids, readout_definition_id, wellless_only))
+        run_set = set(run_ids)
+        out: dict[uuid.UUID, list[ResolvedCandidate]] = {}
+        for mol_id, cands in self._endpoints.get(readout_definition_id, {}).items():
+            kept = [c for c in cands if c.run_id in run_set]
+            if kept:
+                out[mol_id] = kept
+        return out
 
     async def fetch_candidates_for_runs(
         self,
@@ -169,7 +195,6 @@ def _make_draft_campaign(workspace_id: uuid.UUID) -> Campaign:
         project_id=uuid.uuid4(),
         name="C1",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
 
@@ -691,8 +716,8 @@ class TestPreviewRunImport:
                 value=c.value, qualifier=c.qualifier, unit=c.unit,
                 run_id=c.run_id, run_date=c.run_date, run_approved=c.run_approved,
                 z_prime=c.z_prime, protocol_name=c.protocol_name,
-                protocol_version=c.protocol_version, curve_id=c.curve_id,
-                readout_id=c.readout_id, curve_class=cls,
+                protocol_version=c.protocol_version, curve_id=uuid.uuid4(),
+                readout_id=None, curve_class=cls,
             )
 
         candidates = {
@@ -754,8 +779,10 @@ class TestPreviewRunImport:
                 value=base.value, qualifier=base.qualifier, unit=base.unit,
                 run_id=base.run_id, run_date=base.run_date, run_approved=base.run_approved,
                 z_prime=base.z_prime, protocol_name=base.protocol_name,
-                protocol_version=base.protocol_version, curve_id=base.curve_id,
-                readout_id=base.readout_id,
+                protocol_version=base.protocol_version,
+                # intercept_values only ever exist on a fitted curve row.
+                curve_id=uuid.uuid4(),
+                readout_id=None,
                 intercept_values=[
                     {"spec": {"kind": "ec", "level": 50}, "value": primary},
                     {"spec": {"kind": "ec", "level": 90}, "value": ec90},
@@ -872,8 +899,10 @@ class TestPreviewRunImport:
                 value=base.value, qualifier=base.qualifier, unit=base.unit,
                 run_id=base.run_id, run_date=base.run_date, run_approved=base.run_approved,
                 z_prime=base.z_prime, protocol_name=base.protocol_name,
-                protocol_version=base.protocol_version, curve_id=base.curve_id,
-                readout_id=base.readout_id,
+                protocol_version=base.protocol_version,
+                # intercept_values only ever exist on a fitted curve row.
+                curve_id=uuid.uuid4(),
+                readout_id=None,
                 intercept_values=[
                     {"spec": {"kind": "ec", "level": 50}, "value": primary},
                     {"spec": {"kind": "ec", "level": 90}, "value": ec90},
@@ -1134,3 +1163,169 @@ class TestPreviewRunImport:
         out = await uc(q, auth=auth)
         assert isinstance(out, Success)
         assert out.unwrap()["rows"][0]["cells"][0]["qc_pass"] is False
+
+
+class TestPreviewRunImportEndpointFallback:
+    """D1 on the preview — mirrors TestAddResultsFromRuns' commit-path tests.
+
+    The preview is the read-only twin of AddResultsFromRuns: both resolve their
+    candidates through ``fetch_run_candidates``, so a molecule the commit would
+    add from a reported endpoint must show up in the preview too.
+    """
+
+    @staticmethod
+    def _curve(*, value: float, run_id: uuid.UUID, curve_class: str = "full") -> ResolvedCandidate:
+        c = _candidate(value=value, run_id=run_id)
+        return ResolvedCandidate(
+            value=c.value, qualifier=c.qualifier, unit=c.unit,
+            run_id=c.run_id, run_date=c.run_date, run_approved=c.run_approved,
+            z_prime=c.z_prime, protocol_name=c.protocol_name,
+            protocol_version=c.protocol_version, curve_id=uuid.uuid4(),
+            readout_id=None, curve_class=curve_class,
+        )
+
+    @staticmethod
+    def _query(*, proto, readout, run_id, curves, endpoints, campaign, mols, auth):
+        uc = PreviewRunImport(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_make_run_repo([run_id]),
+            molecule_repo=_make_molecule_repo(mols),
+            channel_query=FakeChannelQuery(curves, endpoints),
+        )
+        return uc
+
+    @pytest.mark.asyncio
+    async def test_dr_config_previews_molecule_with_only_a_reported_endpoint(self) -> None:
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol_curve, mol_endpoint = uuid.uuid4(), uuid.uuid4()
+        curve = self._curve(value=10.0, run_id=run_id)
+        endpoint = _candidate(value=32.0, run_id=run_id)
+
+        uc = self._query(
+            proto=proto,
+            readout=readout,
+            run_id=run_id,
+            curves={(proto, readout): {mol_curve: [curve]}},
+            endpoints={
+                readout: {
+                    mol_curve: [_candidate(value=999.0, run_id=run_id)],
+                    mol_endpoint: [endpoint],
+                }
+            },
+            campaign=campaign,
+            mols=[_make_mol(mol_curve, reg="CVT-0001"), _make_mol(mol_endpoint, reg="CVT-0002")],
+            auth=auth,
+        )
+        q = PreviewRunImportQuery(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                )
+            ],
+        )
+        out = await uc(q, auth=auth)
+        assert isinstance(out, Success)
+        doc = out.unwrap()
+        assert doc["summary"]["molecules_total"] == 2
+
+        by_mol = {r["molecule"]["id"]: r for r in doc["rows"]}
+        assert by_mol[str(mol_endpoint)]["cells"][0]["value"] == 32.0
+        # The molecule with a curve keeps the curve — its endpoint row is ignored.
+        assert by_mol[str(mol_curve)]["cells"][0]["value"] == 10.0
+
+    @pytest.mark.asyncio
+    async def test_readout_config_does_not_fetch_endpoint_fallback(self) -> None:
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        proto, readout, run_id, mol = (uuid.uuid4() for _ in range(4))
+
+        uc = self._query(
+            proto=proto,
+            readout=readout,
+            run_id=run_id,
+            curves={},
+            endpoints={readout: {mol: [_candidate(value=32.0, run_id=run_id)]}},
+            campaign=campaign,
+            mols=[_make_mol(mol)],
+            auth=auth,
+        )
+        q = PreviewRunImportQuery(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                )
+            ],
+        )
+        out = await uc(q, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap()["summary"]["molecules_total"] == 0
+
+    @pytest.mark.asyncio
+    async def test_allowed_curve_classes_does_not_filter_endpoint_fallbacks(self) -> None:
+        """A molecule whose only curve is out of class is skipped, not backfilled
+        from its endpoint rows; a molecule with no curve at all still falls back."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol_inactive_curve, mol_endpoint = uuid.uuid4(), uuid.uuid4()
+        endpoint = _candidate(value=32.0, run_id=run_id)
+
+        uc = self._query(
+            proto=proto,
+            readout=readout,
+            run_id=run_id,
+            curves={
+                (proto, readout): {
+                    mol_inactive_curve: [
+                        self._curve(value=10.0, run_id=run_id, curve_class="inactive")
+                    ]
+                }
+            },
+            endpoints={
+                readout: {
+                    mol_inactive_curve: [_candidate(value=999.0, run_id=run_id)],
+                    mol_endpoint: [endpoint],
+                }
+            },
+            campaign=campaign,
+            mols=[_make_mol(mol_endpoint)],
+            auth=auth,
+        )
+        q = PreviewRunImportQuery(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    allowed_curve_classes=["active"],
+                )
+            ],
+        )
+        out = await uc(q, auth=auth)
+        assert isinstance(out, Success)
+        doc = out.unwrap()
+        assert doc["summary"]["molecules_total"] == 1
+        assert doc["rows"][0]["molecule"]["id"] == str(mol_endpoint)
+        assert doc["rows"][0]["cells"][0]["value"] == 32.0

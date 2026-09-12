@@ -6,7 +6,7 @@ be added, applies the user's filter mode (ANY/ALL), and returns a
 DAIKON-shaped preview document for the FE to render — without mutating
 the campaign.
 
-DRY: hit-call computation reuses ``_compute_hit_call``; candidate fetching
+DRY: hit-call computation reuses ``HitCriterion.is_met``; candidate fetching
 reuses ``ChannelResolutionQuery.fetch_candidates_for_runs``; selection-rule
 application delegates to the shared ``apply_selection_rule`` aggregator —
 the same single source of truth the close-time ``ChannelResolver`` uses.
@@ -25,7 +25,6 @@ from cellar.application.auth import AuthContext, require_editor, require_same_wo
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolutionQuery,
     ResolvedCandidate,
-    _compute_hit_call,
 )
 from cellar.application.screening.curve_snapshot import (
     build_aggregate_curve_snapshot,
@@ -131,6 +130,72 @@ _AGGREGATE_LABELS = {
     SelectionRule.MEAN_ACROSS_RUNS: "mean",
     SelectionRule.GEOMETRIC_MEAN: "gmean",
 }
+
+
+def _cfg_norm(cfg: ChannelImportConfig) -> str | None:
+    """The normalization layer a config's candidates live on.
+
+    Dose-response channels carry no normalization — their value comes from a
+    fitted curve, not a formula layer.
+    """
+    return cfg.normalization_applied if cfg.source_kind == ChannelSourceKind.READOUT_DATA else None
+
+
+async def fetch_run_candidates(
+    query: ChannelResolutionQuery,
+    *,
+    workspace_id: uuid.UUID,
+    run_ids: list[uuid.UUID],
+    cfg: ChannelImportConfig,
+) -> dict[uuid.UUID, list[ResolvedCandidate]]:
+    """Per-molecule candidates for one channel config over the selected runs.
+
+    Shared by ``PreviewRunImport`` and ``AddResultsFromRuns`` so the wizard's
+    preview and its commit can never resolve different candidate sets.
+
+    D1 — a dose-response channel falls back to reported endpoint rows
+    (summary-imported, well-less ``readout_data`` on the same readout
+    definition) for molecules with no fitted curve in the selected runs. A
+    molecule that has a curve keeps its curve.
+
+    ``allowed_curve_classes`` is a curve attribute, so it filters curve
+    candidate sets only: a molecule whose candidates are endpoint fallback
+    rows goes straight through, exactly as a numeric readout channel's rows
+    would, while a molecule whose every curve is out of class is dropped
+    (not backfilled from its endpoint rows).
+    """
+    candidates_by_mol = await query.fetch_candidates_for_runs(
+        workspace_id=workspace_id,
+        run_ids=run_ids,
+        protocol_id=cfg.protocol_id,
+        readout_definition_id=cfg.readout_definition_id,
+        source_kind=cfg.source_kind,
+        normalization_applied=_cfg_norm(cfg),
+    )
+    if cfg.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
+        endpoints_by_mol = await query.fetch_endpoint_candidates_for_runs(
+            workspace_id=workspace_id,
+            run_ids=run_ids,
+            readout_definition_id=cfg.readout_definition_id,
+            wellless_only=True,
+        )
+        for mol_id, endpoints in endpoints_by_mol.items():
+            candidates_by_mol.setdefault(mol_id, endpoints)
+
+    if not cfg.allowed_curve_classes:
+        return candidates_by_mol
+
+    allowed = set(cfg.allowed_curve_classes)
+    filtered: dict[uuid.UUID, list[ResolvedCandidate]] = {}
+    for mol_id, candidates in candidates_by_mol.items():
+        if any(c.curve_id is not None for c in candidates):
+            candidates = [
+                c for c in candidates if c.curve_class is not None and c.curve_class in allowed
+            ]
+            if not candidates:
+                continue
+        filtered[mol_id] = candidates
+    return filtered
 
 
 def _apply_selection_rule(
@@ -246,13 +311,6 @@ class PreviewRunImport:
         # decisions. After Option A the intercept_key lives on the channel
         # / config directly, not under hit_threshold, so a display-only
         # channel (no threshold) still keeps its intercept identity.
-        def _cfg_norm(cfg: ChannelImportConfig) -> str | None:
-            return (
-                cfg.normalization_applied
-                if cfg.source_kind == ChannelSourceKind.READOUT_DATA
-                else None
-            )
-
         existing_by_key: dict[tuple[Any, ...], Any] = {
             (
                 ch.protocol_id,
@@ -298,25 +356,13 @@ class PreviewRunImport:
             key = _channel_key(cfg)
             if cfg.use_for_filter and cfg.hit_threshold is not None:
                 active_keys.add(key)
-            candidates_by_mol = await self._query.fetch_candidates_for_runs(
+            candidates_by_mol = await fetch_run_candidates(
+                self._query,
                 workspace_id=q.workspace_id,
                 run_ids=q.run_ids,
-                protocol_id=cfg.protocol_id,
-                readout_definition_id=cfg.readout_definition_id,
-                source_kind=cfg.source_kind,
-                normalization_applied=cfg.normalization_applied,
+                cfg=cfg,
             )
             for molecule_id, candidates in candidates_by_mol.items():
-                # B6: optional curve_class filter (DR-curve sources only).
-                if cfg.allowed_curve_classes:
-                    allowed = set(cfg.allowed_curve_classes)
-                    candidates = [
-                        c
-                        for c in candidates
-                        if c.curve_class is not None and c.curve_class in allowed
-                    ]
-                    if not candidates:
-                        continue
                 picked = _apply_selection_rule(candidates, cfg.selection_rule, cfg.intercept_key)
                 if picked is None:
                     cell = _nd_cell(key)
@@ -324,10 +370,12 @@ class PreviewRunImport:
                     # After Option A, picked.value already IS the channel's
                     # intercept value (primary if intercept_key is None,
                     # intercept-specific otherwise). Threshold compares
-                    # against that value directly.
-                    hit = (
-                        _compute_hit_call(picked.value, cfg.hit_threshold)
-                        if cfg.hit_threshold
+                    # against that value directly. picked.value can still be
+                    # None (e.g. an aggregate rule with no positive
+                    # contributors) even though picked itself is not None.
+                    met = (
+                        cfg.hit_threshold.is_met(picked.value)
+                        if cfg.hit_threshold and picked.value is not None
                         else None
                     )
                     qc_pass_all = all(_qc_pass(c) for c in candidates)
@@ -342,7 +390,7 @@ class PreviewRunImport:
                         "replicate_count": picked.replicate_count,
                         "qc_pass": qc_pass_all,
                         "qc_reason": qc_reason,
-                        "hit_call": hit.value if hit else None,
+                        "hit_call": ("hit" if met else "miss") if met is not None else None,
                         "source_run_id": (
                             str(picked.source_run_id) if picked.source_run_id else None
                         ),

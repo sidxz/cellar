@@ -278,6 +278,20 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     ("campaign_result", "campaign_id", "campaign"),
     ("campaign_measurement", "result_id", "campaign_result"),
     ("campaign_measurement", "channel_id", "campaign_channel"),
+    # campaign_stage.campaign_id and campaign_stage_override.result_id /
+    # .stage_id (migration 074) are the same owned-children shape — ondelete=
+    # CASCADE at the DB level, cascade="all, delete-orphan" on the ORM
+    # relationships (CampaignModel.stages, CampaignResultModel.stage_overrides).
+    ("campaign_stage", "campaign_id", "campaign"),
+    ("campaign_stage_override", "result_id", "campaign_result"),
+    ("campaign_stage_override", "stage_id", "campaign_stage"),
+    # campaign_stage.parent_stage_id is a self-referential FK for the stage
+    # forest (ondelete=RESTRICT — deleting a stage with children fails at the
+    # DB level; Campaign.remove_stage already guards this in the domain
+    # layer). campaign_stage is not a Tier-1 admin-deletable entity; same
+    # rationale as plate_groups.parent_group_id / storage_locations.parent_id
+    # self-refs above.
+    ("campaign_stage", "parent_stage_id", "campaign_stage"),
 
     # -------------------------------------------------------------------------
     # batch_identifiers → molecule_identifiers: auto-mirror cascade on synonym removal

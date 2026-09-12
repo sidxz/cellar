@@ -355,6 +355,74 @@ class TestBulkCreateReadoutDataRequireBatch:
             assert wellless[0].value is not None
             assert wellless[0].value.value == 7.5
 
+    async def test_item_on_a_calculated_readout_is_a_per_item_error(
+        self, session_factory, workspace_id
+    ) -> None:
+        """A calculated readout is computed from its formula — that item is
+        reported and skipped, while the rest of the batch still lands."""
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id, protocol_id, run_id, rd_id, calc_id = (uuid.uuid4() for _ in range(5))
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def(seed_uow, rd_id, protocol_id)
+            await seed_uow.session.execute(
+                sa.text(
+                    "INSERT INTO readout_definitions "
+                    "(id, protocol_id, name, data_type, display_order, is_calculated, "
+                    "calculation_formula) "
+                    "VALUES (:id, :proto, 'Percent Inhibition', 'numeric', 1, true, "
+                    "'[Raw] * 2')"
+                ),
+                {"id": calc_id, "proto": protocol_id},
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        uc = _build_use_case_with_molecules(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            BulkCreateReadoutDataCommand(
+                workspace_id=workspace_id,
+                items=[
+                    ReadoutDataItem(
+                        run_id=run_id,
+                        molecule_id=molecule_id,
+                        readout_definition_id=calc_id,
+                        value_numeric=42.0,
+                    ),
+                    ReadoutDataItem(
+                        run_id=run_id,
+                        molecule_id=molecule_id,
+                        readout_definition_id=rd_id,
+                        value_numeric=7.5,
+                    ),
+                ],
+            ),
+            auth=auth,
+            require_batch=False,
+        )
+
+        assert isinstance(result, Success)
+        res = result.unwrap()
+        assert res.success_count == 1
+        assert res.error_count == 1
+        assert res.errors[0]["index"] == 0
+        assert "Percent Inhibition" in res.errors[0]["error"]
+        assert "calculated" in res.errors[0]["error"]
+
+        check_uow = AsyncUnitOfWork(session_factory)
+        async with check_uow:
+            repo = SQLAlchemyReadoutDataRepository(check_uow)
+            rows = await repo.find_by_run(workspace_id, run_id)
+            wellless = [r for r in rows if r.well_id is None and not r.is_computed]
+            assert len(wellless) == 1
+            assert wellless[0].readout_definition_id == rd_id
+
     async def test_require_batch_false_neither_molecule_nor_batch_errors(
         self, session_factory, workspace_id
     ) -> None:
@@ -434,3 +502,155 @@ class TestBulkCreateReadoutDataRequireBatch:
             rows = await repo.find_by_run(workspace_id, run_id)
             wellless = [r for r in rows if r.well_id is None and not r.is_computed]
             assert len(wellless) == 0
+
+
+class TestBulkCreateReadoutDataRunShape:
+    """One run, one shape: welled runs take well-bound rows, well-less runs don't."""
+
+    @staticmethod
+    async def _add_plate_with_well(uow: AsyncUnitOfWork, run_id: uuid.UUID) -> uuid.UUID:
+        """Give a run one plate carrying one well. Returns the well id."""
+        plate_id, well_id = uuid.uuid4(), uuid.uuid4()
+        await uow.session.execute(
+            sa.text("INSERT INTO plates (id, run_id, plate_number) VALUES (:id, :run, 1)"),
+            {"id": plate_id, "run": run_id},
+        )
+        await uow.session.execute(
+            sa.text(
+                'INSERT INTO wells (id, plate_id, "row", "column", well_type) '
+                "VALUES (:id, :plate, 'A', 1, 'sample')"
+            ),
+            {"id": well_id, "plate": plate_id},
+        )
+        return well_id
+
+    async def test_welled_run_rejects_item_without_well_id(
+        self, session_factory, workspace_id
+    ) -> None:
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            run_id, rd_id = await _seed_run_and_def(seed_uow, workspace_id=workspace_id)
+            await self._add_plate_with_well(seed_uow, run_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        uc = _build_use_case_with_molecules(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            BulkCreateReadoutDataCommand(
+                workspace_id=workspace_id,
+                items=[
+                    ReadoutDataItem(
+                        run_id=run_id,
+                        molecule_id=molecule_id,
+                        readout_definition_id=rd_id,
+                        value_numeric=5.0,
+                    )
+                ],
+            ),
+            auth=auth,
+            require_batch=False,
+        )
+
+        assert isinstance(result, Success)
+        res = result.unwrap()
+        assert res.success_count == 0
+        assert res.error_count == 1
+        assert "run has plates; well_id is required" in res.errors[0]["error"]
+
+        check_uow = AsyncUnitOfWork(session_factory)
+        async with check_uow:
+            repo = SQLAlchemyReadoutDataRepository(check_uow)
+            assert await repo.find_by_run(workspace_id, run_id) == []
+
+    async def test_welled_run_accepts_item_with_its_own_well_id(
+        self, session_factory, workspace_id
+    ) -> None:
+        """The guards must not over-fire: a well-bound row on a welled run lands."""
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            run_id, rd_id = await _seed_run_and_def(seed_uow, workspace_id=workspace_id)
+            well_id = await self._add_plate_with_well(seed_uow, run_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        uc = _build_use_case_with_molecules(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            BulkCreateReadoutDataCommand(
+                workspace_id=workspace_id,
+                items=[
+                    ReadoutDataItem(
+                        run_id=run_id,
+                        well_id=well_id,
+                        molecule_id=molecule_id,
+                        readout_definition_id=rd_id,
+                        value_numeric=5.0,
+                    )
+                ],
+            ),
+            auth=auth,
+            require_batch=False,
+        )
+
+        assert isinstance(result, Success)
+        res = result.unwrap()
+        assert res.error_count == 0, res.errors
+        assert res.success_count == 1
+
+        check_uow = AsyncUnitOfWork(session_factory)
+        async with check_uow:
+            repo = SQLAlchemyReadoutDataRepository(check_uow)
+            rows = await repo.find_by_run(workspace_id, run_id)
+            assert [r.well_id for r in rows] == [well_id]
+
+    async def test_wellless_run_rejects_item_with_well_id(
+        self, session_factory, workspace_id
+    ) -> None:
+        """The well belongs to another run's plate — a summary run has none."""
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            run_id, rd_id = await _seed_run_and_def(seed_uow, workspace_id=workspace_id)
+            other_run_id, _ = await _seed_run_and_def(seed_uow, workspace_id=workspace_id)
+            well_id = await self._add_plate_with_well(seed_uow, other_run_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        uc = _build_use_case_with_molecules(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            BulkCreateReadoutDataCommand(
+                workspace_id=workspace_id,
+                items=[
+                    ReadoutDataItem(
+                        run_id=run_id,
+                        well_id=well_id,
+                        molecule_id=molecule_id,
+                        readout_definition_id=rd_id,
+                        value_numeric=5.0,
+                    )
+                ],
+            ),
+            auth=auth,
+            require_batch=False,
+        )
+
+        assert isinstance(result, Success)
+        res = result.unwrap()
+        assert res.success_count == 0
+        assert res.error_count == 1
+        assert "run has no plates; well_id must be omitted" in res.errors[0]["error"]
+
+        check_uow = AsyncUnitOfWork(session_factory)
+        async with check_uow:
+            repo = SQLAlchemyReadoutDataRepository(check_uow)
+            assert await repo.find_by_run(workspace_id, run_id) == []

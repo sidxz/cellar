@@ -17,13 +17,20 @@ export type {
   AddChannelRequest,
   UpdateChannelRequest,
   CloseCampaignRequest,
+  ReopenCampaignRequest,
   SupersedeRequest,
-  SetResultDecisionRequest,
+  SetResultNotesRequest,
   OverrideCellRequest,
   AddFromCollectionRequest,
   AddFromCampaignRequest,
   AddFromRunRequest,
   AddResultsOutcomeResponse,
+  CampaignStageResponse,
+  StageCriterionDTO,
+  StageOutcomeResponse,
+  AddStageRequest,
+  UpdateStageRequest,
+  SetStageOverrideRequest,
 } from "@/shared/lib/api/model";
 
 // ─── Domain enums ────────────────────────────────────────────────────────────
@@ -33,9 +40,9 @@ export type {
 
 export type CampaignStatus = "draft" | "closed" | "superseded";
 
-export type CampaignDecision = "selected" | "deferred" | "rejected";
+export type StageOutcome = "hit" | "miss" | "untested" | "not_in_stage";
 
-export type HitCall = "hit" | "miss" | "inconclusive";
+export type CheckVerdict = "pass" | "fail" | "untested";
 
 export type SelectionRule =
   | "latest_approved_run"
@@ -65,10 +72,4 @@ export const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, string> = {
   draft: "Draft",
   closed: "Closed",
   superseded: "Superseded",
-};
-
-export const CAMPAIGN_DECISION_LABELS: Record<CampaignDecision, string> = {
-  selected: "Selected",
-  deferred: "Deferred",
-  rejected: "Rejected",
 };

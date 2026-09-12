@@ -176,25 +176,20 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="draft")
-    publishes_collection: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
-    )
     source_protocols: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
-    signature_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     supersedes_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
     )
     superseded_by_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
     )
-    published_collection_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), nullable=True
-    )
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    # Migration 074 — freeform note recorded by CloseCampaign, cleared by ReopenCampaign.
+    close_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     channels: Mapped[list[CampaignChannelModel]] = relationship(
         "CampaignChannelModel",
@@ -206,6 +201,12 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         "CampaignResultModel",
         cascade="all, delete-orphan",
         lazy="selectin",
+    )
+    stages: Mapped[list[CampaignStageModel]] = relationship(
+        "CampaignStageModel",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="CampaignStageModel.display_order",
     )
 
     __table_args__ = (
@@ -233,16 +234,16 @@ class CampaignChannelModel(Base, EntityModelMixin):
     selection_rule: Mapped[str] = mapped_column(String(32), nullable=False)
     qualifier_handling: Mapped[str] = mapped_column(String(32), nullable=False)
     qc_filter: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    hit_threshold: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Picks which `normalization_applied` layer the channel reads from
     # readout_data. NULL = raw layer; any string filters to that formula
     # (e.g. "percent_inhibition"). Ignored when source_kind="dose_response_curve".
     normalization_applied: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Identifies which intercept of a DR curve this channel surfaces (e.g.
     # EC90 on a curve that also reports EC50). NULL = primary intercept.
-    # JSONB shape: {"kind": "ec"|"ic", "level": float}. Channel identity is
-    # set at creation; threshold's intercept_key (under hit_threshold) is
-    # informational only after migration 035.
+    # JSONB shape: {"kind": "ec"|"ic", "level": float}. Channel identity —
+    # including which intercept it targets — is fixed at creation; it is
+    # not affected by later import-time hit-threshold changes (hit_threshold
+    # is import-time-only, on ChannelImportConfig, and never persisted here).
     intercept_key: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
 
@@ -261,13 +262,16 @@ class CampaignResultModel(Base, EntityModelMixin):
     representative_batch_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True
     )
-    decision: Mapped[str] = mapped_column(String(32), nullable=False, server_default="deferred")
-    decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     added_from: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     measurements: Mapped[list[CampaignMeasurementModel]] = relationship(
         "CampaignMeasurementModel",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    stage_overrides: Mapped[list[CampaignStageOverrideModel]] = relationship(
+        "CampaignStageOverrideModel",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
@@ -322,7 +326,6 @@ class CampaignMeasurementModel(Base, EntityModelMixin):
     value: Mapped[float | None] = mapped_column(Float, nullable=True)
     value_qualifier: Mapped[str] = mapped_column(String(16), nullable=False)
     unit: Mapped[str] = mapped_column(String(32), nullable=False)
-    hit_call: Mapped[str | None] = mapped_column(String(16), nullable=True)
     is_manual_override: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
@@ -353,4 +356,70 @@ class CampaignMeasurementModel(Base, EntityModelMixin):
             unique=True,
         ),
         Index("ix_campaign_measurement_source_run", "source_run_id"),
+    )
+
+
+# -----------------------------------------------------------------------------
+# Migration 074 — Campaign hit stages
+# -----------------------------------------------------------------------------
+
+
+class CampaignStageModel(Base, EntityModelMixin):
+    """CampaignStage — owned child of Campaign; a named AND-combination of
+    numeric rules over the campaign's channels. Stages form a forest via
+    ``parent_stage_id``."""
+
+    __tablename__ = "campaign_stage"
+
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("campaign.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    parent_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("campaign_stage.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    criteria: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+
+    __table_args__ = (
+        Index("uq_campaign_stage_name", "campaign_id", text("lower(name)"), unique=True),
+    )
+
+
+class CampaignStageOverrideModel(Base, EntityModelMixin):
+    """CampaignStageOverride — owned child of CampaignResult; a manual
+    per-(result, stage) hit/miss override with an audited reason."""
+
+    __tablename__ = "campaign_stage_override"
+
+    result_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("campaign_result.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stage_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("campaign_stage.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    forced_outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    overridden_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    overridden_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "uq_campaign_stage_override_result_stage",
+            "result_id",
+            "stage_id",
+            unique=True,
+        ),
     )

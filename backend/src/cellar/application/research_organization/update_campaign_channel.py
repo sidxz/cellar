@@ -1,12 +1,11 @@
-"""UpdateCampaignChannel — mutate label, selection rule, qc_filter, or hit_threshold.
+"""UpdateCampaignChannel — mutate label, selection rule, or qc_filter.
 
 Uses the UNSET sentinel to distinguish "don't touch this field" from
-``None`` (which is a meaningful value for ``hit_threshold`` and
-``qc_filter`` — it clears them).
+``None`` (which is a meaningful value for ``qc_filter`` — it clears it).
 
-When a gating field (selection_rule, qc_filter, hit_threshold) actually
-changes value, every non-manual-override measurement for this channel
-across all results is re-resolved via ``ChannelResolver``.
+When a gating field (selection_rule, qc_filter) actually changes value,
+every non-manual-override measurement for this channel across all results
+is re-resolved via ``ChannelResolver``.
 """
 
 from __future__ import annotations
@@ -35,7 +34,6 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
 
 
 class _Unset:
@@ -64,7 +62,6 @@ class UpdateCampaignChannelCommand(Command):
     label: str | object = UNSET
     selection_rule: SelectionRule | object = UNSET
     qc_filter: dict | object | None = UNSET
-    hit_threshold: HitCriterion | object | None = UNSET
 
 
 class UpdateCampaignChannel:
@@ -76,8 +73,8 @@ class UpdateCampaignChannel:
       3. Locate the channel by id.
       4. Detect which fields are changing (sentinel-aware).
       5. Mutate label in-place when supplied.
-      6. If any gating field (selection_rule, qc_filter, hit_threshold) changed,
-         re-resolve every non-manual-override measurement for this channel.
+      6. If any gating field (selection_rule, qc_filter) changed, re-resolve
+         every non-manual-override measurement for this channel.
       7. Bump ``campaign.updated_at``.
       8. Save + commit; dispatch events; return ``Success(campaign)``.
     """
@@ -131,11 +128,6 @@ class UpdateCampaignChannel:
                 if input.qc_filter != channel.qc_filter:
                     gating_changed = True
                 channel.qc_filter = input.qc_filter  # type: ignore[assignment]
-
-            if not isinstance(input.hit_threshold, _Unset):
-                if input.hit_threshold != channel.hit_threshold:
-                    gating_changed = True
-                channel.hit_threshold = input.hit_threshold  # type: ignore[assignment]
 
             if not isinstance(input.label, _Unset):
                 label = input.label

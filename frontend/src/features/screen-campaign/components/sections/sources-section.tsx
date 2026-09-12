@@ -4,6 +4,7 @@ import { Button } from "@/shared/components/ui/button";
 import { shortId } from "@/shared/lib/utils";
 import { X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { protocolColorById } from "../../lib/protocol-colors";
 import type { CampaignResponse } from "../../types";
 import { type AddCompoundsKind, AddCompoundsPills } from "../add/add-compounds-pills";
 
@@ -47,6 +48,8 @@ const SECTION_HEADING = "text-sm font-semibold uppercase tracking-wide text-mute
 interface RunInfo {
   protocol_name?: string;
   run_date?: string;
+  /** Same hue the protocol gets on readout headings / grid column groups. */
+  protocol_color?: string;
 }
 
 /** Short human-readable label for a source entry.
@@ -158,19 +161,24 @@ export function SourcesSection({
   // every measurement attributed to that run carries the same snapshot at
   // import time, so order doesn't matter.
   const runInfoById = useMemo(() => {
+    const channels = campaign.channels ?? [];
+    const colorByProtocol = protocolColorById(channels);
+    const protocolByChannel = new Map(channels.map((c) => [c.id, c.protocol_id] as const));
     const map = new Map<string, RunInfo>();
     for (const r of campaign.results ?? []) {
       for (const m of r.measurements ?? []) {
         const rid = m.source_run_id ?? undefined;
         if (!rid || map.has(rid)) continue;
+        const protocolId = protocolByChannel.get(m.channel_id);
         map.set(rid, {
           protocol_name: m.protocol_name_snapshot || undefined,
           run_date: m.run_date_snapshot || undefined,
+          protocol_color: protocolId ? colorByProtocol.get(protocolId) : undefined,
         });
       }
     }
     return map;
-  }, [campaign.results]);
+  }, [campaign.results, campaign.channels]);
 
   return (
     <section className="border-b px-6 py-4">
@@ -235,10 +243,25 @@ function SourceRow({
   onRemove?: () => void;
 }) {
   const label = describeSource(source, runInfoById);
+  // Colour just the protocol-name segment of a run row, matching the hue it
+  // has on the readout headings and grid column groups.
+  const info = source.kind === "run" && source.run_id ? runInfoById.get(source.run_id) : undefined;
+  const name = info?.protocol_name;
+  const at = name && info?.protocol_color ? label.indexOf(name) : -1;
 
   return (
     <li className="flex items-center justify-between rounded-md border bg-card px-3 py-1.5">
-      <span className="text-sm">{label}</span>
+      <span className="text-sm">
+        {at >= 0 && name ? (
+          <>
+            {label.slice(0, at)}
+            <span style={{ color: info?.protocol_color }}>{name}</span>
+            {label.slice(at + name.length)}
+          </>
+        ) : (
+          label
+        )}
+      </span>
       {!readOnly && onRemove && (
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onRemove}>
           <X className="h-3.5 w-3.5" />

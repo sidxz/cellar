@@ -13,12 +13,14 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import CampaignStage, StageCriterion
 from cellar.domain.research_organization.source_ref import CollectionRef
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    StageOutcome,
     ValueQualifier,
 )
 from cellar.domain.shared.errors import ConcurrencyConflictError
@@ -43,7 +45,6 @@ def _build_campaign(
         project_id=project_id,
         name="Test Campaign",
         description="x",
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
     c.collect_events()  # discard CampaignCreated for test cleanliness
@@ -168,7 +169,7 @@ async def test_is_locked_returns_true_for_closed(
         assert loaded is not None
         loaded.close(
             closed_by=uuid.uuid4(),
-            signature_id=uuid.uuid4(),
+            note=None,
             source_protocols=[{"id": "p1", "name": "X", "version": 1}],
         )
         loaded.collect_events()  # discard CampaignClosed
@@ -312,3 +313,173 @@ async def test_add_and_remove_channel_persists(
         final = await repo_final.find_by_id(c.id)
     assert final is not None
     assert final.channels == []
+
+
+async def test_stage_round_trip(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign()
+    channel_id = c.channels[0].id
+    stage = CampaignStage(
+        campaign_id=c.id,
+        name="Primary hits",
+        display_order=0,
+        criteria=[StageCriterion(channel_id=channel_id, operator="lt", value=5.0)],
+    )
+    c.add_stage(stage)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow2:
+        repo2 = SQLAlchemyCampaignRepository(uow2)
+        reloaded = await repo2.find_by_id(c.id)
+    assert reloaded is not None
+    assert len(reloaded.stages) == 1
+    rs = reloaded.stages[0]
+    assert rs.id == stage.id
+    assert rs.name == "Primary hits"
+    assert rs.display_order == 0
+    assert rs.parent_stage_id is None
+    assert len(rs.criteria) == 1
+    assert rs.criteria[0].channel_id == channel_id
+    assert rs.criteria[0].operator == "lt"
+    assert rs.criteria[0].value == 5.0
+
+
+async def test_stage_rename_and_criteria_replace_reconciles(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign()
+    channel_id = c.channels[0].id
+    stage = CampaignStage(
+        campaign_id=c.id,
+        name="Primary hits",
+        display_order=0,
+        criteria=[StageCriterion(channel_id=channel_id, operator="lt", value=5.0)],
+    )
+    c.add_stage(stage)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow_edit:
+        repo_edit = SQLAlchemyCampaignRepository(uow_edit)
+        reloaded = await repo_edit.find_by_id(c.id)
+        assert reloaded is not None
+        reloaded.update_stage(
+            stage.id,
+            name="Renamed hits",
+            criteria=[StageCriterion(channel_id=channel_id, operator="gte", value=9.0)],
+        )
+        await repo_edit.save(reloaded)
+        await uow_edit.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow_check:
+        repo_check = SQLAlchemyCampaignRepository(uow_check)
+        again = await repo_check.find_by_id(c.id)
+    assert again is not None
+    assert len(again.stages) == 1
+    rs = again.stages[0]
+    assert rs.name == "Renamed hits"
+    assert len(rs.criteria) == 1
+    assert rs.criteria[0].operator == "gte"
+    assert rs.criteria[0].value == 9.0
+
+
+async def test_stage_override_round_trip(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign()
+    channel_id = c.channels[0].id
+    stage = CampaignStage(
+        campaign_id=c.id,
+        name="Primary hits",
+        display_order=0,
+        criteria=[StageCriterion(channel_id=channel_id, operator="lt", value=5.0)],
+    )
+    c.add_stage(stage)
+    result = c.results[0]
+    overridden_by = uuid.uuid4()
+    result.set_stage_override(
+        stage_id=stage.id,
+        forced_outcome=StageOutcome.HIT,
+        reason="manual review",
+        overridden_by=overridden_by,
+    )
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow2:
+        repo2 = SQLAlchemyCampaignRepository(uow2)
+        reloaded = await repo2.find_by_id(c.id)
+    assert reloaded is not None
+    rr = reloaded.results[0]
+    assert stage.id in rr.stage_overrides
+    ov = rr.stage_overrides[stage.id]
+    assert ov.forced_outcome == StageOutcome.HIT
+    assert ov.reason == "manual review"
+    assert ov.overridden_by == overridden_by
+    assert ov.result_id == rr.id
+    assert ov.stage_id == stage.id
+
+
+async def test_stage_override_removal_reconciles(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign()
+    channel_id = c.channels[0].id
+    stage = CampaignStage(
+        campaign_id=c.id,
+        name="Primary hits",
+        display_order=0,
+        criteria=[StageCriterion(channel_id=channel_id, operator="lt", value=5.0)],
+    )
+    c.add_stage(stage)
+    result = c.results[0]
+    result.set_stage_override(
+        stage_id=stage.id,
+        forced_outcome=StageOutcome.MISS,
+        reason="manual review",
+        overridden_by=uuid.uuid4(),
+    )
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow_rm:
+        repo_rm = SQLAlchemyCampaignRepository(uow_rm)
+        reloaded = await repo_rm.find_by_id(c.id)
+        assert reloaded is not None
+        removed = reloaded.results[0].clear_stage_override(stage.id)
+        assert removed is True
+        await repo_rm.save(reloaded)
+        await uow_rm.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow_check:
+        repo_check = SQLAlchemyCampaignRepository(uow_check)
+        again = await repo_check.find_by_id(c.id)
+    assert again is not None
+    assert again.results[0].stage_overrides == {}
+
+
+async def test_close_note_round_trip(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign()
+    c.close_note = "closed after triage review"
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow2:
+        repo2 = SQLAlchemyCampaignRepository(uow2)
+        reloaded = await repo2.find_by_id(c.id)
+    assert reloaded is not None
+    assert reloaded.close_note == "closed after triage review"

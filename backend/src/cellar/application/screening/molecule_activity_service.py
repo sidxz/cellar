@@ -128,15 +128,53 @@ class MoleculeActivityService:
         for curve in curves:
             proto_ids.add(curve.protocol_id)
 
+        # Reported-endpoint fallback (spec D1) — the detail-page twin of the
+        # `drc:` fallback in ``_enrich_molecules``. A summary-imported IC50
+        # leaves no curve behind, so curves alone would hide its protocol from
+        # this page entirely. The raw readout rows name the runs, the runs name
+        # the protocols.
+        # ponytail: loads every readout row for the compound (one query, single
+        # molecule); swap for a DISTINCT (run_id, readout_definition_id)
+        # projection if a heavily-screened compound makes it bite.
+        readout_rows = await self._readout_repo.find_by_molecule(workspace_id, molecule_id)
+        # Raw layer AND well-less: a reported endpoint records no plate
+        # position, so per-well response readings can't masquerade as one.
+        endpoint_rows = [
+            row
+            for row in readout_rows
+            if row.normalization_applied is None and row.well_id is None
+        ]
+        raw_rd_ids = {row.readout_definition_id for row in endpoint_rows}
+        readout_runs = (
+            await self._run_repo.find_by_ids(workspace_id, list({r.run_id for r in endpoint_rows}))
+            if endpoint_rows
+            else {}
+        )
+        curve_proto_ids = {curve.protocol_id for curve in curves}
+        proto_ids |= {run.protocol_id for run in readout_runs.values()}
+
         # Fetch protocol metadata (single query) — used for display
         # name/type, dose_unit (for IC50 unit decoration), and the
         # protocol's declared intercept specs (per-Card column headers
         # on the molecule activity tab).
         protocols_by_id: dict[uuid.UUID, tuple[str, str, str]] = {}
         intercepts_by_proto: dict[uuid.UUID, list[dict[str, Any]]] = {}
+        # (readout_definition_id, protocol_id) for every DR readout-def this
+        # molecule has a raw row but no fitted curve for.
+        endpoint_defs: dict[uuid.UUID, uuid.UUID] = {}
+        curve_rd_ids = {curve.readout_definition_id for curve in curves}
         if proto_ids:
             protos = await self._protocol_repo.find_by_ids(workspace_id, list(proto_ids))
             for proto in protos:
+                endpoint_defs.update(
+                    {
+                        rd.id: proto.id
+                        for rd in proto.readout_definitions
+                        if rd.dose_response_config is not None
+                        and rd.id in raw_rd_ids
+                        and rd.id not in curve_rd_ids
+                    }
+                )
                 protocols_by_id[proto.id] = (
                     proto.name,
                     proto.protocol_type.value,
@@ -189,14 +227,40 @@ class MoleculeActivityService:
                 }
             )
 
+        # One aggregate query for every reported endpoint on the page.
+        endpoints_by_proto: dict[uuid.UUID, list[ActivityValue]] = {}
+        if endpoint_defs:
+            aggregated = await self._readout_repo.find_aggregated_by_molecules(
+                workspace_id,
+                [molecule_id],
+                [(rd_id, None) for rd_id in endpoint_defs],
+                wellless_only=True,
+            )
+            for (rd_id, _norm), agg in aggregated.get(molecule_id, {}).items():
+                endpoints_by_proto.setdefault(endpoint_defs[rd_id], []).append(
+                    ActivityValue(
+                        value=agg.value,
+                        qualifier=agg.qualifier,
+                        unit=agg.unit,
+                        source="readout",
+                        data_point_count=agg.data_point_count,
+                    )
+                )
+
         summaries: list[ProtocolActivitySummary] = []
         for pid in sorted(proto_ids):
+            # A protocol reached only through readout rows earns a card only if
+            # it actually yielded an endpoint — otherwise a well-less row on
+            # some unrelated readout would add an empty card.
+            if pid not in curve_proto_ids and not endpoints_by_proto.get(pid):
+                continue
             name, ptype, _unit = protocols_by_id.get(pid, ("Unknown", "unknown", "uM"))
             summaries.append(
                 ProtocolActivitySummary(
                     protocol_id=pid,
                     protocol_name=name,
                     protocol_type=ptype,
+                    readouts=endpoints_by_proto.get(pid, []),
                     best_curves=curves_by_proto.get(pid, []),
                     intercepts=intercepts_by_proto.get(pid, []),
                 )
@@ -333,6 +397,38 @@ class MoleculeActivityService:
                 protos = await self._protocol_repo.find_by_ids(workspace_id, list(curve_proto_ids))
                 proto_dose_unit = {p.id: p.dose_unit.value for p in protos}
 
+        # Reported-endpoint fallback (spec D1, same rule the campaign channel
+        # resolver applies): a DR readout-def with no fitted curve for a
+        # molecule may still carry a summary-imported endpoint on the raw
+        # readout layer — an IC50 someone reported without dose points. Fetch
+        # those aggregates only for the (molecule, rd) cells the curve query
+        # left empty; a molecule with curves never consults this map.
+        #
+        # Only an unscoped column falls back: the raw-layer aggregate carries
+        # no run filter, so a column the chemist scoped (last N runs, since a
+        # date, specific runs) would otherwise show an endpoint from a run
+        # outside that scope. See docs/backlog/drc-fallback-run-scope.md for
+        # the scope-aware aggregate that would lift this restriction.
+        drc_fallback: dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]] = {}
+        fallback_rd_ids = [
+            rd_id
+            for rd_id in drc_specs
+            if ((run_scopes or {}).get(f"drc:{rd_id}") or RunScope.all()).is_all()
+        ]
+        if fallback_rd_ids:
+            missing_mols = [
+                mol_id
+                for mol_id in molecule_ids
+                if any(not curve_data.get(mol_id, {}).get(rd_id) for rd_id in fallback_rd_ids)
+            ]
+            if missing_mols:
+                drc_fallback = await self._readout_repo.find_aggregated_by_molecules(
+                    workspace_id,
+                    missing_mols,
+                    [(rd_id, None) for rd_id in fallback_rd_ids],
+                    wellless_only=True,
+                )
+
         # "any" column: every curve the molecule has, in every protocol.
         any_curves: dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]] = {}
         any_runs: dict[uuid.UUID, Run] = {}
@@ -409,6 +505,15 @@ class MoleculeActivityService:
                 col_key = f"drc:{rd_id}"
                 curves = mol_curves.get(rd_id) or []
                 if not curves:
+                    agg = drc_fallback.get(mol_id, {}).get((rd_id, None))
+                    if agg:
+                        mol_activity[col_key] = ActivityValue(
+                            value=agg.value,
+                            qualifier=agg.qualifier,
+                            unit=agg.unit,
+                            source="readout",
+                            data_point_count=agg.data_point_count,
+                        )
                     continue
 
                 resolved_runs = self._build_resolved_runs(curves, runs_by_id)

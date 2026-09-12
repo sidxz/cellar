@@ -282,6 +282,18 @@ class ActivitySummaryResponse(BaseModel):
                     protocol_id=p.protocol_id,
                     protocol_name=p.protocol_name,
                     protocol_type=p.protocol_type,
+                    readouts=[
+                        ActivityValueResponse(
+                            value=r.value,
+                            qualifier=r.qualifier,
+                            unit=r.unit,
+                            source=r.source,
+                            curve_type=r.curve_type,
+                            r_squared=r.r_squared,
+                            data_point_count=r.data_point_count,
+                        )
+                        for r in p.readouts
+                    ],
                     best_curves=p.best_curves,
                     intercepts=p.intercepts,
                 )
