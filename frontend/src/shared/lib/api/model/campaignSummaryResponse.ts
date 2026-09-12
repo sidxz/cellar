@@ -12,6 +12,7 @@ import type { CampaignSummaryResponseClosedAt } from './campaignSummaryResponseC
 import type { CampaignSummaryResponseClosedBy } from './campaignSummaryResponseClosedBy';
 import type { CampaignSummaryResponseCloseNote } from './campaignSummaryResponseCloseNote';
 import type { CampaignSummaryResponseSourceProtocolsItem } from './campaignSummaryResponseSourceProtocolsItem';
+import type { SeedRunResponse } from './seedRunResponse';
 import type { CampaignChannelResponse } from './campaignChannelResponse';
 import type { CampaignStageResponse } from './campaignStageResponse';
 import type { TargetRefResponse } from './targetRefResponse';
@@ -36,6 +37,7 @@ export interface CampaignSummaryResponse {
   closed_by?: CampaignSummaryResponseClosedBy;
   close_note?: CampaignSummaryResponseCloseNote;
   source_protocols: CampaignSummaryResponseSourceProtocolsItem[];
+  seed_runs: SeedRunResponse[];
   created_by: string;
   created_at: string;
   updated_at: string;

@@ -1282,6 +1282,7 @@ export * from './savedSearchSourceDTO';
 export * from './searchMoleculesApiV1MoleculesSearchGetParams';
 export * from './searchOntologyApiV1OntologySearchGetParams';
 export * from './searchVisibility';
+export * from './seedRunResponse';
 export * from './selectionRule';
 export * from './setControlLayoutRequest';
 export * from './setEntityTagsBody';
