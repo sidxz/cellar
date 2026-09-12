@@ -316,7 +316,8 @@ class AddResultsFromRuns:
                     # endpoint rows (summary-imported readout_data on the same
                     # readout definition) for molecules with no fitted curve in
                     # the selected runs. A molecule that has a curve keeps its
-                    # curve, even if allowed_curve_classes then drops it.
+                    # curve — if allowed_curve_classes then drops every one of
+                    # them, that molecule is skipped rather than falling back.
                     endpoints_by_mol = await self._query.fetch_endpoint_candidates_for_runs(
                         workspace_id=input.workspace_id,
                         run_ids=input.run_ids,
@@ -326,7 +327,13 @@ class AddResultsFromRuns:
                     for mol_id, endpoints in endpoints_by_mol.items():
                         candidates_by_mol.setdefault(mol_id, endpoints)
                 for mol_id, candidates in candidates_by_mol.items():
-                    if cfg.allowed_curve_classes:
+                    # allowed_curve_classes is a curve attribute, so it filters
+                    # curve candidates only. A molecule whose candidates are
+                    # endpoint fallback rows (no curve in the selected runs)
+                    # goes straight to the selection rule, exactly as a numeric
+                    # readout channel's rows would.
+                    is_curve_set = any(c.curve_id is not None for c in candidates)
+                    if cfg.allowed_curve_classes and is_curve_set:
                         allowed = set(cfg.allowed_curve_classes)
                         candidates = [
                             c

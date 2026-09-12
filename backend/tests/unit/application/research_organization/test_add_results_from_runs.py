@@ -918,3 +918,52 @@ class TestAddResultsFromRuns:
         out = await uc(cmd, auth=auth)
         assert isinstance(out, Success)
         assert out.unwrap().added == 0
+
+    @pytest.mark.asyncio
+    async def test_allowed_curve_classes_does_not_filter_endpoint_fallbacks(
+        self,
+    ) -> None:
+        """allowed_curve_classes is a curve attribute: it must not reject the
+        endpoint fallback (which carries no curve_class), while a molecule whose
+        only curve is out of class is still skipped."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol_inactive_curve, mol_endpoint = uuid.uuid4(), uuid.uuid4()
+        inactive = replace(
+            self._curve_candidate(value=10.0, run_id=run_id), curve_class="inactive"
+        )
+        endpoint = _candidate(value=32.0, run_id=run_id)
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(
+                {(proto, readout): {mol_inactive_curve: [inactive]}},
+                {(proto, readout): {mol_endpoint: [endpoint]}},
+            ),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    allowed_curve_classes={"active"},
+                )
+            ],
+            scope="all",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 1
+        assert [r.molecule_id for r in campaign.results] == [mol_endpoint]
+        cell = campaign.results[0].measurements[0]
+        assert cell.value == 32.0
+        assert cell.source_readout_id == endpoint.readout_id
