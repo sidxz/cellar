@@ -13,9 +13,9 @@ import type { CampaignResponseClosedBy } from './campaignResponseClosedBy';
 import type { CampaignResponseCloseNote } from './campaignResponseCloseNote';
 import type { CampaignResponseSourceProtocolsItem } from './campaignResponseSourceProtocolsItem';
 import type { CampaignChannelResponse } from './campaignChannelResponse';
-import type { CampaignResultResponse } from './campaignResultResponse';
 import type { CampaignStageResponse } from './campaignStageResponse';
 import type { TargetRefResponse } from './targetRefResponse';
+import type { CampaignResultResponse } from './campaignResultResponse';
 
 export interface CampaignResponse {
   id: string;
@@ -36,7 +36,7 @@ export interface CampaignResponse {
   updated_at: string;
   version: number;
   channels: CampaignChannelResponse[];
-  results: CampaignResultResponse[];
   stages: CampaignStageResponse[];
   targets?: TargetRefResponse[];
+  results: CampaignResultResponse[];
 }

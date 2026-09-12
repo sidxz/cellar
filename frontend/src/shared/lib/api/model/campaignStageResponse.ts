@@ -6,11 +6,14 @@
  */
 import type { CampaignStageResponseParentStageId } from './campaignStageResponseParentStageId';
 import type { StageCriterionDTO } from './stageCriterionDTO';
+import type { StageCountsResponse } from './stageCountsResponse';
 
 export interface CampaignStageResponse {
   id: string;
   name: string;
   parent_stage_id?: CampaignStageResponseParentStageId;
   display_order: number;
+  kind: string;
   criteria: StageCriterionDTO[];
+  counts: StageCountsResponse;
 }

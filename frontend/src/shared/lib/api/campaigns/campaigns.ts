@@ -31,7 +31,10 @@ import type {
   AddResultRowRequest,
   AddResultsOutcomeResponse,
   AddStageRequest,
+  BulkRemoveResultsRequest,
+  BulkStageOverrideRequest,
   CampaignResponse,
+  CampaignSummaryResponse,
   CloseCampaignRequest,
   CreateCampaignRequest,
   GetPublishedCampaignApiV1CampaignsCampaignIdPublishedGet200,
@@ -41,7 +44,7 @@ import type {
   MirrorProtocolOutcomeResponse,
   MirrorProtocolRequest,
   OverrideCellRequest,
-  PaginatedResponseCampaignResponse,
+  PaginatedResponseCampaignSummaryResponse,
   PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGet200,
   PreviewPublishedCampaignApiV1CampaignsCampaignIdPreviewPublishedGetParams,
   PreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost200,
@@ -126,7 +129,9 @@ export const useCreateCampaignApiV1CampaignsPost = <TError = HTTPValidationError
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * List campaigns in the workspace, optionally filtered by project/tags/targets.
+ * List campaigns in the workspace, filtered by project/tags/targets/status.
+
+Items are summaries — stage ``counts`` but no result rows.
  * @summary List Campaigns
  */
 export const listCampaignsApiV1CampaignsGet = (
@@ -135,7 +140,7 @@ export const listCampaignsApiV1CampaignsGet = (
 ) => {
       
       
-      return customInstance<PaginatedResponseCampaignResponse>(
+      return customInstance<PaginatedResponseCampaignSummaryResponse>(
       {url: `/api/v1/campaigns`, method: 'GET',
         params, signal
     },
@@ -208,6 +213,99 @@ export function useListCampaignsApiV1CampaignsGet<TData = Awaited<ReturnType<typ
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListCampaignsApiV1CampaignsGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Get a campaign without its result rows (channels, stages + funnel counts).
+ * @summary Get Campaign Summary
+ */
+export const getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet = (
+    campaignId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CampaignSummaryResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/summary`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getGetCampaignSummaryApiV1CampaignsCampaignIdSummaryGetQueryKey = (campaignId?: string,) => {
+    return [
+    `/api/v1/campaigns/${campaignId}/summary`
+    ] as const;
+    }
+
+    
+export const getGetCampaignSummaryApiV1CampaignsCampaignIdSummaryGetQueryOptions = <TData = Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError = HTTPValidationError>(campaignId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCampaignSummaryApiV1CampaignsCampaignIdSummaryGetQueryKey(campaignId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>> = ({ signal }) => getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet(campaignId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(campaignId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCampaignSummaryApiV1CampaignsCampaignIdSummaryGetQueryResult = NonNullable<Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>>
+export type GetCampaignSummaryApiV1CampaignsCampaignIdSummaryGetQueryError = HTTPValidationError
+
+
+export function useGetCampaignSummaryApiV1CampaignsCampaignIdSummaryGet<TData = Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError = HTTPValidationError>(
+ campaignId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>,
+          TError,
+          Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCampaignSummaryApiV1CampaignsCampaignIdSummaryGet<TData = Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError = HTTPValidationError>(
+ campaignId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>,
+          TError,
+          Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCampaignSummaryApiV1CampaignsCampaignIdSummaryGet<TData = Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError = HTTPValidationError>(
+ campaignId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Campaign Summary
+ */
+
+export function useGetCampaignSummaryApiV1CampaignsCampaignIdSummaryGet<TData = Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError = HTTPValidationError>(
+ campaignId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCampaignSummaryApiV1CampaignsCampaignIdSummaryGetQueryOptions(campaignId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -1253,9 +1351,10 @@ export const useAddCampaignStageApiV1CampaignsCampaignIdStagesPost = <TError = H
  * Update a campaign stage.
 
 Semantics: omitted fields are left unchanged (UNSET); a null
-``parent_stage_id`` clears it. ``name``/``criteria``/``display_order``
-have no "clear" meaning on the aggregate, so an explicit null for those
-is treated the same as omitted.
+``parent_stage_id`` clears it. ``name``/``criteria``/``display_order``/
+``kind`` have no "clear" meaning on the aggregate, so an explicit null for
+those is treated the same as omitted. Switching to ``kind: "manual"``
+requires sending ``criteria: []`` in the same PATCH (422 otherwise).
  * @summary Update Campaign Stage
  */
 export const updateCampaignStageApiV1CampaignsCampaignIdStagesStageIdPatch = (
@@ -1511,6 +1610,76 @@ export const useClearStageOverrideApiV1CampaignsCampaignIdResultsResultIdStagesS
       > => {
 
       const mutationOptions = getClearStageOverrideApiV1CampaignsCampaignIdResultsResultIdStagesStageIdOverrideDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Force (or, with ``outcome: null``, clear) one stage's verdict for N results.
+
+Same command as the per-result routes, so one code path; the whole batch
+lands in a single aggregate save (404 on the first unknown result id,
+nothing applied).
+ * @summary Set Stage Overrides
+ */
+export const setStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut = (
+    campaignId: string,
+    stageId: string,
+    bulkStageOverrideRequest: BulkStageOverrideRequest,
+ ) => {
+      
+      
+      return customInstance<CampaignResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/stages/${stageId}/overrides`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: bulkStageOverrideRequest
+    },
+      );
+    }
+  
+
+
+export const getSetStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPutMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut>>, TError,{campaignId: string;stageId: string;data: BulkStageOverrideRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof setStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut>>, TError,{campaignId: string;stageId: string;data: BulkStageOverrideRequest}, TContext> => {
+
+const mutationKey = ['setStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut>>, {campaignId: string;stageId: string;data: BulkStageOverrideRequest}> = (props) => {
+          const {campaignId,stageId,data} = props ?? {};
+
+          return  setStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut(campaignId,stageId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPutMutationResult = NonNullable<Awaited<ReturnType<typeof setStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut>>>
+    export type SetStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPutMutationBody = BulkStageOverrideRequest
+    export type SetStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPutMutationError = HTTPValidationError
+
+    /**
+ * @summary Set Stage Overrides
+ */
+export const useSetStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut>>, TError,{campaignId: string;stageId: string;data: BulkStageOverrideRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPut>>,
+        TError,
+        {campaignId: string;stageId: string;data: BulkStageOverrideRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getSetStageOverridesApiV1CampaignsCampaignIdStagesStageIdOverridesPutMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
@@ -1773,6 +1942,75 @@ export const useAddResultRowApiV1CampaignsCampaignIdResultsPost = <TError = HTTP
       > => {
 
       const mutationOptions = getAddResultRowApiV1CampaignsCampaignIdResultsPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Remove N compound result rows from a DRAFT campaign in one save.
+
+POST rather than DELETE because some proxies drop DELETE bodies. 404 on
+the first unknown result id, with nothing removed.
+ * @summary Bulk Remove Result Rows
+ */
+export const bulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost = (
+    campaignId: string,
+    bulkRemoveResultsRequest: BulkRemoveResultsRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CampaignResponse>(
+      {url: `/api/v1/campaigns/${campaignId}/results/bulk-remove`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: bulkRemoveResultsRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost>>, TError,{campaignId: string;data: BulkRemoveResultsRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof bulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost>>, TError,{campaignId: string;data: BulkRemoveResultsRequest}, TContext> => {
+
+const mutationKey = ['bulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost>>, {campaignId: string;data: BulkRemoveResultsRequest}> = (props) => {
+          const {campaignId,data} = props ?? {};
+
+          return  bulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost(campaignId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePostMutationResult = NonNullable<Awaited<ReturnType<typeof bulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost>>>
+    export type BulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePostMutationBody = BulkRemoveResultsRequest
+    export type BulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Bulk Remove Result Rows
+ */
+export const useBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost>>, TError,{campaignId: string;data: BulkRemoveResultsRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof bulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost>>,
+        TError,
+        {campaignId: string;data: BulkRemoveResultsRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

@@ -8,6 +8,7 @@ import type { UpdateStageRequestName } from './updateStageRequestName';
 import type { UpdateStageRequestParentStageId } from './updateStageRequestParentStageId';
 import type { UpdateStageRequestCriteria } from './updateStageRequestCriteria';
 import type { UpdateStageRequestDisplayOrder } from './updateStageRequestDisplayOrder';
+import type { UpdateStageRequestKind } from './updateStageRequestKind';
 
 /**
  * Partial update — omitted fields are not changed; null clears parent_stage_id.
@@ -21,4 +22,5 @@ export interface UpdateStageRequest {
   parent_stage_id?: UpdateStageRequestParentStageId;
   criteria?: UpdateStageRequestCriteria;
   display_order?: UpdateStageRequestDisplayOrder;
+  kind?: UpdateStageRequestKind;
 }

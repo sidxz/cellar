@@ -5,10 +5,12 @@
  * OpenAPI spec version: 1.1.0-14-gdd8a8c7e-dirty
  */
 import type { AddStageRequestParentStageId } from './addStageRequestParentStageId';
+import type { AddStageRequestKind } from './addStageRequestKind';
 import type { StageCriterionDTO } from './stageCriterionDTO';
 
 export interface AddStageRequest {
   name: string;
   parent_stage_id?: AddStageRequestParentStageId;
+  kind?: AddStageRequestKind;
   criteria?: StageCriterionDTO[];
 }

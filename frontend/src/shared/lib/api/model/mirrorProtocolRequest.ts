@@ -5,8 +5,10 @@
  * OpenAPI spec version: 1.1.0-14-gdd8a8c7e-dirty
  */
 import type { MirrorProtocolRequestStageName } from './mirrorProtocolRequestStageName';
+import type { MirrorProtocolRequestParentStageId } from './mirrorProtocolRequestParentStageId';
 
 export interface MirrorProtocolRequest {
   protocol_id: string;
   stage_name?: MirrorProtocolRequestStageName;
+  parent_stage_id?: MirrorProtocolRequestParentStageId;
 }
