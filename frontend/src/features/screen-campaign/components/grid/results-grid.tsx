@@ -630,10 +630,21 @@ export function ResultsGridV2({
         isExternalFilterPresent={isExternalFilterPresent}
         doesExternalFilterPass={doesExternalFilterPass}
         searchPlaceholder={false}
+        // The chip bar is the only filter surface on this grid: AG Grid's own
+        // column menus would hide rows `rowPassesFilters` still counts as
+        // visible, and the bulk gestures read that predicate.
+        suppressFilters
         selectionToolbar={
           readOnly
             ? undefined
-            : (rows) => <RemoveSelectedButton campaignId={campaign.id} rows={rows} />
+            : (rows) => (
+                <RemoveSelectedButton
+                  campaignId={campaign.id}
+                  rows={rows}
+                  filters={filters}
+                  selectedStageId={selectedStageId}
+                />
+              )
         }
         suppressCellFocus
         animateRows={false}
@@ -665,11 +676,27 @@ export function ResultsGridV2({
 /** Selection toolbar for the draft grid: drops the checked compounds from the
  *  campaign in one save. Removal only takes the rows out of *this* campaign —
  *  no molecule, batch or readout data is touched — but it's not undoable from
- *  here, hence the confirm. */
-function RemoveSelectedButton({ campaignId, rows }: { campaignId: string; rows: RowData[] }) {
+ *  here, hence the confirm.
+ *
+ *  AG Grid keeps filtered-out nodes selected, so the selection is re-filtered
+ *  through the chip predicate: the count and the payload are the rows the
+ *  chemist can actually see. */
+export function RemoveSelectedButton({
+  campaignId,
+  rows,
+  filters,
+  selectedStageId,
+}: {
+  campaignId: string;
+  rows: RowData[];
+  filters: CampaignFilters;
+  selectedStageId: string | null;
+}) {
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
-  const ids = rows.map((r) => r.result.id);
+  const ids = rows
+    .filter((r) => rowPassesFilters(r.result, filters, selectedStageId))
+    .map((r) => r.result.id);
   const n = ids.length;
 
   const mutation = useBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost({
