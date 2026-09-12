@@ -403,18 +403,29 @@ class MoleculeActivityService:
         # readout layer — an IC50 someone reported without dose points. Fetch
         # those aggregates only for the (molecule, rd) cells the curve query
         # left empty; a molecule with curves never consults this map.
+        #
+        # Only an unscoped column falls back: the raw-layer aggregate carries
+        # no run filter, so a column the chemist scoped (last N runs, since a
+        # date, specific runs) would otherwise show an endpoint from a run
+        # outside that scope. See docs/backlog/drc-fallback-run-scope.md for
+        # the scope-aware aggregate that would lift this restriction.
         drc_fallback: dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]] = {}
-        if drc_specs:
+        fallback_rd_ids = [
+            rd_id
+            for rd_id in drc_specs
+            if ((run_scopes or {}).get(f"drc:{rd_id}") or RunScope.all()).is_all()
+        ]
+        if fallback_rd_ids:
             missing_mols = [
                 mol_id
                 for mol_id in molecule_ids
-                if any(not curve_data.get(mol_id, {}).get(rd_id) for rd_id in drc_specs)
+                if any(not curve_data.get(mol_id, {}).get(rd_id) for rd_id in fallback_rd_ids)
             ]
             if missing_mols:
                 drc_fallback = await self._readout_repo.find_aggregated_by_molecules(
                     workspace_id,
                     missing_mols,
-                    [(rd_id, None) for rd_id in drc_specs],
+                    [(rd_id, None) for rd_id in fallback_rd_ids],
                     wellless_only=True,
                 )
 

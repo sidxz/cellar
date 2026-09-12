@@ -545,6 +545,49 @@ class TestEnrichMoleculesReportedEndpointFallback:
         readout_repo.find_aggregated_by_molecules.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_scoped_column_does_not_fall_back(self) -> None:
+        """The raw-layer aggregate carries no run filter, so a column the
+        chemist scoped to specific runs must not borrow an endpoint that could
+        have come from a run outside that scope."""
+        curve_repo = AsyncMock()
+        curve_repo.find_all_curves_for_molecules = AsyncMock(return_value={})
+        readout_repo = self._readout_repo_for(self._agg())
+
+        service = _make_service(curve_repo=curve_repo, readout_repo=readout_repo)
+        col_spec = f"drc:{RD_ID}"
+
+        result = await service.enrich_molecules(
+            WS,
+            [MOL_ID],
+            [col_spec],
+            run_scopes={col_spec: RunScope.last_n(3)},
+        )
+
+        assert result == {}
+        readout_repo.find_aggregated_by_molecules.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_explicitly_unscoped_column_still_falls_back(self) -> None:
+        curve_repo = AsyncMock()
+        curve_repo.find_all_curves_for_molecules = AsyncMock(return_value={})
+        readout_repo = self._readout_repo_for(self._agg())
+
+        service = _make_service(curve_repo=curve_repo, readout_repo=readout_repo)
+        col_spec = f"drc:{RD_ID}"
+
+        result = await service.enrich_molecules(
+            WS,
+            [MOL_ID],
+            [col_spec],
+            run_scopes={col_spec: RunScope.all()},
+        )
+
+        assert result[MOL_ID][col_spec].value == 3.4
+        readout_repo.find_aggregated_by_molecules.assert_awaited_once_with(
+            WS, [MOL_ID], [(RD_ID, None)], wellless_only=True
+        )
+
+    @pytest.mark.asyncio
     async def test_no_curve_and_no_reported_endpoint_stays_absent(self) -> None:
         curve_repo = AsyncMock()
         curve_repo.find_all_curves_for_molecules = AsyncMock(return_value={})
