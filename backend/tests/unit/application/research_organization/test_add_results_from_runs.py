@@ -759,7 +759,9 @@ class TestAddResultsFromRuns:
         assert stage.criteria[0].channel_id == ic50_channel.id
 
     @pytest.mark.asyncio
-    async def test_stage_name_collision_returns_failure(self) -> None:
+    async def test_stage_name_reuses_existing_stage(self) -> None:
+        """Re-importing under a name already on the campaign rewrites that
+        stage's criteria instead of failing on the uniqueness rule."""
         auth = fake_auth()
         campaign = _draft_campaign(auth.workspace_id)
         proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
@@ -776,16 +778,13 @@ class TestAddResultsFromRuns:
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         )
         campaign.channels.append(other_channel)
-        campaign.add_stage(
-            CampaignStage(
-                campaign_id=campaign.id,
-                name="Primary Hits",
-                display_order=0,
-                criteria=[
-                    StageCriterion(channel_id=other_channel.id, operator="lt", value=1.0)
-                ],
-            )
+        existing_stage = CampaignStage(
+            campaign_id=campaign.id,
+            name="Primary Hits",
+            display_order=0,
+            criteria=[StageCriterion(channel_id=other_channel.id, operator="lt", value=1.0)],
         )
+        campaign.add_stage(existing_stage)
 
         candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}
         uc = AddResultsFromRuns(
@@ -812,13 +811,104 @@ class TestAddResultsFromRuns:
                 )
             ],
             scope="all",
-            stage_name="Primary Hits",  # collides with the pre-existing stage
+            stage_name="primary HITS",  # same stage, different casing
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is False
+        # Reused in place — same stage id, criteria replaced by this import's.
+        assert len(campaign.stages) == 1
+        stage = campaign.stages[0]
+        assert stage.id == existing_stage.id
+        assert stage.name == "Primary Hits"
+        imported_channel = next(
+            ch for ch in campaign.channels if ch.readout_definition_id == readout
+        )
+        assert len(stage.criteria) == 1
+        assert stage.criteria[0].channel_id == imported_channel.id
+        assert stage.criteria[0].value == 1000.0
+
+    @pytest.mark.asyncio
+    async def test_stage_created_under_parent_stage_id(self) -> None:
+        """parent_stage_id attaches the new stage under an existing one."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+
+        parent = CampaignStage(campaign_id=campaign.id, name="Triage", display_order=0)
+        campaign.add_stage(parent)
+
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
+                )
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+            parent_stage_id=parent.id,
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is True
+        child = next(s for s in campaign.stages if s.name == "Primary Hits")
+        assert child.parent_stage_id == parent.id
+
+    @pytest.mark.asyncio
+    async def test_unknown_parent_stage_id_returns_failure(self) -> None:
+        """A parent that isn't on the campaign is a 422, not a silent detach."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
+                )
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+            parent_stage_id=uuid.uuid4(),
         )
         out = await uc(cmd, auth=auth)
         assert isinstance(out, Failure)
         assert isinstance(out.failure(), ValidationError)
-        # The colliding stage attempt must not have appended a duplicate.
-        assert len(campaign.stages) == 1
+        assert campaign.stages == []
 
     # ---- D1: dose-response fallback to reported endpoint rows ----
 

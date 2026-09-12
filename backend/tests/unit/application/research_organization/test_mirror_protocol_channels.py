@@ -18,6 +18,7 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import CampaignStage
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
@@ -521,3 +522,139 @@ async def test_mirror_saves_when_only_stage_created_no_new_channels() -> None:
     assert outcome2.stage_created is True
     assert len(campaign.stages) == 1
     assert len(saved) == 1
+
+
+@pytest.mark.asyncio
+async def test_mirror_reuses_stage_with_same_name() -> None:
+    """Re-mirroring under the same stage_name rewrites that stage instead of
+    failing on the name-uniqueness rule — and still persists the campaign
+    even though no new channel was created."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(
+        auth.workspace_id,
+        readouts=[rd],
+        recommended=[HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+    )
+
+    saved: list[Campaign] = []
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(saved=saved, find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=FakeResolver(factory=_fake_measurement),
+        dispatcher=_make_dispatcher(),
+    )
+    cmd = MirrorProtocolChannelsCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign.id,
+        protocol_id=protocol.id,
+        stage_name="Primary Hits",
+    )
+
+    out1 = await uc(cmd, auth=auth)
+    assert isinstance(out1, Success)
+    assert out1.unwrap().stage_created is True
+    original_stage_id = campaign.stages[0].id
+    saved.clear()
+
+    # Same name, different casing -> the same stage.
+    out2 = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+            stage_name="PRIMARY hits",
+        ),
+        auth=auth,
+    )
+    assert isinstance(out2, Success)
+    outcome2 = out2.unwrap()
+    assert outcome2.channels_created == 0
+    assert outcome2.stage_created is False
+    assert len(campaign.stages) == 1
+    assert campaign.stages[0].id == original_stage_id
+    assert len(campaign.stages[0].criteria) == 1
+    assert campaign.stages[0].criteria[0].channel_id == campaign.channels[0].id
+    # A reused-and-rewritten stage still has to be persisted.
+    assert len(saved) == 1
+
+
+@pytest.mark.asyncio
+async def test_mirror_stage_created_under_parent_stage_id() -> None:
+    """parent_stage_id attaches the mirrored stage under an existing one."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    parent = CampaignStage(campaign_id=campaign.id, name="Triage", display_order=0)
+    campaign.add_stage(parent)
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(
+        auth.workspace_id,
+        readouts=[rd],
+        recommended=[HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+    )
+
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=FakeResolver(factory=_fake_measurement),
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+            stage_name="Primary Hits",
+            parent_stage_id=parent.id,
+        ),
+        auth=auth,
+    )
+
+    assert isinstance(out, Success)
+    assert out.unwrap().stage_created is True
+    child = next(s for s in campaign.stages if s.name == "Primary Hits")
+    assert child.parent_stage_id == parent.id
+
+
+@pytest.mark.asyncio
+async def test_mirror_bad_parent_fails_before_resolving_any_measurement() -> None:
+    """The stage step runs before the per-result resolve loop, so a bad
+    parent id costs no resolver work."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    campaign.results.append(
+        CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+    )
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(
+        auth.workspace_id,
+        readouts=[rd],
+        recommended=[HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+    )
+
+    resolver = FakeResolver(factory=_fake_measurement)
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=resolver,
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+            stage_name="Primary Hits",
+            parent_stage_id=uuid.uuid4(),  # not a stage on this campaign
+        ),
+        auth=auth,
+    )
+
+    assert isinstance(out, Failure)
+    assert isinstance(out.failure(), ValidationError)
+    assert resolver.calls == []
+    assert campaign.stages == []

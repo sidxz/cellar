@@ -249,6 +249,7 @@ async def add_results_from_runs(
         description=body.description,
         refresh_existing_cells=body.refresh_existing_cells,
         stage_name=body.stage_name,
+        parent_stage_id=body.parent_stage_id,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
     return AddResultsOutcomeResponse.from_outcome(outcome)

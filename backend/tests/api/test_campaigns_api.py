@@ -1415,6 +1415,67 @@ class TestRunImport:
             {"channel_id": str(channel_id), "operator": "lt", "value": 10.0}
         ]
 
+    async def test_add_from_runs_same_stage_name_twice_reuses_stage(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Re-importing under the same stage_name succeeds and leaves one
+        stage, with the second import's threshold."""
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id, name="Stage Reimport")
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+
+        def _body(threshold: float) -> dict:
+            return {
+                "run_ids": [str(uuid.uuid4())],
+                "channel_configs": [
+                    {
+                        "protocol_id": protocol_id,
+                        "readout_definition_id": rd_id,
+                        "label": "IC50",
+                        "source_kind": "readout_data",
+                        "selection_rule": "latest_approved_run",
+                        "hit_threshold": {
+                            "readout_name": "IC50",
+                            "operator": "lt",
+                            "value": threshold,
+                        },
+                        "use_for_filter": True,
+                    }
+                ],
+                "scope": "all",
+                "stage_name": "Primary Hits",
+            }
+
+        first = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/add-from-runs", json=_body(10.0)
+        )
+        assert first.status_code == 200, first.text
+        second = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/add-from-runs", json=_body(1.0)
+        )
+        assert second.status_code == 200, second.text
+        channel_id = uuid.UUID(second.json()["campaign"]["channels"][0]["id"])
+
+        async with session_factory() as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(CampaignStageModel).where(
+                            CampaignStageModel.campaign_id == uuid.UUID(campaign_id)
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert len(rows) == 1
+        assert rows[0].criteria == [
+            {"channel_id": str(channel_id), "operator": "lt", "value": 1.0}
+        ]
+
     async def test_old_add_from_run_route_returns_404(self, client: AsyncClient) -> None:
         """The deprecated single-run /add-from-run is removed."""
         project_id = await _create_project(client)

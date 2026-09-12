@@ -130,6 +130,7 @@ async def mirror_protocol_channels(
         campaign_id=campaign_id,
         protocol_id=body.protocol_id,
         stage_name=body.stage_name,
+        parent_stage_id=body.parent_stage_id,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
     return MirrorProtocolOutcomeResponse(
