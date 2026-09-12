@@ -399,6 +399,11 @@ class StageOutcomeResponse(BaseModel):
     outcome: str  # hit | miss | untested | not_in_stage | pending
     overridden: bool
     override_reason: str | None = None
+    #: Who forced the verdict by hand, and when. Both null unless
+    #: ``overridden`` — enough for a client to say "kept by hand by X on
+    #: 12 Sep" without fetching the override separately.
+    overridden_by: uuid.UUID | None = None
+    overridden_at: datetime | None = None
     checks: list[StageCheckResponse]
 
     @classmethod
@@ -408,6 +413,8 @@ class StageOutcomeResponse(BaseModel):
             outcome=o.outcome.value,
             overridden=o.overridden,
             override_reason=o.override_reason,
+            overridden_by=o.overridden_by,
+            overridden_at=o.overridden_at,
             checks=[StageCheckResponse.from_domain(c) for c in o.checks],
         )
 

@@ -52,6 +52,9 @@ from cellar.application.research_organization.delete_collection import DeleteCol
 from cellar.application.research_organization.delete_saved_search import DeleteSavedSearch
 from cellar.application.research_organization.execute_search import ExecuteSearch
 from cellar.application.research_organization.get_campaign import GetCampaign
+from cellar.application.research_organization.list_campaign_results import (
+    ListCampaignResults,
+)
 from cellar.application.research_organization.get_collection import (
     GetCollection,
     ListCollections,
@@ -658,6 +661,10 @@ def register_research_organization(container: Container) -> None:
             scientist_reader=SQLAlchemyCampaignScientistReader(uow),
         )
 
+    def _list_campaign_results(c: Container) -> ListCampaignResults:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListCampaignResults(uow=uow, campaign_repo=SQLAlchemyCampaignRepository(uow))
+
     container.define(CreateCampaignUC, _create_campaign)
     container.define(AddResultsFromCollectionUC, _add_results_from_collection)
     container.define(AddResultsFromCampaignUC, _add_results_from_campaign)
@@ -685,6 +692,7 @@ def register_research_organization(container: Container) -> None:
     container.define(CampaignScientistReader, _campaign_scientist_reader)
     container.define(ListCampaigns, _list_campaigns)
     container.define(GetCampaign, _get_campaign)
+    container.define(ListCampaignResults, _list_campaign_results)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

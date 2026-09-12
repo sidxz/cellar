@@ -62,6 +62,9 @@ from cellar.application.research_organization.get_saved_search import (
     GetSavedSearch,
     ListSavedSearches,
 )
+from cellar.application.research_organization.list_campaign_results import (
+    ListCampaignResults,
+)
 from cellar.application.research_organization.list_campaigns import ListCampaigns
 from cellar.application.research_organization.manage_molecule_projects import (
     AddMoleculeToProject,
@@ -151,6 +154,7 @@ __all__ = [
     "GetProjectScopeStatsDep",
     "GetPublishedCampaignDep",
     "GetSavedSearchDep",
+    "ListCampaignResultsDep",
     "ListCampaignsDep",
     "ListCollectionImportTemplatesDep",
     "ListCollectionMoleculesDep",
@@ -330,6 +334,9 @@ GetPublishedCampaignDep = Annotated[
 ]
 ListCampaignsDep = Annotated[ListCampaigns, Depends(_get_use_case(ListCampaigns))]
 GetCampaignDep = Annotated[GetCampaign, Depends(_get_use_case(GetCampaign))]
+ListCampaignResultsDep = Annotated[
+    ListCampaignResults, Depends(_get_use_case(ListCampaignResults))
+]
 GetDoseResponseCurvesBatchDep = Annotated[
     GetDoseResponseCurvesBatch, Depends(_get_use_case(GetDoseResponseCurvesBatch))
 ]

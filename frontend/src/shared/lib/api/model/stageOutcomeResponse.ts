@@ -5,6 +5,8 @@
  * OpenAPI spec version: 1.1.0-14-gdd8a8c7e-dirty
  */
 import type { StageOutcomeResponseOverrideReason } from './stageOutcomeResponseOverrideReason';
+import type { StageOutcomeResponseOverriddenBy } from './stageOutcomeResponseOverriddenBy';
+import type { StageOutcomeResponseOverriddenAt } from './stageOutcomeResponseOverriddenAt';
 import type { StageCheckResponse } from './stageCheckResponse';
 
 export interface StageOutcomeResponse {
@@ -12,5 +14,7 @@ export interface StageOutcomeResponse {
   outcome: string;
   overridden: boolean;
   override_reason?: StageOutcomeResponseOverrideReason;
+  overridden_by?: StageOutcomeResponseOverriddenBy;
+  overridden_at?: StageOutcomeResponseOverriddenAt;
   checks: StageCheckResponse[];
 }

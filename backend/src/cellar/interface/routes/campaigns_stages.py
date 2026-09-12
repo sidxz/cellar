@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from cellar.application.research_organization.add_campaign_stage import (
     AddCampaignStageCommand,
@@ -128,7 +128,7 @@ async def remove_campaign_stage(
 
 @router.put(
     "/{campaign_id}/results/{result_id}/stages/{stage_id}/override",
-    response_model=CampaignResponse,
+    status_code=204,
 )
 async def set_stage_override(
     campaign_id: uuid.UUID,
@@ -137,7 +137,7 @@ async def set_stage_override(
     body: SetStageOverrideRequest,
     auth: AuthDep,
     uc: SetStageOverrideDep,
-) -> CampaignResponse:
+) -> Response:
     """Manually force a stage's hit/miss outcome for one CampaignResult."""
     cmd = SetStageOverrideCommand(
         workspace_id=auth.workspace_id,
@@ -148,13 +148,13 @@ async def set_stage_override(
         forced_outcome=StageOutcome(body.outcome),
         reason=body.reason,
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
 
 
 @router.delete(
     "/{campaign_id}/results/{result_id}/stages/{stage_id}/override",
-    response_model=CampaignResponse,
+    status_code=204,
 )
 async def clear_stage_override(
     campaign_id: uuid.UUID,
@@ -162,7 +162,7 @@ async def clear_stage_override(
     stage_id: uuid.UUID,
     auth: AuthDep,
     uc: SetStageOverrideDep,
-) -> CampaignResponse:
+) -> Response:
     """Clear a manual (result, stage) override, if any (no-op when none exists)."""
     cmd = SetStageOverrideCommand(
         workspace_id=auth.workspace_id,
@@ -173,23 +173,27 @@ async def clear_stage_override(
         forced_outcome=None,
         reason=None,
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
 
 
-@router.put("/{campaign_id}/stages/{stage_id}/overrides", response_model=CampaignResponse)
+@router.put("/{campaign_id}/stages/{stage_id}/overrides", status_code=204)
 async def set_stage_overrides(
     campaign_id: uuid.UUID,
     stage_id: uuid.UUID,
     body: BulkStageOverrideRequest,
     auth: AuthDep,
     uc: SetStageOverrideDep,
-) -> CampaignResponse:
+) -> Response:
     """Force (or, with ``outcome: null``, clear) one stage's verdict for N results.
 
     Same command as the per-result routes, so one code path; the whole batch
     lands in a single aggregate save (404 on the first unknown result id,
     nothing applied).
+
+    204, like the two per-result override routes: an override changes one
+    verdict, and returning the campaign serialised the entire result matrix
+    back to say so. Every caller refetches.
     """
     cmd = SetStageOverrideCommand(
         workspace_id=auth.workspace_id,
@@ -200,5 +204,5 @@ async def set_stage_overrides(
         forced_outcome=StageOutcome(body.outcome) if body.outcome else None,
         reason=body.reason,
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
