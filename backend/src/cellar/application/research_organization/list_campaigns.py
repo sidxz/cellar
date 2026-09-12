@@ -12,6 +12,7 @@ from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import DomainError
 from cellar.domain.shared.target_ref import TargetRef
@@ -27,6 +28,7 @@ class ListCampaignsQuery(Query):
     tag_logic: str = "any"
     target_ids: list[uuid.UUID] | None = None
     target_logic: str = "any"
+    status: CampaignStatus | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -61,6 +63,7 @@ class ListCampaigns:
                     tag_logic=input.tag_logic,
                     target_ids=input.target_ids,
                     target_logic=input.target_logic,
+                    status=input.status,
                 )
             else:
                 campaigns = await self._campaign_repo.find_by_workspace(
@@ -71,6 +74,7 @@ class ListCampaigns:
                     tag_logic=input.tag_logic,
                     target_ids=input.target_ids,
                     target_logic=input.target_logic,
+                    status=input.status,
                 )
 
             next_cursor: str | None = None

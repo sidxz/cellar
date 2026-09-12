@@ -201,6 +201,10 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         "CampaignResultModel",
         cascade="all, delete-orphan",
         lazy="selectin",
+        # Without an explicit order rows come back in Postgres heap order, so
+        # editing one row moves it in the grid on the next load. No display
+        # order column exists; id is deterministic and needs no migration.
+        order_by="CampaignResultModel.id",
     )
     stages: Mapped[list[CampaignStageModel]] = relationship(
         "CampaignStageModel",

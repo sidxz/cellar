@@ -1,4 +1,4 @@
-"""UpdateCampaignChannel — mutate label, selection rule, or qc_filter.
+"""UpdateCampaignChannel — mutate label, display order, selection rule, or qc_filter.
 
 Uses the UNSET sentinel to distinguish "don't touch this field" from
 ``None`` (which is a meaningful value for ``qc_filter`` — it clears it).
@@ -62,6 +62,7 @@ class UpdateCampaignChannelCommand(Command):
     label: str | object = UNSET
     selection_rule: SelectionRule | object = UNSET
     qc_filter: dict | object | None = UNSET
+    display_order: int | object = UNSET
 
 
 class UpdateCampaignChannel:
@@ -72,7 +73,7 @@ class UpdateCampaignChannel:
       2. Load campaign; check status is DRAFT.
       3. Locate the channel by id.
       4. Detect which fields are changing (sentinel-aware).
-      5. Mutate label in-place when supplied.
+      5. Mutate label / display_order in-place when supplied.
       6. If any gating field (selection_rule, qc_filter) changed, re-resolve
          every non-manual-override measurement for this channel.
       7. Bump ``campaign.updated_at``.
@@ -134,6 +135,12 @@ class UpdateCampaignChannel:
                 if not isinstance(label, str) or not label.strip():
                     return Failure(ValidationError("CampaignChannel.label must not be empty"))
                 channel.label = label.strip()
+
+            if not isinstance(input.display_order, _Unset):
+                try:
+                    channel.reorder(input.display_order)  # type: ignore[arg-type]
+                except ValidationError as exc:
+                    return Failure(exc)
 
             # Re-resolve non-override measurements when gating fields changed
             if gating_changed:

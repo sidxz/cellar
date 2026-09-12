@@ -444,6 +444,65 @@ class TestCampaignChannels:
         assert measurement["value"] is None
         assert measurement["value_qualifier"] == "nd"
 
+    async def test_patch_channel_display_order_reorders_columns(self, client: AsyncClient) -> None:
+        """Reorder = PATCH the moved channel with its new index."""
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+
+        ids = []
+        for i, label in enumerate(["First", "Second"]):
+            resp = await client.post(
+                f"/api/v1/campaigns/{campaign_id}/channels",
+                json={
+                    "label": label,
+                    "protocol_id": protocol_id,
+                    "readout_definition_id": rd_id,
+                    "source_kind": "readout_data",
+                    "selection_rule": "latest_approved_run",
+                    "qualifier_handling": "include_qualified",
+                    "display_order": i,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            ids.append(next(c["id"] for c in resp.json()["channels"] if c["label"] == label))
+
+        resp = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/channels/{ids[0]}",
+            json={"display_order": 5},
+        )
+        assert resp.status_code == 200, resp.text
+        assert [c["label"] for c in resp.json()["channels"]] == ["Second", "First"]
+
+        reread = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert [c["display_order"] for c in reread.json()["channels"]] == [1, 5]
+
+    async def test_patch_channel_negative_display_order_422(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "IC50",
+                "protocol_id": protocol_id,
+                "readout_definition_id": rd_id,
+                "source_kind": "readout_data",
+                "selection_rule": "latest_approved_run",
+                "qualifier_handling": "include_qualified",
+                "display_order": 0,
+            },
+        )
+        channel_id = resp.json()["channels"][0]["id"]
+
+        bad = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/channels/{channel_id}",
+            json={"display_order": -1},
+        )
+        assert bad.status_code == 422, bad.text
+
     async def test_remove_channel_not_found_404(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-rmchan")
@@ -1594,3 +1653,103 @@ class TestCampaignTargets:
         )
         assert campaign_id in [c["id"] for c in match.json()["items"]]
         assert campaign_id not in [c["id"] for c in miss.json()["items"]]
+
+
+# ---------------------------------------------------------------------------
+# Summary read + list summaries
+# ---------------------------------------------------------------------------
+
+
+async def _seed_campaign_with_stage(client: AsyncClient, project_id: str) -> tuple[str, str]:
+    """Draft campaign with one molecule, one channel and one stage over it."""
+    mol_id = await _register_molecule(client, ASPIRIN_SMILES, f"Asp-{uuid.uuid4().hex[:8]}")
+    campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+    campaign = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+    channel_id = campaign["channels"][0]["id"]
+
+    resp = await client.post(
+        f"/api/v1/campaigns/{campaign_id}/stages",
+        json={
+            "name": "Primary Hit",
+            "criteria": [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return campaign_id, resp.json()["stages"][0]["id"]
+
+
+class TestCampaignSummary:
+    async def test_summary_drops_results_and_carries_stage_counts(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client, "Summary Project")
+        campaign_id, stage_id = await _seed_campaign_with_stage(client, project_id)
+
+        resp = await client.get(f"/api/v1/campaigns/{campaign_id}/summary")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+
+        assert "results" not in data
+        assert data["result_count"] == 1
+        assert data["id"] == campaign_id
+        stage = next(s for s in data["stages"] if s["id"] == stage_id)
+        # The channel resolves to an ND cell (no screening data) -> untested.
+        assert stage["counts"] == {
+            "population": 1,
+            "hit": 0,
+            "miss": 0,
+            "untested": 1,
+            "pending": 0,
+            "not_in_stage": 0,
+            "overridden": 0,
+        }
+
+    async def test_summary_404_for_unknown_campaign(self, client: AsyncClient) -> None:
+        resp = await client.get(f"/api/v1/campaigns/{uuid.uuid4()}/summary")
+        assert resp.status_code == 404
+
+    async def test_full_read_also_carries_stage_counts(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client, "Counts Project")
+        campaign_id, stage_id = await _seed_campaign_with_stage(client, project_id)
+
+        data = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+
+        stage = next(s for s in data["stages"] if s["id"] == stage_id)
+        assert stage["counts"]["population"] == 1
+
+
+class TestListCampaignsSummaries:
+    async def test_list_items_are_summaries(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client, "List Summary Project")
+        campaign_id, _stage_id = await _seed_campaign_with_stage(client, project_id)
+
+        resp = await client.get("/api/v1/campaigns", params={"project_id": project_id})
+        assert resp.status_code == 200, resp.text
+        row = next(c for c in resp.json()["items"] if c["id"] == campaign_id)
+
+        assert "results" not in row
+        assert row["result_count"] == 1
+        assert row["stages"][0]["counts"]["population"] == 1
+
+    async def test_status_filter(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client, "Status Filter Project")
+        draft_id, _ = await _seed_campaign_with_stage(client, project_id)
+        closed_id, _ = await _seed_campaign_with_stage(client, project_id)
+        close = await client.post(f"/api/v1/campaigns/{closed_id}/close", json={})
+        assert close.status_code == 200, close.text
+
+        closed = await client.get(
+            "/api/v1/campaigns", params={"project_id": project_id, "status": "closed"}
+        )
+        drafts = await client.get(
+            "/api/v1/campaigns", params={"project_id": project_id, "status": "draft"}
+        )
+        unfiltered = await client.get("/api/v1/campaigns", params={"project_id": project_id})
+
+        assert [c["id"] for c in closed.json()["items"]] == [closed_id]
+        assert [c["id"] for c in drafts.json()["items"]] == [draft_id]
+        assert {c["id"] for c in unfiltered.json()["items"]} == {draft_id, closed_id}
+
+    async def test_unknown_status_422(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/v1/campaigns", params={"status": "archived"})
+        assert resp.status_code == 422

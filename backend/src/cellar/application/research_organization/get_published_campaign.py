@@ -18,7 +18,11 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.auth import (
+    AuthContext,
+    require_same_workspace,
+    require_workspace_role,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import (
@@ -107,9 +111,8 @@ class GetPublishedCampaign:
         input: GetPublishedCampaignQuery,
         auth: AuthContext | None = None,
     ) -> Result[dict[str, Any], DomainError]:
-        # Step 1 — auth guard (lowest available: editor).
-        # TODO viewer-level auth: replace with require_viewer(auth) once that guard exists.
-        require_editor(auth)
+        # Step 1 — auth guard. Publishing is a read: any workspace member sees it.
+        require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
 
         async with self._uow:

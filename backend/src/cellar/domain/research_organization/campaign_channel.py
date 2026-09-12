@@ -53,5 +53,10 @@ class CampaignChannel:
         if not self.label or not self.label.strip():
             raise ValidationError("CampaignChannel.label must not be empty")
         self.label = self.label.strip()
-        if self.display_order < 0:
+        self.reorder(self.display_order)
+
+    def reorder(self, display_order: int) -> None:
+        """Move this channel to a new grid position (re-validates the invariant)."""
+        if display_order < 0:
             raise ValidationError("CampaignChannel.display_order must be ≥ 0")
+        self.display_order = display_order

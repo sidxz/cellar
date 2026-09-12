@@ -92,6 +92,11 @@ async def update_campaign_channel(
         else UNSET
     )
     qc_filter: dict | object | None = body.qc_filter if "qc_filter" in provided else UNSET
+    display_order: int | object = (
+        body.display_order
+        if "display_order" in provided and body.display_order is not None
+        else UNSET
+    )
 
     cmd = UpdateCampaignChannelCommand(
         workspace_id=auth.workspace_id,
@@ -100,6 +105,7 @@ async def update_campaign_channel(
         label=label,
         selection_rule=selection_rule,
         qc_filter=qc_filter,
+        display_order=display_order,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

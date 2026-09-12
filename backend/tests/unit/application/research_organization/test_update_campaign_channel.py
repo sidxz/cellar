@@ -147,6 +147,81 @@ class TestUpdateCampaignChannel:
         dispatcher.dispatch_all.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_display_order_update_moves_the_channel(self) -> None:
+        auth = fake_auth()
+        campaign, channel, _result = _make_campaign_with_channel(auth.workspace_id)
+        resolver = FakeResolver(factory=_new_measurement)
+        dispatcher = AsyncMock()
+        dispatcher.dispatch_all = AsyncMock()
+
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=dispatcher,
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            display_order=3,
+        )
+        result_out = await uc(cmd, auth=auth)
+
+        assert isinstance(result_out, Success)
+        assert result_out.unwrap().channels[0].display_order == 3
+        # display_order is not a gating field — no re-resolution.
+        assert resolver.calls == []
+
+    @pytest.mark.asyncio
+    async def test_negative_display_order_returns_validation_failure(self) -> None:
+        auth = fake_auth()
+        campaign, channel, _result = _make_campaign_with_channel(auth.workspace_id)
+
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=FakeResolver(factory=_new_measurement),
+            dispatcher=AsyncMock(),
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            display_order=-1,
+        )
+        result_out = await uc(cmd, auth=auth)
+
+        assert isinstance(result_out, Failure)
+        assert isinstance(result_out.failure(), ValidationError)
+        assert channel.display_order == 0  # unchanged
+
+    @pytest.mark.asyncio
+    async def test_omitted_display_order_is_left_alone(self) -> None:
+        auth = fake_auth()
+        campaign, channel, _result = _make_campaign_with_channel(auth.workspace_id)
+        channel.display_order = 7
+        dispatcher = AsyncMock()
+        dispatcher.dispatch_all = AsyncMock()
+
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=FakeResolver(factory=_new_measurement),
+            dispatcher=dispatcher,
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            label="New Label",
+        )
+        result_out = await uc(cmd, auth=auth)
+
+        assert isinstance(result_out, Success)
+        assert result_out.unwrap().channels[0].display_order == 7
+
+    @pytest.mark.asyncio
     async def test_selection_rule_change_reruns_non_override_measurements(self) -> None:
         auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel(

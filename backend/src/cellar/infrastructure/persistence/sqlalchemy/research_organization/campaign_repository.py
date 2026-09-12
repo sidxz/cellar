@@ -447,6 +447,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         tag_logic: str = "any",
         target_ids: list[uuid.UUID] | None = None,
         target_logic: str = "any",
+        status: CampaignStatus | None = None,
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(
             CampaignModel.workspace_id == workspace_id,
@@ -470,6 +471,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                     )
                 )
             )
+        if status is not None:
+            stmt = stmt.where(CampaignModel.status == status.value)
         stmt = stmt.order_by(CampaignModel.id)
         if cursor_id is not None:
             stmt = stmt.where(CampaignModel.id > cursor_id)
@@ -488,6 +491,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         tag_logic: str = "any",
         target_ids: list[uuid.UUID] | None = None,
         target_logic: str = "any",
+        status: CampaignStatus | None = None,
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(CampaignModel.workspace_id == workspace_id)
         if tags:
@@ -508,6 +512,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                     )
                 )
             )
+        if status is not None:
+            stmt = stmt.where(CampaignModel.status == status.value)
         stmt = stmt.order_by(CampaignModel.id)
         if cursor_id is not None:
             stmt = stmt.where(CampaignModel.id > cursor_id)
