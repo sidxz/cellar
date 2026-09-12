@@ -15,7 +15,7 @@ from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.repository import ReadoutDataRepository, RunRepository
 from cellar.domain.shared.enums import Qualifier
-from cellar.domain.shared.errors import DomainError, NotFoundError
+from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import QualifiedValue
 
 
@@ -62,6 +62,13 @@ class CreateReadoutData:
                 )
                 if run is None:
                     return Failure(NotFoundError("Run", str(input.run_id)))
+
+                # One run, one shape: a welled run's values hang off wells, a
+                # well-less run's off the compound/batch alone.
+                if run.wells and input.well_id is None:
+                    return Failure(ValidationError("run has plates; well_id is required"))
+                if not run.wells and input.well_id is not None:
+                    return Failure(ValidationError("run has no plates; well_id must be omitted"))
 
             # Guard against locked runs
             try:
