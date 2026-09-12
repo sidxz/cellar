@@ -19,6 +19,7 @@ import pytest
 from cellar.application.screening.molecule_activity_service import (
     MoleculeActivityService,
 )
+from cellar.domain.screening_assay.activity_types import AggregatedReadout
 from cellar.domain.screening_assay.aggregation_types import SelectionRule
 from cellar.domain.screening_assay.curve_fitting import InterceptValue
 from cellar.domain.screening_assay.dose_response_config import (
@@ -181,11 +182,17 @@ def _seed_runs(
     return curves, runs
 
 
-def _make_service(curve_repo=None, run_repo=None) -> MoleculeActivityService:
+def _make_service(curve_repo=None, run_repo=None, readout_repo=None) -> MoleculeActivityService:
     protocol_repo = AsyncMock()
     # find_by_ids returns [] by default — service falls back to "uM" for
     # IC50 unit decoration. Tests that need a specific unit should override.
     protocol_repo.find_by_ids = AsyncMock(return_value=[])
+
+    if readout_repo is None:
+        readout_repo = AsyncMock()
+        # Default: no raw-layer rows. Without this the bare AsyncMock would
+        # hand the reported-endpoint fallback a truthy mock instead of a dict.
+        readout_repo.find_aggregated_by_molecules = AsyncMock(return_value={})
 
     if run_repo is None:
         run_repo = AsyncMock()
@@ -196,7 +203,7 @@ def _make_service(curve_repo=None, run_repo=None) -> MoleculeActivityService:
 
     return MoleculeActivityService(
         uow=_FakeUoW(),
-        readout_repo=AsyncMock(),
+        readout_repo=readout_repo,
         curve_repo=curve_repo or AsyncMock(),
         protocol_repo=protocol_repo,
         run_repo=run_repo,
@@ -462,6 +469,88 @@ class TestEnrichMoleculesEmptyInputs:
         col_spec = f"drc:{RD_ID}"
 
         result = await service.enrich_molecules(WS, [MOL_ID], [col_spec])
+        assert result == {}
+
+
+class TestEnrichMoleculesReportedEndpointFallback:
+    """A DR column with no fitted curve falls back to the raw readout layer."""
+
+    @staticmethod
+    def _readout_repo_for(agg: AggregatedReadout) -> AsyncMock:
+        repo = AsyncMock()
+        repo.find_aggregated_by_molecules = AsyncMock(return_value={MOL_ID: {(RD_ID, None): agg}})
+        return repo
+
+    @staticmethod
+    def _agg(value: float = 3.4, count: int = 2) -> AggregatedReadout:
+        return AggregatedReadout(
+            readout_definition_id=RD_ID,
+            readout_name="IC50 (reported)",
+            value=value,
+            qualifier=">",
+            unit="nM",
+            aggregation="mean",
+            data_point_count=count,
+        )
+
+    @pytest.mark.asyncio
+    async def test_curveless_molecule_uses_reported_endpoint(self) -> None:
+        curve_repo = AsyncMock()
+        curve_repo.find_all_curves_for_molecules = AsyncMock(return_value={})
+        readout_repo = self._readout_repo_for(self._agg())
+
+        service = _make_service(curve_repo=curve_repo, readout_repo=readout_repo)
+        col_spec = f"drc:{RD_ID}"
+
+        result = await service.enrich_molecules(WS, [MOL_ID], [col_spec])
+
+        av = result[MOL_ID][col_spec]
+        assert av.source == "readout"
+        assert av.value == 3.4
+        assert av.qualifier == ">"
+        assert av.unit == "nM"
+        assert av.data_point_count == 2
+        # Curve-only fields stay empty — there is no fit behind this value.
+        assert av.curve_params is None
+        assert av.raw_data is None
+        assert av.intercept_values is None
+
+        # Only the raw layer of the DR readout-def is queried, for the one
+        # molecule the curve query left empty.
+        readout_repo.find_aggregated_by_molecules.assert_awaited_once_with(
+            WS, [MOL_ID], [(RD_ID, None)]
+        )
+
+    @pytest.mark.asyncio
+    async def test_molecule_with_curves_ignores_reported_endpoint(self) -> None:
+        """A fitted curve still wins; the fallback isn't even fetched."""
+        curves, runs = _seed_runs([(date(2026, 4, 1), 5.2)])
+        readout_repo = self._readout_repo_for(self._agg(value=999.0))
+
+        service = _make_service(
+            curve_repo=_curve_repo_for(curves),
+            run_repo=_run_repo_for(runs),
+            readout_repo=readout_repo,
+        )
+        col_spec = f"drc:{RD_ID}"
+
+        result = await service.enrich_molecules(WS, [MOL_ID], [col_spec])
+
+        av = result[MOL_ID][col_spec]
+        assert av.source == "dose_response"
+        assert av.value == 5.2
+        readout_repo.find_aggregated_by_molecules.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_curve_and_no_reported_endpoint_stays_absent(self) -> None:
+        curve_repo = AsyncMock()
+        curve_repo.find_all_curves_for_molecules = AsyncMock(return_value={})
+        readout_repo = AsyncMock()
+        readout_repo.find_aggregated_by_molecules = AsyncMock(return_value={})
+
+        service = _make_service(curve_repo=curve_repo, readout_repo=readout_repo)
+
+        result = await service.enrich_molecules(WS, [MOL_ID], [f"drc:{RD_ID}"])
         assert result == {}
 
 

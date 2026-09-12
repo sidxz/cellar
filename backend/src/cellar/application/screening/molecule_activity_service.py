@@ -333,6 +333,24 @@ class MoleculeActivityService:
                 protos = await self._protocol_repo.find_by_ids(workspace_id, list(curve_proto_ids))
                 proto_dose_unit = {p.id: p.dose_unit.value for p in protos}
 
+        # Reported-endpoint fallback (spec D1, same rule the campaign channel
+        # resolver applies): a DR readout-def with no fitted curve for a
+        # molecule may still carry a summary-imported endpoint on the raw
+        # readout layer — an IC50 someone reported without dose points. Fetch
+        # those aggregates only for the (molecule, rd) cells the curve query
+        # left empty; a molecule with curves never consults this map.
+        drc_fallback: dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]] = {}
+        if drc_specs:
+            missing_mols = [
+                mol_id
+                for mol_id in molecule_ids
+                if any(not curve_data.get(mol_id, {}).get(rd_id) for rd_id in drc_specs)
+            ]
+            if missing_mols:
+                drc_fallback = await self._readout_repo.find_aggregated_by_molecules(
+                    workspace_id, missing_mols, [(rd_id, None) for rd_id in drc_specs]
+                )
+
         # "any" column: every curve the molecule has, in every protocol.
         any_curves: dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]] = {}
         any_runs: dict[uuid.UUID, Run] = {}
@@ -409,6 +427,15 @@ class MoleculeActivityService:
                 col_key = f"drc:{rd_id}"
                 curves = mol_curves.get(rd_id) or []
                 if not curves:
+                    agg = drc_fallback.get(mol_id, {}).get((rd_id, None))
+                    if agg:
+                        mol_activity[col_key] = ActivityValue(
+                            value=agg.value,
+                            qualifier=agg.qualifier,
+                            unit=agg.unit,
+                            source="readout",
+                            data_point_count=agg.data_point_count,
+                        )
                     continue
 
                 resolved_runs = self._build_resolved_runs(curves, runs_by_id)

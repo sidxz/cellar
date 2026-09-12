@@ -7,6 +7,7 @@ import { useMemo } from "react";
 
 import type { Molecule } from "@/features/chemical-registration/types";
 import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
+import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import {
   findInterceptValue,
   formatInterceptDisplay,
@@ -361,6 +362,7 @@ export function buildDrcColumns(
                 renderNullAs="nothing"
               />
             ) : null}
+            {av.source === "readout" ? <ReportedEndpointBadge className="ml-1" /> : null}
           </span>
         );
       },

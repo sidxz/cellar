@@ -1,6 +1,7 @@
 "use client";
 
 import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
+import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import { findInterceptValue, interceptLabel } from "@/features/screening-assay/lib/intercept-label";
 import type { CurveClass, InterceptSpec, InterceptValue } from "@/features/screening-assay/types";
 import { EmptyState } from "@/shared/components/empty-state";
@@ -131,7 +132,13 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                           <TableCell className="text-muted-foreground">
                             {readout.unit ?? "—"}
                           </TableCell>
-                          <TableCell className="text-muted-foreground">{readout.source}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {readout.source === "readout" ? (
+                              <ReportedEndpointBadge />
+                            ) : (
+                              readout.source
+                            )}
+                          </TableCell>
                           <TableCell>{readout.data_point_count ?? 0}</TableCell>
                         </TableRow>
                       ))}

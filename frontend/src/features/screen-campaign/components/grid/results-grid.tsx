@@ -33,6 +33,7 @@ import { groupBy } from "@/shared/lib/group-by";
 import { shortId } from "@/shared/lib/utils";
 
 import { DoseResponseSparkline, useProtocolSummaries } from "@/features/screening-assay";
+import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import { type CurveClass, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
 
 import { useMoleculesByIds } from "@/features/chemical-registration";
@@ -117,7 +118,7 @@ function VerdictChip({ verdict }: { verdict: CheckVerdict | null }) {
   return <span className={`rounded-sm border px-1 py-px text-[10px] ${cls}`}>{verdict}</span>;
 }
 
-interface CompoundValueCellProps {
+export interface CompoundValueCellProps {
   prefix: string;
   value: number | null;
   unit: string | null | undefined;
@@ -125,11 +126,15 @@ interface CompoundValueCellProps {
   verdict: CheckVerdict | null;
   overridden: boolean | undefined;
   overrideReason: string | null | undefined;
+  /** True when a dose-response channel resolved this cell from a reported
+   *  endpoint row instead of a fitted curve (source_readout_id set, no
+   *  source_curve_id) — the curve affordances on this row are empty. */
+  reported: boolean;
   readOnly: boolean;
   onEdit: () => void;
 }
 
-function CompoundValueCell({
+export function CompoundValueCell({
   prefix,
   value,
   unit,
@@ -137,6 +142,7 @@ function CompoundValueCell({
   verdict,
   overridden,
   overrideReason,
+  reported,
   readOnly,
   onEdit,
 }: CompoundValueCellProps) {
@@ -151,7 +157,7 @@ function CompoundValueCell({
         {/* Verdict + override markers sit on their own line so they never
             push past the 120px value column (a "pass" chip inline after
             "13.6 uM" clipped to "pa"). */}
-        {(verdict === "pass" || verdict === "fail" || overridden) && (
+        {(verdict === "pass" || verdict === "fail" || overridden || reported) && (
           <div className="mt-0.5 flex items-center gap-1">
             <VerdictChip verdict={verdict} />
             {overridden && (
@@ -163,6 +169,7 @@ function CompoundValueCell({
                 OVR
               </Badge>
             )}
+            {reported && <ReportedEndpointBadge />}
           </div>
         )}
         {replicates != null && replicates > 1 && (
@@ -426,6 +433,7 @@ export function ResultsGridV2({
                 verdict={verdict}
                 overridden={m.is_manual_override}
                 overrideReason={m.override_reason}
+                reported={isDR && !!m.source_readout_id && !m.source_curve_id}
                 readOnly={readOnly}
                 onEdit={() => setOverrideTarget({ result: r, channel: ch, measurement: m })}
               />
