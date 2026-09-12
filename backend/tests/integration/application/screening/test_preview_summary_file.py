@@ -22,6 +22,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repos
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
     SQLAlchemyRunRepository,
 )
+from cellar.domain.shared.errors import ConflictError
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from tests.fakes.fake_auth import FakeAuth
 from tests.fixtures.dose_response_curves import _insert_org, _insert_protocol, _insert_run
@@ -97,6 +98,44 @@ _CSV = (
 
 
 class TestPreviewSummaryFile:
+    async def test_preview_onto_a_welled_run_is_refused(
+        self, session_factory, workspace_id
+    ) -> None:
+        """One run, one shape — refuse at upload time, not three steps later at
+        the dry-run, so the chemist never maps columns for an impossible import."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            run_id, _ic50_id, _notes_id = await _seed(seed_uow, workspace_id=workspace_id)
+            plate_id = uuid.uuid4()
+            await seed_uow.session.execute(
+                sa.text("INSERT INTO plates (id, run_id, plate_number) VALUES (:id, :run, 1)"),
+                {"id": plate_id, "run": run_id},
+            )
+            await seed_uow.session.execute(
+                sa.text(
+                    'INSERT INTO wells (id, plate_id, "row", "column", well_type) '
+                    "VALUES (:id, :plate, 'A', 1, 'sample')"
+                ),
+                {"id": uuid.uuid4(), "plate": plate_id},
+            )
+            await seed_uow.commit()
+
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            workspace_id=workspace_id,
+            run_id=run_id,
+            filename="summary.csv",
+            content=_CSV,
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure), result
+        error = result.failure()
+        assert isinstance(error, ConflictError)
+        assert "1 plate(s) with wells" in str(error)
+
     async def test_suggests_compound_ref_and_readouts(
         self, session_factory, workspace_id
     ) -> None:

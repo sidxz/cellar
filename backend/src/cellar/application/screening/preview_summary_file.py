@@ -18,6 +18,7 @@ import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
+from cellar.application.screening.run_shape import refuse_if_welled
 from cellar.application.screening.summary_import_models import (
     SummaryHeaderSuggestion,
     SummaryPreviewResult,
@@ -128,6 +129,11 @@ class PreviewSummaryFile:
         run = await self._run_repo.find_by_id_in_workspace(workspace_id, run_id)
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))
+
+        # One run, one shape — refuse at upload time rather than letting the
+        # chemist map columns first and hit the refusal at the dry-run step.
+        if (welled := refuse_if_welled(run)) is not None:
+            return Failure(welled)
 
         protocol = await self._protocol_repo.find_by_id_in_workspace(workspace_id, run.protocol_id)
         if protocol is None:
