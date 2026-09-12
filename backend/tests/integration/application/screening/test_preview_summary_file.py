@@ -35,12 +35,14 @@ async def _insert_named_readout_def(
     name: str,
     data_type: str,
     display_order: int,
+    is_calculated: bool = False,
 ) -> None:
     await uow.session.execute(
         sa.text(
             "INSERT INTO readout_definitions "
-            "(id, protocol_id, name, data_type, display_order, is_calculated) "
-            "VALUES (:id, :proto, :name, :data_type, :display_order, false)"
+            "(id, protocol_id, name, data_type, display_order, is_calculated, "
+            "calculation_formula) "
+            "VALUES (:id, :proto, :name, :data_type, :display_order, :calc, :formula)"
         ),
         {
             "id": rd_id,
@@ -48,6 +50,8 @@ async def _insert_named_readout_def(
             "name": name,
             "data_type": data_type,
             "display_order": display_order,
+            "calc": is_calculated,
+            "formula": "[IC50] * 2" if is_calculated else None,
         },
     )
 
@@ -132,6 +136,46 @@ class TestPreviewSummaryFile:
         notes = by_header["Notes"]
         assert notes.role == SummaryRole.READOUT
         assert notes.readout_definition_id == notes_id
+
+    async def test_calculated_readout_is_not_suggested(
+        self, session_factory, workspace_id
+    ) -> None:
+        """A calculated readout is computed from its formula — never an import
+        target, so a column named after one gets no readout suggestion."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id, protocol_id, run_id, calc_id = (uuid.uuid4() for _ in range(4))
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_named_readout_def(
+                seed_uow,
+                calc_id,
+                protocol_id,
+                name="Percent Inhibition",
+                data_type="numeric",
+                display_order=0,
+                is_calculated=True,
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await seed_uow.commit()
+
+        uc = _build_use_case(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            workspace_id=workspace_id,
+            run_id=run_id,
+            filename="summary.csv",
+            content=b"Compound,Percent Inhibition\nCMP-1,42\n",
+            auth=auth,
+        )
+
+        assert isinstance(result, Success)
+        by_header = {s.header: s for s in result.unwrap().suggestions}
+
+        pct = by_header["Percent Inhibition"]
+        assert pct.role == SummaryRole.IGNORE
+        assert pct.readout_definition_id is None
 
     async def test_unmatched_column_suggests_ignore(
         self, session_factory, workspace_id

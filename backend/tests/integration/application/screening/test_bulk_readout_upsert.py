@@ -355,6 +355,74 @@ class TestBulkCreateReadoutDataRequireBatch:
             assert wellless[0].value is not None
             assert wellless[0].value.value == 7.5
 
+    async def test_item_on_a_calculated_readout_is_a_per_item_error(
+        self, session_factory, workspace_id
+    ) -> None:
+        """A calculated readout is computed from its formula — that item is
+        reported and skipped, while the rest of the batch still lands."""
+        molecule_id = uuid.uuid4()
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+
+        org_id, protocol_id, run_id, rd_id, calc_id = (uuid.uuid4() for _ in range(5))
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def(seed_uow, rd_id, protocol_id)
+            await seed_uow.session.execute(
+                sa.text(
+                    "INSERT INTO readout_definitions "
+                    "(id, protocol_id, name, data_type, display_order, is_calculated, "
+                    "calculation_formula) "
+                    "VALUES (:id, :proto, 'Percent Inhibition', 'numeric', 1, true, "
+                    "'[Raw] * 2')"
+                ),
+                {"id": calc_id, "proto": protocol_id},
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        uc = _build_use_case_with_molecules(AsyncUnitOfWork(session_factory))
+        result = await uc(
+            BulkCreateReadoutDataCommand(
+                workspace_id=workspace_id,
+                items=[
+                    ReadoutDataItem(
+                        run_id=run_id,
+                        molecule_id=molecule_id,
+                        readout_definition_id=calc_id,
+                        value_numeric=42.0,
+                    ),
+                    ReadoutDataItem(
+                        run_id=run_id,
+                        molecule_id=molecule_id,
+                        readout_definition_id=rd_id,
+                        value_numeric=7.5,
+                    ),
+                ],
+            ),
+            auth=auth,
+            require_batch=False,
+        )
+
+        assert isinstance(result, Success)
+        res = result.unwrap()
+        assert res.success_count == 1
+        assert res.error_count == 1
+        assert res.errors[0]["index"] == 0
+        assert "Percent Inhibition" in res.errors[0]["error"]
+        assert "calculated" in res.errors[0]["error"]
+
+        check_uow = AsyncUnitOfWork(session_factory)
+        async with check_uow:
+            repo = SQLAlchemyReadoutDataRepository(check_uow)
+            rows = await repo.find_by_run(workspace_id, run_id)
+            wellless = [r for r in rows if r.well_id is None and not r.is_computed]
+            assert len(wellless) == 1
+            assert wellless[0].readout_definition_id == rd_id
+
     async def test_require_batch_false_neither_molecule_nor_batch_errors(
         self, session_factory, workspace_id
     ) -> None:

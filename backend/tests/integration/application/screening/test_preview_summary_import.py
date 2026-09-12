@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 
 import sqlalchemy as sa
-from returns.result import Success
+from returns.result import Failure, Success
 
 from cellar.application.screening.bulk_create_readout_data import (
     BulkCreateReadoutData,
@@ -30,6 +30,7 @@ from cellar.application.screening.preview_summary_import import (
 from cellar.application.screening.summary_import_models import SummaryColumnMapping
 from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
+from cellar.domain.shared.errors import ValidationError
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
@@ -70,14 +71,24 @@ async def _insert_readout_def_typed(
     name: str,
     data_type: str,
     display_order: int,
+    is_calculated: bool = False,
 ) -> None:
     await uow.session.execute(
         sa.text(
             "INSERT INTO readout_definitions "
-            "(id, protocol_id, name, data_type, display_order, is_calculated) "
-            "VALUES (:id, :proto, :name, :dt, :ord, false)"
+            "(id, protocol_id, name, data_type, display_order, is_calculated, "
+            "calculation_formula) "
+            "VALUES (:id, :proto, :name, :dt, :ord, :calc, :formula)"
         ),
-        {"id": rd_id, "proto": protocol_id, "name": name, "dt": data_type, "ord": display_order},
+        {
+            "id": rd_id,
+            "proto": protocol_id,
+            "name": name,
+            "dt": data_type,
+            "ord": display_order,
+            "calc": is_calculated,
+            "formula": "[IC50] * 2" if is_calculated else None,
+        },
     )
 
 
@@ -279,6 +290,57 @@ class TestPreviewSummaryImport:
         # CRITICAL: no writes.
         after = await _readout_count(session_factory)
         assert after == before
+
+    async def test_mapping_onto_a_calculated_readout_is_refused(
+        self, session_factory, workspace_id
+    ) -> None:
+        """The dry run refuses the same binding the import refuses — and still
+        writes nothing."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        molecule_id, org_id, protocol_id, run_id, calc_id = (uuid.uuid4() for _ in range(5))
+        reg = f"CC-{uuid.uuid4().hex[:8]}"
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow,
+                calc_id,
+                protocol_id,
+                name="Percent Inhibition",
+                data_type="numeric",
+                display_order=0,
+                is_calculated=True,
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        before = await _readout_count(session_factory)
+
+        result = await _run_preview(
+            session_factory,
+            PreviewSummaryImportCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,Percent Inhibition\n{reg},42\n".encode(),
+                mapping=SummaryColumnMapping(
+                    compound_ref="Compound",
+                    readout_columns={"Percent Inhibition": calc_id},
+                ),
+            ),
+            auth,
+        )
+
+        assert isinstance(result, Failure), result
+        error = result.failure()
+        assert isinstance(error, ValidationError)
+        assert "Percent Inhibition" in str(error)
+        assert "calculated" in str(error)
+
+        assert await _readout_count(session_factory) == before
 
     async def test_existing_rows_forecast_updates(self, session_factory, workspace_id) -> None:
         auth = FakeAuth(role="editor", workspace_id=workspace_id)

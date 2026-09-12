@@ -143,10 +143,28 @@ class ImportRunReadouts:
         if protocol is None:
             return Failure(NotFoundError("Protocol", str(run.protocol_id)))
 
-        # Build a case-insensitive name → id map for readout definitions
+        # Build a case-insensitive name → id map for readout definitions.
+        # Calculated readouts are derived from their formula, so a column named
+        # after one never binds; if it is the only value column, the
+        # no-columns-matched error below fires.
         rd_by_name: dict[str, uuid.UUID] = {
-            rd.name.lower(): rd.id for rd in protocol.readout_definitions
+            rd.name.lower(): rd.id for rd in protocol.readout_definitions if not rd.is_calculated
         }
+
+        # The grid / single-value mode names its target readout outright, so
+        # that one is refused rather than silently ignored.
+        if cmd.readout_definition_id is not None:
+            target = next(
+                (rd for rd in protocol.readout_definitions if rd.id == cmd.readout_definition_id),
+                None,
+            )
+            if target is not None and target.is_calculated:
+                return Failure(
+                    ValidationError(
+                        f"Readout '{target.name}' is calculated; calculated values are "
+                        "computed from other readouts and cannot be imported"
+                    )
+                )
 
         # 4. Build well position → well lookup ------------------------------
         # Position string: row + column as string, e.g. "A1", "H12"

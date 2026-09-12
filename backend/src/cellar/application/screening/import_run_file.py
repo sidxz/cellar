@@ -101,6 +101,7 @@ from cellar.application.screening.preview_run_file import PreviewRunFile, Reprev
 from cellar.application.screening.readout_calculation_engine import (
     ReadoutCalculationEngine,
 )
+from cellar.application.screening.readout_entry_guard import calculated_readout_error
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.enums import AttachableType
@@ -244,6 +245,12 @@ class ImportRunFile:
         # readout columns with data_type so the normalizer parses each
         # column with the right value kind.
         rd_by_id = {rd.id: rd for rd in protocol.readout_definitions}
+        calculated = calculated_readout_error(
+            ((rc.header, rc.readout_definition_id) for rc in cmd.mapping.readout_columns),
+            rd_by_id,
+        )
+        if calculated is not None:
+            return Failure(calculated)
         typed_readouts: list[ReadoutColumn] = []
         for rc in cmd.mapping.readout_columns:
             rd = rd_by_id.get(rc.readout_definition_id)

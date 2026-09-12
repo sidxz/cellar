@@ -146,8 +146,10 @@ class PreviewSummaryFile:
             )
 
         # Index protocol readout-defs by normalized name for O(1) lookup.
+        # Calculated readouts are derived from their formula, so they are never
+        # a valid import target — leave them out so nothing suggests one.
         readout_by_name: dict[str, uuid.UUID] = {
-            _norm(rd.name): rd.id for rd in protocol.readout_definitions
+            _norm(rd.name): rd.id for rd in protocol.readout_definitions if not rd.is_calculated
         }
 
         suggestions = _infer_suggestions(table.headers, readout_by_name)

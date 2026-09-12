@@ -55,6 +55,7 @@ from cellar.application.screening.long_format_normalizer import (
     infer_mapping,
     normalize,
 )
+from cellar.application.screening.readout_entry_guard import calculated_readout_error
 from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
@@ -155,6 +156,9 @@ class PreviewRunFile:
                     data_type=rd.data_type.value,
                 )
                 for rd in protocol.readout_definitions
+                # Calculated readouts are derived from their formula — never a
+                # legal import target, so never suggested as one.
+                if not rd.is_calculated
             )
             if protocol is not None
             else ()
@@ -388,10 +392,25 @@ class RepreviewRunFile:
                     data_type=rd.data_type.value,
                 )
                 for rd in protocol.readout_definitions
+                # Calculated readouts are derived from their formula — never a
+                # legal import target, so never suggested as one.
+                if not rd.is_calculated
             )
             if protocol is not None
             else ()
         )
+
+        # The chemist-confirmed mapping is the first place a calculated
+        # readout can be bound to a column, so guard it here too.
+        rd_by_id = (
+            {rd.id: rd for rd in protocol.readout_definitions} if protocol is not None else {}
+        )
+        calculated = calculated_readout_error(
+            ((rc.header, rc.readout_definition_id) for rc in input.mapping.readout_columns),
+            rd_by_id,
+        )
+        if calculated is not None:
+            return Failure(calculated)
 
         # Re-run header inference for the response (so the wizard can
         # still display confidence badges) but use the user-supplied

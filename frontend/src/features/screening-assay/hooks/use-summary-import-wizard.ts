@@ -90,10 +90,13 @@ export function useSummaryImportWizard({
 
   const readoutDefOptions = useMemo(
     () =>
-      (protocol?.readout_definitions ?? []).map((rd) => ({
-        id: rd.id,
-        name: rd.name,
-      })),
+      (protocol?.readout_definitions ?? [])
+        // A calculated readout is computed from its formula — never an import target.
+        .filter((rd) => !rd.is_calculated)
+        .map((rd) => ({
+          id: rd.id,
+          name: rd.name,
+        })),
     [protocol?.readout_definitions],
   );
 

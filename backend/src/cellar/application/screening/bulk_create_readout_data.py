@@ -190,14 +190,22 @@ class BulkCreateReadoutData:
         defs_by_name = {rd.name: rd for rd in definitions}
 
         if item.readout_definition_id is not None:
-            if item.readout_definition_id not in defs_by_id:
+            rd = defs_by_id.get(item.readout_definition_id)
+            if rd is None:
                 return Failure(
                     ValidationError(
                         f"Item {idx}: readout_definition_id '{item.readout_definition_id}' "
                         f"does not belong to the run's protocol"
                     )
                 )
-            return Success(item.readout_definition_id)
+            if rd.is_calculated:
+                return Failure(
+                    ValidationError(
+                        f"Item {idx}: readout '{rd.name}' is calculated; "
+                        "values cannot be entered directly"
+                    )
+                )
+            return Success(rd.id)
         if item.readout_definition_name is not None:
             rd = defs_by_name.get(item.readout_definition_name)
             if rd is None:
@@ -205,6 +213,13 @@ class BulkCreateReadoutData:
                     ValidationError(
                         f"Item {idx}: readout definition '{item.readout_definition_name}' "
                         f"not found in protocol"
+                    )
+                )
+            if rd.is_calculated:
+                return Failure(
+                    ValidationError(
+                        f"Item {idx}: readout '{rd.name}' is calculated; "
+                        "values cannot be entered directly"
                     )
                 )
             return Success(rd.id)

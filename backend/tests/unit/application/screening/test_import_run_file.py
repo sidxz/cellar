@@ -501,6 +501,61 @@ class TestImportRunFile:
         assert len(run.wells) == 3
 
     @pytest.mark.asyncio
+    async def test_mapping_onto_a_calculated_readout_is_refused(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        protocol.readout_definitions.append(
+            ReadoutDefinition(
+                protocol_id=protocol.id,
+                name="Percent Inhibition",
+                data_type=ReadoutDataType.NUMERIC,
+                is_calculated=True,
+                calculation_formula="100 - [Raw Data]",
+            )
+        )
+        calc_id = protocol.readout_definitions[-1].id
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=b"Well,Batch,Percent Inhibition\nA1,LG-1,42\n",
+            filename="x.csv",
+        )
+
+        saved: list = []
+        uc, uow, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            save_bulk=saved,
+        )
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                batch_ref="Batch",
+                readout_columns=(
+                    ReadoutColumn(header="Percent Inhibition", readout_definition_id=calc_id),
+                ),
+            ),
+        )
+
+        result = await uc(cmd, auth=auth)
+
+        assert isinstance(result, Failure), result
+        message = str(result.failure())
+        assert "Percent Inhibition" in message
+        assert "calculated" in message
+        assert saved == []
+        assert not uow.committed
+
+    @pytest.mark.asyncio
     async def test_preview_id_is_single_use(self) -> None:
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)
