@@ -8,3 +8,8 @@
 - **Aggregate selection rules leave `contributing_run_ids` empty on refresh** (`ChannelResolver`, pre-existing). The seed-runs scope does not depend on it, but the audit trail for a mean cell is thinner than for a picked cell.
 - **`seed_runs` is a required key in the published document** — additive for the consumer, but a schema-strict client must accept it.
 - **Rows added by hand or from a collection into a run-seeded campaign are restricted to the seeded runs of each protocol** (D4). A compound with data only in a non-seeded run of a seeded protocol reads ND until that run is added or the readout opts out.
+
+## Residual minors from the fix-wave re-review (2026-09-11)
+- `updated_at` is re-stamped inside the seed-run append loop (harmless; one stamp after the loop is cleaner).
+- Seed runs are recorded for selected runs that have no channel config in the same add-from-runs call; they then scope later channels of that protocol. Intended reading: selecting a run seeds it.
+- No un-seed path yet (see the first item above).
