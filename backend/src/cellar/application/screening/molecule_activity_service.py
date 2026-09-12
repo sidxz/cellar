@@ -128,15 +128,47 @@ class MoleculeActivityService:
         for curve in curves:
             proto_ids.add(curve.protocol_id)
 
+        # Reported-endpoint fallback (spec D1) — the detail-page twin of the
+        # `drc:` fallback in ``_enrich_molecules``. A summary-imported IC50
+        # leaves no curve behind, so curves alone would hide its protocol from
+        # this page entirely. The raw readout rows name the runs, the runs name
+        # the protocols.
+        # ponytail: loads every readout row for the compound (one query, single
+        # molecule); swap for a DISTINCT (run_id, readout_definition_id)
+        # projection if a heavily-screened compound makes it bite.
+        readout_rows = await self._readout_repo.find_by_molecule(workspace_id, molecule_id)
+        raw_rd_ids = {
+            row.readout_definition_id for row in readout_rows if row.normalization_applied is None
+        }
+        readout_runs = (
+            await self._run_repo.find_by_ids(workspace_id, list({r.run_id for r in readout_rows}))
+            if raw_rd_ids
+            else {}
+        )
+        proto_ids |= {run.protocol_id for run in readout_runs.values()}
+
         # Fetch protocol metadata (single query) — used for display
         # name/type, dose_unit (for IC50 unit decoration), and the
         # protocol's declared intercept specs (per-Card column headers
         # on the molecule activity tab).
         protocols_by_id: dict[uuid.UUID, tuple[str, str, str]] = {}
         intercepts_by_proto: dict[uuid.UUID, list[dict[str, Any]]] = {}
+        # (readout_definition_id, protocol_id) for every DR readout-def this
+        # molecule has a raw row but no fitted curve for.
+        endpoint_defs: dict[uuid.UUID, uuid.UUID] = {}
+        curve_rd_ids = {curve.readout_definition_id for curve in curves}
         if proto_ids:
             protos = await self._protocol_repo.find_by_ids(workspace_id, list(proto_ids))
             for proto in protos:
+                endpoint_defs.update(
+                    {
+                        rd.id: proto.id
+                        for rd in proto.readout_definitions
+                        if rd.dose_response_config is not None
+                        and rd.id in raw_rd_ids
+                        and rd.id not in curve_rd_ids
+                    }
+                )
                 protocols_by_id[proto.id] = (
                     proto.name,
                     proto.protocol_type.value,
@@ -189,6 +221,23 @@ class MoleculeActivityService:
                 }
             )
 
+        # One aggregate query for every reported endpoint on the page.
+        endpoints_by_proto: dict[uuid.UUID, list[ActivityValue]] = {}
+        if endpoint_defs:
+            aggregated = await self._readout_repo.find_aggregated_by_molecules(
+                workspace_id, [molecule_id], [(rd_id, None) for rd_id in endpoint_defs]
+            )
+            for (rd_id, _norm), agg in aggregated.get(molecule_id, {}).items():
+                endpoints_by_proto.setdefault(endpoint_defs[rd_id], []).append(
+                    ActivityValue(
+                        value=agg.value,
+                        qualifier=agg.qualifier,
+                        unit=agg.unit,
+                        source="readout",
+                        data_point_count=agg.data_point_count,
+                    )
+                )
+
         summaries: list[ProtocolActivitySummary] = []
         for pid in sorted(proto_ids):
             name, ptype, _unit = protocols_by_id.get(pid, ("Unknown", "unknown", "uM"))
@@ -197,6 +246,7 @@ class MoleculeActivityService:
                     protocol_id=pid,
                     protocol_name=name,
                     protocol_type=ptype,
+                    readouts=endpoints_by_proto.get(pid, []),
                     best_curves=curves_by_proto.get(pid, []),
                     intercepts=intercepts_by_proto.get(pid, []),
                 )

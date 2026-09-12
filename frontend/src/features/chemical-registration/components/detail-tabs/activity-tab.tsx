@@ -106,10 +106,14 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                 <Badge variant="outline">{protocol.protocol_type.replace(/_/g, " ")}</Badge>
               </div>
             </CardHeader>
-            <CardContent>
-              {curves.length > 0 ? (
+            <CardContent className="space-y-4">
+              {curves.length > 0 && (
                 <CurveTable curves={curves} intercepts={interceptSpecs(protocol)} />
-              ) : readouts.length > 0 ? (
+              )}
+              {/* Reported endpoints render ALONGSIDE the curve table, not
+                  instead of it: a protocol can hold a fitted curve on one
+                  readout-def and a summary-imported endpoint on another. */}
+              {readouts.length > 0 && (
                 <div className="rounded-lg border">
                   <Table>
                     <TableHeader>
@@ -145,7 +149,8 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                     </TableBody>
                   </Table>
                 </div>
-              ) : (
+              )}
+              {curves.length === 0 && readouts.length === 0 && (
                 <p className="text-sm text-muted-foreground">No readout data for this protocol.</p>
               )}
             </CardContent>
