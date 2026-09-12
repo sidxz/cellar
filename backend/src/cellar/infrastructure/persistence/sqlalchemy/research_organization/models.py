@@ -195,7 +195,9 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         "CampaignChannelModel",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by="CampaignChannelModel.display_order",
+        # id breaks display_order ties deterministically — the two-PATCH
+        # reorder swap leaves a tie if its second call fails.
+        order_by="CampaignChannelModel.display_order, CampaignChannelModel.id",
     )
     results: Mapped[list[CampaignResultModel]] = relationship(
         "CampaignResultModel",
@@ -210,7 +212,7 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         "CampaignStageModel",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by="CampaignStageModel.display_order",
+        order_by="CampaignStageModel.display_order, CampaignStageModel.id",
     )
 
     __table_args__ = (

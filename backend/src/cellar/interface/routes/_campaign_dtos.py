@@ -281,6 +281,8 @@ class AddResultRowRequest(BaseModel):
 class BulkRemoveResultsRequest(BaseModel):
     result_ids: list[uuid.UUID]
 
+    model_config = {"extra": "forbid"}
+
 
 class CloseCampaignRequest(BaseModel):
     note: str | None = None
@@ -481,7 +483,7 @@ class CampaignStageResponse(BaseModel):
     name: str
     parent_stage_id: uuid.UUID | None = None
     display_order: int
-    kind: str  # criteria | manual
+    kind: Literal["criteria", "manual"]
     criteria: list[StageCriterionDTO]
     #: Read-time funnel counts (never stored) — lets a list/summary surface
     #: render the funnel without shipping every result row.
@@ -619,7 +621,7 @@ class _CampaignFieldsResponse(BaseModel):
             # in-memory aggregate would otherwise disagree with the next GET.
             "channels": [
                 CampaignChannelResponse.from_domain(ch)
-                for ch in sorted(c.channels, key=lambda x: x.display_order)
+                for ch in sorted(c.channels, key=lambda x: (x.display_order, x.id))
             ],
             "stages": [CampaignStageResponse.from_domain(s, stage_counts[s.id]) for s in c.stages],
             "targets": [TargetRefResponse.from_ref(t) for t in (targets or [])],

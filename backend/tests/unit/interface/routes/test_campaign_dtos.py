@@ -271,3 +271,32 @@ class TestCampaignSummaryResponse:
         assert set(summary) - set(full) == {"result_count"}
         for field in set(summary) - {"result_count"}:
             assert summary[field] == full[field], field
+
+
+class TestChannelOrdering:
+    def test_channels_tied_on_display_order_come_back_in_id_order(self) -> None:
+        """A failed second PATCH in the reorder swap leaves two channels on the
+        same display_order; the projection must still be deterministic."""
+        campaign, _channel_id = _make_campaign_with_chained_stages()
+        tied = sorted(
+            (uuid.UUID(int=2), uuid.UUID(int=1)),
+            reverse=True,  # added high id first, so a display_order-only sort keeps it first
+        )
+        for channel_id in tied:
+            campaign.add_channel(
+                CampaignChannel(
+                    id=channel_id,
+                    campaign_id=campaign.id,
+                    label=f"Tied {channel_id.int}",
+                    protocol_id=uuid.uuid4(),
+                    readout_definition_id=uuid.uuid4(),
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+                    display_order=7,
+                )
+            )
+
+        response = CampaignResponse.from_domain(campaign)
+
+        assert [c.id for c in response.channels if c.display_order == 7] == sorted(tied)
