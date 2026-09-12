@@ -357,6 +357,7 @@ def _serialize_stage(stage: Any, counts: dict[str, int]) -> dict[str, Any]:
             str(stage.parent_stage_id) if stage.parent_stage_id is not None else None
         ),
         "display_order": stage.display_order,
+        "kind": stage.kind.value,
         "criteria": [c.to_dict() for c in stage.criteria],
         "counts": counts,
     }

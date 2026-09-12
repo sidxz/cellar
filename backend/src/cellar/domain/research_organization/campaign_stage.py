@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from cellar.domain.research_organization.enums import StageOutcome
+from cellar.domain.research_organization.enums import StageKind, StageOutcome
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.hit_criterion import compare
 
@@ -53,8 +53,7 @@ def normalize_stage_name(name: str) -> str:
         raise ValidationError("CampaignStage.name must not be empty")
     if len(normalized) > MAX_STAGE_NAME_LEN:
         raise ValidationError(
-            f"CampaignStage.name must be at most {MAX_STAGE_NAME_LEN} chars, "
-            f"got {len(normalized)}"
+            f"CampaignStage.name must be at most {MAX_STAGE_NAME_LEN} chars, got {len(normalized)}"
         )
     return normalized
 
@@ -120,13 +119,20 @@ class StageCriterion:
 class CampaignStage:
     """Owned entity of Campaign. Zero-criteria stages are valid — a scaffold
     while the chemist is still building the funnel; the UI flags them as
-    "no criteria yet"."""
+    "no criteria yet".
+
+    A MANUAL stage carries no criteria at all: every compound in its
+    population evaluates to `StageOutcome.PENDING` until a chemist promotes
+    (override -> hit) or demotes (override -> miss) it. Children of a manual
+    stage take its hits as their population, exactly as for a criteria stage.
+    """
 
     campaign_id: uuid.UUID
     name: str
     display_order: int
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     parent_stage_id: uuid.UUID | None = None
+    kind: StageKind = StageKind.CRITERIA
     criteria: list[StageCriterion] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -136,6 +142,10 @@ class CampaignStage:
         if len(self.criteria) > MAX_STAGE_CRITERIA:
             raise ValidationError(
                 f"Maximum {MAX_STAGE_CRITERIA} stage criteria allowed, got {len(self.criteria)}"
+            )
+        if self.kind == StageKind.MANUAL and self.criteria:
+            raise ValidationError(
+                "A manual stage has no criteria; clear them or use a criteria stage"
             )
 
 

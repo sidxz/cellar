@@ -20,6 +20,7 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    StageKind,
     StageOutcome,
     ValueQualifier,
 )
@@ -342,10 +343,50 @@ async def test_stage_round_trip(
     assert rs.name == "Primary hits"
     assert rs.display_order == 0
     assert rs.parent_stage_id is None
+    assert rs.kind == StageKind.CRITERIA
     assert len(rs.criteria) == 1
     assert rs.criteria[0].channel_id == channel_id
     assert rs.criteria[0].operator == "lt"
     assert rs.criteria[0].value == 5.0
+
+
+async def test_manual_stage_round_trips_kind(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign()
+    stage = CampaignStage(
+        campaign_id=c.id,
+        name="Manual triage",
+        display_order=0,
+        kind=StageKind.MANUAL,
+    )
+    c.add_stage(stage)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow2:
+        repo2 = SQLAlchemyCampaignRepository(uow2)
+        reloaded = await repo2.find_by_id(c.id)
+    assert reloaded is not None
+    assert reloaded.stages[0].kind == StageKind.MANUAL
+    assert reloaded.stages[0].criteria == []
+
+    # ... and the reconcile path (existing model row) persists a kind switch
+    async with AsyncUnitOfWork(session_factory) as uow_edit:
+        repo_edit = SQLAlchemyCampaignRepository(uow_edit)
+        editable = await repo_edit.find_by_id(c.id)
+        assert editable is not None
+        editable.update_stage(stage.id, kind=StageKind.CRITERIA)
+        await repo_edit.save(editable)
+        await uow_edit.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow_check:
+        repo_check = SQLAlchemyCampaignRepository(uow_check)
+        again = await repo_check.find_by_id(c.id)
+    assert again is not None
+    assert again.stages[0].kind == StageKind.CRITERIA
 
 
 async def test_stage_rename_and_criteria_replace_reconciles(

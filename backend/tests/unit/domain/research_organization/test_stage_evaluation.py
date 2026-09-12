@@ -26,6 +26,7 @@ from cellar.domain.research_organization.enums import (
     CheckVerdict,
     QualifierHandling,
     SelectionRule,
+    StageKind,
     StageOutcome,
     ValueQualifier,
 )
@@ -250,6 +251,7 @@ def test_root_population_is_all_results():
         "hit": 1,
         "miss": 1,
         "untested": 1,
+        "pending": 0,
         "not_in_stage": 0,
         "overridden": 0,
     }
@@ -496,6 +498,7 @@ def test_worked_example_tally_matches_spec():
         "hit": 12,
         "miss": 56,
         "untested": 0,
+        "pending": 0,
         "not_in_stage": 0,
         "overridden": 0,
     }
@@ -504,6 +507,7 @@ def test_worked_example_tally_matches_spec():
         "hit": 7,
         "miss": 3,
         "untested": 2,
+        "pending": 0,
         "not_in_stage": 56,
         "overridden": 0,
     }
@@ -560,3 +564,91 @@ def test_cycle_guard_terminates_instead_of_recursing_forever():
     # resolves hit, and a's own (passing) criterion then also hits.
     assert outcomes[r.id][b.id].outcome == StageOutcome.HIT
     assert outcomes[r.id][a.id].outcome == StageOutcome.HIT
+
+
+# ---------- manual stages ----------
+
+
+def test_manual_stage_is_pending_for_everyone():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    stage = _make_stage(c, kind=StageKind.MANUAL)
+    r1 = _make_result(c)
+    _add_measurement(r1, ch, value=60.0)
+    r2 = _make_result(c)  # no measurement at all
+
+    outcomes = evaluate_stages(c)
+
+    for r in (r1, r2):
+        assert outcomes[r.id][stage.id].outcome == StageOutcome.PENDING
+        assert outcomes[r.id][stage.id].checks == ()
+
+
+def test_manual_stage_promote_feeds_child_population_and_demote_is_miss():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    triage = _make_stage(c, name="Triage", kind=StageKind.MANUAL)
+    child = _make_stage(
+        c,
+        name="Confirmed",
+        parent_stage_id=triage.id,
+        display_order=1,
+        criteria=[StageCriterion(channel_id=ch.id, operator="gte", value=50.0)],
+    )
+    promoted = _make_result(c)
+    _add_measurement(promoted, ch, value=60.0)
+    promoted.set_stage_override(
+        stage_id=triage.id,
+        forced_outcome=StageOutcome.HIT,
+        reason="worth following up",
+        overridden_by=uuid.uuid4(),
+    )
+    demoted = _make_result(c)
+    _add_measurement(demoted, ch, value=60.0)
+    demoted.set_stage_override(
+        stage_id=triage.id,
+        forced_outcome=StageOutcome.MISS,
+        reason="known frequent hitter",
+        overridden_by=uuid.uuid4(),
+    )
+    untouched = _make_result(c)
+    _add_measurement(untouched, ch, value=60.0)
+
+    outcomes = evaluate_stages(c)
+
+    assert outcomes[promoted.id][triage.id].outcome == StageOutcome.HIT
+    assert outcomes[promoted.id][child.id].outcome == StageOutcome.HIT  # in the child's population
+    assert outcomes[demoted.id][triage.id].outcome == StageOutcome.MISS
+    assert outcomes[demoted.id][child.id].outcome == StageOutcome.NOT_IN_STAGE
+    assert outcomes[untouched.id][triage.id].outcome == StageOutcome.PENDING
+    assert outcomes[untouched.id][child.id].outcome == StageOutcome.NOT_IN_STAGE
+
+
+def test_tally_counts_pending_and_population_sums():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    triage = _make_stage(c, name="Triage", kind=StageKind.MANUAL)
+    for _ in range(3):
+        _add_measurement(_make_result(c), ch, value=60.0)
+    promoted = _make_result(c)
+    promoted.set_stage_override(
+        stage_id=triage.id,
+        forced_outcome=StageOutcome.HIT,
+        reason="promote",
+        overridden_by=uuid.uuid4(),
+    )
+
+    counts = tally_stage_counts(c, evaluate_stages(c))[triage.id]
+
+    assert counts == {
+        "population": 4,
+        "hit": 1,
+        "miss": 0,
+        "untested": 0,
+        "pending": 3,
+        "not_in_stage": 0,
+        "overridden": 1,
+    }
+    assert counts["population"] == (
+        counts["hit"] + counts["miss"] + counts["untested"] + counts["pending"]
+    )

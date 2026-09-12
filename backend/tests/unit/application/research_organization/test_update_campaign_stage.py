@@ -20,6 +20,7 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    StageKind,
 )
 from cellar.domain.shared.errors import (
     AuthorizationError,
@@ -106,6 +107,52 @@ class TestUpdateCampaignStage:
         assert updated.criteria[0].operator == "lte"
         repo.save.assert_awaited_once()
         dispatcher.dispatch_all.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_switch_to_manual_clearing_criteria(self) -> None:
+        auth = fake_auth()
+        campaign, _channel, stage = _make_draft_campaign_with_stage(auth.workspace_id)
+        repo = make_campaign_repo(find_in_ws=campaign)
+        uc = UpdateCampaignStage(uow=FakeUnitOfWork(), campaign_repo=repo, dispatcher=AsyncMock())
+
+        result = await uc(
+            UpdateCampaignStageCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                stage_id=stage.id,
+                kind=StageKind.MANUAL,
+                criteria=[],
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Success)
+        updated = result.unwrap().find_stage(stage.id)
+        assert updated is not None
+        assert updated.kind == StageKind.MANUAL
+        assert updated.criteria == []
+
+    @pytest.mark.asyncio
+    async def test_switch_to_manual_keeping_criteria_is_validation_failure(self) -> None:
+        auth = fake_auth()
+        campaign, _channel, stage = _make_draft_campaign_with_stage(auth.workspace_id)
+        repo = make_campaign_repo(find_in_ws=campaign)
+        uc = UpdateCampaignStage(uow=FakeUnitOfWork(), campaign_repo=repo, dispatcher=AsyncMock())
+
+        result = await uc(
+            UpdateCampaignStageCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                stage_id=stage.id,
+                kind=StageKind.MANUAL,
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ValidationError)
+        assert stage.kind == StageKind.CRITERIA
+        repo.save.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_omitted_fields_left_unchanged(self) -> None:

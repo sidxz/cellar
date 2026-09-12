@@ -24,7 +24,7 @@ from cellar.domain.research_organization.campaign_stage import (
     StageCriterion,
     normalize_stage_name,
 )
-from cellar.domain.research_organization.enums import CampaignStatus
+from cellar.domain.research_organization.enums import CampaignStatus, StageKind
 from cellar.domain.research_organization.events import (
     CampaignClosed,
     CampaignCreated,
@@ -259,10 +259,14 @@ class Campaign(AggregateRoot):
         parent_stage_id: uuid.UUID | object | None = UNSET,
         criteria: list[StageCriterion] | object = UNSET,
         display_order: int | object = UNSET,
+        kind: StageKind | object = UNSET,
     ) -> CampaignStage:
         """Update a stage's mutable fields. `criteria` is replaced whole — never
         patched per item. Unsupplied (UNSET) fields are left as-is; `None` is a
-        meaningful value only for `parent_stage_id` (clears it)."""
+        meaningful value only for `parent_stage_id` (clears it).
+
+        Switching to `StageKind.MANUAL` requires the resulting criteria to be
+        empty — send `criteria=[]` alongside the switch."""
         self._ensure_draft("update stage")
         stage = self.find_stage(stage_id)
         if stage is None:
@@ -272,6 +276,7 @@ class Campaign(AggregateRoot):
         new_parent = stage.parent_stage_id if parent_stage_id is UNSET else parent_stage_id
         new_criteria = stage.criteria if criteria is UNSET else criteria
         new_display_order = stage.display_order if display_order is UNSET else display_order
+        new_kind = stage.kind if kind is UNSET else kind
 
         if new_display_order < 0:  # type: ignore[operator]
             raise ValidationError("CampaignStage.display_order must be >= 0")
@@ -282,11 +287,16 @@ class Campaign(AggregateRoot):
         self._check_stage_name_available(new_name, exclude_stage_id=stage.id)
         self._check_stage_parent(new_parent, stage_id=stage.id)  # type: ignore[arg-type]
         self._check_stage_criteria_channels(new_criteria)  # type: ignore[arg-type]
+        if new_kind == StageKind.MANUAL and new_criteria:
+            raise ValidationError(
+                "A manual stage has no criteria; clear them or use a criteria stage"
+            )
 
         stage.name = new_name
         stage.parent_stage_id = new_parent  # type: ignore[assignment]
         stage.criteria = new_criteria  # type: ignore[assignment]
         stage.display_order = new_display_order  # type: ignore[assignment]
+        stage.kind = new_kind  # type: ignore[assignment]
         self.updated_at = datetime.now(UTC)
         return stage
 

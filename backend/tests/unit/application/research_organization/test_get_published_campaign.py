@@ -636,6 +636,7 @@ class TestGetPublishedCampaign:
 
         assert parent_doc["id"] == str(parent_stage.id)
         assert parent_doc["parent_stage_id"] is None
+        assert parent_doc["kind"] == "criteria"
         assert parent_doc["criteria"] == [
             {"channel_id": str(ch.id), "operator": "lt", "value": 100.0}
         ]
@@ -644,6 +645,7 @@ class TestGetPublishedCampaign:
             "hit": 2,
             "miss": 1,
             "untested": 0,
+            "pending": 0,
             "not_in_stage": 0,
             "overridden": 0,
         }
@@ -654,6 +656,7 @@ class TestGetPublishedCampaign:
             "hit": 1,
             "miss": 1,
             "untested": 0,
+            "pending": 0,
             "not_in_stage": 1,
             "overridden": 0,
         }

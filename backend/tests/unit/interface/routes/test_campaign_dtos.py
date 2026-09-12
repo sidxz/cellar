@@ -16,6 +16,7 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    StageKind,
     ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import (
@@ -181,3 +182,24 @@ class TestCampaignResponseStageOutcomes:
         assert stage_b_outcome.checks == [
             StageCheckResponse(channel_id=channel_id, verdict="fail")
         ]
+
+
+    def test_from_domain_carries_stage_kind_and_pending_outcome(self) -> None:
+        campaign, _channel_id = self._make_campaign_with_chained_stages()
+        manual = CampaignStage(
+            campaign_id=campaign.id,
+            name="Manual Triage",
+            display_order=2,
+            kind=StageKind.MANUAL,
+        )
+        campaign.add_stage(manual)
+
+        response = CampaignResponse.from_domain(campaign)
+
+        kinds = {s.name: s.kind for s in response.stages}
+        assert kinds == {"Stage A": "criteria", "Stage B": "criteria", "Manual Triage": "manual"}
+        manual_outcome = next(
+            o for o in response.results[0].stage_outcomes if o.stage_id == manual.id
+        )
+        assert manual_outcome.outcome == "pending"
+        assert manual_outcome.checks == []

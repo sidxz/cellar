@@ -207,6 +207,7 @@ class StageCriterionDTO(BaseModel):
 class AddStageRequest(BaseModel):
     name: str
     parent_stage_id: uuid.UUID | None = None
+    kind: Literal["criteria", "manual"] = "criteria"
     criteria: list[StageCriterionDTO] = []
 
 
@@ -222,6 +223,7 @@ class UpdateStageRequest(BaseModel):
     parent_stage_id: uuid.UUID | None = None
     criteria: list[StageCriterionDTO] | None = None
     display_order: int | None = None
+    kind: Literal["criteria", "manual"] | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -352,7 +354,7 @@ class StageCheckResponse(BaseModel):
 
 class StageOutcomeResponse(BaseModel):
     stage_id: uuid.UUID
-    outcome: str  # hit | miss | untested | not_in_stage
+    outcome: str  # hit | miss | untested | not_in_stage | pending
     overridden: bool
     override_reason: str | None = None
     checks: list[StageCheckResponse]
@@ -433,6 +435,7 @@ class CampaignStageResponse(BaseModel):
     name: str
     parent_stage_id: uuid.UUID | None = None
     display_order: int
+    kind: str  # criteria | manual
     criteria: list[StageCriterionDTO]
 
     @classmethod
@@ -442,6 +445,7 @@ class CampaignStageResponse(BaseModel):
             name=s.name,
             parent_stage_id=s.parent_stage_id,
             display_order=s.display_order,
+            kind=s.kind.value,
             criteria=[StageCriterionDTO.from_domain(c) for c in s.criteria],
         )
 

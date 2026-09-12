@@ -539,6 +539,111 @@ class TestCampaignStages:
         assert updated["name"] == "Renamed Child"
         assert updated["parent_stage_id"] is None
 
+    async def test_add_manual_stage_outcomes_are_pending_until_promoted(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-manual-stage")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={"name": "Manual Triage", "kind": "manual"},
+        )
+        assert resp.status_code == 200, resp.text
+        stage = resp.json()["stages"][0]
+        assert stage["kind"] == "manual"
+        assert stage["criteria"] == []
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert get_resp.status_code == 200, get_resp.text
+        outcome = _find_stage_outcome(get_resp.json(), result_id, stage["id"])
+        assert outcome["outcome"] == "pending"
+        assert outcome["checks"] == []
+
+        # Promote -> hit; demote -> miss.
+        override_url = (
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}/stages/{stage['id']}/override"
+        )
+        promote = await client.put(
+            override_url, json={"outcome": "hit", "reason": "Worth following up"}
+        )
+        assert promote.status_code == 200, promote.text
+        assert _find_stage_outcome(promote.json(), result_id, stage["id"])["outcome"] == "hit"
+
+        demote = await client.put(
+            override_url, json={"outcome": "miss", "reason": "Known frequent hitter"}
+        )
+        assert demote.status_code == 200, demote.text
+        assert _find_stage_outcome(demote.json(), result_id, stage["id"])["outcome"] == "miss"
+
+        cleared = await client.delete(override_url)
+        assert cleared.status_code == 200, cleared.text
+        assert _find_stage_outcome(cleared.json(), result_id, stage["id"])["outcome"] == "pending"
+
+    async def test_add_manual_stage_with_criteria_422(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={
+                "name": "Manual Triage",
+                "kind": "manual",
+                "criteria": [{"channel_id": str(uuid.uuid4()), "operator": "lt", "value": 10.0}],
+            },
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_update_stage_to_manual_requires_clearing_criteria(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+        channel_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "IC50",
+                "protocol_id": protocol_id,
+                "readout_definition_id": rd_id,
+                "source_kind": "readout_data",
+                "selection_rule": "latest_approved_run",
+                "qualifier_handling": "include_qualified",
+                "display_order": 0,
+            },
+        )
+        assert channel_resp.status_code == 200, channel_resp.text
+        channel_id = channel_resp.json()["channels"][0]["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={
+                "name": "Primary Hit",
+                "criteria": [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
+            },
+        )
+        assert stage_resp.status_code == 200, stage_resp.text
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        keep = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}", json={"kind": "manual"}
+        )
+        assert keep.status_code == 422, keep.text
+
+        cleared = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}",
+            json={"kind": "manual", "criteria": []},
+        )
+        assert cleared.status_code == 200, cleared.text
+        updated = next(s for s in cleared.json()["stages"] if s["id"] == stage_id)
+        assert updated["kind"] == "manual"
+        assert updated["criteria"] == []
+
     async def test_remove_stage_409_with_child_then_200_after_reparent(
         self, client: AsyncClient
     ) -> None:

@@ -17,6 +17,7 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    StageKind,
     StageOutcome,
     ValueQualifier,
 )
@@ -321,6 +322,36 @@ def test_update_stage_replaces_criteria_whole():
     updated = c.update_stage(stage.id, criteria=new_criteria)
     assert updated is stage
     assert updated.criteria == new_criteria
+
+
+def test_update_stage_to_manual_rejects_existing_criteria():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    c.add_channel(ch)
+    stage = _make_stage(c, criteria=[StageCriterion(channel_id=ch.id, operator="gte", value=50.0)])
+    c.add_stage(stage)
+    with pytest.raises(ValidationError, match="manual stage has no criteria"):
+        c.update_stage(stage.id, kind=StageKind.MANUAL)
+    assert stage.kind == StageKind.CRITERIA
+
+
+def test_update_stage_to_manual_with_cleared_criteria():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    c.add_channel(ch)
+    stage = _make_stage(c, criteria=[StageCriterion(channel_id=ch.id, operator="gte", value=50.0)])
+    c.add_stage(stage)
+    updated = c.update_stage(stage.id, kind=StageKind.MANUAL, criteria=[])
+    assert updated.kind == StageKind.MANUAL
+    assert updated.criteria == []
+
+
+def test_update_stage_leaves_kind_alone_when_unset():
+    c = _make_campaign()
+    stage = _make_stage(c, kind=StageKind.MANUAL)
+    c.add_stage(stage)
+    updated = c.update_stage(stage.id, name="Renamed")
+    assert updated.kind == StageKind.MANUAL
 
 
 def test_update_stage_rejects_duplicate_name():

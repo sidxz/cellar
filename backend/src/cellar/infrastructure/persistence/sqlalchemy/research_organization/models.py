@@ -384,6 +384,7 @@ class CampaignStageModel(Base, EntityModelMixin):
         nullable=True,
     )
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, server_default="criteria")
     criteria: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
