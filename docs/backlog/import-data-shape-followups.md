@@ -10,3 +10,8 @@
 - **`wellless_only` is a per-call opt-in** on `fetch_endpoint_candidates{,_for_runs}` and `find_aggregated_by_molecules`. A future third fallback caller must pass it; consider a dedicated `fetch_reported_endpoints` wrapper if one appears.
 - **`drc:` sort still ranks curves only** — see `drc-sort-curves-only.md`. **`drc:` fallback fires only on unscoped columns** — see `drc-fallback-run-scope.md`.
 - **Runs that already held both shapes before this branch** keep their data and now refuse further imports of either kind (dev data only; no backfill was in scope).
+
+## Residual minors from the fix-wave re-review (2026-09-11)
+- **Add-from-runs preview cells carry no `source_readout_id`**, so the wizard preview cannot show the "reported" chip the committed grid shows (values agree; provenance display does not). Fix = thread the candidate's readout id through the preview cell DTO.
+- **`add_results_from_runs.py` imports two underscore-private names cross-module** from the shared candidate resolver; rename them public (`resolve_run_candidates` style) in the next touch.
+- A dead `endpoint_calls` log in a test fake that no test asserts on; one `E501` in a test file (CI lints `src/` only).
