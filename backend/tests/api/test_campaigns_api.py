@@ -870,6 +870,46 @@ class TestStageOverride:
         outcome = _find_stage_outcome(get_resp.json(), result_id, stage_id)
         assert outcome["overridden"] is False
 
+    async def test_bulk_overrides_hit_without_reason_422(self, client: AsyncClient) -> None:
+        """A forced hit/miss always records its rationale — an omitted reason is
+        rejected at the API boundary, not silently stored as blank."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-no-reason")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Bulk No Reason"}
+        )
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        resp = await client.put(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}/overrides",
+            json={"result_ids": [result_id], "outcome": "hit"},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_bulk_overrides_on_closed_campaign_423(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-locked")
+        campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Bulk Locked"}
+        )
+        stage_id = stage_resp.json()["stages"][0]["id"]
+        result_id = stage_resp.json()["results"][0]["id"]
+
+        close_resp = await client.post(f"/api/v1/campaigns/{campaign_id}/close", json={})
+        assert close_resp.status_code == 200, close_resp.text
+
+        resp = await client.put(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}/overrides",
+            json={"result_ids": [result_id], "outcome": "hit", "reason": "Too late"},
+        )
+        assert resp.status_code == 423, resp.text
+
     async def test_override_unknown_stage_404(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-stage-override-404")
@@ -1074,6 +1114,25 @@ class TestCampaignResults:
             json={"result_ids": [result_id, str(uuid.uuid4())]},
         )
         assert resp.status_code == 404, resp.text
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert len(get_resp.json()["results"]) == 1
+
+    async def test_bulk_remove_on_closed_campaign_422(self, client: AsyncClient) -> None:
+        """A published campaign's row set is frozen — bulk-remove is rejected."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-rm-locked")
+        campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+
+        close_resp = await client.post(f"/api/v1/campaigns/{campaign_id}/close", json={})
+        assert close_resp.status_code == 200, close_resp.text
+        result_id = close_resp.json()["results"][0]["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/results/bulk-remove",
+            json={"result_ids": [result_id]},
+        )
+        assert resp.status_code == 422, resp.text
 
         get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
         assert len(get_resp.json()["results"]) == 1
