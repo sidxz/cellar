@@ -118,6 +118,16 @@ function VerdictChip({ verdict }: { verdict: CheckVerdict | null }) {
   return <span className={`rounded-sm border px-1 py-px text-[10px] ${cls}`}>{verdict}</span>;
 }
 
+/** True when a dose-response channel resolved this cell from a reported
+ *  endpoint row instead of a fitted curve. Exported so the grid's own
+ *  derivation is what the tests exercise. */
+export function isReportedEndpoint(
+  isDR: boolean,
+  m: Pick<CampaignMeasurementResponse, "source_readout_id" | "source_curve_id">,
+): boolean {
+  return isDR && !!m.source_readout_id && !m.source_curve_id;
+}
+
 export interface CompoundValueCellProps {
   prefix: string;
   value: number | null;
@@ -433,7 +443,7 @@ export function ResultsGridV2({
                 verdict={verdict}
                 overridden={m.is_manual_override}
                 overrideReason={m.override_reason}
-                reported={isDR && !!m.source_readout_id && !m.source_curve_id}
+                reported={isReportedEndpoint(isDR, m)}
                 readOnly={readOnly}
                 onEdit={() => setOverrideTarget({ result: r, channel: ch, measurement: m })}
               />

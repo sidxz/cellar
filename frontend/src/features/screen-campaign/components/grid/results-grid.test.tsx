@@ -1,15 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { CampaignMeasurementResponse } from "../../types";
-import { CompoundValueCell, type CompoundValueCellProps } from "./results-grid";
-
-/** Mirrors the column-def factory's `reported` expression — the grid's
- *  AG Grid host is too heavy to mount here, so the derivation under test is
- *  the one the cell renderer applies verbatim. */
-function reportedFor(isDR: boolean, m: Partial<CampaignMeasurementResponse>): boolean {
-  return isDR && !!m.source_readout_id && !m.source_curve_id;
-}
+import { CompoundValueCell, type CompoundValueCellProps, isReportedEndpoint } from "./results-grid";
 
 function renderCell(overrides: Partial<CompoundValueCellProps> = {}) {
   return render(
@@ -31,7 +23,7 @@ function renderCell(overrides: Partial<CompoundValueCellProps> = {}) {
 
 describe("CompoundValueCell reported marker", () => {
   it("shows the reported chip for a DR measurement sourced from an endpoint row", () => {
-    const reported = reportedFor(true, { source_readout_id: "rd-1", source_curve_id: null });
+    const reported = isReportedEndpoint(true, { source_readout_id: "rd-1", source_curve_id: null });
     expect(reported).toBe(true);
 
     renderCell({ reported });
@@ -42,7 +34,7 @@ describe("CompoundValueCell reported marker", () => {
   });
 
   it("shows no chip for a DR measurement backed by a fitted curve", () => {
-    const reported = reportedFor(true, { source_readout_id: null, source_curve_id: "c-1" });
+    const reported = isReportedEndpoint(true, { source_readout_id: null, source_curve_id: "c-1" });
     expect(reported).toBe(false);
 
     renderCell({ reported });
@@ -50,7 +42,10 @@ describe("CompoundValueCell reported marker", () => {
   });
 
   it("shows no chip on a non-DR channel even when a readout id is present", () => {
-    const reported = reportedFor(false, { source_readout_id: "rd-1", source_curve_id: null });
+    const reported = isReportedEndpoint(false, {
+      source_readout_id: "rd-1",
+      source_curve_id: null,
+    });
     expect(reported).toBe(false);
 
     renderCell({ reported });
