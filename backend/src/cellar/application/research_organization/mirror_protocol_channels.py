@@ -40,6 +40,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
+    resolution_run_ids,
 )
 from cellar.application.research_organization.stage_upsert import upsert_stage_by_name
 from cellar.application.shared.command import Command
@@ -342,12 +343,14 @@ class MirrorProtocolChannels:
             # Resolve cells for the newly created channels — last, so the
             # cheap validation above can bail out first.
             for channel in new_channels:
+                run_ids = resolution_run_ids(campaign, channel)
                 for result in campaign.results:
                     measurement = await self._resolver.resolve(
                         workspace_id=input.workspace_id,
                         channel=channel,
                         result_id=result.id,
                         molecule_id=result.molecule_id,
+                        run_ids=run_ids,
                     )
                     result.add_measurement(measurement)
 

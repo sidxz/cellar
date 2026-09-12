@@ -22,17 +22,15 @@ from cellar.domain.research_organization.campaign_stage import CampaignStage
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
-    QualifierHandling,
-    SelectionRule,
     ValueQualifier,
 )
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.screening_assay.dose_response_config import (
     DoseResponseConfig,
     InterceptSpec,
 )
 from cellar.domain.screening_assay.enums import (
     CurveType,
-    InterceptBasis,
     InterceptKind,
     ProtocolType,
     ReadoutDataType,
@@ -658,3 +656,65 @@ async def test_mirror_bad_parent_fails_before_resolving_any_measurement() -> Non
     assert isinstance(out.failure(), ValidationError)
     assert resolver.calls == []
     assert campaign.stages == []
+
+
+@pytest.mark.asyncio
+async def test_mirrored_channel_resolution_is_scoped_to_the_campaigns_source_runs() -> None:
+    """Spec D4 — channels created by mirroring seed their cells from the
+    campaign's own runs, not every run of the protocol."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
+    protocol = _make_protocol(auth.workspace_id, readouts=[_numeric_readout(name="% inhibition")])
+    run_id = uuid.uuid4()
+    campaign.record_seed_runs([SeedRun(run_id, protocol.id)])
+
+    resolver = FakeResolver(factory=_fake_measurement)
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=resolver,
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+        ),
+        auth=auth,
+    )
+    assert isinstance(out, Success)
+    assert resolver.run_ids_seen == [[run_id]]
+
+
+@pytest.mark.asyncio
+async def test_mirroring_an_unseeded_protocol_resolves_protocol_wide() -> None:
+    """A mirrored counter-screen on a protocol the campaign was never seeded
+    from has no seed runs to scope to — it resolves against every run of that
+    protocol, not ND."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
+    campaign.record_seed_runs([SeedRun(uuid.uuid4(), uuid.uuid4())])  # another protocol
+    protocol = _make_protocol(auth.workspace_id, readouts=[_numeric_readout(name="% inhibition")])
+
+    resolver = FakeResolver(factory=_fake_measurement)
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=resolver,
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+        ),
+        auth=auth,
+    )
+    assert isinstance(out, Success)
+    assert resolver.run_ids_seen == [None]

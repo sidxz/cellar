@@ -14,7 +14,6 @@ from cellar.domain.research_organization.campaign_measurement import (
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.campaign_stage import CampaignStage, StageCriterion
-from cellar.domain.research_organization.source_ref import CollectionRef
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
@@ -24,6 +23,7 @@ from cellar.domain.research_organization.enums import (
     StageOutcome,
     ValueQualifier,
 )
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
@@ -595,3 +595,61 @@ async def test_close_note_round_trip(
         reloaded = await repo2.find_by_id(c.id)
     assert reloaded is not None
     assert reloaded.close_note == "closed after triage review"
+
+
+@pytest.mark.asyncio
+async def test_channel_resolve_from_all_runs_round_trips(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The run-scope opt-out (spec D4) survives insert, reload, and update."""
+    c = _build_campaign(add_result=False, add_measurement=False)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        loaded = await repo.find_by_id(c.id)
+        assert loaded is not None
+        assert loaded.channels[0].resolve_from_all_runs is False  # column default
+        loaded.channels[0].resolve_from_all_runs = True
+        await repo.save(loaded)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        again = await repo.find_by_id(c.id)
+    assert again is not None
+    assert again.channels[0].resolve_from_all_runs is True
+
+
+@pytest.mark.asyncio
+async def test_seed_runs_round_trip_in_recorded_order(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The campaign's seed runs (spec D4) survive insert, reload, and append."""
+    c = _build_campaign(add_result=False, add_measurement=False)
+    p1, p2 = uuid.uuid4(), uuid.uuid4()
+    r1, r2, r3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    c.record_seed_runs([SeedRun(r2, p1), SeedRun(r1, p2)])
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        loaded = await repo.find_by_id(c.id)
+        assert loaded is not None
+        assert loaded.seed_runs == [SeedRun(r2, p1), SeedRun(r1, p2)]
+        loaded.record_seed_runs([SeedRun(r3, p1), SeedRun(r2, p1)])  # r2 already there
+        await repo.save(loaded)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        again = await repo.find_by_id(c.id)
+    assert again is not None
+    assert again.seed_runs == [SeedRun(r2, p1), SeedRun(r1, p2), SeedRun(r3, p1)]
+    assert again.seed_run_ids_for(p1) == [r2, r3]

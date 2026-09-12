@@ -14,29 +14,29 @@ from cellar.application.research_organization.add_results_from_collection import
     AddResultsOutcome,
 )
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
+    CampaignMeasurement,
+)
 from cellar.domain.research_organization.campaign_result import CampaignResult
-from cellar.domain.research_organization.source_ref import CollectionRef
+from cellar.domain.research_organization.enums import (
+    ChannelSourceKind,
+    QualifierHandling,
+    SelectionRule,
+    ValueQualifier,
+)
+from cellar.domain.research_organization.source_ref import CollectionRef, SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeUnitOfWork,
     FakeResolver,
+    FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
     make_collection_repo,
-)
-from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_measurement import (
-    CampaignMeasurement,
-)
-from cellar.domain.research_organization.enums import (
-    ChannelSourceKind,
-    QualifierHandling,
-    SelectionRule,
-    ValueQualifier,
 )
 
 
@@ -256,3 +256,37 @@ class TestAddResultsFromCollection:
         )
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
+
+    @pytest.mark.asyncio
+    async def test_resolution_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — rows pulled from a collection into a run-seeded campaign
+        resolve against the campaign's runs; an opt-out channel does not."""
+        auth = fake_auth()
+        campaign = _make_campaign(auth)
+        channel = _make_channel(campaign)
+        campaign.add_channel(channel)
+        run_id = uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
+
+        def _uc(resolver, mols):
+            return AddResultsFromCollection(
+                uow=FakeUnitOfWork(),
+                campaign_repo=make_campaign_repo(find_in_ws=campaign),
+                collection_repo=make_collection_repo(in_ws=True, molecule_ids=mols),
+                resolver=resolver,
+                dispatcher=AsyncMock(),
+            )
+
+        cmd = AddResultsFromCollectionCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            collection_id=uuid.uuid4(),
+        )
+        resolver = FakeResolver(_fake_measurement)
+        assert isinstance(await _uc(resolver, [uuid.uuid4()])(cmd, auth=auth), Success)
+        assert resolver.run_ids_seen == [[run_id]]
+
+        channel.resolve_from_all_runs = True
+        opted_out = FakeResolver(_fake_measurement)
+        assert isinstance(await _uc(opted_out, [uuid.uuid4()])(cmd, auth=auth), Success)
+        assert opted_out.run_ids_seen == [None]

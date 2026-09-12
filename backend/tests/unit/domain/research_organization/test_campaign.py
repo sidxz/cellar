@@ -27,7 +27,11 @@ from cellar.domain.research_organization.events import (
     CampaignReopened,
     CampaignSuperseded,
 )
-from cellar.domain.research_organization.source_ref import CollectionRef
+from cellar.domain.research_organization.source_ref import (
+    CollectionRef,
+    RunRef,
+    SeedRun,
+)
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 
 
@@ -596,3 +600,45 @@ def test_supersede_transitions_and_emits_event():
     assert c.superseded_by_campaign_id == new_id
     events = c.collect_events()
     assert any(isinstance(e, CampaignSuperseded) for e in events)
+
+
+# ---------------------------------------------------------------------------
+# seed runs — the campaign's resolution run scope (spec D4)
+# ---------------------------------------------------------------------------
+
+
+def test_record_seed_runs_appends_in_order_and_ignores_repeats():
+    c = _make_campaign()
+    p1, p2 = uuid.uuid4(), uuid.uuid4()
+    run_a, run_b, run_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    c.record_seed_runs([SeedRun(run_b, p1), SeedRun(run_a, p1)])
+    c.record_seed_runs([SeedRun(run_a, p1), SeedRun(run_c, p2), SeedRun(run_b, p1)])
+    assert c.seed_runs == [SeedRun(run_b, p1), SeedRun(run_a, p1), SeedRun(run_c, p2)]
+
+
+def test_seed_run_ids_for_filters_by_protocol_in_insertion_order():
+    c = _make_campaign()
+    p1, p2 = uuid.uuid4(), uuid.uuid4()
+    run_a, run_b, run_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    c.record_seed_runs([SeedRun(run_b, p1), SeedRun(run_c, p2), SeedRun(run_a, p1)])
+    assert c.seed_run_ids_for(p1) == [run_b, run_a]
+    assert c.seed_run_ids_for(p2) == [run_c]
+    assert c.seed_run_ids_for(uuid.uuid4()) == []
+
+
+def test_seed_runs_are_not_derived_from_run_refs():
+    """A RunRef names only the run that won a pick, so rows alone never widen
+    the scope — only record_seed_runs does."""
+    c = _make_campaign()
+    c.add_result(
+        CampaignResult(campaign_id=c.id, molecule_id=uuid.uuid4(), added_from=RunRef(run_id=uuid.uuid4()))
+    )
+    assert c.seed_runs == []
+
+
+def test_record_seed_runs_is_draft_only():
+    c = _make_campaign()
+    c.status = CampaignStatus.CLOSED
+    with pytest.raises(ValidationError, match="record seed runs"):
+        c.record_seed_runs([SeedRun(uuid.uuid4(), uuid.uuid4())])
+    assert c.seed_runs == []

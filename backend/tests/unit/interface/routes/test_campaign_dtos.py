@@ -22,6 +22,7 @@ from cellar.domain.research_organization.enums import (
 from cellar.domain.research_organization.source_ref import (
     CollectionRef,
     RunRef,
+    SeedRun,
 )
 from cellar.interface.routes._campaign_dtos import (
     CampaignResponse,
@@ -300,3 +301,20 @@ class TestChannelOrdering:
         response = CampaignResponse.from_domain(campaign)
 
         assert [c.id for c in response.channels if c.display_order == 7] == sorted(tied)
+
+
+class TestSeedRuns:
+    def test_seed_runs_are_projected_in_recorded_order_on_both_reads(self) -> None:
+        campaign, _channel_id = _make_campaign_with_chained_stages()
+        p1, p2 = uuid.uuid4(), uuid.uuid4()
+        r1, r2 = uuid.uuid4(), uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(r2, p1), SeedRun(r1, p2)])
+
+        full = CampaignResponse.from_domain(campaign).model_dump()
+        summary = CampaignSummaryResponse.from_domain(campaign).model_dump()
+
+        assert full["seed_runs"] == [
+            {"run_id": r2, "protocol_id": p1},
+            {"run_id": r1, "protocol_id": p2},
+        ]
+        assert summary["seed_runs"] == full["seed_runs"]

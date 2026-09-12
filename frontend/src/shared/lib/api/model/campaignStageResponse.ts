@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.1.0-14-gdd8a8c7e-dirty
  */
 import type { CampaignStageResponseParentStageId } from './campaignStageResponseParentStageId';
+import type { CampaignStageResponseKind } from './campaignStageResponseKind';
 import type { StageCriterionDTO } from './stageCriterionDTO';
 import type { StageCountsResponse } from './stageCountsResponse';
 
@@ -13,7 +14,7 @@ export interface CampaignStageResponse {
   name: string;
   parent_stage_id?: CampaignStageResponseParentStageId;
   display_order: number;
-  kind: string;
+  kind: CampaignStageResponseKind;
   criteria: StageCriterionDTO[];
   counts: StageCountsResponse;
 }

@@ -3,7 +3,7 @@
   "title": "DAIKON Published Campaign Contract",
   "description": "JSON Schema for GET /api/v1/campaigns/{id}/published — spec §6.",
   "type": "object",
-  "required": ["campaign", "compound_sources", "source_protocols", "channels", "stages", "results"],
+  "required": ["campaign", "compound_sources", "source_protocols", "seed_runs", "channels", "stages", "results"],
   "additionalProperties": false,
   "properties": {
     "campaign": {
@@ -90,11 +90,24 @@
       }
     },
 
+    "seed_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["run_id", "protocol_id"],
+        "additionalProperties": false,
+        "properties": {
+          "run_id":      { "type": "string", "format": "uuid" },
+          "protocol_id": { "type": "string", "format": "uuid" }
+        }
+      }
+    },
+
     "channels": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "label", "display_order", "protocol_ref", "readout", "source_kind", "selection_rule"],
+        "required": ["id", "label", "display_order", "protocol_ref", "readout", "source_kind", "selection_rule", "resolve_from_all_runs"],
         "additionalProperties": false,
         "properties": {
           "id":             { "type": "string", "format": "uuid" },
@@ -123,6 +136,7 @@
           },
           "source_kind":     { "type": "string" },
           "selection_rule":  { "type": "string" },
+          "resolve_from_all_runs": { "type": "boolean" },
           "qc_filter": {
             "oneOf": [
               { "type": "object" },

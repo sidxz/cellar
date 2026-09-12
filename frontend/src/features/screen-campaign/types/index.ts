@@ -5,7 +5,7 @@
 // the domain-specific string-literal union types here so the feature layer
 // has a stable, named vocabulary without a runtime dep on generated code.
 
-import type { CampaignChannelResponse } from "@/shared/lib/api/model";
+import type { CampaignChannelResponse, CampaignStageResponseKind } from "@/shared/lib/api/model";
 
 export type {
   CampaignResponse,
@@ -48,7 +48,7 @@ export type StageOutcome = "hit" | "miss" | "untested" | "pending" | "not_in_sta
 
 /** How a stage decides its members: evaluated from `criteria`, or hand-picked
  *  (every row starts `pending` until an override promotes/demotes it). */
-export type StageKind = "criteria" | "manual";
+export type StageKind = CampaignStageResponseKind;
 
 export type CheckVerdict = "pass" | "fail" | "untested";
 

@@ -23,6 +23,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
+    resolution_run_ids,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -100,6 +101,7 @@ class RecomputeChannel:
 
             # Snapshot results list to avoid mutation-during-iteration issues
             results = list(campaign.results)
+            run_ids = resolution_run_ids(campaign, channel)
 
             for result in results:
                 measurement = result.find_measurement(channel.id)
@@ -110,6 +112,7 @@ class RecomputeChannel:
                     channel=channel,
                     result_id=result.id,
                     molecule_id=result.molecule_id,
+                    run_ids=run_ids,
                 )
                 if measurement is not None:
                     new_measurement.id = measurement.id  # preserve id → UPDATE not DELETE+INSERT

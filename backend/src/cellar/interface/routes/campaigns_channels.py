@@ -64,6 +64,7 @@ async def add_campaign_channel(
         display_order=body.display_order,
         normalization_applied=body.normalization_applied,
         intercept_key=body.intercept_key.to_domain() if body.intercept_key is not None else None,
+        resolve_from_all_runs=body.resolve_from_all_runs,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
@@ -98,6 +99,12 @@ async def update_campaign_channel(
         else UNSET
     )
 
+    resolve_from_all_runs: bool | object = (
+        body.resolve_from_all_runs
+        if "resolve_from_all_runs" in provided and body.resolve_from_all_runs is not None
+        else UNSET
+    )
+
     cmd = UpdateCampaignChannelCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
@@ -106,6 +113,7 @@ async def update_campaign_channel(
         selection_rule=selection_rule,
         qc_filter=qc_filter,
         display_order=display_order,
+        resolve_from_all_runs=resolve_from_all_runs,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

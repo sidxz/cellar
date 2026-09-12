@@ -12,6 +12,7 @@ aggregate — provenance is per-row.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -31,6 +32,7 @@ from cellar.domain.research_organization.events import (
     CampaignReopened,
     CampaignSuperseded,
 )
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 
@@ -68,6 +70,7 @@ class Campaign(AggregateRoot):
         results: list[CampaignResult] | None = None,
         stages: list[CampaignStage] | None = None,
         close_note: str | None = None,
+        seed_runs: list[SeedRun] | None = None,
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at, version=version)
         if not name or not name.strip():
@@ -87,6 +90,7 @@ class Campaign(AggregateRoot):
         self.results: list[CampaignResult] = results or []
         self.stages: list[CampaignStage] = stages or []
         self.close_note = close_note
+        self.seed_runs: list[SeedRun] = seed_runs or []
 
     # ----- factory -----
 
@@ -189,6 +193,26 @@ class Campaign(AggregateRoot):
         if added > 0:
             self.updated_at = datetime.now(UTC)
         return added, skipped
+
+    # ----- seed runs (spec D4) -----
+
+    def record_seed_runs(self, runs: Iterable[SeedRun]) -> None:
+        """Append the runs an add-from-runs call imported from. Runs already
+        recorded are ignored; insertion order is kept. Draft only."""
+        self._ensure_draft("record seed runs")
+        seen = {s.run_id for s in self.seed_runs}
+        for run in runs:
+            if run.run_id in seen:
+                continue
+            self.seed_runs.append(run)
+            seen.add(run.run_id)
+            self.updated_at = datetime.now(UTC)
+
+    def seed_run_ids_for(self, protocol_id: uuid.UUID) -> list[uuid.UUID]:
+        """Seed run ids of ``protocol_id``, in the order they were recorded.
+        Empty for a protocol the campaign was never seeded from — such a
+        channel resolves protocol-wide."""
+        return [s.run_id for s in self.seed_runs if s.protocol_id == protocol_id]
 
     # ----- stages -----
 

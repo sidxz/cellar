@@ -9,7 +9,6 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.research_organization.update_campaign_channel import (
-    UNSET,
     UpdateCampaignChannel,
     UpdateCampaignChannelCommand,
 )
@@ -26,14 +25,15 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeUnitOfWork,
     FakeResolver,
+    FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
@@ -425,3 +425,75 @@ class TestUpdateCampaignChannel:
         assert rebuilt is not None
         assert rebuilt.value == 99.0  # genuinely replaced
         assert rebuilt.id == original_id  # id preserved for UPDATE semantics
+
+    @pytest.mark.asyncio
+    async def test_gating_re_resolve_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — a gating PATCH re-resolves within the campaign's runs."""
+        auth = fake_auth()
+        campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
+        run_id = uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
+
+        resolver = FakeResolver(factory=_new_measurement)
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            selection_rule=SelectionRule.MEAN_ACROSS_RUNS,
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert resolver.run_ids_seen == [[run_id]]
+
+    @pytest.mark.asyncio
+    async def test_setting_resolve_from_all_runs_re_resolves_unrestricted(self) -> None:
+        """Flipping the opt-out is itself gating: every cell of the channel is
+        recomputed, now sweeping every run of the protocol."""
+        auth = fake_auth()
+        campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
+        campaign.record_seed_runs([SeedRun(uuid.uuid4(), channel.protocol_id)])
+
+        resolver = FakeResolver(factory=_new_measurement)
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            resolve_from_all_runs=True,
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Success)
+        assert channel.resolve_from_all_runs is True
+        assert resolver.run_ids_seen == [None]
+        assert result.find_measurement(channel.id).value == 99.0
+
+    @pytest.mark.asyncio
+    async def test_resolve_from_all_runs_unchanged_does_not_re_resolve(self) -> None:
+        auth = fake_auth()
+        campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
+        resolver = FakeResolver(factory=_new_measurement)
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            resolve_from_all_runs=False,
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert resolver.calls == []

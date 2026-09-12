@@ -19,4 +19,5 @@ export interface AddChannelRequest {
   display_order?: number;
   normalization_applied?: AddChannelRequestNormalizationApplied;
   intercept_key?: AddChannelRequestInterceptKey;
+  resolve_from_all_runs?: boolean;
 }

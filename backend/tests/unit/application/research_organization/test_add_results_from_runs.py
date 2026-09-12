@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -38,14 +38,14 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import AuthorizationError, ValidationError
+from cellar.domain.shared.hit_criterion import HitCriterion
 from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -134,10 +134,26 @@ def _draft_campaign(workspace_id) -> Campaign:
     )
 
 
-def _run_repo(run_ids):
+def _run_repo(run_ids, protocol_id=None):
+    """Fake RunRepository — ``find_by_ids`` returns ``{id: run}`` like the port."""
     repo = AsyncMock()
-    repo.find_by_ids = AsyncMock(return_value=[SimpleNamespace(id=r) for r in run_ids])
+    repo.find_by_ids = AsyncMock(
+        return_value={
+            r: SimpleNamespace(id=r, protocol_id=protocol_id or uuid.uuid4()) for r in run_ids
+        }
+    )
     return repo
+
+
+def _readout_config(proto, readout, rule=SelectionRule.LATEST_APPROVED_RUN, **kw):
+    return ChannelImportConfig(
+        protocol_id=proto,
+        readout_definition_id=readout,
+        label="IC50",
+        source_kind=ChannelSourceKind.READOUT_DATA,
+        selection_rule=rule,
+        **kw,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -587,6 +603,151 @@ class TestAddResultsFromRuns:
         assert set(
             campaign.results[0].measurements[0].contributing_run_ids
         ) == {r1, r2}
+
+    # ------------------------------------------------------------------
+    # seed runs (spec D4) — every input run is recorded, on every call
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_every_input_run_is_recorded_even_when_its_value_never_wins(self) -> None:
+        """Latest-run rule over two runs: the row's RunRef names one run, but
+        both are seed runs, in the order the chemist selected them."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, mol = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        r_old, r_new = uuid.uuid4(), uuid.uuid4()
+        candidates = {
+            (proto, readout): {
+                mol: [
+                    _candidate(value=10.0, run_id=r_old, run_date=date(2026, 1, 1)),
+                    _candidate(value=14.0, run_id=r_new, run_date=date(2026, 6, 1)),
+                ]
+            }
+        }
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([r_old, r_new], protocol_id=proto),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[r_new, r_old],
+            channel_configs=[_readout_config(proto, readout)],
+            scope="all",
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert campaign.results[0].measurements[0].source_run_id == r_new
+        assert campaign.seed_runs == [SeedRun(r_new, proto), SeedRun(r_old, proto)]
+
+    @pytest.mark.asyncio
+    async def test_mean_across_runs_records_all_runs(self) -> None:
+        """An aggregate pick has no single source run; the seed set is still
+        every run imported from."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, mol = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        r1, r2, r3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        candidates = {
+            (proto, readout): {
+                mol: [_candidate(value=v, run_id=r) for v, r in ((1.0, r1), (2.0, r2), (3.0, r3))]
+            }
+        }
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([r1, r2, r3], protocol_id=proto),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[r1, r2, r3],
+            channel_configs=[_readout_config(proto, readout, SelectionRule.MEAN_ACROSS_RUNS)],
+            scope="all",
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert campaign.results[0].measurements[0].value == 2.0
+        assert campaign.seed_run_ids_for(proto) == [r1, r2, r3]
+
+    @pytest.mark.asyncio
+    async def test_refresh_existing_cells_records_the_new_run(self) -> None:
+        """"Add run R2, refresh existing cells" adds no row but must widen the
+        seed set, or the next refresh/close reverts the cells to R1."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, mol = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        r1, r2 = uuid.uuid4(), uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(r1, proto)])
+        channel = CampaignChannel(
+            campaign_id=campaign.id,
+            label="IC50",
+            display_order=0,
+            protocol_id=proto,
+            readout_definition_id=readout,
+            source_kind=ChannelSourceKind.READOUT_DATA,
+            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        )
+        campaign.channels.append(channel)
+        campaign.results.append(CampaignResult(campaign_id=campaign.id, molecule_id=mol))
+
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=r2)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([r2], protocol_id=proto),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[r2],
+            channel_configs=[_readout_config(proto, readout)],
+            scope="all",
+            refresh_existing_cells=True,
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 0
+        assert campaign.results[0].find_measurement(channel.id).value == 42.0
+        assert campaign.seed_run_ids_for(proto) == [r1, r2]
+
+    @pytest.mark.asyncio
+    async def test_hits_only_import_that_adds_no_row_still_records_the_run(self) -> None:
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, mol, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        candidates = {(proto, readout): {mol: [_candidate(value=9000.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id], protocol_id=proto),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                _readout_config(
+                    proto,
+                    readout,
+                    hit_threshold=HitCriterion(readout_name="IC50", operator="lte", value=100.0),
+                    use_for_filter=True,
+                )
+            ],
+            scope="hits_only",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 0
+        assert campaign.seed_runs == [SeedRun(run_id, proto)]
 
     # ------------------------------------------------------------------
     # stage_name (Task 12)

@@ -189,3 +189,27 @@ class RunRef(SourceRef):
             "run_id": str(self.run_id),
             "description": self.description,
         }
+
+
+@dataclass(frozen=True)
+class SeedRun:
+    """One run a campaign was seeded from (add-from-runs), with its protocol.
+
+    Recorded on the campaign itself, never derived from row ``RunRef``s: a
+    ``RunRef`` names only the run that won a pick, so a union of them drops
+    runs whose values never won (a three-run mean would collapse to one run).
+    ``protocol_id`` lets resolution scope each channel to the seed runs of
+    its own protocol (spec D4).
+    """
+
+    run_id: uuid.UUID
+    protocol_id: uuid.UUID
+
+    def to_dict(self) -> dict[str, str]:
+        return {"run_id": str(self.run_id), "protocol_id": str(self.protocol_id)}
+
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> SeedRun:
+        return SeedRun(
+            run_id=uuid.UUID(data["run_id"]), protocol_id=uuid.UUID(data["protocol_id"])
+        )

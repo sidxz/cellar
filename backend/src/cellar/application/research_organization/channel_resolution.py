@@ -40,6 +40,7 @@ from cellar.application.screening.run_aggregation import (
 from cellar.application.screening.run_aggregation import (
     resolve_intercept as _resolve_intercept,
 )
+from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
@@ -70,6 +71,7 @@ __all__ = [
     "_intercept_scalar",
     "_max_dose_from_raw",
     "_resolve_intercept",
+    "resolution_run_ids",
 ]
 
 # Placeholder unit used for ND cells when no candidate is available to
@@ -88,7 +90,14 @@ class ChannelResolutionQuery(Protocol):
         workspace_id: uuid.UUID,
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
-    ) -> list[ResolvedCandidate]: ...
+        run_ids: list[uuid.UUID] | None = None,
+    ) -> list[ResolvedCandidate]:
+        """Candidates for one (channel, molecule) pair.
+
+        ``run_ids`` restricts the sweep to those runs; ``None`` means every
+        run of the protocol.
+        """
+        ...
 
     async def fetch_candidates_for_runs(
         self,
@@ -118,6 +127,7 @@ class ChannelResolutionQuery(Protocol):
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
         wellless_only: bool = False,
+        run_ids: list[uuid.UUID] | None = None,
     ) -> list[ResolvedCandidate]:
         """Raw-layer ``readout_data`` rows for the channel's readout definition.
 
@@ -131,6 +141,9 @@ class ChannelResolutionQuery(Protocol):
         construction, and per-well response readings on the same definition
         would otherwise average into a fake endpoint. Numeric readout channels
         leave it off and keep reading per-well rows.
+
+        ``run_ids`` restricts the sweep to those runs; ``None`` means every
+        run of the protocol.
         """
         ...
 
@@ -151,6 +164,21 @@ class ChannelResolutionQuery(Protocol):
         ``dict[molecule_id, list[ResolvedCandidate]]``.
         """
         ...
+
+
+def resolution_run_ids(campaign: Campaign, channel: CampaignChannel) -> list[uuid.UUID] | None:
+    """Run scope for resolving one channel of a campaign (spec D4).
+
+    ``None`` (every run of the channel's protocol) when the channel opts out
+    via ``resolve_from_all_runs`` or when the campaign has no seed runs of the
+    channel's protocol — so a mirrored counter-screen on a protocol the
+    campaign was never seeded from resolves protocol-wide without the flag.
+    Otherwise the campaign's seed run ids of that protocol. Compute once per
+    channel, not per cell.
+    """
+    if channel.resolve_from_all_runs:
+        return None
+    return campaign.seed_run_ids_for(channel.protocol_id) or None
 
 
 def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
@@ -194,9 +222,15 @@ class ChannelResolver:
         channel: CampaignChannel,
         result_id: uuid.UUID,
         molecule_id: uuid.UUID,
+        run_ids: list[uuid.UUID] | None = None,
     ) -> CampaignMeasurement:
+        """Resolve one cell. ``run_ids`` scopes the sweep — see
+        :func:`resolution_run_ids`; ``None`` means every run of the protocol."""
         candidates = await self._q.fetch_candidates(
-            workspace_id=workspace_id, channel=channel, molecule_id=molecule_id
+            workspace_id=workspace_id,
+            channel=channel,
+            molecule_id=molecule_id,
+            run_ids=run_ids,
         )
         candidates = [c for c in candidates if _passes_qc(c, channel.qc_filter)]
 
@@ -210,6 +244,7 @@ class ChannelResolver:
                 channel=channel,
                 molecule_id=molecule_id,
                 wellless_only=True,
+                run_ids=run_ids,
             )
             candidates = [c for c in endpoints if _passes_qc(c, channel.qc_filter)]
 

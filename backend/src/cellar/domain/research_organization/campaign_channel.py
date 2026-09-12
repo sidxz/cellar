@@ -48,6 +48,12 @@ class CampaignChannel:
     #: creation and never changes (a chemist wanting a different intercept
     #: creates a new channel).
     intercept_key: InterceptKey | None = None
+    #: Opt out of the campaign's run scope. A campaign seeded from runs
+    #: resolves every channel against only those runs (spec D4); a channel
+    #: with this flag set resolves protocol-wide instead — the counter-screen
+    #: or physchem readout that was measured whenever, not in the campaign's
+    #: own screening runs.
+    resolve_from_all_runs: bool = False
 
     def __post_init__(self) -> None:
         if not self.label or not self.label.strip():

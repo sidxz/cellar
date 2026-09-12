@@ -23,6 +23,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
+    resolution_run_ids,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -93,6 +94,7 @@ class RefreshFromSources:
             # Snapshot both lists to avoid mutation-during-iteration issues
             channels = list(campaign.channels)
             results = list(campaign.results)
+            scope = {ch.id: resolution_run_ids(campaign, ch) for ch in channels}
 
             for result in results:
                 for channel in channels:
@@ -104,6 +106,7 @@ class RefreshFromSources:
                         channel=channel,
                         result_id=result.id,
                         molecule_id=result.molecule_id,
+                        run_ids=scope[channel.id],
                     )
                     if measurement is not None:
                         new_measurement.id = (

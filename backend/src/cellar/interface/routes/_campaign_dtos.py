@@ -27,7 +27,11 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     SelectionRule,
 )
-from cellar.domain.research_organization.source_ref import ManualRef, source_group_key
+from cellar.domain.research_organization.source_ref import (
+    ManualRef,
+    SeedRun,
+    source_group_key,
+)
 from cellar.domain.research_organization.stage_evaluation import (
     StageCheck,
     StageOutcomes,
@@ -181,6 +185,9 @@ class AddChannelRequest(BaseModel):
     #: does not accept this field (a chemist wanting a different intercept
     #: creates a new channel).
     intercept_key: InterceptKeyDTO | None = None
+    #: Opt out of the campaign's run scope — resolve protocol-wide even when
+    #: the campaign was seeded from runs (spec D4).
+    resolve_from_all_runs: bool = False
 
 
 class UpdateChannelRequest(BaseModel):
@@ -196,6 +203,9 @@ class UpdateChannelRequest(BaseModel):
     #: Column position in the campaign grid. Reorder = PATCH each moved
     #: channel with its new index.
     display_order: int | None = None
+    #: Opt out of the campaign's run scope. Omitted = unchanged; flipping it
+    #: re-resolves every cell of the channel.
+    resolve_from_all_runs: bool | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -442,6 +452,7 @@ class CampaignChannelResponse(BaseModel):
     #: Identifies which intercept of a DR curve this channel surfaces.
     #: ``None`` = primary intercept (legacy single-intercept channels).
     intercept_key: InterceptKeyDTO | None = None
+    resolve_from_all_runs: bool = False
 
     @classmethod
     def from_domain(cls, ch: CampaignChannel) -> CampaignChannelResponse:
@@ -459,6 +470,7 @@ class CampaignChannelResponse(BaseModel):
             intercept_key=InterceptKeyDTO.from_domain(ch.intercept_key)
             if ch.intercept_key is not None
             else None,
+            resolve_from_all_runs=ch.resolve_from_all_runs,
         )
 
 
@@ -548,6 +560,18 @@ def _derive_compound_sources(
     return out
 
 
+class SeedRunResponse(BaseModel):
+    """One run the campaign was seeded from (spec D4) — the resolution scope
+    for channels of that protocol."""
+
+    run_id: uuid.UUID
+    protocol_id: uuid.UUID
+
+    @classmethod
+    def from_domain(cls, s: SeedRun) -> SeedRunResponse:
+        return cls(run_id=s.run_id, protocol_id=s.protocol_id)
+
+
 class _CampaignFieldsResponse(BaseModel):
     """Everything a campaign read carries apart from the result rows.
 
@@ -569,6 +593,8 @@ class _CampaignFieldsResponse(BaseModel):
     closed_by: uuid.UUID | None = None
     close_note: str | None = None
     source_protocols: list[dict[str, Any]]
+    #: Runs the campaign was seeded from, in insertion order (spec D4).
+    seed_runs: list[SeedRunResponse]
     created_by: uuid.UUID
     created_at: datetime
     updated_at: datetime
@@ -612,6 +638,7 @@ class _CampaignFieldsResponse(BaseModel):
             "closed_by": c.closed_by,
             "close_note": c.close_note,
             "source_protocols": c.source_protocols,
+            "seed_runs": [SeedRunResponse.from_domain(s) for s in c.seed_runs],
             "created_by": c.created_by,
             "created_at": c.created_at,
             "updated_at": c.updated_at,

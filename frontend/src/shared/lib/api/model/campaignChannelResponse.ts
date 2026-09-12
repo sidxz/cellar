@@ -20,4 +20,5 @@ export interface CampaignChannelResponse {
   display_order: number;
   normalization_applied?: CampaignChannelResponseNormalizationApplied;
   intercept_key?: CampaignChannelResponseInterceptKey;
+  resolve_from_all_runs?: boolean;
 }

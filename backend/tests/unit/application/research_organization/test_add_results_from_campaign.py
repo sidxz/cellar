@@ -30,7 +30,7 @@ from cellar.domain.research_organization.enums import (
     StageOutcome,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import CampaignRef
+from cellar.domain.research_organization.source_ref import CampaignRef, SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -311,3 +311,48 @@ class TestAddResultsFromCampaign:
         )
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
+
+    @pytest.mark.asyncio
+    async def test_resolution_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — rows pulled from another campaign into a run-seeded
+        campaign still resolve against that campaign's runs."""
+        auth = fake_auth()
+        target = _make_campaign(auth)
+        channel = _make_channel(target)
+        run_id = uuid.uuid4()
+        target.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
+        source, _ = _make_source_campaign(auth, [60.0])
+        repo = make_campaign_repo(find_dispatch={target.id: target, source.id: source})
+
+        resolver = FakeResolver(_fake_measurement)
+        uc = AddResultsFromCampaign(
+            uow=FakeUnitOfWork(),
+            campaign_repo=repo,
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromCampaignCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=target.id,
+            source_campaign_id=source.id,
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert resolver.run_ids_seen == [[run_id]]
+
+        channel.resolve_from_all_runs = True
+        opted_out = FakeResolver(_fake_measurement)
+        source2, _ = _make_source_campaign(auth, [70.0])
+        repo2 = make_campaign_repo(find_dispatch={target.id: target, source2.id: source2})
+        uc = AddResultsFromCampaign(
+            uow=FakeUnitOfWork(),
+            campaign_repo=repo2,
+            resolver=opted_out,
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromCampaignCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=target.id,
+            source_campaign_id=source2.id,
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert opted_out.run_ids_seen == [None]

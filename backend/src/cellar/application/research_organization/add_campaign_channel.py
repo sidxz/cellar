@@ -16,6 +16,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
+    resolution_run_ids,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -55,6 +56,8 @@ class AddCampaignChannelCommand(Command):
     #: Identifies which intercept of a DR curve this channel surfaces.
     #: ``None`` = primary intercept (legacy single-intercept channels).
     intercept_key: InterceptKey | None = None
+    #: Opt out of the campaign's run scope — resolve protocol-wide (spec D4).
+    resolve_from_all_runs: bool = False
 
 
 class AddCampaignChannel:
@@ -115,17 +118,20 @@ class AddCampaignChannel:
                         else None
                     ),
                     intercept_key=input.intercept_key,
+                    resolve_from_all_runs=input.resolve_from_all_runs,
                 )
                 campaign.add_channel(channel)
             except ValidationError as e:
                 return Failure(e)
 
+            run_ids = resolution_run_ids(campaign, channel)
             for result in campaign.results:
                 measurement = await self._resolver.resolve(
                     workspace_id=input.workspace_id,
                     channel=channel,
                     result_id=result.id,
                     molecule_id=result.molecule_id,
+                    run_ids=run_ids,
                 )
                 result.add_measurement(measurement)
 

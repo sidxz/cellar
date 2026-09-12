@@ -25,14 +25,15 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeUnitOfWork,
     FakeResolver,
+    FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
@@ -169,3 +170,65 @@ class TestAddCampaignChannel:
         cmd = _base_command(auth.workspace_id, campaign.id)
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
+
+    @pytest.mark.asyncio
+    async def test_resolution_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — a run-seeded campaign resolves a new channel against its
+        own runs, and only its own runs."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        run_id, protocol_id = uuid.uuid4(), uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(run_id, protocol_id)])
+        resolver = FakeResolver(factory=_fake_measurement)
+
+        uc = AddCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = _base_command(auth.workspace_id, campaign.id, protocol_id=protocol_id)
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert resolver.run_ids_seen == [[run_id]]
+
+    @pytest.mark.asyncio
+    async def test_channel_on_an_unseeded_protocol_resolves_unrestricted(self) -> None:
+        """A counter-screen on a protocol the campaign was never seeded from
+        has no seed runs to scope to, so it resolves protocol-wide."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        campaign.record_seed_runs([SeedRun(uuid.uuid4(), uuid.uuid4())])
+        resolver = FakeResolver(factory=_fake_measurement)
+
+        uc = AddCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = _base_command(auth.workspace_id, campaign.id, protocol_id=uuid.uuid4())
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert resolver.run_ids_seen == [None]
+
+    @pytest.mark.asyncio
+    async def test_opt_out_channel_resolves_unrestricted(self) -> None:
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        protocol_id = uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(uuid.uuid4(), protocol_id)])
+        resolver = FakeResolver(factory=_fake_measurement)
+
+        uc = AddCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = _base_command(
+            auth.workspace_id, campaign.id, protocol_id=protocol_id, resolve_from_all_runs=True
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Success)
+        assert out.unwrap().channels[0].resolve_from_all_runs is True
+        assert resolver.run_ids_seen == [None]

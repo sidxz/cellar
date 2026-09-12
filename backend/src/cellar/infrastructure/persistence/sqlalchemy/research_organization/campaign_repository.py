@@ -26,7 +26,7 @@ from cellar.domain.research_organization.enums import (
     StageOutcome,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import SourceRef
+from cellar.domain.research_organization.source_ref import SeedRun, SourceRef
 from cellar.domain.shared.hit_criterion import InterceptKey
 from cellar.domain.shared.target_ref import TargetRef
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
@@ -95,6 +95,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             results=results,
             stages=stages,
             close_note=model.close_note,
+            seed_runs=[SeedRun.from_dict(s) for s in (model.seed_runs or [])],
         )
 
     def _to_model(self, aggregate: Campaign) -> CampaignModel:
@@ -116,6 +117,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             results=[self._result_to_model(r) for r in aggregate.results],
             stages=[self._stage_to_model(s) for s in aggregate.stages],
             close_note=aggregate.close_note,
+            seed_runs=[s.to_dict() for s in aggregate.seed_runs],
         )
 
     def _update_model(self, model: CampaignModel, aggregate: Campaign) -> None:
@@ -128,6 +130,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.supersedes_campaign_id = aggregate.supersedes_campaign_id
         model.superseded_by_campaign_id = aggregate.superseded_by_campaign_id
         model.close_note = aggregate.close_note
+        model.seed_runs = [s.to_dict() for s in aggregate.seed_runs]
 
         # Reconcile channels by id
         existing_channels = {ch.id: ch for ch in model.channels}
@@ -186,6 +189,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             intercept_key=(
                 InterceptKey.from_dict(model.intercept_key) if model.intercept_key else None
             ),
+            resolve_from_all_runs=model.resolve_from_all_runs,
         )
 
     @staticmethod
@@ -203,6 +207,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             qc_filter=ch.qc_filter,
             normalization_applied=ch.normalization_applied,
             intercept_key=ch.intercept_key.to_dict() if ch.intercept_key else None,
+            resolve_from_all_runs=ch.resolve_from_all_runs,
         )
 
     @staticmethod
@@ -217,6 +222,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.qc_filter = ch.qc_filter
         model.normalization_applied = ch.normalization_applied
         model.intercept_key = ch.intercept_key.to_dict() if ch.intercept_key else None
+        model.resolve_from_all_runs = ch.resolve_from_all_runs
 
     # ------------------------------------------------------------------
     # Stage mapping
