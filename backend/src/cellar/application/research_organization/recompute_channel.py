@@ -101,6 +101,7 @@ class RecomputeChannel:
 
             # Snapshot results list to avoid mutation-during-iteration issues
             results = list(campaign.results)
+            run_ids = resolution_run_ids(campaign, channel)
 
             for result in results:
                 measurement = result.find_measurement(channel.id)
@@ -111,7 +112,7 @@ class RecomputeChannel:
                     channel=channel,
                     result_id=result.id,
                     molecule_id=result.molecule_id,
-                    run_ids=resolution_run_ids(campaign, channel),
+                    run_ids=run_ids,
                 )
                 if measurement is not None:
                     new_measurement.id = measurement.id  # preserve id → UPDATE not DELETE+INSERT

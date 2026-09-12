@@ -62,7 +62,7 @@ from cellar.domain.research_organization.enums import (
     QualifierHandling,
 )
 from cellar.domain.research_organization.repository import CampaignRepository
-from cellar.domain.research_organization.source_ref import RunRef
+from cellar.domain.research_organization.source_ref import RunRef, SeedRun
 from cellar.domain.screening_assay.repository import RunRepository
 from cellar.domain.shared.errors import (
     DomainError,
@@ -169,6 +169,18 @@ class AddResultsFromRuns:
                 return Failure(ValidationError("At least one run_id is required"))
             if not input.channel_configs:
                 return Failure(ValidationError("At least one channel_config is required"))
+
+            # Spec D4 — the campaign remembers every run it was seeded from,
+            # whether or not that run's values win a pick (a mean over three
+            # runs attributes its row to one), and on every call — including
+            # refresh-existing-cells and a hits-only import that adds no row —
+            # so later refresh / close resolve against the same runs.
+            runs = await self._run_repo.find_by_ids(input.workspace_id, input.run_ids)
+            campaign.record_seed_runs(
+                SeedRun(run_id=rid, protocol_id=runs[rid].protocol_id)
+                for rid in input.run_ids
+                if rid in runs
+            )
 
             # Step 1 — channel resolution: reuse or create.
             # Reuse key is (protocol, readout, normalization, intercept_key)

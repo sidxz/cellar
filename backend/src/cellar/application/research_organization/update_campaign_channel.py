@@ -154,6 +154,7 @@ class UpdateCampaignChannel:
 
             # Re-resolve non-override measurements when gating fields changed
             if gating_changed:
+                run_ids = resolution_run_ids(campaign, channel)
                 for result in campaign.results:
                     measurement = result.find_measurement(channel.id)
                     if measurement is None:
@@ -165,7 +166,7 @@ class UpdateCampaignChannel:
                         channel=channel,
                         result_id=result.id,
                         molecule_id=result.molecule_id,
-                        run_ids=resolution_run_ids(campaign, channel),
+                        run_ids=run_ids,
                     )
                     new_measurement.id = measurement.id  # preserve id → UPDATE not DELETE+INSERT
                     result.remove_measurement_for_channel(channel.id)

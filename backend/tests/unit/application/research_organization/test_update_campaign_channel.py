@@ -9,7 +9,6 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.research_organization.update_campaign_channel import (
-    UNSET,
     UpdateCampaignChannel,
     UpdateCampaignChannelCommand,
 )
@@ -26,15 +25,15 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import RunRef
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeUnitOfWork,
     FakeResolver,
+    FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
@@ -433,7 +432,7 @@ class TestUpdateCampaignChannel:
         auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
         run_id = uuid.uuid4()
-        result.added_from = RunRef(run_id=run_id)
+        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
 
         resolver = FakeResolver(factory=_new_measurement)
         uc = UpdateCampaignChannel(
@@ -457,7 +456,7 @@ class TestUpdateCampaignChannel:
         recomputed, now sweeping every run of the protocol."""
         auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
-        result.added_from = RunRef(run_id=uuid.uuid4())
+        campaign.record_seed_runs([SeedRun(uuid.uuid4(), channel.protocol_id)])
 
         resolver = FakeResolver(factory=_new_measurement)
         uc = UpdateCampaignChannel(

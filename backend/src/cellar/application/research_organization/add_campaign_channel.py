@@ -124,13 +124,14 @@ class AddCampaignChannel:
             except ValidationError as e:
                 return Failure(e)
 
+            run_ids = resolution_run_ids(campaign, channel)
             for result in campaign.results:
                 measurement = await self._resolver.resolve(
                     workspace_id=input.workspace_id,
                     channel=channel,
                     result_id=result.id,
                     molecule_id=result.molecule_id,
-                    run_ids=resolution_run_ids(campaign, channel),
+                    run_ids=run_ids,
                 )
                 result.add_measurement(measurement)
 

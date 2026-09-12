@@ -167,13 +167,18 @@ class ChannelResolutionQuery(Protocol):
 
 
 def resolution_run_ids(campaign: Campaign, channel: CampaignChannel) -> list[uuid.UUID] | None:
-    """Run scope for resolving one channel of a campaign (spec D4): None when
-    the channel opts out or the campaign has no run sources; else the sorted
-    source run ids."""
+    """Run scope for resolving one channel of a campaign (spec D4).
+
+    ``None`` (every run of the channel's protocol) when the channel opts out
+    via ``resolve_from_all_runs`` or when the campaign has no seed runs of the
+    channel's protocol — so a mirrored counter-screen on a protocol the
+    campaign was never seeded from resolves protocol-wide without the flag.
+    Otherwise the campaign's seed run ids of that protocol. Compute once per
+    channel, not per cell.
+    """
     if channel.resolve_from_all_runs:
         return None
-    ids = campaign.source_run_ids()
-    return sorted(ids) if ids else None
+    return campaign.seed_run_ids_for(channel.protocol_id) or None
 
 
 def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:

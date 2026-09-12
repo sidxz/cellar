@@ -25,15 +25,15 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import RunRef
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeUnitOfWork,
     FakeResolver,
+    FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
@@ -354,9 +354,8 @@ class TestRecomputeChannel:
         campaign, ch_a, _, results = _build_campaign_two_channels_three_results(
             auth.workspace_id
         )
-        run_a, run_b = sorted([uuid.uuid4(), uuid.uuid4()])
-        results[0].added_from = RunRef(run_id=run_b)
-        results[1].added_from = RunRef(run_id=run_a)
+        run_a, run_b = uuid.uuid4(), uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(run_a, ch_a.protocol_id), SeedRun(run_b, ch_a.protocol_id)])
 
         def _uc(resolver):
             return RecomputeChannel(

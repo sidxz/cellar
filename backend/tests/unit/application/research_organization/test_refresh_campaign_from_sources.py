@@ -25,15 +25,15 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import RunRef
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeUnitOfWork,
     FakeResolver,
+    FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
@@ -400,9 +400,9 @@ class TestRefreshFromSources:
         campaign, channels, results = _build_pre_populated_campaign(
             auth.workspace_id, n_channels=1, n_results=2
         )
-        run_a, run_b = sorted([uuid.uuid4(), uuid.uuid4()])
-        results[0].added_from = RunRef(run_id=run_a)
-        results[1].added_from = RunRef(run_id=run_b)
+        run_a, run_b = uuid.uuid4(), uuid.uuid4()
+        proto = channels[0].protocol_id
+        campaign.record_seed_runs([SeedRun(run_a, proto), SeedRun(run_b, proto)])
 
         def _uc(resolver):
             return RefreshFromSources(

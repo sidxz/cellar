@@ -14,29 +14,29 @@ from cellar.application.research_organization.add_results_from_collection import
     AddResultsOutcome,
 )
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import (
+    CampaignMeasurement,
+)
 from cellar.domain.research_organization.campaign_result import CampaignResult
-from cellar.domain.research_organization.source_ref import CollectionRef, RunRef
+from cellar.domain.research_organization.enums import (
+    ChannelSourceKind,
+    QualifierHandling,
+    SelectionRule,
+    ValueQualifier,
+)
+from cellar.domain.research_organization.source_ref import CollectionRef, SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeUnitOfWork,
     FakeResolver,
+    FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
     make_collection_repo,
-)
-from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_measurement import (
-    CampaignMeasurement,
-)
-from cellar.domain.research_organization.enums import (
-    ChannelSourceKind,
-    QualifierHandling,
-    SelectionRule,
-    ValueQualifier,
 )
 
 
@@ -266,13 +266,7 @@ class TestAddResultsFromCollection:
         channel = _make_channel(campaign)
         campaign.add_channel(channel)
         run_id = uuid.uuid4()
-        campaign.add_result(
-            CampaignResult(
-                campaign_id=campaign.id,
-                molecule_id=uuid.uuid4(),
-                added_from=RunRef(run_id=run_id),
-            )
-        )
+        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
 
         def _uc(resolver, mols):
             return AddResultsFromCollection(

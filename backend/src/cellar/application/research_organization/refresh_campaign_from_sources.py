@@ -94,6 +94,7 @@ class RefreshFromSources:
             # Snapshot both lists to avoid mutation-during-iteration issues
             channels = list(campaign.channels)
             results = list(campaign.results)
+            scope = {ch.id: resolution_run_ids(campaign, ch) for ch in channels}
 
             for result in results:
                 for channel in channels:
@@ -105,7 +106,7 @@ class RefreshFromSources:
                         channel=channel,
                         result_id=result.id,
                         molecule_id=result.molecule_id,
-                        run_ids=resolution_run_ids(campaign, channel),
+                        run_ids=scope[channel.id],
                     )
                     if measurement is not None:
                         new_measurement.id = (

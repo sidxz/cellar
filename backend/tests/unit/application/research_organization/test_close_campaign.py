@@ -27,7 +27,7 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.events import CampaignClosed
-from cellar.domain.research_organization.source_ref import RunRef
+from cellar.domain.research_organization.source_ref import RunRef, SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -39,7 +39,6 @@ from tests.unit.application.research_organization._helpers import (
     fake_auth,
     make_campaign_repo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Local builder helpers
@@ -611,7 +610,7 @@ class TestCloseCampaign:
         auth = fake_auth()
         campaign, channels, results = _build_campaign(auth.workspace_id)
         run_id = uuid.uuid4()
-        results[0].added_from = RunRef(run_id=run_id)
+        campaign.record_seed_runs([SeedRun(run_id, channels[0].protocol_id)])
 
         uc, _, _, resolver = _make_use_case(campaign)
         out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
@@ -619,10 +618,24 @@ class TestCloseCampaign:
         assert resolver.run_ids_seen == [[run_id]]
 
     @pytest.mark.asyncio
-    async def test_close_opt_out_channel_resolves_unrestricted(self) -> None:
+    async def test_run_refs_alone_do_not_scope_resolution(self) -> None:
+        """A RunRef records only the run that won a pick — never the seed
+        set. A campaign whose rows carry RunRefs but which recorded no seed
+        runs resolves protocol-wide (the D4 fallback)."""
         auth = fake_auth()
         campaign, channels, results = _build_campaign(auth.workspace_id)
         results[0].added_from = RunRef(run_id=uuid.uuid4())
+
+        uc, _, _, resolver = _make_use_case(campaign)
+        out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
+        assert isinstance(out, Success)
+        assert resolver.run_ids_seen == [None]
+
+    @pytest.mark.asyncio
+    async def test_close_opt_out_channel_resolves_unrestricted(self) -> None:
+        auth = fake_auth()
+        campaign, channels, results = _build_campaign(auth.workspace_id)
+        campaign.record_seed_runs([SeedRun(uuid.uuid4(), channels[0].protocol_id)])
         channels[0].resolve_from_all_runs = True
 
         uc, _, _, resolver = _make_use_case(campaign)

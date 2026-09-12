@@ -205,6 +205,9 @@ class GetPublishedCampaign:
             "campaign": _serialize_campaign(campaign, project),
             "compound_sources": _derive_compound_sources(campaign.results),
             "source_protocols": list(campaign.source_protocols),  # snapshot set at close
+            # The runs the campaign was seeded from (spec D4) — the scope its
+            # channels resolved within, per protocol.
+            "seed_runs": [s.to_dict() for s in campaign.seed_runs],
             "channels": [
                 _serialize_channel(ch, protocol_lookup, readout_lookup) for ch in campaign.channels
             ],

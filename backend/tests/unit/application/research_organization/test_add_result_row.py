@@ -25,15 +25,15 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import ManualRef, RunRef
+from cellar.domain.research_organization.source_ref import ManualRef, SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeUnitOfWork,
     FakeResolver,
+    FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
@@ -295,13 +295,7 @@ class TestAddResultRow:
         channel = _make_channel(campaign.id)
         campaign.add_channel(channel)
         run_id = uuid.uuid4()
-        campaign.add_result(
-            CampaignResult(
-                campaign_id=campaign.id,
-                molecule_id=uuid.uuid4(),
-                added_from=RunRef(run_id=run_id),
-            )
-        )
+        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
 
         def _run(resolver) -> None:
             return AddResultRow(

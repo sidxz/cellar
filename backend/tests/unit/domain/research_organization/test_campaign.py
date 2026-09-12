@@ -28,10 +28,9 @@ from cellar.domain.research_organization.events import (
     CampaignSuperseded,
 )
 from cellar.domain.research_organization.source_ref import (
-    CampaignRef,
     CollectionRef,
-    ManualRef,
     RunRef,
+    SeedRun,
 )
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 
@@ -604,40 +603,42 @@ def test_supersede_transitions_and_emits_event():
 
 
 # ---------------------------------------------------------------------------
-# source_run_ids — the campaign's resolution run scope (spec D4)
+# seed runs — the campaign's resolution run scope (spec D4)
 # ---------------------------------------------------------------------------
 
 
-def _result(campaign: Campaign, added_from=None) -> CampaignResult:
-    return CampaignResult(
-        campaign_id=campaign.id, molecule_id=uuid.uuid4(), added_from=added_from
+def test_record_seed_runs_appends_in_order_and_ignores_repeats():
+    c = _make_campaign()
+    p1, p2 = uuid.uuid4(), uuid.uuid4()
+    run_a, run_b, run_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    c.record_seed_runs([SeedRun(run_b, p1), SeedRun(run_a, p1)])
+    c.record_seed_runs([SeedRun(run_a, p1), SeedRun(run_c, p2), SeedRun(run_b, p1)])
+    assert c.seed_runs == [SeedRun(run_b, p1), SeedRun(run_a, p1), SeedRun(run_c, p2)]
+
+
+def test_seed_run_ids_for_filters_by_protocol_in_insertion_order():
+    c = _make_campaign()
+    p1, p2 = uuid.uuid4(), uuid.uuid4()
+    run_a, run_b, run_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    c.record_seed_runs([SeedRun(run_b, p1), SeedRun(run_c, p2), SeedRun(run_a, p1)])
+    assert c.seed_run_ids_for(p1) == [run_b, run_a]
+    assert c.seed_run_ids_for(p2) == [run_c]
+    assert c.seed_run_ids_for(uuid.uuid4()) == []
+
+
+def test_seed_runs_are_not_derived_from_run_refs():
+    """A RunRef names only the run that won a pick, so rows alone never widen
+    the scope — only record_seed_runs does."""
+    c = _make_campaign()
+    c.add_result(
+        CampaignResult(campaign_id=c.id, molecule_id=uuid.uuid4(), added_from=RunRef(run_id=uuid.uuid4()))
     )
+    assert c.seed_runs == []
 
 
-def test_source_run_ids_empty_for_non_run_sources():
-    """Hand-added / collection / campaign rows carry no run scope of their own."""
+def test_record_seed_runs_is_draft_only():
     c = _make_campaign()
-    c.add_result(_result(c))
-    c.add_result(_result(c, ManualRef()))
-    c.add_result(_result(c, CollectionRef(collection_id=uuid.uuid4())))
-    c.add_result(_result(c, CampaignRef(campaign_id=uuid.uuid4())))
-    assert c.source_run_ids() == set()
-
-
-def test_source_run_ids_unions_run_refs():
-    c = _make_campaign()
-    run_a, run_b = uuid.uuid4(), uuid.uuid4()
-    for ref in (RunRef(run_id=run_a), RunRef(run_id=run_b), RunRef(run_id=run_a)):
-        c.add_result(_result(c, ref))
-    assert c.source_run_ids() == {run_a, run_b}
-
-
-def test_source_run_ids_ignores_non_run_rows_in_a_mixed_campaign():
-    """A hand-added row in a run-seeded campaign does not widen the scope —
-    it is restricted to the campaign's runs like every other row."""
-    c = _make_campaign()
-    run_a = uuid.uuid4()
-    c.add_result(_result(c, RunRef(run_id=run_a)))
-    c.add_result(_result(c, CollectionRef(collection_id=uuid.uuid4())))
-    c.add_result(_result(c))
-    assert c.source_run_ids() == {run_a}
+    c.status = CampaignStatus.CLOSED
+    with pytest.raises(ValidationError, match="record seed runs"):
+        c.record_seed_runs([SeedRun(uuid.uuid4(), uuid.uuid4())])
+    assert c.seed_runs == []

@@ -10,10 +10,10 @@ import pytest
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
     ResolvedCandidate,
-    resolution_run_ids,
     _build_aggregate_curve_snapshot,
     _max_dose_from_raw,
     _resolve_intercept,
+    resolution_run_ids,
 )
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
@@ -24,7 +24,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import RunRef
+from cellar.domain.research_organization.source_ref import RunRef, SeedRun
 from cellar.domain.shared.hit_criterion import InterceptKey
 
 
@@ -928,8 +928,8 @@ async def test_readout_channel_does_not_reach_for_the_endpoint_fallback():
 # ---------------------------------------------------------------------------
 
 
-def _campaign_with_runs(*run_ids: uuid.UUID) -> Campaign:
-    """A campaign seeded from the given runs (one result per run)."""
+def _campaign_seeded_from(*seed_runs: SeedRun) -> Campaign:
+    """A draft campaign that recorded the given seed runs (spec D4)."""
     c = Campaign.create(
         workspace_id=uuid.uuid4(),
         project_id=uuid.uuid4(),
@@ -937,12 +937,7 @@ def _campaign_with_runs(*run_ids: uuid.UUID) -> Campaign:
         description=None,
         created_by=uuid.uuid4(),
     )
-    for rid in run_ids:
-        c.add_result(
-            CampaignResult(
-                campaign_id=c.id, molecule_id=uuid.uuid4(), added_from=RunRef(run_id=rid)
-            )
-        )
+    c.record_seed_runs(seed_runs)
     return c
 
 
@@ -994,21 +989,38 @@ async def test_resolve_defaults_to_unrestricted():
     assert q.endpoint_run_ids == [None]
 
 
-def test_resolution_run_ids_returns_sorted_source_runs():
-    r1, r2 = sorted([uuid.uuid4(), uuid.uuid4()])
-    campaign = _campaign_with_runs(r2, r1)
-    assert resolution_run_ids(campaign, _channel(SelectionRule.LATEST_APPROVED_RUN)) == [r1, r2]
+def test_resolution_run_ids_is_the_channel_protocols_seed_runs_in_order():
+    """Only the seed runs of the channel's own protocol, insertion order."""
+    p1, p2 = uuid.uuid4(), uuid.uuid4()
+    r1, r2, r3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    campaign = _campaign_seeded_from(SeedRun(r2, p1), SeedRun(r3, p2), SeedRun(r1, p1))
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch.protocol_id = p1
+    assert resolution_run_ids(campaign, ch) == [r2, r1]
 
 
-def test_resolution_run_ids_is_none_without_run_sources():
-    """A campaign seeded by hand / from a collection resolves protocol-wide."""
-    campaign = _campaign_with_runs()
-    campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
+def test_resolution_run_ids_is_none_for_a_protocol_with_no_seed_runs():
+    """A mirrored counter-screen on a protocol the campaign was never seeded
+    from resolves protocol-wide — no opt-out flag needed."""
+    p1 = uuid.uuid4()
+    campaign = _campaign_seeded_from(SeedRun(uuid.uuid4(), p1))
+    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch.protocol_id = uuid.uuid4()
+    assert resolution_run_ids(campaign, ch) is None
+
+
+def test_resolution_run_ids_is_none_without_seed_runs():
+    """A campaign seeded by hand / from a collection — or one whose rows carry
+    RunRefs but never recorded seed runs — resolves protocol-wide."""
+    campaign = _campaign_seeded_from()
+    campaign.add_result(
+        CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4(), added_from=RunRef(run_id=uuid.uuid4()))
+    )
     assert resolution_run_ids(campaign, _channel(SelectionRule.LATEST_APPROVED_RUN)) is None
 
 
 def test_resolution_run_ids_is_none_when_the_channel_opts_out():
-    campaign = _campaign_with_runs(uuid.uuid4())
     ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    campaign = _campaign_seeded_from(SeedRun(uuid.uuid4(), ch.protocol_id))
     ch.resolve_from_all_runs = True
     assert resolution_run_ids(campaign, ch) is None

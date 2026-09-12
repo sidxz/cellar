@@ -30,7 +30,7 @@ from cellar.domain.research_organization.enums import (
     StageOutcome,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import CampaignRef, RunRef
+from cellar.domain.research_organization.source_ref import CampaignRef, SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -320,13 +320,7 @@ class TestAddResultsFromCampaign:
         target = _make_campaign(auth)
         channel = _make_channel(target)
         run_id = uuid.uuid4()
-        target.add_result(
-            CampaignResult(
-                campaign_id=target.id,
-                molecule_id=uuid.uuid4(),
-                added_from=RunRef(run_id=run_id),
-            )
-        )
+        target.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
         source, _ = _make_source_campaign(auth, [60.0])
         repo = make_campaign_repo(find_dispatch={target.id: target, source.id: source})
 

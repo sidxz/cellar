@@ -190,6 +190,11 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     # Migration 074 — freeform note recorded by CloseCampaign, cleared by ReopenCampaign.
     close_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Migration 079 — runs the campaign was seeded from, [{run_id, protocol_id}]
+    # in insertion order (spec D4). Appended by every add-from-runs call.
+    seed_runs: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
 
     channels: Mapped[list[CampaignChannelModel]] = relationship(
         "CampaignChannelModel",

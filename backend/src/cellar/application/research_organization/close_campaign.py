@@ -99,6 +99,7 @@ class CloseCampaign:
             # (same 3-branch loop as RefreshFromSources).
             channels = list(campaign.channels)
             results = list(campaign.results)
+            scope = {ch.id: resolution_run_ids(campaign, ch) for ch in channels}
 
             for result in results:
                 for channel in channels:
@@ -110,7 +111,7 @@ class CloseCampaign:
                         channel=channel,
                         result_id=result.id,
                         molecule_id=result.molecule_id,
-                        run_ids=resolution_run_ids(campaign, channel),
+                        run_ids=scope[channel.id],
                     )
                     # Preserve the existing measurement id when replacing — this avoids
                     # the unique constraint on (result_id, channel_id) firing when the

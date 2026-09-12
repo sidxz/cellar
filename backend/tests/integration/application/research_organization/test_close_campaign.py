@@ -46,7 +46,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import RunRef
+from cellar.domain.research_organization.source_ref import RunRef, SeedRun
 from cellar.domain.screening_assay.enums import (
     ProtocolType,
     ReadoutAggregation,
@@ -63,7 +63,6 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repos
     SQLAlchemyProtocolRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -452,136 +451,314 @@ async def test_stage_writes_blocked_while_closed_then_allowed_after_reopen(
     assert override_count == 1
 
 
-@pytest.mark.asyncio
-async def test_refresh_resolves_only_the_campaigns_source_runs(session_factory) -> None:
-    """Spec D4, end to end against real SQL: a campaign seeded from run A keeps
-    run A's number when a newer run B of the same protocol lands. Flipping the
-    channel's ``resolve_from_all_runs`` opt-out lets run B win.
-    """
-    ws_id = uuid.uuid4()
-    mol_id = uuid.uuid4()
-    protocol_id = uuid.uuid4()
-    readout_id = uuid.uuid4()
-    project_id = uuid.uuid4()
-    run_a_id = uuid.uuid4()
-    run_b_id = uuid.uuid4()
-    batch_id = uuid.uuid4()
-    user_id = uuid.uuid4()
-
-    uow = AsyncUnitOfWork(session_factory)
-    await _insert_molecule(uow, mol_id, ws_id)
-    await _insert_project(uow, project_id, ws_id)
-    await _insert_protocol(uow, ws_id, protocol_id, readout_id, readout_unit="uM")
-
-    # Run A (older) reports 1.0; run B (newer) reports 9.0 for the same molecule.
+async def _insert_run_with_readout(  # type: ignore[no-untyped-def]
+    session_factory,
+    *,
+    ws_id: uuid.UUID,
+    protocol_id: uuid.UUID,
+    readout_id: uuid.UUID,
+    run_id: uuid.UUID,
+    run_date: date,
+    mol_id: uuid.UUID,
+    value: float,
+    user_id: uuid.UUID,
+) -> None:
+    """An approved run of ``protocol_id`` with one well-less readout row for ``mol_id``."""
     async with session_factory() as session, session.begin():
-        for run_id, run_date, value, row_id in (
-            (run_a_id, date(2026, 1, 1), 1.0, uuid.uuid4()),
-            (run_b_id, date(2026, 6, 1), 9.0, uuid.uuid4()),
-        ):
-            await session.execute(
-                sa.text(
-                    "INSERT INTO runs "
-                    "(id, workspace_id, protocol_id, run_date, operator, "
-                    "status, is_locked, version, notes) "
-                    "VALUES (:id, :ws, :proto, :run_date, :user, 'approved', "
-                    "false, 1, NULL)"
-                ),
-                {
-                    "id": run_id,
-                    "ws": ws_id,
-                    "proto": protocol_id,
-                    "run_date": run_date,
-                    "user": user_id,
-                },
-            )
-            await session.execute(
-                sa.text(
-                    "INSERT INTO readout_data "
-                    "(id, workspace_id, run_id, well_id, molecule_id, "
-                    "batch_id, readout_definition_id, value_numeric, "
-                    "value_qualifier, is_outlier, is_computed, "
-                    "normalization_applied) "
-                    "VALUES (:id, :ws, :run, NULL, :mol, :batch, :rd, "
-                    ":value, '=', false, false, NULL)"
-                ),
-                {
-                    "id": row_id,
-                    "ws": ws_id,
-                    "run": run_id,
-                    "mol": mol_id,
-                    "batch": batch_id,
-                    "rd": readout_id,
-                    "value": value,
-                },
-            )
+        await session.execute(
+            sa.text(
+                "INSERT INTO runs "
+                "(id, workspace_id, protocol_id, run_date, operator, "
+                "status, is_locked, version, notes) "
+                "VALUES (:id, :ws, :proto, :run_date, :user, 'approved', false, 1, NULL)"
+            ),
+            {"id": run_id, "ws": ws_id, "proto": protocol_id, "run_date": run_date, "user": user_id},
+        )
+        await session.execute(
+            sa.text(
+                "INSERT INTO readout_data "
+                "(id, workspace_id, run_id, well_id, molecule_id, "
+                "batch_id, readout_definition_id, value_numeric, "
+                "value_qualifier, is_outlier, is_computed, normalization_applied) "
+                "VALUES (:id, :ws, :run, NULL, :mol, :batch, :rd, "
+                ":value, '=', false, false, NULL)"
+            ),
+            {
+                "id": uuid.uuid4(),
+                "ws": ws_id,
+                "run": run_id,
+                "mol": mol_id,
+                "batch": uuid.uuid4(),
+                "rd": readout_id,
+                "value": value,
+            },
+        )
 
-    campaign = Campaign.create(
-        workspace_id=ws_id,
-        project_id=project_id,
-        name="Run Scope",
-        description=None,
-        created_by=user_id,
-    )
-    channel = CampaignChannel(
+
+def _readout_channel(
+    campaign: Campaign,
+    *,
+    protocol_id: uuid.UUID,
+    readout_id: uuid.UUID,
+    rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
+    display_order: int = 0,
+) -> CampaignChannel:
+    return CampaignChannel(
         campaign_id=campaign.id,
         label="IC50",
         protocol_id=protocol_id,
         readout_definition_id=readout_id,
         source_kind=ChannelSourceKind.READOUT_DATA,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=rule,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
-        display_order=0,
+        display_order=display_order,
     )
-    campaign.add_channel(channel)
-    # Seeded from run A only — as add-from-runs would attribute it.
-    campaign.add_result(
-        CampaignResult(
-            campaign_id=campaign.id,
-            molecule_id=mol_id,
-            added_from=RunRef(run_id=run_a_id),
+
+
+class _RunScopeHarness:
+    """One molecule, one project, the real resolver + SQL query, and the
+    real Refresh / Close / Reopen use cases against ``session_factory``."""
+
+    def __init__(self, session_factory) -> None:  # type: ignore[no-untyped-def]
+        self.sf = session_factory
+        self.ws_id = uuid.uuid4()
+        self.mol_id = uuid.uuid4()
+        self.project_id = uuid.uuid4()
+        self.user_id = uuid.uuid4()
+        self.auth = _make_fake_auth(self.user_id, self.ws_id)
+        self.resolver = ChannelResolver(SQLAlchemyChannelResolutionQuery(session_factory))
+        self.campaign: Campaign | None = None
+
+    async def setup(self) -> None:
+        uow = AsyncUnitOfWork(self.sf)
+        await _insert_molecule(uow, self.mol_id, self.ws_id)
+        await _insert_project(uow, self.project_id, self.ws_id)
+
+    async def add_protocol(self, protocol_id: uuid.UUID, readout_id: uuid.UUID) -> None:
+        await _insert_protocol(AsyncUnitOfWork(self.sf), self.ws_id, protocol_id, readout_id)
+
+    async def add_run(
+        self, protocol_id: uuid.UUID, readout_id: uuid.UUID, run_date: date, value: float
+    ) -> uuid.UUID:
+        run_id = uuid.uuid4()
+        await _insert_run_with_readout(
+            self.sf,
+            ws_id=self.ws_id,
+            protocol_id=protocol_id,
+            readout_id=readout_id,
+            run_id=run_id,
+            run_date=run_date,
+            mol_id=self.mol_id,
+            value=value,
+            user_id=self.user_id,
         )
-    )
-    async with AsyncUnitOfWork(session_factory) as uow_seed:
-        await SQLAlchemyCampaignRepository(uow_seed).save(campaign)
-        await uow_seed.commit()
+        return run_id
 
-    auth = _make_fake_auth(user_id, ws_id)
-    resolver = ChannelResolver(SQLAlchemyChannelResolutionQuery(session_factory))
+    def new_campaign(self, name: str) -> Campaign:
+        self.campaign = Campaign.create(
+            workspace_id=self.ws_id,
+            project_id=self.project_id,
+            name=name,
+            description=None,
+            created_by=self.user_id,
+        )
+        self.campaign.add_result(
+            CampaignResult(campaign_id=self.campaign.id, molecule_id=self.mol_id)
+        )
+        return self.campaign
 
-    async def _refresh() -> None:
-        uow_uc = AsyncUnitOfWork(session_factory)
+    async def save(self) -> None:
+        async with AsyncUnitOfWork(self.sf) as uow:
+            await SQLAlchemyCampaignRepository(uow).save(self.campaign)
+            await uow.commit()
+
+    async def reload(self) -> Campaign:
+        async with AsyncUnitOfWork(self.sf) as uow:
+            c = await SQLAlchemyCampaignRepository(uow).find_by_id_in_workspace(
+                self.ws_id, self.campaign.id
+            )
+        assert c is not None
+        return c
+
+    async def cell(self, channel_id: uuid.UUID) -> float | None:
+        c = await self.reload()
+        m = c.results[0].find_measurement(channel_id)
+        assert m is not None
+        return m.value
+
+    async def refresh(self) -> None:
+        uow = AsyncUnitOfWork(self.sf)
         uc = RefreshFromSources(
-            uow=uow_uc,
-            campaign_repo=SQLAlchemyCampaignRepository(uow_uc),
-            resolver=resolver,
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            resolver=self.resolver,
             dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
         )
         out = await uc(
-            RefreshFromSourcesCommand(workspace_id=ws_id, campaign_id=campaign.id),
-            auth=auth,
+            RefreshFromSourcesCommand(workspace_id=self.ws_id, campaign_id=self.campaign.id),
+            auth=self.auth,
         )
         assert isinstance(out, Success), f"Expected Success, got {out}"
 
-    async def _cell_value() -> float | None:
-        async with AsyncUnitOfWork(session_factory) as uow_check:
-            reloaded = await SQLAlchemyCampaignRepository(uow_check).find_by_id_in_workspace(
-                ws_id, campaign.id
-            )
-        assert reloaded is not None
-        return reloaded.results[0].measurements[0].value
+    async def close(self) -> None:
+        uow = AsyncUnitOfWork(self.sf)
+        uc = CloseCampaign(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            resolver=self.resolver,
+            dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
+        )
+        out = await uc(
+            CloseCampaignCommand(
+                workspace_id=self.ws_id,
+                campaign_id=self.campaign.id,
+                user_id=self.user_id,
+                note=None,
+            ),
+            auth=self.auth,
+        )
+        assert isinstance(out, Success), f"Expected Success, got {out}"
 
-    await _refresh()
-    assert await _cell_value() == 1.0, "Run B is outside the campaign's run scope"
+    async def reopen(self) -> None:
+        uow = AsyncUnitOfWork(self.sf)
+        uc = ReopenCampaign(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
+        )
+        out = await uc(
+            ReopenCampaignCommand(
+                workspace_id=self.ws_id,
+                campaign_id=self.campaign.id,
+                user_id=self.user_id,
+                reason="late confirmation result",
+            ),
+            auth=self.auth,
+        )
+        assert isinstance(out, Success), f"Expected Success, got {out}"
+
+
+@pytest.mark.asyncio
+async def test_refresh_resolves_only_the_campaigns_seed_runs(session_factory) -> None:
+    """Spec D4, end to end against real SQL: a campaign seeded from run A keeps
+    run A's number when a newer run B of the same protocol lands. Flipping the
+    channel's ``resolve_from_all_runs`` opt-out lets run B win.
+    """
+    h = _RunScopeHarness(session_factory)
+    await h.setup()
+    protocol_id, readout_id = uuid.uuid4(), uuid.uuid4()
+    await h.add_protocol(protocol_id, readout_id)
+    run_a = await h.add_run(protocol_id, readout_id, date(2026, 1, 1), 1.0)
+    await h.add_run(protocol_id, readout_id, date(2026, 6, 1), 9.0)
+
+    campaign = h.new_campaign("Run Scope")
+    channel = _readout_channel(campaign, protocol_id=protocol_id, readout_id=readout_id)
+    campaign.add_channel(channel)
+    campaign.record_seed_runs([SeedRun(run_a, protocol_id)])
+    await h.save()
+
+    await h.refresh()
+    assert await h.cell(channel.id) == 1.0, "Run B is outside the campaign's run scope"
 
     # Opt the channel out of the run scope — now the latest run wins.
-    async with AsyncUnitOfWork(session_factory) as uow_flip:
-        repo = SQLAlchemyCampaignRepository(uow_flip)
-        loaded = await repo.find_by_id_in_workspace(ws_id, campaign.id)
-        assert loaded is not None
-        loaded.channels[0].resolve_from_all_runs = True
-        await repo.save(loaded)
-        await uow_flip.commit()
+    loaded = await h.reload()
+    loaded.channels[0].resolve_from_all_runs = True
+    h.campaign = loaded
+    await h.save()
 
-    await _refresh()
-    assert await _cell_value() == 9.0
+    await h.refresh()
+    assert await h.cell(channel.id) == 9.0
+
+
+@pytest.mark.asyncio
+async def test_run_refs_alone_do_not_scope_resolution(session_factory) -> None:
+    """A campaign whose rows carry RunRefs but which recorded no seed runs
+    resolves protocol-wide (the D4 fallback for pre-079 data the backfill
+    could not attribute)."""
+    h = _RunScopeHarness(session_factory)
+    await h.setup()
+    protocol_id, readout_id = uuid.uuid4(), uuid.uuid4()
+    await h.add_protocol(protocol_id, readout_id)
+    run_a = await h.add_run(protocol_id, readout_id, date(2026, 1, 1), 1.0)
+    await h.add_run(protocol_id, readout_id, date(2026, 6, 1), 9.0)
+
+    campaign = h.new_campaign("RunRef only")
+    channel = _readout_channel(campaign, protocol_id=protocol_id, readout_id=readout_id)
+    campaign.add_channel(channel)
+    campaign.results[0].added_from = RunRef(run_id=run_a)
+    await h.save()
+
+    await h.refresh()
+    assert await h.cell(channel.id) == 9.0
+
+
+@pytest.mark.asyncio
+async def test_three_run_mean_survives_close_reopen_refresh(session_factory) -> None:
+    """The C1 regression: a mean over three seed runs stays a three-run mean
+    through close (which re-resolves every cell) → reopen → refresh, even
+    though a fourth run of the protocol exists and no row's RunRef names
+    runs 2 or 3."""
+    h = _RunScopeHarness(session_factory)
+    await h.setup()
+    protocol_id, readout_id = uuid.uuid4(), uuid.uuid4()
+    await h.add_protocol(protocol_id, readout_id)
+    seed_runs = [
+        await h.add_run(protocol_id, readout_id, date(2026, m, 1), float(v))
+        for m, v in ((1, 1.0), (2, 2.0), (3, 3.0))
+    ]
+    await h.add_run(protocol_id, readout_id, date(2026, 6, 1), 90.0)  # not a seed run
+
+    campaign = h.new_campaign("Three-run mean")
+    channel = _readout_channel(
+        campaign,
+        protocol_id=protocol_id,
+        readout_id=readout_id,
+        rule=SelectionRule.MEAN_ACROSS_RUNS,
+    )
+    campaign.add_channel(channel)
+    # As add-from-runs attributes it: the row names one run, the campaign all three.
+    campaign.results[0].added_from = RunRef(run_id=seed_runs[0])
+    campaign.record_seed_runs(SeedRun(r, protocol_id) for r in seed_runs)
+    await h.save()
+
+    await h.refresh()
+    assert await h.cell(channel.id) == 2.0
+
+    await h.close()
+    assert (await h.reload()).status == CampaignStatus.CLOSED
+    assert await h.cell(channel.id) == 2.0
+
+    await h.reopen()
+    await h.refresh()
+    reloaded = await h.reload()
+    assert reloaded.status == CampaignStatus.DRAFT
+    assert reloaded.results[0].find_measurement(channel.id).value == 2.0
+
+
+@pytest.mark.asyncio
+async def test_channel_on_an_unseeded_protocol_resolves_protocol_wide(session_factory) -> None:
+    """The I1 regression: a mirrored counter-screen on a protocol the campaign
+    was never seeded from is not ND — it resolves against every run of its
+    own protocol, while the seeded protocol's channel stays run-scoped."""
+    h = _RunScopeHarness(session_factory)
+    await h.setup()
+    p1, r1 = uuid.uuid4(), uuid.uuid4()
+    p2, r2 = uuid.uuid4(), uuid.uuid4()
+    await h.add_protocol(p1, r1)
+    await h.add_protocol(p2, r2)
+    seed_run = await h.add_run(p1, r1, date(2026, 1, 1), 1.0)
+    await h.add_run(p1, r1, date(2026, 6, 1), 9.0)
+    await h.add_run(p2, r2, date(2026, 6, 1), 55.0)  # counter-screen, never a seed run
+
+    campaign = h.new_campaign("Counter-screen")
+    primary = _readout_channel(campaign, protocol_id=p1, readout_id=r1, display_order=0)
+    counter = _readout_channel(campaign, protocol_id=p2, readout_id=r2, display_order=1)
+    campaign.add_channel(primary)
+    campaign.add_channel(counter)
+    campaign.record_seed_runs([SeedRun(seed_run, p1)])
+    await h.save()
+
+    await h.refresh()
+    assert await h.cell(primary.id) == 1.0
+    assert await h.cell(counter.id) == 55.0

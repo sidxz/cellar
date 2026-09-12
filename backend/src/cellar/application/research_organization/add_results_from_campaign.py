@@ -135,6 +135,7 @@ class AddResultsFromCampaign:
 
             if added > 0:
                 added_molecule_ids = {r.molecule_id for r in new_results}
+                scope = {ch.id: resolution_run_ids(campaign, ch) for ch in campaign.channels}
                 for result in campaign.results:
                     if result.molecule_id not in added_molecule_ids:
                         continue
@@ -144,7 +145,7 @@ class AddResultsFromCampaign:
                             channel=channel,
                             result_id=result.id,
                             molecule_id=result.molecule_id,
-                            run_ids=resolution_run_ids(campaign, channel),
+                            run_ids=scope[channel.id],
                         )
                         result.add_measurement(measurement)
 
