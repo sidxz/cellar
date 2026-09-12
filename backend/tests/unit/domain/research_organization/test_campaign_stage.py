@@ -17,7 +17,7 @@ from cellar.domain.research_organization.campaign_stage import (
     _Unset,
     normalize_stage_name,
 )
-from cellar.domain.research_organization.enums import StageOutcome
+from cellar.domain.research_organization.enums import StageKind, StageOutcome
 from cellar.domain.shared.errors import ValidationError
 
 
@@ -132,6 +132,24 @@ class TestCampaignStage:
         assert isinstance(stage.id, uuid.UUID)
         assert stage.parent_stage_id is None
         assert stage.criteria == []
+        assert stage.kind == StageKind.CRITERIA
+
+    def test_manual_stage_without_criteria_is_valid(self) -> None:
+        stage = CampaignStage(
+            campaign_id=uuid.uuid4(), name="Triage", display_order=0, kind=StageKind.MANUAL
+        )
+        assert stage.kind == StageKind.MANUAL
+        assert stage.criteria == []
+
+    def test_manual_stage_rejects_criteria(self) -> None:
+        with pytest.raises(ValidationError, match="manual stage has no criteria"):
+            CampaignStage(
+                campaign_id=uuid.uuid4(),
+                name="Triage",
+                display_order=0,
+                kind=StageKind.MANUAL,
+                criteria=[StageCriterion(channel_id=uuid.uuid4(), operator="lt", value=10.0)],
+            )
 
     def test_accepts_up_to_max_criteria(self) -> None:
         criteria = [
@@ -179,7 +197,10 @@ class TestStageOverride:
         self._make(forced_outcome=StageOutcome.HIT)
         self._make(forced_outcome=StageOutcome.MISS)
 
-    @pytest.mark.parametrize("outcome", [StageOutcome.UNTESTED, StageOutcome.NOT_IN_STAGE])
+    @pytest.mark.parametrize(
+        "outcome",
+        [StageOutcome.UNTESTED, StageOutcome.NOT_IN_STAGE, StageOutcome.PENDING],
+    )
     def test_rejects_outcomes_other_than_hit_or_miss(self, outcome: StageOutcome) -> None:
         with pytest.raises(ValidationError):
             self._make(forced_outcome=outcome)

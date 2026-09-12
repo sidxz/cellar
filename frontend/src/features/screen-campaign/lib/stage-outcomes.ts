@@ -21,13 +21,15 @@ export interface StageTally {
   hit: number;
   miss: number;
   untested: number;
+  pending: number;
   not_in_stage: number;
   overridden: number;
 }
 
 /** Tallies one stage's outcomes across a result set. `population` is
- *  `hit + miss + untested` (every result actually evaluated against the
- *  stage's own criteria) — `not_in_stage` rows are gated out by a parent
+ *  `hit + miss + untested + pending` (every result actually evaluated
+ *  against the stage's own criteria, plus a manual stage's un-triaged
+ *  rows) — `not_in_stage` rows are gated out by a parent
  *  that isn't a hit and sit outside the population, per the spec's worked
  *  example. Results with no recorded outcome for this stage are skipped. */
 export function tallyStage(results: CampaignResultResponse[], stageId: string): StageTally {
@@ -36,6 +38,7 @@ export function tallyStage(results: CampaignResultResponse[], stageId: string): 
     hit: 0,
     miss: 0,
     untested: 0,
+    pending: 0,
     not_in_stage: 0,
     overridden: 0,
   };
@@ -45,9 +48,10 @@ export function tallyStage(results: CampaignResultResponse[], stageId: string): 
     if (outcome.outcome === "hit") tally.hit++;
     else if (outcome.outcome === "miss") tally.miss++;
     else if (outcome.outcome === "untested") tally.untested++;
+    else if (outcome.outcome === "pending") tally.pending++;
     else if (outcome.outcome === "not_in_stage") tally.not_in_stage++;
     if (outcome.overridden) tally.overridden++;
   }
-  tally.population = tally.hit + tally.miss + tally.untested;
+  tally.population = tally.hit + tally.miss + tally.untested + tally.pending;
   return tally;
 }

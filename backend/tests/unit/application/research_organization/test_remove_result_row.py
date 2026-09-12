@@ -67,7 +67,7 @@ class TestRemoveResultRow:
         cmd = RemoveResultRowCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
         )
         out = await uc(cmd, auth=auth)
 
@@ -93,7 +93,7 @@ class TestRemoveResultRow:
         cmd = RemoveResultRowCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=uuid.uuid4(),  # unknown
+            result_ids=[uuid.uuid4()],  # unknown
         )
         out = await uc(cmd, auth=auth)
 
@@ -114,7 +114,7 @@ class TestRemoveResultRow:
         cmd = RemoveResultRowCommand(
             workspace_id=auth.workspace_id,
             campaign_id=uuid.uuid4(),
-            result_id=uuid.uuid4(),
+            result_ids=[uuid.uuid4()],
         )
         out = await uc(cmd, auth=auth)
 
@@ -139,7 +139,7 @@ class TestRemoveResultRow:
         cmd = RemoveResultRowCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
         )
         out = await uc(cmd, auth=auth)
 
@@ -160,8 +160,88 @@ class TestRemoveResultRow:
         cmd = RemoveResultRowCommand(
             workspace_id=auth.workspace_id,
             campaign_id=uuid.uuid4(),
-            result_id=uuid.uuid4(),
+            result_ids=[uuid.uuid4()],
         )
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
+        campaign_repo.save.assert_not_awaited()
+
+
+class TestBulkRemoveResultRows:
+    @pytest.mark.asyncio
+    async def test_two_ids_removed_in_one_save(self) -> None:
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        keep = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        drop_a = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        drop_b = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        for r in (keep, drop_a, drop_b):
+            campaign.add_result(r)
+
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        uc = RemoveResultRow(
+            uow=FakeUnitOfWork(),
+            campaign_repo=campaign_repo,
+            dispatcher=AsyncMock(),
+        )
+        cmd = RemoveResultRowCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            result_ids=[drop_a.id, drop_b.id],
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Success)
+        assert [r.id for r in out.unwrap().results] == [keep.id]
+        # One aggregate save == one optimistic-concurrency version bump.
+        campaign_repo.save.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_one_unknown_id_removes_nothing(self) -> None:
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        first = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        second = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        campaign.add_result(first)
+        campaign.add_result(second)
+
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        uc = RemoveResultRow(
+            uow=FakeUnitOfWork(),
+            campaign_repo=campaign_repo,
+            dispatcher=AsyncMock(),
+        )
+        cmd = RemoveResultRowCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            result_ids=[first.id, uuid.uuid4()],
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Failure)
+        assert isinstance(out.failure(), NotFoundError)
+        assert len(campaign.results) == 2
+        campaign_repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_empty_result_ids_returns_validation_failure(self) -> None:
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        uc = RemoveResultRow(
+            uow=FakeUnitOfWork(),
+            campaign_repo=campaign_repo,
+            dispatcher=AsyncMock(),
+        )
+        cmd = RemoveResultRowCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            result_ids=[],
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Failure)
+        assert isinstance(out.failure(), ValidationError)
+        # Rejected before anything is loaded or written.
+        campaign_repo.find_by_id_in_workspace.assert_not_awaited()
         campaign_repo.save.assert_not_awaited()

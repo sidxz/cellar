@@ -7,6 +7,7 @@
 import type { ChannelImportConfigDTO } from './channelImportConfigDTO';
 import type { AddFromRunsRequestDescription } from './addFromRunsRequestDescription';
 import type { AddFromRunsRequestStageName } from './addFromRunsRequestStageName';
+import type { AddFromRunsRequestParentStageId } from './addFromRunsRequestParentStageId';
 
 export interface AddFromRunsRequest {
   run_ids: string[];
@@ -16,4 +17,5 @@ export interface AddFromRunsRequest {
   description?: AddFromRunsRequestDescription;
   refresh_existing_cells?: boolean;
   stage_name?: AddFromRunsRequestStageName;
+  parent_stage_id?: AddFromRunsRequestParentStageId;
 }

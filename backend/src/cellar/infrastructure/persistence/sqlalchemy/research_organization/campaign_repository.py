@@ -22,6 +22,7 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    StageKind,
     StageOutcome,
     ValueQualifier,
 )
@@ -229,6 +230,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             name=model.name,
             display_order=model.display_order,
             parent_stage_id=model.parent_stage_id,
+            kind=StageKind(model.kind),
             criteria=[StageCriterion.from_dict(c) for c in model.criteria],
         )
 
@@ -240,6 +242,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             name=stage.name,
             parent_stage_id=stage.parent_stage_id,
             display_order=stage.display_order,
+            kind=stage.kind.value,
             criteria=[c.to_dict() for c in stage.criteria],
         )
 
@@ -248,6 +251,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.name = stage.name
         model.parent_stage_id = stage.parent_stage_id
         model.display_order = stage.display_order
+        model.kind = stage.kind.value
         model.criteria = [c.to_dict() for c in stage.criteria]
 
     # ------------------------------------------------------------------
@@ -278,9 +282,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         )
 
     @staticmethod
-    def _override_update_model(
-        model: CampaignStageOverrideModel, override: StageOverride
-    ) -> None:
+    def _override_update_model(model: CampaignStageOverrideModel, override: StageOverride) -> None:
         model.forced_outcome = override.forced_outcome.value
         model.reason = override.reason
         model.overridden_by = override.overridden_by
@@ -445,6 +447,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         tag_logic: str = "any",
         target_ids: list[uuid.UUID] | None = None,
         target_logic: str = "any",
+        status: CampaignStatus | None = None,
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(
             CampaignModel.workspace_id == workspace_id,
@@ -468,6 +471,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                     )
                 )
             )
+        if status is not None:
+            stmt = stmt.where(CampaignModel.status == status.value)
         stmt = stmt.order_by(CampaignModel.id)
         if cursor_id is not None:
             stmt = stmt.where(CampaignModel.id > cursor_id)
@@ -486,6 +491,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         tag_logic: str = "any",
         target_ids: list[uuid.UUID] | None = None,
         target_logic: str = "any",
+        status: CampaignStatus | None = None,
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(CampaignModel.workspace_id == workspace_id)
         if tags:
@@ -506,6 +512,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                     )
                 )
             )
+        if status is not None:
+            stmt = stmt.where(CampaignModel.status == status.value)
         stmt = stmt.order_by(CampaignModel.id)
         if cursor_id is not None:
             stmt = stmt.where(CampaignModel.id > cursor_id)

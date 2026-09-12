@@ -53,6 +53,19 @@ class ChannelSourceKind(StrEnum):
     DOSE_RESPONSE_CURVE = "dose_response_curve"
 
 
+class StageKind(StrEnum):
+    """How a stage decides its outcome.
+
+    CRITERIA — the AND of its numeric criteria over the campaign's channels.
+    MANUAL — no criteria at all: every compound in the stage's population sits
+    at `StageOutcome.PENDING` until a chemist promotes (override -> hit) or
+    demotes (override -> miss) it.
+    """
+
+    CRITERIA = "criteria"
+    MANUAL = "manual"
+
+
 class StageOutcome(StrEnum):
     """Per-(result, stage) verdict computed by `stage_evaluation.evaluate_stages`."""
 
@@ -60,6 +73,7 @@ class StageOutcome(StrEnum):
     MISS = "miss"
     UNTESTED = "untested"
     NOT_IN_STAGE = "not_in_stage"
+    PENDING = "pending"
 
 
 class CheckVerdict(StrEnum):
@@ -88,6 +102,7 @@ __all__ = [
     "QualifierHandling",
     "SearchVisibility",
     "SelectionRule",
+    "StageKind",
     "StageOutcome",
     "ValueQualifier",
 ]

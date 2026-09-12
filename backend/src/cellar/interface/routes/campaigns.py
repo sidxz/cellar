@@ -48,6 +48,7 @@ from cellar.application.research_organization.supersede_campaign import (
 from cellar.application.research_organization.update_campaign_metadata import (
     UpdateCampaignMetadataCommand,
 )
+from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.interface.dependencies import (
     AddResultsFromCampaignDep,
     AddResultsFromCollectionDep,
@@ -71,6 +72,7 @@ from cellar.interface.routes._campaign_dtos import (
     AddFromRunsRequest,
     AddResultsOutcomeResponse,
     CampaignResponse,
+    CampaignSummaryResponse,
     CloseCampaignRequest,
     CreateCampaignRequest,
     PreviewRunImportRequest,
@@ -101,7 +103,7 @@ async def create_campaign(
     return CampaignResponse.from_domain(campaign)
 
 
-@router.get("", response_model=PaginatedResponse[CampaignResponse])
+@router.get("", response_model=PaginatedResponse[CampaignSummaryResponse])
 async def list_campaigns(
     auth: AuthDep,
     uc: ListCampaignsDep,
@@ -112,8 +114,12 @@ async def list_campaigns(
     tag_logic: Literal["any", "all"] = Query(default="any"),
     targets: list[uuid.UUID] | None = Query(default=None),
     target_logic: Literal["any", "all"] = Query(default="any"),
-) -> PaginatedResponse[CampaignResponse]:
-    """List campaigns in the workspace, optionally filtered by project/tags/targets."""
+    status: Literal["draft", "closed", "superseded"] | None = Query(default=None),
+) -> PaginatedResponse[CampaignSummaryResponse]:
+    """List campaigns in the workspace, filtered by project/tags/targets/status.
+
+    Items are summaries — stage ``counts`` but no result rows.
+    """
     query = ListCampaignsQuery(
         workspace_id=auth.workspace_id,
         project_id=project_id,
@@ -123,14 +129,29 @@ async def list_campaigns(
         tag_logic=tag_logic,
         target_ids=targets,
         target_logic=target_logic,
+        status=CampaignStatus(status) if status is not None else None,
     )
     out = result_to_response(await uc(query, auth=auth))
     return PaginatedResponse(
         items=[
-            CampaignResponse.from_domain(c, targets=out.targets_by_campaign.get(c.id, []))
+            CampaignSummaryResponse.from_domain(c, targets=out.targets_by_campaign.get(c.id, []))
             for c in out.page.items
         ],
         next_cursor=out.page.next_cursor,
+    )
+
+
+@router.get("/{campaign_id}/summary", response_model=CampaignSummaryResponse)
+async def get_campaign_summary(
+    campaign_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetCampaignDep,
+) -> CampaignSummaryResponse:
+    """Get a campaign without its result rows (channels, stages + funnel counts)."""
+    query = GetCampaignQuery(workspace_id=auth.workspace_id, campaign_id=campaign_id)
+    out = result_to_response(await uc(query, auth=auth))
+    return CampaignSummaryResponse.from_domain(
+        out.campaign, out.scientist_by_run_id, targets=out.targets
     )
 
 
@@ -249,6 +270,7 @@ async def add_results_from_runs(
         description=body.description,
         refresh_existing_cells=body.refresh_existing_cells,
         stage_name=body.stage_name,
+        parent_stage_id=body.parent_stage_id,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
     return AddResultsOutcomeResponse.from_outcome(outcome)

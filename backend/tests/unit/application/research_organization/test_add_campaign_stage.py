@@ -20,6 +20,7 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    StageKind,
 )
 from cellar.domain.shared.errors import (
     AuthorizationError,
@@ -96,10 +97,53 @@ class TestAddCampaignStage:
         assert stage.name == "Primary Hit"
         assert stage.display_order == 0
         assert stage.parent_stage_id is None
+        assert stage.kind == StageKind.CRITERIA
         assert len(stage.criteria) == 1
         assert stage.criteria[0].channel_id == channel.id
         repo.save.assert_awaited_once()
         dispatcher.dispatch_all.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_manual_kind_threads_through(self) -> None:
+        auth = fake_auth()
+        campaign, _channel = _make_draft_campaign_with_channel(auth.workspace_id)
+        repo = make_campaign_repo(find_in_ws=campaign)
+        uc = AddCampaignStage(uow=FakeUnitOfWork(), campaign_repo=repo, dispatcher=AsyncMock())
+
+        result = await uc(
+            AddCampaignStageCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                name="Triage",
+                kind=StageKind.MANUAL,
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Success)
+        assert result.unwrap().stages[0].kind == StageKind.MANUAL
+
+    @pytest.mark.asyncio
+    async def test_manual_kind_with_criteria_is_validation_failure(self) -> None:
+        auth = fake_auth()
+        campaign, channel = _make_draft_campaign_with_channel(auth.workspace_id)
+        repo = make_campaign_repo(find_in_ws=campaign)
+        uc = AddCampaignStage(uow=FakeUnitOfWork(), campaign_repo=repo, dispatcher=AsyncMock())
+
+        result = await uc(
+            AddCampaignStageCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                name="Triage",
+                kind=StageKind.MANUAL,
+                criteria=[StageCriterion(channel_id=channel.id, operator="lt", value=10.0)],
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ValidationError)
+        repo.save.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_second_stage_gets_next_display_order(self) -> None:

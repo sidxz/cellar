@@ -19,7 +19,7 @@ from cellar.application.research_organization.update_campaign_stage import (
     UpdateCampaignStageCommand,
 )
 from cellar.domain.research_organization.campaign_stage import UNSET, StageCriterion
-from cellar.domain.research_organization.enums import StageOutcome
+from cellar.domain.research_organization.enums import StageKind, StageOutcome
 from cellar.interface.dependencies import (
     AddCampaignStageDep,
     AuthDep,
@@ -30,6 +30,7 @@ from cellar.interface.dependencies import (
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.routes._campaign_dtos import (
     AddStageRequest,
+    BulkStageOverrideRequest,
     CampaignResponse,
     SetStageOverrideRequest,
     UpdateStageRequest,
@@ -51,6 +52,7 @@ async def add_campaign_stage(
         campaign_id=campaign_id,
         name=body.name,
         parent_stage_id=body.parent_stage_id,
+        kind=StageKind(body.kind),
         criteria=[c.to_domain() for c in body.criteria],
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
@@ -68,9 +70,10 @@ async def update_campaign_stage(
     """Update a campaign stage.
 
     Semantics: omitted fields are left unchanged (UNSET); a null
-    ``parent_stage_id`` clears it. ``name``/``criteria``/``display_order``
-    have no "clear" meaning on the aggregate, so an explicit null for those
-    is treated the same as omitted.
+    ``parent_stage_id`` clears it. ``name``/``criteria``/``display_order``/
+    ``kind`` have no "clear" meaning on the aggregate, so an explicit null for
+    those is treated the same as omitted. Switching to ``kind: "manual"``
+    requires sending ``criteria: []`` in the same PATCH (422 otherwise).
     """
     provided = body.model_fields_set
 
@@ -88,6 +91,9 @@ async def update_campaign_stage(
         if "display_order" in provided and body.display_order is not None
         else UNSET
     )
+    kind: StageKind | object = (
+        StageKind(body.kind) if "kind" in provided and body.kind is not None else UNSET
+    )
 
     cmd = UpdateCampaignStageCommand(
         workspace_id=auth.workspace_id,
@@ -97,6 +103,7 @@ async def update_campaign_stage(
         parent_stage_id=parent_stage_id,
         criteria=criteria,
         display_order=display_order,
+        kind=kind,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
@@ -135,7 +142,7 @@ async def set_stage_override(
     cmd = SetStageOverrideCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
-        result_id=result_id,
+        result_ids=[result_id],
         stage_id=stage_id,
         user_id=auth.user_id,
         forced_outcome=StageOutcome(body.outcome),
@@ -160,11 +167,38 @@ async def clear_stage_override(
     cmd = SetStageOverrideCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
-        result_id=result_id,
+        result_ids=[result_id],
         stage_id=stage_id,
         user_id=auth.user_id,
         forced_outcome=None,
         reason=None,
+    )
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
+
+
+@router.put("/{campaign_id}/stages/{stage_id}/overrides", response_model=CampaignResponse)
+async def set_stage_overrides(
+    campaign_id: uuid.UUID,
+    stage_id: uuid.UUID,
+    body: BulkStageOverrideRequest,
+    auth: AuthDep,
+    uc: SetStageOverrideDep,
+) -> CampaignResponse:
+    """Force (or, with ``outcome: null``, clear) one stage's verdict for N results.
+
+    Same command as the per-result routes, so one code path; the whole batch
+    lands in a single aggregate save (404 on the first unknown result id,
+    nothing applied).
+    """
+    cmd = SetStageOverrideCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        result_ids=body.result_ids,
+        stage_id=stage_id,
+        user_id=auth.user_id,
+        forced_outcome=StageOutcome(body.outcome) if body.outcome else None,
+        reason=body.reason,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

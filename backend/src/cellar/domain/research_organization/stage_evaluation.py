@@ -25,6 +25,7 @@ from cellar.domain.research_organization.campaign_stage import (
 )
 from cellar.domain.research_organization.enums import (
     CheckVerdict,
+    StageKind,
     StageOutcome,
     ValueQualifier,
 )
@@ -113,7 +114,12 @@ def _evaluate_stage(
         visiting.discard(stage.id)
         in_stage = parent_outcome.outcome == StageOutcome.HIT
 
-    if in_stage:
+    if in_stage and stage.kind == StageKind.MANUAL:
+        # A manual stage has no criteria to check: everyone in its population
+        # waits at `pending` until an override promotes or demotes them.
+        checks = ()
+        base_outcome = StageOutcome.PENDING
+    elif in_stage:
         checks = tuple(_check_criterion(result, c) for c in stage.criteria)
         base_outcome = _combine(checks)
     else:
@@ -151,14 +157,16 @@ def evaluate_stages(campaign: Campaign) -> StageOutcomes:
 def tally_stage_counts(
     campaign: Campaign, outcomes: StageOutcomes
 ) -> dict[uuid.UUID, dict[str, int]]:
-    """Per-stage funnel counts. ``population = hit + miss + untested``; for a
-    root stage that's every result (root outcomes are never `not_in_stage`)."""
+    """Per-stage funnel counts. ``population = hit + miss + untested + pending``;
+    for a root stage that's every result (root outcomes are never
+    `not_in_stage`). ``pending`` is only ever non-zero for a manual stage."""
     counts: dict[uuid.UUID, dict[str, int]] = {
         stage.id: {
             "population": 0,
             "hit": 0,
             "miss": 0,
             "untested": 0,
+            "pending": 0,
             "not_in_stage": 0,
             "overridden": 0,
         }

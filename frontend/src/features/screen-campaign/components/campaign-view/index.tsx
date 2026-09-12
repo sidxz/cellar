@@ -53,12 +53,12 @@ export function CampaignView({ campaign }: CampaignViewProps) {
     : null;
 
   // Same lens as the draft builder: a stage tab pre-selects its population
-  // (hit + miss + untested); "All" clears the outcome chips.
+  // (hit + miss + untested + pending); "All" clears the outcome chips.
   function selectStage(id: string | null) {
     setSelectedStageId(id);
     setFilters((f) => ({
       ...f,
-      stageOutcomes: new Set<StageOutcome>(id ? ["hit", "miss", "untested"] : []),
+      stageOutcomes: new Set<StageOutcome>(id ? ["hit", "miss", "untested", "pending"] : []),
     }));
   }
 

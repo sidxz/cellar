@@ -20,6 +20,7 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    StageKind,
     StageOutcome,
     ValueQualifier,
 )
@@ -218,6 +219,77 @@ async def test_find_by_project(
     assert {x.id for x in found} == {a.id, b.id}
 
 
+async def test_find_by_project_filters_on_status(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    project_id = uuid.uuid4()
+    workspace_id = uuid.uuid4()
+    draft = _build_campaign(workspace_id=workspace_id, project_id=project_id)
+    # No children on the closed one — a DB trigger blocks writes under a
+    # closed campaign, and this test only cares about the status filter.
+    closed = _build_campaign(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        add_channel=False,
+        add_result=False,
+        add_measurement=False,
+    )
+    closed.status = CampaignStatus.CLOSED
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(draft)
+        await repo.save(closed)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow2:
+        repo2 = SQLAlchemyCampaignRepository(uow2)
+        found_closed = await repo2.find_by_project(
+            workspace_id, project_id, status=CampaignStatus.CLOSED
+        )
+        found_draft = await repo2.find_by_project(
+            workspace_id, project_id, status=CampaignStatus.DRAFT
+        )
+        found_all = await repo2.find_by_project(workspace_id, project_id)
+
+    assert {x.id for x in found_closed} == {closed.id}
+    assert {x.id for x in found_draft} == {draft.id}
+    assert {x.id for x in found_all} == {draft.id, closed.id}
+
+
+async def test_results_keep_their_order_after_a_row_is_updated(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Editing one row must not reshuffle the grid.
+
+    Without ``order_by`` on the relationship the rows come back in Postgres
+    heap order, and an UPDATE rewrites the tuple — moving the edited row.
+    """
+    c = _build_campaign(add_result=False, add_measurement=False)
+    for _ in range(5):
+        c.add_result(CampaignResult(campaign_id=c.id, molecule_id=uuid.uuid4()))
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow2:
+        repo2 = SQLAlchemyCampaignRepository(uow2)
+        loaded = await repo2.find_by_id_in_workspace(c.workspace_id, c.id)
+        assert loaded is not None
+        order_before = [r.id for r in loaded.results]
+        # Touch the first row — the one most likely to move in heap order.
+        loaded.results[0].notes = "edited"
+        await repo2.save(loaded)
+        await uow2.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow3:
+        repo3 = SQLAlchemyCampaignRepository(uow3)
+        reloaded = await repo3.find_by_id_in_workspace(c.workspace_id, c.id)
+    assert reloaded is not None
+    assert [r.id for r in reloaded.results] == order_before
+    assert order_before == sorted(order_before)
+
+
 async def test_delete_cascades_children(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
@@ -342,10 +414,50 @@ async def test_stage_round_trip(
     assert rs.name == "Primary hits"
     assert rs.display_order == 0
     assert rs.parent_stage_id is None
+    assert rs.kind == StageKind.CRITERIA
     assert len(rs.criteria) == 1
     assert rs.criteria[0].channel_id == channel_id
     assert rs.criteria[0].operator == "lt"
     assert rs.criteria[0].value == 5.0
+
+
+async def test_manual_stage_round_trips_kind(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign()
+    stage = CampaignStage(
+        campaign_id=c.id,
+        name="Manual triage",
+        display_order=0,
+        kind=StageKind.MANUAL,
+    )
+    c.add_stage(stage)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        await repo.save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow2:
+        repo2 = SQLAlchemyCampaignRepository(uow2)
+        reloaded = await repo2.find_by_id(c.id)
+    assert reloaded is not None
+    assert reloaded.stages[0].kind == StageKind.MANUAL
+    assert reloaded.stages[0].criteria == []
+
+    # ... and the reconcile path (existing model row) persists a kind switch
+    async with AsyncUnitOfWork(session_factory) as uow_edit:
+        repo_edit = SQLAlchemyCampaignRepository(uow_edit)
+        editable = await repo_edit.find_by_id(c.id)
+        assert editable is not None
+        editable.update_stage(stage.id, kind=StageKind.CRITERIA)
+        await repo_edit.save(editable)
+        await uow_edit.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow_check:
+        repo_check = SQLAlchemyCampaignRepository(uow_check)
+        again = await repo_check.find_by_id(c.id)
+    assert again is not None
+    assert again.stages[0].kind == StageKind.CRITERIA
 
 
 async def test_stage_rename_and_criteria_replace_reconciles(

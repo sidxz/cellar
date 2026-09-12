@@ -137,13 +137,14 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name", "parent_stage_id", "display_order", "criteria", "counts"],
+        "required": ["id", "name", "parent_stage_id", "display_order", "kind", "criteria", "counts"],
         "additionalProperties": false,
         "properties": {
           "id":              { "type": "string", "format": "uuid" },
           "name":            { "type": "string" },
           "parent_stage_id": { "type": ["string", "null"] },
           "display_order":   { "type": "integer" },
+          "kind":            { "type": "string", "enum": ["criteria", "manual"] },
           "criteria": {
             "type": "array",
             "items": {
@@ -164,13 +165,14 @@
           },
           "counts": {
             "type": "object",
-            "required": ["population", "hit", "miss", "untested", "not_in_stage", "overridden"],
+            "required": ["population", "hit", "miss", "untested", "pending", "not_in_stage", "overridden"],
             "additionalProperties": false,
             "properties": {
               "population":   { "type": "integer" },
               "hit":          { "type": "integer" },
               "miss":         { "type": "integer" },
               "untested":     { "type": "integer" },
+              "pending":      { "type": "integer" },
               "not_in_stage": { "type": "integer" },
               "overridden":   { "type": "integer" }
             }
@@ -279,7 +281,7 @@
               "additionalProperties": false,
               "properties": {
                 "stage_id":        { "type": "string", "format": "uuid" },
-                "outcome":         { "type": "string", "enum": ["hit", "miss", "untested", "not_in_stage"] },
+                "outcome":         { "type": "string", "enum": ["hit", "miss", "untested", "not_in_stage", "pending"] },
                 "overridden":      { "type": "boolean" },
                 "override_reason": { "type": ["string", "null"] },
                 "checks": {

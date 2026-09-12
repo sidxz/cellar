@@ -19,7 +19,7 @@ from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_stage import CampaignStage, StageCriterion
-from cellar.domain.research_organization.enums import CampaignStatus
+from cellar.domain.research_organization.enums import CampaignStatus, StageKind
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import (
     DataLockedError,
@@ -35,6 +35,7 @@ class AddCampaignStageCommand(Command):
     campaign_id: uuid.UUID
     name: str
     parent_stage_id: uuid.UUID | None = None
+    kind: StageKind = StageKind.CRITERIA
     criteria: list[StageCriterion] = field(default_factory=list)
 
 
@@ -90,6 +91,7 @@ class AddCampaignStage:
                     name=input.name,
                     display_order=next_display_order,
                     parent_stage_id=input.parent_stage_id,
+                    kind=input.kind,
                     criteria=input.criteria,
                 )
                 campaign.add_stage(stage)

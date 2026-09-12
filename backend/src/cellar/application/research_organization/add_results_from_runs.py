@@ -19,9 +19,10 @@ Behavioral notes:
   (the screener can hit "Refresh from sources" if they want to).
 - Snapshot fields populated on every new/updated measurement:
   ``replicate_count``, ``qc_pass``, ``contributing_run_ids``.
-- ``stage_name`` (optional) creates a CampaignStage from every config that
-  opts into import-time filtering (``use_for_filter`` + ``hit_threshold``);
-  no qualifying config means no stage (not an error).
+- ``stage_name`` (optional) creates — or reuses, by case-insensitive name —
+  a CampaignStage from every config that opts into import-time filtering
+  (``use_for_filter`` + ``hit_threshold``); no qualifying config means no
+  stage (not an error). ``parent_stage_id`` attaches it under a parent.
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ from cellar.application.research_organization.preview_run_import import (
     _cfg_norm,
     fetch_run_candidates,
 )
+from cellar.application.research_organization.stage_upsert import upsert_stage_by_name
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -54,10 +56,7 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
-from cellar.domain.research_organization.campaign_stage import (
-    CampaignStage,
-    StageCriterion,
-)
+from cellar.domain.research_organization.campaign_stage import StageCriterion
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     QualifierHandling,
@@ -82,11 +81,16 @@ class AddResultsFromRunsCommand(Command):
     scope: Literal["hits_only", "all"] = "hits_only"
     description: str | None = None
     refresh_existing_cells: bool = False
-    #: When set, creates a top-level CampaignStage named ``stage_name`` from
-    #: every config's import-time filter (``use_for_filter`` + a
-    #: ``hit_threshold``), one StageCriterion per such config bound to its
-    #: resolved channel. No qualifying config -> no stage (not an error).
+    #: When set, creates (or reuses, by case-insensitive name) a CampaignStage
+    #: named ``stage_name`` from every config's import-time filter
+    #: (``use_for_filter`` + a ``hit_threshold``), one StageCriterion per such
+    #: config bound to its resolved channel. No qualifying config -> no stage
+    #: (not an error).
     stage_name: str | None = None
+    #: Parent for the stage ``stage_name`` creates, making it a child in the
+    #: funnel. On reuse of an existing stage, ``None`` leaves the current
+    #: parent alone.
+    parent_stage_id: uuid.UUID | None = None
 
 
 @dataclass
@@ -239,6 +243,8 @@ class AddResultsFromRuns:
             # to that config's resolved channel. Numeric-only, like the
             # mirror path: a config using the string-based ``in`` operator
             # contributes nothing (StageCriterion doesn't accept it).
+            # A stage of that name already on the campaign is reused and its
+            # criteria replaced (see ``upsert_stage_by_name``).
             stage_created = False
             if input.stage_name:
                 stage_criteria: list[StageCriterion] = []
@@ -260,18 +266,12 @@ class AddResultsFromRuns:
                             )
                         )
                     if stage_criteria:
-                        next_stage_order = (
-                            max((s.display_order for s in campaign.stages), default=-1) + 1
+                        _, stage_created = upsert_stage_by_name(
+                            campaign,
+                            name=input.stage_name,
+                            criteria=stage_criteria,
+                            parent_stage_id=input.parent_stage_id,
                         )
-                        campaign.add_stage(
-                            CampaignStage(
-                                campaign_id=campaign.id,
-                                name=input.stage_name,
-                                display_order=next_stage_order,
-                                criteria=stage_criteria,
-                            )
-                        )
-                        stage_created = True
                 except ValidationError as e:
                     return Failure(e)
 

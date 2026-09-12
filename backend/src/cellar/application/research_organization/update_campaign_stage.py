@@ -21,7 +21,7 @@ from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_stage import UNSET, StageCriterion
-from cellar.domain.research_organization.enums import CampaignStatus
+from cellar.domain.research_organization.enums import CampaignStatus, StageKind
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import (
     DataLockedError,
@@ -42,6 +42,7 @@ class UpdateCampaignStageCommand(Command):
     parent_stage_id: uuid.UUID | object | None = UNSET
     criteria: list[StageCriterion] | object = UNSET
     display_order: int | object = UNSET
+    kind: StageKind | object = UNSET
 
 
 class UpdateCampaignStage:
@@ -93,6 +94,7 @@ class UpdateCampaignStage:
                     parent_stage_id=input.parent_stage_id,
                     criteria=input.criteria,
                     display_order=input.display_order,
+                    kind=input.kind,
                 )
             except (NotFoundError, ValidationError) as e:
                 return Failure(e)

@@ -30,8 +30,10 @@ from cellar.domain.research_organization.enums import (
 from cellar.domain.research_organization.source_ref import ManualRef, source_group_key
 from cellar.domain.research_organization.stage_evaluation import (
     StageCheck,
+    StageOutcomes,
     StageResultOutcome,
     evaluate_stages,
+    tally_stage_counts,
 )
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.domain.shared.target_ref import TargetRef
@@ -155,8 +157,12 @@ class AddFromRunsRequest(PreviewRunImportRequest):
     refresh_existing_cells: bool = False
     #: When set, creates a CampaignStage from the configs that opt into
     #: import-time filtering (use_for_filter + hit_threshold). No qualifying
-    #: config -> no stage.
+    #: config -> no stage. An existing stage with this name (case-insensitive)
+    #: is reused and its criteria replaced.
     stage_name: str | None = None
+    #: Parent for the stage ``stage_name`` creates. Omitted on reuse leaves
+    #: the existing stage's parent alone.
+    parent_stage_id: uuid.UUID | None = None
 
 
 class AddChannelRequest(BaseModel):
@@ -187,6 +193,9 @@ class UpdateChannelRequest(BaseModel):
     label: str | None = None
     selection_rule: str | None = None
     qc_filter: dict[str, Any] | None = None
+    #: Column position in the campaign grid. Reorder = PATCH each moved
+    #: channel with its new index.
+    display_order: int | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -207,6 +216,7 @@ class StageCriterionDTO(BaseModel):
 class AddStageRequest(BaseModel):
     name: str
     parent_stage_id: uuid.UUID | None = None
+    kind: Literal["criteria", "manual"] = "criteria"
     criteria: list[StageCriterionDTO] = []
 
 
@@ -222,6 +232,7 @@ class UpdateStageRequest(BaseModel):
     parent_stage_id: uuid.UUID | None = None
     criteria: list[StageCriterionDTO] | None = None
     display_order: int | None = None
+    kind: Literal["criteria", "manual"] | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -229,6 +240,19 @@ class UpdateStageRequest(BaseModel):
 class SetStageOverrideRequest(BaseModel):
     outcome: Literal["hit", "miss"]
     reason: str
+
+
+class BulkStageOverrideRequest(BaseModel):
+    """Force (or, with ``outcome: null``, clear) one stage's verdict for N results.
+
+    ``outcome`` is a required key so a body can never silently mean "clear".
+    """
+
+    result_ids: list[uuid.UUID]
+    outcome: Literal["hit", "miss"] | None
+    reason: str | None = None
+
+    model_config = {"extra": "forbid"}
 
 
 class SetResultNotesRequest(BaseModel):
@@ -254,6 +278,12 @@ class AddResultRowRequest(BaseModel):
     molecule_id: uuid.UUID
 
 
+class BulkRemoveResultsRequest(BaseModel):
+    result_ids: list[uuid.UUID]
+
+    model_config = {"extra": "forbid"}
+
+
 class CloseCampaignRequest(BaseModel):
     note: str | None = None
 
@@ -266,8 +296,12 @@ class MirrorProtocolRequest(BaseModel):
     protocol_id: uuid.UUID
     #: When set, creates a CampaignStage from the protocol's
     #: recommended_hit_criteria mapped onto the mirrored channels. No
-    #: recommendation maps -> no stage.
+    #: recommendation maps -> no stage. An existing stage with this name
+    #: (case-insensitive) is reused and its criteria replaced.
     stage_name: str | None = None
+    #: Parent for the stage ``stage_name`` creates. Omitted on reuse leaves
+    #: the existing stage's parent alone.
+    parent_stage_id: uuid.UUID | None = None
 
 
 class MirrorProtocolOutcomeResponse(BaseModel):
@@ -352,7 +386,7 @@ class StageCheckResponse(BaseModel):
 
 class StageOutcomeResponse(BaseModel):
     stage_id: uuid.UUID
-    outcome: str  # hit | miss | untested | not_in_stage
+    outcome: str  # hit | miss | untested | not_in_stage | pending
     overridden: bool
     override_reason: str | None = None
     checks: list[StageCheckResponse]
@@ -428,21 +462,43 @@ class CampaignChannelResponse(BaseModel):
         )
 
 
+class StageCountsResponse(BaseModel):
+    """Funnel counts for one stage — ``tally_stage_counts`` buckets, verbatim.
+
+    ``population = hit + miss + untested + pending``; ``overridden`` counts
+    rows whose outcome came from a manual override (it overlaps the others).
+    """
+
+    population: int
+    hit: int
+    miss: int
+    untested: int
+    pending: int
+    not_in_stage: int
+    overridden: int
+
+
 class CampaignStageResponse(BaseModel):
     id: uuid.UUID
     name: str
     parent_stage_id: uuid.UUID | None = None
     display_order: int
+    kind: Literal["criteria", "manual"]
     criteria: list[StageCriterionDTO]
+    #: Read-time funnel counts (never stored) — lets a list/summary surface
+    #: render the funnel without shipping every result row.
+    counts: StageCountsResponse
 
     @classmethod
-    def from_domain(cls, s: CampaignStage) -> CampaignStageResponse:
+    def from_domain(cls, s: CampaignStage, counts: dict[str, int]) -> CampaignStageResponse:
         return cls(
             id=s.id,
             name=s.name,
             parent_stage_id=s.parent_stage_id,
             display_order=s.display_order,
+            kind=s.kind.value,
             criteria=[StageCriterionDTO.from_domain(c) for c in s.criteria],
+            counts=StageCountsResponse(**counts),
         )
 
 
@@ -492,7 +548,14 @@ def _derive_compound_sources(
     return out
 
 
-class CampaignResponse(BaseModel):
+class _CampaignFieldsResponse(BaseModel):
+    """Everything a campaign read carries apart from the result rows.
+
+    Shared by ``CampaignResponse`` (adds ``results``) and
+    ``CampaignSummaryResponse`` (adds ``result_count``) so the two reads can
+    never drift apart.
+    """
+
     id: uuid.UUID
     workspace_id: uuid.UUID
     project_id: uuid.UUID
@@ -511,13 +574,62 @@ class CampaignResponse(BaseModel):
     updated_at: datetime
     version: int
     channels: list[CampaignChannelResponse]
-    results: list[CampaignResultResponse]
     stages: list[CampaignStageResponse]
     #: Distinct targets unioned from the runs this campaign's measurements
     #: reference — a derived, read-time field (never stored), like
     #: ``compound_sources``. Defaults to ``[]`` for callers that don't project
     #: targets (e.g. mutation responses that return the refreshed campaign).
     targets: list[TargetRefResponse] = []
+
+    @staticmethod
+    def _shared(
+        c: Campaign,
+        scientist_by_run_id: dict[uuid.UUID, str] | None,
+        targets: list[TargetRef] | None,
+    ) -> tuple[dict[str, Any], StageOutcomes]:
+        """Build the shared kwargs and hand back the stage outcomes.
+
+        Evaluates the hit-stage funnel once (pure, cheap: results x stages x
+        criteria). The outcomes come back so ``CampaignResponse`` can thread
+        each result's verdicts through in declared stage order —
+        ``evaluate_stages`` inserts entries in parent-first recursive-evaluation
+        order, which need not match ``campaign.stages`` (a child stage can be
+        declared before its parent).
+        """
+        stage_outcomes = evaluate_stages(c)
+        stage_counts = tally_stage_counts(c, stage_outcomes)
+        return {
+            "id": c.id,
+            "workspace_id": c.workspace_id,
+            "project_id": c.project_id,
+            "name": c.name,
+            "description": c.description,
+            "status": c.status.value,
+            "compound_sources": _derive_compound_sources(c.results, scientist_by_run_id),
+            "supersedes_campaign_id": c.supersedes_campaign_id,
+            "superseded_by_campaign_id": c.superseded_by_campaign_id,
+            "closed_at": c.closed_at,
+            "closed_by": c.closed_by,
+            "close_note": c.close_note,
+            "source_protocols": c.source_protocols,
+            "created_by": c.created_by,
+            "created_at": c.created_at,
+            "updated_at": c.updated_at,
+            "version": c.version,
+            # Sort here, not on the aggregate: the ORM relationship only
+            # re-orders on reload, so a mutation response that returns the
+            # in-memory aggregate would otherwise disagree with the next GET.
+            "channels": [
+                CampaignChannelResponse.from_domain(ch)
+                for ch in sorted(c.channels, key=lambda x: (x.display_order, x.id))
+            ],
+            "stages": [CampaignStageResponse.from_domain(s, stage_counts[s.id]) for s in c.stages],
+            "targets": [TargetRefResponse.from_ref(t) for t in (targets or [])],
+        }, stage_outcomes
+
+
+class CampaignResponse(_CampaignFieldsResponse):
+    results: list[CampaignResultResponse]
 
     @classmethod
     def from_domain(
@@ -526,40 +638,36 @@ class CampaignResponse(BaseModel):
         scientist_by_run_id: dict[uuid.UUID, str] | None = None,
         targets: list[TargetRef] | None = None,
     ) -> CampaignResponse:
-        # Evaluate the hit-stage funnel once (pure, cheap: results x stages x
-        # criteria) and thread each result's outcomes through in declared
-        # stage order — evaluate_stages inserts entries in parent-first
-        # recursive-evaluation order, which need not match campaign.stages
-        # (a child stage can be declared before its parent).
-        stage_outcomes = evaluate_stages(c)
+        shared, stage_outcomes = cls._shared(c, scientist_by_run_id, targets)
         return cls(
-            id=c.id,
-            workspace_id=c.workspace_id,
-            project_id=c.project_id,
-            name=c.name,
-            description=c.description,
-            status=c.status.value,
-            compound_sources=_derive_compound_sources(c.results, scientist_by_run_id),
-            supersedes_campaign_id=c.supersedes_campaign_id,
-            superseded_by_campaign_id=c.superseded_by_campaign_id,
-            closed_at=c.closed_at,
-            closed_by=c.closed_by,
-            close_note=c.close_note,
-            source_protocols=c.source_protocols,
-            created_by=c.created_by,
-            created_at=c.created_at,
-            updated_at=c.updated_at,
-            version=c.version,
-            channels=[CampaignChannelResponse.from_domain(ch) for ch in c.channels],
+            **shared,
             results=[
                 CampaignResultResponse.from_domain(
                     r, {s.id: stage_outcomes[r.id][s.id] for s in c.stages}
                 )
                 for r in c.results
             ],
-            stages=[CampaignStageResponse.from_domain(s) for s in c.stages],
-            targets=[TargetRefResponse.from_ref(t) for t in (targets or [])],
         )
+
+
+class CampaignSummaryResponse(_CampaignFieldsResponse):
+    """A campaign without its result rows — the list + summary read.
+
+    Stage ``counts`` carry the funnel, so a caller that only needs "how many
+    compounds cleared each stage" never pays for the row payload.
+    """
+
+    result_count: int
+
+    @classmethod
+    def from_domain(
+        cls,
+        c: Campaign,
+        scientist_by_run_id: dict[uuid.UUID, str] | None = None,
+        targets: list[TargetRef] | None = None,
+    ) -> CampaignSummaryResponse:
+        shared, _ = cls._shared(c, scientist_by_run_id, targets)
+        return cls(**shared, result_count=len(c.results))
 
 
 class AddResultsOutcomeResponse(BaseModel):

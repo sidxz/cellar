@@ -31,6 +31,10 @@ export type {
   AddStageRequest,
   UpdateStageRequest,
   SetStageOverrideRequest,
+  StageCountsResponse,
+  CampaignSummaryResponse,
+  BulkStageOverrideRequest,
+  BulkRemoveResultsRequest,
 } from "@/shared/lib/api/model";
 
 // ─── Domain enums ────────────────────────────────────────────────────────────
@@ -40,7 +44,11 @@ export type {
 
 export type CampaignStatus = "draft" | "closed" | "superseded";
 
-export type StageOutcome = "hit" | "miss" | "untested" | "not_in_stage";
+export type StageOutcome = "hit" | "miss" | "untested" | "pending" | "not_in_stage";
+
+/** How a stage decides its members: evaluated from `criteria`, or hand-picked
+ *  (every row starts `pending` until an override promotes/demotes it). */
+export type StageKind = "criteria" | "manual";
 
 export type CheckVerdict = "pass" | "fail" | "untested";
 

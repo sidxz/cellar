@@ -40,6 +40,10 @@ const missResult = makeResult({
     makeOutcome({ outcome: "miss", overridden: true, override_reason: "Confirmed on retest" }),
   ],
 });
+const pendingResult = makeResult({
+  id: "r-pending",
+  stage_outcomes: [makeOutcome({ outcome: "pending" })],
+});
 const notInStageResult = makeResult({
   id: "r-not-in-stage",
   stage_outcomes: [
@@ -48,7 +52,7 @@ const notInStageResult = makeResult({
   ],
 });
 
-const results = [hitResult, missResult, notInStageResult];
+const results = [hitResult, missResult, pendingResult, notInStageResult];
 
 describe("outcomeFor", () => {
   it("finds the result's outcome entry for the given stage", () => {
@@ -62,15 +66,25 @@ describe("outcomeFor", () => {
 });
 
 describe("tallyStage", () => {
-  it("tallies hit/miss/untested/not_in_stage/overridden for one stage", () => {
+  it("tallies hit/miss/untested/pending/not_in_stage/overridden for one stage", () => {
     expect(tallyStage(results, STAGE_A)).toEqual({
-      population: 2,
+      population: 3,
       hit: 1,
       miss: 1,
       untested: 0,
+      pending: 1,
       not_in_stage: 1,
       overridden: 1,
     });
+  });
+
+  // A manual stage's un-triaged rows are still part of the funnel it was
+  // drawn from — the tile reads "1 of 3", not "1 of 2".
+  it("counts pending rows inside the population", () => {
+    const manualOnly = [pendingResult, pendingResult, hitResult];
+    const tally = tallyStage(manualOnly, STAGE_A);
+    expect(tally.pending).toBe(2);
+    expect(tally.population).toBe(3);
   });
 
   it("only counts the requested stage", () => {
@@ -79,6 +93,7 @@ describe("tallyStage", () => {
       hit: 1,
       miss: 0,
       untested: 0,
+      pending: 0,
       not_in_stage: 0,
       overridden: 0,
     });
@@ -90,6 +105,7 @@ describe("tallyStage", () => {
       hit: 0,
       miss: 0,
       untested: 0,
+      pending: 0,
       not_in_stage: 0,
       overridden: 0,
     });

@@ -7,6 +7,7 @@
 import type { UpdateChannelRequestLabel } from './updateChannelRequestLabel';
 import type { UpdateChannelRequestSelectionRule } from './updateChannelRequestSelectionRule';
 import type { UpdateChannelRequestQcFilter } from './updateChannelRequestQcFilter';
+import type { UpdateChannelRequestDisplayOrder } from './updateChannelRequestDisplayOrder';
 
 /**
  * Partial update — omitted fields are not changed; null clears the value.
@@ -18,4 +19,5 @@ export interface UpdateChannelRequest {
   label?: UpdateChannelRequestLabel;
   selection_rule?: UpdateChannelRequestSelectionRule;
   qc_filter?: UpdateChannelRequestQcFilter;
+  display_order?: UpdateChannelRequestDisplayOrder;
 }

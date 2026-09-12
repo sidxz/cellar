@@ -509,11 +509,24 @@ class TestGetPublishedCampaign:
         assert pref["version"] is None
 
     # ------------------------------------------------------------------
-    # 10. Unauthorized (viewer role) → Failure(AuthorizationError)
+    # 10. Publishing is a read — viewer passes, no workspace role does not
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_unauthorized_viewer_returns_authorization_failure(self) -> None:
+    async def test_viewer_can_read_the_published_document(self) -> None:
         auth = fake_auth(role="viewer")
+        campaign, _ = _make_closed_campaign(auth.workspace_id)
+
+        uc, _ = _build_use_case(campaign)
+        q = _make_query(auth.workspace_id, campaign.id)
+        out = await uc(q, auth=auth)
+
+        assert isinstance(out, Success)
+        assert out.unwrap()["campaign"]["id"] == str(campaign.id)
+
+    @pytest.mark.asyncio
+    async def test_no_workspace_role_returns_authorization_failure(self) -> None:
+        auth = fake_auth(role="viewer")
+        auth.has_role = lambda _minimum_role: False
         campaign, _ = _make_closed_campaign(auth.workspace_id)
 
         uc, _ = _build_use_case(campaign)
@@ -636,6 +649,7 @@ class TestGetPublishedCampaign:
 
         assert parent_doc["id"] == str(parent_stage.id)
         assert parent_doc["parent_stage_id"] is None
+        assert parent_doc["kind"] == "criteria"
         assert parent_doc["criteria"] == [
             {"channel_id": str(ch.id), "operator": "lt", "value": 100.0}
         ]
@@ -644,6 +658,7 @@ class TestGetPublishedCampaign:
             "hit": 2,
             "miss": 1,
             "untested": 0,
+            "pending": 0,
             "not_in_stage": 0,
             "overridden": 0,
         }
@@ -654,6 +669,7 @@ class TestGetPublishedCampaign:
             "hit": 1,
             "miss": 1,
             "untested": 0,
+            "pending": 0,
             "not_in_stage": 1,
             "overridden": 0,
         }

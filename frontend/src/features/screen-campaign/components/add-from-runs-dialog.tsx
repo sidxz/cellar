@@ -75,6 +75,9 @@ import {
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 
 import { campaignKeys } from "../hooks/use-campaigns";
+import { stageNameNotice } from "../lib/stage-name-notice";
+import type { CampaignStageResponse } from "../types";
+import { ROOT_SENTINEL } from "./stage-popover";
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -132,10 +135,10 @@ function channelConfigKey(readoutDefId: string, interceptKey: InterceptKey | nul
 interface AddFromRunsDialogProps {
   campaignId: string;
   projectId: string;
-  /** Existing stage names on this campaign — used to default the "Save as
-   *  hit stage" checkbox off (and to block Add) when the auto-derived
-   *  `<Protocol> hits` name would collide (case-insensitive). */
-  existingStageNames: string[];
+  /** This campaign's stages — they fill the parent picker and drive the
+   *  reuse advisory under the stage name (a colliding name reuses that
+   *  stage, except a manual one, which the backend refuses). */
+  stages: CampaignStageResponse[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -145,10 +148,14 @@ interface AddFromRunsDialogProps {
 export function AddFromRunsDialog({
   campaignId,
   projectId,
-  existingStageNames,
+  stages,
   open,
   onOpenChange,
 }: AddFromRunsDialogProps) {
+  const parentOptions = useMemo(
+    () => [...stages].sort((a, b) => a.display_order - b.display_order),
+    [stages],
+  );
   const qc = useQueryClient();
   const [step, setStep] = useState<"configure" | "preview">("configure");
 
@@ -174,6 +181,8 @@ export function AddFromRunsDialog({
   // protocol is chosen.
   const [saveStage, setSaveStage] = useState(false);
   const [stageName, setStageName] = useState("Imported hits");
+  // ROOT_SENTINEL = "no parent" (Radix Select forbids an empty item value).
+  const [stageParentId, setStageParentId] = useState<string>(ROOT_SENTINEL);
 
   // — Data —
   const { data: protocolsData } = useProtocolSummaries([projectId]);
@@ -404,6 +413,7 @@ export function AddFromRunsDialog({
     setApprovedOnly(true);
     setSaveStage(false);
     setStageName("Imported hits");
+    setStageParentId(ROOT_SENTINEL);
     onOpenChange(false);
   }
 
@@ -414,11 +424,7 @@ export function AddFromRunsDialog({
   // filtering and carry a threshold.
   const hasThreshold = channelConfigs.some((c) => c.hit_operator !== "");
   const trimmedStageName = stageName.trim();
-  const stageNameCollides =
-    hasThreshold &&
-    saveStage &&
-    trimmedStageName !== "" &&
-    existingStageNames.some((n) => n.toLowerCase() === trimmedStageName.toLowerCase());
+  const nameNotice = hasThreshold && saveStage ? stageNameNotice(stages, stageName) : null;
 
   // — Debounced preview refresh —
   const [previewData, setPreviewData] = useState<{
@@ -489,13 +495,11 @@ export function AddFromRunsDialog({
               const proto = protocols.find((pr) => pr.id === id);
               const defaultName = proto ? `${proto.name} hits` : "Imported hits";
               setStageName(defaultName);
-              // Off by default when the auto-derived name already exists on
-              // this campaign — a repeat import of the same protocol would
-              // otherwise submit a duplicate stage_name and 422 the whole
-              // request (spec: stage names are unique per campaign).
-              setSaveStage(
-                !existingStageNames.some((n) => n.toLowerCase() === defaultName.toLowerCase()),
-              );
+              // A repeat import of the same protocol reuses that stage
+              // (criteria replaced), so a collision is fine — only a manual
+              // stage of that name, which the backend refuses, defaults the
+              // checkbox off.
+              setSaveStage(stageNameNotice(stages, defaultName)?.blocking !== true);
             }}
             runs={filteredRuns}
             selectedRunIds={selectedRunIds}
@@ -526,9 +530,12 @@ export function AddFromRunsDialog({
             hasThreshold={hasThreshold}
             saveStage={saveStage}
             onSaveStageChange={setSaveStage}
-            stageNameCollides={stageNameCollides}
+            stageNotice={nameNotice}
             stageName={stageName}
             onStageNameChange={setStageName}
+            parentOptions={parentOptions}
+            stageParentId={stageParentId}
+            onStageParentChange={setStageParentId}
           />
         ) : (
           <PreviewStep data={previewData} isLoading={previewMutation.isPending && !previewData} />
@@ -544,7 +551,7 @@ export function AddFromRunsDialog({
             </Button>
           ) : (
             <Button
-              disabled={!previewData || addMutation.isPending || stageNameCollides}
+              disabled={!previewData || addMutation.isPending || nameNotice?.blocking}
               onClick={() => {
                 const payload = buildPayload();
                 addMutation.mutate({
@@ -554,6 +561,10 @@ export function AddFromRunsDialog({
                     scope,
                     refresh_existing_cells: refreshExisting,
                     stage_name: hasThreshold && saveStage ? trimmedStageName : null,
+                    parent_stage_id:
+                      hasThreshold && saveStage && stageParentId !== ROOT_SENTINEL
+                        ? stageParentId
+                        : null,
                   } as never,
                 });
               }}
@@ -609,11 +620,16 @@ interface ConfigureStepProps {
   hasThreshold: boolean;
   saveStage: boolean;
   onSaveStageChange: (v: boolean) => void;
-  /** True when the typed stage name collides (case-insensitive) with an
-   *  existing stage on this campaign — shows an inline hint and blocks Add. */
-  stageNameCollides: boolean;
+  /** Set when the typed stage name matches an existing stage: an advisory
+   *  that its criteria will be replaced, or — for a manual stage — a
+   *  blocking error. */
+  stageNotice: { text: string; blocking: boolean } | null;
   stageName: string;
   onStageNameChange: (v: string) => void;
+  /** Stages the new one can hang under, in display order. */
+  parentOptions: CampaignStageResponse[];
+  stageParentId: string;
+  onStageParentChange: (v: string) => void;
 }
 
 function ConfigureStep(p: ConfigureStepProps) {
@@ -955,19 +971,39 @@ function ConfigureStep(p: ConfigureStepProps) {
                   </Label>
                 </div>
                 {p.saveStage && (
-                  <div className="space-y-1">
-                    <Label className="text-xs">Stage name</Label>
-                    <Input
-                      value={p.stageName}
-                      onChange={(e) => p.onStageNameChange(e.target.value)}
-                      placeholder="e.g. Screening hits"
-                      className="h-8 text-sm"
-                    />
-                    {p.stageNameCollides && (
-                      <p className="text-xs text-destructive">
-                        A stage named "{p.stageName.trim()}" already exists on this campaign.
-                      </p>
-                    )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Stage name</Label>
+                      <Input
+                        value={p.stageName}
+                        onChange={(e) => p.onStageNameChange(e.target.value)}
+                        placeholder="e.g. Screening hits"
+                        className="h-8 text-sm"
+                      />
+                      {p.stageNotice && (
+                        <p
+                          className={`text-xs ${p.stageNotice.blocking ? "text-destructive" : "text-muted-foreground"}`}
+                        >
+                          {p.stageNotice.text}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Parent stage</Label>
+                      <Select value={p.stageParentId} onValueChange={p.onStageParentChange}>
+                        <SelectTrigger className="h-8 text-sm" aria-label="Parent stage">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ROOT_SENTINEL}>None (root)</SelectItem>
+                          {p.parentOptions.map((st) => (
+                            <SelectItem key={st.id} value={st.id}>
+                              {st.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
               </div>

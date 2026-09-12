@@ -21,7 +21,9 @@ The single-channel ``AddCampaignChannel`` use case stays the authoritative
 path for one-at-a-time creation; this just iterates the same shape inside
 one UoW for atomicity.
 
-An optional ``stage_name`` additionally creates one CampaignStage, mapping
+An optional ``stage_name`` additionally creates (or reuses, by
+case-insensitive name — re-mirroring after a threshold tweak rewrites the
+stage rather than failing) one CampaignStage, mapping
 the protocol's ``recommended_hit_criteria`` onto the channels this mirror
 touched (created or already present) via ``_match_recommended_threshold``.
 Numeric-only — a recommendation using the string-based ``in`` operator is
@@ -39,15 +41,13 @@ from cellar.application.auth import AuthContext, require_editor, require_same_wo
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
 )
+from cellar.application.research_organization.stage_upsert import upsert_stage_by_name
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_stage import (
-    CampaignStage,
-    StageCriterion,
-)
+from cellar.domain.research_organization.campaign_stage import StageCriterion
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
@@ -71,11 +71,16 @@ class MirrorProtocolChannelsCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
     protocol_id: uuid.UUID
-    #: When set, creates a top-level CampaignStage named ``stage_name`` from
-    #: the protocol's ``recommended_hit_criteria``, mapped onto the mirrored
-    #: (created or already-present) channels via ``_match_recommended_threshold``.
+    #: When set, creates — or reuses, by case-insensitive name — a
+    #: CampaignStage named ``stage_name`` from the protocol's
+    #: ``recommended_hit_criteria``, mapped onto the mirrored (created or
+    #: already-present) channels via ``_match_recommended_threshold``.
     #: No recommendation maps -> no stage (not an error).
     stage_name: str | None = None
+    #: Parent for the stage ``stage_name`` creates, making it a child in the
+    #: funnel. On reuse of an existing stage, ``None`` leaves the current
+    #: parent alone.
+    parent_stage_id: uuid.UUID | None = None
 
 
 @dataclass
@@ -232,6 +237,9 @@ class MirrorProtocolChannels:
             # mirror touched — created just now or already present — so a
             # requested stage_name can map recommended criteria onto either.
             channel_targets: list[tuple[str, InterceptKey | None, CampaignChannel]] = []
+            # Channels created just now; their cells are resolved after the
+            # stage step so a stage validation failure costs no resolver work.
+            new_channels: list[CampaignChannel] = []
 
             for rd in protocol.readout_definitions:
                 is_dr = rd.data_type == ReadoutDataType.DOSE_RESPONSE
@@ -293,21 +301,16 @@ class MirrorProtocolChannels:
                     existing_channels[key] = channel
                     channels_created += 1
                     channel_targets.append((rd.name, intercept_key, channel))
-
-                    for result in campaign.results:
-                        measurement = await self._resolver.resolve(
-                            workspace_id=input.workspace_id,
-                            channel=channel,
-                            result_id=result.id,
-                            molecule_id=result.molecule_id,
-                        )
-                        result.add_measurement(measurement)
+                    new_channels.append(channel)
 
             # Optional hit stage — maps the protocol's recommended criteria
             # onto the channels this mirror just touched (created or already
             # present). Numeric-only; a recommendation with no match, or
             # using the string-based ``in`` operator, contributes nothing.
+            # A stage of that name already on the campaign is reused and its
+            # criteria replaced (see ``upsert_stage_by_name``).
             stage_created = False
+            stage_touched = False  # created OR reused-and-rewritten: must persist
             if input.stage_name:
                 recommended = protocol.recommended_hit_criteria or []
                 stage_criteria: list[StageCriterion] = []
@@ -325,23 +328,30 @@ class MirrorProtocolChannels:
                         )
                     )
                 if stage_criteria:
-                    next_stage_order = (
-                        max((s.display_order for s in campaign.stages), default=-1) + 1
-                    )
                     try:
-                        campaign.add_stage(
-                            CampaignStage(
-                                campaign_id=campaign.id,
-                                name=input.stage_name,
-                                display_order=next_stage_order,
-                                criteria=stage_criteria,
-                            )
+                        _, stage_created = upsert_stage_by_name(
+                            campaign,
+                            name=input.stage_name,
+                            criteria=stage_criteria,
+                            parent_stage_id=input.parent_stage_id,
                         )
                     except ValidationError as e:
                         return Failure(e)
-                    stage_created = True
+                    stage_touched = True
 
-            if channels_created > 0 or stage_created:
+            # Resolve cells for the newly created channels — last, so the
+            # cheap validation above can bail out first.
+            for channel in new_channels:
+                for result in campaign.results:
+                    measurement = await self._resolver.resolve(
+                        workspace_id=input.workspace_id,
+                        channel=channel,
+                        result_id=result.id,
+                        molecule_id=result.molecule_id,
+                    )
+                    result.add_measurement(measurement)
+
+            if channels_created > 0 or stage_touched:
                 await self._campaign_repo.save(campaign)
             events = await self._uow.commit()
 

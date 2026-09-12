@@ -1,7 +1,15 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CompoundValueCell, type CompoundValueCellProps, isReportedEndpoint } from "./results-grid";
+import type { StageOutcome } from "../../types";
+import { emptyFilters } from "../campaign-filter-bar";
+import {
+  CompoundValueCell,
+  type CompoundValueCellProps,
+  RemoveSelectedButton,
+  isReportedEndpoint,
+} from "./results-grid";
 
 function renderCell(overrides: Partial<CompoundValueCellProps> = {}) {
   return render(
@@ -60,5 +68,67 @@ describe("CompoundValueCell reported marker", () => {
     // Value stays on its own line above the markers so the 120px column
     // never clips it.
     expect(markerLine).not.toHaveTextContent("13.6");
+  });
+});
+
+// ── Bulk remove ───────────────────────────────────────────────────────────────
+
+const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
+
+vi.mock("@/shared/lib/api/campaigns/campaigns", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost: () => ({
+    mutate,
+    isPending: false,
+  }),
+}));
+
+const STAGE = "stage-1";
+
+function row(id: string, outcome: StageOutcome) {
+  return {
+    result: {
+      id,
+      molecule_id: `mol-${id}`,
+      measurements: [],
+      stage_outcomes: [{ stage_id: STAGE, outcome, overridden: false, checks: [] }],
+    },
+  };
+}
+
+function renderToolbar(stageOutcomes: StageOutcome[]) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <RemoveSelectedButton
+        campaignId="c1"
+        rows={[row("r-hit", "hit"), row("r-miss", "miss")] as never}
+        filters={{ ...emptyFilters(), stageOutcomes: new Set(stageOutcomes) }}
+        selectedStageId={STAGE}
+      />
+    </QueryClientProvider>,
+  );
+}
+
+describe("RemoveSelectedButton visible selection", () => {
+  beforeEach(() => mutate.mockClear());
+
+  it("removes every selected row when no chip filter is on", () => {
+    renderToolbar([]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove selected (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove 2" }));
+    expect(mutate).toHaveBeenCalledWith({
+      campaignId: "c1",
+      data: { result_ids: ["r-hit", "r-miss"] },
+    });
+  });
+
+  it("leaves a selected row the chip filter hides untouched", () => {
+    // AG Grid keeps r-miss selected after the "Hit" chip hides it; the
+    // chemist can't see it, so it must not be removed — nor counted.
+    renderToolbar(["hit"]);
+    fireEvent.click(screen.getByRole("button", { name: "Remove selected (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove 1" }));
+    expect(mutate).toHaveBeenCalledWith({ campaignId: "c1", data: { result_ids: ["r-hit"] } });
   });
 });

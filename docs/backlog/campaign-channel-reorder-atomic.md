@@ -1,0 +1,9 @@
+# Campaign channel reorder is two PATCHes — a failed second call leaves a permanent display_order tie
+
+**Found:** 2026-09-11, whole-branch review of `feat/stage-gates`.
+
+**Root cause:** `frontend/src/features/screen-campaign/components/sections/channels-section.tsx` reorders columns by swapping two channels' `display_order` with two sequential `PATCH /campaigns/{id}/channels/{channel_id}` calls (sequential on purpose — see `reference_concurrent_aggregate_writes_race`: concurrent load-modify-save PATCHes against one optimistic-concurrency aggregate silently drop all but one). Between the two calls both channels hold the same `display_order`. If the second PATCH fails — network, or a concurrent editor's 409 — the tie is permanent; nothing reconciles it. The single-channel `POST /channels` can create the same tie directly, since `display_order` comes from the body and uniqueness is not enforced anywhere.
+
+**Mitigated, not fixed (this branch):** the tie no longer produces a *non-deterministic* column order. Both the ORM relationship (`CampaignModel.channels` / `.stages` in `infrastructure/persistence/sqlalchemy/research_organization/models.py`) and the projection sort (`interface/routes/_campaign_dtos.py`) now order on `(display_order, id)`, so a tie falls back to id order instead of Postgres heap order. Covered by `tests/unit/interface/routes/test_campaign_dtos.py::TestChannelOrdering`.
+
+**Fix direction:** an atomic reorder endpoint — `PUT /campaigns/{id}/channels/order` with `{channel_ids: [...]}`, renumbering every channel in one load / one `save` / one version bump. That makes the reorder all-or-nothing, removes the intermediate tied state entirely, and lets the frontend drop its two-call dance. The same endpoint shape applies to stages if they ever get drag-reorder. A uniqueness constraint on `(campaign_id, display_order)` is *not* the fix — it would reject the legitimate intermediate state of any incremental renumber.

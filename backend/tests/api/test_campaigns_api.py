@@ -444,6 +444,65 @@ class TestCampaignChannels:
         assert measurement["value"] is None
         assert measurement["value_qualifier"] == "nd"
 
+    async def test_patch_channel_display_order_reorders_columns(self, client: AsyncClient) -> None:
+        """Reorder = PATCH the moved channel with its new index."""
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+
+        ids = []
+        for i, label in enumerate(["First", "Second"]):
+            resp = await client.post(
+                f"/api/v1/campaigns/{campaign_id}/channels",
+                json={
+                    "label": label,
+                    "protocol_id": protocol_id,
+                    "readout_definition_id": rd_id,
+                    "source_kind": "readout_data",
+                    "selection_rule": "latest_approved_run",
+                    "qualifier_handling": "include_qualified",
+                    "display_order": i,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            ids.append(next(c["id"] for c in resp.json()["channels"] if c["label"] == label))
+
+        resp = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/channels/{ids[0]}",
+            json={"display_order": 5},
+        )
+        assert resp.status_code == 200, resp.text
+        assert [c["label"] for c in resp.json()["channels"]] == ["Second", "First"]
+
+        reread = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert [c["display_order"] for c in reread.json()["channels"]] == [1, 5]
+
+    async def test_patch_channel_negative_display_order_422(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "IC50",
+                "protocol_id": protocol_id,
+                "readout_definition_id": rd_id,
+                "source_kind": "readout_data",
+                "selection_rule": "latest_approved_run",
+                "qualifier_handling": "include_qualified",
+                "display_order": 0,
+            },
+        )
+        channel_id = resp.json()["channels"][0]["id"]
+
+        bad = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/channels/{channel_id}",
+            json={"display_order": -1},
+        )
+        assert bad.status_code == 422, bad.text
+
     async def test_remove_channel_not_found_404(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
         mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-rmchan")
@@ -538,6 +597,111 @@ class TestCampaignStages:
         updated = next(s for s in resp.json()["stages"] if s["id"] == child["id"])
         assert updated["name"] == "Renamed Child"
         assert updated["parent_stage_id"] is None
+
+    async def test_add_manual_stage_outcomes_are_pending_until_promoted(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-manual-stage")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={"name": "Manual Triage", "kind": "manual"},
+        )
+        assert resp.status_code == 200, resp.text
+        stage = resp.json()["stages"][0]
+        assert stage["kind"] == "manual"
+        assert stage["criteria"] == []
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert get_resp.status_code == 200, get_resp.text
+        outcome = _find_stage_outcome(get_resp.json(), result_id, stage["id"])
+        assert outcome["outcome"] == "pending"
+        assert outcome["checks"] == []
+
+        # Promote -> hit; demote -> miss.
+        override_url = (
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}/stages/{stage['id']}/override"
+        )
+        promote = await client.put(
+            override_url, json={"outcome": "hit", "reason": "Worth following up"}
+        )
+        assert promote.status_code == 200, promote.text
+        assert _find_stage_outcome(promote.json(), result_id, stage["id"])["outcome"] == "hit"
+
+        demote = await client.put(
+            override_url, json={"outcome": "miss", "reason": "Known frequent hitter"}
+        )
+        assert demote.status_code == 200, demote.text
+        assert _find_stage_outcome(demote.json(), result_id, stage["id"])["outcome"] == "miss"
+
+        cleared = await client.delete(override_url)
+        assert cleared.status_code == 200, cleared.text
+        assert _find_stage_outcome(cleared.json(), result_id, stage["id"])["outcome"] == "pending"
+
+    async def test_add_manual_stage_with_criteria_422(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={
+                "name": "Manual Triage",
+                "kind": "manual",
+                "criteria": [{"channel_id": str(uuid.uuid4()), "operator": "lt", "value": 10.0}],
+            },
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_update_stage_to_manual_requires_clearing_criteria(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+        campaign = await _create_empty_campaign(client, project_id)
+        campaign_id = campaign["id"]
+        channel_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/channels",
+            json={
+                "label": "IC50",
+                "protocol_id": protocol_id,
+                "readout_definition_id": rd_id,
+                "source_kind": "readout_data",
+                "selection_rule": "latest_approved_run",
+                "qualifier_handling": "include_qualified",
+                "display_order": 0,
+            },
+        )
+        assert channel_resp.status_code == 200, channel_resp.text
+        channel_id = channel_resp.json()["channels"][0]["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={
+                "name": "Primary Hit",
+                "criteria": [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
+            },
+        )
+        assert stage_resp.status_code == 200, stage_resp.text
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        keep = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}", json={"kind": "manual"}
+        )
+        assert keep.status_code == 422, keep.text
+
+        cleared = await client.patch(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}",
+            json={"kind": "manual", "criteria": []},
+        )
+        assert cleared.status_code == 200, cleared.text
+        updated = next(s for s in cleared.json()["stages"] if s["id"] == stage_id)
+        assert updated["kind"] == "manual"
+        assert updated["criteria"] == []
 
     async def test_remove_stage_409_with_child_then_200_after_reparent(
         self, client: AsyncClient
@@ -637,6 +801,114 @@ class TestStageOverride:
         # Clearing again (nothing to clear) is a no-op success, not a 404.
         second_delete = await client.delete(override_url)
         assert second_delete.status_code == 200, second_delete.text
+
+    async def test_bulk_overrides_put_promotes_two_results_then_null_clears(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol1 = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-override")
+        mol2 = await _register_molecule(client, CAFFEINE_SMILES, "Caf-bulk-override")
+        campaign = await _create_draft_campaign(client, project_id, [mol1, mol2])
+        campaign_id = campaign["id"]
+        result_ids = [r["id"] for r in campaign["results"]]
+        assert len(result_ids) == 2
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Bulk Stage"}
+        )
+        assert stage_resp.status_code == 200, stage_resp.text
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        bulk_url = f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}/overrides"
+        put_resp = await client.put(
+            bulk_url,
+            json={
+                "result_ids": result_ids,
+                "outcome": "hit",
+                "reason": "Batch promote after re-assay",
+            },
+        )
+        assert put_resp.status_code == 200, put_resp.text
+        for result_id in result_ids:
+            outcome = _find_stage_outcome(put_resp.json(), result_id, stage_id)
+            assert outcome["outcome"] == "hit"
+            assert outcome["overridden"] is True
+            assert outcome["override_reason"] == "Batch promote after re-assay"
+
+        clear_resp = await client.put(bulk_url, json={"result_ids": result_ids, "outcome": None})
+        assert clear_resp.status_code == 200, clear_resp.text
+        for result_id in result_ids:
+            outcome = _find_stage_outcome(clear_resp.json(), result_id, stage_id)
+            assert outcome["overridden"] is False
+            assert outcome["override_reason"] is None
+
+    async def test_bulk_overrides_unknown_result_404_and_nothing_applied(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-override-404")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Bulk Stage 404"}
+        )
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        resp = await client.put(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}/overrides",
+            json={
+                "result_ids": [result_id, str(uuid.uuid4())],
+                "outcome": "hit",
+                "reason": "Batch promote",
+            },
+        )
+        assert resp.status_code == 404, resp.text
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        outcome = _find_stage_outcome(get_resp.json(), result_id, stage_id)
+        assert outcome["overridden"] is False
+
+    async def test_bulk_overrides_hit_without_reason_422(self, client: AsyncClient) -> None:
+        """A forced hit/miss always records its rationale — an omitted reason is
+        rejected at the API boundary, not silently stored as blank."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-no-reason")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Bulk No Reason"}
+        )
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        resp = await client.put(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}/overrides",
+            json={"result_ids": [result_id], "outcome": "hit"},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_bulk_overrides_on_closed_campaign_423(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-locked")
+        campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Bulk Locked"}
+        )
+        stage_id = stage_resp.json()["stages"][0]["id"]
+        result_id = stage_resp.json()["results"][0]["id"]
+
+        close_resp = await client.post(f"/api/v1/campaigns/{campaign_id}/close", json={})
+        assert close_resp.status_code == 200, close_resp.text
+
+        resp = await client.put(
+            f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}/overrides",
+            json={"result_ids": [result_id], "outcome": "hit", "reason": "Too late"},
+        )
+        assert resp.status_code == 423, resp.text
 
     async def test_override_unknown_stage_404(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
@@ -810,6 +1082,60 @@ class TestCampaignResults:
         assert resp.status_code == 200, resp.text
         remaining = {r["molecule_id"] for r in resp.json()["results"]}
         assert mol2 not in remaining
+
+    async def test_bulk_remove_result_rows_200(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        mol1 = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-rm1")
+        mol2 = await _register_molecule(client, CAFFEINE_SMILES, "Caf-bulk-rm2")
+        mol3 = await _register_molecule(client, "c1ccccc1", "Benz-bulk-rm3")
+        campaign = await _create_draft_campaign(client, project_id, [mol1, mol2, mol3])
+        campaign_id = campaign["id"]
+        to_remove = [_find_result_id(campaign, mol1), _find_result_id(campaign, mol3)]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/results/bulk-remove",
+            json={"result_ids": to_remove},
+        )
+        assert resp.status_code == 200, resp.text
+        remaining = {r["molecule_id"] for r in resp.json()["results"]}
+        assert remaining == {mol2}
+
+    async def test_bulk_remove_unknown_result_404_and_nothing_removed(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol1 = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-rm-404")
+        campaign = await _create_draft_campaign(client, project_id, [mol1])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/results/bulk-remove",
+            json={"result_ids": [result_id, str(uuid.uuid4())]},
+        )
+        assert resp.status_code == 404, resp.text
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert len(get_resp.json()["results"]) == 1
+
+    async def test_bulk_remove_on_closed_campaign_422(self, client: AsyncClient) -> None:
+        """A published campaign's row set is frozen — bulk-remove is rejected."""
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-bulk-rm-locked")
+        campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+
+        close_resp = await client.post(f"/api/v1/campaigns/{campaign_id}/close", json={})
+        assert close_resp.status_code == 200, close_resp.text
+        result_id = close_resp.json()["results"][0]["id"]
+
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/results/bulk-remove",
+            json={"result_ids": [result_id]},
+        )
+        assert resp.status_code == 422, resp.text
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        assert len(get_resp.json()["results"]) == 1
 
     async def test_set_result_notes_200(self, client: AsyncClient) -> None:
         """Notes sent in the PATCH body are persisted on the result."""
@@ -1207,6 +1533,67 @@ class TestRunImport:
             {"channel_id": str(channel_id), "operator": "lt", "value": 10.0}
         ]
 
+    async def test_add_from_runs_same_stage_name_twice_reuses_stage(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> None:
+        """Re-importing under the same stage_name succeeds and leaves one
+        stage, with the second import's threshold."""
+        project_id = await _create_project(client)
+        campaign = await _create_empty_campaign(client, project_id, name="Stage Reimport")
+        campaign_id = campaign["id"]
+        protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+
+        def _body(threshold: float) -> dict:
+            return {
+                "run_ids": [str(uuid.uuid4())],
+                "channel_configs": [
+                    {
+                        "protocol_id": protocol_id,
+                        "readout_definition_id": rd_id,
+                        "label": "IC50",
+                        "source_kind": "readout_data",
+                        "selection_rule": "latest_approved_run",
+                        "hit_threshold": {
+                            "readout_name": "IC50",
+                            "operator": "lt",
+                            "value": threshold,
+                        },
+                        "use_for_filter": True,
+                    }
+                ],
+                "scope": "all",
+                "stage_name": "Primary Hits",
+            }
+
+        first = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/add-from-runs", json=_body(10.0)
+        )
+        assert first.status_code == 200, first.text
+        second = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/add-from-runs", json=_body(1.0)
+        )
+        assert second.status_code == 200, second.text
+        channel_id = uuid.UUID(second.json()["campaign"]["channels"][0]["id"])
+
+        async with session_factory() as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(CampaignStageModel).where(
+                            CampaignStageModel.campaign_id == uuid.UUID(campaign_id)
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert len(rows) == 1
+        assert rows[0].criteria == [
+            {"channel_id": str(channel_id), "operator": "lt", "value": 1.0}
+        ]
+
     async def test_old_add_from_run_route_returns_404(self, client: AsyncClient) -> None:
         """The deprecated single-run /add-from-run is removed."""
         project_id = await _create_project(client)
@@ -1325,3 +1712,103 @@ class TestCampaignTargets:
         )
         assert campaign_id in [c["id"] for c in match.json()["items"]]
         assert campaign_id not in [c["id"] for c in miss.json()["items"]]
+
+
+# ---------------------------------------------------------------------------
+# Summary read + list summaries
+# ---------------------------------------------------------------------------
+
+
+async def _seed_campaign_with_stage(client: AsyncClient, project_id: str) -> tuple[str, str]:
+    """Draft campaign with one molecule, one channel and one stage over it."""
+    mol_id = await _register_molecule(client, ASPIRIN_SMILES, f"Asp-{uuid.uuid4().hex[:8]}")
+    campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
+    campaign = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+    channel_id = campaign["channels"][0]["id"]
+
+    resp = await client.post(
+        f"/api/v1/campaigns/{campaign_id}/stages",
+        json={
+            "name": "Primary Hit",
+            "criteria": [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return campaign_id, resp.json()["stages"][0]["id"]
+
+
+class TestCampaignSummary:
+    async def test_summary_drops_results_and_carries_stage_counts(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client, "Summary Project")
+        campaign_id, stage_id = await _seed_campaign_with_stage(client, project_id)
+
+        resp = await client.get(f"/api/v1/campaigns/{campaign_id}/summary")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+
+        assert "results" not in data
+        assert data["result_count"] == 1
+        assert data["id"] == campaign_id
+        stage = next(s for s in data["stages"] if s["id"] == stage_id)
+        # The channel resolves to an ND cell (no screening data) -> untested.
+        assert stage["counts"] == {
+            "population": 1,
+            "hit": 0,
+            "miss": 0,
+            "untested": 1,
+            "pending": 0,
+            "not_in_stage": 0,
+            "overridden": 0,
+        }
+
+    async def test_summary_404_for_unknown_campaign(self, client: AsyncClient) -> None:
+        resp = await client.get(f"/api/v1/campaigns/{uuid.uuid4()}/summary")
+        assert resp.status_code == 404
+
+    async def test_full_read_also_carries_stage_counts(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client, "Counts Project")
+        campaign_id, stage_id = await _seed_campaign_with_stage(client, project_id)
+
+        data = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+
+        stage = next(s for s in data["stages"] if s["id"] == stage_id)
+        assert stage["counts"]["population"] == 1
+
+
+class TestListCampaignsSummaries:
+    async def test_list_items_are_summaries(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client, "List Summary Project")
+        campaign_id, _stage_id = await _seed_campaign_with_stage(client, project_id)
+
+        resp = await client.get("/api/v1/campaigns", params={"project_id": project_id})
+        assert resp.status_code == 200, resp.text
+        row = next(c for c in resp.json()["items"] if c["id"] == campaign_id)
+
+        assert "results" not in row
+        assert row["result_count"] == 1
+        assert row["stages"][0]["counts"]["population"] == 1
+
+    async def test_status_filter(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client, "Status Filter Project")
+        draft_id, _ = await _seed_campaign_with_stage(client, project_id)
+        closed_id, _ = await _seed_campaign_with_stage(client, project_id)
+        close = await client.post(f"/api/v1/campaigns/{closed_id}/close", json={})
+        assert close.status_code == 200, close.text
+
+        closed = await client.get(
+            "/api/v1/campaigns", params={"project_id": project_id, "status": "closed"}
+        )
+        drafts = await client.get(
+            "/api/v1/campaigns", params={"project_id": project_id, "status": "draft"}
+        )
+        unfiltered = await client.get("/api/v1/campaigns", params={"project_id": project_id})
+
+        assert [c["id"] for c in closed.json()["items"]] == [closed_id]
+        assert [c["id"] for c in drafts.json()["items"]] == [draft_id]
+        assert {c["id"] for c in unfiltered.json()["items"]} == {draft_id, closed_id}
+
+    async def test_unknown_status_422(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/v1/campaigns", params={"status": "archived"})
+        assert resp.status_code == 422

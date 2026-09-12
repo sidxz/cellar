@@ -7,10 +7,12 @@
  * campaign's hit-stage funnel as a row of tiles — "All <n>" plus one tile
  * per stage sorted by display_order. Each tile shows the hit count as the
  * big number, the population it was drawn from ("of N"), the hit rate, and
- * the stage's criteria as a one-line summary, all tallied from
- * `stage_outcomes` regardless of selection. A child stage's tile carries
- * "↳ after <parent name>" as its eyebrow. Selecting a tile is purely a
- * notify-parent affordance (`onSelectStage`).
+ * the stage's criteria as a one-line summary. The counts come from the
+ * server (`stage.counts`, computed by the same `tally_stage_counts` the
+ * published document uses) — never recomputed here. A child stage's tile
+ * carries "↳ after <parent name>" as its eyebrow, a manual stage's carries
+ * "manual". Selecting a tile is purely a notify-parent affordance
+ * (`onSelectStage`).
  *
  * The panel below the tabs shows the *selected* stage's criteria (read-only
  * rows) plus its parent and, when editable, a MoreHorizontal menu opening
@@ -24,9 +26,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { protocolColorById } from "../../lib/protocol-colors";
-import { tallyStage } from "../../lib/stage-outcomes";
 import type { CampaignResponse, StageCriterionDTO } from "../../types";
-import { StagePopoverForm } from "../stage-popover";
+import { MANUAL_STAGE_HELP, StagePopoverForm } from "../stage-popover";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -87,10 +88,6 @@ export function StagesSection({
   );
   const stageById = useMemo(() => new Map(stages.map((s) => [s.id, s] as const)), [stages]);
   const results = campaign.results ?? [];
-  const tallies = useMemo(
-    () => new Map(stages.map((s) => [s.id, tallyStage(results, s.id)] as const)),
-    [stages, results],
-  );
 
   // Protocol name lookup for criteria rows — same rationale as ChannelsSection:
   // resolve any protocol referenced by a channel regardless of project scope.
@@ -161,9 +158,9 @@ export function StagesSection({
 
         {stages.map((stage) => {
           const parent = stage.parent_stage_id ? stageById.get(stage.parent_stage_id) : undefined;
-          const tally = tallies.get(stage.id);
-          const hit = tally?.hit ?? 0;
-          const population = tally?.population ?? 0;
+          const hit = stage.counts?.hit ?? 0;
+          const population = stage.counts?.population ?? 0;
+          const isManual = stage.kind === "manual";
           const summary = stage.criteria.map(criterionText).join(" · ");
           return (
             <button
@@ -175,6 +172,11 @@ export function StagesSection({
               {parent && (
                 <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                   ↳ after {parent.name}
+                </span>
+              )}
+              {isManual && (
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  manual
                 </span>
               )}
               <span className="text-sm font-semibold leading-tight">{stage.name}</span>
@@ -229,7 +231,9 @@ export function StagesSection({
             )}
           </div>
 
-          {selectedStage.criteria.length === 0 ? (
+          {selectedStage.kind === "manual" ? (
+            <p className="text-sm text-muted-foreground">{MANUAL_STAGE_HELP}</p>
+          ) : selectedStage.criteria.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No criteria yet — this stage passes its whole population.
             </p>

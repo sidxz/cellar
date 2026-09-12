@@ -31,6 +31,7 @@ import { CampaignView } from "./campaign-view";
 import { CloseCampaignDialog } from "./close-campaign-dialog";
 import { ResultsGridV2 } from "./grid/results-grid";
 import { PreviewAsPublishedDialog } from "./preview-as-published-dialog";
+import { StageBulkMenu } from "./stage-bulk-menu";
 
 import { ChannelsSection } from "./sections/channels-section";
 // ── V2 section imports ────────────────────────────────────────────────────────
@@ -119,13 +120,13 @@ function CampaignBuilderV2({
     : null;
 
   // Picking a stage tab lenses the grid onto that stage's population
-  // (hit + miss + untested) and hides the rows gated out of it; "All"
+  // (hit + miss + untested + pending) and hides the rows gated out of it; "All"
   // clears the outcome chips again.
   function selectStage(id: string | null) {
     setSelectedStageId(id);
     setFilters((f) => ({
       ...f,
-      stageOutcomes: new Set<StageOutcome>(id ? ["hit", "miss", "untested"] : []),
+      stageOutcomes: new Set<StageOutcome>(id ? ["hit", "miss", "untested", "pending"] : []),
     }));
   }
 
@@ -172,6 +173,12 @@ function CampaignBuilderV2({
         onChange={setFilters}
         selectedStageId={effectiveStageId}
         resultCount={campaign.results?.length ?? 0}
+      />
+      <StageBulkMenu
+        campaign={campaign}
+        filters={filters}
+        selectedStageId={effectiveStageId}
+        readOnly={campaign.status !== "draft"}
       />
       <ResultsGridV2
         campaign={campaign}

@@ -38,12 +38,14 @@ interface PublishedStageShape {
   name: string;
   parent_stage_id: string | null;
   display_order: number;
+  kind: string;
   criteria: unknown[];
   counts: {
     population: number;
     hit: number;
     miss: number;
     untested: number;
+    pending: number;
     not_in_stage: number;
     overridden: number;
   };
@@ -171,10 +173,12 @@ export function PreviewAsPublishedDialog({
                         <tr>
                           <th className="text-left p-2">Stage</th>
                           <th className="text-left p-2">After</th>
+                          <th className="text-left p-2">Kind</th>
                           <th className="text-left p-2">Criteria</th>
                           <th className="text-left p-2">Hit</th>
                           <th className="text-left p-2">Miss</th>
                           <th className="text-left p-2">Untested</th>
+                          <th className="text-left p-2">Pending</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -190,10 +194,14 @@ export function PreviewAsPublishedDialog({
                                     ? (stageNameById.get(s.parent_stage_id) ?? "—")
                                     : "—"}
                                 </td>
-                                <td className="p-2">{s.criteria.length}</td>
+                                <td className="p-2 text-muted-foreground">{s.kind}</td>
+                                <td className="p-2">
+                                  {s.kind === "manual" ? "—" : s.criteria.length}
+                                </td>
                                 <td className="p-2">{s.counts.hit}</td>
                                 <td className="p-2">{s.counts.miss}</td>
                                 <td className="p-2">{s.counts.untested}</td>
+                                <td className="p-2">{s.counts.pending}</td>
                               </tr>
                             ));
                         })()}

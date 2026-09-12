@@ -19,17 +19,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { formatDate } from "@/shared/lib/format-date";
 
 import { useProject } from "@/features/research-organization/hooks/use-projects";
 import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
-import { useCampaigns } from "../hooks/use-campaigns";
+import { type CampaignStatusFilter, useCampaigns } from "../hooks/use-campaigns";
 import { CampaignStatusChip } from "./campaign-status-chip";
 import { CreateCampaignDialog } from "./create-campaign-dialog";
 
 interface CampaignListProps {
   projectId: string;
 }
+
+/** Segmented status filter — "all" is the client-side "don't send `status`". */
+const STATUS_TABS: { value: CampaignStatusFilter | "all"; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "draft", label: "Draft" },
+  { value: "closed", label: "Closed" },
+  { value: "superseded", label: "Superseded" },
+];
 
 /**
  * Per-project campaign list.
@@ -44,11 +53,13 @@ export function CampaignList({ projectId }: CampaignListProps) {
     targetIds: [],
     targetLogic: "any",
   });
+  const [status, setStatus] = useState<CampaignStatusFilter | "all">("all");
   const { data, isLoading, error } = useCampaigns(projectId, {
     tags: tagFilter.tagIds,
     tagLogic: tagFilter.tagLogic,
     targets: targetFilter.targetIds,
     targetLogic: targetFilter.targetLogic,
+    status: status === "all" ? undefined : status,
   });
   const { data: project } = useProject(projectId);
 
@@ -58,12 +69,22 @@ export function CampaignList({ projectId }: CampaignListProps) {
     { label: "Campaigns" },
   ]);
 
-  const hasFilter = tagFilter.tagIds.length > 0 || targetFilter.targetIds.length > 0;
+  const hasFilter =
+    tagFilter.tagIds.length > 0 || targetFilter.targetIds.length > 0 || status !== "all";
 
   return (
     <>
       <div className="mb-4 flex items-center gap-3 justify-between">
         <div className="flex items-center gap-2">
+          <Tabs value={status} onValueChange={(v) => setStatus(v as CampaignStatusFilter | "all")}>
+            <TabsList aria-label="Filter by status">
+              {STATUS_TABS.map((t) => (
+                <TabsTrigger key={t.value} value={t.value}>
+                  {t.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
           <TagFilter value={tagFilter} onChange={setTagFilter} />
           <TargetFilter value={targetFilter} onChange={setTargetFilter} />
         </div>
@@ -142,7 +163,7 @@ export function CampaignList({ projectId }: CampaignListProps) {
                   <TargetChips targets={c.targets} max={3} />
                 </TableCell>
                 <TableCell>{c.channels?.length ?? 0}</TableCell>
-                <TableCell>{c.results?.length ?? 0}</TableCell>
+                <TableCell>{c.result_count}</TableCell>
                 <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                   {c.created_at ? formatDate(c.created_at as string) : "—"}
                 </TableCell>

@@ -33,11 +33,12 @@ from tests.unit.application.research_organization._helpers import (
 # ---------------------------------------------------------------------------
 
 
-def _make_draft_campaign_with_stage_and_result(
+def _make_draft_campaign_with_stage_and_results(
     workspace_id: uuid.UUID,
     *,
     status: CampaignStatus = CampaignStatus.DRAFT,
-) -> tuple[Campaign, CampaignStage, CampaignResult]:
+    result_count: int = 1,
+) -> tuple[Campaign, CampaignStage, list[CampaignResult]]:
     campaign = Campaign(
         workspace_id=workspace_id,
         project_id=uuid.uuid4(),
@@ -47,11 +48,25 @@ def _make_draft_campaign_with_stage_and_result(
     )
     stage = CampaignStage(campaign_id=campaign.id, name="Primary Hit", display_order=0)
     campaign.add_stage(stage)
-    result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
-    campaign.add_result(result)
+    results = []
+    for _ in range(result_count):
+        result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        campaign.add_result(result)
+        results.append(result)
     campaign.status = status
     campaign.clear_events()
-    return campaign, stage, result
+    return campaign, stage, results
+
+
+def _make_draft_campaign_with_stage_and_result(
+    workspace_id: uuid.UUID,
+    *,
+    status: CampaignStatus = CampaignStatus.DRAFT,
+) -> tuple[Campaign, CampaignStage, CampaignResult]:
+    campaign, stage, results = _make_draft_campaign_with_stage_and_results(
+        workspace_id, status=status
+    )
+    return campaign, stage, results[0]
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +87,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
             stage_id=stage.id,
             user_id=auth.user_id,
             forced_outcome=StageOutcome.HIT,
@@ -100,7 +115,7 @@ class TestSetStageOverride:
             SetStageOverrideCommand(
                 workspace_id=auth.workspace_id,
                 campaign_id=campaign.id,
-                result_id=result.id,
+                result_ids=[result.id],
                 stage_id=stage.id,
                 user_id=auth.user_id,
                 forced_outcome=StageOutcome.HIT,
@@ -114,7 +129,7 @@ class TestSetStageOverride:
             SetStageOverrideCommand(
                 workspace_id=auth.workspace_id,
                 campaign_id=campaign.id,
-                result_id=result.id,
+                result_ids=[result.id],
                 stage_id=stage.id,
                 user_id=auth.user_id,
                 forced_outcome=StageOutcome.MISS,
@@ -143,7 +158,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
             stage_id=stage.id,
             user_id=auth.user_id,
             forced_outcome=None,
@@ -164,7 +179,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
             stage_id=stage.id,
             user_id=auth.user_id,
             forced_outcome=None,
@@ -184,7 +199,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
             stage_id=stage.id,
             user_id=auth.user_id,
             forced_outcome=StageOutcome.UNTESTED,
@@ -206,7 +221,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
             stage_id=stage.id,
             user_id=auth.user_id,
             forced_outcome=StageOutcome.HIT,
@@ -227,7 +242,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=uuid.uuid4(),
-            result_id=uuid.uuid4(),
+            result_ids=[uuid.uuid4()],
             stage_id=uuid.uuid4(),
             user_id=auth.user_id,
             forced_outcome=None,
@@ -247,7 +262,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=uuid.uuid4(),
+            result_ids=[uuid.uuid4()],
             stage_id=stage.id,
             user_id=auth.user_id,
             forced_outcome=None,
@@ -267,7 +282,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
             stage_id=uuid.uuid4(),
             user_id=auth.user_id,
             forced_outcome=None,
@@ -289,7 +304,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
             stage_id=stage.id,
             user_id=auth.user_id,
             forced_outcome=StageOutcome.HIT,
@@ -311,7 +326,7 @@ class TestSetStageOverride:
         cmd = SetStageOverrideCommand(
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
-            result_id=result.id,
+            result_ids=[result.id],
             stage_id=stage.id,
             user_id=auth.user_id,
             forced_outcome=StageOutcome.HIT,
@@ -319,4 +334,111 @@ class TestSetStageOverride:
         )
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
+        repo.save.assert_not_awaited()
+
+
+class TestBulkStageOverride:
+    @pytest.mark.asyncio
+    async def test_three_results_overridden_in_one_save(self) -> None:
+        auth = fake_auth()
+        campaign, stage, results = _make_draft_campaign_with_stage_and_results(
+            auth.workspace_id, result_count=3
+        )
+        repo = make_campaign_repo(find_in_ws=campaign)
+        uc = SetStageOverride(uow=FakeUnitOfWork(), campaign_repo=repo, dispatcher=AsyncMock())
+
+        cmd = SetStageOverrideCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            result_ids=[r.id for r in results],
+            stage_id=stage.id,
+            user_id=auth.user_id,
+            forced_outcome=StageOutcome.HIT,
+            reason="Batch promote after re-assay",
+        )
+        outcome = await uc(cmd, auth=auth)
+
+        assert isinstance(outcome, Success)
+        for result in outcome.unwrap().results:
+            override = result.stage_overrides[stage.id]
+            assert override.forced_outcome == StageOutcome.HIT
+            assert override.reason == "Batch promote after re-assay"
+        # One aggregate save == one optimistic-concurrency version bump.
+        repo.save.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_forced_outcome_none_clears_every_listed_result(self) -> None:
+        auth = fake_auth()
+        campaign, stage, results = _make_draft_campaign_with_stage_and_results(
+            auth.workspace_id, result_count=3
+        )
+        for result in results:
+            result.set_stage_override(
+                stage_id=stage.id,
+                forced_outcome=StageOutcome.HIT,
+                reason="Pre-existing",
+                overridden_by=auth.user_id,
+            )
+        repo = make_campaign_repo(find_in_ws=campaign)
+        uc = SetStageOverride(uow=FakeUnitOfWork(), campaign_repo=repo, dispatcher=AsyncMock())
+
+        cmd = SetStageOverrideCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            result_ids=[r.id for r in results],
+            stage_id=stage.id,
+            user_id=auth.user_id,
+            forced_outcome=None,
+        )
+        outcome = await uc(cmd, auth=auth)
+
+        assert isinstance(outcome, Success)
+        assert all(not r.stage_overrides for r in outcome.unwrap().results)
+        repo.save.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_one_unknown_id_fails_and_leaves_every_result_untouched(self) -> None:
+        auth = fake_auth()
+        campaign, stage, results = _make_draft_campaign_with_stage_and_results(
+            auth.workspace_id, result_count=3
+        )
+        repo = make_campaign_repo(find_in_ws=campaign)
+        uc = SetStageOverride(uow=FakeUnitOfWork(), campaign_repo=repo, dispatcher=AsyncMock())
+
+        cmd = SetStageOverrideCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            result_ids=[results[0].id, uuid.uuid4(), results[2].id],
+            stage_id=stage.id,
+            user_id=auth.user_id,
+            forced_outcome=StageOutcome.HIT,
+            reason="Batch promote",
+        )
+        outcome = await uc(cmd, auth=auth)
+
+        assert isinstance(outcome, Failure)
+        assert isinstance(outcome.failure(), NotFoundError)
+        assert all(not r.stage_overrides for r in campaign.results)
+        repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_empty_result_ids_returns_validation_failure(self) -> None:
+        auth = fake_auth()
+        campaign, stage, _results = _make_draft_campaign_with_stage_and_results(auth.workspace_id)
+        repo = make_campaign_repo(find_in_ws=campaign)
+        uc = SetStageOverride(uow=FakeUnitOfWork(), campaign_repo=repo, dispatcher=AsyncMock())
+
+        cmd = SetStageOverrideCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            result_ids=[],
+            stage_id=stage.id,
+            user_id=auth.user_id,
+            forced_outcome=StageOutcome.HIT,
+            reason="Nothing selected",
+        )
+        outcome = await uc(cmd, auth=auth)
+
+        assert isinstance(outcome, Failure)
+        assert isinstance(outcome.failure(), ValidationError)
         repo.save.assert_not_awaited()

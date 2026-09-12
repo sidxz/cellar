@@ -27,16 +27,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost } from "@/shared/lib/api/campaigns/campaigns";
+import {
+  useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost,
+  useUpdateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch,
+} from "@/shared/lib/api/campaigns/campaigns";
 import { groupBy } from "@/shared/lib/group-by";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Plus } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import { campaignKeys } from "../../hooks/use-campaigns";
 import { protocolColorById } from "../../lib/protocol-colors";
-import type { CampaignChannelResponse, CampaignResponse } from "../../types";
+import { stageNameNotice } from "../../lib/stage-name-notice";
+import type { CampaignChannelResponse, CampaignResponse, CampaignStageResponse } from "../../types";
 import { ChannelPopoverForm } from "../channel-popover";
+import { ROOT_SENTINEL } from "../stage-popover";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -76,6 +81,39 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
   const groupedChannels = groupBy(channels, (ch) => ch.protocol_id);
   const colorByProtocol = useMemo(() => protocolColorById(channels), [channels]);
 
+  const qc = useQueryClient();
+  const reorderMutation = useUpdateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch();
+
+  /**
+   * Swap a readout's `display_order` with its neighbour in the same protocol
+   * row — the order the grid's columns and the criteria pickers follow.
+   *
+   * The two PATCHes are sequential, not concurrent: both load-modify-save the
+   * same optimistic-concurrency Campaign aggregate, so firing them together
+   * would drop one with a version conflict.
+   */
+  async function swapWithNeighbour(row: CampaignChannelResponse[], index: number, delta: number) {
+    const from = row[index];
+    const to = row[index + delta];
+    if (!from || !to) return;
+    try {
+      await reorderMutation.mutateAsync({
+        campaignId: campaign.id,
+        channelId: from.id,
+        data: { display_order: to.display_order },
+      });
+      await reorderMutation.mutateAsync({
+        campaignId: campaign.id,
+        channelId: to.id,
+        data: { display_order: from.display_order },
+      });
+    } catch {
+      showError("Couldn't reorder readouts");
+    } finally {
+      void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaign.id) });
+    }
+  }
+
   return (
     <section className="border-b px-6 py-4">
       <div className="mb-2 flex items-center justify-between">
@@ -85,7 +123,7 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
             <MirrorProtocolPopover
               campaignId={campaign.id}
               projectId={projectId}
-              existingStageNames={campaign.stages.map((s) => s.name)}
+              stages={campaign.stages}
               open={mirrorOpen}
               onOpenChange={setMirrorOpen}
             />
@@ -139,13 +177,17 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
                 {protocolNameById.get(protocolId) ?? "Protocol"}
               </h3>
               <ul className="flex flex-wrap gap-1.5">
-                {protocolChannels.map((c) => (
+                {protocolChannels.map((c, i) => (
                   <ChannelChip
                     key={c.id}
                     channel={c}
                     campaign={campaign}
                     projectId={projectId}
                     readOnly={readOnly}
+                    canMoveEarlier={i > 0}
+                    canMoveLater={i < protocolChannels.length - 1}
+                    reorderPending={reorderMutation.isPending}
+                    onMove={(delta) => void swapWithNeighbour(protocolChannels, i, delta)}
                   />
                 ))}
               </ul>
@@ -171,11 +213,20 @@ function ChannelChip({
   campaign,
   projectId,
   readOnly,
+  canMoveEarlier,
+  canMoveLater,
+  reorderPending,
+  onMove,
 }: {
   channel: CampaignChannelResponse;
   campaign: CampaignResponse;
   projectId: string;
   readOnly: boolean;
+  canMoveEarlier: boolean;
+  canMoveLater: boolean;
+  reorderPending: boolean;
+  /** -1 moves the readout one slot earlier in its protocol row, +1 later. */
+  onMove: (delta: -1 | 1) => void;
 }) {
   const [editOpen, setEditOpen] = useState(false);
 
@@ -206,7 +257,7 @@ function ChannelChip({
   }
 
   return (
-    <li>
+    <li className="inline-flex items-center gap-0.5">
       <Popover open={editOpen} onOpenChange={setEditOpen}>
         <PopoverTrigger asChild>
           <button type="button" className={`${CHIP} ${CHIP_EDITABLE}`} title={title}>
@@ -226,7 +277,45 @@ function ChannelChip({
           />
         </PopoverContent>
       </Popover>
+      <ReorderButton
+        label={channel.label}
+        delta={-1}
+        disabled={!canMoveEarlier || reorderPending}
+        onMove={onMove}
+      />
+      <ReorderButton
+        label={channel.label}
+        delta={1}
+        disabled={!canMoveLater || reorderPending}
+        onMove={onMove}
+      />
     </li>
+  );
+}
+
+/** One arrow beside a chip — moves the readout a slot within its protocol row. */
+function ReorderButton({
+  label,
+  delta,
+  disabled,
+  onMove,
+}: {
+  label: string;
+  delta: -1 | 1;
+  disabled: boolean;
+  onMove: (delta: -1 | 1) => void;
+}) {
+  const Icon = delta === -1 ? ChevronLeft : ChevronRight;
+  return (
+    <button
+      type="button"
+      aria-label={`Move ${label} ${delta === -1 ? "earlier" : "later"}`}
+      disabled={disabled}
+      onClick={() => onMove(delta)}
+      className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+    >
+      <Icon className="h-3 w-3" />
+    </button>
   );
 }
 
@@ -242,21 +331,22 @@ function ChannelChip({
  *
  * When the chosen protocol declares `recommended_hit_criteria`, offers to
  * also create a CampaignStage from them in the same request (`stage_name`)
- * — the funnel's first stage usually mirrors the protocol's own SOP cutoff.
+ * — the funnel's first stage usually mirrors the protocol's own SOP cutoff —
+ * optionally hung under an existing stage (`parent_stage_id`).
  */
 function MirrorProtocolPopover({
   campaignId,
   projectId,
-  existingStageNames,
+  stages,
   open,
   onOpenChange,
 }: {
   campaignId: string;
   projectId: string;
-  /** Existing stage names on this campaign — defaults "also create a stage"
-   *  off (and blocks Mirror) when the auto-derived name collides
-   *  (case-insensitive), so re-mirroring the same protocol doesn't 422. */
-  existingStageNames: string[];
+  /** This campaign's stages: they fill the parent picker and drive the
+   *  reuse advisory under the stage name (a colliding name reuses that
+   *  stage, except a manual one, which the backend refuses). */
+  stages: CampaignStageResponse[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -267,6 +357,12 @@ function MirrorProtocolPopover({
   // default below) — the checkbox isn't shown before then.
   const [createStage, setCreateStage] = useState(false);
   const [stageName, setStageName] = useState("");
+  // ROOT_SENTINEL = "no parent" (Radix Select forbids an empty item value).
+  const [parentStageId, setParentStageId] = useState<string>(ROOT_SENTINEL);
+  const parentOptions = useMemo(
+    () => [...stages].sort((a, b) => a.display_order - b.display_order),
+    [stages],
+  );
   const { data: protocols } = useProtocolSummaries([projectId]);
   const { data: chosenProtocol } = useProtocol(protocolId, {
     enabled: !!protocolId,
@@ -295,6 +391,7 @@ function MirrorProtocolPopover({
         setProtocolId("");
         setCreateStage(false);
         setStageName("");
+        setParentStageId(ROOT_SENTINEL);
       },
       onError: (err: unknown) => {
         const msg =
@@ -311,13 +408,10 @@ function MirrorProtocolPopover({
     const proto = protocols?.find((p) => p.id === id);
     const defaultName = proto ? `${proto.name} hits` : "";
     setStageName(defaultName);
-    // Off by default when the auto-derived name already exists on this
-    // campaign — re-mirroring the same protocol (the documented idempotent
-    // path) would otherwise submit a duplicate stage_name and 422.
-    setCreateStage(
-      defaultName !== "" &&
-        !existingStageNames.some((n) => n.toLowerCase() === defaultName.toLowerCase()),
-    );
+    // Re-mirroring the same protocol reuses its stage, so a collision is
+    // fine — only a manual stage of that name (which the backend refuses)
+    // defaults the checkbox off.
+    setCreateStage(defaultName !== "" && stageNameNotice(stages, defaultName)?.blocking !== true);
   }
 
   const handleMirror = () => {
@@ -328,17 +422,18 @@ function MirrorProtocolPopover({
         protocol_id: protocolId,
         stage_name:
           hasRecommendedCriteria && createStage && stageName.trim() ? stageName.trim() : undefined,
+        parent_stage_id:
+          hasRecommendedCriteria && createStage && parentStageId !== ROOT_SENTINEL
+            ? parentStageId
+            : undefined,
       },
     });
   };
 
   const trimmedStageName = stageName.trim();
   const stageNameMissing = hasRecommendedCriteria && createStage && !trimmedStageName;
-  const stageNameCollides =
-    hasRecommendedCriteria &&
-    createStage &&
-    trimmedStageName !== "" &&
-    existingStageNames.some((n) => n.toLowerCase() === trimmedStageName.toLowerCase());
+  const nameNotice =
+    hasRecommendedCriteria && createStage ? stageNameNotice(stages, stageName) : null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -385,19 +480,39 @@ function MirrorProtocolPopover({
               </Label>
             </div>
             {createStage && (
-              <div className="space-y-1">
-                <Label className="text-xs">Stage name</Label>
-                <Input
-                  value={stageName}
-                  onChange={(e) => setStageName(e.target.value)}
-                  placeholder="e.g. Screening Hits"
-                />
-                {stageNameCollides && (
-                  <p className="text-xs text-destructive">
-                    A stage named "{trimmedStageName}" already exists on this campaign.
-                  </p>
-                )}
-              </div>
+              <>
+                <div className="space-y-1">
+                  <Label className="text-xs">Stage name</Label>
+                  <Input
+                    value={stageName}
+                    onChange={(e) => setStageName(e.target.value)}
+                    placeholder="e.g. Screening Hits"
+                  />
+                  {nameNotice && (
+                    <p
+                      className={`text-xs ${nameNotice.blocking ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {nameNotice.text}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Parent stage</Label>
+                  <Select value={parentStageId} onValueChange={setParentStageId}>
+                    <SelectTrigger aria-label="Parent stage">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ROOT_SENTINEL}>None (root)</SelectItem>
+                      {parentOptions.map((st) => (
+                        <SelectItem key={st.id} value={st.id}>
+                          {st.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -410,7 +525,7 @@ function MirrorProtocolPopover({
             type="button"
             size="sm"
             onClick={handleMirror}
-            disabled={!protocolId || stageNameMissing || stageNameCollides || mutation.isPending}
+            disabled={!protocolId || stageNameMissing || nameNotice?.blocking || mutation.isPending}
           >
             {mutation.isPending ? "Mirroring…" : "Mirror"}
           </Button>

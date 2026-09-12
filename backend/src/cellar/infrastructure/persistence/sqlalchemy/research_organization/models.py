@@ -195,18 +195,24 @@ class CampaignModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         "CampaignChannelModel",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by="CampaignChannelModel.display_order",
+        # id breaks display_order ties deterministically — the two-PATCH
+        # reorder swap leaves a tie if its second call fails.
+        order_by="CampaignChannelModel.display_order, CampaignChannelModel.id",
     )
     results: Mapped[list[CampaignResultModel]] = relationship(
         "CampaignResultModel",
         cascade="all, delete-orphan",
         lazy="selectin",
+        # Without an explicit order rows come back in Postgres heap order, so
+        # editing one row moves it in the grid on the next load. No display
+        # order column exists; id is deterministic and needs no migration.
+        order_by="CampaignResultModel.id",
     )
     stages: Mapped[list[CampaignStageModel]] = relationship(
         "CampaignStageModel",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by="CampaignStageModel.display_order",
+        order_by="CampaignStageModel.display_order, CampaignStageModel.id",
     )
 
     __table_args__ = (
@@ -384,6 +390,7 @@ class CampaignStageModel(Base, EntityModelMixin):
         nullable=True,
     )
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, server_default="criteria")
     criteria: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )
