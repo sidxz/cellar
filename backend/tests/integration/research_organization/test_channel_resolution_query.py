@@ -577,7 +577,6 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
     scoped = await query.fetch_endpoint_candidates_for_runs(
         workspace_id=ws_id,
         run_ids=[run_curve_id],
-        protocol_id=protocol_id,
         readout_definition_id=rd_id,
     )
     assert [c.readout_id for c in scoped[mol_endpoint_id]] == [raw_endpoint_id]
@@ -608,7 +607,6 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
     scoped_wellless = await query.fetch_endpoint_candidates_for_runs(
         workspace_id=ws_id,
         run_ids=[run_curve_id],
-        protocol_id=protocol_id,
         readout_definition_id=rd_id,
         wellless_only=True,
     )

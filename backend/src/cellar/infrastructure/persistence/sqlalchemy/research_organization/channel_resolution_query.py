@@ -286,7 +286,6 @@ class SQLAlchemyChannelResolutionQuery:
             return await self.fetch_endpoint_candidates_for_runs(
                 workspace_id=workspace_id,
                 run_ids=run_ids,
-                protocol_id=protocol_id,
                 readout_definition_id=readout_definition_id,
                 normalization_applied=normalization_applied,
             )
@@ -369,7 +368,6 @@ class SQLAlchemyChannelResolutionQuery:
         *,
         workspace_id: uuid.UUID,
         run_ids: list[uuid.UUID],
-        protocol_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
         normalization_applied: str | None = None,
         wellless_only: bool = False,
@@ -377,9 +375,9 @@ class SQLAlchemyChannelResolutionQuery:
         """Per-molecule readout_data candidates restricted to a set of run_ids.
 
         Serves both the READOUT_DATA branch of ``fetch_candidates_for_runs``
-        and the dose-response reported-endpoint fallback in AddResultsFromRuns.
-        ``protocol_id`` is accepted for parity with the sibling method — the
-        readout definition already pins the protocol.
+        and the dose-response reported-endpoint fallback shared by the
+        add-from-runs preview and commit. The readout definition already pins
+        the protocol, so no ``protocol_id`` is taken.
 
         ``wellless_only`` is the dose-response fallback's guard — see the
         sibling method.

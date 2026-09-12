@@ -43,6 +43,8 @@ from cellar.application.research_organization.channel_resolution import (
 from cellar.application.research_organization.preview_run_import import (
     ChannelImportConfig,
     _apply_selection_rule,
+    _cfg_norm,
+    fetch_run_candidates,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -58,7 +60,6 @@ from cellar.domain.research_organization.campaign_stage import (
 )
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
-    ChannelSourceKind,
     QualifierHandling,
 )
 from cellar.domain.research_organization.repository import CampaignRepository
@@ -195,11 +196,7 @@ class AddResultsFromRuns:
             )
 
             for cfg in input.channel_configs:
-                norm = (
-                    cfg.normalization_applied
-                    if cfg.source_kind == ChannelSourceKind.READOUT_DATA
-                    else None
-                )
+                norm = _cfg_norm(cfg)
                 key: ChannelKey = (
                     cfg.protocol_id,
                     cfg.readout_definition_id,
@@ -251,11 +248,7 @@ class AddResultsFromRuns:
                             continue
                         if cfg.hit_threshold.operator == "in":
                             continue
-                        norm = (
-                            cfg.normalization_applied
-                            if cfg.source_kind == ChannelSourceKind.READOUT_DATA
-                            else None
-                        )
+                        norm = _cfg_norm(cfg)
                         channel = channel_by_config[
                             (cfg.protocol_id, cfg.readout_definition_id, norm, cfg.intercept_key)
                         ]
@@ -289,11 +282,7 @@ class AddResultsFromRuns:
             active_channel_ids: set[uuid.UUID] = set()
 
             for cfg in input.channel_configs:
-                norm = (
-                    cfg.normalization_applied
-                    if cfg.source_kind == ChannelSourceKind.READOUT_DATA
-                    else None
-                )
+                norm = _cfg_norm(cfg)
                 key = (
                     cfg.protocol_id,
                     cfg.readout_definition_id,
@@ -303,46 +292,15 @@ class AddResultsFromRuns:
                 channel = channel_by_config[key]
                 if cfg.use_for_filter and cfg.hit_threshold is not None:
                     active_channel_ids.add(channel.id)
-                candidates_by_mol = await self._query.fetch_candidates_for_runs(
+                # D1 + the curve-class filter live in the shared helper so the
+                # preview and this commit resolve identical candidate sets.
+                candidates_by_mol = await fetch_run_candidates(
+                    self._query,
                     workspace_id=input.workspace_id,
                     run_ids=input.run_ids,
-                    protocol_id=cfg.protocol_id,
-                    readout_definition_id=cfg.readout_definition_id,
-                    source_kind=cfg.source_kind,
-                    normalization_applied=norm,
+                    cfg=cfg,
                 )
-                if cfg.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
-                    # D1 — a dose-response channel falls back to reported
-                    # endpoint rows (summary-imported readout_data on the same
-                    # readout definition) for molecules with no fitted curve in
-                    # the selected runs. A molecule that has a curve keeps its
-                    # curve — if allowed_curve_classes then drops every one of
-                    # them, that molecule is skipped rather than falling back.
-                    endpoints_by_mol = await self._query.fetch_endpoint_candidates_for_runs(
-                        workspace_id=input.workspace_id,
-                        run_ids=input.run_ids,
-                        protocol_id=cfg.protocol_id,
-                        readout_definition_id=cfg.readout_definition_id,
-                        wellless_only=True,
-                    )
-                    for mol_id, endpoints in endpoints_by_mol.items():
-                        candidates_by_mol.setdefault(mol_id, endpoints)
                 for mol_id, candidates in candidates_by_mol.items():
-                    # allowed_curve_classes is a curve attribute, so it filters
-                    # curve candidates only. A molecule whose candidates are
-                    # endpoint fallback rows (no curve in the selected runs)
-                    # goes straight to the selection rule, exactly as a numeric
-                    # readout channel's rows would.
-                    is_curve_set = any(c.curve_id is not None for c in candidates)
-                    if cfg.allowed_curve_classes and is_curve_set:
-                        allowed = set(cfg.allowed_curve_classes)
-                        candidates = [
-                            c
-                            for c in candidates
-                            if c.curve_class is not None and c.curve_class in allowed
-                        ]
-                        if not candidates:
-                            continue
                     picked = _apply_selection_rule(
                         candidates, cfg.selection_rule, cfg.intercept_key
                     )

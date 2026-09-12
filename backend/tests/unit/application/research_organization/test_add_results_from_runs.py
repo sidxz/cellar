@@ -58,10 +58,10 @@ class FakeChannelQuery:
         self._endpoints = endpoints_by_channel or {}
 
     @staticmethod
-    def _scoped(data, protocol_id, readout_definition_id, run_ids):
+    def _scoped(data, key, run_ids):
         run_set = set(run_ids)
         out: dict[uuid.UUID, list[ResolvedCandidate]] = {}
-        for mol_id, cands in data.get((protocol_id, readout_definition_id), {}).items():
+        for mol_id, cands in data.get(key, {}).items():
             kept = [c for c in cands if c.run_id in run_set]
             if kept:
                 out[mol_id] = kept
@@ -85,19 +85,18 @@ class FakeChannelQuery:
         source_kind,
         normalization_applied=None,
     ):
-        return self._scoped(self._data, protocol_id, readout_definition_id, run_ids)
+        return self._scoped(self._data, (protocol_id, readout_definition_id), run_ids)
 
     async def fetch_endpoint_candidates_for_runs(
         self,
         *,
         workspace_id,
         run_ids,
-        protocol_id,
         readout_definition_id,
         normalization_applied=None,
         wellless_only=False,
     ):
-        return self._scoped(self._endpoints, protocol_id, readout_definition_id, run_ids)
+        return self._scoped(self._endpoints, readout_definition_id, run_ids)
 
 
 def _candidate(
@@ -848,7 +847,7 @@ class TestAddResultsFromRuns:
             channel_query=FakeChannelQuery(
                 {(proto, readout): {mol_curve: [curve]}},
                 {
-                    (proto, readout): {
+                    readout: {
                         mol_curve: [curve_mol_endpoint],
                         mol_endpoint: [endpoint],
                     }
@@ -899,7 +898,7 @@ class TestAddResultsFromRuns:
             run_repo=_run_repo([run_id]),
             channel_query=FakeChannelQuery(
                 {},
-                {(proto, readout): {mol: [_candidate(value=32.0, run_id=run_id)]}},
+                {readout: {mol: [_candidate(value=32.0, run_id=run_id)]}},
             ),
             dispatcher=AsyncMock(),
         )
@@ -943,7 +942,7 @@ class TestAddResultsFromRuns:
             run_repo=_run_repo([run_id]),
             channel_query=FakeChannelQuery(
                 {(proto, readout): {mol_inactive_curve: [inactive]}},
-                {(proto, readout): {mol_endpoint: [endpoint]}},
+                {readout: {mol_endpoint: [endpoint]}},
             ),
             dispatcher=AsyncMock(),
         )

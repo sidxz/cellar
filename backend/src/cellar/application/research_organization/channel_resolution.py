@@ -139,7 +139,6 @@ class ChannelResolutionQuery(Protocol):
         *,
         workspace_id: uuid.UUID,
         run_ids: list[uuid.UUID],
-        protocol_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
         normalization_applied: str | None = None,
         wellless_only: bool = False,
@@ -147,7 +146,8 @@ class ChannelResolutionQuery(Protocol):
         """Run-scoped twin of :meth:`fetch_endpoint_candidates`.
 
         Also the READOUT_DATA implementation of
-        :meth:`fetch_candidates_for_runs`. Returns
+        :meth:`fetch_candidates_for_runs`. The readout definition already pins
+        the protocol, so no ``protocol_id`` is taken. Returns
         ``dict[molecule_id, list[ResolvedCandidate]]``.
         """
         ...
