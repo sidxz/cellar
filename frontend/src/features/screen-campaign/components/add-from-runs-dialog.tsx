@@ -75,6 +75,7 @@ import {
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 
 import { campaignKeys } from "../hooks/use-campaigns";
+import { stageNameNotice } from "../lib/stage-name-notice";
 import type { CampaignStageResponse } from "../types";
 import { ROOT_SENTINEL } from "./stage-popover";
 
@@ -134,10 +135,9 @@ function channelConfigKey(readoutDefId: string, interceptKey: InterceptKey | nul
 interface AddFromRunsDialogProps {
   campaignId: string;
   projectId: string;
-  /** This campaign's stages — they name the "Save as hit stage" collision
-   *  check (the checkbox defaults off, and Add is blocked, when the
-   *  auto-derived `<Protocol> hits` name collides case-insensitively) and
-   *  fill the parent picker. */
+  /** This campaign's stages — they fill the parent picker and drive the
+   *  reuse advisory under the stage name (a colliding name reuses that
+   *  stage, except a manual one, which the backend refuses). */
   stages: CampaignStageResponse[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -152,7 +152,6 @@ export function AddFromRunsDialog({
   open,
   onOpenChange,
 }: AddFromRunsDialogProps) {
-  const existingStageNames = useMemo(() => stages.map((s) => s.name), [stages]);
   const parentOptions = useMemo(
     () => [...stages].sort((a, b) => a.display_order - b.display_order),
     [stages],
@@ -425,11 +424,7 @@ export function AddFromRunsDialog({
   // filtering and carry a threshold.
   const hasThreshold = channelConfigs.some((c) => c.hit_operator !== "");
   const trimmedStageName = stageName.trim();
-  const stageNameCollides =
-    hasThreshold &&
-    saveStage &&
-    trimmedStageName !== "" &&
-    existingStageNames.some((n) => n.toLowerCase() === trimmedStageName.toLowerCase());
+  const nameNotice = hasThreshold && saveStage ? stageNameNotice(stages, stageName) : null;
 
   // — Debounced preview refresh —
   const [previewData, setPreviewData] = useState<{
@@ -500,13 +495,11 @@ export function AddFromRunsDialog({
               const proto = protocols.find((pr) => pr.id === id);
               const defaultName = proto ? `${proto.name} hits` : "Imported hits";
               setStageName(defaultName);
-              // Off by default when the auto-derived name already exists on
-              // this campaign — a repeat import of the same protocol would
-              // otherwise submit a duplicate stage_name and 422 the whole
-              // request (spec: stage names are unique per campaign).
-              setSaveStage(
-                !existingStageNames.some((n) => n.toLowerCase() === defaultName.toLowerCase()),
-              );
+              // A repeat import of the same protocol reuses that stage
+              // (criteria replaced), so a collision is fine — only a manual
+              // stage of that name, which the backend refuses, defaults the
+              // checkbox off.
+              setSaveStage(stageNameNotice(stages, defaultName)?.blocking !== true);
             }}
             runs={filteredRuns}
             selectedRunIds={selectedRunIds}
@@ -537,7 +530,7 @@ export function AddFromRunsDialog({
             hasThreshold={hasThreshold}
             saveStage={saveStage}
             onSaveStageChange={setSaveStage}
-            stageNameCollides={stageNameCollides}
+            stageNotice={nameNotice}
             stageName={stageName}
             onStageNameChange={setStageName}
             parentOptions={parentOptions}
@@ -558,7 +551,7 @@ export function AddFromRunsDialog({
             </Button>
           ) : (
             <Button
-              disabled={!previewData || addMutation.isPending || stageNameCollides}
+              disabled={!previewData || addMutation.isPending || nameNotice?.blocking}
               onClick={() => {
                 const payload = buildPayload();
                 addMutation.mutate({
@@ -627,9 +620,10 @@ interface ConfigureStepProps {
   hasThreshold: boolean;
   saveStage: boolean;
   onSaveStageChange: (v: boolean) => void;
-  /** True when the typed stage name collides (case-insensitive) with an
-   *  existing stage on this campaign — shows an inline hint and blocks Add. */
-  stageNameCollides: boolean;
+  /** Set when the typed stage name matches an existing stage: an advisory
+   *  that its criteria will be replaced, or — for a manual stage — a
+   *  blocking error. */
+  stageNotice: { text: string; blocking: boolean } | null;
   stageName: string;
   onStageNameChange: (v: string) => void;
   /** Stages the new one can hang under, in display order. */
@@ -986,9 +980,11 @@ function ConfigureStep(p: ConfigureStepProps) {
                         placeholder="e.g. Screening hits"
                         className="h-8 text-sm"
                       />
-                      {p.stageNameCollides && (
-                        <p className="text-xs text-destructive">
-                          A stage named "{p.stageName.trim()}" already exists on this campaign.
+                      {p.stageNotice && (
+                        <p
+                          className={`text-xs ${p.stageNotice.blocking ? "text-destructive" : "text-muted-foreground"}`}
+                        >
+                          {p.stageNotice.text}
                         </p>
                       )}
                     </div>

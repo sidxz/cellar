@@ -38,6 +38,7 @@ import { ChevronLeft, ChevronRight, Copy, Plus } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 import { campaignKeys } from "../../hooks/use-campaigns";
 import { protocolColorById } from "../../lib/protocol-colors";
+import { stageNameNotice } from "../../lib/stage-name-notice";
 import type { CampaignChannelResponse, CampaignResponse, CampaignStageResponse } from "../../types";
 import { ChannelPopoverForm } from "../channel-popover";
 import { ROOT_SENTINEL } from "../stage-popover";
@@ -342,9 +343,9 @@ function MirrorProtocolPopover({
 }: {
   campaignId: string;
   projectId: string;
-  /** This campaign's stages: their names default "also create a stage" off
-   *  (and block Mirror) when the auto-derived name collides
-   *  (case-insensitive), and they fill the parent picker. */
+  /** This campaign's stages: they fill the parent picker and drive the
+   *  reuse advisory under the stage name (a colliding name reuses that
+   *  stage, except a manual one, which the backend refuses). */
   stages: CampaignStageResponse[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -358,7 +359,6 @@ function MirrorProtocolPopover({
   const [stageName, setStageName] = useState("");
   // ROOT_SENTINEL = "no parent" (Radix Select forbids an empty item value).
   const [parentStageId, setParentStageId] = useState<string>(ROOT_SENTINEL);
-  const existingStageNames = useMemo(() => stages.map((s) => s.name), [stages]);
   const parentOptions = useMemo(
     () => [...stages].sort((a, b) => a.display_order - b.display_order),
     [stages],
@@ -408,13 +408,10 @@ function MirrorProtocolPopover({
     const proto = protocols?.find((p) => p.id === id);
     const defaultName = proto ? `${proto.name} hits` : "";
     setStageName(defaultName);
-    // Off by default when the auto-derived name already exists on this
-    // campaign — re-mirroring the same protocol (the documented idempotent
-    // path) would otherwise submit a duplicate stage_name and 422.
-    setCreateStage(
-      defaultName !== "" &&
-        !existingStageNames.some((n) => n.toLowerCase() === defaultName.toLowerCase()),
-    );
+    // Re-mirroring the same protocol reuses its stage, so a collision is
+    // fine — only a manual stage of that name (which the backend refuses)
+    // defaults the checkbox off.
+    setCreateStage(defaultName !== "" && stageNameNotice(stages, defaultName)?.blocking !== true);
   }
 
   const handleMirror = () => {
@@ -435,11 +432,8 @@ function MirrorProtocolPopover({
 
   const trimmedStageName = stageName.trim();
   const stageNameMissing = hasRecommendedCriteria && createStage && !trimmedStageName;
-  const stageNameCollides =
-    hasRecommendedCriteria &&
-    createStage &&
-    trimmedStageName !== "" &&
-    existingStageNames.some((n) => n.toLowerCase() === trimmedStageName.toLowerCase());
+  const nameNotice =
+    hasRecommendedCriteria && createStage ? stageNameNotice(stages, stageName) : null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -494,9 +488,11 @@ function MirrorProtocolPopover({
                     onChange={(e) => setStageName(e.target.value)}
                     placeholder="e.g. Screening Hits"
                   />
-                  {stageNameCollides && (
-                    <p className="text-xs text-destructive">
-                      A stage named "{trimmedStageName}" already exists on this campaign.
+                  {nameNotice && (
+                    <p
+                      className={`text-xs ${nameNotice.blocking ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      {nameNotice.text}
                     </p>
                   )}
                 </div>
@@ -529,7 +525,7 @@ function MirrorProtocolPopover({
             type="button"
             size="sm"
             onClick={handleMirror}
-            disabled={!protocolId || stageNameMissing || stageNameCollides || mutation.isPending}
+            disabled={!protocolId || stageNameMissing || nameNotice?.blocking || mutation.isPending}
           >
             {mutation.isPending ? "Mirroring…" : "Mirror"}
           </Button>

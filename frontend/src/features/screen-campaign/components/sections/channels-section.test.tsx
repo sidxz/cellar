@@ -212,6 +212,38 @@ describe("MirrorProtocolPopover", () => {
     });
   });
 
+  it("reuses a colliding criteria stage — advisory, Mirror still enabled", async () => {
+    render(<ChannelsSection campaign={withStage} projectId="p1" readOnly={false} />, { wrapper });
+
+    fireEvent.click(screen.getByRole("button", { name: /Mirror protocol/ }));
+    pick(0, "Kinase Panel");
+    fireEvent.change(screen.getByPlaceholderText("e.g. Screening Hits"), {
+      target: { value: "primary" },
+    });
+
+    expect(
+      screen.getByText('Reuses stage "Primary": its criteria will be replaced.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mirror" })).toBeEnabled();
+  });
+
+  it("blocks a name that belongs to a manual stage", async () => {
+    const manual = {
+      ...withStage,
+      stages: [{ id: "st-m", name: "Confirmed", display_order: 0, kind: "manual" }],
+    } as unknown as CampaignResponse;
+    render(<ChannelsSection campaign={manual} projectId="p1" readOnly={false} />, { wrapper });
+
+    fireEvent.click(screen.getByRole("button", { name: /Mirror protocol/ }));
+    pick(0, "Kinase Panel");
+    fireEvent.change(screen.getByPlaceholderText("e.g. Screening Hits"), {
+      target: { value: "Confirmed" },
+    });
+
+    expect(screen.getByText("Confirmed is a manual stage; pick another name")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mirror" })).toBeDisabled();
+  });
+
   it("leaves parent_stage_id off when the stage stays at the root", async () => {
     render(<ChannelsSection campaign={withStage} projectId="p1" readOnly={false} />, { wrapper });
 
