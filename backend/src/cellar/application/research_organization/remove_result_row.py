@@ -40,13 +40,15 @@ class RemoveResultRow:
 
     Pipeline:
       1. ``require_editor`` auth guard.
-      2. Load campaign (workspace-scoped); NotFoundError if missing.
-      3. Inline DRAFT check — Failure(ValidationError) if not DRAFT.
-      4. Resolve *every* result id on ``campaign.results`` before removing
+      2. Empty ``result_ids`` -> ``Failure(ValidationError)`` (matches
+         ``SetStageOverride`` — an empty selection is never a valid write).
+      3. Load campaign (workspace-scoped); NotFoundError if missing.
+      4. Inline DRAFT check — Failure(ValidationError) if not DRAFT.
+      5. Resolve *every* result id on ``campaign.results`` before removing
          anything; the first unknown id -> NotFoundError (all-or-nothing).
-      5. ``campaign.remove_result_by_molecule(result.molecule_id)`` per id —
+      6. ``campaign.remove_result_by_molecule(result.molecule_id)`` per id —
          removes the row and all associated measurements.
-      6. Bump ``campaign.updated_at``. Save + commit; dispatch; return ``Success``.
+      7. Bump ``campaign.updated_at``. Save + commit; dispatch; return ``Success``.
     """
 
     def __init__(
@@ -67,6 +69,9 @@ class RemoveResultRow:
     ) -> Result[Campaign, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
+
+        if not input.result_ids:
+            return Failure(ValidationError("result_ids must not be empty"))
 
         async with self._uow:
             campaign = await self._campaign_repo.find_by_id_in_workspace(

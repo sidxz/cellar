@@ -222,3 +222,26 @@ class TestBulkRemoveResultRows:
         assert isinstance(out.failure(), NotFoundError)
         assert len(campaign.results) == 2
         campaign_repo.save.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_empty_result_ids_returns_validation_failure(self) -> None:
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        campaign_repo = make_campaign_repo(find_in_ws=campaign)
+        uc = RemoveResultRow(
+            uow=FakeUnitOfWork(),
+            campaign_repo=campaign_repo,
+            dispatcher=AsyncMock(),
+        )
+        cmd = RemoveResultRowCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            result_ids=[],
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Failure)
+        assert isinstance(out.failure(), ValidationError)
+        # Rejected before anything is loaded or written.
+        campaign_repo.find_by_id_in_workspace.assert_not_awaited()
+        campaign_repo.save.assert_not_awaited()
