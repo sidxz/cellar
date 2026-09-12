@@ -1,9 +1,9 @@
-import { generate4PLPoints } from "@/features/screening-assay/lib/dose-response-display";
 /**
  * Render a dose-response curve to a canvas and return as base64 PNG.
  * Used for embedding sparkline images in Excel exports.
  */
 import { CHART_CANVAS, CHART_COLORS } from "@/shared/lib/chart-colors";
+import { generate4PLPoints } from "@structflo/components/dose-response";
 
 interface CurveImageParams {
   hill_slope: number;

@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "@structflo/daikon-design-tokens/tokens.css";
 
+/* Tailwind v4 does not scan node_modules, so without this every class inside
+   @structflo/components is dropped and its charts render unstyled. */
+@source "../../node_modules/@structflo/components/src";
+
 /* ── Auth page entrance animation ─────────────────────────── */
 @keyframes auth-enter {
   from {

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+// The warning amber the shared renderer draws suggestions and aggregate
+// markers in. Asserted by value: if the shared palette moves, these markers
+// move with it in every app, and that is worth noticing here.
+const CHART_WARNING = "#f49e17";
+
 // Capture Plot props rather than render Plotly — we're asserting on the
 // trace + shape shapes the chart emits in aggregate mode, not the
 // pixel-level rendering (already covered by the figure tests).
@@ -10,17 +15,6 @@ vi.mock("@/shared/lib/plotly", () => ({
     return null;
   },
   getPlotlyGlobal: () => null,
-}));
-
-vi.mock("@/shared/lib/chart-colors", () => ({
-  CHART_AXIS: { tick: "#000", label: "#000", grid: "#ccc" },
-  CHART_COLORS: { warning: "#f59e0b", error: "#dc2626", success: "#16a34a" },
-  GROUP_PALETTE: ["#000", "#111", "#222", "#333", "#444", "#555", "#666", "#777"],
-  CURVE_DEFAULT_COLOR: "#000",
-  CURVE_QUALITY_COLORS: { inactive: "#999", full: "#000", partial: "#aaa" } as Record<
-    string,
-    string
-  >,
 }));
 
 // Hooks talk to the API — stub to no-op so the chart's edit-mode wiring
@@ -259,7 +253,7 @@ describe("<DoseResponseChart /> — aggregate-mode overlay", () => {
     // Solid (no dash) and amber — distinct from the dotted per-curve dash
     // that LATEST cells draw.
     expect(verticalShapes[0].line?.dash).toBeUndefined();
-    expect(verticalShapes[0].line?.color).toBe("#f59e0b");
+    expect(verticalShapes[0].line?.color).toBe(CHART_WARNING);
   });
 
   it("suppresses additional-intercept dashed lines in aggregate mode", () => {
@@ -529,8 +523,8 @@ describe("<DoseResponseChart /> — auto-3σ suggestion markers", () => {
     const suggestionTrace = traces.find((t) => /suggested 3σ/i.test(t.name ?? ""));
     expect(suggestionTrace).toBeDefined();
     expect(suggestionTrace?.marker?.symbol).toBe("circle-open");
-    // Color matches the warning token (amber-500 / #f59e0b).
-    expect(suggestionTrace?.marker?.color).toBe("#f59e0b");
+    // Color matches the shared palette's warning token.
+    expect(suggestionTrace?.marker?.color).toBe(CHART_WARNING);
     expect(suggestionTrace?.x).toEqual([0.1]);
     expect(suggestionTrace?.y).toEqual([30]);
 
