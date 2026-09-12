@@ -323,6 +323,7 @@ class AddResultsFromRuns:
                         run_ids=input.run_ids,
                         protocol_id=cfg.protocol_id,
                         readout_definition_id=cfg.readout_definition_id,
+                        wellless_only=True,
                     )
                     for mol_id, endpoints in endpoints_by_mol.items():
                         candidates_by_mol.setdefault(mol_id, endpoints)

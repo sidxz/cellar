@@ -350,3 +350,46 @@ class TestHasWelllessRows:
             # Scoped: another workspace / another run sees nothing.
             assert await repo.has_wellless_rows(uuid.uuid4(), run_id) is False
             assert await repo.has_wellless_rows(workspace_id, uuid.uuid4()) is False
+
+
+@pytest.mark.asyncio
+class TestFindAggregatedWelllessOnly:
+    """``wellless_only`` is the reported-endpoint fallback's guard: per-well
+    response readings on a dose-response definition must never be averaged
+    into a fake endpoint."""
+
+    async def test_wellless_only_excludes_welled_rows(self, uow, workspace_id):
+        molecule_id = uuid.uuid4()
+        async with uow:
+            run_id, rd_id = await _seed_run_and_def(uow, workspace_id=workspace_id)
+            repo = SQLAlchemyReadoutDataRepository(uow)
+            for well_id, value in ((None, 3.4), (uuid.uuid4(), 100.0)):
+                await repo.save(
+                    ReadoutData(
+                        workspace_id=workspace_id,
+                        run_id=run_id,
+                        well_id=well_id,
+                        molecule_id=molecule_id,
+                        readout_definition_id=rd_id,
+                        value=QualifiedValue(value=value, qualifier=Qualifier.EQUAL),
+                    )
+                )
+            await uow.commit()
+
+        repo = SQLAlchemyReadoutDataRepository(uow)
+        async with uow:
+            both = await repo.find_aggregated_by_molecules(
+                workspace_id, [molecule_id], [(rd_id, None)]
+            )
+            wellless = await repo.find_aggregated_by_molecules(
+                workspace_id, [molecule_id], [(rd_id, None)], wellless_only=True
+            )
+
+        # Default keeps reading per-well rows — numeric readout columns need them.
+        assert both[molecule_id][(rd_id, None)].data_point_count == 2
+        assert both[molecule_id][(rd_id, None)].value == pytest.approx(51.7)
+
+        # The fallback sees only the summary-imported endpoint.
+        agg = wellless[molecule_id][(rd_id, None)]
+        assert agg.data_point_count == 1
+        assert agg.value == pytest.approx(3.4)

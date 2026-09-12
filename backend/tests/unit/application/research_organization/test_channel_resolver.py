@@ -36,7 +36,9 @@ class _FakeQuery:
     async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
         return list(self._c)
 
-    async def fetch_endpoint_candidates(self, *, workspace_id, channel, molecule_id):
+    async def fetch_endpoint_candidates(
+        self, *, workspace_id, channel, molecule_id, wellless_only=False
+    ):
         return list(self._e)
 
 

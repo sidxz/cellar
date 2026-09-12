@@ -430,6 +430,8 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
     raw_endpoint_id = uuid.uuid4()
     computed_endpoint_id = uuid.uuid4()
     other_run_endpoint_id = uuid.uuid4()
+    mol_welled_id = uuid.uuid4()
+    welled_row_id = uuid.uuid4()
 
     async with session_factory() as session, session.begin():
         await session.execute(
@@ -525,6 +527,28 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
                     "norm": norm,
                 },
             )
+        # A per-well response reading on the SAME dose-response definition —
+        # a plate column mapped onto it. Never a reported endpoint.
+        await session.execute(
+            sa.text(
+                "INSERT INTO readout_data "
+                "(id, workspace_id, run_id, well_id, molecule_id, "
+                "batch_id, readout_definition_id, value_numeric, "
+                "value_qualifier, is_outlier, is_computed, "
+                "normalization_applied) "
+                "VALUES (:id, :ws, :run, :well, :mol, :batch, :rd, "
+                "77.0, '=', false, false, NULL)"
+            ),
+            {
+                "id": welled_row_id,
+                "ws": ws_id,
+                "run": run_curve_id,
+                "well": uuid.uuid4(),
+                "mol": mol_welled_id,
+                "batch": batch_id,
+                "rd": rd_id,
+            },
+        )
 
     query = SQLAlchemyChannelResolutionQuery(session_factory)
     channel = CampaignChannel(
@@ -568,3 +592,31 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
     )
     assert list(curves) == [mol_curve_id]
     assert [c.curve_id for c in curves[mol_curve_id]] == [curve_id]
+
+    # ``wellless_only`` — the DR fallback's guard. A molecule whose only raw
+    # row on this definition is a per-well response reading yields nothing, so
+    # it can't be averaged into a fake reported endpoint.
+    assert (
+        await query.fetch_endpoint_candidates(
+            workspace_id=ws_id,
+            channel=channel,
+            molecule_id=mol_welled_id,
+            wellless_only=True,
+        )
+        == []
+    )
+    scoped_wellless = await query.fetch_endpoint_candidates_for_runs(
+        workspace_id=ws_id,
+        run_ids=[run_curve_id],
+        protocol_id=protocol_id,
+        readout_definition_id=rd_id,
+        wellless_only=True,
+    )
+    assert mol_welled_id not in scoped_wellless
+    assert [c.readout_id for c in scoped_wellless[mol_endpoint_id]] == [raw_endpoint_id]
+
+    # Default (numeric readout channels) still reads per-well rows.
+    welled = await query.fetch_endpoint_candidates(
+        workspace_id=ws_id, channel=channel, molecule_id=mol_welled_id
+    )
+    assert [c.readout_id for c in welled] == [welled_row_id]

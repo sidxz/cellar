@@ -137,14 +137,20 @@ class MoleculeActivityService:
         # molecule); swap for a DISTINCT (run_id, readout_definition_id)
         # projection if a heavily-screened compound makes it bite.
         readout_rows = await self._readout_repo.find_by_molecule(workspace_id, molecule_id)
-        raw_rd_ids = {
-            row.readout_definition_id for row in readout_rows if row.normalization_applied is None
-        }
+        # Raw layer AND well-less: a reported endpoint records no plate
+        # position, so per-well response readings can't masquerade as one.
+        endpoint_rows = [
+            row
+            for row in readout_rows
+            if row.normalization_applied is None and row.well_id is None
+        ]
+        raw_rd_ids = {row.readout_definition_id for row in endpoint_rows}
         readout_runs = (
-            await self._run_repo.find_by_ids(workspace_id, list({r.run_id for r in readout_rows}))
-            if raw_rd_ids
+            await self._run_repo.find_by_ids(workspace_id, list({r.run_id for r in endpoint_rows}))
+            if endpoint_rows
             else {}
         )
+        curve_proto_ids = {curve.protocol_id for curve in curves}
         proto_ids |= {run.protocol_id for run in readout_runs.values()}
 
         # Fetch protocol metadata (single query) — used for display
@@ -225,7 +231,10 @@ class MoleculeActivityService:
         endpoints_by_proto: dict[uuid.UUID, list[ActivityValue]] = {}
         if endpoint_defs:
             aggregated = await self._readout_repo.find_aggregated_by_molecules(
-                workspace_id, [molecule_id], [(rd_id, None) for rd_id in endpoint_defs]
+                workspace_id,
+                [molecule_id],
+                [(rd_id, None) for rd_id in endpoint_defs],
+                wellless_only=True,
             )
             for (rd_id, _norm), agg in aggregated.get(molecule_id, {}).items():
                 endpoints_by_proto.setdefault(endpoint_defs[rd_id], []).append(
@@ -240,6 +249,11 @@ class MoleculeActivityService:
 
         summaries: list[ProtocolActivitySummary] = []
         for pid in sorted(proto_ids):
+            # A protocol reached only through readout rows earns a card only if
+            # it actually yielded an endpoint — otherwise a well-less row on
+            # some unrelated readout would add an empty card.
+            if pid not in curve_proto_ids and not endpoints_by_proto.get(pid):
+                continue
             name, ptype, _unit = protocols_by_id.get(pid, ("Unknown", "unknown", "uM"))
             summaries.append(
                 ProtocolActivitySummary(
@@ -398,7 +412,10 @@ class MoleculeActivityService:
             ]
             if missing_mols:
                 drc_fallback = await self._readout_repo.find_aggregated_by_molecules(
-                    workspace_id, missing_mols, [(rd_id, None) for rd_id in drc_specs]
+                    workspace_id,
+                    missing_mols,
+                    [(rd_id, None) for rd_id in drc_specs],
+                    wellless_only=True,
                 )
 
         # "any" column: every curve the molecule has, in every protocol.

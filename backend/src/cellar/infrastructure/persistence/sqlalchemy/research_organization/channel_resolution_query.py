@@ -91,6 +91,7 @@ def _readout_stmt(
     workspace_id: uuid.UUID,
     readout_definition_id: uuid.UUID,
     normalization_applied: str | None,
+    wellless_only: bool = False,
 ):
     """Base SELECT over readout_data candidates; callers add the scoping clause.
 
@@ -136,6 +137,10 @@ def _readout_stmt(
             # siblings (percent_inhibition / z_score) don't bleed into the
             # aggregate.
             _normalization_clause(normalization_applied),
+            # Reported endpoints are well-less by construction (a summary
+            # import records no plate position). Per-well response readings on
+            # the same definition must never be averaged into an endpoint.
+            *([ReadoutDataModel.well_id.is_(None)] if wellless_only else []),
         )
     )
 
@@ -367,6 +372,7 @@ class SQLAlchemyChannelResolutionQuery:
         protocol_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
         normalization_applied: str | None = None,
+        wellless_only: bool = False,
     ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
         """Per-molecule readout_data candidates restricted to a set of run_ids.
 
@@ -374,6 +380,9 @@ class SQLAlchemyChannelResolutionQuery:
         and the dose-response reported-endpoint fallback in AddResultsFromRuns.
         ``protocol_id`` is accepted for parity with the sibling method — the
         readout definition already pins the protocol.
+
+        ``wellless_only`` is the dose-response fallback's guard — see the
+        sibling method.
         """
         if not run_ids:
             return {}
@@ -381,6 +390,7 @@ class SQLAlchemyChannelResolutionQuery:
             workspace_id=workspace_id,
             readout_definition_id=readout_definition_id,
             normalization_applied=normalization_applied,
+            wellless_only=wellless_only,
         ).where(ReadoutDataModel.run_id.in_(run_ids))
         async with self._sf() as session:
             rows = (await session.execute(stmt)).all()
@@ -396,6 +406,7 @@ class SQLAlchemyChannelResolutionQuery:
         workspace_id: uuid.UUID,
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
+        wellless_only: bool = False,
     ) -> list[ResolvedCandidate]:
         """readout_data candidates for the channel's readout definition.
 
@@ -404,11 +415,18 @@ class SQLAlchemyChannelResolutionQuery:
         reaches for when no curve survives QC. A DR channel carries no
         ``normalization_applied``, so it lands on the raw layer, which is
         where a summary-imported reported IC50 lives.
+
+        ``wellless_only`` narrows to ``well_id IS NULL``: the dose-response
+        fallback passes it so a plate column mapped onto a DR definition —
+        per-well response readings, which carry a well_id — can never be
+        averaged into a fake endpoint. A numeric readout channel legitimately
+        reads per-well rows and leaves it off.
         """
         stmt = _readout_stmt(
             workspace_id=workspace_id,
             readout_definition_id=channel.readout_definition_id,
             normalization_applied=channel.normalization_applied,
+            wellless_only=wellless_only,
         ).where(ReadoutDataModel.molecule_id == molecule_id)
         async with self._sf() as session:
             rows = (await session.execute(stmt)).all()

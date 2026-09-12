@@ -521,7 +521,7 @@ class TestEnrichMoleculesReportedEndpointFallback:
         # Only the raw layer of the DR readout-def is queried, for the one
         # molecule the curve query left empty.
         readout_repo.find_aggregated_by_molecules.assert_awaited_once_with(
-            WS, [MOL_ID], [(RD_ID, None)]
+            WS, [MOL_ID], [(RD_ID, None)], wellless_only=True
         )
 
     @pytest.mark.asyncio
@@ -999,13 +999,16 @@ class TestGetActivitySummaryReportedEndpoints:
     RUN_ID = uuid.uuid4()
 
     @classmethod
-    def _readout_repo(cls, *, aggregated: dict | None = None) -> AsyncMock:
+    def _readout_repo(
+        cls, *, aggregated: dict | None = None, well_id: uuid.UUID | None = None
+    ) -> AsyncMock:
         repo = AsyncMock()
         repo.find_by_molecule = AsyncMock(
             return_value=[
                 ReadoutData(
                     workspace_id=WS,
                     run_id=cls.RUN_ID,
+                    well_id=well_id,
                     molecule_id=MOL_ID,
                     readout_definition_id=RD_ID,
                 )
@@ -1086,4 +1089,16 @@ class TestGetActivitySummaryReportedEndpoints:
         assert len(proto.best_curves) == 1
         assert proto.best_curves[0]["fitted_value"] == 5.2
         assert proto.readouts == []
+        readout_repo.find_aggregated_by_molecules.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_per_well_rows_are_not_reported_endpoints(self) -> None:
+        """A plate column mapped onto a DR def carries a well_id — it must not
+        become a fake endpoint, and must not conjure an empty protocol card."""
+        readout_repo = self._readout_repo(well_id=uuid.uuid4())
+        service = self._service(curves=[], readout_repo=readout_repo)
+
+        summary = await service.get_activity_summary(WS, MOL_ID)
+
+        assert summary.protocols == []
         readout_repo.find_aggregated_by_molecules.assert_not_awaited()

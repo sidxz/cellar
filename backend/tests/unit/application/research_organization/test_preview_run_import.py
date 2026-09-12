@@ -58,7 +58,9 @@ class FakeChannelQuery:
     async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
         return []
 
-    async def fetch_endpoint_candidates(self, *, workspace_id, channel, molecule_id):
+    async def fetch_endpoint_candidates(
+        self, *, workspace_id, channel, molecule_id, wellless_only=False
+    ):
         return []
 
     async def fetch_endpoint_candidates_for_runs(
@@ -69,6 +71,7 @@ class FakeChannelQuery:
         protocol_id,
         readout_definition_id,
         normalization_applied=None,
+        wellless_only=False,
     ):
         return {}
 

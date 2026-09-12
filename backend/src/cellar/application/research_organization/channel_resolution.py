@@ -117,6 +117,7 @@ class ChannelResolutionQuery(Protocol):
         workspace_id: uuid.UUID,
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
+        wellless_only: bool = False,
     ) -> list[ResolvedCandidate]:
         """Raw-layer ``readout_data`` rows for the channel's readout definition.
 
@@ -124,6 +125,12 @@ class ChannelResolutionQuery(Protocol):
         reported-endpoint fallback on a dose-response channel when no curve
         survives QC: a summary-imported "reported IC50" lands on the readout
         layer, not as a fitted curve.
+
+        ``wellless_only`` restricts to rows with no ``well_id``. The
+        dose-response fallback passes it — a reported endpoint is well-less by
+        construction, and per-well response readings on the same definition
+        would otherwise average into a fake endpoint. Numeric readout channels
+        leave it off and keep reading per-well rows.
         """
         ...
 
@@ -135,6 +142,7 @@ class ChannelResolutionQuery(Protocol):
         protocol_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
         normalization_applied: str | None = None,
+        wellless_only: bool = False,
     ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
         """Run-scoped twin of :meth:`fetch_endpoint_candidates`.
 
@@ -198,7 +206,10 @@ class ChannelResolver:
         # only when no curve survives QC.
         if not candidates and channel.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
             endpoints = await self._q.fetch_endpoint_candidates(
-                workspace_id=workspace_id, channel=channel, molecule_id=molecule_id
+                workspace_id=workspace_id,
+                channel=channel,
+                molecule_id=molecule_id,
+                wellless_only=True,
             )
             candidates = [c for c in endpoints if _passes_qc(c, channel.qc_filter)]
 

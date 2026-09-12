@@ -301,7 +301,14 @@ class ReadoutDataRepository(Protocol):
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
         specs: list[tuple[uuid.UUID, str | None]],
-    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]: ...
+        *,
+        wellless_only: bool = False,
+    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]:
+        """``wellless_only`` restricts to ``well_id IS NULL`` — the
+        reported-endpoint fallback's guard, so per-well response readings on a
+        dose-response definition can't be averaged into a fake endpoint."""
+        ...
+
     async def find_aggregated_by_molecules_and_names(
         self,
         workspace_id: uuid.UUID,
