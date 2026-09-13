@@ -10,3 +10,4 @@ allowBuilds:
 # minimumReleaseAge, which fails Docker builds right after a Duar SDK release).
 minimumReleaseAgeExclude:
   - "@duar-auth/*"
+  - "@structflo/*"

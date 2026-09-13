@@ -472,9 +472,9 @@ export type ReadoutData = ReadoutDataResponse;
  * The backend payload is defined at
  * `backend/src/cellar/interface/routes/readout_data.py` — it has no
  * `additional_curves` / `aggregate` fields. Those are attached frontend-side
- * by the campaign curve-snapshot adapter (`snapshotToDoseResponseCurve` in
- * `screen-campaign/lib/snapshot-adapter.ts`) so the campaign expand dialog can
- * draw aggregate-mode overlays through the same `<DoseResponseChart>`.
+ * by the search compound sheet's `adaptCurve` when the chemist is looking at
+ * an aggregate of several runs, so the chart can draw the contributing curves
+ * muted underneath the representative one.
  *
  * The backend-owned shape MUST come from the generated type so it can't
  * silently drift; only the two client extensions are hand-written. Note the

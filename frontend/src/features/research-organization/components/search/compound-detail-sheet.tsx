@@ -2,7 +2,6 @@
 
 import type { Molecule } from "@/features/chemical-registration/types";
 import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
-import { DoseResponseChart } from "@/features/screening-assay/components/dose-response-chart";
 import type { CurveClass, CurveType, DoseResponseCurve } from "@/features/screening-assay/types";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { StatusBadge } from "@/shared/components/status-badge";
@@ -10,6 +9,8 @@ import { Button } from "@/shared/components/ui/button";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/shared/components/ui/sheet";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { Plot } from "@/shared/lib/plotly";
+import { DoseResponseChartView } from "@structflo/components/dose-response";
 import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -231,7 +232,7 @@ function ProtocolCard({ group, molecule, scope, defaultExpanded = true }: Protoc
         // the side-panel chart pushes past the sheet's right edge.
         <div className="min-w-0 space-y-3 border-t border-border px-4 py-3">
           {headerText && <p className="text-xs text-muted-foreground">{headerText}</p>}
-          <DoseResponseChart curves={[adaptedCurve]} isInteractive={false} />
+          <DoseResponseChartView curves={[adaptedCurve]} plot={Plot} />
         </div>
       )}
     </div>

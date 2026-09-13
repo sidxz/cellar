@@ -474,6 +474,11 @@ export function ResultsGridV2({
             headerName: "Curve",
             colId: `${ch.id}_curve`,
             width: 240,
+            // DataGrid calls sizeColumnsToFit, which would otherwise squeeze
+            // this column below the 220px figure and clip its right edge —
+            // including the intercept marker.
+            minWidth: 240,
+            suppressSizeToFit: true,
             sortable: false,
             cellRenderer: (params: ICellRendererParams<RowData>) => {
               const r = params.data?.result;
