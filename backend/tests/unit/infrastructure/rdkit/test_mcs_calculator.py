@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import uuid
+
 from rdkit import Chem
 
 from cellar.infrastructure.rdkit.mcs_calculator import RdkitMcsCalculator
+from cellar.infrastructure.rdkit.streaming_rgroup_decomposer import StreamingRGroupDecomposer
 
 # A congeneric series: quinoline-4-carboxylic acid with varied substituents.
 SERIES = [
@@ -83,3 +86,25 @@ def test_no_molecules_at_all():
     assert result.molecule_count == 0
     assert result.is_empty is True
     assert result.core_smiles is None
+
+
+def test_every_molecule_matches_the_mcs_core_in_decomposition():
+    """The promise the UI makes: pick the shared substructure as your core and
+    no compound falls out of the R-group table.
+
+    Worth pinning end-to-end rather than assuming. `core_smiles` is written
+    from the atoms of *one* matching molecule, while R-group decomposition does
+    its own matching against that SMILES — aromaticity perception or an
+    implicit-H difference at a ring cut could in principle lose a row. A table
+    that says "shared by 23 of 23" and shows 19 rows is the failure this guards.
+    """
+    result = RdkitMcsCalculator().compute(SERIES, timeout_seconds=10)
+    assert result.core_smiles is not None
+
+    session = StreamingRGroupDecomposer().session(core_smiles=result.core_smiles)
+    matched = [
+        session.add(uuid.uuid4(), smiles) for smiles in SERIES
+    ]
+
+    assert all(matched), "every molecule the MCS was computed over must match it"
+    assert len(matched) == result.molecule_count
