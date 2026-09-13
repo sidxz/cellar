@@ -52,9 +52,6 @@ from cellar.application.research_organization.delete_collection import DeleteCol
 from cellar.application.research_organization.delete_saved_search import DeleteSavedSearch
 from cellar.application.research_organization.execute_search import ExecuteSearch
 from cellar.application.research_organization.get_campaign import GetCampaign
-from cellar.application.research_organization.list_campaign_results import (
-    ListCampaignResults,
-)
 from cellar.application.research_organization.get_collection import (
     GetCollection,
     ListCollections,
@@ -70,6 +67,9 @@ from cellar.application.research_organization.get_published_campaign import GetP
 from cellar.application.research_organization.get_saved_search import (
     GetSavedSearch,
     ListSavedSearches,
+)
+from cellar.application.research_organization.list_campaign_results import (
+    ListCampaignResults,
 )
 from cellar.application.research_organization.list_campaigns import ListCampaigns
 from cellar.application.research_organization.manage_molecule_projects import (
