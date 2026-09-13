@@ -127,6 +127,7 @@ def _create_test_app(
     from cellar.interface.routes.scaffold_tree import router as scaffold_tree_router
     from cellar.interface.routes.sar_analysis import router as sar_analysis_router
     from cellar.interface.routes.umap_cluster import router as umap_cluster_router
+    from cellar.interface.routes.mcs import router as mcs_router
     from cellar.interface.routes.kiosk import router as kiosk_router
     from cellar.interface.routes.kiosk_devices import router as kiosk_device_router
     from cellar.interface.routes.org_plate_policies import router as org_plate_policy_router
@@ -182,6 +183,7 @@ def _create_test_app(
     app.include_router(scaffold_tree_router)
     app.include_router(sar_analysis_router)
     app.include_router(umap_cluster_router)
+    app.include_router(mcs_router)
     app.include_router(audit_router)
     app.include_router(admin_delete_router)
     app.include_router(campaign_router)

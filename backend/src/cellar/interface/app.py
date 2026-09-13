@@ -364,6 +364,10 @@ def create_app() -> FastAPI:
 
     app.include_router(umap_cluster_router)
 
+    from cellar.interface.routes.mcs import router as mcs_router
+
+    app.include_router(mcs_router)
+
     from cellar.interface.routes.molecule_activity import router as molecule_activity_router
 
     app.include_router(molecule_activity_router)

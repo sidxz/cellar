@@ -18,12 +18,14 @@ import hashlib
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Protocol
 from uuid import UUID
 
 from rdkit import Chem
 
-from cellar.application.sar_analysis.repositories import ScaffoldTreeJobRepository
+from cellar.application.sar_analysis.repositories import (
+    MoleculeSmilesFetcher,
+    ScaffoldTreeJobRepository,
+)
 from cellar.application.sar_analysis.scaffold_network import ScaffoldNetworkBuilder
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.sar_analysis.scaffold_tree_types import (
@@ -41,12 +43,6 @@ class BuildScaffoldNetworkInput:
     workspace_id: UUID
 
 
-class MoleculeFetcherForScaffoldTree(Protocol):
-    async def fetch_for_scaffold_tree(
-        self, *, molecule_ids: list[UUID], workspace_id: UUID
-    ) -> list[tuple[UUID, str, str | None]]: ...
-
-
 def compute_ids_hash(ids: list[UUID]) -> str:
     """Stable SHA-256 hash of a molecule ID list, order-independent."""
     payload = ",".join(sorted(str(i) for i in ids))
@@ -57,7 +53,7 @@ class BuildScaffoldNetwork:
     def __init__(
         self,
         *,
-        molecule_fetcher: MoleculeFetcherForScaffoldTree,
+        molecule_fetcher: MoleculeSmilesFetcher,
         job_repository: ScaffoldTreeJobRepository,
         uow: UnitOfWork,
         network_builder: ScaffoldNetworkBuilder,

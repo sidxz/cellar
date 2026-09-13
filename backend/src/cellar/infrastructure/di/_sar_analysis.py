@@ -38,6 +38,7 @@ from cellar.application.sar_analysis.cancel_activity_projection import CancelAct
 from cellar.application.sar_analysis.cancel_decomposition_run import CancelDecompositionRun
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaffoldTreeJob
 from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
+from cellar.application.sar_analysis.compute_mcs import ComputeMcs
 from cellar.application.sar_analysis.compute_umap_cluster import ComputeUmapCluster
 from cellar.application.sar_analysis.decomposition_members import DecompositionMemberStream
 from cellar.application.sar_analysis.decomposition_rows import FetchDecompositionRows
@@ -115,6 +116,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.butina_clusterer import ButinaClusterer
 from cellar.infrastructure.rdkit.maxmin_picker import MaxMinPickerAdapter
+from cellar.infrastructure.rdkit.mcs_calculator import RdkitMcsCalculator
 from cellar.infrastructure.rdkit.scaffold_network_builder import ScaffoldNetworkBuilder
 from cellar.infrastructure.rdkit.streaming_rgroup_decomposer import StreamingRGroupDecomposer
 from cellar.infrastructure.rdkit.umap_embedder import UmapEmbedder
@@ -147,6 +149,20 @@ def register_sar_analysis(container: Container) -> None:
         )
 
     container.define(BuildScaffoldNetwork, _build_scaffold_network)
+
+    # --- MCS (pure RDKit wrapper) → Singleton, and its use case ---
+    # Synchronous: no job repository, no orchestrator. See ComputeMcs.
+    container.define(RdkitMcsCalculator, Singleton(RdkitMcsCalculator))
+
+    def _compute_mcs(c: Container) -> ComputeMcs:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ComputeMcs(
+            molecule_fetcher=SQLAlchemyMoleculeRepository(uow),
+            calculator=c[RdkitMcsCalculator],
+            uow=uow,
+        )
+
+    container.define(ComputeMcs, _compute_mcs)
 
     # --- Streaming R-group decomposer (pure RDKit wrapper, no deps) → Singleton ---
     container.define(StreamingRGroupDecomposer, Singleton(StreamingRGroupDecomposer))
