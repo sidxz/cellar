@@ -729,10 +729,12 @@ async def depict_structures(
     Returns a dict mapping each valid SMILES to a base64-encoded PNG.
     Invalid SMILES are silently skipped. Max 200 SMILES per request.
     """
+    # No workspace_id: depiction renders the SMILES it is handed and reads
+    # nothing tenant-scoped, so the query does not carry one. Passing it was a
+    # TypeError on every call — see docs/backlog/molecules-depict-500.md.
     images = result_to_response(
         await use_case(
             DepictMoleculesQuery(
-                workspace_id=auth.workspace_id,
                 smiles_list=body.smiles_list,
                 width=body.width,
                 height=body.height,

@@ -111,16 +111,18 @@ async def _create_campaign_with_molecules(
     campaign_id = campaign["id"]
 
     # Add each molecule directly via add-result-row (simplest integration path
-    # for tests that don't care about the collection machinery)
+    # for tests that don't care about the collection machinery). The writes
+    # answer 204, so the campaign is read back once they have all landed.
     for mol_id in molecule_ids:
         resp = await client.post(
             f"/api/v1/campaigns/{campaign_id}/results",
             json={"molecule_id": mol_id},
         )
-        assert resp.status_code == 200, resp.text
-        campaign = resp.json()
+        assert resp.status_code == 204, resp.text
 
-    return campaign
+    get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+    assert get_resp.status_code == 200, get_resp.text
+    return get_resp.json()
 
 
 # Keep old alias for tests that don't need to care about the source mechanism.
@@ -355,8 +357,9 @@ class TestCreateCampaign:
             f"/api/v1/campaigns/{campaign_id}/results",
             json={"molecule_id": mol_id},
         )
-        assert resp.status_code == 200, resp.text
-        data = resp.json()
+        assert resp.status_code == 204, resp.text
+
+        data = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
         assert len(data["results"]) == 1
         assert data["results"][0]["molecule_id"] == mol_id
         assert data["results"][0]["notes"] is None
@@ -1077,7 +1080,7 @@ class TestStageOverride:
                     f"/api/v1/campaigns/{campaign_id}/results/{result_id}/cells/{channel_id}",
                     json={"value": value, "value_qualifier": "=", "unit": "uM"},
                 )
-                assert resp.status_code == 200, resp.text
+                assert resp.status_code == 204, resp.text
 
         stage_a_resp = await client.post(
             f"/api/v1/campaigns/{campaign_id}/stages",
@@ -1232,9 +1235,10 @@ class TestCampaignResults:
             f"/api/v1/campaigns/{campaign_id}/results",
             json={"molecule_id": mol2},
         )
-        assert resp.status_code == 200, resp.text
-        result_ids = {r["molecule_id"] for r in resp.json()["results"]}
-        assert mol2 in result_ids
+        assert resp.status_code == 204, resp.text
+
+        campaign_json = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+        assert mol2 in {r["molecule_id"] for r in campaign_json["results"]}
 
     async def test_remove_result_row_200(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
@@ -1247,9 +1251,10 @@ class TestCampaignResults:
         result_id = next(r["id"] for r in campaign["results"] if r["molecule_id"] == mol2)
 
         resp = await client.delete(f"/api/v1/campaigns/{campaign_id}/results/{result_id}")
-        assert resp.status_code == 200, resp.text
-        remaining = {r["molecule_id"] for r in resp.json()["results"]}
-        assert mol2 not in remaining
+        assert resp.status_code == 204, resp.text
+
+        campaign_json = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+        assert mol2 not in {r["molecule_id"] for r in campaign_json["results"]}
 
     async def test_bulk_remove_result_rows_200(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
@@ -1264,9 +1269,10 @@ class TestCampaignResults:
             f"/api/v1/campaigns/{campaign_id}/results/bulk-remove",
             json={"result_ids": to_remove},
         )
-        assert resp.status_code == 200, resp.text
-        remaining = {r["molecule_id"] for r in resp.json()["results"]}
-        assert remaining == {mol2}
+        assert resp.status_code == 204, resp.text
+
+        campaign_json = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+        assert {r["molecule_id"] for r in campaign_json["results"]} == {mol2}
 
     async def test_bulk_remove_unknown_result_404_and_nothing_removed(
         self, client: AsyncClient

@@ -63,13 +63,6 @@ async def test_returns_the_shared_core_of_a_series(client: AsyncClient) -> None:
     assert result["core_smiles"] == "Nc1c(C(=O)O)cnc2ccccc12"
 
 
-@pytest.mark.xfail(
-    reason=(
-        "POST /molecules/depict is a 500 on main — the route passes a workspace_id "
-        "the query does not declare. See docs/backlog/molecules-depict-500.md; this "
-        "passes as soon as that one-liner lands."
-    ),
-)
 @pytest.mark.asyncio
 async def test_the_core_is_depictable(client: AsyncClient) -> None:
     ids = [await _register(client, smi, f"mcs-depict-{i}") for i, smi in enumerate(SERIES)]
