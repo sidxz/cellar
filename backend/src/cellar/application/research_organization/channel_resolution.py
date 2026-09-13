@@ -197,7 +197,23 @@ def _nd_measurement(
     unit: str,
     protocol_name: str = "",
     protocol_version: int = 0,
+    source: ResolvedCandidate | None = None,
+    pin_source: bool = True,
 ) -> CampaignMeasurement:
+    """An ND cell. ``source`` is the run the cell was resolved *from*, when one
+    exists — an Inactive curve, or a fit with no readable intercept.
+
+    Carrying its snapshot (and, unless ``pin_source`` is off, its run/curve
+    ids) is what makes "tested, no value" separable from "nothing to resolve":
+    ``stage_evaluation._is_tested_nd`` reads exactly these fields to call the
+    first a miss and the second untested. The import path
+    (``preview_run_import._apply_selection_rule`` -> ``_Picked``) already keeps
+    them, so without this a Refresh from sources / Recompute channel would
+    quietly demote every tested ND back to untested.
+
+    ``pin_source=False`` for the aggregate rules, which have no single run to
+    point at — same rule the value-carrying path below applies.
+    """
     return CampaignMeasurement(
         result_id=result_id,
         channel_id=channel_id,
@@ -206,6 +222,10 @@ def _nd_measurement(
         unit=unit or _ND_UNIT_PLACEHOLDER,
         protocol_name_snapshot=protocol_name or "-",
         protocol_version_snapshot=protocol_version,
+        source_run_id=source.run_id if source and pin_source else None,
+        source_curve_id=source.curve_id if source and pin_source else None,
+        run_date_snapshot=source.run_date if source and pin_source else None,
+        curve_snapshot=_build_curve_snapshot(source) if source else None,
     )
 
 
@@ -263,17 +283,30 @@ class ChannelResolver:
             ik,
         )
 
+        # Aggregate modes (mean / geometric_mean) don't have a single source
+        # run / curve to pin onto the measurement — the value is synthesized.
+        is_aggregate = channel.selection_rule in {
+            SelectionRule.MEAN_ACROSS_RUNS,
+            SelectionRule.GEOMETRIC_MEAN,
+        }
+
         if result.value is None:
             # The aggregator returned ND (all candidates dropped, MANUAL_PICK,
             # or aggregate produced no positives). Use the representative run
             # if any to carry protocol metadata onto the ND cell.
             rep = result.representative_run or candidates[0]
+            # MANUAL_PICK stays bare: its ND means "no chemist has picked yet",
+            # not "the assay produced no value", and must keep reading as
+            # untested rather than becoming a miss.
+            manual = channel.selection_rule == SelectionRule.MANUAL_PICK
             return _nd_measurement(
                 result_id=result_id,
                 channel_id=channel.id,
                 unit=rep.unit or _ND_UNIT_PLACEHOLDER,
                 protocol_name=rep.protocol_name,
                 protocol_version=rep.protocol_version,
+                source=None if manual else rep,
+                pin_source=not is_aggregate,
             )
 
         pick = result.representative_run
@@ -285,12 +318,6 @@ class ChannelResolver:
         # through.
         qualifier = result.qualifier if result.qualifier != ValueQualifier.EQ else pick.qualifier
 
-        # Aggregate modes (mean / geometric_mean) don't have a single source
-        # run / curve to pin onto the measurement — the value is synthesized.
-        is_aggregate = channel.selection_rule in {
-            SelectionRule.MEAN_ACROSS_RUNS,
-            SelectionRule.GEOMETRIC_MEAN,
-        }
         source_run = None if is_aggregate else pick.run_id
         source_curve = None if is_aggregate else pick.curve_id
         source_readout = None if is_aggregate else pick.readout_id

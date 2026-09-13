@@ -83,6 +83,7 @@ def _add_measurement(
     value: float | None,
     qualifier: ValueQualifier = ValueQualifier.EQ,
     unit: str = "nM",
+    **extra,
 ) -> CampaignMeasurement:
     m = CampaignMeasurement(
         result_id=result.id,
@@ -92,6 +93,7 @@ def _add_measurement(
         unit=unit,
         protocol_name_snapshot="proto",
         protocol_version_snapshot=1,
+        **extra,
     )
     result.add_measurement(m)
     return m
@@ -228,6 +230,66 @@ def test_nd_and_excluded_qualifiers_are_untested():
 
     assert outcomes[r_nd.id][stage.id].outcome == StageOutcome.UNTESTED
     assert outcomes[r_excluded.id][stage.id].outcome == StageOutcome.UNTESTED
+
+
+def test_nd_off_a_curve_is_a_miss_not_untested():
+    """A curve was fitted and yielded no readable value: the compound WAS
+    tested, so the criterion fails. Owner's rule, 2026-09-13."""
+    c = _make_campaign()
+    ch = _make_channel(c, source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE)
+    stage = _make_stage(c, criteria=[StageCriterion(channel_id=ch.id, operator="gt", value=0.0)])
+    r = _make_result(c)
+    _add_measurement(
+        r,
+        ch,
+        value=None,
+        qualifier=ValueQualifier.ND,
+        unit="",
+        source_curve_id=uuid.uuid4(),
+    )
+
+    outcome = evaluate_stages(c)[r.id][stage.id]
+
+    assert outcome.outcome == StageOutcome.MISS
+    assert outcome.checks == (StageCheck(channel_id=ch.id, verdict=CheckVerdict.FAIL),)
+
+
+def test_nd_with_only_a_curve_snapshot_is_a_miss():
+    """Aggregate channels (mean / geometric mean) pin no source curve — the
+    frozen snapshot is the only evidence the cell was resolved from a run."""
+    c = _make_campaign()
+    ch = _make_channel(c, source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE)
+    stage = _make_stage(c, criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=10.0)])
+    r = _make_result(c)
+    _add_measurement(
+        r,
+        ch,
+        value=None,
+        qualifier=ValueQualifier.ND,
+        unit="",
+        curve_snapshot={"curve_class": "inactive", "top": 1.0, "bottom": 0.0},
+    )
+
+    assert evaluate_stages(c)[r.id][stage.id].outcome == StageOutcome.MISS
+
+
+def test_excluded_stays_untested_even_with_a_curve():
+    """EXCLUDED is a deliberate "don't count this cell", not a negative result
+    — it keeps the row untested however much provenance it carries."""
+    c = _make_campaign()
+    ch = _make_channel(c, source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE)
+    stage = _make_stage(c, criteria=[StageCriterion(channel_id=ch.id, operator="gt", value=0.0)])
+    r = _make_result(c)
+    _add_measurement(
+        r,
+        ch,
+        value=None,
+        qualifier=ValueQualifier.EXCLUDED,
+        unit="",
+        source_curve_id=uuid.uuid4(),
+    )
+
+    assert evaluate_stages(c)[r.id][stage.id].outcome == StageOutcome.UNTESTED
 
 
 # ---------- root population ----------
