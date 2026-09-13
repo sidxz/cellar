@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_result import CampaignResult
@@ -51,6 +52,11 @@ class StageResultOutcome:
     overridden: bool
     override_reason: str | None
     checks: tuple[StageCheck, ...]
+    #: Who forced this verdict by hand, and when. Both None unless
+    #: ``overridden``. Carried through from the ``StageOverride`` so a reader
+    #: can say "kept by hand by X on 12 Sep" without a second lookup.
+    overridden_by: uuid.UUID | None = None
+    overridden_at: datetime | None = None
 
 
 #: result_id -> stage_id -> outcome
@@ -128,17 +134,23 @@ def _evaluate_stage(
 
     override = result.stage_overrides.get(stage.id)
     if override is None:
-        outcome, overridden, override_reason = base_outcome, False, None
+        outcome_result = StageResultOutcome(
+            stage_id=stage.id,
+            outcome=base_outcome,
+            overridden=False,
+            override_reason=None,
+            checks=checks,
+        )
     else:
-        outcome, overridden, override_reason = override.forced_outcome, True, override.reason
-
-    outcome_result = StageResultOutcome(
-        stage_id=stage.id,
-        outcome=outcome,
-        overridden=overridden,
-        override_reason=override_reason,
-        checks=checks,
-    )
+        outcome_result = StageResultOutcome(
+            stage_id=stage.id,
+            outcome=override.forced_outcome,
+            overridden=True,
+            override_reason=override.reason,
+            checks=checks,
+            overridden_by=override.overridden_by,
+            overridden_at=override.overridden_at,
+        )
     memo[stage.id] = outcome_result
     return outcome_result
 

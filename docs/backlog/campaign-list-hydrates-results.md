@@ -12,3 +12,22 @@ So the wire payload shrank but the database work did not: a project with 30 camp
 **Impact:** no regression versus the old behaviour (the list route previously serialized the results as well, so this is strictly cheaper), but the list route's cost still scales with total result count rather than campaign count. It is the first thing to bite when a project accumulates large campaigns.
 
 **Fix direction:** in `find_by_project` / `find_by_workspace` (`infrastructure/persistence/sqlalchemy/research_organization/campaign_repository.py`), add `noload(CampaignModel.results)` to the statement and source `result_count` from a correlated `count()` subquery. That requires a second projection path for the funnel counts, since `tally_stage_counts` needs per-result outcomes — either a SQL-side tally, or accept that `/summary` (one campaign) keeps hydrating while the list (N campaigns) does not. Do the list route first; it is where the N multiplies.
+
+
+## Also true of the paged row read (2026-09-12)
+
+`GET /api/v1/campaigns/{id}/results` (`application/research_organization/list_campaign_results.py`)
+loads the same whole aggregate to return one page. It has to: `evaluate_stages`
+is the only thing that knows what a stage verdict is, so filtering by outcome
+means evaluating, and evaluating means having the rows. What that endpoint
+*does* remove is the serialisation — a page of 50 instead of every row with
+every measurement and every `curve_snapshot` JSONB — which is the larger cost
+per request.
+
+**Fix direction (same shape as above):** project the criteria channels'
+`(result_id, channel_id, value, value_qualifier)` plus `stage_overrides` in one
+flat SELECT, run the existing evaluator over that, then load only the page's
+full rows by id. That needs `evaluate_stages` to take `(stages, results)`
+rather than a `Campaign`, which is a small signature change, and a read-model
+query in the campaign repository. Worth doing when a real campaign is large
+enough to measure; the `ponytail:` comment in the use case points here.

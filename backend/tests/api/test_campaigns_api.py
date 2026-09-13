@@ -684,21 +684,26 @@ class TestCampaignStages:
         override_url = (
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}/stages/{stage['id']}/override"
         )
+        async def outcome_now() -> dict:
+            campaign_json = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+            return _find_stage_outcome(campaign_json, result_id, stage["id"])
+
         promote = await client.put(
             override_url, json={"outcome": "hit", "reason": "Worth following up"}
         )
-        assert promote.status_code == 200, promote.text
-        assert _find_stage_outcome(promote.json(), result_id, stage["id"])["outcome"] == "hit"
+        assert promote.status_code == 204, promote.text
+        assert (await outcome_now())["outcome"] == "hit"
 
         demote = await client.put(
             override_url, json={"outcome": "miss", "reason": "Known frequent hitter"}
         )
-        assert demote.status_code == 200, demote.text
-        assert _find_stage_outcome(demote.json(), result_id, stage["id"])["outcome"] == "miss"
+        assert demote.status_code == 204, demote.text
+        assert (await outcome_now())["outcome"] == "miss"
 
         cleared = await client.delete(override_url)
-        assert cleared.status_code == 200, cleared.text
-        assert _find_stage_outcome(cleared.json(), result_id, stage["id"])["outcome"] == "pending"
+        assert cleared.status_code == 204, cleared.text
+        # A manual stage falls back to pending, not to a computed verdict.
+        assert (await outcome_now())["outcome"] == "pending"
 
     async def test_add_manual_stage_with_criteria_422(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
@@ -836,11 +841,8 @@ class TestStageOverride:
         put_resp = await client.put(
             override_url, json={"outcome": "miss", "reason": "Chemist call: artifact"}
         )
-        assert put_resp.status_code == 200, put_resp.text
-        outcome = _find_stage_outcome(put_resp.json(), result_id, stage_id)
-        assert outcome["outcome"] == "miss"
-        assert outcome["overridden"] is True
-        assert outcome["override_reason"] == "Chemist call: artifact"
+        # 204: the override answers with nothing; the verdict is read back.
+        assert put_resp.status_code == 204, put_resp.text
 
         get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
         assert get_resp.status_code == 200, get_resp.text
@@ -848,17 +850,23 @@ class TestStageOverride:
         assert outcome["outcome"] == "miss"
         assert outcome["overridden"] is True
         assert outcome["override_reason"] == "Chemist call: artifact"
+        # Who kept it by hand, and when.
+        assert outcome["overridden_by"] is not None
+        assert outcome["overridden_at"] is not None
 
         delete_resp = await client.delete(override_url)
-        assert delete_resp.status_code == 200, delete_resp.text
-        outcome = _find_stage_outcome(delete_resp.json(), result_id, stage_id)
+        assert delete_resp.status_code == 204, delete_resp.text
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        outcome = _find_stage_outcome(get_resp.json(), result_id, stage_id)
         assert outcome["outcome"] == "hit"
         assert outcome["overridden"] is False
         assert outcome["override_reason"] is None
+        assert outcome["overridden_by"] is None
+        assert outcome["overridden_at"] is None
 
         # Clearing again (nothing to clear) is a no-op success, not a 404.
         second_delete = await client.delete(override_url)
-        assert second_delete.status_code == 200, second_delete.text
+        assert second_delete.status_code == 204, second_delete.text
 
     async def test_bulk_overrides_put_promotes_two_results_then_null_clears(
         self, client: AsyncClient
@@ -886,17 +894,19 @@ class TestStageOverride:
                 "reason": "Batch promote after re-assay",
             },
         )
-        assert put_resp.status_code == 200, put_resp.text
+        assert put_resp.status_code == 204, put_resp.text
+        campaign_json = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
         for result_id in result_ids:
-            outcome = _find_stage_outcome(put_resp.json(), result_id, stage_id)
+            outcome = _find_stage_outcome(campaign_json, result_id, stage_id)
             assert outcome["outcome"] == "hit"
             assert outcome["overridden"] is True
             assert outcome["override_reason"] == "Batch promote after re-assay"
 
         clear_resp = await client.put(bulk_url, json={"result_ids": result_ids, "outcome": None})
-        assert clear_resp.status_code == 200, clear_resp.text
+        assert clear_resp.status_code == 204, clear_resp.text
+        campaign_json = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
         for result_id in result_ids:
-            outcome = _find_stage_outcome(clear_resp.json(), result_id, stage_id)
+            outcome = _find_stage_outcome(campaign_json, result_id, stage_id)
             assert outcome["overridden"] is False
             assert outcome["override_reason"] is None
 
@@ -1110,6 +1120,106 @@ class TestStageOverride:
 # ---------------------------------------------------------------------------
 
 
+class TestListCampaignResults:
+    """GET /campaigns/{id}/results — the paged row read.
+
+    The filter and sort are covered in the use-case unit tests; these pin the
+    wire contract a consumer builds against.
+    """
+
+    async def test_pages_rows_and_reports_the_total(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        mol1 = await _register_molecule(client, ASPIRIN_SMILES, "Asp-paged")
+        mol2 = await _register_molecule(client, CAFFEINE_SMILES, "Caf-paged")
+        campaign = await _create_draft_campaign(client, project_id, [mol1, mol2])
+        campaign_id = campaign["id"]
+
+        first = await client.get(f"/api/v1/campaigns/{campaign_id}/results?limit=1")
+        assert first.status_code == 200, first.text
+        body = first.json()
+        assert len(body["items"]) == 1
+        assert body["total_count"] == 2
+        assert body["next_cursor"] is not None
+        # Rows carry what the full read carries, stage outcomes included.
+        assert "measurements" in body["items"][0]
+        assert "stage_outcomes" in body["items"][0]
+
+        second = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?limit=1&cursor={body['next_cursor']}"
+        )
+        assert second.status_code == 200, second.text
+        page2 = second.json()
+        assert len(page2["items"]) == 1
+        assert page2["items"][0]["id"] != body["items"][0]["id"]
+        assert page2["next_cursor"] is None
+
+    async def test_filters_by_stage_outcome(self, client: AsyncClient) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-paged-stage")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+        result_id = campaign["results"][0]["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Paged Stage"}
+        )
+        stage_id = stage_resp.json()["stages"][0]["id"]
+
+        # A criteria stage with no criteria computes "hit" (spec 3.1).
+        hits = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=hit"
+        )
+        assert hits.status_code == 200, hits.text
+        assert [r["id"] for r in hits.json()["items"]] == [result_id]
+        assert hits.json()["total_count"] == 1
+
+        misses = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=miss"
+        )
+        assert misses.json()["items"] == []
+        assert misses.json()["total_count"] == 0
+
+        # The filter reads the verdict after an override, not the computed one.
+        await client.put(
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
+            f"/stages/{stage_id}/override",
+            json={"outcome": "miss", "reason": "Chemist call"},
+        )
+        misses = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=miss"
+        )
+        assert [r["id"] for r in misses.json()["items"]] == [result_id]
+
+    async def test_rejects_an_outcome_without_a_stage_and_unknown_ids(
+        self, client: AsyncClient
+    ) -> None:
+        project_id = await _create_project(client)
+        mol_id = await _register_molecule(client, ASPIRIN_SMILES, "Asp-paged-bad")
+        campaign = await _create_draft_campaign(client, project_id, [mol_id])
+        campaign_id = campaign["id"]
+
+        no_stage = await client.get(f"/api/v1/campaigns/{campaign_id}/results?outcome=hit")
+        assert no_stage.status_code == 422, no_stage.text
+
+        bad_outcome = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?stage_id={uuid.uuid4()}&outcome=nonsense"
+        )
+        assert bad_outcome.status_code == 422, bad_outcome.text
+
+        unknown_stage = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?stage_id={uuid.uuid4()}"
+        )
+        assert unknown_stage.status_code == 404, unknown_stage.text
+
+        unknown_channel = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?order_by={uuid.uuid4()}"
+        )
+        assert unknown_channel.status_code == 404, unknown_channel.text
+
+        unknown_campaign = await client.get(f"/api/v1/campaigns/{uuid.uuid4()}/results")
+        assert unknown_campaign.status_code == 404, unknown_campaign.text
+
+
 class TestCampaignResults:
     async def test_add_result_row_200(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
@@ -1207,8 +1317,12 @@ class TestCampaignResults:
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
             json={"notes": "Watch hERG"},
         )
-        assert resp.status_code == 200, resp.text
-        updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
+        # 204: the write answers with nothing rather than the whole matrix.
+        assert resp.status_code == 204, resp.text
+        assert resp.content == b""
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        updated_result = next(r for r in get_resp.json()["results"] if r["id"] == result_id)
         assert updated_result["notes"] == "Watch hERG"
         assert "decision" not in updated_result
 
@@ -1228,8 +1342,10 @@ class TestCampaignResults:
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}",
             json={"notes": None},
         )
-        assert resp.status_code == 200, resp.text
-        updated_result = next(r for r in resp.json()["results"] if r["id"] == result_id)
+        assert resp.status_code == 204, resp.text
+
+        get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
+        updated_result = next(r for r in get_resp.json()["results"] if r["id"] == result_id)
         assert updated_result["notes"] is None
 
     async def test_set_result_notes_missing_key_422(self, client: AsyncClient) -> None:
