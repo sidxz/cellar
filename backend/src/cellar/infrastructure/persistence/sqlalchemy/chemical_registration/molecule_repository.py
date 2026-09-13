@@ -197,7 +197,7 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         in ``molecule_ids`` that belongs to ``workspace_id``. Molecules without
         a ``smiles`` are silently dropped — the builder cannot use them.
 
-        Implements ``MoleculeFetcherForScaffoldTree`` (structural Protocol).
+        Implements ``MoleculeSmilesFetcher`` (structural Protocol).
         """
         if not molecule_ids:
             return []
