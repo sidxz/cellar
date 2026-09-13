@@ -2,6 +2,13 @@
 
 Covers the paged row read, per-row CRUD (add / remove), bulk row removal,
 per-row notes edits, and per-cell manual overrides.
+
+Every write here answers 204. They used to return the whole
+``CampaignResponse``, so editing one cell on a 16,900-row campaign serialised
+the entire result matrix back to say so. No caller wanted it — cellar's own
+grid invalidates and refetches, and daikon's client ignores the body — and a
+write that reports "here is everything" hides which thing it actually changed.
+Read the new state with ``GET /campaigns/{id}`` or the paged read above.
 """
 
 from __future__ import annotations
@@ -46,7 +53,6 @@ from cellar.interface.pagination import (
 from cellar.interface.routes._campaign_dtos import (
     AddResultRowRequest,
     BulkRemoveResultsRequest,
-    CampaignResponse,
     CampaignResultResponse,
     OverrideCellRequest,
     SetResultNotesRequest,
@@ -108,11 +114,7 @@ async def set_result_notes(
     auth: AuthDep,
     uc: SetResultNotesDep,
 ) -> Response:
-    """Set (or, with ``null``, clear) the free-text notes on one result row.
-
-    204: returning the campaign would serialise the whole result matrix back
-    for a one-field edit, and every caller refetches anyway.
-    """
+    """Set (or, with ``null``, clear) the free-text notes on one result row."""
     cmd = SetResultNotesCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
@@ -125,7 +127,7 @@ async def set_result_notes(
 
 @router.patch(
     "/{campaign_id}/results/{result_id}/cells/{channel_id}",
-    response_model=CampaignResponse,
+    status_code=204,
 )
 async def override_result_cell(
     campaign_id: uuid.UUID,
@@ -134,7 +136,7 @@ async def override_result_cell(
     body: OverrideCellRequest,
     auth: AuthDep,
     uc: OverrideResultCellDep,
-) -> CampaignResponse:
+) -> Response:
     """Manually override a single (result, channel) measurement cell."""
     cmd = OverrideResultCellCommand(
         workspace_id=auth.workspace_id,
@@ -146,51 +148,51 @@ async def override_result_cell(
         unit=body.unit,
         reason=body.reason,
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
 
 
-@router.post("/{campaign_id}/results", response_model=CampaignResponse)
+@router.post("/{campaign_id}/results", status_code=204)
 async def add_result_row(
     campaign_id: uuid.UUID,
     body: AddResultRowRequest,
     auth: AuthDep,
     uc: AddResultRowDep,
-) -> CampaignResponse:
+) -> Response:
     """Add a new compound result row (manual attribution) to a DRAFT campaign."""
     cmd = AddResultRowCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         molecule_id=body.molecule_id,
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
 
 
-@router.delete("/{campaign_id}/results/{result_id}", response_model=CampaignResponse)
+@router.delete("/{campaign_id}/results/{result_id}", status_code=204)
 async def remove_result_row(
     campaign_id: uuid.UUID,
     result_id: uuid.UUID,
     auth: AuthDep,
     uc: RemoveResultRowDep,
-) -> CampaignResponse:
+) -> Response:
     """Remove a compound result row and its measurements from a DRAFT campaign."""
     cmd = RemoveResultRowCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         result_ids=[result_id],
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
 
 
-@router.post("/{campaign_id}/results/bulk-remove", response_model=CampaignResponse)
+@router.post("/{campaign_id}/results/bulk-remove", status_code=204)
 async def bulk_remove_result_rows(
     campaign_id: uuid.UUID,
     body: BulkRemoveResultsRequest,
     auth: AuthDep,
     uc: RemoveResultRowDep,
-) -> CampaignResponse:
+) -> Response:
     """Remove N compound result rows from a DRAFT campaign in one save.
 
     POST rather than DELETE because some proxies drop DELETE bodies. 404 on
@@ -201,5 +203,5 @@ async def bulk_remove_result_rows(
         campaign_id=campaign_id,
         result_ids=body.result_ids,
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
