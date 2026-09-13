@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 
 import type { Molecule } from "@/features/chemical-registration/types";
@@ -14,6 +15,7 @@ import { useCherrypickBasket } from "../hooks/use-cherrypick-basket";
 import { useRegionDiversePick } from "../hooks/use-region-diverse-pick";
 import { useUmapCluster } from "../hooks/use-umap-cluster";
 import type { ColorOption } from "../lib/cluster-palette";
+import { stashSarHandoff } from "../lib/sar-handoff";
 import { useColorMode } from "../lib/use-color-mode";
 import { usePickerConfig } from "../lib/use-picker-config";
 import { ClusterBasketBar } from "./cluster-basket-bar";
@@ -22,6 +24,7 @@ import { ClusterSelectionPane } from "./cluster-selection-pane";
 import { ClusterToolbar } from "./cluster-toolbar";
 import { ColorModePicker, type ProtocolOption } from "./color-mode-picker";
 import { RegionActionBar } from "./region-action-bar";
+import { RegionCommonCore } from "./region-common-core";
 import { SaveSelectionDialog } from "./save-selection-dialog";
 
 // react-resizable-panels v4: STRING = percent, NUMBER = pixels.
@@ -168,6 +171,19 @@ export function ClusterMapView({
   }, [colorMode, colorProtocolId]);
 
   // --- Handlers.
+  const router = useRouter();
+
+  // The common core of a lassoed region is only interesting if the chemist can
+  // act on it: stash it the way the scaffold tree does and open the workbench
+  // on the same compounds.
+  const handleUseAsCore = useCallback(
+    (coreSmiles: string, moleculeIds: string[]) => {
+      stashSarHandoff({ coreSmiles, moleculeIds });
+      router.push(collectionId ? `/collections/${collectionId}?view=sar` : "?view=sar");
+    },
+    [router, collectionId],
+  );
+
   const handleLassoSelected = useCallback(
     (ids: string[] | null) => {
       setLassoedIds(new Set(ids ?? []));
@@ -281,18 +297,21 @@ export function ClusterMapView({
           </span>
           <span className="text-border">·</span>
           {lassoedIds.size > 0 ? (
-            <RegionActionBar
-              regionCount={lassoedIds.size}
-              n={regionN}
-              onNChange={setRegionN}
-              onPickDiverse={handlePickDiverse}
-              picking={region.loading}
-              pickCount={region.pickedIds.size}
-              onAddPicks={handleAddPicks}
-              onAddAll={handleAddAll}
-              onRemove={handleRemoveRegion}
-              onClear={handleClearRegion}
-            />
+            <>
+              <RegionCommonCore regionIds={Array.from(lassoedIds)} onUseAsCore={handleUseAsCore} />
+              <RegionActionBar
+                regionCount={lassoedIds.size}
+                n={regionN}
+                onNChange={setRegionN}
+                onPickDiverse={handlePickDiverse}
+                picking={region.loading}
+                pickCount={region.pickedIds.size}
+                onAddPicks={handleAddPicks}
+                onAddAll={handleAddAll}
+                onRemove={handleRemoveRegion}
+                onClear={handleClearRegion}
+              />
+            </>
           ) : (
             <span>Drag on the map to lasso a region</span>
           )}
