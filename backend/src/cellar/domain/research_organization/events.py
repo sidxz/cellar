@@ -99,3 +99,18 @@ class CampaignSuperseded(DomainEvent):
     """Fired when a closed campaign is replaced by a new one."""
 
     superseded_by_campaign_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignCollectionAdded(DomainEvent):
+    """A library was linked to a campaign. Use-case-constructed, emitted only
+    when a link row was actually inserted (idempotent re-adds stay silent)."""
+
+    collection_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignCollectionRemoved(DomainEvent):
+    collection_id: uuid.UUID
+    user_id: uuid.UUID | None = None

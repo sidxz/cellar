@@ -408,6 +408,33 @@ class CollectionCoverageReader(Protocol):
         """Page the collection molecules no run of the protocol has screened."""
         ...
 
+    async def runs_coverage(
+        self,
+        workspace_id: uuid.UUID,
+        collection_ids: list[uuid.UUID],
+        run_ids: list[uuid.UUID],
+    ) -> list[CollectionCoverage]:
+        """Coverage of each named collection across an explicit set of runs.
+
+        Unlike ``run_coverage``/``protocol_coverage`` the runs are given, not
+        derived from ``run_collections`` or a protocol — the caller owns the
+        link (a campaign names both its libraries and its seed runs). With no
+        runs every collection reports ``covered = 0``.
+        """
+        ...
+
+    async def runs_gap(
+        self,
+        workspace_id: uuid.UUID,
+        collection_id: uuid.UUID,
+        run_ids: list[uuid.UUID],
+        *,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[uuid.UUID]:
+        """Page the collection molecules none of the given runs has screened."""
+        ...
+
 
 @runtime_checkable
 class CompoundFlagRepository(Protocol):

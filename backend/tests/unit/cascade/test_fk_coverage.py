@@ -351,6 +351,13 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # Tier-1 admin-delete pathway (same rationale as the campaign children
     # block above); deleting a campaign clears its tag links automatically.
     ("campaign_tags", "campaign_id", "campaign"),
+    # campaign_collections.campaign_id (migration 080) is the same shape —
+    # ondelete=CASCADE, so deleting a campaign drops the links to the
+    # libraries it screened. The other side, campaign_collections.collection_id,
+    # is deliberately RESTRICT and needs no entry: collections IS Tier-1, so a
+    # library a campaign points at is blocked from deletion (as with
+    # run_collections).
+    ("campaign_collections", "campaign_id", "campaign"),
     # registered_plate_tags.registered_plate_id has ondelete=CASCADE —
     # registered_plates is not a Tier-1 admin-deletable entity; plate lifecycle
     # is managed via the inventory module (same rationale as the

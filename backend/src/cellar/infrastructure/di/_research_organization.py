@@ -24,6 +24,10 @@ from cellar.application.research_organization.add_results_from_runs import (
 )
 from cellar.application.research_organization.archive_project import ArchiveProject
 from cellar.application.research_organization.bulk_add_to_collection import BulkAddToCollection
+from cellar.application.research_organization.campaign_collection_coverage import (
+    GetCampaignCollectionCoverage,
+    GetCampaignCollectionGap,
+)
 from cellar.application.research_organization.campaign_scientist_reader import (
     CampaignScientistReader,
 )
@@ -72,6 +76,10 @@ from cellar.application.research_organization.list_campaign_results import (
     ListCampaignResults,
 )
 from cellar.application.research_organization.list_campaigns import ListCampaigns
+from cellar.application.research_organization.manage_campaign_collections import (
+    AddCampaignCollection,
+    RemoveCampaignCollection,
+)
 from cellar.application.research_organization.manage_molecule_projects import (
     AddMoleculeToProject,
     ListMoleculeProjects,
@@ -145,6 +153,9 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (  # noqa: E501
     SQLAlchemySavedSearchRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.coverage_query import (
+    SQLAlchemyCollectionCoverageQuery,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
     SQLAlchemyDoseResponseCurveRepository,
@@ -665,6 +676,24 @@ def register_research_organization(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ListCampaignResults(uow=uow, campaign_repo=SQLAlchemyCampaignRepository(uow))
 
+    def _campaign_collection_cmd(cls):
+        def factory(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return cls(uow, SQLAlchemyCampaignRepository(uow), c[EventDispatcher])
+
+        return factory
+
+    def _campaign_collection_read(cls):
+        def factory(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return cls(
+                uow,
+                SQLAlchemyCampaignRepository(uow),
+                SQLAlchemyCollectionCoverageQuery(uow),
+            )
+
+        return factory
+
     container.define(CreateCampaignUC, _create_campaign)
     container.define(AddResultsFromCollectionUC, _add_results_from_collection)
     container.define(AddResultsFromCampaignUC, _add_results_from_campaign)
@@ -693,6 +722,13 @@ def register_research_organization(container: Container) -> None:
     container.define(ListCampaigns, _list_campaigns)
     container.define(GetCampaign, _get_campaign)
     container.define(ListCampaignResults, _list_campaign_results)
+    container.define(AddCampaignCollection, _campaign_collection_cmd(AddCampaignCollection))
+    container.define(RemoveCampaignCollection, _campaign_collection_cmd(RemoveCampaignCollection))
+    container.define(
+        GetCampaignCollectionCoverage,
+        _campaign_collection_read(GetCampaignCollectionCoverage),
+    )
+    container.define(GetCampaignCollectionGap, _campaign_collection_read(GetCampaignCollectionGap))
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

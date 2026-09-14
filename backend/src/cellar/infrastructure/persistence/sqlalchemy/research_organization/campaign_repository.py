@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
@@ -26,6 +27,7 @@ from cellar.domain.research_organization.enums import (
     StageOutcome,
     ValueQualifier,
 )
+from cellar.domain.research_organization.repository import CampaignCollectionLinkResult
 from cellar.domain.research_organization.source_ref import SeedRun, SourceRef
 from cellar.domain.shared.hit_criterion import InterceptKey
 from cellar.domain.shared.target_ref import TargetRef
@@ -42,6 +44,8 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CampaignResultModel,
     CampaignStageModel,
     CampaignStageOverrideModel,
+    CollectionModel,
+    campaign_collections,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     RunModel,
@@ -538,6 +542,78 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             CampaignStatus.CLOSED.value,
             CampaignStatus.SUPERSEDED.value,
         }
+
+    async def find_status(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> CampaignStatus | None:
+        stmt = select(CampaignModel.status).where(
+            CampaignModel.id == campaign_id,
+            CampaignModel.workspace_id == workspace_id,
+        )
+        status = (await self._session.execute(stmt)).scalar_one_or_none()
+        return CampaignStatus(status) if status is not None else None
+
+    async def find_seed_run_ids(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> list[uuid.UUID] | None:
+        stmt = select(CampaignModel.seed_runs).where(
+            CampaignModel.id == campaign_id,
+            CampaignModel.workspace_id == workspace_id,
+        )
+        rows = (await self._session.execute(stmt)).one_or_none()
+        if rows is None:
+            return None
+        return [SeedRun.from_dict(s).run_id for s in (rows[0] or [])]
+
+    # ------------------------------------------------------------------
+    # Campaign-collection links (association, not aggregate state)
+    # ------------------------------------------------------------------
+
+    async def list_collection_ids(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        stmt = (
+            select(campaign_collections.c.collection_id)
+            .join(
+                CollectionModel,
+                CollectionModel.id == campaign_collections.c.collection_id,
+            )
+            .where(
+                campaign_collections.c.campaign_id == campaign_id,
+                CollectionModel.workspace_id == workspace_id,
+            )
+        )
+        return list((await self._session.execute(stmt)).scalars())
+
+    async def add_collection(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> CampaignCollectionLinkResult:
+        """Link a library to a campaign (idempotent). Workspace-checked on both sides."""
+        if not await self._owns(CampaignModel, campaign_id, workspace_id):
+            return CampaignCollectionLinkResult.OWNER_NOT_FOUND
+        if not await self._owns(CollectionModel, collection_id, workspace_id):
+            return CampaignCollectionLinkResult.COLLECTION_NOT_FOUND
+        result = await self._session.execute(
+            pg_insert(campaign_collections)
+            .values(campaign_id=campaign_id, collection_id=collection_id)
+            .on_conflict_do_nothing()
+        )
+        if result.rowcount:
+            return CampaignCollectionLinkResult.ADDED
+        return CampaignCollectionLinkResult.ALREADY_LINKED
+
+    async def remove_collection(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> bool:
+        if not await self._owns(CampaignModel, campaign_id, workspace_id):
+            return False
+        result = await self._session.execute(
+            delete(campaign_collections).where(
+                campaign_collections.c.campaign_id == campaign_id,
+                campaign_collections.c.collection_id == collection_id,
+            )
+        )
+        return bool(result.rowcount)
 
     async def project_targets(
         self, workspace_id: uuid.UUID, campaigns: list[Campaign]

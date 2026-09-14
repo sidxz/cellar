@@ -60,6 +60,27 @@ molecule_projects = Table(
     ),
 )
 
+# Migration 080 — the libraries a campaign screened. Pure association (never
+# aggregate state), mirroring ``run_collections``: the collection side is
+# RESTRICT so a library a campaign points at cannot be deleted out from under it.
+campaign_collections = Table(
+    "campaign_collections",
+    Base.metadata,
+    Column(
+        "campaign_id",
+        Uuid(as_uuid=True),
+        ForeignKey("campaign.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "collection_id",
+        Uuid(as_uuid=True),
+        ForeignKey("collections.id", ondelete="RESTRICT"),
+        primary_key=True,
+    ),
+    Index("ix_campaign_collections_collection", "collection_id"),
+)
+
 
 class ProjectModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     """Project — workspace-level research project."""

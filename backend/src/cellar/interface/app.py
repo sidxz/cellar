@@ -314,6 +314,9 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.campaigns_channels import (
         router as campaign_channels_router,
     )
+    from cellar.interface.routes.campaigns_collections import (
+        router as campaign_collections_router,
+    )
     from cellar.interface.routes.campaigns_publishing import (
         router as campaign_publishing_router,
     )
@@ -342,6 +345,7 @@ def create_app() -> FastAPI:
     app.include_router(saved_search_router)
     app.include_router(campaign_router)
     app.include_router(campaign_channels_router)
+    app.include_router(campaign_collections_router)
     app.include_router(campaign_stages_router)
     app.include_router(campaign_results_router)
     app.include_router(campaign_publishing_router)

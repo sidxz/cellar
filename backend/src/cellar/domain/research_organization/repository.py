@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.research_organization.campaign import Campaign
@@ -20,6 +21,22 @@ from cellar.domain.research_organization.project_membership import (
 from cellar.domain.research_organization.project_scope_stats import ProjectScopeStats
 from cellar.domain.research_organization.saved_search import SavedSearch
 from cellar.domain.shared.target_ref import TargetRef
+
+
+class CampaignCollectionLinkResult(Enum):
+    """Outcome of linking a library to a campaign.
+
+    Mirrors the screening context's ``CollectionLinkResult`` (defined there
+    rather than shared — the two domain contexts stay independent): lets the
+    use case distinguish a real insert (audit-worthy) from an idempotent
+    no-op, and surface unknown/cross-workspace campaigns or collections as
+    NotFound instead of silently succeeding.
+    """
+
+    ADDED = "added"
+    ALREADY_LINKED = "already_linked"
+    OWNER_NOT_FOUND = "owner_not_found"  # campaign missing or cross-workspace
+    COLLECTION_NOT_FOUND = "collection_not_found"
 
 
 @runtime_checkable
@@ -220,6 +237,42 @@ class CampaignRepository(Protocol):
     ) -> list[Campaign]: ...
 
     async def is_locked(self, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> bool: ...
+
+    async def find_status(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> CampaignStatus | None:
+        """The campaign's status, or None when it is missing/cross-workspace.
+
+        Column-only read: ``is_locked`` cannot tell an absent campaign from an
+        open one, so link edits need this to 404 before they 409.
+        """
+        ...
+
+    async def find_seed_run_ids(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> list[uuid.UUID] | None:
+        """Run ids from the campaign's ``seed_runs``, or None when it is missing.
+
+        Column-only read of the JSONB — coverage needs the runs, not the
+        results and measurements a full aggregate load would drag in.
+        """
+        ...
+
+    async def list_collection_ids(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        """Libraries linked to the campaign (association, not aggregate state)."""
+        ...
+
+    async def add_collection(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> CampaignCollectionLinkResult: ...
+
+    async def remove_collection(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> bool:
+        """True when a link row was actually removed."""
+        ...
 
     async def project_targets(
         self, workspace_id: uuid.UUID, campaigns: list[Campaign]

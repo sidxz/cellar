@@ -22,6 +22,10 @@ from cellar.application.research_organization.add_results_from_runs import (
 )
 from cellar.application.research_organization.archive_project import ArchiveProject
 from cellar.application.research_organization.bulk_add_to_collection import BulkAddToCollection
+from cellar.application.research_organization.campaign_collection_coverage import (
+    GetCampaignCollectionCoverage,
+    GetCampaignCollectionGap,
+)
 from cellar.application.research_organization.close_campaign import CloseCampaign
 from cellar.application.research_organization.collection_import_templates import (
     CreateCollectionImportTemplate,
@@ -66,6 +70,10 @@ from cellar.application.research_organization.list_campaign_results import (
     ListCampaignResults,
 )
 from cellar.application.research_organization.list_campaigns import ListCampaigns
+from cellar.application.research_organization.manage_campaign_collections import (
+    AddCampaignCollection,
+    RemoveCampaignCollection,
+)
 from cellar.application.research_organization.manage_molecule_projects import (
     AddMoleculeToProject,
     ListMoleculeProjects,
@@ -119,6 +127,7 @@ from ._core import _get_use_case, get_container
 
 __all__ = [
     "AddCampaignChannelDep",
+    "AddCampaignCollectionDep",
     "AddCampaignStageDep",
     "AddMoleculeToProjectDep",
     "AddMoleculesToCollectionDep",
@@ -147,6 +156,8 @@ __all__ = [
     "DeleteCollectionImportTemplateDep",
     "DeleteSavedSearchDep",
     "ExecuteSearchDep",
+    "GetCampaignCollectionCoverageDep",
+    "GetCampaignCollectionGapDep",
     "GetCampaignDep",
     "GetCollectionDep",
     "GetDoseResponseCurvesBatchDep",
@@ -170,6 +181,7 @@ __all__ = [
     "RecomputeChannelDep",
     "RefreshFromSourcesDep",
     "RemoveCampaignChannelDep",
+    "RemoveCampaignCollectionDep",
     "RemoveCampaignStageDep",
     "RemoveMoleculeFromProjectDep",
     "RemoveMoleculesFromCollectionDep",
@@ -343,4 +355,16 @@ GetDoseResponseCurvesBatchDep = Annotated[
 RecomputeChannelDep = Annotated[RecomputeChannel, Depends(_get_use_case(RecomputeChannel))]
 UpdateCampaignMetadataDep = Annotated[
     UpdateCampaignMetadata, Depends(_get_use_case(UpdateCampaignMetadata))
+]
+AddCampaignCollectionDep = Annotated[
+    AddCampaignCollection, Depends(_get_use_case(AddCampaignCollection))
+]
+RemoveCampaignCollectionDep = Annotated[
+    RemoveCampaignCollection, Depends(_get_use_case(RemoveCampaignCollection))
+]
+GetCampaignCollectionCoverageDep = Annotated[
+    GetCampaignCollectionCoverage, Depends(_get_use_case(GetCampaignCollectionCoverage))
+]
+GetCampaignCollectionGapDep = Annotated[
+    GetCampaignCollectionGap, Depends(_get_use_case(GetCampaignCollectionGap))
 ]
