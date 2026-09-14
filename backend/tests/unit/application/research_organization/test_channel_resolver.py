@@ -25,6 +25,7 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import RunRef, SeedRun
+from cellar.domain.research_organization.stage_evaluation import _is_tested_nd
 from cellar.domain.shared.hit_criterion import InterceptKey
 
 
@@ -160,6 +161,9 @@ async def test_no_candidates_yields_nd():
     )
     assert m.value is None
     assert m.value_qualifier == ValueQualifier.ND
+    # Nothing was resolved, so the cell carries no provenance and the funnel
+    # keeps reading it as untested rather than as a miss.
+    assert not _is_tested_nd(m)
 
 
 @pytest.mark.asyncio
@@ -476,6 +480,31 @@ async def test_latest_approved_run_inactive_pick_emits_nd():
     )
     assert m.value is None
     assert m.value_qualifier == ValueQualifier.ND
+    # The curve WAS fitted; it just yielded no readable value. Refresh/recompute
+    # must keep that provenance or the stage funnel demotes the row back to
+    # untested — see stage_evaluation._is_tested_nd.
+    assert m.source_curve_id == candidates[0].curve_id
+    assert m.source_run_id == candidates[0].run_id
+    assert m.curve_snapshot is not None
+    assert _is_tested_nd(m)
+
+
+@pytest.mark.asyncio
+async def test_manual_pick_nd_carries_no_provenance():
+    """MANUAL_PICK's ND means "no chemist has picked yet" — still untested."""
+    ch = _channel(SelectionRule.MANUAL_PICK)
+    candidates = [_dr_candidate(5.0, run_date=date(2026, 5, 1))]
+    resolver = ChannelResolver(_FakeQuery(candidates))
+    m = await resolver.resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert m.value_qualifier == ValueQualifier.ND
+    assert m.source_curve_id is None
+    assert m.curve_snapshot is None
+    assert not _is_tested_nd(m)
 
 
 @pytest.mark.asyncio
@@ -564,6 +593,13 @@ async def test_mean_across_runs_all_inactive_emits_nd():
     )
     assert m.value is None
     assert m.value_qualifier == ValueQualifier.ND
+    # An aggregate has no single run to point at, so the ND cell pins no ids —
+    # matching the value-carrying aggregate path and the import path. The
+    # representative curve's snapshot is still what marks the cell as tested.
+    assert m.source_curve_id is None
+    assert m.source_run_id is None
+    assert m.curve_snapshot is not None
+    assert _is_tested_nd(m)
 
 
 # ---------------------------------------------------------------------------

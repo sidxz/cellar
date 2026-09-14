@@ -19,6 +19,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_measurement import (
+    CampaignMeasurement,
+)
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.campaign_stage import (
     CampaignStage,
@@ -63,6 +66,30 @@ class StageResultOutcome:
 StageOutcomes = dict[uuid.UUID, dict[uuid.UUID, StageResultOutcome]]
 
 
+def _is_tested_nd(measurement: CampaignMeasurement | None) -> bool:
+    """True for an ND cell that came off a curve the assay actually produced.
+
+    The compound WAS tested; the fit simply yielded no readable value (an
+    Inactive classification, or no intercept of the channel's kind). That is a
+    real negative result, not a gap in the data — owner's rule, 2026-09-13:
+    *"'ND' is not untested, it is miss because we have raw values but IC50
+    cannot be determined from curve."*
+
+    An ND with no curve behind it (nothing resolved for the cell at all) and
+    EXCLUDED stay untested.
+
+    ponytail: direction-blind. Right for a potency cut (`IC50 lt 10`), wrong
+    for a "no response is good" cut (a cytotoxicity `CC50 gte 50`), where an
+    inactive compound ought to pass. No such stage exists yet; give
+    StageCriterion a per-criterion knob when one does.
+    """
+    return (
+        measurement is not None
+        and measurement.value_qualifier == ValueQualifier.ND
+        and (measurement.source_curve_id is not None or measurement.curve_snapshot is not None)
+    )
+
+
 def _check_criterion(result: CampaignResult, criterion: StageCriterion) -> StageCheck:
     measurement = result.find_measurement(criterion.channel_id)
     if (
@@ -70,7 +97,10 @@ def _check_criterion(result: CampaignResult, criterion: StageCriterion) -> Stage
         or measurement.value_qualifier in _UNTESTED_QUALIFIERS
         or measurement.value is None
     ):
-        return StageCheck(channel_id=criterion.channel_id, verdict=CheckVerdict.UNTESTED)
+        return StageCheck(
+            channel_id=criterion.channel_id,
+            verdict=CheckVerdict.FAIL if _is_tested_nd(measurement) else CheckVerdict.UNTESTED,
+        )
     # ponytail: censored values (`<`/`>` qualifiers) are compared by their
     # plain numeric value, same as the pre-stages per-cell hit computation
     # did — a reported "< 5" is just 5.0 against the criterion. The channel's
