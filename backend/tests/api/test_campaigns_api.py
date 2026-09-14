@@ -1193,6 +1193,49 @@ class TestListCampaignResults:
         )
         assert [r["id"] for r in misses.json()["items"]] == [result_id]
 
+    async def test_a_repeated_outcome_keeps_a_row_matching_any_of_them(
+        self, client: AsyncClient
+    ) -> None:
+        """``?outcome=hit&outcome=miss`` is how a consumer asks for a whole
+        stage. It has to be read as both values — a query string that repeats
+        a scalar param silently keeps only the last one."""
+        project_id = await _create_project(client)
+        mol_hit = await _register_molecule(client, ASPIRIN_SMILES, "Asp-paged-any")
+        mol_miss = await _register_molecule(client, CAFFEINE_SMILES, "Caf-paged-any")
+        campaign = await _create_draft_campaign(client, project_id, [mol_hit, mol_miss])
+        campaign_id = campaign["id"]
+
+        stage_resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Any Stage"}
+        )
+        stage_id = stage_resp.json()["stages"][0]["id"]
+        # A criteria stage with no criteria computes "hit"; demote one row so
+        # the stage holds one of each.
+        demoted = campaign["results"][1]["id"]
+        await client.put(
+            f"/api/v1/campaigns/{campaign_id}/results/{demoted}/stages/{stage_id}/override",
+            json={"outcome": "miss", "reason": "Chemist call"},
+        )
+
+        both = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results"
+            f"?stage_id={stage_id}&outcome=hit&outcome=miss"
+        )
+        assert both.status_code == 200, both.text
+        assert both.json()["total_count"] == 2
+        assert len(both.json()["items"]) == 2
+
+        # A single value still means exactly that one value.
+        one = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=miss"
+        )
+        assert [r["id"] for r in one.json()["items"]] == [demoted]
+
+        no_stage = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?outcome=hit&outcome=miss"
+        )
+        assert no_stage.status_code == 422, no_stage.text
+
     async def test_rejects_an_outcome_without_a_stage_and_unknown_ids(
         self, client: AsyncClient
     ) -> None:

@@ -67,7 +67,10 @@ async def list_campaign_results(
     auth: AuthDep,
     uc: ListCampaignResultsDep,
     stage_id: uuid.UUID | None = None,
-    outcome: StageOutcome | None = None,
+    outcome: Annotated[
+        list[StageOutcome] | None,
+        Query(description="Verdict at stage_id to keep; may repeat to keep any of them"),
+    ] = None,
     order_by: Annotated[
         uuid.UUID | None, Query(description="Channel id to sort by; omit for row order")
     ] = None,
@@ -79,8 +82,11 @@ async def list_campaign_results(
 
     ``outcome`` filters on the verdict at ``stage_id`` **after** overrides —
     the same value the row's ``stage_outcomes`` reports — and needs
-    ``stage_id``. ``order_by`` names a channel: plain values sort first,
-    then censored ones, with ND and excluded cells last in either direction.
+    ``stage_id``. It may repeat (``&outcome=hit&outcome=miss``) to keep a row
+    whose verdict is any of them; all four of ``hit``/``miss``/``untested``/
+    ``pending`` is exactly the stage's ``population`` in the summary read.
+    ``order_by`` names a channel: plain values sort first, then censored ones,
+    with ND and excluded cells last in either direction.
     ``total_count`` is the filtered count, so a page can say "50 of 214".
 
     The full ``GET /campaigns/{id}`` read is unchanged; use this when you want
@@ -90,7 +96,7 @@ async def list_campaign_results(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         stage_id=stage_id,
-        outcome=outcome,
+        outcome=tuple(outcome or ()),
         order_by_channel_id=order_by,
         descending=direction == "desc",
         cursor_id=parse_cursor(cursor),
