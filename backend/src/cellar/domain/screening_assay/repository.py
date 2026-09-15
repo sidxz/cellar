@@ -65,6 +65,13 @@ class ProtocolRepository(Protocol):
         self, workspace_id: uuid.UUID, parent_protocol_id: uuid.UUID
     ) -> AssayProtocol | None: ...
     async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> AssayProtocol | None: ...
+    async def find_usages(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[str]:
+        """What still points at this protocol, one chemist-readable phrase each
+        (``'campaign "Test-2" (2 readouts)'``, ``'3 runs'``). Empty when nothing
+        does. A protocol with any usage must not be deleted: several of these
+        references carry no foreign key, so the database would not stop it."""
+        ...
+
     async def find_similar(
         self,
         workspace_id: uuid.UUID,

@@ -16,6 +16,7 @@ import type { ProtocolResponseRecommendedHitCriteria } from './protocolResponseR
 import type { ProtocolResponseLockedBy } from './protocolResponseLockedBy';
 import type { ProtocolResponseLockReason } from './protocolResponseLockReason';
 import type { ProtocolResponseLockedAt } from './protocolResponseLockedAt';
+import type { ProtocolResponseCanDelete } from './protocolResponseCanDelete';
 
 export interface ProtocolResponse {
   id: string;
@@ -41,4 +42,5 @@ export interface ProtocolResponse {
   locked_by?: ProtocolResponseLockedBy;
   lock_reason?: ProtocolResponseLockReason;
   locked_at?: ProtocolResponseLockedAt;
+  can_delete?: ProtocolResponseCanDelete;
 }

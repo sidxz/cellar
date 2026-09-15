@@ -157,6 +157,11 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                 Duplicate
               </DropdownMenuItem>,
             );
+          }
+
+          // The server decides: a draft the caller created (or any draft, for
+          // an admin) that no campaign, run, flag or template still uses.
+          if (!locked && p.can_delete) {
             destructiveItems.push(
               <DropdownMenuItem
                 key="delete"
