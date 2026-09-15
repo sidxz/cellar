@@ -1,5 +1,6 @@
 "use client";
 
+import { getDeleteBlockedError } from "@/shared/hooks/use-admin-delete";
 import { cascadeDeleteApiV1AdminEntityTypeEntityIdCascadeDelete as cascadeDelete } from "@/shared/lib/api/admin/admin";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -26,6 +27,8 @@ export function useCascadeDelete(opts?: { onSuccess?: () => void }) {
       opts?.onSuccess?.();
     },
     onError: (err: unknown) => {
+      // The dialog lists the blockers of a refused delete; a toast would only repeat them.
+      if (getDeleteBlockedError(err)) return;
       showError(err instanceof Error ? err.message : "Failed");
     },
   });

@@ -1,5 +1,6 @@
 "use client";
 
+import { DeleteBlockerList } from "@/shared/components/delete-blocker-list";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,9 +15,10 @@ import {
 import { Button, buttonVariants } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { getDeleteBlockedError } from "@/shared/hooks/use-admin-delete";
 import { useCascadeDelete } from "@/shared/hooks/use-cascade-delete";
 import { useCascadePreview } from "@/shared/hooks/use-cascade-preview";
-import type { CascadeNodeResponse } from "@/shared/lib/api/model";
+import type { BlockerPayload, CascadeNodeResponse } from "@/shared/lib/api/model";
 import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
@@ -40,14 +42,7 @@ function NodeView({
   depth?: number;
 }) {
   const indent = depth * 16;
-  const actionColor =
-    node.action === "block"
-      ? "text-destructive font-semibold"
-      : node.action === "set_null"
-        ? "text-amber-600"
-        : node.action === "warn"
-          ? "text-muted-foreground"
-          : "";
+  const actionColor = node.action === "set_null" ? "text-amber-600" : "";
 
   const sampleLabels = node.samples
     .map((s) => (s as Record<string, unknown>).label)
@@ -82,12 +77,15 @@ export function CascadeDeleteDialog({
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
-  const setOpen = (next: boolean) => {
-    if (!isControlled) setInternalOpen(next);
-    onOpenChange?.(next);
-  };
   const [typed, setTyped] = useState("");
   const [reason, setReason] = useState("");
+  // Blockers returned by a delete that a new reference beat after the preview.
+  const [refused, setRefused] = useState<BlockerPayload[] | null>(null);
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setInternalOpen(next);
+    if (!next) setRefused(null);
+    onOpenChange?.(next);
+  };
 
   const preview = useCascadePreview(entityType, entityId, open);
   const m = useCascadeDelete({
@@ -97,7 +95,23 @@ export function CascadeDeleteDialog({
     },
   });
 
-  const canSubmit = typed === entityLabel && reason.trim().length > 0;
+  const blockers = refused ?? preview.data?.blockers ?? [];
+  const warnings = preview.data?.warnings ?? [];
+  const canSubmit =
+    preview.isSuccess && blockers.length === 0 && typed === entityLabel && reason.trim().length > 0;
+
+  async function onConfirm() {
+    setRefused(null);
+    try {
+      await m.mutateAsync({ entityType, entityId, typedName: typed, reason });
+    } catch (err: unknown) {
+      const blocked = getDeleteBlockedError(err);
+      if (blocked) {
+        setRefused(blocked.blockers);
+        void preview.refetch();
+      }
+    }
+  }
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
@@ -121,14 +135,44 @@ export function CascadeDeleteDialog({
         </AlertDialogHeader>
 
         {preview.isLoading && <p>Computing impact…</p>}
+        {preview.isError && (
+          <p className="text-sm text-destructive">
+            Couldn't compute what this delete affects. Close the dialog and try again.
+          </p>
+        )}
+
+        {blockers.length > 0 && (
+          <div className="space-y-1 text-sm">
+            <p className="font-semibold text-destructive">
+              Can't force delete while these still use it:
+            </p>
+            <DeleteBlockerList items={blockers} />
+            <p className="text-muted-foreground text-xs">
+              Resolve them first, then open this dialog again.
+            </p>
+          </div>
+        )}
+
+        {warnings.length > 0 && (
+          <div className="space-y-1 text-sm">
+            <p className="font-medium">Also affected, not blocking:</p>
+            <DeleteBlockerList items={warnings} />
+          </div>
+        )}
+
         {preview.data && <NodeView node={preview.data} />}
 
         <div className="space-y-2 pt-2">
-          <label className="text-sm font-medium">
+          <label htmlFor="cascade-delete-typed-name" className="text-sm font-medium">
             Type <code className="bg-muted px-1 rounded">{entityLabel}</code> to confirm:
           </label>
-          <Input value={typed} onChange={(e) => setTyped(e.target.value)} />
+          <Input
+            id="cascade-delete-typed-name"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+          />
           <Textarea
+            id="cascade-delete-reason"
             placeholder="Reason for deletion (required)"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -143,12 +187,7 @@ export function CascadeDeleteDialog({
             disabled={!canSubmit || m.isPending}
             onClick={(e) => {
               e.preventDefault();
-              m.mutate({
-                entityType,
-                entityId,
-                typedName: typed,
-                reason,
-              });
+              void onConfirm();
             }}
           >
             {m.isPending ? "Deleting…" : "Force delete"}
