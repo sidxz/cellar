@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -924,22 +925,33 @@ async def test_dr_channel_qc_passing_inactive_curve_beats_an_endpoint():
 
 
 @pytest.mark.asyncio
-async def test_dr_channel_endpoint_resolves_even_with_an_intercept_key():
-    """Regression for resolve_intercept: a readout row carries no
-    intercept_values, so the channel's intercept key must not force ND."""
-    ch = _channel(
-        SelectionRule.LATEST_APPROVED_RUN,
-        intercept_key=InterceptKey(kind="ic", level=50.0),
+async def test_dr_channel_endpoint_fills_only_its_primary_intercept_channel():
+    """A reported IC50 carries no curve, so the channel's intercept key can't be
+    resolved off one: it matches the readout's primary intercept or it is ND.
+    An IC90 channel stays untested (no curve behind it), not a miss."""
+    endpoint = replace(
+        _endpoint_candidate(12.0),
+        intercept_values=[{"spec": {"kind": "ic", "level": 50.0}, "value": 12.0}],
     )
-    resolver = ChannelResolver(_FakeQuery([], endpoints=[_endpoint_candidate(12.0)]))
-    m = await resolver.resolve(
-        workspace_id=uuid.uuid4(),
-        channel=ch,
-        result_id=uuid.uuid4(),
-        molecule_id=uuid.uuid4(),
-    )
-    assert m.value == 12.0
-    assert m.value_qualifier is ValueQualifier.EQ
+
+    async def resolve(key: InterceptKey):
+        ch = _channel(SelectionRule.LATEST_APPROVED_RUN, intercept_key=key)
+        return await ChannelResolver(_FakeQuery([], endpoints=[endpoint])).resolve(
+            workspace_id=uuid.uuid4(),
+            channel=ch,
+            result_id=uuid.uuid4(),
+            molecule_id=uuid.uuid4(),
+        )
+
+    ic50 = await resolve(InterceptKey(kind="ic", level=50.0))
+    assert ic50.value == 12.0
+    assert ic50.value_qualifier is ValueQualifier.EQ
+
+    ic90 = await resolve(InterceptKey(kind="ic", level=90.0))
+    assert ic90.value is None
+    assert ic90.value_qualifier is ValueQualifier.ND
+    assert ic90.source_curve_id is None
+    assert ic90.curve_snapshot is None
 
 
 @pytest.mark.asyncio

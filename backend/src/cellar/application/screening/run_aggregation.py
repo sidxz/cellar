@@ -128,15 +128,17 @@ def resolve_intercept(
     at_bound, (None, ND) for Inactive / missing intercept / at_bound
     without max_dose.
     """
-    # A readout row has no curve, so there is no intercept to resolve —
-    # its value IS the reported endpoint. Behaviour-preserving for readout
-    # channels (which reach the same result below via ``intercept_key is
-    # None`` and empty ``intercept_values``); it is the dose-response
-    # reported-endpoint fallback that needs the guard, because that
-    # channel's ``intercept_key`` would otherwise force every endpoint
-    # row to ND.
+    # A readout row has no curve, so there is no intercept to resolve — its
+    # value IS the reported endpoint, qualifier and all (a CRO's ">50"). It
+    # stands for the readout's primary intercept only: the channel with no
+    # intercept_key, or one keyed to that intercept. An IC90 channel beside
+    # the IC50 has nothing reported for it.
     if run.curve_id is None:
-        return run.value, ValueQualifier.EQ
+        if intercept_key is not None:
+            spec = (run.intercept_values or [{}])[0].get("spec") or {}
+            if (spec.get("kind"), spec.get("level")) != (intercept_key.kind, intercept_key.level):
+                return None, ValueQualifier.ND
+        return run.value, run.qualifier
 
     if run.curve_class == "inactive":
         return None, ValueQualifier.ND

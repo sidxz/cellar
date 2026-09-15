@@ -1243,6 +1243,19 @@ class TestPreviewRunImportEndpointFallback:
         # The molecule with a curve keeps the curve — its endpoint row is ignored.
         assert by_mol[str(mol_curve)]["cells"][0]["value"] == 10.0
 
+    def test_reported_endpoint_keeps_its_censored_qualifier(self) -> None:
+        from cellar.application.research_organization.preview_run_import import (
+            _apply_selection_rule,
+        )
+
+        picked = _apply_selection_rule(
+            [_candidate(value=50.0, qualifier=ValueQualifier.GT)],
+            SelectionRule.LATEST_APPROVED_RUN,
+        )
+        assert picked is not None
+        assert picked.value == 50.0
+        assert picked.qualifier is ValueQualifier.GT
+
     @pytest.mark.asyncio
     async def test_readout_config_does_not_fetch_endpoint_fallback(self) -> None:
         auth = fake_auth()

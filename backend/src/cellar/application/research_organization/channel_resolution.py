@@ -312,12 +312,6 @@ class ChannelResolver:
         pick = result.representative_run
         assert pick is not None  # value-Some implies representative-Some
 
-        # The candidate's wire-level qualifier (e.g. ">100 µM" detection
-        # limit on a readout) is overridden by the resolver-derived
-        # qualifier (ND from inactive, GT from at_bound). Otherwise carry it
-        # through.
-        qualifier = result.qualifier if result.qualifier != ValueQualifier.EQ else pick.qualifier
-
         source_run = None if is_aggregate else pick.run_id
         source_curve = None if is_aggregate else pick.curve_id
         source_readout = None if is_aggregate else pick.readout_id
@@ -345,7 +339,7 @@ class ChannelResolver:
             result_id=result_id,
             channel_id=channel.id,
             value=result.value,
-            value_qualifier=qualifier,
+            value_qualifier=result.qualifier,
             unit=pick.unit or _ND_UNIT_PLACEHOLDER,
             source_run_id=source_run,
             source_curve_id=source_curve,

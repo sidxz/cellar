@@ -10,6 +10,7 @@ disambiguation behavior.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date
 
@@ -458,10 +459,24 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
             sa.text(
                 "INSERT INTO readout_definitions "
                 "(id, protocol_id, name, data_type, display_order, "
-                "is_calculated, unit) "
-                "VALUES (:id, :proto, 'IC50', 'dose_response', 0, false, 'uM')"
+                "is_calculated, unit, dose_response_config) "
+                "VALUES (:id, :proto, 'IC50', 'dose_response', 0, false, 'uM', "
+                "CAST(:cfg AS jsonb))"
             ),
-            {"id": rd_id, "proto": protocol_id},
+            {
+                "id": rd_id,
+                "proto": protocol_id,
+                "cfg": json.dumps(
+                    {
+                        "curve_type": "ic50",
+                        "y_readout_name": "Response",
+                        "intercepts": [
+                            {"kind": "ic", "level": 50.0},
+                            {"kind": "ic", "level": 90.0},
+                        ],
+                    }
+                ),
+            },
         )
         for run_id in (run_curve_id, run_summary_id):
             await session.execute(
@@ -573,6 +588,8 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
     assert raw.qualifier is ValueQualifier.GT
     assert raw.unit == "uM"
     assert raw.curve_id is None
+    # Tagged as the readout's primary intercept, so only an IC50 channel takes it.
+    assert raw.intercept_values == [{"spec": {"kind": "ic", "level": 50.0}, "value": 32.0}]
 
     scoped = await query.fetch_endpoint_candidates_for_runs(
         workspace_id=ws_id,
