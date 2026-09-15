@@ -34,7 +34,31 @@ const campaign = {
   project_id: "proj-1",
   status: "draft",
   seed_runs: [{ run_id: "run-1", protocol_id: "proto-1" }],
+  stages: [
+    { id: "stage-1", name: "Primary" },
+    { id: "stage-2", name: "Confirm" },
+  ],
 } as unknown as CampaignResponse;
+
+/** tally_stage_counts' buckets: population = hit + miss + untested + pending. */
+function stageCounts(
+  stage_id: string,
+  over: Partial<Record<string, number>> = {},
+): Record<string, unknown> {
+  return {
+    stage_id,
+    counts: {
+      population: 0,
+      hit: 0,
+      miss: 0,
+      untested: 0,
+      pending: 0,
+      not_in_stage: 0,
+      overridden: 0,
+      ...over,
+    },
+  };
+}
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -59,8 +83,28 @@ beforeEach(() => {
   vi.clearAllMocks();
   coverage.mockReturnValue({
     data: [
-      { id: "lib-1", name: "Diversity 5k", type: "library", covered: 3, total: 4, fraction: 0.75 },
-      { id: "lib-2", name: "Kinase focused", type: "library", covered: 0, total: 2, fraction: 0 },
+      {
+        id: "lib-1",
+        name: "Diversity 5k",
+        type: "library",
+        covered: 3,
+        total: 4,
+        fraction: 0.75,
+        stages: [
+          // 3 rows reached Primary, one of them untested there: 2 hits / 2 tested.
+          stageCounts("stage-1", { population: 3, hit: 2, miss: 0, untested: 1 }),
+          stageCounts("stage-2", { population: 2, hit: 1, miss: 1 }),
+        ],
+      },
+      {
+        id: "lib-2",
+        name: "Kinase focused",
+        type: "library",
+        covered: 0,
+        total: 2,
+        fraction: 0,
+        stages: [stageCounts("stage-1"), stageCounts("stage-2")],
+      },
     ],
     isLoading: false,
   });
@@ -83,6 +127,15 @@ describe("LibrariesSection", () => {
     // idempotent re-add of lib-2 would be a wasted write.
     await waitFor(() => expect(removeMutate).toHaveBeenCalledWith("lib-1"));
     expect(addMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows hits and tested per stage, by stage name", () => {
+    renderSection();
+    expect(screen.getAllByText("Primary")).toHaveLength(2);
+    expect(screen.getByText("2 hits / 2 tested")).toBeInTheDocument();
+    expect(screen.getByText("1 hit / 2 tested")).toBeInTheDocument();
+    // A library that reached no stage still lists them, at zero.
+    expect(screen.getAllByText("0 hits / 0 tested")).toHaveLength(2);
   });
 
   it("says nothing was screened when the campaign has no seed runs", () => {
