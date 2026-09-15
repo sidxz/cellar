@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from cellar.application.admin.admin_hard_delete import AdminHardDeleteCommand
 from cellar.application.admin.cascade_delete import CascadeDeleteCommand
 from cellar.application.admin.cascade_preview import CascadePreviewQuery
+from cellar.application.admin.cascade_service import CascadePreviewResult, InboundReference
 from cellar.domain.shared.cascade import CascadeNode
 from cellar.interface.dependencies import (
     AdminHardDeleteDep,
@@ -38,6 +39,19 @@ class BlockerPayload(BaseModel):
     count: int
     samples: list[dict]
     truncated: bool
+    display_label: str | None = None
+
+    @classmethod
+    def from_reference(cls, r: InboundReference) -> BlockerPayload:
+        return cls(
+            table=r.table,
+            entity_type=r.entity_type,
+            fk_column=r.fk_column,
+            count=r.count,
+            samples=r.samples,
+            truncated=r.truncated,
+            display_label=r.display_label,
+        )
 
 
 class BlockedByDependenciesResponse(BaseModel):
@@ -104,16 +118,33 @@ class CascadeNodeResponse(BaseModel):
 CascadeNodeResponse.model_rebuild()
 
 
+class CascadePreviewResponse(CascadeNodeResponse):
+    """The preview tree's root, plus what would refuse the delete (blockers)
+    and what it leaves changed but not removed (warnings)."""
+
+    blockers: list[BlockerPayload] = []
+    warnings: list[BlockerPayload] = []
+
+    @classmethod
+    def from_result(cls, result: CascadePreviewResult) -> CascadePreviewResponse:
+        root = CascadeNodeResponse.from_domain(result.root)
+        return cls(
+            **root.model_dump(),
+            blockers=[BlockerPayload.from_reference(b) for b in result.blockers],
+            warnings=[BlockerPayload.from_reference(w) for w in result.warnings],
+        )
+
+
 @router.post(
     "/{entity_type}/{entity_id}/cascade-preview",
-    response_model=CascadeNodeResponse,
+    response_model=CascadePreviewResponse,
 )
 async def cascade_preview(
     entity_type: str,
     entity_id: uuid.UUID,
     auth: AuthDep,
     use_case: CascadePreviewDep,
-) -> CascadeNodeResponse:
+) -> CascadePreviewResponse:
     res = await use_case(
         CascadePreviewQuery(
             workspace_id=auth.workspace_id,
@@ -122,8 +153,7 @@ async def cascade_preview(
         ),
         auth=auth,
     )
-    node = result_to_response(res)
-    return CascadeNodeResponse.from_domain(node)
+    return CascadePreviewResponse.from_result(result_to_response(res))
 
 
 class CascadeDeleteBody(BaseModel):
@@ -134,6 +164,7 @@ class CascadeDeleteBody(BaseModel):
 @router.delete(
     "/{entity_type}/{entity_id}/cascade",
     status_code=status.HTTP_204_NO_CONTENT,
+    responses={409: {"model": BlockedByDependenciesResponse}},
 )
 async def cascade_delete(
     entity_type: str,

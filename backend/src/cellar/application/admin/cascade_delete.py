@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.admin.admin_delete_registry import get_entry
+from cellar.application.admin.admin_hard_delete import BlockedByDependenciesError
 from cellar.application.admin.cascade_service import (
-    CascadeExecutionError,
+    CascadeBlockedError,
     CascadeService,
 )
 from cellar.application.admin.tier2_entities import TIER2_ENTITY_TYPES
@@ -79,8 +80,9 @@ class CascadeDelete:
                     parent_id=input.entity_id,
                     workspace_id=input.workspace_id,
                 )
-            except CascadeExecutionError as e:
-                return Failure(ValidationError(str(e)))
+            except CascadeBlockedError as blocked:
+                # Same 409 body as a Tier-1 refusal, naming every blocker.
+                return Failure(BlockedByDependenciesError(blocked.blockers))
 
             # Audit inside the active transaction so that audit failure rolls
             # back the entire cascade — atomicity required for 21 CFR Part 11.
