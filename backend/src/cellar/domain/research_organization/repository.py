@@ -264,6 +264,20 @@ class CampaignRepository(Protocol):
         """Libraries linked to the campaign (association, not aggregate state)."""
         ...
 
+    async def collection_members_among(
+        self,
+        workspace_id: uuid.UUID,
+        collection_ids: list[uuid.UUID],
+        molecule_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, set[uuid.UUID]]:
+        """Which of ``molecule_ids`` belong to each of ``collection_ids``.
+
+        Intersecting in the database keeps per-library stage tallies bounded
+        by the campaign's own rows rather than by library size. Collections
+        with no listed member are omitted.
+        """
+        ...
+
     async def add_collection(
         self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID
     ) -> CampaignCollectionLinkResult: ...

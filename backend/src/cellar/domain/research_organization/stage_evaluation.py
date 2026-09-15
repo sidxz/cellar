@@ -197,11 +197,22 @@ def evaluate_stages(campaign: Campaign) -> StageOutcomes:
 
 
 def tally_stage_counts(
-    campaign: Campaign, outcomes: StageOutcomes
+    campaign: Campaign,
+    outcomes: StageOutcomes,
+    *,
+    result_ids: set[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, dict[str, int]]:
     """Per-stage funnel counts. ``population = hit + miss + untested + pending``;
     for a root stage that's every result (root outcomes are never
-    `not_in_stage`). ``pending`` is only ever non-zero for a manual stage."""
+    `not_in_stage`). ``pending`` is only ever non-zero for a manual stage.
+
+    ``result_ids`` narrows the tally to a subset of the campaign's rows —
+    the rows in one library, say. Every stage still gets a bucket, so a
+    subset that matches nothing reports zeros rather than vanishing. The
+    outcomes are unchanged either way: a compound's verdict is a property of
+    the compound and the stage, never of the slice it is counted in, so one
+    ``evaluate_stages`` feeds any number of tallies.
+    """
     counts: dict[uuid.UUID, dict[str, int]] = {
         stage.id: {
             "population": 0,
@@ -215,6 +226,8 @@ def tally_stage_counts(
         for stage in campaign.stages
     }
     for result in campaign.results:
+        if result_ids is not None and result.id not in result_ids:
+            continue
         for stage_id, outcome in outcomes.get(result.id, {}).items():
             bucket = counts.get(stage_id)
             if bucket is None:

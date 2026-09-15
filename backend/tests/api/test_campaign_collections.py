@@ -180,3 +180,101 @@ class TestCampaignCollectionGap:
             params={"limit": 501},
         )
         assert resp.status_code == 422, resp.text
+
+
+class TestCampaignCollectionStageCounts:
+    """?include=stages — the campaign's funnel, counted per library."""
+
+    async def _campaign_with_two_rows(self, client: AsyncClient) -> tuple[str, str, str]:
+        """A draft campaign with two result rows. Returns (campaign_id, mol_a, mol_b)."""
+        project_id = await _create_project(client, name="StageCounts Project")
+        mol_a = await _register_molecule(client, ASPIRIN_SMILES, "StageCount-A")
+        mol_b = await _register_molecule(client, CAFFEINE_SMILES, "StageCount-B")
+        campaign_id = await _seed_closeable_campaign(client, project_id, mol_a)
+        added = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/results", json={"molecule_id": mol_b}
+        )
+        assert added.status_code == 204, added.text
+        return campaign_id, mol_a, mol_b
+
+    async def _add_manual_stage(self, client: AsyncClient, campaign_id: str) -> str:
+        """A manual stage parks every row at `pending` — no measurement values
+        needed to prove the per-library split."""
+        resp = await client.post(
+            f"/api/v1/campaigns/{campaign_id}/stages",
+            json={"name": "Triage", "kind": "manual"},
+        )
+        assert resp.status_code == 200, resp.text
+        return resp.json()["stages"][0]["id"]
+
+    async def test_stages_absent_without_the_flag(self, client: AsyncClient) -> None:
+        campaign_id, mol_a, _ = await self._campaign_with_two_rows(client)
+        await self._add_manual_stage(client, campaign_id)
+        coll = await _make_collection(client, [mol_a], name="FlagOffLib")
+        await client.post(f"/api/v1/campaigns/{campaign_id}/collections/{coll}")
+
+        entry = (await client.get(f"/api/v1/campaigns/{campaign_id}/collection-coverage")).json()[
+            0
+        ]
+        assert entry["stages"] is None
+
+    async def test_counts_only_the_rows_in_that_library(self, client: AsyncClient) -> None:
+        campaign_id, mol_a, _ = await self._campaign_with_two_rows(client)
+        stage_id = await self._add_manual_stage(client, campaign_id)
+        # The library holds one of the campaign's two compounds.
+        coll = await _make_collection(client, [mol_a], name="HalfTheCampaign")
+        await client.post(f"/api/v1/campaigns/{campaign_id}/collections/{coll}")
+
+        resp = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/collection-coverage", params={"include": "stages"}
+        )
+        assert resp.status_code == 200, resp.text
+        entry = resp.json()[0]
+        assert [s["stage_id"] for s in entry["stages"]] == [stage_id]
+        counts = entry["stages"][0]["counts"]
+        assert counts["population"] == 1
+        assert counts["pending"] == 1
+        # Coverage is untouched by the flag.
+        assert entry["total"] == 1
+        assert entry["covered"] == 0
+
+        # The campaign's own summary still counts both rows.
+        summary = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
+        assert summary["stages"][0]["counts"]["population"] == 2
+
+    async def test_library_sharing_no_compound_reports_zeros(self, client: AsyncClient) -> None:
+        campaign_id, _, _ = await self._campaign_with_two_rows(client)
+        await self._add_manual_stage(client, campaign_id)
+        stranger = await _register_molecule(client, "CCCCCCCCCCCC", "StageCount-Stranger")
+        coll = await _make_collection(client, [stranger], name="NoOverlapLib")
+        await client.post(f"/api/v1/campaigns/{campaign_id}/collections/{coll}")
+
+        entry = (
+            await client.get(
+                f"/api/v1/campaigns/{campaign_id}/collection-coverage",
+                params={"include": "stages"},
+            )
+        ).json()[0]
+        assert entry["stages"][0]["counts"]["population"] == 0
+        assert entry["stages"][0]["counts"]["pending"] == 0
+
+    async def test_campaign_without_stages_reports_empty_list(self, client: AsyncClient) -> None:
+        campaign_id, mol_a, _ = await self._campaign_with_two_rows(client)
+        coll = await _make_collection(client, [mol_a], name="StagelessLib")
+        await client.post(f"/api/v1/campaigns/{campaign_id}/collections/{coll}")
+
+        entry = (
+            await client.get(
+                f"/api/v1/campaigns/{campaign_id}/collection-coverage",
+                params={"include": "stages"},
+            )
+        ).json()[0]
+        # [] (no stages) is not None (not asked for).
+        assert entry["stages"] == []
+
+    async def test_unknown_include_value_is_rejected(self, client: AsyncClient) -> None:
+        campaign_id, _, _ = await self._campaign_with_two_rows(client)
+        resp = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/collection-coverage", params={"include": "wat"}
+        )
+        assert resp.status_code == 422, resp.text

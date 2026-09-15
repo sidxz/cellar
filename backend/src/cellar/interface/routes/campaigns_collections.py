@@ -9,6 +9,7 @@ nor ``GET /campaigns/{id}/summary`` pays for it.
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Query, Response
 
@@ -28,7 +29,7 @@ from cellar.interface.dependencies import (
     RemoveCampaignCollectionDep,
 )
 from cellar.interface.error_handlers import result_to_response
-from cellar.interface.routes._collection_coverage import CollectionCoverageResponse
+from cellar.interface.routes._campaign_dtos import CampaignCollectionCoverageResponse
 
 router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 
@@ -73,22 +74,39 @@ async def remove_campaign_collection(
     return Response(status_code=204)
 
 
-@router.get("/{campaign_id}/collection-coverage", response_model=list[CollectionCoverageResponse])
+@router.get(
+    "/{campaign_id}/collection-coverage",
+    response_model=list[CampaignCollectionCoverageResponse],
+)
 async def campaign_collection_coverage(
     campaign_id: uuid.UUID,
     auth: AuthDep,
     uc: GetCampaignCollectionCoverageDep,
-) -> list[CollectionCoverageResponse]:
-    """Per linked library: members read in any of this campaign's seed runs."""
-    coverage = result_to_response(
+    include: Literal["stages"] | None = Query(
+        None,
+        description=(
+            "Pass 'stages' to also tally each library's rows through the "
+            "campaign's stages. Costs a full campaign load; omit it for "
+            "coverage alone."
+        ),
+    ),
+) -> list[CampaignCollectionCoverageResponse]:
+    """Per linked library: members read in any of this campaign's seed runs.
+
+    With ``include=stages`` each entry also carries the campaign's funnel
+    counted over that library's rows — which library the hits came from.
+    """
+    libraries = result_to_response(
         await uc(
             GetCampaignCollectionCoverageQuery(
-                workspace_id=auth.workspace_id, campaign_id=campaign_id
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign_id,
+                include_stages=include == "stages",
             ),
             auth=auth,
         )
     )
-    return [CollectionCoverageResponse.from_coverage(c) for c in coverage]
+    return [CampaignCollectionCoverageResponse.from_library(lib) for lib in libraries]
 
 
 @router.get(
