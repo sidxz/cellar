@@ -44,9 +44,10 @@ class ListCampaignResultsQuery(Query):
     campaign_id: uuid.UUID
     #: Which stage's verdict to filter on. Required when ``outcome`` is set.
     stage_id: uuid.UUID | None = None
-    #: The verdict at ``stage_id`` **after** any manual override — exactly what
-    #: the row's ``stage_outcomes`` reports.
-    outcome: StageOutcome | None = None
+    #: Verdicts at ``stage_id`` **after** any manual override — exactly what
+    #: the row's ``stage_outcomes`` reports. A row is kept when its verdict is
+    #: any of these; empty means no outcome filter.
+    outcome: tuple[StageOutcome, ...] = ()
     #: Channel to order by. ``None`` keeps the campaign's own row order.
     order_by_channel_id: uuid.UUID | None = None
     descending: bool = False
@@ -73,7 +74,7 @@ class ListCampaignResults:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
 
-        if input.outcome is not None and input.stage_id is None:
+        if input.outcome and input.stage_id is None:
             return Failure(ValidationError("outcome requires stage_id"))
 
         async with self._uow:
@@ -103,13 +104,14 @@ class ListCampaignResults:
             outcomes = evaluate_stages(campaign)
 
             rows = list(campaign.results)
-            if input.stage_id is not None and input.outcome is not None:
+            if input.stage_id is not None and input.outcome:
                 stage_id = input.stage_id
+                wanted = set(input.outcome)
                 rows = [
                     r
                     for r in rows
                     if (o := outcomes.get(r.id, {}).get(stage_id)) is not None
-                    and o.outcome == input.outcome
+                    and o.outcome in wanted
                 ]
             total = len(rows)
 
