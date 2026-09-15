@@ -90,7 +90,7 @@ How the walk behaves:
 - **It evaluates rules for every collected id.** Samples are for display only.
 - **It never revisits a `(table, id)`.** This matters for self-referencing cascades such as merged tombstones.
 - **Rows already scheduled for deletion are dropped from `nulls`.**
-- **Id lists bind in chunks** via `itertools.batched`, with chunk size a module constant of 10,000. asyncpg caps a statement at 32,767 parameters, and one 384-well protocol with 86 plates already passes that.
+- **Id lists bind as one `uuid[]` parameter** (`column = ANY(:ids)`, helper `any_id` in `rules.py`). `IN (...)` binds one parameter per id, and asyncpg refuses more than 32,767 of them; one 384-well protocol with 86 plates already passes that. Checked on the dev DB: 40,000 ids fail through `IN` and pass as an array. The current runner uses `IN` everywhere, so large force deletes fail today.
 
 ### 3.3 Preview
 
@@ -197,7 +197,8 @@ M1 and B1 can both name the same run; each line stays accurate, so they aren't m
 
 - **M11:** add the rule and delete the misspelled `("cdd_molecule_syncs", "molecule_id", "molecules")` entry from `IGNORED_FKS`.
 - **DR1:** add it, together with recursion on disclosure requests.
-- **Stale entry:** delete `("registered_plates", "run_id", "runs")` from `IGNORED_FKS`. That column doesn't exist; the link is `plates.registered_plate_id`.
+- **Stale entries:** delete four `IGNORED_FKS` entries that name columns which no longer exist: `registered_plates.run_id` (the link is `plates.registered_plate_id`), `batches.storage_location_id`, `protocols.target_id` (now the `protocol_targets` table) and the misspelled `cdd_molecule_syncs.molecule_id`.
+- **Model imports:** the coverage test loads every module under `infrastructure/persistence/sqlalchemy` instead of a hand-kept list, so a new model's columns can't escape classification. The existing FK test still passes with the full set (checked).
 
 ## 6. Guard tests (`tests/unit/cascade/test_fk_coverage.py`)
 
@@ -242,7 +243,7 @@ M1 and B1 can both name the same run; each line stays accurate, so they aren't m
   - A reaction-step product link: nulled, with an UPDATE audit entry.
 - **Set-null audit** on an existing FK rule (successor protocol lineage): an UPDATE entry.
 - **Tier 1:** a protocol whose only reference is a compound flag returns a 409 naming it.
-- **Chunking:** a protocol delete with the chunk size patched to 2.
+- **Bind cap:** a protocol delete whose run has 33,000 wells.
 
 **API** (`tests/api/test_admin_delete.py`): the preview returns `blockers` and `warnings`, and a blocked cascade delete returns the 409 body.
 
@@ -273,7 +274,7 @@ M1 and B1 can both name the same run; each line stays accurate, so they aren't m
 - **Review:** one whole-branch review at the end.
 - **Migration:** none.
 - **Order:**
-  1. Engine: rule validation, plan walk, set-null audit, chunking.
+  1. Engine: rule validation, plan walk, set-null audit, array-bound ids.
   2. Tier 1.
   3. Rules and guard tests.
   4. API.
