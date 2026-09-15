@@ -3,13 +3,60 @@
 Declares what happens to children of Protocol, Run, Plate, etc., when those
 parents are deleted via Tier-2 admin force-cascade.
 
-Rules are derived from the actual ForeignKey declarations in
-infrastructure/persistence/sqlalchemy/screening_assay/models.py.
+Rules cover FK references (see
+infrastructure/persistence/sqlalchemy/screening_assay/models.py) and id-only
+references without an FK (compound flags, and measurements naming a molecule
+or batch).
 """
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Sequence
+
+from sqlalchemy import ColumnElement, Table, exists, or_
 
 from cellar.domain.shared.cascade.actions import CascadeAction as A
 from cellar.infrastructure.cascade.registry import register_rules
-from cellar.infrastructure.cascade.rules import CascadeRule
+from cellar.infrastructure.cascade.rules import CascadeRule, any_id
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    DoseResponseCurveModel,
+    PlateModel,
+    ReadoutDataModel,
+    WellModel,
+)
+
+
+def _runs_with_data_for_molecules(
+    runs: Table, molecule_ids: Sequence[uuid.UUID]
+) -> ColumnElement[bool]:
+    readouts = ReadoutDataModel.__table__
+    curves = DoseResponseCurveModel.__table__
+    return or_(
+        exists().where(
+            readouts.c.run_id == runs.c.id, any_id(readouts.c.molecule_id, molecule_ids)
+        ),
+        exists().where(curves.c.run_id == runs.c.id, any_id(curves.c.molecule_id, molecule_ids)),
+    )
+
+
+def _runs_with_data_for_batches(
+    runs: Table, batch_ids: Sequence[uuid.UUID]
+) -> ColumnElement[bool]:
+    readouts = ReadoutDataModel.__table__
+    curves = DoseResponseCurveModel.__table__
+    plates = PlateModel.__table__
+    wells = WellModel.__table__
+    return or_(
+        exists().where(readouts.c.run_id == runs.c.id, any_id(readouts.c.batch_id, batch_ids)),
+        exists().where(curves.c.run_id == runs.c.id, any_id(curves.c.batch_id, batch_ids)),
+        exists().where(
+            plates.c.run_id == runs.c.id,
+            wells.c.plate_id == plates.c.id,
+            any_id(wells.c.batch_id, batch_ids),
+        ),
+    )
+
 
 register_rules(
     # -------------------------------------------------------------------------
@@ -191,5 +238,39 @@ register_rules(
         action=A.CASCADE,
         fk_column="protocol_id",
         display_label="Compound flags",
+    ),
+    # CompoundFlagModel.molecule_id (no FK): the flag means nothing without its compound.
+    CascadeRule(
+        child_table="compound_flags",
+        parent_table="molecules",
+        action=A.CASCADE,
+        fk_column="molecule_id",
+        display_label="Compound flags",
+    ),
+    # -------------------------------------------------------------------------
+    # Runs holding measurements for a force-deleted molecule or batch (no FK)
+    # -------------------------------------------------------------------------
+    # readout_data.molecule_id and dose_response_curves.molecule_id. Deleting a
+    # compound must not pull data out of runs, and a refit would re-create its
+    # curves anyway. Merge the molecule, or force-delete the runs first.
+    CascadeRule(
+        child_table="runs",
+        parent_table="molecules",
+        action=A.BLOCK,
+        match=_runs_with_data_for_molecules,
+        covers=("readout_data.molecule_id", "dose_response_curves.molecule_id"),
+        label_field="run_date",
+        display_label="Runs with data for this molecule",
+    ),
+    # Wells store only the batch, so a deleted batch leaves a plate map with no
+    # compound identity at all.
+    CascadeRule(
+        child_table="runs",
+        parent_table="batches",
+        action=A.BLOCK,
+        match=_runs_with_data_for_batches,
+        covers=("wells.batch_id", "readout_data.batch_id", "dose_response_curves.batch_id"),
+        label_field="run_date",
+        display_label="Runs with data for this molecule's batches",
     ),
 )
