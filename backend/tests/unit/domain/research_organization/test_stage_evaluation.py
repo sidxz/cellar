@@ -714,3 +714,75 @@ def test_tally_counts_pending_and_population_sums():
     assert counts["population"] == (
         counts["hit"] + counts["miss"] + counts["untested"] + counts["pending"]
     )
+
+
+# ---------- tally over a subset of rows (per-library funnels) ----------
+
+
+def test_tally_restricted_to_result_ids_counts_only_those_rows():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    stage = _make_stage(c, criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=10.0)])
+
+    in_library = _make_result(c)
+    _add_measurement(in_library, ch, value=1.0)  # hit
+    also_in_library = _make_result(c)
+    _add_measurement(also_in_library, ch, value=50.0)  # miss
+    elsewhere = _make_result(c)
+    _add_measurement(elsewhere, ch, value=2.0)  # hit, but not in the library
+
+    outcomes = evaluate_stages(c)
+    whole = tally_stage_counts(c, outcomes)[stage.id]
+    library = tally_stage_counts(c, outcomes, result_ids={in_library.id, also_in_library.id})[
+        stage.id
+    ]
+
+    assert whole["population"] == 3
+    assert whole["hit"] == 2
+    # The third row's hit belongs to the campaign, not to this library.
+    assert library["population"] == 2
+    assert library["hit"] == 1
+    assert library["miss"] == 1
+
+
+def test_tally_of_no_rows_is_zeros_not_a_missing_stage():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    stage = _make_stage(c, criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=10.0)])
+    r = _make_result(c)
+    _add_measurement(r, ch, value=1.0)
+
+    counts = tally_stage_counts(c, evaluate_stages(c), result_ids=set())
+
+    # A library sharing no compound with the campaign still reports the stage.
+    assert counts[stage.id] == {
+        "population": 0,
+        "hit": 0,
+        "miss": 0,
+        "untested": 0,
+        "pending": 0,
+        "not_in_stage": 0,
+        "overridden": 0,
+    }
+
+
+def test_tally_subset_keeps_campaign_stage_order():
+    c = _make_campaign()
+    ch = _make_channel(c)
+    first = _make_stage(
+        c, display_order=0, criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=10.0)]
+    )
+    second = _make_stage(
+        c,
+        display_order=1,
+        parent_stage_id=first.id,
+        criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=5.0)],
+    )
+    r = _make_result(c)
+    _add_measurement(r, ch, value=1.0)
+
+    counts = tally_stage_counts(c, evaluate_stages(c), result_ids={r.id})
+
+    # The response renders these in dict order; it must match campaign.stages,
+    # which is the order the campaign summary lists.
+    assert list(counts.keys()) == [first.id, second.id]

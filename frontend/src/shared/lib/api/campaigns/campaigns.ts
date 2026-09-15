@@ -33,6 +33,9 @@ import type {
   AddStageRequest,
   BulkRemoveResultsRequest,
   BulkStageOverrideRequest,
+  CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetParams,
+  CampaignCollectionCoverageResponse,
+  CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetParams,
   CampaignResponse,
   CampaignSummaryResponse,
   CloseCampaignRequest,
@@ -1284,6 +1287,345 @@ export const useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProt
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * Name a library this campaign screened (idempotent).
+ * @summary Add Campaign Collection
+ */
+export const addCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost = (
+    campaignId: string,
+    collectionId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/campaigns/${campaignId}/collections/${collectionId}`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getAddCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost>>, TError,{campaignId: string;collectionId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost>>, TError,{campaignId: string;collectionId: string}, TContext> => {
+
+const mutationKey = ['addCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost>>, {campaignId: string;collectionId: string}> = (props) => {
+          const {campaignId,collectionId} = props ?? {};
+
+          return  addCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost(campaignId,collectionId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPostMutationResult = NonNullable<Awaited<ReturnType<typeof addCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost>>>
+    
+    export type AddCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Add Campaign Collection
+ */
+export const useAddCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost>>, TError,{campaignId: string;collectionId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPost>>,
+        TError,
+        {campaignId: string;collectionId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getAddCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Unlink a library from this campaign.
+ * @summary Remove Campaign Collection
+ */
+export const removeCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete = (
+    campaignId: string,
+    collectionId: string,
+ ) => {
+      
+      
+      return customInstance<void>(
+      {url: `/api/v1/campaigns/${campaignId}/collections/${collectionId}`, method: 'DELETE'
+    },
+      );
+    }
+  
+
+
+export const getRemoveCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDeleteMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete>>, TError,{campaignId: string;collectionId: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof removeCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete>>, TError,{campaignId: string;collectionId: string}, TContext> => {
+
+const mutationKey = ['removeCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete>>, {campaignId: string;collectionId: string}> = (props) => {
+          const {campaignId,collectionId} = props ?? {};
+
+          return  removeCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete(campaignId,collectionId,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof removeCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete>>>
+    
+    export type RemoveCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDeleteMutationError = HTTPValidationError
+
+    /**
+ * @summary Remove Campaign Collection
+ */
+export const useRemoveCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete>>, TError,{campaignId: string;collectionId: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDelete>>,
+        TError,
+        {campaignId: string;collectionId: string},
+        TContext
+      > => {
+
+      const mutationOptions = getRemoveCampaignCollectionApiV1CampaignsCampaignIdCollectionsCollectionIdDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Per linked library: members read in any of this campaign's seed runs.
+
+With ``include=stages`` each entry also carries the campaign's funnel
+counted over that library's rows — which library the hits came from.
+ * @summary Campaign Collection Coverage
+ */
+export const campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet = (
+    campaignId: string,
+    params?: CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CampaignCollectionCoverageResponse[]>(
+      {url: `/api/v1/campaigns/${campaignId}/collection-coverage`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getCampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetQueryKey = (campaignId?: string,
+    params?: CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetParams,) => {
+    return [
+    `/api/v1/campaigns/${campaignId}/collection-coverage`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getCampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetQueryOptions = <TData = Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError = HTTPValidationError>(campaignId: string,
+    params?: CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetQueryKey(campaignId,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>> = ({ signal }) => campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet(campaignId,params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(campaignId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetQueryResult = NonNullable<Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>>
+export type CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetQueryError = HTTPValidationError
+
+
+export function useCampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet<TData = Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    params: undefined |  CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>,
+          TError,
+          Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet<TData = Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    params?: CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>,
+          TError,
+          Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet<TData = Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    params?: CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Campaign Collection Coverage
+ */
+
+export function useCampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet<TData = Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    params?: CampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCampaignCollectionCoverageApiV1CampaignsCampaignIdCollectionCoverageGetQueryOptions(campaignId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Library members no seed run of this campaign read (paginated).
+ * @summary Campaign Collection Gap
+ */
+export const campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet = (
+    campaignId: string,
+    collectionId: string,
+    params?: CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<string[]>(
+      {url: `/api/v1/campaigns/${campaignId}/collections/${collectionId}/gap`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getCampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetQueryKey = (campaignId?: string,
+    collectionId?: string,
+    params?: CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetParams,) => {
+    return [
+    `/api/v1/campaigns/${campaignId}/collections/${collectionId}/gap`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getCampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetQueryOptions = <TData = Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(campaignId: string,
+    collectionId: string,
+    params?: CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetQueryKey(campaignId,collectionId,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>> = ({ signal }) => campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet(campaignId,collectionId,params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(campaignId && collectionId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetQueryResult = NonNullable<Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>>
+export type CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetQueryError = HTTPValidationError
+
+
+export function useCampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    collectionId: string,
+    params: undefined |  CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>,
+          TError,
+          Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    collectionId: string,
+    params?: CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>,
+          TError,
+          Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    collectionId: string,
+    params?: CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Campaign Collection Gap
+ */
+
+export function useCampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet<TData = Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError = HTTPValidationError>(
+ campaignId: string,
+    collectionId: string,
+    params?: CampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof campaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCampaignCollectionGapApiV1CampaignsCampaignIdCollectionsCollectionIdGapGetQueryOptions(campaignId,collectionId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
  * Add a hit-triage stage to a draft Campaign.
  * @summary Add Campaign Stage
  */

@@ -26,6 +26,8 @@ export type {
   AddFromRunRequest,
   AddResultsOutcomeResponse,
   CampaignStageResponse,
+  CampaignCollectionCoverageResponse,
+  CollectionStageCountsResponse,
   StageCriterionDTO,
   StageOutcomeResponse,
   AddStageRequest,

@@ -13,6 +13,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from cellar.application.research_organization.campaign_collection_coverage import (
+    LibraryCoverage,
+)
 from cellar.application.research_organization.preview_run_import import (
     ChannelImportConfig,
 )
@@ -41,6 +44,7 @@ from cellar.domain.research_organization.stage_evaluation import (
 )
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.domain.shared.target_ref import TargetRef
+from cellar.interface.routes._collection_coverage import CollectionCoverageResponse
 from cellar.interface.routes._target_refs import TargetRefResponse
 
 # ---------------------------------------------------------------------------
@@ -495,6 +499,48 @@ class StageCountsResponse(BaseModel):
     pending: int
     not_in_stage: int
     overridden: int
+
+
+class CollectionStageCountsResponse(BaseModel):
+    """One campaign stage's funnel, counted over a single library's rows."""
+
+    stage_id: uuid.UUID
+    counts: StageCountsResponse
+
+
+class CampaignCollectionCoverageResponse(CollectionCoverageResponse):
+    """Campaign library coverage, optionally with its per-stage funnel.
+
+    Extends the shared run/protocol coverage shape rather than widening it:
+    those two payloads must not grow a campaign-only field. ``stages`` is
+    null unless the caller asked for it (``?include=stages``) and ``[]`` for
+    a campaign with no stages.
+    """
+
+    stages: list[CollectionStageCountsResponse] | None = None
+
+    @classmethod
+    def from_library(cls, lib: LibraryCoverage) -> CampaignCollectionCoverageResponse:
+        c = lib.coverage
+        return cls(
+            id=c.ref.id,
+            name=c.ref.name,
+            type=c.ref.type,
+            covered=c.covered,
+            total=c.total,
+            fraction=c.fraction,
+            # tally_stage_counts keys its dict in ``campaign.stages`` order,
+            # which is the order the summary lists them — the contract daikon
+            # reads against. Preserved by dict insertion order, not re-sorted.
+            stages=None
+            if lib.stage_counts is None
+            else [
+                CollectionStageCountsResponse(
+                    stage_id=stage_id, counts=StageCountsResponse(**counts)
+                )
+                for stage_id, counts in lib.stage_counts.items()
+            ],
+        )
 
 
 class CampaignStageResponse(BaseModel):

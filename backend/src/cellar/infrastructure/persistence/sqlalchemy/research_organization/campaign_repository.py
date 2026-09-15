@@ -45,6 +45,7 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CampaignStageModel,
     CampaignStageOverrideModel,
     CollectionModel,
+    CollectionMoleculeModel,
     campaign_collections,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
@@ -584,6 +585,41 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             )
         )
         return list((await self._session.execute(stmt)).scalars())
+
+    async def collection_members_among(
+        self,
+        workspace_id: uuid.UUID,
+        collection_ids: list[uuid.UUID],
+        molecule_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, set[uuid.UUID]]:
+        """Which of ``molecule_ids`` belong to each of ``collection_ids``.
+
+        Bounded by the caller's molecule set, not by library size: a campaign
+        of 900 rows costs the same against a 300k-member deck as against a
+        small one. Collections with no listed member are absent from the
+        result — callers read them as the empty set.
+        """
+        if not collection_ids or not molecule_ids:
+            return {}
+        stmt = (
+            select(
+                CollectionMoleculeModel.collection_id,
+                CollectionMoleculeModel.molecule_id,
+            )
+            .join(
+                CollectionModel,
+                CollectionModel.id == CollectionMoleculeModel.collection_id,
+            )
+            .where(
+                CollectionMoleculeModel.collection_id.in_(collection_ids),
+                CollectionMoleculeModel.molecule_id.in_(molecule_ids),
+                CollectionModel.workspace_id == workspace_id,
+            )
+        )
+        members: dict[uuid.UUID, set[uuid.UUID]] = {}
+        for collection_id, molecule_id in (await self._session.execute(stmt)).all():
+            members.setdefault(collection_id, set()).add(molecule_id)
+        return members
 
     async def add_collection(
         self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID

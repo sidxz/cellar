@@ -36,7 +36,7 @@ import { StageBulkMenu } from "./stage-bulk-menu";
 import { ChannelsSection } from "./sections/channels-section";
 // ── V2 section imports ────────────────────────────────────────────────────────
 import { HeaderStrip } from "./sections/header-strip";
-import { LibrariesSection } from "./sections/libraries-section";
+// import { LibrariesSection } from "./sections/libraries-section"; // section hidden
 import { SourcesSection } from "./sections/sources-section";
 import { StagesSection } from "./sections/stages-section";
 
@@ -157,7 +157,10 @@ function CampaignBuilderV2({
         projectId={projectId}
         readOnly={campaign.status !== "draft"}
       />
-      <LibrariesSection campaign={campaign} readOnly={campaign.status !== "draft"} />
+      {/* Libraries section hidden for now (owner's call, 2026-09-14). The
+          backend endpoints and libraries-section.tsx stay as they are —
+          uncomment this line and its import to bring the section back. */}
+      {/* <LibrariesSection campaign={campaign} readOnly={campaign.status !== "draft"} /> */}
       <ChannelsSection
         campaign={campaign}
         projectId={projectId}

@@ -23,7 +23,7 @@ import { SupersedeDialog } from "./supersede-dialog";
 import { CampaignFilterBar, type CampaignFilters, emptyFilters } from "../campaign-filter-bar";
 import { ChannelsSection } from "../sections/channels-section";
 import { HeaderStrip } from "../sections/header-strip";
-import { LibrariesSection } from "../sections/libraries-section";
+// import { LibrariesSection } from "../sections/libraries-section"; // section hidden
 import { SourcesSection } from "../sections/sources-section";
 import { StagesSection } from "../sections/stages-section";
 
@@ -108,7 +108,10 @@ export function CampaignView({ campaign }: CampaignViewProps) {
         onReopen={() => setReopenOpen(true)}
       />
       <SourcesSection campaign={campaign} projectId={campaign.project_id} readOnly />
-      <LibrariesSection campaign={campaign} readOnly />
+      {/* Libraries section hidden for now (owner's call, 2026-09-14). The
+          backend endpoints and libraries-section.tsx stay as they are —
+          uncomment this line and its import to bring the section back. */}
+      {/* <LibrariesSection campaign={campaign} readOnly /> */}
       <ChannelsSection campaign={campaign} projectId={campaign.project_id} readOnly />
       <StagesSection
         campaign={campaign}
