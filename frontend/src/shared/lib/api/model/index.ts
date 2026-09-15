@@ -1063,6 +1063,7 @@ export * from './protocolFormResponseOntologyDefaultsAnyOfItem';
 export * from './protocolFormResponseProtocolType';
 export * from './protocolFormResponseReadoutTemplatesItem';
 export * from './protocolResponse';
+export * from './protocolResponseCanDelete';
 export * from './protocolResponseCategory';
 export * from './protocolResponseControlLayouts';
 export * from './protocolResponseControlLayoutsAnyOf';

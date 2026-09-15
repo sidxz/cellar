@@ -221,6 +221,10 @@ class ProtocolResponse(BaseModel):
     locked_by: uuid.UUID | None = None
     lock_reason: str | None = None
     locked_at: datetime | None = None
+    # Whether the caller could delete it right now: a draft they created (or
+    # any draft, for an admin) that nothing still uses. Filled only by
+    # GET /protocols/{id}; null on every other response means "not computed".
+    can_delete: bool | None = None
 
     @classmethod
     def from_domain(
@@ -229,6 +233,7 @@ class ProtocolResponse(BaseModel):
         *,
         project_ids: list[uuid.UUID] | None = None,
         targets: list[TargetRefResponse] | None = None,
+        can_delete: bool | None = None,
     ) -> ProtocolResponse:
         # Serialize ontology_annotations
         onto_annots = None
@@ -308,6 +313,7 @@ class ProtocolResponse(BaseModel):
             locked_by=p.locked_by,
             lock_reason=p.lock_reason,
             locked_at=p.locked_at,
+            can_delete=can_delete,
         )
 
 
@@ -623,6 +629,7 @@ async def get_protocol(
     return ProtocolResponse.from_domain(
         item.protocol,
         targets=[TargetRefResponse.from_ref(t) for t in item.targets],
+        can_delete=item.can_delete,
     )
 
 
@@ -781,7 +788,8 @@ async def delete_protocol(
     auth: AuthDep,
     uc: DeleteProtocolDep,
 ) -> None:
-    """Delete a DRAFT protocol. Only drafts can be deleted."""
+    """Delete a DRAFT protocol: its creator or an admin, and only while nothing
+    still uses it (409 names what does)."""
     result_to_response(
         await uc(
             DeleteProtocolCommand(workspace_id=auth.workspace_id, protocol_id=protocol_id),

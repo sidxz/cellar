@@ -626,7 +626,8 @@ export const useUpdateProtocolApiV1ProtocolsProtocolIdPatch = <TError = HTTPVali
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Delete a DRAFT protocol. Only drafts can be deleted.
+ * Delete a DRAFT protocol: its creator or an admin, and only while nothing
+still uses it (409 names what does).
  * @summary Delete Protocol
  */
 export const deleteProtocolApiV1ProtocolsProtocolIdDelete = (

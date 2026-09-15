@@ -14,6 +14,7 @@ import type {
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
   PlateMapWellModel,
+  ProtocolResponse,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
   RefitDoseResponseCurveRequest,
@@ -410,6 +411,10 @@ export interface Protocol {
   locked_by: string | null;
   lock_reason: string | null;
   locked_at: string | null;
+  /** Whether the caller could delete it right now (a draft they created, or
+   *  any draft for an admin, that nothing still uses). Only GET /protocols/{id}
+   *  fills it; absent/null elsewhere means "not computed". Typed off the DTO. */
+  can_delete?: ProtocolResponse["can_delete"];
 }
 
 /** Read-only mirror of a prot-cellar target. Aliases the orval DTO — never

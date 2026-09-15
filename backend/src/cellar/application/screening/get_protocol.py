@@ -16,6 +16,7 @@ from cellar.application.auth import AuthContext, require_same_workspace, require
 from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.screening_assay.enums import ProtocolStatus
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.screening_assay.target import TargetRef
@@ -43,6 +44,16 @@ class ProtocolWithTargets:
 
     protocol: Protocol
     targets: list[TargetRef] = field(default_factory=list)
+    #: Whether the caller could delete it right now. Only GetProtocol fills it;
+    #: None elsewhere means "not computed", not "no".
+    can_delete: bool | None = None
+
+
+def may_delete_protocol(protocol: Protocol, auth: AuthContext | None) -> bool:
+    """Drafts only, by their creator or an admin. Says nothing about usages."""
+    if protocol.status != ProtocolStatus.DRAFT:
+        return False
+    return auth is None or auth.has_role("admin") or protocol.created_by == auth.user_id
 
 
 class GetProtocol:
@@ -64,8 +75,17 @@ class GetProtocol:
             targets = await self._repo.find_effective_targets_for_protocols(
                 input.workspace_id, [protocol.id]
             )
+            can_delete = (auth is None or auth.has_role("editor")) and may_delete_protocol(
+                protocol, auth
+            )
+            if can_delete:
+                can_delete = not await self._repo.find_usages(input.workspace_id, protocol.id)
             return Success(
-                ProtocolWithTargets(protocol=protocol, targets=targets.get(protocol.id, []))
+                ProtocolWithTargets(
+                    protocol=protocol,
+                    targets=targets.get(protocol.id, []),
+                    can_delete=can_delete,
+                )
             )
 
 
