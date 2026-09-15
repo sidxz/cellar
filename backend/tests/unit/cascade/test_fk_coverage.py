@@ -124,8 +124,8 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # -------------------------------------------------------------------------
     # plate_groups.storage_location_id is a nullable loose location reference,
     # ondelete=SET NULL. A deleted location just un-places the group; nothing
-    # to cascade — same rationale as the samples/batches/registered_plates
-    # storage_location_id entries above.
+    # to cascade — same rationale as the samples.location_id and
+    # registered_plates.storage_location_id entries above.
     ("plate_groups", "storage_location_id", "storage_locations"),
     # -------------------------------------------------------------------------
     # Plate groups — org-owned hierarchy (migration 062); same rationale as
@@ -615,7 +615,10 @@ LEFT_ALONE: dict[str, str] = {
     "registered_plates.project_id": _TIER1_ONLY,
     "registered_plates.template_id": _TIER1_ONLY,
     "registration_forms.field_overrides": _TIER1_ONLY,
-    "synthesis_requests.parent_request_id": _TIER1_ONLY,
+    "synthesis_requests.parent_request_id": (
+        "parent request link; a molecule force delete can remove a finished parent "
+        "(docs/backlog/tier1-only-parents-id-references.md)"
+    ),
     "synthesis_requests.project_id": _TIER1_ONLY,
     "campaign.superseded_by_campaign_id": "campaigns can't be deleted",
     "campaign.supersedes_campaign_id": "campaigns can't be deleted",
@@ -700,6 +703,12 @@ def _force_delete_reach(root: str) -> tuple[set[str], set[str]]:
     return removed, walked
 
 
+# A BLOCK rule stops the whole delete before any row is touched, so the FK is
+# never hit. CASCADE and SET_NULL each resolve the FK directly. A WARN rule
+# does neither: the delete goes ahead and the FK violation still fires.
+_HANDLES_FK = (CascadeAction.CASCADE, CascadeAction.SET_NULL, CascadeAction.BLOCK)
+
+
 def test_every_fk_into_a_force_deleted_table_is_handled():
     problems: list[str] = []
     with _rules_loaded():
@@ -709,7 +718,7 @@ def test_every_fk_into_a_force_deleted_table_is_handled():
                 (r.child_table, r.fk_column, r.parent_table)
                 for table in walked
                 for r in get_rules_for_parent(table)
-                if r.fk_column is not None
+                if r.fk_column is not None and r.action in _HANDLES_FK
             }
             for child, col, parent in sorted(_collect_all_fks()):
                 if (
@@ -724,6 +733,23 @@ def test_every_fk_into_a_force_deleted_table_is_handled():
         + "\n".join(problems)
         + "\n\nResolution: add a CascadeRule on the parent (and recurse into that parent "
         "if a rule deletes it), or give the FK an ondelete of CASCADE or SET NULL."
+    )
+
+
+def test_rules_that_do_not_cascade_target_tables_with_ids():
+    """M2: the runner matches, samples and nulls a BLOCK/WARN/SET_NULL rule's rows
+    by id (``child.c.id``). A CASCADE rule is the one exception — it may go by
+    predicate alone against an id-less join table (``plan.link_deletes``)."""
+    with _rules_loaded():
+        missing_id = [
+            f"{r.child_table} ({r.action.value}, {r.fk_column or ', '.join(r.covers)})"
+            for r in all_rules()
+            if r.action != CascadeAction.CASCADE
+            and "id" not in Base.metadata.tables[r.child_table].c
+        ]
+    assert not missing_id, (
+        "Non-CASCADE rules need an id column on their child table, or the runner "
+        "can't match, sample or null their rows:\n" + "\n".join(f"  {m}" for m in missing_id)
     )
 
 
