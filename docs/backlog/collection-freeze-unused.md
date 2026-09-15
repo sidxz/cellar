@@ -29,3 +29,5 @@ spec (§13 "Out of scope") — not done as part of that change. Do it as its own
 nothing else references the fields; verify with
 `grep -rn "is_frozen\|derived_from_campaign_id\|\.freeze(" backend/src/cellar/` returning nothing
 outside the files being deleted.
+
+**Related (found 2026-09-15, force-delete analysis):** `frontend/src/features/research-organization/components/collection/collection-header.tsx:77` links to `/campaigns/${collection.derived_from_campaign_id}`, but no top-level campaigns route exists; campaigns live under `/projects/[id]/campaigns`. The link stays dormant while nothing calls `freeze()`. Fix it or delete it together with the columns. The DB also has an FK on `derived_from_campaign_id` that the model doesn't declare (see `model-db-fk-drift.md`).
