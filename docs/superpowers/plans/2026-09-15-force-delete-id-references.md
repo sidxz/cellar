@@ -67,7 +67,7 @@
   - `any_id_text(expr, ids) -> ColumnElement[bool]`
 - Every existing rule and test builds `CascadeRule` with keyword arguments, so reordering the fields breaks no call site.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/unit/infrastructure/cascade/test_rules.py`:
 
@@ -157,12 +157,12 @@ def test_set_null_needs_a_column_to_clear() -> None:
         )
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd backend && uv run pytest tests/unit/infrastructure/cascade/test_rules.py -q`
 Expected: FAIL. The import of `any_id` errors, and `CascadeRule` has no `match` field.
 
-- [ ] **Step 3: Replace `rules.py`**
+- [x] **Step 3: Replace `rules.py`**
 
 ```python
 """CascadeRule: one reference from a child table to a parent row.
@@ -257,12 +257,12 @@ class CascadeRule:
         return self.covers
 ```
 
-- [ ] **Step 4: Run the cascade unit tests**
+- [x] **Step 4: Run the cascade unit tests**
 
 Run: `cd backend && uv run pytest tests/unit/infrastructure/cascade/ tests/unit/domain/shared/cascade/ tests/unit/cascade/ -q`
 Expected: PASS. That covers the new tests plus `test_registry.py`, `test_screening_rules.py`, `test_cross_context_rules.py` and `test_fk_coverage.py`.
 
-- [ ] **Step 5: Lint and commit**
+- [x] **Step 5: Lint and commit**
 
 ```bash
 cd backend && uv run ruff check src/cellar/infrastructure/cascade/rules.py tests/unit/infrastructure/cascade/test_rules.py && uv run ruff format src/cellar/infrastructure/cascade/rules.py tests/unit/infrastructure/cascade/test_rules.py
@@ -304,7 +304,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" -- backend/s
   - Test helpers: the `_rows` module and the `extra_rules` fixture.
 - **Removed:** `CascadeExecutionError`. Its only users are the runner, `cascade_service.py` and `cascade_delete.py`.
 
-- [ ] **Step 1: Add the `extra_rules` fixture**
+- [x] **Step 1: Add the `extra_rules` fixture**
 
 Append to `backend/tests/integration/cascade/conftest.py`, and add `from collections.abc import Callable, Iterator` to its imports:
 
@@ -324,7 +324,7 @@ def extra_rules() -> Iterator[Callable[..., None]]:
     register_rules(*snapshot)
 ```
 
-- [ ] **Step 2: Create the row builders**
+- [x] **Step 2: Create the row builders**
 
 Create `backend/tests/integration/cascade/_rows.py`:
 
@@ -769,7 +769,7 @@ async def merge_event(
 
 If an insert fails on a column this list doesn't set, compare against the NOT NULL columns in `information_schema.columns` for that table and add the missing ones. The spec lists the required columns under §0 verification; the dev DB is `chem-vault2-postgres-1`.
 
-- [ ] **Step 3: Write the failing engine tests**
+- [x] **Step 3: Write the failing engine tests**
 
 Create `backend/tests/integration/cascade/test_cascade_plan.py`:
 
@@ -1035,12 +1035,12 @@ In `backend/tests/api/test_admin_delete.py::TestCascadeTier2::test_cascade_previ
         assert body["warnings"] == []
 ```
 
-- [ ] **Step 4: Run the tests to verify they fail**
+- [x] **Step 4: Run the tests to verify they fail**
 
 Run: `cd backend && DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/integration/cascade/test_cascade_plan.py tests/unit/application/admin/test_cascade_delete_blocked.py -q`
 Expected: FAIL. `CascadeBlockedError` can't be imported and `CascadeRunner` has no `plan`.
 
-- [ ] **Step 5: Replace the application types**
+- [x] **Step 5: Replace the application types**
 
 Replace `backend/src/cellar/application/admin/cascade_service.py`:
 
@@ -1130,7 +1130,7 @@ class CascadeService(Protocol):
     ) -> str | None: ...
 ```
 
-- [ ] **Step 6: Replace the runner**
+- [x] **Step 6: Replace the runner**
 
 Replace `backend/src/cellar/infrastructure/cascade/cascade_runner.py`:
 
@@ -1503,7 +1503,7 @@ class CascadeRunner:
         return entries
 ```
 
-- [ ] **Step 7: Wire the service, use cases and route**
+- [x] **Step 7: Wire the service, use cases and route**
 
 In `backend/src/cellar/infrastructure/cascade/cascade_service_impl.py`:
 - Import `CascadePreviewResult` alongside `CascadeService` and `InboundReference` from `cellar.application.admin.cascade_service`.
@@ -1654,7 +1654,7 @@ class CascadePreviewResponse(CascadeNodeResponse):
 
 5. Give the `cascade_delete` decorator `responses={409: {"model": BlockedByDependenciesResponse}}`.
 
-- [ ] **Step 8: Run the tests to verify they pass**
+- [x] **Step 8: Run the tests to verify they pass**
 
 Run:
 ```bash
@@ -1663,7 +1663,7 @@ DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/integ
 ```
 Expected: PASS, including every pre-existing cascade test. `test_execute_deletes_more_rows_than_asyncpg_can_bind` takes a few seconds.
 
-- [ ] **Step 9: Lint and commit**
+- [x] **Step 9: Lint and commit**
 
 ```bash
 cd backend && uv run ruff check src/ tests/integration/cascade tests/unit/application/admin tests/api/test_admin_delete.py && uv run ruff format src/cellar/infrastructure/cascade src/cellar/application/admin src/cellar/interface/routes/admin_delete.py tests/integration/cascade tests/unit/application/admin tests/api/test_admin_delete.py && uv run lint-imports
@@ -1690,7 +1690,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" -- backend/s
 - Consumes: `CascadeRule.where` / `.references` / `.fk_column` (Task 1), `InboundReference.display_label` (Task 2), `_rows` and `extra_rules` (Task 2).
 - Produces: `find_inbound_references(...)`, whose signature is unchanged. Its result now also holds one `InboundReference` per matching rule registered for the parent, whatever the rule's action (spec D7). Rules on a real FK to the parent are skipped, because the FK walk already counts them.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/tests/integration/cascade/test_inbound_refs.py`, and add the imports it needs: `from collections.abc import Callable`, `from cellar.domain.shared.cascade.actions import CascadeAction`, `from cellar.infrastructure.cascade.rules import CascadeRule` and `from tests.integration.cascade import _rows`.
 
@@ -1722,12 +1722,12 @@ async def test_a_rule_reference_blocks_tier1_whatever_its_action(
     assert [r.table for r in refs].count("runs") == 1
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd backend && DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/integration/cascade/test_inbound_refs.py -q`
 Expected: FAIL, with `ValueError: not enough values to unpack` (no rule blocker).
 
-- [ ] **Step 3: Replace `inbound_refs.py`**
+- [x] **Step 3: Replace `inbound_refs.py`**
 
 ```python
 """Tier-1 RESTRICT blockers: every row still referencing (table, id).
@@ -1868,12 +1868,12 @@ async def _reference(
     )
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `cd backend && DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/integration/cascade/ tests/api/test_admin_delete.py -q`
 Expected: PASS (the new test plus the existing inbound-ref, workspace-isolation and API tests).
 
-- [ ] **Step 5: Lint and commit**
+- [x] **Step 5: Lint and commit**
 
 ```bash
 cd backend && uv run ruff check src/cellar/infrastructure/cascade/inbound_refs.py tests/integration/cascade/test_inbound_refs.py && uv run ruff format src/cellar/infrastructure/cascade/inbound_refs.py tests/integration/cascade/test_inbound_refs.py
@@ -1908,7 +1908,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" -- backend/s
   - "Draft campaigns using this run (their cells re-resolve without it on the next refresh)"
   - "Campaigns with a row for this molecule"
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `backend/tests/integration/cascade/test_rules_protocols_runs.py`:
 
@@ -2136,12 +2136,12 @@ Append to `backend/tests/api/test_admin_delete.py::TestAdminHardDelete`:
         )
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `cd backend && DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/integration/cascade/test_rules_protocols_runs.py "tests/api/test_admin_delete.py::TestCascadeTier2::test_cascade_delete_blocked_returns_every_blocker" "tests/api/test_admin_delete.py::TestAdminHardDelete::test_a_rule_reference_blocks_tier1_hard_delete" -q`
 Expected: FAIL. With no rules registered there are no blockers or warnings: the cascade delete returns 204 and the Tier-1 delete returns 204.
 
-- [ ] **Step 3: Add the attachment rules**
+- [x] **Step 3: Add the attachment rules**
 
 Create `backend/src/cellar/infrastructure/cascade/rules_attachment.py`:
 
@@ -2207,7 +2207,7 @@ def register_attachment(container: Container) -> None:
 
 Add `"cellar.infrastructure.cascade.rules_attachment",` to `_CASCADE_MODULES` in both `backend/tests/integration/cascade/conftest.py` and `backend/tests/unit/cascade/test_fk_coverage.py`.
 
-- [ ] **Step 4: Add the campaign rules**
+- [x] **Step 4: Add the campaign rules**
 
 In `backend/src/cellar/infrastructure/cascade/rules_research_organization.py`:
 - Append to the module docstring: `Campaign rules (spec 2026-09-15) reference screening data by id without an FK; they are expressed as match predicates.`
@@ -2357,7 +2357,7 @@ Append these rules inside the existing `register_rules(...)` call, after the sav
     ),
 ```
 
-- [ ] **Step 5: Add the import-template and compound-flag rules**
+- [x] **Step 5: Add the import-template and compound-flag rules**
 
 Append inside `register_rules(...)` in `backend/src/cellar/infrastructure/cascade/rules_inventory.py`:
 
@@ -2395,7 +2395,7 @@ Append inside `register_rules(...)` in `backend/src/cellar/infrastructure/cascad
     ),
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run:
 ```bash
@@ -2404,7 +2404,7 @@ DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/integ
 ```
 Expected: PASS.
 
-- [ ] **Step 7: Lint and commit**
+- [x] **Step 7: Lint and commit**
 
 ```bash
 cd backend && uv run ruff check src/cellar/infrastructure tests/integration/cascade tests/unit/cascade tests/api/test_admin_delete.py && uv run ruff format src/cellar/infrastructure/cascade src/cellar/infrastructure/di/_attachment.py tests/integration/cascade tests/unit/cascade tests/api/test_admin_delete.py && uv run lint-imports
@@ -2448,7 +2448,7 @@ M2 (campaign rows) and M9/B3 (attachments) were registered in Task 4; this task 
   - "CDD sync records (a later CDD sync may re-import this molecule)"
   - "Merge events (disclosure link cleared)"
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `backend/tests/integration/cascade/test_rules_molecules_batches.py`:
 
@@ -2655,12 +2655,12 @@ async def test_links_from_records_that_stay_are_cleared_and_audited(
     assert tuple(row) == (None, None)
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `cd backend && DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/integration/cascade/test_rules_molecules_batches.py -q`
 Expected: FAIL. Only `test_a_campaign_row_for_the_molecule_blocks` passes, because Task 4 registered M2. The rest fail: either there are no blockers, or the delete raises `IntegrityError` on `cdd_molecule_sync` / `merge_events.disclosure_request_id`.
 
-- [ ] **Step 3: Add the screening rules**
+- [x] **Step 3: Add the screening rules**
 
 In `backend/src/cellar/infrastructure/cascade/rules_screening_assay.py`:
 - In the module docstring, replace `Rules are derived from the actual ForeignKey declarations in` with `Rules cover FK references (see`, ending that sentence with `) and id-only references without an FK (compound flags, and measurements naming a molecule or batch).`
@@ -2751,7 +2751,7 @@ Append inside `register_rules(...)`, after the compound-flag rule from Task 4:
     ),
 ```
 
-- [ ] **Step 4: Add the inventory rules**
+- [x] **Step 4: Add the inventory rules**
 
 In `backend/src/cellar/infrastructure/cascade/rules_inventory.py`:
 - Delete the docstring line `- sample_requests.molecule_id: plain UUID, no FK constraint; no cascade rule.`
@@ -2884,7 +2884,7 @@ Append inside `register_rules(...)`:
     ),
 ```
 
-- [ ] **Step 5: Add the chemical-registration rules**
+- [x] **Step 5: Add the chemical-registration rules**
 
 In `backend/src/cellar/infrastructure/cascade/rules_chemical_registration.py`:
 1. Delete the docstring lines `- compound_flags.molecule_id: plain UUID, no FK constraint; rule removed.` and `- bulk_registration_items.molecule_id: plain UUID, no FK constraint; rule removed.`
@@ -2943,7 +2943,7 @@ In `backend/src/cellar/infrastructure/cascade/rules_chemical_registration.py`:
     ),
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run:
 ```bash
@@ -2952,7 +2952,7 @@ DOCKER_HOST=unix:///Users/sidx/.docker/run/docker.sock uv run pytest tests/integ
 ```
 Expected: PASS.
 
-- [ ] **Step 7: Lint and commit**
+- [x] **Step 7: Lint and commit**
 
 ```bash
 cd backend && uv run ruff check src/cellar/infrastructure/cascade tests/integration/cascade && uv run ruff format src/cellar/infrastructure/cascade tests/integration/cascade && uv run lint-imports
@@ -2982,7 +2982,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" -- backend/s
   - `test_every_fk_into_a_force_deleted_table_is_handled`
   - `test_classification_names_real_columns`
 
-- [ ] **Step 1: Load every model, and load rules through one helper**
+- [x] **Step 1: Load every model, and load rules through one helper**
 
 At the top of `backend/tests/unit/cascade/test_fk_coverage.py`, replace everything from `import importlib` through the `from cellar.infrastructure.cascade.registry import …` line with the block below. That span holds the explicit `import cellar.infrastructure.persistence.sqlalchemy.…` model imports and the existing `Base` and registry imports.
 
@@ -3046,7 +3046,7 @@ def test_every_fk_is_categorized():
 
 The rest of the function (the `uncovered` / `unsafe_self_refs` loop and its asserts) stays unchanged, dedented out of the `with`.
 
-- [ ] **Step 2: Remove stale and now-covered `IGNORED_FKS` entries**
+- [x] **Step 2: Remove stale and now-covered `IGNORED_FKS` entries**
 
 Delete these entries together with their comment blocks:
 - `("batches", "storage_location_id", "storage_locations")` and its "Batches → storage_locations" comment block, because `batches` has no such column. The `samples.location_id` and `registered_plates.storage_location_id` entries stay.
@@ -3055,7 +3055,7 @@ Delete these entries together with their comment blocks:
 - `("cdd_molecule_syncs", "molecule_id", "molecules")` and its comment block. It's misspelled, and rule M11 covers the FK now.
 - `("merge_events", "disclosure_request_id", "disclosure_requests")` and its comment block. Rule DR1 covers it, and the comment's claim that the nullable FK won't block was wrong: the FK is NO ACTION.
 
-- [ ] **Step 3: Add the classification table and the new tests**
+- [x] **Step 3: Add the classification table and the new tests**
 
 Append to the end of `backend/tests/unit/cascade/test_fk_coverage.py`:
 
@@ -3320,7 +3320,7 @@ def test_classification_names_real_columns():
     )
 ```
 
-- [ ] **Step 4: Run the guard tests**
+- [x] **Step 4: Run the guard tests**
 
 Run: `cd backend && uv run pytest tests/unit/cascade/test_fk_coverage.py -q`
 Expected: 4 passed.
@@ -3329,12 +3329,12 @@ The classification table was generated against the models at `13eb5c17` and cros
 
 Check that the guard actually bites: temporarily comment out the M11 rule in `rules_chemical_registration.py`, run the file, and confirm `test_every_fk_into_a_force_deleted_table_is_handled` fails naming `molecules: cdd_molecule_sync.molecule_id -> molecules`. Then restore the rule.
 
-- [ ] **Step 5: Run the whole unit suite**
+- [x] **Step 5: Run the whole unit suite**
 
 Run: `cd backend && uv run pytest tests/unit -q`
 Expected: PASS. Rule-registry tests are sensitive to import order, and `_rules_loaded` restores the evict-after behaviour they rely on.
 
-- [ ] **Step 6: Lint and commit**
+- [x] **Step 6: Lint and commit**
 
 ```bash
 cd backend && uv run ruff check tests/unit/cascade/test_fk_coverage.py && uv run ruff format tests/unit/cascade/test_fk_coverage.py
@@ -3367,7 +3367,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" -- backend/t
 - Consumes: `POST /api/v1/admin/{entity_type}/{entity_id}/cascade-preview` → `CascadePreviewResponse` (Task 2), whose `blockers` and `warnings` are `BlockerPayload[]` with `display_label: string | null`; the 409 body from a blocked `DELETE …/cascade`; `getDeleteBlockedError` (existing, `use-admin-delete.ts`).
 - Produces: `DeleteBlockerList({ items }: { items: BlockerPayload[] })`.
 
-- [ ] **Step 1: Regenerate the API types**
+- [x] **Step 1: Regenerate the API types**
 
 The dev backend must be up on `:8000` and reloaded with Tasks 2–5; it runs from this checkout with `--reload`. Check `curl -s localhost:8000/version`. If it isn't running, start it with the repo's `make` target, so the root `.env` exports the Sentinel service key.
 
@@ -3385,7 +3385,7 @@ Expected, roughly:
 - modified `model/blockerPayload.ts` (`display_label`), `model/index.ts` and `admin/admin.ts` (preview returns `CascadePreviewResponse`);
 - new `model/cascadePreviewResponse.ts`, plus its generated samples/children item types if orval emits them.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `frontend/src/shared/components/cascade-delete-dialog.test.tsx`:
 
@@ -3526,12 +3526,12 @@ Append to the `describe("useCascadeDelete")` block in `frontend/src/shared/hooks
   });
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `cd frontend && pnpm exec vitest run src/shared/components/cascade-delete-dialog.test.tsx src/shared/hooks/use-cascade-delete.test.tsx`
 Expected: FAIL. No blocker text is rendered, the button is enabled, and a toast fires on the blocked delete.
 
-- [ ] **Step 4: Add the shared blocker list**
+- [x] **Step 4: Add the shared blocker list**
 
 Create `frontend/src/shared/components/delete-blocker-list.tsx`:
 
@@ -3578,7 +3578,7 @@ In `frontend/src/shared/components/admin-delete-button.tsx`, import `DeleteBlock
             <DeleteBlockerList items={blockers} />
 ```
 
-- [ ] **Step 5: Update the hooks**
+- [x] **Step 5: Update the hooks**
 
 `frontend/src/shared/hooks/use-cascade-preview.ts`:
 
@@ -3610,7 +3610,7 @@ In `frontend/src/shared/hooks/use-cascade-delete.ts`:
     },
 ```
 
-- [ ] **Step 6: Update the dialog**
+- [x] **Step 6: Update the dialog**
 
 Replace `frontend/src/shared/components/cascade-delete-dialog.tsx`:
 
@@ -3819,7 +3819,7 @@ export function CascadeDeleteDialog({
 }
 ```
 
-- [ ] **Step 7: Run the frontend checks**
+- [x] **Step 7: Run the frontend checks**
 
 Run:
 ```bash
@@ -3829,7 +3829,7 @@ pnpm lint; echo "lint exit=$?"
 ```
 Expected: tests PASS, `tsc` prints nothing, and `lint exit=0`. If biome reports formatting, run `pnpm exec biome check --write <the touched files>` on those paths only, never `--unsafe`, then re-run.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd .. && git add frontend/src/shared/components/delete-blocker-list.tsx frontend/src/shared/components/admin-delete-button.tsx frontend/src/shared/components/cascade-delete-dialog.tsx frontend/src/shared/components/cascade-delete-dialog.test.tsx frontend/src/shared/hooks/use-cascade-preview.ts frontend/src/shared/hooks/use-cascade-delete.ts frontend/src/shared/hooks/use-cascade-delete.test.tsx frontend/src/shared/lib/api
@@ -3848,7 +3848,7 @@ Check `git show --stat HEAD` lists only real API type changes under `src/shared/
 - Modify: `docs/backlog/admin-force-delete-protocol-dangling-refs.md` (status line)
 - Modify: `docs/superpowers/plans/2026-09-15-force-delete-id-references.md` (tick the boxes)
 
-- [ ] **Step 1: Run the full suites**
+- [x] **Step 1: Run the full suites**
 
 ```bash
 cd backend && uv run ruff check src/ && uv run ruff format --check src/ && uv run lint-imports
@@ -3859,7 +3859,7 @@ cd ../frontend && pnpm test && pnpm exec tsc --noEmit && pnpm lint; echo "lint e
 ```
 Expected: everything passes. Compare any failure against `docs/backlog/pre-existing-test-failures.md` and `docs/backlog/preexisting-test-lint-failures-main.md`. Failures already on `main` get noted in the PR, not fixed here. Anything new is this branch's problem.
 
-- [ ] **Step 2: Check it in the running app**
+- [x] **Step 2: Check it in the running app**
 
 The dev stack is on `:8000`/`:3000`. Using the `verify` skill's recipe:
 1. On a protocol with a campaign channel in the dev workspace, open **Admin → Force delete (cascade)…**. The dialog lists "Campaigns with a channel on this protocol" and **Force delete** stays disabled after typing the name and reason.
@@ -3867,11 +3867,11 @@ The dev stack is on `:8000`/`:3000`. Using the `verify` skill's recipe:
 
 Don't delete real dev data to test this.
 
-- [ ] **Step 3: One whole-branch review**
+- [x] **Step 3: One whole-branch review**
 
 Use superpowers:requesting-code-review for the whole branch against `main` (`git diff main...HEAD`), with the spec as the requirement. Fix what it finds with focused tests, then re-run Step 1 for the touched area.
 
-- [ ] **Step 4: Mark the handoff done and push**
+- [x] **Step 4: Mark the handoff done and push**
 
 In `docs/backlog/admin-force-delete-protocol-dangling-refs.md`, replace the status paragraph with:
 
@@ -3889,7 +3889,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>" -- docs/back
 git push -u origin feat/force-delete-id-references
 ```
 
-- [ ] **Step 5: Open the PR**
+- [x] **Step 5: Open the PR**
 
 Use the `panda-sas` gh account (`gh auth switch --user panda-sas` if another account is active). The body covers:
 - what force delete now does per reference (the spec §4 tables, summarised);

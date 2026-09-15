@@ -1,8 +1,8 @@
 # Handoff: admin force delete leaves references without an FK dangling
 
-**Status:** analysed and designed on 2026-09-15, and the owner approved the proposal. The design is in
-`docs/superpowers/specs/2026-09-15-force-delete-id-references-design.md`. The handoff below is kept for
-context.
+**Status:** implemented on `feat/force-delete-id-references` (2026-09-15). Design:
+`docs/superpowers/specs/2026-09-15-force-delete-id-references-design.md`; plan:
+`docs/superpowers/plans/2026-09-15-force-delete-id-references.md`. The handoff below is kept for context.
 
 ## Context
 
