@@ -6,17 +6,21 @@ integration tests) to avoid dependency on domain factories.
 RunModel has no ``name`` column — ``notes`` is used as the human
 label for runs in TABLE_LABELS.
 """
+
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from datetime import date
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cellar.domain.shared.cascade.actions import CascadeAction
 from cellar.infrastructure.cascade.inbound_refs import find_inbound_references
-
+from cellar.infrastructure.cascade.rules import CascadeRule
+from tests.integration.cascade import _rows
 
 # ---------------------------------------------------------------------------
 # Raw SQL helpers
@@ -163,3 +167,31 @@ async def test_truncated_when_more_than_sample_limit(db_session: AsyncSession) -
     assert run_ref.count == 7
     assert len(run_ref.samples) == 5
     assert run_ref.truncated is True
+
+
+@pytest.mark.asyncio
+async def test_a_rule_reference_blocks_tier1_whatever_its_action(
+    db_session: AsyncSession, extra_rules: Callable[..., None]
+) -> None:
+    ws = uuid.uuid4()
+    protocol = await _rows.protocol(db_session, ws)
+    await _rows.compound_flag(db_session, ws, protocol_id=protocol, molecule_id=uuid.uuid4())
+    await _rows.run(db_session, ws, protocol)
+    extra_rules(
+        CascadeRule(
+            child_table="compound_flags",
+            parent_table="protocols",
+            action=CascadeAction.WARN,
+            fk_column="protocol_id",
+            display_label="Test: flags",
+        )
+    )
+
+    refs = await find_inbound_references(
+        db_session, parent_table="protocols", parent_id=protocol, workspace_id=ws
+    )
+
+    [flags] = [r for r in refs if r.display_label == "Test: flags"]
+    assert (flags.table, flags.fk_column, flags.count) == ("compound_flags", "protocol_id", 1)
+    # runs.protocol_id is a real FK: the FK walk counts it once, never again as a rule.
+    assert [r.table for r in refs].count("runs") == 1
