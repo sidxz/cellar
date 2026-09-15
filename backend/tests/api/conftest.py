@@ -111,6 +111,9 @@ def _create_test_app(
     from cellar.interface.routes.campaigns_channels import (
         router as campaign_channels_router,
     )
+    from cellar.interface.routes.campaigns_collections import (
+        router as campaign_collections_router,
+    )
     from cellar.interface.routes.campaigns_publishing import (
         router as campaign_publishing_router,
     )
@@ -188,6 +191,7 @@ def _create_test_app(
     app.include_router(admin_delete_router)
     app.include_router(campaign_router)
     app.include_router(campaign_channels_router)
+    app.include_router(campaign_collections_router)
     app.include_router(campaign_stages_router)
     app.include_router(campaign_results_router)
     app.include_router(campaign_publishing_router)

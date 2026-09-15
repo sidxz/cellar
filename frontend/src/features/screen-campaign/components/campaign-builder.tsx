@@ -36,6 +36,7 @@ import { StageBulkMenu } from "./stage-bulk-menu";
 import { ChannelsSection } from "./sections/channels-section";
 // ── V2 section imports ────────────────────────────────────────────────────────
 import { HeaderStrip } from "./sections/header-strip";
+import { LibrariesSection } from "./sections/libraries-section";
 import { SourcesSection } from "./sections/sources-section";
 import { StagesSection } from "./sections/stages-section";
 
@@ -156,6 +157,7 @@ function CampaignBuilderV2({
         projectId={projectId}
         readOnly={campaign.status !== "draft"}
       />
+      <LibrariesSection campaign={campaign} readOnly={campaign.status !== "draft"} />
       <ChannelsSection
         campaign={campaign}
         projectId={projectId}
