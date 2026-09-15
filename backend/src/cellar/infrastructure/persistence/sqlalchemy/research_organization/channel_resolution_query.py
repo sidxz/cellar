@@ -148,8 +148,13 @@ def _readout_stmt(
 
 def _readout_candidate(row, normalization_applied: str | None) -> ResolvedCandidate:
     """Map one ``_readout_stmt`` row onto a candidate."""
+    # ponytail: the summary import accepts ">=" / "<=", campaigns only know
+    # ">" / "<". Read them as the strict form so ">=40" stays censored instead
+    # of falling through to an exact 40. Only a criterion cut at exactly that
+    # number can differ; add inclusive qualifiers if that ever matters.
+    raw = {">=": ">", "<=": "<"}.get(row.value_qualifier, row.value_qualifier)
     try:
-        qualifier = ValueQualifier(row.value_qualifier or "=")
+        qualifier = ValueQualifier(raw or "=")
     except ValueError:
         qualifier = ValueQualifier.EQ
     value = float(row.value_numeric)
