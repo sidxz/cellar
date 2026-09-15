@@ -76,6 +76,7 @@ class BlockedByDependenciesError(ConflictError):
                     "count": r.count,
                     "samples": r.samples,
                     "truncated": r.truncated,
+                    "display_label": r.display_label,
                 }
                 for r in self.blockers
             ],

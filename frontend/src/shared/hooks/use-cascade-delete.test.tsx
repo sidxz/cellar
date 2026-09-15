@@ -75,4 +75,25 @@ describe("useCascadeDelete", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(mockShowError).toHaveBeenCalledWith("API error: 409 — name mismatch");
   });
+
+  it("stays silent on a blocked delete; the dialog lists the blockers", async () => {
+    mockCascade.mockRejectedValue(
+      new ApiError("API error: 409", 409, {
+        error: "delete_blocked_by_dependencies",
+        blockers: [],
+      }),
+    );
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useCascadeDelete(), { wrapper });
+
+    result.current.mutate({
+      entityType: "run",
+      entityId: "r-1",
+      typedName: "Run 2026-09-15",
+      reason: "botched import",
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(mockShowError).not.toHaveBeenCalled();
+  });
 });

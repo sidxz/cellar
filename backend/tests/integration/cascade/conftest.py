@@ -10,10 +10,12 @@ The autouse fixture below re-imports the cascade rule modules before *each* inte
 test in this directory, ensuring the registry is always populated regardless of
 test-collection ordering.
 """
+
 from __future__ import annotations
 
 import importlib
 import sys
+from collections.abc import Callable, Iterator
 
 import pytest
 
@@ -23,6 +25,7 @@ _CASCADE_MODULES = [
     "cellar.infrastructure.cascade.rules_audit_compliance",
     "cellar.infrastructure.cascade.rules_chemical_registration",
     "cellar.infrastructure.cascade.rules_inventory",
+    "cellar.infrastructure.cascade.rules_attachment",
 ]
 
 # SQLAlchemy model modules that must be in Base.metadata for the runner to work.
@@ -44,13 +47,38 @@ def _ensure_cascade_registry_populated() -> None:
         importlib.import_module(mod_name)
 
     # Cascade modules need to re-execute register_rules() if the registry was cleared.
-    # We detect this by checking whether the registry is empty after a dummy import;
-    # the simplest approach is to evict and re-import unconditionally — the register
-    # calls are idempotent (they check for duplicates).
+    # register_rules() does not dedupe, so a module already in sys.modules must
+    # never be re-imported outside the "registry was cleared" branch below —
+    # that would append its rules a second time.
     from cellar.infrastructure.cascade.registry import get_rules_for_parent
+
     if not get_rules_for_parent("protocols"):
         # Registry was cleared — force re-import of all cascade modules.
         for mod_name in _CASCADE_MODULES:
             sys.modules.pop(mod_name, None)
         for mod_name in _CASCADE_MODULES:
             importlib.import_module(mod_name)
+    else:
+        # "protocols" has rules, but that only proves whichever module some
+        # *other* test file happened to import at collection time (usually
+        # rules_screening_assay) has run — not that every module has. Import
+        # any module that has never fired yet; already-imported ones are left
+        # alone so their rules aren't appended twice.
+        for mod_name in _CASCADE_MODULES:
+            if mod_name not in sys.modules:
+                importlib.import_module(mod_name)
+
+
+@pytest.fixture
+def extra_rules() -> Iterator[Callable[..., None]]:
+    """Register cascade rules for one test; the registry is restored afterwards."""
+    from cellar.infrastructure.cascade.registry import (
+        _clear_for_test,
+        all_rules,
+        register_rules,
+    )
+
+    snapshot = all_rules()
+    yield register_rules
+    _clear_for_test()
+    register_rules(*snapshot)

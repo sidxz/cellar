@@ -9,6 +9,7 @@ for runs in TABLE_LABELS.  PlateModel uses ``barcode``.
 The cascade rules module must be imported explicitly so the process-global
 registry is populated before CascadeRunner.preview() calls get_rules_for_parent().
 """
+
 from __future__ import annotations
 
 import uuid
@@ -19,13 +20,12 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Force cascade rules into the registry
-import cellar.infrastructure.cascade.rules_screening_assay  # noqa: F401
+import cellar.infrastructure.cascade.rules_screening_assay
+
 # Force models into Base.metadata (screening assay models cover runs/plates)
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
-
 from cellar.domain.shared.cascade.actions import CascadeAction
 from cellar.infrastructure.cascade.cascade_runner import CascadeRunner
-
 
 # ---------------------------------------------------------------------------
 # Stable IDs and raw SQL helpers
@@ -140,9 +140,11 @@ async def test_preview_protocol_with_one_run_one_plate(
     await _insert_plate(db_session, plate_id, run_id, barcode="B1")
 
     runner = CascadeRunner(db_session)
-    tree = await runner.preview(
-        parent_table="protocols", parent_id=protocol_id, workspace_id=WORKSPACE_ID
-    )
+    tree = (
+        await runner.preview(
+            parent_table="protocols", parent_id=protocol_id, workspace_id=WORKSPACE_ID
+        )
+    ).root
 
     # Root node
     assert tree.entity_type == "protocol"
@@ -161,9 +163,7 @@ async def test_preview_protocol_with_one_run_one_plate(
     run_sub = runs_node.children[0]
 
     # Plates are children of the run sub-node
-    plates_node = next(
-        (c for c in run_sub.children if c.table == "plates"), None
-    )
+    plates_node = next((c for c in run_sub.children if c.table == "plates"), None)
     assert plates_node is not None, (
         f"expected 'plates' child in run sub-node, got: {[c.table for c in run_sub.children]}"
     )

@@ -3,11 +3,11 @@
 Declares what happens to children of Molecule (and related aggregates) when
 those parents are deleted via Tier-2 admin force-cascade.
 
-Rules are derived from the actual ForeignKey declarations in:
-  infrastructure/persistence/sqlalchemy/chemical_registration/models.py
-  infrastructure/persistence/sqlalchemy/chemical_registration/disclosure_models.py
-  infrastructure/persistence/sqlalchemy/chemical_registration/synthesis_route_models.py
-  infrastructure/persistence/sqlalchemy/chemical_registration/bulk_registration_models.py
+Rules cover FK references (see
+infrastructure/persistence/sqlalchemy/chemical_registration/models.py,
+disclosure_models.py, synthesis_route_models.py and
+bulk_registration_models.py) and id-only references without an FK
+(merged-in tombstones, and reaction steps naming a molecule or batch).
 
 Schema notes / deviations from plan:
 - molecule_relationships: actual FK columns are source_molecule_id / target_molecule_id,
@@ -15,14 +15,16 @@ Schema notes / deviations from plan:
 - synthesis_route_steps: actual table is reaction_steps with FK column route_id,
   NOT synthesis_route_steps.
 - molecule_properties: table does not exist in the schema; rule removed.
-- compound_flags.molecule_id: plain UUID, no FK constraint; rule removed.
 - mixture_components: two FKs to molecules — mixture_molecule_id (CASCADE) and
   component_molecule_id (no ondelete); both added.
 - merge_events: two FKs to molecules — source_molecule_id and target_molecule_id;
-  rows are append-only audit records; SET_NULL is inappropriate so both CASCADE.
+  rows are append-only audit records, so a merge event of *this* molecule must
+  go with it — SET_NULL is inappropriate for those two, so both CASCADE.
+  merge_events.disclosure_request_id is different (DR1, below): another
+  molecule's merge event only loses its disclosure link, so that one is
+  SET_NULL.
 - disclosure_requests: also has resolved_to_molecule_id and matched_molecule_id FKs
   to molecules (nullable, no ondelete); SET_NULL on those references.
-- bulk_registration_items.molecule_id: plain UUID, no FK constraint; rule removed.
 """
 
 from cellar.domain.shared.cascade.actions import CascadeAction as A
@@ -116,6 +118,7 @@ register_rules(
         action=A.CASCADE,
         label_field=None,
         display_label="Disclosure requests",
+        recurse_into_entity="disclosure_request",
     ),
     # DisclosureRequestModel.resolved_to_molecule_id → molecules.id (nullable, no ondelete)
     CascadeRule(
@@ -164,5 +167,54 @@ register_rules(
         action=A.CASCADE,
         label_field=None,
         display_label="Merge events (target ref)",
+    ),
+    # -------------------------------------------------------------------------
+    # References without a handled FK
+    # -------------------------------------------------------------------------
+    # MoleculeModel.merged_into_id (no FK): tombstones merged into this molecule
+    # are invisible aliases of it, so they go too, walked as molecules.
+    CascadeRule(
+        child_table="molecules",
+        parent_table="molecules",
+        action=A.CASCADE,
+        fk_column="merged_into_id",
+        label_field="registration_number",
+        display_label="Merged registrations (tombstones)",
+        recurse_into_entity="molecule",
+    ),
+    # ReactionStepModel.product_molecule_id / .batch_id (no FK): a step on
+    # another molecule's route that made or used this compound keeps its step.
+    CascadeRule(
+        child_table="reaction_steps",
+        parent_table="molecules",
+        action=A.SET_NULL,
+        fk_column="product_molecule_id",
+        display_label="Reaction steps (product link cleared)",
+    ),
+    CascadeRule(
+        child_table="reaction_steps",
+        parent_table="batches",
+        action=A.SET_NULL,
+        fk_column="batch_id",
+        display_label="Reaction steps (batch link cleared)",
+    ),
+    # CddMoleculeSyncModel.molecule_id → molecules (FK, no ondelete). The CDD vault
+    # stays the source: dropping the ledger row lets a later sync re-import the
+    # molecule. Without this rule the delete fails on the FK.
+    CascadeRule(
+        child_table="cdd_molecule_sync",
+        parent_table="molecules",
+        action=A.CASCADE,
+        fk_column="molecule_id",
+        display_label="CDD sync records (a later CDD sync may re-import this molecule)",
+    ),
+    # MergeEventModel.disclosure_request_id → disclosure_requests (FK, nullable, no
+    # ondelete): another molecule's merge event keeps its record, minus the link.
+    CascadeRule(
+        child_table="merge_events",
+        parent_table="disclosure_requests",
+        action=A.SET_NULL,
+        fk_column="disclosure_request_id",
+        display_label="Merge events (disclosure link cleared)",
     ),
 )
