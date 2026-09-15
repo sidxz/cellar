@@ -74,6 +74,8 @@ describe("CascadeDeleteDialog", () => {
     expect(screen.getByText(/closed or superseded campaigns citing this run/i)).toBeInTheDocument();
     expect(screen.getByText(/kinase panel/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Force delete" })).toBeDisabled();
+    // M10: screen readers must be told the blocker list appeared.
+    expect(screen.getByRole("alert")).toHaveTextContent(/kinase panel/i);
   });
 
   it("lists warnings without blocking the delete", () => {

@@ -20,7 +20,7 @@ import { useCascadeDelete } from "@/shared/hooks/use-cascade-delete";
 import { useCascadePreview } from "@/shared/hooks/use-cascade-preview";
 import type { BlockerPayload, CascadeNodeResponse } from "@/shared/lib/api/model";
 import { AlertTriangle } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 export interface CascadeDeleteDialogProps {
   entityType: string;
@@ -74,6 +74,9 @@ export function CascadeDeleteDialog({
   open: controlledOpen,
   onOpenChange,
 }: CascadeDeleteDialogProps) {
+  const typedNameId = useId();
+  const reasonId = useId();
+  const blockersId = useId();
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -142,7 +145,7 @@ export function CascadeDeleteDialog({
         )}
 
         {blockers.length > 0 && (
-          <div className="space-y-1 text-sm">
+          <div id={blockersId} role="alert" className="space-y-1 text-sm">
             <p className="font-semibold text-destructive">
               Can't force delete while these still use it:
             </p>
@@ -163,16 +166,15 @@ export function CascadeDeleteDialog({
         {preview.data && <NodeView node={preview.data} />}
 
         <div className="space-y-2 pt-2">
-          <label htmlFor="cascade-delete-typed-name" className="text-sm font-medium">
+          <label htmlFor={typedNameId} className="text-sm font-medium">
             Type <code className="bg-muted px-1 rounded">{entityLabel}</code> to confirm:
           </label>
-          <Input
-            id="cascade-delete-typed-name"
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-          />
+          <Input id={typedNameId} value={typed} onChange={(e) => setTyped(e.target.value)} />
+          <label htmlFor={reasonId} className="text-sm font-medium">
+            Reason
+          </label>
           <Textarea
-            id="cascade-delete-reason"
+            id={reasonId}
             placeholder="Reason for deletion (required)"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
@@ -185,6 +187,7 @@ export function CascadeDeleteDialog({
           <AlertDialogAction
             className={buttonVariants({ variant: "destructive" })}
             disabled={!canSubmit || m.isPending}
+            aria-describedby={blockers.length > 0 ? blockersId : undefined}
             onClick={(e) => {
               e.preventDefault();
               void onConfirm();
