@@ -111,6 +111,7 @@ def _readout_stmt(
             ProtocolModel.name,
             ProtocolModel.protocol_version,
             ReadoutDefinitionModel.unit,
+            ReadoutDefinitionModel.dose_response_config,
         )
         .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
         .join(ProtocolModel, RunModel.protocol_id == ProtocolModel.id)
@@ -151,8 +152,14 @@ def _readout_candidate(row, normalization_applied: str | None) -> ResolvedCandid
         qualifier = ValueQualifier(row.value_qualifier or "=")
     except ValueError:
         qualifier = ValueQualifier.EQ
+    value = float(row.value_numeric)
+    # A reported endpoint on a dose-response readout is the value at the
+    # readout's primary (first) intercept — a CRO's IC50 column. Tagging it
+    # lets a channel keyed to that intercept find it and every other
+    # intercept channel skip it (see ``resolve_intercept``).
+    intercepts = (row.dose_response_config or {}).get("intercepts") or []
     return ResolvedCandidate(
-        value=float(row.value_numeric),
+        value=value,
         qualifier=qualifier,
         unit=unit_for_normalization(normalization_applied, row.unit) or "",
         run_id=row.run_id,
@@ -163,6 +170,7 @@ def _readout_candidate(row, normalization_applied: str | None) -> ResolvedCandid
         protocol_version=row.protocol_version,
         curve_id=None,
         readout_id=row.id,
+        intercept_values=[{"spec": intercepts[0], "value": value}] if intercepts else None,
     )
 
 

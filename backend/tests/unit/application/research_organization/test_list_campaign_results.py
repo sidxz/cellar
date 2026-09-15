@@ -99,7 +99,7 @@ def _campaign(workspace_id: uuid.UUID) -> tuple[Campaign, CampaignChannel, Campa
         (2.0, ValueQualifier.EQ),  # hit
         (50.0, ValueQualifier.EQ),  # miss
         (None, ValueQualifier.ND),  # untested
-        (5.0, ValueQualifier.GT),  # censored — "> 5", still < 10 numerically
+        (5.0, ValueQualifier.LT),  # censored — "< 5" proves "< 10"
     ]
     for value, qualifier in cells:
         result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
@@ -154,7 +154,7 @@ async def test_filters_on_the_stage_verdict():
         await _run(campaign, auth, stage_id=stage.id, outcome=(StageOutcome.UNTESTED,))
     ).unwrap()
 
-    # "> 5" is compared on its numeric value, so it clears "< 10" like any other.
+    # "< 5" proves "< 10", so it is a hit like any other.
     assert hits.page.total_count == 2
     assert misses.page.total_count == 1
     assert untested.page.total_count == 1

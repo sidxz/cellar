@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey, compare
 
@@ -137,3 +138,35 @@ class TestCompare:
         crit = HitCriterion(readout_name="IC50", operator="lt", value=10.0)
         assert crit.is_met(5.0) is True
         assert crit.is_met(15.0) is False
+
+
+class TestCompareCensored:
+    """A censored value passes only when every value it could be meets the
+    criterion. ">50" is somewhere above 50, "<5" somewhere below 5."""
+
+    @pytest.mark.parametrize(
+        ("operator", "value", "qualifier", "target", "expected"),
+        [
+            # ">50": an inactive at a 50 uM top dose.
+            ("lt", 50.0, ValueQualifier.GT, 60.0, False),
+            ("lte", 50.0, ValueQualifier.GT, 50.0, False),
+            ("gt", 50.0, ValueQualifier.GT, 10.0, True),
+            ("gt", 50.0, ValueQualifier.GT, 50.0, True),
+            ("gte", 50.0, ValueQualifier.GT, 50.0, True),
+            ("gt", 50.0, ValueQualifier.GT, 60.0, False),
+            ("between", 50.0, ValueQualifier.GT, [10.0, 100.0], False),
+            # "<5": potent past the bottom dose.
+            ("lt", 5.0, ValueQualifier.LT, 10.0, True),
+            ("lt", 5.0, ValueQualifier.LT, 5.0, True),
+            ("lte", 5.0, ValueQualifier.LT, 5.0, True),
+            ("lt", 5.0, ValueQualifier.LT, 1.0, False),
+            ("gt", 5.0, ValueQualifier.LT, 1.0, False),
+            ("between", 5.0, ValueQualifier.LT, [0.0, 10.0], False),
+        ],
+    )
+    def test_censored(self, operator, value, qualifier, target, expected) -> None:
+        assert compare(operator, value, target, qualifier) is expected
+
+    def test_is_met_passes_qualifier_through(self) -> None:
+        crit = HitCriterion(readout_name="IC50", operator="lt", value=60.0)
+        assert crit.is_met(50.0, ValueQualifier.GT) is False

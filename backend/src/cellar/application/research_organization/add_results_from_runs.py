@@ -324,7 +324,7 @@ class AddResultsFromRuns:
                     # can still be None (e.g. an aggregate rule with no
                     # positive contributors) even though picked is not None.
                     is_hit = (
-                        cfg.hit_threshold.is_met(picked.value)
+                        cfg.hit_threshold.is_met(picked.value, picked.qualifier)
                         if cfg.hit_threshold and picked.value is not None
                         else None
                     )

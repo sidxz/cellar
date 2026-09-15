@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from cellar.domain.research_organization.enums import StageKind, StageOutcome
+from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.hit_criterion import compare
 
@@ -96,8 +97,8 @@ class StageCriterion:
                     f"StageCriterion with '{self.operator}' operator requires a numeric value"
                 )
 
-    def is_met(self, value: float) -> bool:
-        return compare(self.operator, value, self.value)
+    def is_met(self, value: float, qualifier: ValueQualifier = ValueQualifier.EQ) -> bool:
+        return compare(self.operator, value, self.value, qualifier)
 
     def to_dict(self) -> dict:
         return {

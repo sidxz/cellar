@@ -204,17 +204,25 @@ def test_untested_does_not_beat_miss():
 # ---------- censored values / nd / excluded ----------
 
 
-def test_censored_qualifier_compared_as_plain_number():
+def test_censored_value_that_proves_the_criterion_is_a_hit():
     c = _make_campaign()
     ch = _make_channel(c)
     stage = _make_stage(c, criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=10.0)])
     r = _make_result(c)
     _add_measurement(r, ch, value=5.0, qualifier=ValueQualifier.LT)  # reported as "< 5"
 
-    outcome = evaluate_stages(c)[r.id][stage.id]
+    assert evaluate_stages(c)[r.id][stage.id].outcome == StageOutcome.HIT
 
-    # The qualifier symbol is ignored; 5.0 < 10.0 is what's compared.
-    assert outcome.outcome == StageOutcome.HIT
+
+def test_censored_value_that_cannot_prove_the_criterion_is_a_miss():
+    """An inactive ">50" (top dose 50) must not pass "IC50 < 60" by its number."""
+    c = _make_campaign()
+    ch = _make_channel(c)
+    stage = _make_stage(c, criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=60.0)])
+    r = _make_result(c)
+    _add_measurement(r, ch, value=50.0, qualifier=ValueQualifier.GT)
+
+    assert evaluate_stages(c)[r.id][stage.id].outcome == StageOutcome.MISS
 
 
 def test_nd_and_excluded_qualifiers_are_untested():

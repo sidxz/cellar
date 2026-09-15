@@ -374,7 +374,7 @@ class PreviewRunImport:
                     # None (e.g. an aggregate rule with no positive
                     # contributors) even though picked itself is not None.
                     met = (
-                        cfg.hit_threshold.is_met(picked.value)
+                        cfg.hit_threshold.is_met(picked.value, picked.qualifier)
                         if cfg.hit_threshold and picked.value is not None
                         else None
                     )
