@@ -129,7 +129,9 @@ describe("LibrariesSection", () => {
     expect(addMutate).not.toHaveBeenCalled();
   });
 
-  it("shows hits and tested per stage, by stage name", () => {
+  // Per-stage hits are hidden in cellar's UI for now (the rendering in
+  // libraries-section.tsx is commented out, not deleted). Unskip with it.
+  it.skip("shows hits and tested per stage, by stage name", () => {
     renderSection();
     expect(screen.getAllByText("Primary")).toHaveLength(2);
     expect(screen.getByText("2 hits / 2 tested")).toBeInTheDocument();

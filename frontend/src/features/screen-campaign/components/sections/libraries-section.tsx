@@ -15,10 +15,12 @@
  * the empty-seed-run case says so rather than letting a row of zeroes imply
  * a failed screen.
  *
- * Under each bar, the campaign's stages counted over that library's rows —
- * which deck the hits came from. `tested` is the stage population minus the
- * rows with no reading and the ones still awaiting a manual call, so a hit
- * rate reads off the two numbers directly.
+ * Per-stage hits per library are HIDDEN here for now (owner's call,
+ * 2026-09-14) — the backend serves them at `?include=stages` and daikon's
+ * Libraries tab shows them. The rendering is commented out rather than
+ * deleted: restore `StageLines` below, its call site, and the `true` argument
+ * to `useCampaignCollectionCoverage` together, and the section shows one line
+ * per stage (hits / tested) under each bar again.
  */
 
 import { CollectionMultiSelect } from "@/features/screening-assay/components/collection-multi-select";
@@ -34,7 +36,8 @@ import {
   useCampaignCollectionCoverage,
   useRemoveCampaignCollection,
 } from "../../hooks/use-campaign-collections";
-import type { CampaignResponse, CollectionStageCountsResponse } from "../../types";
+import type { CampaignResponse } from "../../types";
+// import type { CollectionStageCountsResponse } from "../../types"; // StageLines
 
 const SECTION_HEADING = "text-sm font-semibold uppercase tracking-wide text-muted-foreground";
 
@@ -48,9 +51,9 @@ interface LibrariesSectionProps {
 
 export function LibrariesSection({ campaign, readOnly }: LibrariesSectionProps) {
   const qc = useQueryClient();
-  // Stage counts ride along with the coverage read (one campaign evaluation
-  // for every library, server-side).
-  const { data: coverage, isLoading } = useCampaignCollectionCoverage(campaign.id, true);
+  // Coverage only: asking for stages costs the backend a full campaign load,
+  // so the flag goes back on when StageLines does.
+  const { data: coverage, isLoading } = useCampaignCollectionCoverage(campaign.id);
   const addLibrary = useAddCampaignCollection(campaign.id);
   const removeLibrary = useRemoveCampaignCollection(campaign.id);
   const pending = addLibrary.isPending || removeLibrary.isPending;
@@ -58,7 +61,7 @@ export function LibrariesSection({ campaign, readOnly }: LibrariesSectionProps) 
 
   const libraries = coverage ?? [];
   const hasSeedRuns = campaign.seed_runs.length > 0;
-  const stageNameById = new Map(campaign.stages.map((s) => [s.id, s.name] as const));
+  // const stageNameById = new Map(campaign.stages.map((s) => [s.id, s.name] as const));
 
   const apply = async (ids: string[]) => {
     const current = libraries.map((c) => c.id);
@@ -114,7 +117,7 @@ export function LibrariesSection({ campaign, readOnly }: LibrariesSectionProps) 
                   coverage={c}
                   onViewGap={() => setGap({ collectionId: c.id, name: c.name })}
                 />
-                <StageLines stages={c.stages ?? []} nameById={stageNameById} />
+                {/* <StageLines stages={c.stages ?? []} nameById={stageNameById} /> */}
               </div>
             ))}
           </div>
@@ -138,35 +141,35 @@ export function LibrariesSection({ campaign, readOnly }: LibrariesSectionProps) 
   );
 }
 
-/** The campaign's funnel for one library: hits and tested per stage.
- *
- *  Every stage is listed, including the ones this library never reached — a
- *  zero row is the answer to "did anything of ours get that far", not noise. */
-function StageLines({
-  stages,
-  nameById,
-}: {
-  stages: CollectionStageCountsResponse[];
-  nameById: Map<string, string>;
-}) {
-  if (stages.length === 0) return null;
-  return (
-    <dl className="mt-1.5 space-y-0.5">
-      {stages.map(({ stage_id, counts }) => {
-        const tested = counts.population - counts.untested - counts.pending;
-        return (
-          <div
-            key={stage_id}
-            className="flex items-baseline justify-between gap-2 text-[11px] text-muted-foreground"
-          >
-            <dt className="truncate">{nameById.get(stage_id) ?? "Stage"}</dt>
-            <dd className="shrink-0 tabular-nums">
-              {counts.hit.toLocaleString("en-US")} {counts.hit === 1 ? "hit" : "hits"} /{" "}
-              {tested.toLocaleString("en-US")} tested
-            </dd>
-          </div>
-        );
-      })}
-    </dl>
-  );
-}
+// /** The campaign's funnel for one library: hits and tested per stage.
+//  *
+//  *  Every stage is listed, including the ones this library never reached — a
+//  *  zero row is the answer to "did anything of ours get that far", not noise. */
+// function StageLines({
+//   stages,
+//   nameById,
+// }: {
+//   stages: CollectionStageCountsResponse[];
+//   nameById: Map<string, string>;
+// }) {
+//   if (stages.length === 0) return null;
+//   return (
+//     <dl className="mt-1.5 space-y-0.5">
+//       {stages.map(({ stage_id, counts }) => {
+//         const tested = counts.population - counts.untested - counts.pending;
+//         return (
+//           <div
+//             key={stage_id}
+//             className="flex items-baseline justify-between gap-2 text-[11px] text-muted-foreground"
+//           >
+//             <dt className="truncate">{nameById.get(stage_id) ?? "Stage"}</dt>
+//             <dd className="shrink-0 tabular-nums">
+//               {counts.hit.toLocaleString("en-US")} {counts.hit === 1 ? "hit" : "hits"} /{" "}
+//               {tested.toLocaleString("en-US")} tested
+//             </dd>
+//           </div>
+//         );
+//       })}
+//     </dl>
+//   );
+// }
