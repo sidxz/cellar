@@ -54,8 +54,8 @@ async def find_inbound_references(
                 references.append(ref)
 
     for rule in get_rules_for_parent(parent_table):
-        if _is_fk_to(rule, parent_table):
-            continue  # counted by the FK walk above
+        if _is_fk_to(rule, parent_table) and rule.child_table != parent_table:
+            continue  # counted by the FK walk above, which skips self-references
         table = Base.metadata.tables[rule.child_table]
         ref = await _reference(
             session,

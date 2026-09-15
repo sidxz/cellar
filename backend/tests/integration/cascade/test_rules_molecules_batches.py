@@ -169,6 +169,37 @@ async def test_tombstones_sync_rows_flags_and_files_go_with_the_molecule(
         assert not await _rows.exists(db_session, table, row)
 
 
+async def test_a_disclosure_request_matching_a_merged_in_molecule_does_not_break_the_delete(
+    db_session: AsyncSession,
+) -> None:
+    """I1: force-deleting A also cascades X (merged into A). A disclosure request
+    for A that matched X must have its pointer nulled before X is deleted, or the
+    delete order trips fk_disclosure_requests_matched_molecule (NO ACTION)."""
+    ws = uuid.uuid4()
+    org = await _rows.org(db_session, ws)
+    molecule_a = await _rows.molecule(db_session, ws, org, reg="CC-000001")
+    molecule_x = await _rows.molecule(
+        db_session, ws, org, reg="CC-000002", merged_into_id=molecule_a
+    )
+    request = await _rows.disclosure_request(
+        db_session, ws, molecule_a, matched_molecule_id=molecule_x
+    )
+
+    entries = await CascadeRunner(db_session).execute(
+        parent_table="molecules", parent_id=molecule_a, workspace_id=ws
+    )
+
+    for table, row_id in (
+        ("molecules", molecule_a),
+        ("molecules", molecule_x),
+        ("disclosure_requests", request),
+    ):
+        assert not await _rows.exists(db_session, table, row_id)
+    assert not any(
+        e.entity_id == request and e.action == AuditAction.UPDATE for e in entries
+    )
+
+
 async def test_links_from_records_that_stay_are_cleared_and_audited(
     db_session: AsyncSession,
 ) -> None:

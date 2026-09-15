@@ -14,7 +14,17 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import ARRAY, BindParameter, ColumnElement, String, Table, Uuid, any_, bindparam
+from sqlalchemy import (
+    ARRAY,
+    BindParameter,
+    ColumnElement,
+    String,
+    Table,
+    Uuid,
+    any_,
+    bindparam,
+    func,
+)
 
 from cellar.domain.shared.cascade.actions import CascadeAction  # re-export for convenience
 
@@ -41,9 +51,10 @@ def any_id_text(expr: ColumnElement[Any], ids: Sequence[uuid.UUID]) -> ColumnEle
     """``any_id`` for ids stored as JSON strings.
 
     Compares as text, so a malformed value inside the JSON can't fail the
-    whole statement on a uuid cast.
+    whole statement on a uuid cast. Compares case-insensitively, since JSON
+    writers aren't guaranteed to write the lowercase hex ``str(uuid)`` form.
     """
-    return expr == any_(bindparam(None, [str(i) for i in ids], type_=ARRAY(String())))
+    return func.lower(expr) == any_(bindparam(None, [str(i) for i in ids], type_=ARRAY(String())))
 
 
 @dataclass(frozen=True)

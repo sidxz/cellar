@@ -132,6 +132,31 @@ async def test_a_closed_campaign_citing_the_run_blocks(
     }
 
 
+async def test_a_closed_campaign_citing_a_run_blocks_through_protocol_recursion(
+    db_session: AsyncSession,
+) -> None:
+    """M11: the real R1 predicate through protocol->runs recursion (spec §8's
+    scenario), not just the synthetic BLOCK rule in test_cascade_plan.py."""
+    ws = uuid.uuid4()
+    protocol = await _rows.protocol(db_session, ws)
+    runs = [await _rows.run(db_session, ws, protocol) for _ in range(6)]
+    sixth_run = runs[5]
+    campaign = await _rows.campaign(
+        db_session, ws, name="Closed panel", seed_runs=[(sixth_run, protocol)]
+    )
+    await _rows.set_campaign_status(db_session, campaign, "closed")
+    runner = CascadeRunner(db_session)
+
+    preview = await runner.preview(parent_table="protocols", parent_id=protocol, workspace_id=ws)
+    assert _labels(preview.blockers) == {
+        "Closed or superseded campaigns citing this run": ["Closed panel"]
+    }
+
+    with pytest.raises(CascadeBlockedError):
+        await runner.execute(parent_table="protocols", parent_id=protocol, workspace_id=ws)
+    assert await _rows.exists(db_session, "protocols", protocol)
+
+
 async def test_a_draft_seeded_from_the_run_warns_and_keeps_its_seed_list(
     db_session: AsyncSession,
 ) -> None:

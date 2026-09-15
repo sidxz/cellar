@@ -46,7 +46,10 @@ class CascadePlan:
     deletes: list[tuple[str, list[uuid.UUID]]] = field(default_factory=list)
     # Rows of id-less join tables, removed by predicate before anything else.
     link_deletes: list[tuple[str, ColumnElement[bool]]] = field(default_factory=list)
-    # (table, column, [(row id, the id the column held)])
+    # (table, column, [(row id, the id the column held)]). Complete: includes
+    # rows the delete also removes, so applying every null before any delete
+    # keeps NO ACTION FKs safe whatever the delete order. Building UPDATE
+    # audit entries for those rows is execute()'s job to skip, not plan()'s.
     nulls: list[tuple[str, str, list[tuple[uuid.UUID, uuid.UUID]]]] = field(default_factory=list)
     blockers: list[InboundReference] = field(default_factory=list)
     warnings: list[InboundReference] = field(default_factory=list)
@@ -120,11 +123,19 @@ class CascadeRunner:
             action=CascadeAction.CASCADE,
             children=[],
         )
-        await self._populate_children(root, parent_id=id_, workspace_id=workspace_id)
+        visited: set[tuple[str, uuid.UUID]] = {(table, id_)}
+        await self._populate_children(
+            root, parent_id=id_, workspace_id=workspace_id, visited=visited
+        )
         return root
 
     async def _populate_children(
-        self, node: CascadeNode, *, parent_id: uuid.UUID, workspace_id: uuid.UUID
+        self,
+        node: CascadeNode,
+        *,
+        parent_id: uuid.UUID,
+        workspace_id: uuid.UUID,
+        visited: set[tuple[str, uuid.UUID]],
     ) -> None:
         for rule in get_rules_for_parent(node.table):
             if rule.action in _REPORTED:
@@ -150,6 +161,10 @@ class CascadeRunner:
             if rule.action == CascadeAction.CASCADE and rule.recurse_into_entity:
                 # Each sampled child row becomes a recursion seed (display only).
                 for s in samples:
+                    row_id = uuid.UUID(s["id"])
+                    if (rule.child_table, row_id) in visited:
+                        continue  # already on this path; don't recurse without bound
+                    visited.add((rule.child_table, row_id))
                     sub = CascadeNode(
                         entity_type=child_node.entity_type,
                         table=rule.child_table,
@@ -161,7 +176,7 @@ class CascadeRunner:
                         children=[],
                     )
                     await self._populate_children(
-                        sub, parent_id=uuid.UUID(s["id"]), workspace_id=workspace_id
+                        sub, parent_id=row_id, workspace_id=workspace_id, visited=visited
                     )
                     child_node.children.append(sub)
 
@@ -202,14 +217,6 @@ class CascadeRunner:
         walked: dict[str, set[uuid.UUID]] = {parent_table: {parent_id}}
         await self._walk(parent_table, [parent_id], workspace_id, plan, matches, walked)
 
-        deleted = {(parent_table, parent_id)} | {
-            (table, row_id) for table, ids in plan.deletes for row_id in ids
-        }
-        plan.nulls = [
-            (table, column, kept)
-            for table, column, rows in plan.nulls
-            if (kept := [(row_id, old) for row_id, old in rows if (table, row_id) not in deleted])
-        ]
         for found in matches.values():
             target = plan.blockers if found.rule.action == CascadeAction.BLOCK else plan.warnings
             target.append(found.reference())
@@ -273,7 +280,7 @@ class CascadeRunner:
     ) -> None:
         label = rule.label_field if rule.label_field and rule.label_field in child.c else None
         cols = [child.c.id, child.c[label]] if label else [child.c.id]
-        rows = (await self._session.execute(select(*cols).where(where))).all()
+        rows = (await self._session.execute(select(*cols).where(where).order_by(child.c.id))).all()
         if not rows:
             return
         found = matches.setdefault(rule, _Matches(rule))
@@ -306,6 +313,11 @@ class CascadeRunner:
         entries = await self._snapshot_deletes(
             [(parent_table, [parent_id]), *plan.deletes], workspace_id, now
         )
+        # A row the delete also removes gets no UPDATE entry: its DELETE
+        # snapshot, taken above before any write, already holds the old value.
+        deleted = {(parent_table, parent_id)} | {
+            (table, row_id) for table, ids in plan.deletes for row_id in ids
+        }
         for table, column, rows in plan.nulls:
             entity_type, _ = label_for_table(table)
             entries.extend(
@@ -319,6 +331,7 @@ class CascadeRunner:
                     timestamp=now,
                 )
                 for row_id, old in rows
+                if (table, row_id) not in deleted
             )
 
         for table, where in plan.link_deletes:

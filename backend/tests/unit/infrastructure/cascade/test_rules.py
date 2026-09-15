@@ -8,7 +8,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-from cellar.infrastructure.cascade.rules import CascadeAction, CascadeRule, any_id
+from cellar.infrastructure.cascade.rules import CascadeAction, CascadeRule, any_id, any_id_text
 
 _child = sa.Table(
     "child",
@@ -48,6 +48,12 @@ def test_a_predicate_rule_uses_its_predicate_and_reports_what_it_covers() -> Non
     sql = str(rule.where(_child, [uuid.uuid4()]).compile(dialect=postgresql.dialect()))
     assert "child.kind" in sql
     assert rule.references == ("child.parent_id",)
+
+
+def test_any_id_text_compares_case_insensitively() -> None:
+    """M6: an uppercase or brace-wrapped id in JSON must still match str(uuid)."""
+    sql = str(any_id_text(_child.c.kind, [uuid.uuid4()]).compile(dialect=postgresql.dialect()))
+    assert "lower(" in sql
 
 
 def _first(table: sa.Table, ids: list[uuid.UUID]) -> sa.ColumnElement[bool]:

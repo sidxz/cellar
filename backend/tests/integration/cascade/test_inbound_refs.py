@@ -195,3 +195,22 @@ async def test_a_rule_reference_blocks_tier1_whatever_its_action(
     assert (flags.table, flags.fk_column, flags.count) == ("compound_flags", "protocol_id", 1)
     # runs.protocol_id is a real FK: the FK walk counts it once, never again as a rule.
     assert [r.table for r in refs].count("runs") == 1
+
+
+async def test_a_successor_protocol_is_reported_as_a_self_referential_rule_blocker(
+    db_session: AsyncSession,
+) -> None:
+    """M1: the FK walk skips ``table.name == parent_table`` for self-references, so
+    the rule walk must not also skip them as "counted by the FK walk above"."""
+    ws = uuid.uuid4()
+    parent = await _rows.protocol(db_session, ws)
+    await _rows.protocol(db_session, ws, name="Kinase assay v2", parent_protocol_id=parent)
+
+    refs = await find_inbound_references(
+        db_session, parent_table="protocols", parent_id=parent, workspace_id=ws
+    )
+
+    [successor] = [
+        r for r in refs if r.display_label == "Successor protocols (lineage link cleared)"
+    ]
+    assert successor.count == 1
