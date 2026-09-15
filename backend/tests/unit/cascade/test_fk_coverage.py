@@ -10,6 +10,7 @@ either (a) accept the default Tier-1 RESTRICT behavior (no action needed
 if parent is Tier-1-deletable), or (b) declare a Tier-2 cascade rule, or
 (c) explicitly add it to IGNORED_FKS with a justifying comment.
 """
+
 import importlib
 import sys
 
@@ -42,7 +43,10 @@ import cellar.infrastructure.persistence.sqlalchemy.workspace_config.models  # n
 import cellar.infrastructure.persistence.sqlalchemy.tagging.models  # noqa: F401
 
 from cellar.infrastructure.persistence.sqlalchemy.base import Base
-from cellar.infrastructure.cascade.registry import all_rules, _clear_for_test as _clear_cascade_registry
+from cellar.infrastructure.cascade.registry import (
+    all_rules,
+    _clear_for_test as _clear_cascade_registry,
+)
 
 # ---------------------------------------------------------------------------
 # Cascade module names.  Imported and unloaded within the test so that:
@@ -56,6 +60,7 @@ _CASCADE_MODULES = [
     "cellar.infrastructure.cascade.rules_inventory",
     "cellar.infrastructure.cascade.rules_research_organization",
     "cellar.infrastructure.cascade.rules_screening_assay",
+    "cellar.infrastructure.cascade.rules_attachment",
 ]
 
 
@@ -71,7 +76,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # append-only and never admin-deleted; cascade handled by ORM relationship.
     ("audit_entries", "operation_id", "audit_operations"),
     ("electronic_signatures", "operation_id", "audit_operations"),
-
     # -------------------------------------------------------------------------
     # Organizations — referenced as provenance (no admin delete cascade needed)
     # -------------------------------------------------------------------------
@@ -82,14 +86,12 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # the FK is to organizations which is a Tier-1 entity — RESTRICT surfaces it.
     # The cascade rule is declared in research_organization/cascade.py (SET_NULL).
     # No additional categorization needed — covered by Tier-2 rule.
-
     # -------------------------------------------------------------------------
     # Storage hierarchy — self-referential; storage_locations is not admin-deletable
     # -------------------------------------------------------------------------
     # storage_locations.parent_id is a self-referential FK for the storage hierarchy.
     # Admins manage storage via the inventory UI, not the admin-delete pathway.
     ("storage_locations", "parent_id", "storage_locations"),
-
     # -------------------------------------------------------------------------
     # Registered plates — self-referential for daughter-plate tracking
     # -------------------------------------------------------------------------
@@ -97,7 +99,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # registered_plates is not a Tier-1 admin-deletable entity; plate lifecycle
     # is managed via the inventory module.
     ("registered_plates", "parent_plate_id", "registered_plates"),
-
     # -------------------------------------------------------------------------
     # Samples → storage_locations: loose location reference, not cascade-deleted
     # -------------------------------------------------------------------------
@@ -105,17 +106,14 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # storage location does not delete the samples within it; samples are
     # reassigned or manually managed. Not a Tier-1 delete path.
     ("samples", "location_id", "storage_locations"),
-
     # -------------------------------------------------------------------------
     # Batches → storage_locations: same as samples above
     # -------------------------------------------------------------------------
     ("batches", "storage_location_id", "storage_locations"),
-
     # -------------------------------------------------------------------------
     # registered_plates → storage_locations: same rationale
     # -------------------------------------------------------------------------
     ("registered_plates", "storage_location_id", "storage_locations"),
-
     # -------------------------------------------------------------------------
     # plate_groups → storage_locations: SET NULL by design (migration 067)
     # -------------------------------------------------------------------------
@@ -124,7 +122,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # to cascade — same rationale as the samples/batches/registered_plates
     # storage_location_id entries above.
     ("plate_groups", "storage_location_id", "storage_locations"),
-
     # -------------------------------------------------------------------------
     # Plate groups — org-owned hierarchy (migration 062); same rationale as
     # storage_locations/registered_plates self-refs above
@@ -141,21 +138,18 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # plates — the DB clears the reference automatically, same rationale as
     # the storage_locations loose-reference entries above.
     ("registered_plates", "group_id", "plate_groups"),
-
     # -------------------------------------------------------------------------
     # registered_plates → runs (screening data link): cross-context soft ref
     # -------------------------------------------------------------------------
     # registered_plates.run_id links a physical plate to a screening run.
     # This is a cross-context reference; the plate is not owned by the run.
     ("registered_plates", "run_id", "runs"),
-
     # -------------------------------------------------------------------------
     # Protocols → targets: target is a reference entity, not admin-deletable
     # -------------------------------------------------------------------------
     # protocols.target_id is a nullable FK to biological targets. Targets are
     # reference data managed separately; not in the admin-delete cascade path.
     ("protocols", "target_id", "targets"),
-
     # -------------------------------------------------------------------------
     # custom_field_definitions → controlled_vocabularies: SET NULL on delete
     # -------------------------------------------------------------------------
@@ -165,7 +159,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # but the ondelete=SET NULL means it shouldn't block deletion.
     # Documented here so the intent is explicit.
     ("custom_field_definitions", "vocabulary_id", "controlled_vocabularies"),
-
     # -------------------------------------------------------------------------
     # CDD molecule sync → molecules: sync ledger, survives molecule deletion
     # -------------------------------------------------------------------------
@@ -174,7 +167,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # survive independently; cascade via Tier-2 is not appropriate here because
     # the table tracks the import history, not owned child data.
     ("cdd_molecule_syncs", "molecule_id", "molecules"),
-
     # -------------------------------------------------------------------------
     # bulk_registration_items → bulk_registrations: owned, ORM cascade handles it
     # -------------------------------------------------------------------------
@@ -182,7 +174,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # cascade="all, delete-orphan". Tier-1 RESTRICT surfaces it; the DB engine
     # will cascade automatically. No Tier-2 rule needed.
     ("bulk_registration_items", "bulk_registration_id", "bulk_registrations"),
-
     # -------------------------------------------------------------------------
     # protocol_projects → projects: join table, cascade handled by Tier-2 rule
     # -------------------------------------------------------------------------
@@ -193,7 +184,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # surface it as a RESTRICT blocker when deleting a project. No additional
     # Tier-2 rule needed because the Tier-1 introspection already picks it up.
     ("protocol_projects", "project_id", "projects"),
-
     # -------------------------------------------------------------------------
     # shipment_items → shipments: owned, ORM + DB cascade handles it
     # -------------------------------------------------------------------------
@@ -201,7 +191,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # Shipments are not a Tier-1 admin-deletable entity; lifecycle managed by
     # the inventory module. No cascade rule needed.
     ("shipment_items", "shipment_id", "shipments"),
-
     # -------------------------------------------------------------------------
     # plate_loan_items → plate_loans: owned, ORM + DB cascade handles it
     # -------------------------------------------------------------------------
@@ -222,7 +211,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # SET NULL by design — a deleted loan detaches the shipments that carried it
     # (migration 071); the shipment record itself survives.
     ("shipments", "loan_id", "plate_loans"),
-
     # -------------------------------------------------------------------------
     # batches → salt_catalog: SET NULL on salt entry delete
     # -------------------------------------------------------------------------
@@ -231,13 +219,11 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # Documented here: the FK has SET NULL semantics so deleting a salt entry
     # should null-out the reference, not block or cascade-delete the batch.
     ("batches", "salt_entry_id", "salt_catalog"),
-
     # -------------------------------------------------------------------------
     # collections → organizations: SET NULL on org delete (research org context)
     # -------------------------------------------------------------------------
     # Already covered by a Tier-2 SET_NULL cascade rule in research_organization/cascade.py.
     # Listed here to document that the FK to organizations is intentional.
-
     # -------------------------------------------------------------------------
     # molecules → organizations: provenance, not cascade-deletable via org delete
     # -------------------------------------------------------------------------
@@ -247,7 +233,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # Organizations are reference entities; admin deletion is rare and requires
     # manual molecule reassignment beforehand.
     ("molecules", "originating_org_id", "organizations"),
-
     # -------------------------------------------------------------------------
     # collections → organizations (owned_by_org_id): SET NULL on org delete
     # -------------------------------------------------------------------------
@@ -255,7 +240,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # (ondelete=SET NULL). If the org is deleted the collection's org link is
     # cleared automatically by the DB; no cascade rule needed.
     ("collections", "owned_by_org_id", "organizations"),
-
     # -------------------------------------------------------------------------
     # merge_events → disclosure_requests: append-only audit records
     # -------------------------------------------------------------------------
@@ -264,7 +248,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # they must survive deletion of the associated disclosure request.
     # The nullable FK means the DB won't block disclosure_request deletion.
     ("merge_events", "disclosure_request_id", "disclosure_requests"),
-
     # -------------------------------------------------------------------------
     # Campaign aggregate — owned children, ORM + DB cascade handles them
     # -------------------------------------------------------------------------
@@ -292,7 +275,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # rationale as plate_groups.parent_group_id / storage_locations.parent_id
     # self-refs above.
     ("campaign_stage", "parent_stage_id", "campaign_stage"),
-
     # -------------------------------------------------------------------------
     # batch_identifiers → molecule_identifiers: auto-mirror cascade on synonym removal
     # -------------------------------------------------------------------------
@@ -306,7 +288,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # No Tier-2 rule or TIER1_PARENT_TABLE registration needed — the DB CASCADE
     # ondelete clause handles this automatically.
     ("batch_identifiers", "derived_from_molecule_identifier_id", "molecule_identifiers"),
-
     # -------------------------------------------------------------------------
     # Target link tables → targets: RESTRICT blocks deleting an in-use target
     # -------------------------------------------------------------------------
@@ -320,7 +301,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # intentional for pure association rows.
     ("protocol_targets", "target_id", "targets"),
     ("run_targets", "target_id", "targets"),
-
     # -------------------------------------------------------------------------
     # Tag link tables → tags: DB CASCADE clears links on tag delete
     # -------------------------------------------------------------------------
@@ -342,7 +322,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     ("campaign_tags", "tag_id", "tags"),
     ("batch_tags", "tag_id", "tags"),
     ("registered_plate_tags", "tag_id", "tags"),
-
     # -------------------------------------------------------------------------
     # Tag link tables → non-Tier-1 entity parents: DB CASCADE on entity delete
     # -------------------------------------------------------------------------
@@ -364,7 +343,6 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # registered_plates self-ref block above); deleting a plate clears its tag
     # links automatically.
     ("registered_plate_tags", "registered_plate_id", "registered_plates"),
-
     # -------------------------------------------------------------------------
     # SAR async-job result tables → their run/projection parent: DB CASCADE
     # -------------------------------------------------------------------------
@@ -389,9 +367,7 @@ def _collect_all_fks() -> set[tuple[str, str, str]]:
 
 
 def _collect_tier2_rule_keys() -> set[tuple[str, str, str]]:
-    return {
-        (r.child_table, r.fk_column, r.parent_table) for r in all_rules()
-    }
+    return {(r.child_table, r.fk_column, r.parent_table) for r in all_rules()}
 
 
 # DB-level ondelete clauses that resolve the FK at delete time.
@@ -413,15 +389,33 @@ def _has_db_ondelete_handling(child_table: str, fk_col: str) -> bool:
 
 # Tier-1 admin-deletable parent tables — RESTRICT will surface their inbound FKs.
 TIER1_PARENT_TABLES = {
-    "controlled_vocabularies", "registration_forms", "protocol_forms",
-    "salt_catalog", "ontology_slot_definitions", "custom_field_definitions",
-    "data_sources", "external_api_keys", "compound_flags",
-    "molecule_relationships", "synthesis_routes", "molecules",
-    "protocols", "runs", "plate_templates", "run_import_templates",
-    "batches", "samples", "shipments", "synthesis_requests",
-    "projects", "collections", "saved_searches",
+    "controlled_vocabularies",
+    "registration_forms",
+    "protocol_forms",
+    "salt_catalog",
+    "ontology_slot_definitions",
+    "custom_field_definitions",
+    "data_sources",
+    "external_api_keys",
+    "compound_flags",
+    "molecule_relationships",
+    "synthesis_routes",
+    "molecules",
+    "protocols",
+    "runs",
+    "plate_templates",
+    "run_import_templates",
+    "batches",
+    "samples",
+    "shipments",
+    "synthesis_requests",
+    "projects",
+    "collections",
+    "saved_searches",
     # Additional Tier-1 entities referenced by FKs in the schema
-    "bulk_registrations", "bulk_disclosures", "readout_definitions",
+    "bulk_registrations",
+    "bulk_disclosures",
+    "readout_definitions",
     "plates",
 }
 
@@ -499,5 +493,5 @@ def test_every_fk_is_categorized():
         "FKs not covered by Tier-1 RESTRICT or Tier-2 cascade rules:\n"
         + "\n".join(f"  {ct}.{c} -> {pt}" for ct, c, pt in uncovered)
         + "\n\nResolution: either register a CascadeRule, add the parent table "
-          "to TIER1_PARENT_TABLES, or add to IGNORED_FKS with a justifying comment."
+        "to TIER1_PARENT_TABLES, or add to IGNORED_FKS with a justifying comment."
     )

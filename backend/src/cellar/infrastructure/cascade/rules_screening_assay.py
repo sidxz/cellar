@@ -180,4 +180,16 @@ register_rules(
         label_field="notes",
         display_label="Successor runs (lineage link cleared)",
     ),
+    # -------------------------------------------------------------------------
+    # Compound flags (no FK)
+    # -------------------------------------------------------------------------
+    # CompoundFlagModel.protocol_id: a user's flag on a compound in a protocol,
+    # meaningless once the protocol is gone.
+    CascadeRule(
+        child_table="compound_flags",
+        parent_table="protocols",
+        action=A.CASCADE,
+        fk_column="protocol_id",
+        display_label="Compound flags",
+    ),
 )

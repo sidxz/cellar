@@ -59,4 +59,18 @@ register_rules(
         label_field="name",
         display_label="Plate groups (collection link cleared)",
     ),
+    # -------------------------------------------------------------------------
+    # Plate import template default protocol (no FK)
+    # -------------------------------------------------------------------------
+    # ImportTemplateModel.default_protocol_id. The template's readout mappings
+    # belong to that protocol, so refuse rather than leave a template that
+    # imports into nothing. The user deletes the template.
+    CascadeRule(
+        child_table="import_templates",
+        parent_table="protocols",
+        action=A.BLOCK,
+        fk_column="default_protocol_id",
+        label_field="name",
+        display_label="Plate import templates defaulting to this protocol",
+    ),
 )

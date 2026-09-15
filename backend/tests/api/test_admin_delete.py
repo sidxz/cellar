@@ -93,6 +93,41 @@ class TestAdminHardDelete:
         assert op["reason"] == "obsolete"
         assert any(e["entry_type"] == "delete" for e in op["entries"])
 
+    async def test_a_rule_reference_blocks_tier1_hard_delete(
+        self, client: AsyncClient, api_app: FastAPI, workspace_id: uuid.UUID
+    ) -> None:
+        """A compound flag has no FK to its protocol, but still refuses a Tier-1 delete."""
+        protocol_id = uuid.uuid4()
+        await _raw_insert_protocol(
+            api_app, protocol_id, f"T1-Flagged-{protocol_id.hex[:6]}", workspace_id
+        )
+        async with await _get_session(api_app) as session:
+            await session.execute(
+                sa.text(
+                    "INSERT INTO compound_flags (id, workspace_id, molecule_id, protocol_id, "
+                    "flagged_by, flag_type, created_at) "
+                    "VALUES (:id, :ws, :mol, :proto, :user, 'pains', now())"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "ws": workspace_id,
+                    "mol": uuid.uuid4(),
+                    "proto": protocol_id,
+                    "user": uuid.uuid4(),
+                },
+            )
+            await session.commit()
+
+        resp = await _admin_delete(client, "protocol", str(protocol_id), "duplicate registration")
+
+        assert resp.status_code == 409, resp.text
+        [blocker] = resp.json()["blockers"]
+        assert (blocker["table"], blocker["display_label"], blocker["count"]) == (
+            "compound_flags",
+            "Compound flags",
+            1,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Tier-2 helpers — raw SQL inserts (API protocol creation requires too much
@@ -202,3 +237,39 @@ class TestCascadeTier2:
         """Vocabulary is NOT in TIER2_ENTITY_TYPES; cascade-preview on it returns 404."""
         resp = await client.post(f"/api/v1/admin/vocabulary/{uuid.uuid4()}/cascade-preview")
         assert resp.status_code == 404, resp.text
+
+    async def test_cascade_delete_blocked_returns_every_blocker(
+        self, client: AsyncClient, api_app: FastAPI, workspace_id: uuid.UUID
+    ) -> None:
+        """A block rule refuses the cascade with the Tier-1 409 body."""
+        protocol_id = uuid.uuid4()
+        proto_name = f"T14-Blocked-{protocol_id.hex[:6]}"
+        await _raw_insert_protocol(api_app, protocol_id, proto_name, workspace_id)
+        async with await _get_session(api_app) as session:
+            await session.execute(
+                sa.text(
+                    "INSERT INTO import_templates (id, workspace_id, name, column_mappings, "
+                    "created_by, default_protocol_id) "
+                    "VALUES (:id, :ws, 'CRO sheet', CAST('{}' AS jsonb), :user, :proto)"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "ws": workspace_id,
+                    "user": uuid.uuid4(),
+                    "proto": protocol_id,
+                },
+            )
+            await session.commit()
+
+        resp = await client.request(
+            "DELETE",
+            f"/api/v1/admin/protocol/{protocol_id}/cascade",
+            json={"typed_name": proto_name, "reason": "duplicate registration"},
+        )
+
+        assert resp.status_code == 409, resp.text
+        body = resp.json()
+        assert body["error"] == "delete_blocked_by_dependencies"
+        assert [b["display_label"] for b in body["blockers"]] == [
+            "Plate import templates defaulting to this protocol"
+        ]

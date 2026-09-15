@@ -25,6 +25,7 @@ _CASCADE_MODULES = [
     "cellar.infrastructure.cascade.rules_audit_compliance",
     "cellar.infrastructure.cascade.rules_chemical_registration",
     "cellar.infrastructure.cascade.rules_inventory",
+    "cellar.infrastructure.cascade.rules_attachment",
 ]
 
 # SQLAlchemy model modules that must be in Base.metadata for the runner to work.
