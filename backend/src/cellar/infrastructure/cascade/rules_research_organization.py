@@ -3,8 +3,10 @@
 Declares what happens to children of Project, Molecule (cross-context), etc.,
 when those parents are deleted via Tier-2 admin force-cascade.
 
-Rules are derived from the actual ForeignKey declarations in:
-  infrastructure/persistence/sqlalchemy/research_organization/models.py
+Rules cover FK references (see
+infrastructure/persistence/sqlalchemy/research_organization/models.py) and
+id-only references without an FK (campaign rows naming a protocol, run or
+molecule by id, spec 2026-09-15, expressed as match predicates).
 
 Schema notes / deviations from plan:
 - Association table is molecule_projects (not project_molecules) — corrected.
@@ -13,9 +15,6 @@ Schema notes / deviations from plan:
 - CollectionMoleculeModel.molecule_id → molecules.id (ondelete=CASCADE) — added.
 - CollectionModel.project_id → projects.id (ondelete=SET NULL) — added.
 - ProjectMemberModel.project_id → projects.id (ondelete=CASCADE) — added.
-
-Campaign rules (spec 2026-09-15) reference screening data by id without an
-FK; they are expressed as match predicates.
 """
 
 from __future__ import annotations

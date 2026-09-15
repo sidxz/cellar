@@ -3,11 +3,11 @@
 Declares what happens to children of Molecule (and related aggregates) when
 those parents are deleted via Tier-2 admin force-cascade.
 
-Rules are derived from the actual ForeignKey declarations in:
-  infrastructure/persistence/sqlalchemy/chemical_registration/models.py
-  infrastructure/persistence/sqlalchemy/chemical_registration/disclosure_models.py
-  infrastructure/persistence/sqlalchemy/chemical_registration/synthesis_route_models.py
-  infrastructure/persistence/sqlalchemy/chemical_registration/bulk_registration_models.py
+Rules cover FK references (see
+infrastructure/persistence/sqlalchemy/chemical_registration/models.py,
+disclosure_models.py, synthesis_route_models.py and
+bulk_registration_models.py) and id-only references without an FK
+(merged-in tombstones, and reaction steps naming a molecule or batch).
 
 Schema notes / deviations from plan:
 - molecule_relationships: actual FK columns are source_molecule_id / target_molecule_id,
@@ -18,7 +18,11 @@ Schema notes / deviations from plan:
 - mixture_components: two FKs to molecules — mixture_molecule_id (CASCADE) and
   component_molecule_id (no ondelete); both added.
 - merge_events: two FKs to molecules — source_molecule_id and target_molecule_id;
-  rows are append-only audit records; SET_NULL is inappropriate so both CASCADE.
+  rows are append-only audit records, so a merge event of *this* molecule must
+  go with it — SET_NULL is inappropriate for those two, so both CASCADE.
+  merge_events.disclosure_request_id is different (DR1, below): another
+  molecule's merge event only loses its disclosure link, so that one is
+  SET_NULL.
 - disclosure_requests: also has resolved_to_molecule_id and matched_molecule_id FKs
   to molecules (nullable, no ondelete); SET_NULL on those references.
 """

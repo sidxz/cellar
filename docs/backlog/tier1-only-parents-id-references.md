@@ -12,7 +12,9 @@
   - `registered_plates.project_id` and `synthesis_requests.project_id` should be set null.
   - `favorites.entity_id` (projects are the only favoritable type) should cascade.
   - Today a project is always blocked anyway, by its creator's `project_members` row.
-- **synthesis routes and requests:** `synthesis_requests.proposed_route_id` and `.parent_request_id` should be set null.
+- **synthesis routes and requests:**
+  - `synthesis_requests.proposed_route_id` and `.parent_request_id` should be set null.
+  - A molecule force delete removes finished synthesis requests, so a child request on another molecule can keep a `parent_request_id` pointing at nothing; set null (or refuse) when a rule exists for it.
 - **Config referenced by name, not id:**
   - Ontology slots: protocol annotations are keyed by slot name, so orphaned annotations are hidden but still returned by the API.
   - Custom fields: molecule and batch values are keyed by name, so updates carrying the key are rejected as "Unknown custom field". Separately, `registration_forms.field_overrides[].field_definition_id` goes dead.

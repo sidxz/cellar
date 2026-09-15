@@ -89,7 +89,7 @@ How the walk behaves:
 
 - **It evaluates rules for every collected id.** Samples are for display only.
 - **It never revisits a `(table, id)`.** This matters for self-referencing cascades such as merged tombstones.
-- **Rows already scheduled for deletion are dropped from `nulls`.**
+- **Every null is applied before any delete**, which keeps NO ACTION FKs safe whatever the delete order; a row the delete also removes gets no UPDATE audit entry, because its DELETE snapshot already holds the old value.
 - **Id lists bind as one `uuid[]` parameter** (`column = ANY(:ids)`, helper `any_id` in `rules.py`). `IN (...)` binds one parameter per id, and asyncpg refuses more than 32,767 of them; one 384-well protocol with 86 plates already passes that. Checked on the dev DB: 40,000 ids fail through `IN` and pass as an array. The current runner uses `IN` everywhere, so large force deletes fail today.
 
 ### 3.3 Preview
@@ -105,8 +105,8 @@ How the walk behaves:
 - **If there are blockers,** it raises `CascadeBlockedError(blockers)`, which replaces `CascadeExecutionError`. `CascadeDelete` returns `Failure(BlockedByDependenciesError(blockers))`, so the refusal is a 409 carrying the Tier-1 body.
 - **Otherwise it snapshots and applies**, all in the caller's transaction, so an audit failure still rolls everything back:
   - **Deleted rows:** one DELETE entry each, as today.
-  - **Nulled rows:** one UPDATE entry each, with `field_name` = column, `old_value` = previous id, `new_value` = None.
-  - **Apply order:** nulls first, then deletes deepest-first, then the root.
+  - **Nulled rows:** one UPDATE entry each, with `field_name` = column, `old_value` = previous id, `new_value` = None — except a row the delete also removes, which gets no UPDATE entry (its DELETE snapshot already holds the old value).
+  - **Apply order:** every null before any delete, then deletes deepest-first, then the root.
 
 ### 3.5 Tier 1
 

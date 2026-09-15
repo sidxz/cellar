@@ -3,15 +3,18 @@
 Declares what happens to children of Batch, Sample, etc., when those parents
 are deleted via Tier-2 admin force-cascade.
 
-Rules are derived from the actual ForeignKey declarations in:
-  infrastructure/persistence/sqlalchemy/inventory/models.py
-  infrastructure/persistence/sqlalchemy/inventory/shipment_models.py
-  infrastructure/persistence/sqlalchemy/inventory/sample_request_models.py
+Rules cover FK references (see
+infrastructure/persistence/sqlalchemy/inventory/models.py,
+shipment_models.py and sample_request_models.py) and id-only references
+without an FK (sample and synthesis requests naming a molecule or batch,
+inventory plates naming a batch in their well map).
 
 Schema notes / deviations from plan:
-- shipment_items.sample_id: plain UUID, no FK constraint declared; rule removed.
-- sample_requests: no sample_id FK column at all (fulfilled_sample_id is plain UUID);
-  rule for SET_NULL on sample_id removed.
+- shipment_items.item_id (polymorphic; item_type says what it names) and
+  sample_requests.fulfilled_sample_id are left alone on purpose: history that
+  outlives what it names, not a rule gap (see LEFT_ALONE in test_fk_coverage.py).
+- sample_requests.molecule_id and .batch_id: plain UUID, no FK — both are
+  covered by rules below (BLOCK/CASCADE on molecule_id, SET_NULL on batch_id).
 - batches.molecule_id: no ondelete clause but is a FK — CASCADE rule added.
 """
 
