@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.research_organization.campaign import Campaign
@@ -11,6 +12,7 @@ from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.collection_import_template import (
     CollectionImportTemplate,
 )
+from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.domain.research_organization.project import Project
 from cellar.domain.research_organization.project_membership import (
     ProjectMember,
@@ -19,6 +21,22 @@ from cellar.domain.research_organization.project_membership import (
 from cellar.domain.research_organization.project_scope_stats import ProjectScopeStats
 from cellar.domain.research_organization.saved_search import SavedSearch
 from cellar.domain.shared.target_ref import TargetRef
+
+
+class CampaignCollectionLinkResult(Enum):
+    """Outcome of linking a library to a campaign.
+
+    Mirrors the screening context's ``CollectionLinkResult`` (defined there
+    rather than shared — the two domain contexts stay independent): lets the
+    use case distinguish a real insert (audit-worthy) from an idempotent
+    no-op, and surface unknown/cross-workspace campaigns or collections as
+    NotFound instead of silently succeeding.
+    """
+
+    ADDED = "added"
+    ALREADY_LINKED = "already_linked"
+    OWNER_NOT_FOUND = "owner_not_found"  # campaign missing or cross-workspace
+    COLLECTION_NOT_FOUND = "collection_not_found"
 
 
 @runtime_checkable
@@ -56,6 +74,10 @@ class CollectionRepository(Protocol):
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> Collection | None: ...
+
+    async def find_by_ids(self, workspace_id: uuid.UUID, ids: list[uuid.UUID]) -> list[Collection]:
+        """Bulk fetch for name enrichment — ``molecule_count`` is not populated."""
+        ...
 
     async def save(self, aggregate: Collection) -> None: ...
 
@@ -198,6 +220,7 @@ class CampaignRepository(Protocol):
         tag_logic: str = "any",
         target_ids: list[uuid.UUID] | None = None,
         target_logic: str = "any",
+        status: CampaignStatus | None = None,
     ) -> list[Campaign]: ...
 
     async def find_by_workspace(
@@ -210,9 +233,60 @@ class CampaignRepository(Protocol):
         tag_logic: str = "any",
         target_ids: list[uuid.UUID] | None = None,
         target_logic: str = "any",
+        status: CampaignStatus | None = None,
     ) -> list[Campaign]: ...
 
     async def is_locked(self, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> bool: ...
+
+    async def find_status(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> CampaignStatus | None:
+        """The campaign's status, or None when it is missing/cross-workspace.
+
+        Column-only read: ``is_locked`` cannot tell an absent campaign from an
+        open one, so link edits need this to 404 before they 409.
+        """
+        ...
+
+    async def find_seed_run_ids(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> list[uuid.UUID] | None:
+        """Run ids from the campaign's ``seed_runs``, or None when it is missing.
+
+        Column-only read of the JSONB — coverage needs the runs, not the
+        results and measurements a full aggregate load would drag in.
+        """
+        ...
+
+    async def list_collection_ids(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        """Libraries linked to the campaign (association, not aggregate state)."""
+        ...
+
+    async def collection_members_among(
+        self,
+        workspace_id: uuid.UUID,
+        collection_ids: list[uuid.UUID],
+        molecule_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, set[uuid.UUID]]:
+        """Which of ``molecule_ids`` belong to each of ``collection_ids``.
+
+        Intersecting in the database keeps per-library stage tallies bounded
+        by the campaign's own rows rather than by library size. Collections
+        with no listed member are omitted.
+        """
+        ...
+
+    async def add_collection(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> CampaignCollectionLinkResult: ...
+
+    async def remove_collection(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> bool:
+        """True when a link row was actually removed."""
+        ...
 
     async def project_targets(
         self, workspace_id: uuid.UUID, campaigns: list[Campaign]

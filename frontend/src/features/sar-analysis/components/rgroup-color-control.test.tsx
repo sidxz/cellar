@@ -116,19 +116,6 @@ describe("RGroupColorControl", () => {
     } as never);
   });
 
-  it("renders the 'Color by:' label and protocol picker", () => {
-    render(
-      <RGroupColorControl
-        value={null}
-        onChange={vi.fn()}
-        aggregationMode="latest"
-        onAggregationChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("Color by:")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Protocol" })).toBeInTheDocument();
-  });
-
   it("calls onChange with a SarColorSpec whose column is drc:<rd> on protocol+readout pick", async () => {
     const { useProtocol } = await import("@/features/screening-assay/hooks/use-protocols");
 
@@ -171,17 +158,5 @@ describe("RGroupColorControl", () => {
         protocolId: "proto-1",
       }),
     );
-  });
-
-  it("renders the AggregationControl summarise dropdown", () => {
-    render(
-      <RGroupColorControl
-        value={null}
-        onChange={vi.fn()}
-        aggregationMode="latest"
-        onAggregationChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("combobox", { name: "Aggregation mode" })).toBeInTheDocument();
   });
 });

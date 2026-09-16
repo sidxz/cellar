@@ -56,11 +56,11 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
     tag_filter_subquery,
 )
 
-
 # Similarity thresholds for find_similar (the tunable knobs; spec: "start conservative").
-_NAME_BLOCK_FLOOR = 0.3       # blocking: word_similarity(stored_name, draft) must exceed this (OR share a target)
-_RUN_READOUT_JACCARD = 0.5    # run-candidate (targets present): minimum readout-schema overlap
-_RUN_NAME_FLOOR = 0.6         # run-candidate (no targets yet): minimum name match
+# blocking: word_similarity(stored_name, draft) must exceed this (OR share a target)
+_NAME_BLOCK_FLOOR = 0.3
+_RUN_READOUT_JACCARD = 0.5  # run-candidate (targets present): minimum readout-schema overlap
+_RUN_NAME_FLOOR = 0.6  # run-candidate (no targets yet): minimum name match
 _RUN_MIN_SHARED_READOUTS = 2  # run-candidate (no targets yet): minimum shared readout kinds
 
 
@@ -280,6 +280,89 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         )
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
+
+    async def find_usages(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[str]:
+        """Every row that still points at the protocol and would not go with it.
+
+        Readout/condition definitions and the project/target/tag links cascade,
+        so they don't count. Campaign channels, campaign seed runs, compound
+        flags and import-template defaults carry no FK (a delete would leave
+        them dangling); runs, curves and child versions have an FK without
+        cascade (a delete would fail on the constraint instead of refusing).
+        """
+        from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
+            ImportTemplateModel,
+        )
+        from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
+            CampaignChannelModel,
+            CampaignModel,
+        )
+        from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_model import (  # noqa: E501
+            CompoundFlagModel,
+        )
+        from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+            DoseResponseCurveModel,
+        )
+
+        def plural(n: int, noun: str) -> str:
+            return f"{n} {noun}{'' if n == 1 else 's'}"
+
+        usages: list[str] = []
+        rows = await self._session.execute(
+            select(CampaignModel.name, func.count(CampaignChannelModel.id))
+            .join(CampaignChannelModel, CampaignChannelModel.campaign_id == CampaignModel.id)
+            .where(
+                CampaignModel.workspace_id == workspace_id,
+                CampaignChannelModel.protocol_id == protocol_id,
+            )
+            .group_by(CampaignModel.id, CampaignModel.name)
+            .order_by(CampaignModel.name)
+        )
+        usages += [f'campaign "{name}" ({plural(n, "readout")})' for name, n in rows]
+
+        seeded = await self._session.scalars(
+            select(CampaignModel.name)
+            .where(
+                CampaignModel.workspace_id == workspace_id,
+                CampaignModel.seed_runs.contains([{"protocol_id": str(protocol_id)}]),
+            )
+            .order_by(CampaignModel.name)
+        )
+        usages += [f'campaign "{name}" (seeded from its runs)' for name in seeded]
+
+        templates = await self._session.scalars(
+            select(ImportTemplateModel.name)
+            .where(
+                ImportTemplateModel.workspace_id == workspace_id,
+                ImportTemplateModel.default_protocol_id == protocol_id,
+            )
+            .order_by(ImportTemplateModel.name)
+        )
+        usages += [f'import template "{name}"' for name in templates]
+
+        children = await self._session.scalars(
+            select(ProtocolModel.name)
+            .where(
+                ProtocolModel.workspace_id == workspace_id,
+                ProtocolModel.parent_protocol_id == protocol_id,
+            )
+            .order_by(ProtocolModel.name)
+        )
+        usages += [f'newer version "{name}"' for name in children]
+
+        for model, noun in (
+            (RunModel, "run"),
+            (DoseResponseCurveModel, "dose-response curve"),
+            (CompoundFlagModel, "compound flag"),
+        ):
+            n = await self._session.scalar(
+                select(func.count())
+                .select_from(model)
+                .where(model.workspace_id == workspace_id, model.protocol_id == protocol_id)
+            )
+            if n:
+                usages.append(plural(n, noun))
+        return usages
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         """Delete a protocol by ID (only for DRAFT protocols)."""

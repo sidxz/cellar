@@ -2,10 +2,6 @@ import uuid
 from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 
 
-def test_create_default_has_no_cdd_vault_id():
-    ws = WorkspaceSettings.create_default(workspace_id=uuid.uuid4())
-    assert ws.cdd_vault_id is None
-
 
 def test_update_cdd_vault_id():
     ws = WorkspaceSettings.create_default(workspace_id=uuid.uuid4())

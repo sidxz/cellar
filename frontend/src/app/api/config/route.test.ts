@@ -32,4 +32,12 @@ describe("/api/config", () => {
     expect(body.uiGitSha).toBe("unknown");
     expect(body.environment).toBe("development");
   });
+
+  it("exposes the prot-cellar UI url with a dev default", async () => {
+    vi.stubEnv("APP_PROT_CELLAR_URL", "");
+    expect((await GET().json()).protCellarUrl).toBe("http://localhost:3001");
+
+    vi.stubEnv("APP_PROT_CELLAR_URL", "https://prot-cellar.example");
+    expect((await GET().json()).protCellarUrl).toBe("https://prot-cellar.example");
+  });
 });

@@ -50,10 +50,13 @@ def _plan(
     compound_index=None,
     batch_index=None,
     defs_by_id=None,
+    structure_header=None,
+    structure_index=None,
 ):
     mapping = SummaryColumnMapping(
         compound_ref=compound_ref_header,
         batch_ref=batch_ref_header,
+        structure=structure_header,
         readout_columns=readout_columns if readout_columns is not None else {"IC50": RDEF_NUM},
     )
     return plan_summary_rows(
@@ -62,6 +65,7 @@ def _plan(
         defs_by_id=defs_by_id if defs_by_id is not None else _DEFS,
         compound_index=compound_index or {},
         batch_index=batch_index or {},
+        structure_index=structure_index or {},
     )
 
 
@@ -337,3 +341,164 @@ async def test_build_batch_index_dedups_and_omits_unmatched():
     idx = await build_batch_index(["CV-1-001", "CV-1-001", "GHOST"], ws, repo)
     assert idx == {"CV-1-001": (BATCH_1, MOL_A)}
     assert repo.calls == ["CV-1-001", "GHOST"]
+
+
+# ---------------------------------------------------------------------------
+# Structure fallback (STRUCTURE role)
+# ---------------------------------------------------------------------------
+
+
+def test_structure_fallback_resolves_when_identifier_misses():
+    rows = [{"Compound": "NEW-1", "SMILES": "CCO", "IC50": "1.0"}]
+    plan = _plan(
+        rows,
+        structure_header="SMILES",
+        compound_index={},
+        structure_index={"CCO": MOL_A},
+    )
+    assert [i.molecule_id for i in plan.items] == [MOL_A]
+    assert plan.unmatched_compound_refs == frozenset()
+    assert plan.unmatched_compounds == []
+    assert plan.matched_compound_count == 1
+
+
+def test_identifier_hit_wins_over_structure():
+    rows = [{"Compound": "CMP-1", "SMILES": "CCO", "IC50": "1.0"}]
+    plan = _plan(
+        rows,
+        structure_header="SMILES",
+        compound_index={"CMP-1": MOL_B},
+        structure_index={"CCO": MOL_A},
+    )
+    assert [i.molecule_id for i in plan.items] == [MOL_B]
+
+
+def test_unmatched_compounds_reports_row_and_structure():
+    rows = [
+        {"Compound": "NEW-1", "SMILES": "CCO", "IC50": "1.0"},
+        {"Compound": "NEW-2", "SMILES": "", "IC50": "2.0"},
+    ]
+    plan = _plan(rows, structure_header="SMILES", compound_index={}, structure_index={})
+    assert plan.unmatched_compound_refs == frozenset({"NEW-1", "NEW-2"})
+    assert [(u.ref, u.row, u.structure) for u in plan.unmatched_compounds] == [
+        ("NEW-1", 1, "CCO"),
+        ("NEW-2", 2, None),
+    ]
+
+
+def test_structure_never_consulted_when_batch_ref_present():
+    """Batch is authoritative: a structure that resolves ELSEWHERE must not turn a
+    batch-resolved row into a row_conflict, and must not rescue a batch miss."""
+    # Batch resolves, compound identifier misses, SMILES matches a different molecule.
+    rows = [{"Compound": "NEW-1", "Batch": "CV-1-001", "SMILES": "CCO", "IC50": "1.0"}]
+    plan = _plan(
+        rows,
+        batch_ref_header="Batch",
+        structure_header="SMILES",
+        compound_index={},
+        batch_index={"CV-1-001": (BATCH_1, MOL_B)},
+        structure_index={"CCO": MOL_A},
+    )
+    assert plan.row_conflicts == []
+    assert [(i.molecule_id, i.batch_id) for i in plan.items] == [(MOL_B, BATCH_1)]
+    assert plan.unmatched_compound_refs == frozenset({"NEW-1"})
+
+    # Batch misses: row stays unmatched even though the SMILES would resolve.
+    plan = _plan(
+        rows,
+        batch_ref_header="Batch",
+        structure_header="SMILES",
+        compound_index={},
+        batch_index={},
+        structure_index={"CCO": MOL_A},
+    )
+    assert plan.items == []
+    assert plan.unmatched_batch_refs == frozenset({"CV-1-001"})
+    assert plan.unmatched_compound_refs == frozenset({"NEW-1"})
+
+
+def test_no_structure_header_means_no_fallback():
+    rows = [{"Compound": "NEW-1", "SMILES": "CCO", "IC50": "1.0"}]
+    plan = _plan(rows, compound_index={}, structure_index={"CCO": MOL_A})
+    assert plan.items == []
+    assert plan.unmatched_compound_refs == frozenset({"NEW-1"})
+
+
+class _FakeMoleculeResolver:
+    """Resolves only SMILES 'CCO' -> MOL_A; records what it was asked."""
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    async def resolve(self, workspace_id, refs):
+        from cellar.application.shared.molecule_resolver import (
+            ResolvedMolecule,
+            UnresolvedMolecule,
+        )
+
+        self.asked = [r.value for r in refs]
+        resolved = [ResolvedMolecule(ref=r, molecule_id=MOL_A) for r in refs if r.value == "CCO"]
+        unresolved = [
+            UnresolvedMolecule(ref=r, reason="not_found") for r in refs if r.value != "CCO"
+        ]
+        return resolved, unresolved
+
+
+async def test_build_structure_index_only_for_refs_that_missed():
+    from cellar.application.screening.summary_import_resolver import build_structure_index
+
+    rows = [
+        {"Compound": "CMP-1", "SMILES": "c1ccccc1"},  # identifier hit -> not asked
+        {"Compound": "NEW-1", "SMILES": "CCO"},  # miss -> asked
+        {"Compound": "NEW-1", "SMILES": "CCO"},  # duplicate -> asked once
+        {"Compound": "NEW-2", "SMILES": "XYZ"},  # miss, unresolvable
+        {"Compound": "", "SMILES": "CCO"},  # no ref -> never a fallback candidate
+    ]
+    mapping = SummaryColumnMapping(compound_ref="Compound", structure="SMILES")
+    resolver = _FakeMoleculeResolver()
+    index = await build_structure_index(
+        rows,
+        mapping=mapping,
+        compound_index={"CMP-1": MOL_B},
+        workspace_id=uuid.UUID(int=9),
+        molecule_resolver=resolver,  # type: ignore[arg-type]
+    )
+    assert sorted(resolver.asked) == ["CCO", "XYZ"]
+    assert index == {"CCO": MOL_A}
+
+
+async def test_build_structure_index_empty_without_structure_mapping():
+    from cellar.application.screening.summary_import_resolver import build_structure_index
+
+    resolver = _FakeMoleculeResolver()
+    index = await build_structure_index(
+        [{"Compound": "NEW-1", "SMILES": "CCO"}],
+        mapping=SummaryColumnMapping(compound_ref="Compound"),
+        compound_index={},
+        workspace_id=uuid.UUID(int=9),
+        molecule_resolver=resolver,  # type: ignore[arg-type]
+    )
+    assert index == {}
+    assert resolver.asked == []
+
+
+# ---------------------------------------------------------------------------
+# Both refs mapped, neither resolves → BOTH reported (resolution unchanged)
+# ---------------------------------------------------------------------------
+
+
+def test_both_refs_neither_resolves_reports_compound_too():
+    rows = [{"Compound": "NEW-1", "Batch": "NEW-1-001", "IC50": "1.0"}]
+    plan = _plan(rows, batch_ref_header="Batch", compound_index={}, batch_index={})
+    assert plan.items == []
+    assert plan.unmatched_batch_refs == frozenset({"NEW-1-001"})
+    assert plan.unmatched_compound_refs == frozenset({"NEW-1"})
+    assert [(u.ref, u.row) for u in plan.unmatched_compounds] == [("NEW-1", 1)]
+
+
+def test_both_refs_batch_misses_compound_hits_reports_batch_only():
+    rows = [{"Compound": "CMP-1", "Batch": "GHOST", "IC50": "1.0"}]
+    plan = _plan(rows, batch_ref_header="Batch", compound_index={"CMP-1": MOL_A}, batch_index={})
+    assert plan.items == []  # batch stays authoritative: the row still skips
+    assert plan.unmatched_batch_refs == frozenset({"GHOST"})
+    assert plan.unmatched_compound_refs == frozenset()

@@ -1,7 +1,10 @@
 function toDate(input: string | Date | null | undefined): Date | null {
   if (input == null) return null;
   if (input instanceof Date) return input;
-  const d = new Date(input);
+  // A bare YYYY-MM-DD is a calendar date, not an instant: anchor it at LOCAL
+  // midnight so formatting never shifts the day. new Date("2026-07-01") is UTC
+  // midnight, which a local-time formatter renders as Jun 30 west of UTC.
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(input) ? new Date(`${input}T00:00:00`) : new Date(input);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -73,13 +76,8 @@ export function formatRelativeDate(input: string | Date | null | undefined): str
  * arithmetic doesn't drift across the UTC boundary.
  */
 export function formatRelativeDay(input: string | Date | null | undefined): string {
-  if (input == null) return "";
-  // Anchor a bare date string at local midnight; pass Date / full timestamps through.
-  const d =
-    typeof input === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input)
-      ? new Date(`${input}T00:00:00`)
-      : toDate(input);
-  if (!d || Number.isNaN(d.getTime())) return "";
+  const d = toDate(input);
+  if (!d) return "";
 
   const startOfDay = new Date(d);
   startOfDay.setHours(0, 0, 0, 0);
@@ -96,4 +94,50 @@ export function formatRelativeDay(input: string | Date | null | undefined): stri
     day: "numeric",
     year: today.getFullYear() === startOfDay.getFullYear() ? undefined : "numeric",
   });
+}
+
+/**
+ * Day-granular due phrase for a date-only value (local calendar days):
+ *   today → "due today" · +1 → "due tomorrow" · 2..13 → "due in N d" ·
+ *   14..59 → "due in N w" · ≥60 → "due Sep 30" (year when not current) ·
+ *   −1..−13 → "N d overdue" · −14..−59 → "N w overdue" ·
+ *   −60..−729 → "N mo overdue" (30-day months) · ≤−730 → "N y overdue".
+ * `now` is injectable for tests.
+ */
+export function formatDue(
+  input: string | Date | null | undefined,
+  now: Date = new Date(),
+): { label: string; overdue: boolean } | null {
+  const d = toDate(input);
+  if (!d) return null;
+  const due = new Date(d);
+  due.setHours(0, 0, 0, 0);
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  // round, not floor: a DST change between the two midnights is ±1 h
+  const delta = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+  if (delta === 0) return { label: "due today", overdue: false };
+  if (delta === 1) return { label: "due tomorrow", overdue: false };
+  if (delta > 1 && delta < 14) return { label: `due in ${delta} d`, overdue: false };
+  if (delta >= 14 && delta < 60)
+    return { label: `due in ${Math.floor(delta / 7)} w`, overdue: false };
+  if (delta >= 60) {
+    const sameYear = due.getFullYear() === today.getFullYear();
+    const text = due.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: sameYear ? undefined : "numeric",
+    });
+    return { label: `due ${text}`, overdue: false };
+  }
+  const late = -delta;
+  const label =
+    late < 14
+      ? `${late} d overdue`
+      : late < 60
+        ? `${Math.floor(late / 7)} w overdue`
+        : late < 730
+          ? `${Math.floor(late / 30)} mo overdue`
+          : `${Math.floor(late / 365)} y overdue`;
+  return { label, overdue: true };
 }

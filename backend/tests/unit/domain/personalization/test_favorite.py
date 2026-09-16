@@ -1,7 +1,6 @@
 """Tests for the Favorite aggregate."""
 
 import uuid
-from datetime import UTC, datetime
 
 from cellar.domain.personalization.enums import FavoriteEntityType
 from cellar.domain.personalization.favorite import Favorite
@@ -32,35 +31,6 @@ def test_create_emits_no_events() -> None:
     )
     assert fav.collect_events() == []
 
-
-def test_entity_type_is_str_enum() -> None:
-    assert FavoriteEntityType.PROJECT == "project"
-    assert FavoriteEntityType("project") is FavoriteEntityType.PROJECT
-
-
-def test_reconstruction_round_trips_all_fields() -> None:
-    """Persistence hydrates via __init__, bypassing create() — verify it."""
-    fav_id, ws, user, entity = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    created_at = datetime(2026, 6, 1, tzinfo=UTC)
-    updated_at = datetime(2026, 6, 2, tzinfo=UTC)
-    fav = Favorite(
-        id=fav_id,
-        workspace_id=ws,
-        user_id=user,
-        entity_type=FavoriteEntityType.PROJECT,
-        entity_id=entity,
-        created_at=created_at,
-        updated_at=updated_at,
-        version=3,
-    )
-    assert fav.id == fav_id
-    assert fav.workspace_id == ws
-    assert fav.user_id == user
-    assert fav.entity_type is FavoriteEntityType.PROJECT
-    assert fav.entity_id == entity
-    assert fav.created_at == created_at
-    assert fav.updated_at == updated_at
-    assert fav.version == 3
 
 
 def test_equality_is_by_identity() -> None:

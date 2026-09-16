@@ -47,7 +47,6 @@ vi.mock("../../hooks/use-targets", () => ({
       { id: "t-inherited", name: "NadD", target_type: "single_protein" },
     ],
   }),
-  useCreateTarget: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 vi.mock("@/features/workspace-config/hooks/use-ontology-slots", () => ({

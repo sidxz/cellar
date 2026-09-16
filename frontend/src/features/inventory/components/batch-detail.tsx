@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { Paperclip, Pencil } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useBatch, useUpdateBatch } from "../hooks/use-batches";

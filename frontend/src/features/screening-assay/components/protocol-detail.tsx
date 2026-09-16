@@ -24,7 +24,7 @@ import { Label } from "@/shared/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import {
   Activity,
   AlertTriangle,
@@ -157,6 +157,11 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                 Duplicate
               </DropdownMenuItem>,
             );
+          }
+
+          // The server decides: a draft the caller created (or any draft, for
+          // an admin) that no campaign, run, flag or template still uses.
+          if (!locked && p.can_delete) {
             destructiveItems.push(
               <DropdownMenuItem
                 key="delete"

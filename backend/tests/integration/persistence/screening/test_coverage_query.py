@@ -335,3 +335,96 @@ class TestProtocolGap:
 
         # Union of A,B screened {m1,m2,m3}; m4 only on non-attaching X -> {m4}.
         assert set(gap) == {g.m4}
+
+
+class TestRunsCoverage:
+    """The campaign path: explicit runs × explicit collections, no link table."""
+
+    async def test_union_over_the_given_runs(self, uow, workspace_id):
+        g = await _seed_graph(uow, workspace_id)
+        query = SQLAlchemyCollectionCoverageQuery(uow)
+
+        async with uow:
+            result = await query.runs_coverage(workspace_id, [g.coll_c], [g.run_a, g.run_b])
+
+        # A (m1,m2) plus B (m2,m3) = 3 distinct members, counted once each.
+        assert len(result) == 1
+        assert result[0].ref.id == g.coll_c
+        assert result[0].covered == 3
+        assert result[0].total == 4
+
+    async def test_counts_a_run_that_never_attached_the_collection(self, uow, workspace_id):
+        g = await _seed_graph(uow, workspace_id)
+        query = SQLAlchemyCollectionCoverageQuery(uow)
+
+        async with uow:
+            result = await query.runs_coverage(
+                workspace_id, [g.coll_c], [g.run_a, g.run_b, g.run_x]
+            )
+
+        # X read m4 without ever attaching C: the campaign names its own runs,
+        # so run_collections must not gate this count (it does gate the
+        # protocol rollup, which reports 3 for the same graph).
+        assert result[0].covered == 4
+
+    async def test_no_runs_means_nothing_screened(self, uow, workspace_id):
+        g = await _seed_graph(uow, workspace_id)
+        query = SQLAlchemyCollectionCoverageQuery(uow)
+
+        async with uow:
+            result = await query.runs_coverage(workspace_id, [g.coll_c], [])
+
+        # A campaign with no seed runs still lists its libraries, at 0.
+        assert result[0].covered == 0
+        assert result[0].total == 4
+        assert result[0].fraction == 0.0
+
+    async def test_empty_collection_keeps_null_fraction(self, uow, workspace_id):
+        g = await _seed_graph(uow, workspace_id)
+        query = SQLAlchemyCollectionCoverageQuery(uow)
+
+        async with uow:
+            result = await query.runs_coverage(workspace_id, [g.coll_c, g.coll_c2], [g.run_a])
+
+        by_coll = {cov.ref.id: cov for cov in result}
+        assert by_coll[g.coll_c2].total == 0
+        assert by_coll[g.coll_c2].fraction is None
+        assert by_coll[g.coll_c].ref.type == "library"
+
+    async def test_no_collections_returns_empty(self, uow, workspace_id):
+        query = SQLAlchemyCollectionCoverageQuery(uow)
+        async with uow:
+            assert await query.runs_coverage(workspace_id, [], [uuid.uuid4()]) == []
+
+
+class TestRunsGap:
+    async def test_gap_is_members_no_given_run_read(self, uow, workspace_id):
+        g = await _seed_graph(uow, workspace_id)
+        query = SQLAlchemyCollectionCoverageQuery(uow)
+
+        async with uow:
+            gap = await query.runs_gap(workspace_id, g.coll_c, [g.run_a, g.run_b])
+
+        # A,B read {m1,m2,m3} -> only m4 is left.
+        assert set(gap) == {g.m4}
+
+    async def test_gap_without_runs_is_full_membership(self, uow, workspace_id):
+        g = await _seed_graph(uow, workspace_id)
+        query = SQLAlchemyCollectionCoverageQuery(uow)
+
+        async with uow:
+            gap = await query.runs_gap(workspace_id, g.coll_c, [])
+
+        assert set(gap) == {g.m1, g.m2, g.m3, g.m4}
+
+    async def test_gap_pages(self, uow, workspace_id):
+        g = await _seed_graph(uow, workspace_id)
+        query = SQLAlchemyCollectionCoverageQuery(uow)
+
+        async with uow:
+            first = await query.runs_gap(workspace_id, g.coll_c, [], offset=0, limit=2)
+            second = await query.runs_gap(workspace_id, g.coll_c, [], offset=2, limit=2)
+
+        assert len(first) == 2
+        assert len(second) == 2
+        assert set(first) | set(second) == {g.m1, g.m2, g.m3, g.m4}

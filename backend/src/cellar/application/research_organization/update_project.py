@@ -23,7 +23,7 @@ class UpdateProjectCommand(Command):
     workspace_id: uuid.UUID
     project_id: uuid.UUID
     name: str | object = UNSET
-    description: str | None | object = UNSET
+    description: str | object | None = UNSET
 
 
 class UpdateProject:

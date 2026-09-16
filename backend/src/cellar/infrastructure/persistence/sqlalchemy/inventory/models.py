@@ -6,6 +6,7 @@ import uuid
 from datetime import date
 
 from sqlalchemy import (
+    Boolean,
     Date,
     Float,
     ForeignKey,
@@ -166,9 +167,13 @@ class RegisteredPlateModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixi
         Uuid, ForeignKey("storage_locations.id")
     )
     project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    owner_org_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     template_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     parent_plate_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("registered_plates.id")
+    )
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("plate_groups.id", ondelete="SET NULL")
     )
     registered_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
@@ -179,7 +184,61 @@ class RegisteredPlateModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixi
         Index("ix_reg_plate_type", "workspace_id", "plate_type"),
         Index("ix_reg_plate_location", "storage_location_id"),
         Index("ix_reg_plate_project", "project_id"),
+        Index("ix_reg_plate_owner_org", "workspace_id", "owner_org_id"),
         Index("ix_reg_plate_parent", "parent_plate_id"),
+        Index("ix_reg_plate_group", "group_id"),
+    )
+
+
+class OrgPlatePolicyModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """Per-org plate loan policy within a workspace."""
+
+    __tablename__ = "org_plate_policies"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    require_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    confirmation: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="admin_confirm"
+    )
+    default_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "org_id", name="uq_org_plate_policy_ws_org"),
+    )
+
+
+class PlateGroupModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """ORM model for the plate_groups table."""
+
+    __tablename__ = "plate_groups"
+
+    owner_org_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    parent_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("plate_groups.id", ondelete="RESTRICT")
+    )
+    group_type: Mapped[str | None] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(Text)
+    state: Mapped[str | None] = mapped_column(String(50))
+    storage_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("storage_locations.id", ondelete="SET NULL")
+    )
+    initial_volume_ul: Mapped[float | None] = mapped_column(Float)
+    initial_concentration_mm: Mapped[float | None] = mapped_column(Float)
+    compound_count: Mapped[int | None] = mapped_column(Integer)
+    scientist: Mapped[str | None] = mapped_column(String(200))
+    collection_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("collections.id", ondelete="SET NULL")
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+    # uq_plate_groups_ws_org_parent_name is NOT declared here — it's a raw-SQL
+    # NULLS NOT DISTINCT index (see migration 062) that ORM constructs can't
+    # express; the migration owns it.
+    __table_args__ = (
+        Index("ix_plate_groups_ws_org", "workspace_id", "owner_org_id"),
+        Index("ix_plate_groups_parent", "parent_group_id"),
+        Index("ix_plate_groups_collection", "collection_id"),
     )
 
 

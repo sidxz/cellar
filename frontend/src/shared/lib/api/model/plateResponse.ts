@@ -4,26 +4,33 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { PlateFormat } from './plateFormat';
+import type { PlateType } from './plateType';
 import type { PlateResponseWellMap } from './plateResponseWellMap';
+import type { PlateStatus } from './plateStatus';
 import type { PlateResponseStorageLocationId } from './plateResponseStorageLocationId';
 import type { PlateResponseProjectId } from './plateResponseProjectId';
 import type { PlateResponseTemplateId } from './plateResponseTemplateId';
 import type { PlateResponseParentPlateId } from './plateResponseParentPlateId';
 import type { PlateResponseNotes } from './plateResponseNotes';
+import type { PlateResponseOwnerOrgId } from './plateResponseOwnerOrgId';
+import type { PlateResponseGroupId } from './plateResponseGroupId';
 
 export interface PlateResponse {
   id: string;
   workspace_id: string;
   barcode: string;
   plate_label: string;
-  format: string;
-  plate_type: string;
+  format: PlateFormat;
+  plate_type: PlateType;
   well_map?: PlateResponseWellMap;
-  status: string;
+  status: PlateStatus;
   storage_location_id?: PlateResponseStorageLocationId;
   project_id?: PlateResponseProjectId;
   template_id?: PlateResponseTemplateId;
   parent_plate_id?: PlateResponseParentPlateId;
   registered_by: string;
   notes?: PlateResponseNotes;
+  owner_org_id?: PlateResponseOwnerOrgId;
+  group_id?: PlateResponseGroupId;
 }

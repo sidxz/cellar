@@ -18,12 +18,13 @@ async def load(ctx: DemoContext) -> int:
         CreateShipmentCommand,
         DeliverShipment,
         DeliverShipmentCommand,
-        MarkShipmentInTransit,
         MarkInTransitCommand,
+        MarkShipmentInTransit,
         ShipmentItemInput,
         ShipShipment,
         ShipShipmentCommand,
     )
+    from cellar.domain.inventory.enums import ShipmentItemType
 
     data: dict = ctx.data("shipments.json")
     create_uc = ctx.container[CreateShipment]
@@ -35,7 +36,8 @@ async def load(ctx: DemoContext) -> int:
     for key, rec in data.items():
         items = [
             ShipmentItemInput(
-                sample_id=ctx.registry.get(sample_ref),
+                item_type=ShipmentItemType.SAMPLE,
+                item_id=ctx.registry.get(sample_ref),
                 amount_value=5.0,
                 amount_unit="mg",
             )

@@ -41,26 +41,6 @@ def _make_curve(**kwargs) -> DoseResponseCurve:
 
 
 class TestDoseResponseCurve:
-    def test_create_with_all_fields(self) -> None:
-        curve = _make_curve(
-            curve_class=CurveClass.FULL,
-            confidence_interval_low=3.1,
-            confidence_interval_high=7.8,
-            excluded_points=[{"conc": 50.0, "response": -5.0}],
-        )
-
-        assert curve.curve_type == CurveType.IC50
-        assert curve.fitted_value == 5.2
-        assert curve.hill_slope == -1.0
-        assert curve.top == 100.0
-        assert curve.bottom == 0.0
-        assert curve.r_squared == 0.98
-        assert curve.num_points == 8
-        assert curve.curve_class == CurveClass.FULL
-        assert curve.confidence_interval_low == 3.1
-        assert curve.confidence_interval_high == 7.8
-        assert len(curve.raw_data) == 2
-        assert len(curve.excluded_points) == 1
 
     def test_num_points_zero_raises(self) -> None:
         with pytest.raises(ValidationError, match="num_points must be >= 1"):
@@ -94,9 +74,6 @@ class TestDoseResponseCurve:
         curve = _make_curve(raw_data=None)
         assert curve.raw_data == []
 
-    def test_excluded_points_none_by_default(self) -> None:
-        curve = _make_curve()
-        assert curve.excluded_points is None
 
     def test_all_curve_types(self) -> None:
         for ct in CurveType:

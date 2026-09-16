@@ -189,6 +189,7 @@ def _build_preview_uc(
     protocol: Protocol | None = None,
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
     existing_readouts: list | None = None,
+    has_wellless_rows: bool = False,
 ) -> tuple[PreviewRunFile, InMemoryPreviewStore]:
     run_repo = AsyncMock()
     run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
@@ -215,6 +216,7 @@ def _build_preview_uc(
 
     readout_data_repo = AsyncMock()
     readout_data_repo.find_by_run = AsyncMock(return_value=existing_readouts or [])
+    readout_data_repo.has_wellless_rows = AsyncMock(return_value=has_wellless_rows)
 
     store = store or InMemoryPreviewStore(ttl_seconds=60)
     return (
@@ -244,6 +246,9 @@ def _build_import_uc(
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
     existing_readouts: list | None = None,
     upload_attachment=None,
+    plate_repo=None,
+    plate_visibility=None,
+    has_wellless_rows: bool = False,
 ) -> tuple[ImportRunFile, FakeUoW, AsyncMock]:
     uow = FakeUoW()
 
@@ -256,6 +261,7 @@ def _build_import_uc(
 
     readout_data_repo = AsyncMock()
     readout_data_repo.find_by_run = AsyncMock(return_value=existing_readouts or [])
+    readout_data_repo.has_wellless_rows = AsyncMock(return_value=has_wellless_rows)
     saved_list = save_bulk if save_bulk is not None else []
 
     async def _save_bulk(entities):
@@ -303,6 +309,8 @@ def _build_import_uc(
         preview_store=store,
         plate_template_repo=_make_plate_template_repo(plate_templates),
         upload_attachment=upload_attachment,
+        plate_repo=plate_repo,
+        plate_visibility=plate_visibility,
     )
     return uc, uow, run_repo
 
@@ -341,6 +349,7 @@ class TestPreviewRunFile:
             b"P1,A1,100,LG-1,0.5\n"
             b"P1,A2,50,LG-1,0.4\n"
             b"P1,A3,,,0.9\n"  # blank
+            b"P1,,,,0.1\n"  # no well -> dropped at normalization, counted in rows_skipped
         )
         result = await uc(
             PreviewRunFileQuery(
@@ -353,14 +362,15 @@ class TestPreviewRunFile:
         )
         assert isinstance(result, Success), result
         preview = result.unwrap()
-        assert preview.total_rows == 3
+        assert preview.total_rows == 4
+        assert preview.rows_skipped == 1
         assert len(preview.plates) == 1
         plate = preview.plates[0]
         assert plate.plate_name == "P1"
         assert plate.sample_count == 2
         assert plate.blank_count == 1
-        assert preview.matched_batches == 1
-        assert preview.unmatched_batches == ()
+        assert preview.matched_batch_count == 1
+        assert preview.unmatched_batch_refs == ()
         # Cached for follow-up import
         assert preview.preview_id in store._items  # noqa: SLF001
 
@@ -380,8 +390,30 @@ class TestPreviewRunFile:
             auth=auth,
         )
         preview = result.unwrap()
-        assert preview.unmatched_batches == ("LG-MISSING",)
-        assert preview.matched_batches == 0
+        assert preview.unmatched_batch_refs == ("LG-MISSING",)
+        assert preview.matched_batch_count == 0
+
+    @pytest.mark.asyncio
+    async def test_preview_onto_a_wellless_run_is_refused(self) -> None:
+        """A run already holding summary rows has no plates to preview into."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        uc, _ = _build_preview_uc(run=run, has_wellless_rows=True)
+
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=b"Plate Name,Well,Raw Data\nP1,A1,0.5\n",
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        error = result.failure()
+        assert isinstance(error, ConflictError)
+        assert "well-less summary results" in str(error)
 
 
 # ---------------------------------------------------------------------------
@@ -434,6 +466,7 @@ class TestImportRunFile:
             b"P1,A1,100,LG-1,0.5\n"
             b"P1,A2,50,LG-1,0.4\n"
             b"P1,A3,,,0.9\n"
+            b"P1,,,,0.1\n"  # no well -> dropped at normalization, counted in rows_skipped
         )
         preview_id = _seed_preview(
             store,
@@ -469,12 +502,16 @@ class TestImportRunFile:
         result = await uc(cmd, auth=auth)
         assert isinstance(result, Success), result
         out = result.unwrap()
+        # Same vocabulary as the preview: total_rows is the RAW file row count,
+        # rows_skipped the rows dropped at normalization (no parseable well).
+        assert out.total_rows == 4
+        assert out.rows_skipped == 1
         assert out.plates_created == 1
         # Sample wells (A1, A2) + blank (A3) — all 3 wells created
         assert out.wells_created == 3
         # Readouts written for all wells with values, including the blank
         # (control wells need raw values for plate normalization).
-        assert out.readouts_created == 3
+        assert out.values_inserted == 3
         assert len(saved) == 3
         # Protocol has no control layout + normalization is NONE → blank row
         # falls through to SAMPLE; counted as unclassified rather than typed.
@@ -488,6 +525,111 @@ class TestImportRunFile:
         # Run aggregate state
         assert len(run.plates) == 1
         assert len(run.wells) == 3
+
+    @pytest.mark.asyncio
+    async def test_import_onto_a_wellless_run_is_refused(self) -> None:
+        """Plate-shaped import must not land on a run holding summary rows."""
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = b"Plate Name,Well,Raw Data\nP1,A1,0.5\n"
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+
+        saved: list = []
+        uc, uow, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={},
+            store=store,
+            save_bulk=saved,
+            has_wellless_rows=True,
+        )
+
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate Name",
+                    readout_columns=(
+                        ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ConflictError)
+        assert saved == []
+        assert not uow.committed
+        assert run.plates == []
+
+    @pytest.mark.asyncio
+    async def test_mapping_onto_a_calculated_readout_is_refused(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        protocol.readout_definitions.append(
+            ReadoutDefinition(
+                protocol_id=protocol.id,
+                name="Percent Inhibition",
+                data_type=ReadoutDataType.NUMERIC,
+                is_calculated=True,
+                calculation_formula="100 - [Raw Data]",
+            )
+        )
+        calc_id = protocol.readout_definitions[-1].id
+
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=b"Well,Batch,Percent Inhibition\nA1,LG-1,42\n",
+            filename="x.csv",
+        )
+
+        saved: list = []
+        uc, uow, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            save_bulk=saved,
+        )
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                batch_ref="Batch",
+                readout_columns=(
+                    ReadoutColumn(header="Percent Inhibition", readout_definition_id=calc_id),
+                ),
+            ),
+        )
+
+        result = await uc(cmd, auth=auth)
+
+        assert isinstance(result, Failure), result
+        message = str(result.failure())
+        assert "Percent Inhibition" in message
+        assert "calculated" in message
+        assert saved == []
+        assert not uow.committed
 
     @pytest.mark.asyncio
     async def test_preview_id_is_single_use(self) -> None:
@@ -650,12 +792,12 @@ class TestImportRunFile:
             auth=auth,
         )
         out = result.unwrap()
-        assert out.unmatched_batches == ["LG-MISSING"]
+        assert out.unmatched_batch_refs == ["LG-MISSING"]
         # A1 was skipped (unmatched), A2 is a blank — only one well created.
         assert out.wells_created == 1
         # The blank well still gets its readout written (non-sample readouts
         # have None molecule/batch and feed plate normalization).
-        assert out.readouts_created == 1
+        assert out.values_inserted == 1
 
     @pytest.mark.asyncio
     async def test_normalization_without_control_layout_fails(self) -> None:
@@ -1093,10 +1235,10 @@ class TestConflictAwareReimport:
         # one readout conflict reported (A1's Raw Data).
         assert out.plates_created == 0
         assert out.wells_created == 1
-        assert out.readouts_created == 1
+        assert out.values_inserted == 1
         assert len(saved) == 1
-        assert len(out.conflicts_readout) == 1
-        c = out.conflicts_readout[0]
+        assert len(out.readout_conflicts) == 1
+        c = out.readout_conflicts[0]
         assert c.plate_name == "P1"
         assert c.well_position == "A1"
         assert c.readout_definition_id == rd_id
@@ -1174,10 +1316,10 @@ class TestConflictAwareReimport:
 
         # Whole row skipped — no readout written, no well created.
         assert out.wells_created == 0
-        assert out.readouts_created == 0
+        assert out.values_inserted == 0
         assert len(saved) == 0
-        assert len(out.conflicts_well_metadata) == 1
-        wc = out.conflicts_well_metadata[0]
+        assert len(out.well_conflicts) == 1
+        wc = out.well_conflicts[0]
         assert wc.plate_name == "P1"
         assert wc.well_position == "A1"
         assert "dose" in wc.reason
@@ -1251,7 +1393,7 @@ class TestConflictAwareReimport:
 
         assert out.plates_created == 1
         assert out.wells_created == 1
-        assert out.readouts_created == 1
+        assert out.values_inserted == 1
         # Run aggregate now has both plates
         assert len(run.plates) == 2
         plate_names = {(p.plate_map or {}).get("name") for p in run.plates}
@@ -1341,9 +1483,9 @@ class TestConflictAwareReimport:
         out = result.unwrap()
 
         # Raw Data conflict; Scientist writes.
-        assert out.readouts_created == 1
-        assert len(out.conflicts_readout) == 1
-        assert out.conflicts_readout[0].readout_definition_id == raw_rd_id
+        assert out.values_inserted == 1
+        assert len(out.readout_conflicts) == 1
+        assert out.readout_conflicts[0].readout_definition_id == raw_rd_id
         # The one saved row is the Scientist text readout.
         assert len(saved) == 1
         assert saved[0].readout_definition_id == scientist_rd_id
@@ -1444,6 +1586,7 @@ def _build_repreview_uc(
 
     readout_data_repo = AsyncMock()
     readout_data_repo.find_by_run = AsyncMock(return_value=[])
+    readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
 
     return RepreviewRunFile(
         uow=FakeUoW(),
@@ -1505,7 +1648,7 @@ class TestRepreviewRunFile:
         # Same preview_id reused — caller can keep referring to it.
         assert preview.preview_id == preview_id
         # Mapping change took effect: no batch_ref column was used.
-        assert preview.unmatched_batches == ()
+        assert preview.unmatched_batch_refs == ()
         assert "MMV2215819" in preview.unmatched_compound_refs
 
     @pytest.mark.asyncio
@@ -1611,6 +1754,7 @@ class TestAutoCreateMissingBatches:
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_run = AsyncMock(return_value=[])
+        readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
 
         store = InMemoryPreviewStore(ttl_seconds=60)
 
@@ -1652,8 +1796,8 @@ class TestAutoCreateMissingBatches:
         assert "test.csv" in call_cmd.source_label
 
         # After auto-create, the ref resolved → not in unmatched list.
-        assert "MISSING-BATCH-X" not in preview.unmatched_batches
-        assert preview.matched_batches == 1
+        assert "MISSING-BATCH-X" not in preview.unmatched_batch_refs
+        assert preview.matched_batch_count == 1
         assert preview.auto_created_batches == 1
 
     @pytest.mark.asyncio
@@ -1681,6 +1825,7 @@ class TestAutoCreateMissingBatches:
         protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_run = AsyncMock(return_value=[])
+        readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
 
         store = InMemoryPreviewStore(ttl_seconds=60)
         uc = PreviewRunFile(
@@ -1710,7 +1855,7 @@ class TestAutoCreateMissingBatches:
         assert isinstance(result, Success), result
         preview = result.unwrap()
         ensure_uc.assert_not_called()
-        assert "MISSING-BATCH-X" in preview.unmatched_batches
+        assert "MISSING-BATCH-X" in preview.unmatched_batch_refs
         assert preview.auto_created_batches == 0
 
     @pytest.mark.asyncio
@@ -1760,6 +1905,7 @@ class TestAutoCreateMissingBatches:
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_run = AsyncMock(return_value=[])
+        readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
         async def _save_bulk(entities):
             saved.extend(entities)
         readout_data_repo.save_bulk = _save_bulk
@@ -1812,7 +1958,7 @@ class TestAutoCreateMissingBatches:
 
         assert out.auto_created_batches == 1
         # The batch resolved → not in unmatched list.
-        assert "MISSING-BATCH-X" not in out.unmatched_batches
+        assert "MISSING-BATCH-X" not in out.unmatched_batch_refs
 
     @pytest.mark.asyncio
     async def test_auto_create_skipped_when_compound_unresolved(self) -> None:
@@ -1837,6 +1983,7 @@ class TestAutoCreateMissingBatches:
         protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=None)
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_run = AsyncMock(return_value=[])
+        readout_data_repo.has_wellless_rows = AsyncMock(return_value=False)
 
         store = InMemoryPreviewStore(ttl_seconds=60)
         uc = PreviewRunFile(
@@ -1867,5 +2014,113 @@ class TestAutoCreateMissingBatches:
         preview = result.unwrap()
         # compound unresolved → no auto-create
         ensure_uc.assert_not_called()
-        assert "MISSING-BATCH-X" in preview.unmatched_batches
+        assert "MISSING-BATCH-X" in preview.unmatched_batch_refs
         assert preview.auto_created_batches == 0
+
+
+# ---------------------------------------------------------------------------
+# Import auto-link to inventory plates (S15 spec §5.3)
+# ---------------------------------------------------------------------------
+
+
+class TestImportAutoLinksInventoryPlate:
+    """Every *new* plate the import creates is resolved by its file name
+    against inventory; a miss (or a hidden plate) leaves the link null."""
+
+    @staticmethod
+    def _inventory(workspace_id: uuid.UUID, org_id: uuid.UUID, label: str):
+        from types import SimpleNamespace
+
+        from cellar.application.inventory.plate_visibility import PlateVisibilityService
+        from cellar.domain.inventory.enums import PlateType
+        from cellar.domain.inventory.registered_plate import RegisteredPlate
+        from cellar.domain.shared.value_objects import Barcode
+        from tests.fakes.fake_registered_plate_repository import (
+            FakeRegisteredPlateRepository,
+        )
+
+        plate = RegisteredPlate.register(
+            workspace_id=workspace_id,
+            owner_org_id=org_id,
+            barcode=Barcode(value="000777"),
+            plate_label=label,
+            format=PlateFormat.F96,
+            plate_type=PlateType.ASSAY,
+            registered_by=uuid.uuid4(),
+        )
+
+        class _Dir:
+            async def list_orgs(self):
+                return [SimpleNamespace(id=org_id), SimpleNamespace(id=uuid.uuid4())]
+
+        return plate, FakeRegisteredPlateRepository([plate]), PlateVisibilityService(_Dir())
+
+    async def _import(self, auth, plate_repo, visibility) -> Run:
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        rd_id = protocol.readout_definitions[0].id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Raw Data\n"
+            b"SAC3-014-3070,A1,100,LG-1,0.5\n"
+            b"UNKNOWN-PLATE,A1,100,LG-1,0.4\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            plate_repo=plate_repo,
+            plate_visibility=visibility,
+        )
+        cmd = ImportRunFileCommand(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(
+                well="Well",
+                plate_name="Plate Name",
+                concentration="Concentration",
+                batch_ref="Batch",
+                readout_columns=(ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),),
+            ),
+        )
+        result = await uc(cmd, auth=auth)
+        assert isinstance(result, Success), result
+        assert result.unwrap().plates_created == 2
+        return run
+
+    async def test_matching_label_links_and_miss_stays_null(self) -> None:
+        org_id = uuid.uuid4()
+        auth = FakeAuth()
+        auth.org_id = org_id
+        rp, plate_repo, visibility = self._inventory(auth.workspace_id, org_id, "SAC3-014-3070")
+
+        run = await self._import(auth, plate_repo, visibility)
+
+        by_name = {p.plate_map["name"]: p for p in run.plates}
+        assert by_name["SAC3-014-3070"].registered_plate_id == rp.id
+        assert by_name["UNKNOWN-PLATE"].registered_plate_id is None
+
+    async def test_hidden_foreign_org_plate_is_not_linked(self) -> None:
+        auth = FakeAuth()
+        auth.org_id = uuid.uuid4()
+        _, plate_repo, visibility = self._inventory(
+            auth.workspace_id, uuid.uuid4(), "SAC3-014-3070"
+        )
+
+        run = await self._import(auth, plate_repo, visibility)
+
+        assert all(p.registered_plate_id is None for p in run.plates)
+
+    async def test_without_inventory_wiring_nothing_links(self) -> None:
+        auth = FakeAuth()
+        run = await self._import(auth, None, None)
+        assert all(p.registered_plate_id is None for p in run.plates)

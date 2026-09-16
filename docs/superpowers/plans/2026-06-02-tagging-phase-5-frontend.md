@@ -584,13 +584,13 @@ git commit -m "feat(tagging-ui): TagEditor with key/value autocomplete"
 - [ ] **Step 1:** In the collection detail header's meta area, add a tags row below the badges:
 ```tsx
 import { TagEditor } from "@/features/tagging/components/tag-editor";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 // ...
 <div className="mt-2">
   <TagEditor entity="collections" entityId={collection.id} canEdit={useAuthzHasRole("editor")} />
 </div>
 ```
-(Use the app's existing role hook — confirm whether it's `useAuthzHasRole("editor")` or similar from `@sentinel-auth/nextjs`, as used in `vocabulary-list.tsx`.)
+(Use the app's existing role hook — confirm whether it's `useAuthzHasRole("editor")` or similar from `@duar-auth/nextjs`, as used in `vocabulary-list.tsx`.)
 
 - [ ] **Step 2:** Do the same on the molecule detail page (entity `"molecules"`, `entityId={molecule.id}`), placed in the header/metadata area.
 

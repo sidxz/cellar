@@ -12,6 +12,7 @@ import type { RegisterPlateBodyProjectId } from './registerPlateBodyProjectId';
 import type { RegisterPlateBodyTemplateId } from './registerPlateBodyTemplateId';
 import type { RegisterPlateBodyParentPlateId } from './registerPlateBodyParentPlateId';
 import type { RegisterPlateBodyNotes } from './registerPlateBodyNotes';
+import type { RegisterPlateBodyOwnerOrgId } from './registerPlateBodyOwnerOrgId';
 
 export interface RegisterPlateBody {
   barcode: string;
@@ -24,4 +25,5 @@ export interface RegisterPlateBody {
   template_id?: RegisterPlateBodyTemplateId;
   parent_plate_id?: RegisterPlateBodyParentPlateId;
   notes?: RegisterPlateBodyNotes;
+  owner_org_id?: RegisterPlateBodyOwnerOrgId;
 }

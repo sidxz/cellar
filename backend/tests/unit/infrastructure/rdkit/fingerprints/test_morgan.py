@@ -3,12 +3,6 @@ from rdkit import Chem
 from cellar.infrastructure.rdkit.fingerprints.morgan import MorganAlgorithm
 
 
-def test_metadata() -> None:
-    alg = MorganAlgorithm()
-    assert alg.name == "morgan"
-    assert alg.column_name == "morgan_bfp"
-    assert alg.cartridge_query_fn == "morganbv_fp"
-
 
 def test_compute_bytes_returns_256_bytes_for_2048_bit_fp() -> None:
     alg = MorganAlgorithm()

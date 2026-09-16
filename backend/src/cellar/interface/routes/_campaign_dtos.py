@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from cellar.application.research_organization.campaign_collection_coverage import (
+    LibraryCoverage,
+)
 from cellar.application.research_organization.preview_run_import import (
     ChannelImportConfig,
 )
@@ -22,13 +25,26 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import CampaignStage, StageCriterion
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     SelectionRule,
 )
-from cellar.domain.research_organization.source_ref import ManualRef, source_group_key
+from cellar.domain.research_organization.source_ref import (
+    ManualRef,
+    SeedRun,
+    source_group_key,
+)
+from cellar.domain.research_organization.stage_evaluation import (
+    StageCheck,
+    StageOutcomes,
+    StageResultOutcome,
+    evaluate_stages,
+    tally_stage_counts,
+)
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.domain.shared.target_ref import TargetRef
+from cellar.interface.routes._collection_coverage import CollectionCoverageResponse
 from cellar.interface.routes._target_refs import TargetRefResponse
 
 # ---------------------------------------------------------------------------
@@ -82,7 +98,6 @@ class CreateCampaignRequest(BaseModel):
     name: str
     description: str | None = None
     project_id: uuid.UUID
-    publishes_collection: bool = True
     supersedes_campaign_id: uuid.UUID | None = None
 
 
@@ -100,7 +115,8 @@ class AddFromCollectionRequest(BaseModel):
 
 class AddFromCampaignRequest(BaseModel):
     source_campaign_id: uuid.UUID
-    decision_filter: list[str] = ["selected"]
+    #: Pull only the source campaign's hits at this stage. ``None`` = every result.
+    stage_id: uuid.UUID | None = None
     description: str | None = None
 
 
@@ -145,9 +161,16 @@ class PreviewRunImportRequest(BaseModel):
 
 class AddFromRunsRequest(PreviewRunImportRequest):
     scope: str = "hits_only"  # "hits_only" | "all"
-    default_decision: str = "selected"
     description: str | None = None
     refresh_existing_cells: bool = False
+    #: When set, creates a CampaignStage from the configs that opt into
+    #: import-time filtering (use_for_filter + hit_threshold). No qualifying
+    #: config -> no stage. An existing stage with this name (case-insensitive)
+    #: is reused and its criteria replaced.
+    stage_name: str | None = None
+    #: Parent for the stage ``stage_name`` creates. Omitted on reuse leaves
+    #: the existing stage's parent alone.
+    parent_stage_id: uuid.UUID | None = None
 
 
 class AddChannelRequest(BaseModel):
@@ -158,7 +181,6 @@ class AddChannelRequest(BaseModel):
     selection_rule: str
     qualifier_handling: str
     qc_filter: dict[str, Any] | None = None
-    hit_threshold: HitCriterionDTO | None = None
     display_order: int = 0
     #: Normalization layer for ``readout_data`` source. Ignored for dose-response.
     normalization_applied: str | None = None
@@ -167,6 +189,9 @@ class AddChannelRequest(BaseModel):
     #: does not accept this field (a chemist wanting a different intercept
     #: creates a new channel).
     intercept_key: InterceptKeyDTO | None = None
+    #: Opt out of the campaign's run scope — resolve protocol-wide even when
+    #: the campaign was seeded from runs (spec D4).
+    resolve_from_all_runs: bool = False
 
 
 class UpdateChannelRequest(BaseModel):
@@ -179,29 +204,79 @@ class UpdateChannelRequest(BaseModel):
     label: str | None = None
     selection_rule: str | None = None
     qc_filter: dict[str, Any] | None = None
-    hit_threshold: HitCriterionDTO | None = None
+    #: Column position in the campaign grid. Reorder = PATCH each moved
+    #: channel with its new index.
+    display_order: int | None = None
+    #: Opt out of the campaign's run scope. Omitted = unchanged; flipping it
+    #: re-resolves every cell of the channel.
+    resolve_from_all_runs: bool | None = None
 
     model_config = {"extra": "forbid"}
 
 
-class SetResultDecisionRequest(BaseModel):
-    decision: str
-    reason: str | None = None
-    notes: str | None = None
+class StageCriterionDTO(BaseModel):
+    channel_id: uuid.UUID
+    operator: str  # lt, lte, gt, gte, between
+    value: float | list[float]
+
+    def to_domain(self) -> StageCriterion:
+        return StageCriterion(channel_id=self.channel_id, operator=self.operator, value=self.value)
+
+    @classmethod
+    def from_domain(cls, c: StageCriterion) -> StageCriterionDTO:
+        return cls(channel_id=c.channel_id, operator=c.operator, value=c.value)
+
+
+class AddStageRequest(BaseModel):
+    name: str
+    parent_stage_id: uuid.UUID | None = None
+    kind: Literal["criteria", "manual"] = "criteria"
+    criteria: list[StageCriterionDTO] = []
+
+
+class UpdateStageRequest(BaseModel):
+    """Partial update — omitted fields are not changed; null clears parent_stage_id.
+
+    The UC uses the domain-owned UNSET sentinel to distinguish "omit" from
+    None. We map Pydantic's model_fields_set to thread the sentinel through
+    correctly, exactly as ``UpdateChannelRequest`` does.
+    """
+
+    name: str | None = None
+    parent_stage_id: uuid.UUID | None = None
+    criteria: list[StageCriterionDTO] | None = None
+    display_order: int | None = None
+    kind: Literal["criteria", "manual"] | None = None
 
     model_config = {"extra": "forbid"}
 
 
-class BulkSetResultDecisionsRequest(BaseModel):
-    """Bulk-set decision for many CampaignResult rows in one transaction.
+class SetStageOverrideRequest(BaseModel):
+    outcome: Literal["hit", "miss"]
+    reason: str
 
-    ``result_ids`` is typically the frontend's currently-filtered subset so a
-    chemist can "Mark all visible as Selected" / "Reject all non-hits" / etc.
+
+class BulkStageOverrideRequest(BaseModel):
+    """Force (or, with ``outcome: null``, clear) one stage's verdict for N results.
+
+    ``outcome`` is a required key so a body can never silently mean "clear".
     """
 
     result_ids: list[uuid.UUID]
-    decision: str
+    outcome: Literal["hit", "miss"] | None
     reason: str | None = None
+
+    model_config = {"extra": "forbid"}
+
+
+class SetResultNotesRequest(BaseModel):
+    """Set (or, with ``null``, clear) the free-text notes on one result row.
+
+    ``notes`` is a required key: an omitted key is a 422, so an empty PATCH
+    body can never silently clear a note. Explicit ``null`` still clears.
+    """
+
+    notes: str | None
 
     model_config = {"extra": "forbid"}
 
@@ -210,7 +285,6 @@ class OverrideCellRequest(BaseModel):
     value: float | None = None
     value_qualifier: str
     unit: str
-    hit_call: str | None = None
     reason: str | None = None  # B8 — required when value differs from auto-resolved
 
 
@@ -218,16 +292,30 @@ class AddResultRowRequest(BaseModel):
     molecule_id: uuid.UUID
 
 
+class BulkRemoveResultsRequest(BaseModel):
+    result_ids: list[uuid.UUID]
+
+    model_config = {"extra": "forbid"}
+
+
 class CloseCampaignRequest(BaseModel):
-    signature_id: uuid.UUID
-    signature_meaning: str | None = None
-    #: Override the campaign's stored publishes_collection at close time.
-    #: None ⇒ keep the create-time value (default behaviour).
-    publishes_collection: bool | None = None
+    note: str | None = None
+
+
+class ReopenCampaignRequest(BaseModel):
+    reason: str
 
 
 class MirrorProtocolRequest(BaseModel):
     protocol_id: uuid.UUID
+    #: When set, creates a CampaignStage from the protocol's
+    #: recommended_hit_criteria mapped onto the mirrored channels. No
+    #: recommendation maps -> no stage. An existing stage with this name
+    #: (case-insensitive) is reused and its criteria replaced.
+    stage_name: str | None = None
+    #: Parent for the stage ``stage_name`` creates. Omitted on reuse leaves
+    #: the existing stage's parent alone.
+    parent_stage_id: uuid.UUID | None = None
 
 
 class MirrorProtocolOutcomeResponse(BaseModel):
@@ -235,6 +323,7 @@ class MirrorProtocolOutcomeResponse(BaseModel):
 
     channels_created: int
     channels_skipped: int
+    stage_created: bool
     campaign: CampaignResponse
 
 
@@ -253,7 +342,6 @@ class CampaignMeasurementResponse(BaseModel):
     value: float | None = None
     value_qualifier: str
     unit: str
-    hit_call: str | None = None
     is_manual_override: bool
     source_run_id: uuid.UUID | None = None
     source_curve_id: uuid.UUID | None = None
@@ -282,7 +370,6 @@ class CampaignMeasurementResponse(BaseModel):
             value=m.value,
             value_qualifier=m.value_qualifier.value,
             unit=m.unit,
-            hit_call=m.hit_call.value if m.hit_call is not None else None,
             is_manual_override=m.is_manual_override,
             source_run_id=m.source_run_id,
             source_curve_id=m.source_curve_id,
@@ -302,25 +389,63 @@ class CampaignMeasurementResponse(BaseModel):
         )
 
 
+class StageCheckResponse(BaseModel):
+    channel_id: uuid.UUID
+    verdict: str  # pass | fail | untested
+
+    @classmethod
+    def from_domain(cls, c: StageCheck) -> StageCheckResponse:
+        return cls(channel_id=c.channel_id, verdict=c.verdict.value)
+
+
+class StageOutcomeResponse(BaseModel):
+    stage_id: uuid.UUID
+    outcome: str  # hit | miss | untested | not_in_stage | pending
+    overridden: bool
+    override_reason: str | None = None
+    #: Who forced the verdict by hand, and when. Both null unless
+    #: ``overridden`` — enough for a client to say "kept by hand by X on
+    #: 12 Sep" without fetching the override separately.
+    overridden_by: uuid.UUID | None = None
+    overridden_at: datetime | None = None
+    checks: list[StageCheckResponse]
+
+    @classmethod
+    def from_domain(cls, o: StageResultOutcome) -> StageOutcomeResponse:
+        return cls(
+            stage_id=o.stage_id,
+            outcome=o.outcome.value,
+            overridden=o.overridden,
+            override_reason=o.override_reason,
+            overridden_by=o.overridden_by,
+            overridden_at=o.overridden_at,
+            checks=[StageCheckResponse.from_domain(c) for c in o.checks],
+        )
+
+
 class CampaignResultResponse(BaseModel):
     id: uuid.UUID
     molecule_id: uuid.UUID
     representative_batch_id: uuid.UUID | None = None
-    decision: str
-    decision_reason: str | None = None
     notes: str | None = None
     measurements: list[CampaignMeasurementResponse]
+    stage_outcomes: list[StageOutcomeResponse]
 
     @classmethod
-    def from_domain(cls, r: CampaignResult) -> CampaignResultResponse:
+    def from_domain(
+        cls,
+        r: CampaignResult,
+        outcomes: dict[uuid.UUID, StageResultOutcome] | None = None,
+    ) -> CampaignResultResponse:
         return cls(
             id=r.id,
             molecule_id=r.molecule_id,
             representative_batch_id=r.representative_batch_id,
-            decision=r.decision.value,
-            decision_reason=r.decision_reason,
             notes=r.notes,
             measurements=[CampaignMeasurementResponse.from_domain(m) for m in r.measurements],
+            stage_outcomes=[
+                StageOutcomeResponse.from_domain(o) for o in (outcomes or {}).values()
+            ],
         )
 
 
@@ -333,12 +458,12 @@ class CampaignChannelResponse(BaseModel):
     selection_rule: str
     qualifier_handling: str
     qc_filter: dict[str, Any] | None = None
-    hit_threshold: HitCriterionDTO | None = None
     display_order: int
     normalization_applied: str | None = None
     #: Identifies which intercept of a DR curve this channel surfaces.
     #: ``None`` = primary intercept (legacy single-intercept channels).
     intercept_key: InterceptKeyDTO | None = None
+    resolve_from_all_runs: bool = False
 
     @classmethod
     def from_domain(cls, ch: CampaignChannel) -> CampaignChannelResponse:
@@ -351,14 +476,94 @@ class CampaignChannelResponse(BaseModel):
             selection_rule=ch.selection_rule.value,
             qualifier_handling=ch.qualifier_handling.value,
             qc_filter=ch.qc_filter,
-            hit_threshold=HitCriterionDTO.from_domain(ch.hit_threshold)
-            if ch.hit_threshold is not None
-            else None,
             display_order=ch.display_order,
             normalization_applied=ch.normalization_applied,
             intercept_key=InterceptKeyDTO.from_domain(ch.intercept_key)
             if ch.intercept_key is not None
             else None,
+            resolve_from_all_runs=ch.resolve_from_all_runs,
+        )
+
+
+class StageCountsResponse(BaseModel):
+    """Funnel counts for one stage — ``tally_stage_counts`` buckets, verbatim.
+
+    ``population = hit + miss + untested + pending``; ``overridden`` counts
+    rows whose outcome came from a manual override (it overlaps the others).
+    """
+
+    population: int
+    hit: int
+    miss: int
+    untested: int
+    pending: int
+    not_in_stage: int
+    overridden: int
+
+
+class CollectionStageCountsResponse(BaseModel):
+    """One campaign stage's funnel, counted over a single library's rows."""
+
+    stage_id: uuid.UUID
+    counts: StageCountsResponse
+
+
+class CampaignCollectionCoverageResponse(CollectionCoverageResponse):
+    """Campaign library coverage, optionally with its per-stage funnel.
+
+    Extends the shared run/protocol coverage shape rather than widening it:
+    those two payloads must not grow a campaign-only field. ``stages`` is
+    null unless the caller asked for it (``?include=stages``) and ``[]`` for
+    a campaign with no stages.
+    """
+
+    stages: list[CollectionStageCountsResponse] | None = None
+
+    @classmethod
+    def from_library(cls, lib: LibraryCoverage) -> CampaignCollectionCoverageResponse:
+        c = lib.coverage
+        return cls(
+            id=c.ref.id,
+            name=c.ref.name,
+            type=c.ref.type,
+            covered=c.covered,
+            total=c.total,
+            fraction=c.fraction,
+            # tally_stage_counts keys its dict in ``campaign.stages`` order,
+            # which is the order the summary lists them — the contract daikon
+            # reads against. Preserved by dict insertion order, not re-sorted.
+            stages=None
+            if lib.stage_counts is None
+            else [
+                CollectionStageCountsResponse(
+                    stage_id=stage_id, counts=StageCountsResponse(**counts)
+                )
+                for stage_id, counts in lib.stage_counts.items()
+            ],
+        )
+
+
+class CampaignStageResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    parent_stage_id: uuid.UUID | None = None
+    display_order: int
+    kind: Literal["criteria", "manual"]
+    criteria: list[StageCriterionDTO]
+    #: Read-time funnel counts (never stored) — lets a list/summary surface
+    #: render the funnel without shipping every result row.
+    counts: StageCountsResponse
+
+    @classmethod
+    def from_domain(cls, s: CampaignStage, counts: dict[str, int]) -> CampaignStageResponse:
+        return cls(
+            id=s.id,
+            name=s.name,
+            parent_stage_id=s.parent_stage_id,
+            display_order=s.display_order,
+            kind=s.kind.value,
+            criteria=[StageCriterionDTO.from_domain(c) for c in s.criteria],
+            counts=StageCountsResponse(**counts),
         )
 
 
@@ -408,7 +613,26 @@ def _derive_compound_sources(
     return out
 
 
-class CampaignResponse(BaseModel):
+class SeedRunResponse(BaseModel):
+    """One run the campaign was seeded from (spec D4) — the resolution scope
+    for channels of that protocol."""
+
+    run_id: uuid.UUID
+    protocol_id: uuid.UUID
+
+    @classmethod
+    def from_domain(cls, s: SeedRun) -> SeedRunResponse:
+        return cls(run_id=s.run_id, protocol_id=s.protocol_id)
+
+
+class _CampaignFieldsResponse(BaseModel):
+    """Everything a campaign read carries apart from the result rows.
+
+    Shared by ``CampaignResponse`` (adds ``results``) and
+    ``CampaignSummaryResponse`` (adds ``result_count``) so the two reads can
+    never drift apart.
+    """
+
     id: uuid.UUID
     workspace_id: uuid.UUID
     project_id: uuid.UUID
@@ -416,25 +640,76 @@ class CampaignResponse(BaseModel):
     description: str | None = None
     status: str
     compound_sources: list[dict[str, Any]]
-    publishes_collection: bool
     supersedes_campaign_id: uuid.UUID | None = None
     superseded_by_campaign_id: uuid.UUID | None = None
-    published_collection_id: uuid.UUID | None = None
     closed_at: datetime | None = None
     closed_by: uuid.UUID | None = None
-    signature_id: uuid.UUID | None = None
+    close_note: str | None = None
     source_protocols: list[dict[str, Any]]
+    #: Runs the campaign was seeded from, in insertion order (spec D4).
+    seed_runs: list[SeedRunResponse]
     created_by: uuid.UUID
     created_at: datetime
     updated_at: datetime
     version: int
     channels: list[CampaignChannelResponse]
-    results: list[CampaignResultResponse]
+    stages: list[CampaignStageResponse]
     #: Distinct targets unioned from the runs this campaign's measurements
     #: reference — a derived, read-time field (never stored), like
     #: ``compound_sources``. Defaults to ``[]`` for callers that don't project
     #: targets (e.g. mutation responses that return the refreshed campaign).
     targets: list[TargetRefResponse] = []
+
+    @staticmethod
+    def _shared(
+        c: Campaign,
+        scientist_by_run_id: dict[uuid.UUID, str] | None,
+        targets: list[TargetRef] | None,
+    ) -> tuple[dict[str, Any], StageOutcomes]:
+        """Build the shared kwargs and hand back the stage outcomes.
+
+        Evaluates the hit-stage funnel once (pure, cheap: results x stages x
+        criteria). The outcomes come back so ``CampaignResponse`` can thread
+        each result's verdicts through in declared stage order —
+        ``evaluate_stages`` inserts entries in parent-first recursive-evaluation
+        order, which need not match ``campaign.stages`` (a child stage can be
+        declared before its parent).
+        """
+        stage_outcomes = evaluate_stages(c)
+        stage_counts = tally_stage_counts(c, stage_outcomes)
+        return {
+            "id": c.id,
+            "workspace_id": c.workspace_id,
+            "project_id": c.project_id,
+            "name": c.name,
+            "description": c.description,
+            "status": c.status.value,
+            "compound_sources": _derive_compound_sources(c.results, scientist_by_run_id),
+            "supersedes_campaign_id": c.supersedes_campaign_id,
+            "superseded_by_campaign_id": c.superseded_by_campaign_id,
+            "closed_at": c.closed_at,
+            "closed_by": c.closed_by,
+            "close_note": c.close_note,
+            "source_protocols": c.source_protocols,
+            "seed_runs": [SeedRunResponse.from_domain(s) for s in c.seed_runs],
+            "created_by": c.created_by,
+            "created_at": c.created_at,
+            "updated_at": c.updated_at,
+            "version": c.version,
+            # Sort here, not on the aggregate: the ORM relationship only
+            # re-orders on reload, so a mutation response that returns the
+            # in-memory aggregate would otherwise disagree with the next GET.
+            "channels": [
+                CampaignChannelResponse.from_domain(ch)
+                for ch in sorted(c.channels, key=lambda x: (x.display_order, x.id))
+            ],
+            "stages": [CampaignStageResponse.from_domain(s, stage_counts[s.id]) for s in c.stages],
+            "targets": [TargetRefResponse.from_ref(t) for t in (targets or [])],
+        }, stage_outcomes
+
+
+class CampaignResponse(_CampaignFieldsResponse):
+    results: list[CampaignResultResponse]
 
     @classmethod
     def from_domain(
@@ -443,35 +718,45 @@ class CampaignResponse(BaseModel):
         scientist_by_run_id: dict[uuid.UUID, str] | None = None,
         targets: list[TargetRef] | None = None,
     ) -> CampaignResponse:
+        shared, stage_outcomes = cls._shared(c, scientist_by_run_id, targets)
         return cls(
-            id=c.id,
-            workspace_id=c.workspace_id,
-            project_id=c.project_id,
-            name=c.name,
-            description=c.description,
-            status=c.status.value,
-            compound_sources=_derive_compound_sources(c.results, scientist_by_run_id),
-            publishes_collection=c.publishes_collection,
-            supersedes_campaign_id=c.supersedes_campaign_id,
-            superseded_by_campaign_id=c.superseded_by_campaign_id,
-            published_collection_id=c.published_collection_id,
-            closed_at=c.closed_at,
-            closed_by=c.closed_by,
-            signature_id=c.signature_id,
-            source_protocols=c.source_protocols,
-            created_by=c.created_by,
-            created_at=c.created_at,
-            updated_at=c.updated_at,
-            version=c.version,
-            channels=[CampaignChannelResponse.from_domain(ch) for ch in c.channels],
-            results=[CampaignResultResponse.from_domain(r) for r in c.results],
-            targets=[TargetRefResponse.from_ref(t) for t in (targets or [])],
+            **shared,
+            results=[
+                CampaignResultResponse.from_domain(
+                    r, {s.id: stage_outcomes[r.id][s.id] for s in c.stages}
+                )
+                for r in c.results
+            ],
         )
+
+
+class CampaignSummaryResponse(_CampaignFieldsResponse):
+    """A campaign without its result rows — the list + summary read.
+
+    Stage ``counts`` carry the funnel, so a caller that only needs "how many
+    compounds cleared each stage" never pays for the row payload.
+    """
+
+    result_count: int
+
+    @classmethod
+    def from_domain(
+        cls,
+        c: Campaign,
+        scientist_by_run_id: dict[uuid.UUID, str] | None = None,
+        targets: list[TargetRef] | None = None,
+    ) -> CampaignSummaryResponse:
+        shared, _ = cls._shared(c, scientist_by_run_id, targets)
+        return cls(**shared, result_count=len(c.results))
 
 
 class AddResultsOutcomeResponse(BaseModel):
     added: int
     skipped: int
+    #: True only for the add-from-runs outcome when a stage was actually
+    #: created from the requested stage_name; other add-results outcomes
+    #: (collection, campaign) never create a stage.
+    stage_created: bool = False
     campaign: CampaignResponse
 
     @classmethod
@@ -479,13 +764,6 @@ class AddResultsOutcomeResponse(BaseModel):
         return cls(
             added=outcome.added,
             skipped=outcome.skipped,
+            stage_created=getattr(outcome, "stage_created", False),
             campaign=CampaignResponse.from_domain(outcome.campaign),
         )
-
-
-class BulkSetResultDecisionsResponse(BaseModel):
-    """Bulk-decision outcome: refreshed campaign + applied/missing counts."""
-
-    campaign: CampaignResponse
-    updated_count: int
-    missing_ids: list[uuid.UUID]

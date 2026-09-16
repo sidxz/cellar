@@ -44,7 +44,8 @@ type ImportReadoutsResult = ImportReadoutsResponse;
 export function GridImportDialog({ runId, protocolId, open, onOpenChange }: GridImportDialogProps) {
   const qc = useQueryClient();
   const { data: protocol } = useProtocol(protocolId);
-  const readoutDefs = protocol?.readout_definitions ?? [];
+  // A calculated readout is computed from its formula — never an import target.
+  const readoutDefs = (protocol?.readout_definitions ?? []).filter((rd) => !rd.is_calculated);
 
   const [file, setFile] = useState<File | null>(null);
   const [readoutId, setReadoutId] = useState<string>("");

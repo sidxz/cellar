@@ -27,6 +27,7 @@ import type {
   AddMoleculesBody,
   BulkAddRequestBody,
   BulkAddResponse,
+  CollectionPlateGroupResponse,
   CollectionResponse,
   ComposeCollectionsBody,
   CreateCollectionBody,
@@ -702,6 +703,99 @@ export function useListCollectionMoleculesApiV1CollectionsCollectionIdMoleculesG
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListCollectionMoleculesApiV1CollectionsCollectionIdMoleculesGetQueryOptions(collectionId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Plate groups (any level) linked to this collection, with plate/loan counts.
+ * @summary List Collection Plate Groups
+ */
+export const listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet = (
+    collectionId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CollectionPlateGroupResponse[]>(
+      {url: `/api/v1/collections/${collectionId}/plate-groups`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGetQueryKey = (collectionId?: string,) => {
+    return [
+    `/api/v1/collections/${collectionId}/plate-groups`
+    ] as const;
+    }
+
+    
+export const getListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGetQueryOptions = <TData = Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError = HTTPValidationError>(collectionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGetQueryKey(collectionId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>> = ({ signal }) => listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet(collectionId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(collectionId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>>
+export type ListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGetQueryError = HTTPValidationError
+
+
+export function useListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet<TData = Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError = HTTPValidationError>(
+ collectionId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet<TData = Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError = HTTPValidationError>(
+ collectionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet<TData = Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError = HTTPValidationError>(
+ collectionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Collection Plate Groups
+ */
+
+export function useListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet<TData = Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError = HTTPValidationError>(
+ collectionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListCollectionPlateGroupsApiV1CollectionsCollectionIdPlateGroupsGetQueryOptions(collectionId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

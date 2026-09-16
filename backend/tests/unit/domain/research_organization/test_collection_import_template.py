@@ -41,15 +41,6 @@ def test_update_changes_mapping_and_bumps_updated_at():
     assert tpl.updated_at >= original_updated
 
 
-def test_new_template_has_empty_usage_list():
-    tpl = CollectionImportTemplate.create(
-        workspace_id=uuid.uuid4(),
-        name="t",
-        column_mapping={"name": "X"},
-        created_by=uuid.uuid4(),
-    )
-    assert tpl.used_in_collections == []
-
 
 def test_record_usage_appends_and_bumps_updated_at():
     tpl = CollectionImportTemplate.create(

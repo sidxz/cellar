@@ -19,7 +19,7 @@ import uuid
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
-from cellar.application.screening.compound_ref_resolver import resolve_rows
+from cellar.application.screening.compound_ref_resolver import Resolutions, resolve_rows
 from cellar.application.screening.import_plan import (
     ReadoutConflict,
     WellConflict,
@@ -55,6 +55,8 @@ from cellar.application.screening.long_format_normalizer import (
     infer_mapping,
     normalize,
 )
+from cellar.application.screening.readout_entry_guard import calculated_readout_error
+from cellar.application.screening.run_shape import refuse_if_wellless
 from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
@@ -73,6 +75,14 @@ from cellar.domain.shared.errors import (
 
 # Hard cap from the plan: sync-only MVP.
 _MAX_ROWS = 50_000
+
+
+def _conflict_errors(resolutions: Resolutions) -> tuple[dict[str, str], ...]:
+    """Batch Ref / Compound Ref disagreements in the shared ``errors`` shape."""
+    return tuple(
+        {"row": f"{c.plate_name} {c.well_label}", "error": c.reason}
+        for c in resolutions.row_conflicts
+    )
 
 
 class PreviewRunFile:
@@ -119,6 +129,10 @@ class PreviewRunFile:
         if run is None:
             return Failure(NotFoundError("Run", str(input.run_id)))
 
+        wellless = await refuse_if_wellless(self._readout_data_repo, input.workspace_id, run.id)
+        if wellless is not None:
+            return Failure(wellless)
+
         try:
             table = self._parser.parse(input.file_content, input.filename)
         except TabularParseError as exc:
@@ -147,6 +161,9 @@ class PreviewRunFile:
                     data_type=rd.data_type.value,
                 )
                 for rd in protocol.readout_definitions
+                # Calculated readouts are derived from their formula — never a
+                # legal import target, so never suggested as one.
+                if not rd.is_calculated
             )
             if protocol is not None
             else ()
@@ -156,16 +173,17 @@ class PreviewRunFile:
         guessed = _build_guess_mapping(suggested)
 
         plates: tuple[PlatePreview, ...] = ()
-        matched_batches = 0
+        matched_batch_count = 0
         unmatched_set: set[str] = set()
         unmatched_compound_set: frozenset[str] = frozenset()
         ambiguous_dto: tuple[AmbiguousCompoundDTO, ...] = ()
-        row_conflict_strings: tuple[str, ...] = ()
-        matched_compounds = 0
+        errors: tuple[dict[str, str], ...] = ()
+        matched_compound_count = 0
         validation_errors: list[str] = []
         will_create_plates = 0
         will_create_wells = 0
-        will_create_readouts = 0
+        values_to_insert = 0
+        rows_skipped = 0
         well_conflicts: list[WellConflict] = []
         readout_conflicts: list[ReadoutConflict] = []
         auto_created_batches = 0
@@ -175,6 +193,7 @@ class PreviewRunFile:
             if isinstance(normalized, Success):
                 norm: NormalizedTable = normalized.unwrap()
                 plates = _summarize_plates(norm.rows, norm.plate_formats)
+                rows_skipped = norm.skipped_rows
 
                 # Build both indexes, then run the resolver. Dry-run only
                 # — no overrides at preview time.
@@ -221,20 +240,18 @@ class PreviewRunFile:
                             compound_index=compound_index,
                         )
 
-                # `matched_batches` is *distinct* batch refs that
+                # `matched_batch_count` is *distinct* batch refs that
                 # resolved (matches the original `_resolve_batches`
                 # contract — the wire format documents it as a count
                 # of unique refs, not rows).
-                matched_batches = len(batch_index)
+                matched_batch_count = len(batch_index)
                 unmatched_set = set(resolutions.unmatched_batch_refs)
                 unmatched_compound_set = resolutions.unmatched_compound_refs
-                matched_compounds = resolutions.matched_compound_count
+                matched_compound_count = resolutions.matched_compound_count
                 ambiguous_dto = tuple(
                     _to_ambiguous_dto(a) for a in resolutions.ambiguous_compounds
                 )
-                row_conflict_strings = tuple(
-                    f"{c.plate_name} {c.well_label}: {c.reason}" for c in resolutions.row_conflicts
-                )
+                errors = _conflict_errors(resolutions)
 
                 if protocol is not None:
                     templates_by_format = await _load_templates_by_format(
@@ -266,7 +283,7 @@ class PreviewRunFile:
                     )
                     will_create_plates = plan.create_plate_count
                     will_create_wells = plan.create_well_count
-                    will_create_readouts = plan.create_readout_count
+                    values_to_insert = plan.create_readout_count
                     well_conflicts = plan.well_conflicts
                     readout_conflicts = plan.readout_conflicts
 
@@ -294,20 +311,21 @@ class PreviewRunFile:
                 suggestions=suggested.suggestions,
                 sample_rows=sample,
                 plates=plates,
-                matched_batches=matched_batches,
-                unmatched_batches=tuple(sorted(unmatched_set)),
+                matched_batch_count=matched_batch_count,
+                unmatched_batch_refs=tuple(sorted(unmatched_set)),
                 total_rows=table.row_count,
                 expires_in_seconds=int(ttl),
                 validation_errors=tuple(validation_errors),
                 will_create_plates=will_create_plates,
                 will_create_wells=will_create_wells,
-                will_create_readouts=will_create_readouts,
-                will_skip_wells=tuple(well_conflicts),
-                will_skip_readouts=tuple(readout_conflicts),
-                matched_compounds=matched_compounds,
+                values_to_insert=values_to_insert,
+                well_conflicts=tuple(well_conflicts),
+                readout_conflicts=tuple(readout_conflicts),
+                matched_compound_count=matched_compound_count,
                 unmatched_compound_refs=tuple(sorted(unmatched_compound_set)),
                 ambiguous_compounds=ambiguous_dto,
-                row_conflicts=row_conflict_strings,
+                errors=errors,
+                rows_skipped=rows_skipped,
                 auto_created_batches=auto_created_batches,
             )
         )
@@ -368,6 +386,10 @@ class RepreviewRunFile:
         if run is None:
             return Failure(NotFoundError("Run", str(input.run_id)))
 
+        wellless = await refuse_if_wellless(self._readout_data_repo, input.workspace_id, run.id)
+        if wellless is not None:
+            return Failure(wellless)
+
         protocol = await self._protocol_repo.find_by_id_in_workspace(
             input.workspace_id, run.protocol_id
         )
@@ -379,10 +401,25 @@ class RepreviewRunFile:
                     data_type=rd.data_type.value,
                 )
                 for rd in protocol.readout_definitions
+                # Calculated readouts are derived from their formula — never a
+                # legal import target, so never suggested as one.
+                if not rd.is_calculated
             )
             if protocol is not None
             else ()
         )
+
+        # The chemist-confirmed mapping is the first place a calculated
+        # readout can be bound to a column, so guard it here too.
+        rd_by_id = (
+            {rd.id: rd for rd in protocol.readout_definitions} if protocol is not None else {}
+        )
+        calculated = calculated_readout_error(
+            ((rc.header, rc.readout_definition_id) for rc in input.mapping.readout_columns),
+            rd_by_id,
+        )
+        if calculated is not None:
+            return Failure(calculated)
 
         # Re-run header inference for the response (so the wizard can
         # still display confidence badges) but use the user-supplied
@@ -409,7 +446,7 @@ class RepreviewRunFile:
         validation_errors: list[str] = []
         will_create_plates = 0
         will_create_wells = 0
-        will_create_readouts = 0
+        values_to_insert = 0
         well_conflicts: list[WellConflict] = []
         readout_conflicts: list[ReadoutConflict] = []
 
@@ -435,14 +472,11 @@ class RepreviewRunFile:
             )
             will_create_plates = plan.create_plate_count
             will_create_wells = plan.create_well_count
-            will_create_readouts = plan.create_readout_count
+            values_to_insert = plan.create_readout_count
             well_conflicts = plan.well_conflicts
             readout_conflicts = plan.readout_conflicts
 
         ambiguous_dto = tuple(_to_ambiguous_dto(a) for a in resolutions.ambiguous_compounds)
-        row_conflict_strings = tuple(
-            f"{c.plate_name} {c.well_label}: {c.reason}" for c in resolutions.row_conflicts
-        )
 
         sample = tuple(
             {h: (r.get(h) or "") for h in cached.table.headers} for r in cached.table.rows[:5]
@@ -456,19 +490,20 @@ class RepreviewRunFile:
                 suggestions=suggested.suggestions,
                 sample_rows=sample,
                 plates=plates,
-                matched_batches=len(batch_index),
-                unmatched_batches=tuple(sorted(resolutions.unmatched_batch_refs)),
+                matched_batch_count=len(batch_index),
+                unmatched_batch_refs=tuple(sorted(resolutions.unmatched_batch_refs)),
                 total_rows=cached.table.row_count,
                 expires_in_seconds=int(ttl),
                 validation_errors=tuple(validation_errors),
                 will_create_plates=will_create_plates,
                 will_create_wells=will_create_wells,
-                will_create_readouts=will_create_readouts,
-                will_skip_wells=tuple(well_conflicts),
-                will_skip_readouts=tuple(readout_conflicts),
-                matched_compounds=resolutions.matched_compound_count,
+                values_to_insert=values_to_insert,
+                well_conflicts=tuple(well_conflicts),
+                readout_conflicts=tuple(readout_conflicts),
+                matched_compound_count=resolutions.matched_compound_count,
                 unmatched_compound_refs=tuple(sorted(resolutions.unmatched_compound_refs)),
                 ambiguous_compounds=ambiguous_dto,
-                row_conflicts=row_conflict_strings,
+                errors=_conflict_errors(resolutions),
+                rows_skipped=norm.skipped_rows,
             )
         )

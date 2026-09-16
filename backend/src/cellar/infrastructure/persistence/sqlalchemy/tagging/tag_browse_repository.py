@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import String, cast, distinct, func, literal, select, union_all
+from sqlalchemy import String, cast, distinct, func, literal, or_, select, union_all
 
 from cellar.application.workspace_config.tagging.list_tag_entities import TaggedEntityRow
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
@@ -93,11 +93,26 @@ class SQLAlchemyTagBrowseRepository:
         match_all: bool = False,
         types: list[str] | None = None,
         limit: int = 200,
+        excluded_org_ids: set[uuid.UUID] | None = None,
     ) -> list[TaggedEntityRow]:
         if not tag_ids:
             return []
         ids = list(dict.fromkeys(tag_ids))  # dedup, preserve order
         b = self._branch
+
+        # NULL-preserving private-org exclusion, Plate branch only (S2 Task 5c)
+        # — mirrors RegisteredPlateRepository.search's exclusion clause. A
+        # plate with no owner org is never excluded; only plates explicitly
+        # owned by a private foreign org drop out of the browse results.
+        # Other entity types have no owner-org policy and are unaffected.
+        plate_extra_where = (
+            or_(
+                RegisteredPlateModel.owner_org_id.is_(None),
+                RegisteredPlateModel.owner_org_id.not_in(excluded_org_ids),
+            )
+            if excluded_org_ids
+            else None
+        )
         run_branch = (
             select(
                 literal("Run").label("entity_type"),
@@ -188,6 +203,7 @@ class SQLAlchemyTagBrowseRepository:
                 ids,
                 workspace_id,
                 match_all=match_all,
+                extra_where=plate_extra_where,
             ),
         }
         selected = [s for name, s in branches.items() if not types or name in types]

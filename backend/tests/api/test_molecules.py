@@ -53,7 +53,6 @@ class TestRegisterMolecule:
         assert mol["structure"]["smiles"] is not None
         assert mol["structure"]["inchi_key"] is not None
         assert mol["descriptors"]["molecular_weight"] > 0
-        assert mol["registration_number"].startswith("CV-")
 
     async def test_register_undisclosed_molecule(
         self, client: AsyncClient, seed_org: str

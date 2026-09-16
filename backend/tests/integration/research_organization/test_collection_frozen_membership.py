@@ -89,7 +89,6 @@ async def _create_dummy_campaign(
         project_id=uuid.uuid4(),
         name="Dummy origin campaign",
         description=None,
-        publishes_collection=False,
         created_by=uuid.uuid4(),
     )
     await campaign_repo.save(c)

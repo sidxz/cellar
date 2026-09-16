@@ -30,7 +30,8 @@ import type {
   HTTPValidationError,
   MoveRequest,
   QuarantineRequest,
-  SampleResponse
+  SampleResponse,
+  ShipmentLinkResponse
 } from '.././model';
 
 import { customInstance } from '.././custom-instance';
@@ -183,6 +184,99 @@ export function useGetSampleApiV1SamplesSampleIdGet<TData = Awaited<ReturnType<t
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetSampleApiV1SamplesSampleIdGetQueryOptions(sampleId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * Shipments that carried this sample (with the amount shipped), newest first.
+ * @summary List Sample Shipments
+ */
+export const listSampleShipmentsApiV1SamplesSampleIdShipmentsGet = (
+    sampleId: string,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ShipmentLinkResponse[]>(
+      {url: `/api/v1/samples/${sampleId}/shipments`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListSampleShipmentsApiV1SamplesSampleIdShipmentsGetQueryKey = (sampleId?: string,) => {
+    return [
+    `/api/v1/samples/${sampleId}/shipments`
+    ] as const;
+    }
+
+    
+export const getListSampleShipmentsApiV1SamplesSampleIdShipmentsGetQueryOptions = <TData = Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError = HTTPValidationError>(sampleId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSampleShipmentsApiV1SamplesSampleIdShipmentsGetQueryKey(sampleId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>> = ({ signal }) => listSampleShipmentsApiV1SamplesSampleIdShipmentsGet(sampleId, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(sampleId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListSampleShipmentsApiV1SamplesSampleIdShipmentsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>>
+export type ListSampleShipmentsApiV1SamplesSampleIdShipmentsGetQueryError = HTTPValidationError
+
+
+export function useListSampleShipmentsApiV1SamplesSampleIdShipmentsGet<TData = Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError = HTTPValidationError>(
+ sampleId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListSampleShipmentsApiV1SamplesSampleIdShipmentsGet<TData = Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError = HTTPValidationError>(
+ sampleId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListSampleShipmentsApiV1SamplesSampleIdShipmentsGet<TData = Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError = HTTPValidationError>(
+ sampleId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Sample Shipments
+ */
+
+export function useListSampleShipmentsApiV1SamplesSampleIdShipmentsGet<TData = Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError = HTTPValidationError>(
+ sampleId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSampleShipmentsApiV1SamplesSampleIdShipmentsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListSampleShipmentsApiV1SamplesSampleIdShipmentsGetQueryOptions(sampleId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from httpx import AsyncClient
 
@@ -64,3 +66,57 @@ async def test_re_register_with_create_batch_on_duplicate_true_creates_second_ba
     assert second.json()["is_new"] is False
     assert second.json()["batch"] is not None
     assert second.json()["batch_skipped"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("smiles", [ETHANOL_SMILES, None], ids=["disclosed", "undisclosed"])
+async def test_scientist_name_round_trips(
+    client: AsyncClient, originating_org_id: str, smiles: str | None
+):
+    """The person half of provenance is captured at registration and read back."""
+    body = {
+        "name": f"Prov-{smiles or 'undisclosed'}",
+        "smiles": smiles,
+        "originating_org_id": originating_org_id,
+        "scientist_name": "A. Chemist",
+    }
+    created = await client.post("/api/v1/molecules", json=body)
+    assert created.status_code == 201, created.text
+    mol = created.json()["molecule"]
+    assert mol["scientist_name"] == "A. Chemist"
+
+    read = await client.get(f"/api/v1/molecules/{mol['id']}")
+    assert read.status_code == 200
+    assert read.json()["scientist_name"] == "A. Chemist"
+
+
+@pytest.mark.asyncio
+async def test_declared_disclosure_date_round_trips_on_registration(
+    client: AsyncClient, originating_org_id: str
+):
+    body = {
+        "name": "Declared-1",
+        "smiles": "CCN",
+        "originating_org_id": originating_org_id,
+        "disclosure_date": "2024-03-15",
+    }
+    created = await client.post("/api/v1/molecules", json=body)
+    assert created.status_code == 201, created.text
+    mol = created.json()["molecule"]
+    assert mol["disclosure_date"] == "2024-03-15"
+    read = await client.get(f"/api/v1/molecules/{mol['id']}")
+    assert read.json()["disclosure_date"] == "2024-03-15"
+
+
+@pytest.mark.asyncio
+async def test_future_disclosure_date_on_registration_is_rejected(
+    client: AsyncClient, originating_org_id: str
+):
+    body = {
+        "name": "Declared-future",
+        "smiles": "CCCN",
+        "originating_org_id": originating_org_id,
+        "disclosure_date": (datetime.now(UTC).date() + timedelta(days=1)).isoformat(),
+    }
+    resp = await client.post("/api/v1/molecules", json=body)
+    assert resp.status_code == 422, resp.text

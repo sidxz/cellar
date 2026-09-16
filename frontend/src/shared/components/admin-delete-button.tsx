@@ -1,5 +1,6 @@
 "use client";
 
+import { DeleteBlockerList } from "@/shared/components/delete-blocker-list";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -97,26 +98,7 @@ export function AdminDeleteButton({
         {blockers ? (
           <div className="space-y-2 text-sm">
             <p className="font-semibold text-destructive">Cannot delete — dependencies exist:</p>
-            <ul className="list-disc pl-5">
-              {blockers.map((b) => (
-                <li key={b.table}>
-                  {b.count} {b.entity_type}
-                  {b.count !== 1 ? "s" : ""}
-                  {b.samples.length > 0 && (
-                    <span className="text-muted-foreground">
-                      :{" "}
-                      {b.samples
-                        .map((s) => {
-                          const item = s as Record<string, unknown>;
-                          return (item.label as string | null) ?? (item.id as string);
-                        })
-                        .join(", ")}
-                      {b.truncated ? ", …" : ""}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <DeleteBlockerList items={blockers} />
             <p className="text-muted-foreground text-xs pt-2">
               Resolve these references first, then retry.
             </p>

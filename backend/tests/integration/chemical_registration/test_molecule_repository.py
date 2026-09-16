@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import pytest
 import sqlalchemy as sa
 
+from cellar.domain.shared.errors import ConflictError
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (
     SQLAlchemyMoleculeRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -38,6 +39,7 @@ async def _insert_molecule_raw(
     *,
     structure_status: str = "undisclosed",
     merged_into_id: uuid.UUID | None = None,
+    inchi_key: str | None = None,
 ) -> None:
     """Insert a minimal molecule row directly via SQL."""
     org_id = ws_id
@@ -47,9 +49,9 @@ async def _insert_molecule_raw(
             "INSERT INTO molecules "
             "(id, workspace_id, name, molecule_type, structure_status, "
             "registration_status, synthesis_status, lifecycle_stage, "
-            "registration_number, originating_org_id, merged_into_id, version) "
+            "registration_number, originating_org_id, merged_into_id, inchi_key, version) "
             "VALUES (:id, :ws, :name, 'small_molecule', :ss, "
-            "'approved', 'virtual', 'registered', :reg, :org, :merged, 1)"
+            "'approved', 'virtual', 'registered', :reg, :org, :merged, :inchi_key, 1)"
         ),
         {
             "id": mol_id,
@@ -59,6 +61,7 @@ async def _insert_molecule_raw(
             "org": org_id,
             "ss": structure_status,
             "merged": merged_into_id,
+            "inchi_key": inchi_key,
         },
     )
 
@@ -95,14 +98,15 @@ async def _insert_identifier_raw(
 
 @pytest.mark.integration
 class TestFindUndisclosedByIdentifiers:
-
     async def test_single_match(self, uow: AsyncUnitOfWork) -> None:
         """An undisclosed molecule with a matching identifier is returned."""
         ws_id = uuid.uuid4()
         mol_id = uuid.uuid4()
 
         async with uow:
-            await _insert_molecule_raw(uow, mol_id, ws_id, "CV-90001", structure_status="undisclosed")
+            await _insert_molecule_raw(
+                uow, mol_id, ws_id, "CV-90001", structure_status="undisclosed"
+            )
             await _insert_identifier_raw(uow, mol_id, ws_id, "EXT-001")
             await uow.commit()
 
@@ -128,9 +132,13 @@ class TestFindUndisclosedByIdentifiers:
         mol_b = uuid.uuid4()
 
         async with uow:
-            await _insert_molecule_raw(uow, mol_a, ws_id, "CV-90010", structure_status="undisclosed")
+            await _insert_molecule_raw(
+                uow, mol_a, ws_id, "CV-90010", structure_status="undisclosed"
+            )
             await _insert_identifier_raw(uow, mol_a, ws_id, "AMB-A")
-            await _insert_molecule_raw(uow, mol_b, ws_id, "CV-90011", structure_status="undisclosed")
+            await _insert_molecule_raw(
+                uow, mol_b, ws_id, "CV-90011", structure_status="undisclosed"
+            )
             await _insert_identifier_raw(uow, mol_b, ws_id, "AMB-B")
             await uow.commit()
 
@@ -145,7 +153,9 @@ class TestFindUndisclosedByIdentifiers:
         mol_id = uuid.uuid4()
 
         async with uow:
-            await _insert_molecule_raw(uow, mol_id, ws_id, "CV-90020", structure_status="disclosed")
+            await _insert_molecule_raw(
+                uow, mol_id, ws_id, "CV-90020", structure_status="disclosed"
+            )
             await _insert_identifier_raw(uow, mol_id, ws_id, "DISC-001")
             await uow.commit()
 
@@ -160,7 +170,9 @@ class TestFindUndisclosedByIdentifiers:
         mol_id = uuid.uuid4()
 
         async with uow:
-            await _insert_molecule_raw(uow, mol_id, ws_id, "CV-90030", structure_status="undisclosed")
+            await _insert_molecule_raw(
+                uow, mol_id, ws_id, "CV-90030", structure_status="undisclosed"
+            )
             await _insert_identifier_raw(uow, mol_id, ws_id, "CaSe-MiXeD")
             await uow.commit()
 
@@ -178,9 +190,14 @@ class TestFindUndisclosedByIdentifiers:
 
         async with uow:
             # Create the target first so the tombstone's merged_into_id is valid conceptually
-            await _insert_molecule_raw(uow, target_id, ws_id, "CV-90040", structure_status="undisclosed")
             await _insert_molecule_raw(
-                uow, mol_id, ws_id, "CV-90041",
+                uow, target_id, ws_id, "CV-90040", structure_status="undisclosed"
+            )
+            await _insert_molecule_raw(
+                uow,
+                mol_id,
+                ws_id,
+                "CV-90041",
                 structure_status="undisclosed",
                 merged_into_id=target_id,
             )
@@ -204,7 +221,6 @@ class TestFindUndisclosedByIdentifiers:
 
 @pytest.mark.integration
 class TestNextRegistrationNumber:
-
     async def test_empty_workspace_starts_at_one(self, uow: AsyncUnitOfWork) -> None:
         ws = uuid.uuid4()
         async with uow:
@@ -212,9 +228,7 @@ class TestNextRegistrationNumber:
             reg = await repo.next_registration_number(ws, prefix="CC-", width=6)
         assert reg.value == "CC-000001"
 
-    async def test_continues_global_counter_across_prefixes(
-        self, uow: AsyncUnitOfWork
-    ) -> None:
+    async def test_continues_global_counter_across_prefixes(self, uow: AsyncUnitOfWork) -> None:
         ws = uuid.uuid4()
         async with uow:
             for n in (1, 982):
@@ -236,7 +250,7 @@ class TestNextRegistrationNumber:
     async def test_handles_mixed_widths(self, uow: AsyncUnitOfWork) -> None:
         ws = uuid.uuid4()
         async with uow:
-            await _insert_molecule_raw(uow, uuid.uuid4(), ws, "CV-00500")    # width 5
+            await _insert_molecule_raw(uow, uuid.uuid4(), ws, "CV-00500")  # width 5
             await _insert_molecule_raw(uow, uuid.uuid4(), ws, "CC-000600")  # width 6
             repo = SQLAlchemyMoleculeRepository(uow)
             reg = await repo.next_registration_number(ws, prefix="CC-", width=6)
@@ -257,3 +271,58 @@ class TestNextRegistrationNumber:
             repo = SQLAlchemyMoleculeRepository(uow)
             reg = await repo.next_registration_number(ws, prefix="MTB-", width=7)
         assert reg.value == "MTB-0000001"
+
+    async def test_concurrent_mints_never_collide(self, session_factory) -> None:
+        """Registrants minting at the same time each get their own number.
+
+        Every task mints, yields to the others, then inserts and commits — the
+        interleaving that let two live registrations both compute one number
+        and lose to uq_mol_ws_regnum.
+        """
+        ws = uuid.uuid4()
+
+        async def register_one() -> str:
+            async with AsyncUnitOfWork(session_factory) as uow:
+                repo = SQLAlchemyMoleculeRepository(uow)
+                reg = await repo.next_registration_number(ws, prefix="CC-", width=6)
+                await asyncio.sleep(0.05)
+                await _insert_molecule_raw(uow, uuid.uuid4(), ws, reg.value)
+                await uow.commit()
+            return reg.value
+
+        minted = await asyncio.gather(*(register_one() for _ in range(4)))
+        assert sorted(minted) == [f"CC-{n:06d}" for n in range(1, 5)]
+
+
+ASPIRIN_KEY = "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"
+
+
+class TestInchiKeyUniqueness:
+    """The database, not just RegisterMolecule, refuses a second active
+    molecule with the same InChIKey in a workspace (uq_molecules_ws_inchi_active)."""
+
+    async def test_second_active_molecule_with_same_inchi_key_is_rejected(
+        self, session_factory
+    ) -> None:
+        ws = uuid.uuid4()
+        async with AsyncUnitOfWork(session_factory) as uow:
+            await _insert_molecule_raw(uow, uuid.uuid4(), ws, "CC-000001", inchi_key=ASPIRIN_KEY)
+            await uow.commit()
+
+        with pytest.raises(ConflictError, match="uq_molecules_ws_inchi_active"):
+            async with AsyncUnitOfWork(session_factory) as uow:
+                await _insert_molecule_raw(
+                    uow, uuid.uuid4(), ws, "CC-000002", inchi_key=ASPIRIN_KEY
+                )
+                await uow.commit()
+
+    async def test_merged_away_duplicate_is_allowed(self, session_factory) -> None:
+        """A merged source keeps its InChIKey; only active rows are constrained."""
+        ws = uuid.uuid4()
+        target = uuid.uuid4()
+        async with AsyncUnitOfWork(session_factory) as uow:
+            await _insert_molecule_raw(uow, target, ws, "CC-000001", inchi_key=ASPIRIN_KEY)
+            await _insert_molecule_raw(
+                uow, uuid.uuid4(), ws, "CC-000002", inchi_key=ASPIRIN_KEY, merged_into_id=target
+            )
+            await uow.commit()

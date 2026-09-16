@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from cellar.application.shared.actor_context import current_actor
 from cellar.application.shared.transaction_context import TransactionContext
 from cellar.domain.audit_compliance.enums import (
     ActorType,
@@ -20,6 +21,8 @@ from cellar.domain.audit_compliance.enums import (
 from cellar.domain.audit_compliance.models import AuditEntry, AuditOperation
 from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.domain.shared.events import DomainEvent
+
+_NIL_USER = uuid.UUID(int=0)
 
 
 class AuditRecordingService:
@@ -103,13 +106,18 @@ class AuditRecordingService:
         Use cases should call ``record()`` directly for richer audit trails.
         This handler serves as a fallback for events that don't have
         a dedicated audit handler wired up.
+
+        Actor = the event's own user_id when set, else the request's current
+        actor (set by get_auth), else the nil SYSTEM user.
         """
+        event_user = getattr(event, "user_id", None)
+        actor_id = event_user if event_user not in (None, _NIL_USER) else current_actor()
         operation = AuditOperation(
             id=uuid.uuid4(),
             workspace_id=getattr(event, "workspace_id", uuid.UUID(int=0)),
             operation_type=_infer_operation_type(event),
-            user_id=getattr(event, "user_id", uuid.UUID(int=0)),
-            actor_type=ActorType.SYSTEM,
+            user_id=actor_id if actor_id is not None else _NIL_USER,
+            actor_type=ActorType.USER if actor_id is not None else ActorType.SYSTEM,
             entity_type=event.aggregate_type,
             entity_id=event.aggregate_id,
             status=AuditStatus.COMPLETED,

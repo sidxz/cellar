@@ -48,6 +48,10 @@ class PlateMapData:
     format: str
     wells: list[WellMapEntry] = field(default_factory=list)
     summary: PlateMapSummary | None = None
+    # Physical inventory plate this run plate was run on — all None when unlinked.
+    registered_plate_id: uuid.UUID | None = None
+    registered_plate_barcode: str | None = None
+    registered_plate_label: str | None = None
 
 
 @dataclass(frozen=True)

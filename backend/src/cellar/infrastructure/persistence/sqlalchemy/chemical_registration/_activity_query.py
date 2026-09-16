@@ -15,12 +15,16 @@ from sqlalchemy import column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import ColumnElement
 
+from cellar.domain.screening_assay.readout_name import normalize_readout_name
+from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
+    ProtocolModel,
     ReadoutDataModel,
+    ReadoutDefinitionModel,
     RunModel,
 )
 
@@ -32,6 +36,10 @@ _ACTIVITY_OP_MAP: dict[str, str] = {
     "gte": "__ge__",
     # "between" is handled separately (uses min+max instead of value).
 }
+
+
+def _sql_normalized_name(col: Any) -> ColumnElement:
+    return sa.func.lower(sa.func.btrim(sa.func.regexp_replace(col, r"\s+", " ", "g")))
 
 
 def _activity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
@@ -53,6 +61,16 @@ def _activity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> Colu
           ``between``). Treated as a single-element where list.
         - **Presence-only:** neither shape provides a where condition.
 
+    ``protocol_id`` may be absent/None ⇒ **any protocol**. Only these shapes
+    are allowed there: presence-only; ``curve_class``; readout-def-less
+    ``dr_curve`` (potency in µM, normalized via each protocol's dose_unit,
+    optionally scoped to one intercept via ``intercept_key``); and
+    readout-def-less ``readout_data`` with a ``readout_name`` (matches
+    readout-defs across protocols by normalized name + unit, no unit
+    conversion). Every other shape — a ``readout_definition_id`` without a
+    ``protocol_id``, or any ``run_scope`` other than ``any`` — is per-protocol
+    by nature and rejected.
+
     ``run_scope`` (optional) restricts every condition to a subset of runs:
         - ``{"mode": "any"}`` (default): no constraint.
         - ``{"mode": "latest"}``: most recent run for this protocol.
@@ -62,9 +80,14 @@ def _activity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> Colu
         - ``{"mode": "all"}``: molecule satisfies in every run that has data
           for it (positive match AND no counterexample row).
     """
-    protocol_id = criterion["protocol_id"]
+    protocol_id = criterion.get("protocol_id") or None
     run_scope = criterion.get("run_scope")
     where_list = _normalize_where(criterion)
+
+    scoped = isinstance(run_scope, dict) and run_scope.get("mode", "any") != "any"
+    if protocol_id is None and scoped:
+        msg = "run_scope needs a protocol_id; any-protocol activity only supports mode='any'"
+        raise ValueError(msg)
 
     if not where_list:
         return _activity_presence_clause(workspace_id, protocol_id, run_scope)
@@ -120,9 +143,10 @@ def _activity_where_clause(
             raise ValueError(msg)
         base_filters: list[ColumnElement] = [
             DoseResponseCurveModel.workspace_id == workspace_id,
-            DoseResponseCurveModel.protocol_id == protocol_id,
             DoseResponseCurveModel.curve_class.in_(classes),
         ]
+        if protocol_id is not None:
+            base_filters.append(DoseResponseCurveModel.protocol_id == protocol_id)
         scope_filter = _run_scope_filter(
             run_scope, workspace_id, protocol_id, DoseResponseCurveModel.run_id
         )
@@ -133,8 +157,16 @@ def _activity_where_clause(
         )
 
     rd_id = cond.get("readout_definition_id")
+    if protocol_id is None:
+        if source == "readout_data" and not rd_id:
+            return _readout_name_any_protocol_clause(cond, workspace_id)
+        if source == "dr_curve" and not rd_id:
+            return _potency_any_protocol_clause(cond, workspace_id)
     if not rd_id:
         msg = "where condition needs readout_definition_id"
+        raise ValueError(msg)
+    if protocol_id is None:
+        msg = "where condition with readout_definition_id needs protocol_id"
         raise ValueError(msg)
 
     if source == "dr_curve":
@@ -177,21 +209,7 @@ def _activity_where_clause(
     if scope_filter is not None:
         base_filters.append(scope_filter)
 
-    operator = cond.get("operator", "lt")
-    if operator == "between":
-        if "min" not in cond or "max" not in cond:
-            msg = "between operator requires both min and max"
-            raise ValueError(msg)
-        value_filter = data_col.between(cond["min"], cond["max"])
-    else:
-        op_name = _ACTIVITY_OP_MAP.get(operator)
-        if not op_name:
-            msg = f"Unknown activity operator: {operator}"
-            raise ValueError(msg)
-        if "value" not in cond:
-            msg = f"activity operator {operator!r} requires value"
-            raise ValueError(msg)
-        value_filter = getattr(data_col, op_name)(cond["value"])
+    value_filter = _value_filter(data_col, cond)
 
     # "all" semantics: molecule has at least one satisfying row AND no
     # non-satisfying row in scope. Implemented as IN(positive) AND NOT IN(negative).
@@ -236,6 +254,106 @@ def _jsonb_intercept_value(kind: str, level: float) -> ColumnElement:
     )
 
 
+def _value_filter(data_col: Any, cond: dict[str, Any]) -> ColumnElement:
+    """Apply the where-condition's operator (eq/lt/lte/gt/gte/between) to ``data_col``."""
+    operator = cond.get("operator", "lt")
+    if operator == "between":
+        if "min" not in cond or "max" not in cond:
+            msg = "between operator requires both min and max"
+            raise ValueError(msg)
+        return data_col.between(cond["min"], cond["max"])
+    op_name = _ACTIVITY_OP_MAP.get(operator)
+    if not op_name:
+        msg = f"Unknown activity operator: {operator}"
+        raise ValueError(msg)
+    if "value" not in cond:
+        msg = f"activity operator {operator!r} requires value"
+        raise ValueError(msg)
+    return getattr(data_col, op_name)(cond["value"])
+
+
+def _to_micromolar(expr: Any) -> ColumnElement:
+    """Express ``expr`` (a value in the owning protocol's ``dose_unit``) in µM.
+
+    Molar units scale by a constant; mg/mL needs the molecule's molecular
+    weight (µM = mg/mL × 1e6 / MW) and yields NULL when MW is unknown, so
+    that curve simply cannot match a cutoff. The CASE is generated from
+    ``ConcentrationUnit`` so a new unit cannot be silently mis-scaled.
+    Callers must join ``ProtocolModel`` and ``MoleculeModel``.
+    """
+    whens = []
+    for unit in ConcentrationUnit:
+        factor = unit.micromolar_factor
+        f = (
+            sa.literal(factor)
+            if factor is not None
+            else 1_000_000.0 / sa.func.nullif(MoleculeModel.molecular_weight, 0)
+        )
+        whens.append((ProtocolModel.dose_unit == unit.value, f))
+    return expr * sa.case(*whens, else_=None)
+
+
+def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
+    """Molecules with at least one DR curve in ANY protocol whose intercept,
+    normalized to µM, satisfies the condition.
+
+    ``intercept_key`` (kind, level) picks the intercept from the curve's
+    ``intercept_values`` JSONB (curves store the primary there too, so one
+    path serves IC50 and EC90). Without it the primary ``fitted_value`` is
+    used — the legacy shape from the first any-protocol release.
+    """
+    ik = cond.get("intercept_key")
+    if ik is None:
+        expr: Any = DoseResponseCurveModel.fitted_value
+    else:
+        kind = ik.get("kind") if isinstance(ik, dict) else None
+        level = ik.get("level") if isinstance(ik, dict) else None
+        if kind not in ("ic", "ec") or not isinstance(level, (int, float)):
+            msg = f"Invalid intercept_key on any-protocol activity where: {ik!r}"
+            raise ValueError(msg)
+        expr = _jsonb_intercept_value(kind, float(level))
+    sub = (
+        sa.select(DoseResponseCurveModel.molecule_id)
+        .join(ProtocolModel, DoseResponseCurveModel.protocol_id == ProtocolModel.id)
+        .join(MoleculeModel, DoseResponseCurveModel.molecule_id == MoleculeModel.id)
+        .where(
+            DoseResponseCurveModel.workspace_id == workspace_id,
+            ProtocolModel.workspace_id == workspace_id,
+            _value_filter(_to_micromolar(expr), cond),
+        )
+    )
+    return MoleculeModel.id.in_(sub)
+
+
+def _readout_name_any_protocol_clause(
+    cond: dict[str, Any], workspace_id: uuid.UUID
+) -> ColumnElement:
+    """Molecules with a non-outlier readout value, in ANY protocol whose
+    readout-def matches by normalized name + unit, satisfying the condition.
+    No unit conversion: the unit is part of the group identity."""
+    name = cond.get("readout_name")
+    if not isinstance(name, str) or not name.strip():
+        msg = "any-protocol readout_data where needs a non-empty readout_name"
+        raise ValueError(msg)
+    unit = cond.get("unit") or ""
+    sub = (
+        sa.select(ReadoutDataModel.molecule_id)
+        .join(
+            ReadoutDefinitionModel,
+            ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
+        )
+        .where(
+            ReadoutDataModel.workspace_id == workspace_id,
+            ReadoutDataModel.is_outlier == False,  # noqa: E712
+            ReadoutDataModel.normalization_applied.is_(None),
+            _sql_normalized_name(ReadoutDefinitionModel.name) == normalize_readout_name(name),
+            sa.func.coalesce(ReadoutDefinitionModel.unit, "") == unit,
+            _value_filter(ReadoutDataModel.value_numeric, cond),
+        )
+    )
+    return MoleculeModel.id.in_(sub)
+
+
 def _activity_presence_clause(
     workspace_id: uuid.UUID,
     protocol_id: Any,
@@ -247,8 +365,9 @@ def _activity_presence_clause(
     conds: list[ColumnElement] = [
         ReadoutDataModel.workspace_id == workspace_id,
         RunModel.workspace_id == workspace_id,
-        RunModel.protocol_id == protocol_id,
     ]
+    if protocol_id is not None:
+        conds.append(RunModel.protocol_id == protocol_id)
 
     if isinstance(run_scope, dict):
         mode = run_scope.get("mode", "any")

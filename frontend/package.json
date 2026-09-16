@@ -16,11 +16,12 @@
     "postinstall": "cp node_modules/@rdkit/rdkit/dist/RDKit_minimal.wasm public/RDKit_minimal.wasm 2>/dev/null || true"
   },
   "dependencies": {
+    "@duar-auth/js": "^1.3.0",
+    "@duar-auth/nextjs": "^1.3.0",
+    "@duar-auth/react": "^1.3.0",
     "@hookform/resolvers": "^5.0.0",
     "@rdkit/rdkit": "2025.3.4-1.0.0",
-    "@sentinel-auth/js": "^0.17.0",
-    "@sentinel-auth/nextjs": "^0.17.0",
-    "@sentinel-auth/react": "^0.17.0",
+    "@structflo/components": "^0.3.0",
     "@structflo/daikon-design-tokens": "^1.0.0",
     "@tabler/icons-react": "^3.41.1",
     "@tanstack/react-query": "^5.80.0",
@@ -42,6 +43,7 @@
     "plotly.js": "^3.5.0",
     "radix-ui": "^1.4.3",
     "react": "^19.1.0",
+    "react-d3-tree": "^3.6.6",
     "react-dom": "^19.1.0",
     "react-dropzone": "^15.0.0",
     "react-hook-form": "^7.56.0",

@@ -90,15 +90,22 @@ class ConditionDataType(StrEnum):
 
 
 class TargetType(StrEnum):
-    """Classification of a biological target."""
+    """Classification of a biological target.
+
+    Superset of prot-cellar's ``TargetType`` — the mirror must accept every
+    value the source can emit (unknown source values map to ``UNKNOWN``).
+    """
 
     SINGLE_PROTEIN = "single_protein"
+    DOMAIN = "domain"
     PROTEIN_COMPLEX = "protein_complex"
     PROTEIN_FAMILY = "protein_family"
+    PROTEIN_PROTEIN_INTERACTION = "protein_protein_interaction"
     NUCLEIC_ACID = "nucleic_acid"
     ORGANISM = "organism"
     CELL_LINE = "cell_line"
     TISSUE = "tissue"
+    UNKNOWN = "unknown"
 
 
 # PlateFormat is shared across screening and inventory — canonical definition

@@ -47,6 +47,9 @@ from cellar.application.chemical_registration.merge_service import MergeService
 from cellar.application.chemical_registration.preview_bulk_registration_file import (
     PreviewBulkRegistrationFile,
 )
+from cellar.application.chemical_registration.preview_registration import (
+    PreviewRegistration,
+)
 from cellar.application.chemical_registration.register_molecule import RegisterMolecule
 from cellar.application.chemical_registration.reject_disclosure import RejectDisclosure
 from cellar.application.chemical_registration.resolve_disclosure_conflict import (
@@ -85,6 +88,7 @@ __all__ = [
     "ListRelationshipsDep",
     "MergeServiceDep",
     "PreviewBulkRegistrationFileDep",
+    "PreviewRegistrationDep",
     # Chemical registration
     "RegisterMoleculeDep",
     "RejectDisclosureDep",
@@ -97,6 +101,9 @@ __all__ = [
 
 # --- Chemical Registration dependencies ---
 RegisterMoleculeDep = Annotated[RegisterMolecule, Depends(_get_use_case(RegisterMolecule))]
+PreviewRegistrationDep = Annotated[
+    PreviewRegistration, Depends(_get_use_case(PreviewRegistration))
+]
 GetMoleculeDep = Annotated[GetMolecule, Depends(_get_use_case(GetMolecule))]
 ListMoleculesDep = Annotated[ListMolecules, Depends(_get_use_case(ListMolecules))]
 ListMoleculesByIdsDep = Annotated[ListMoleculesByIds, Depends(_get_use_case(ListMoleculesByIds))]

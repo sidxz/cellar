@@ -20,6 +20,29 @@ from cellar.interface.error_handlers import result_to_response
 router = APIRouter(prefix="/api/v1/user", tags=["user"])
 
 
+class MeResponse(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    name: str
+    org_id: uuid.UUID | None = None
+    org_slug: str | None = None
+    workspace_role: str
+    is_admin: bool
+
+
+@router.get("/me", response_model=MeResponse)
+async def me(auth: AuthDep) -> MeResponse:
+    return MeResponse(
+        user_id=auth.user_id,
+        email=auth.email,
+        name=auth.name,
+        org_id=auth.org_id,
+        org_slug=auth.org_slug,
+        workspace_role=auth.workspace_role,
+        is_admin=auth.is_admin,
+    )
+
+
 class PreferencesResponse(BaseModel):
     theme: str = "dark"
     sidebar_collapsed: bool = False
@@ -71,7 +94,7 @@ async def update_preferences(
 
 
 # ---------------------------------------------------------------------------
-# Workspace members (proxy to Sentinel)
+# Workspace members (proxy to Duar)
 # ---------------------------------------------------------------------------
 
 
@@ -87,7 +110,7 @@ class WorkspaceMemberResponse(BaseModel):
 async def list_workspace_members(
     auth: AuthDep, q: str | None = None
 ) -> list[WorkspaceMemberResponse]:
-    """List members of the current workspace. Proxies to Sentinel."""
+    """List members of the current workspace. Proxies to Duar."""
     if q:
         members = await auth.search_workspace_members(q, limit=20)
     else:

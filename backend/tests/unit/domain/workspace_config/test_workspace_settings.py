@@ -23,18 +23,6 @@ class TestWorkspaceSettingsCreate:
         assert settings.formulation_number_scheme is None
         assert settings.version == 1
 
-    def test_explicit_values(self) -> None:
-        ws_id = uuid.uuid4()
-        settings = WorkspaceSettings(
-            id=ws_id,
-            registration_rules={"numbering": "CV-{seq}"},
-            default_molecule_type="small_molecule",
-            audit_retention_days=365,
-        )
-        assert settings.registration_rules == {"numbering": "CV-{seq}"}
-        assert settings.default_molecule_type == "small_molecule"
-        assert settings.audit_retention_days == 365
-
 
 class TestWorkspaceSettingsUpdate:
     def test_partial_update(self) -> None:

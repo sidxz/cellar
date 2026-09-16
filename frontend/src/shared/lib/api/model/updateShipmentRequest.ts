@@ -8,10 +8,12 @@ import type { UpdateShipmentRequestCarrier } from './updateShipmentRequestCarrie
 import type { UpdateShipmentRequestExpectedArrivalDate } from './updateShipmentRequestExpectedArrivalDate';
 import type { UpdateShipmentRequestShippingConditions } from './updateShipmentRequestShippingConditions';
 import type { UpdateShipmentRequestNotes } from './updateShipmentRequestNotes';
+import type { UpdateShipmentRequestLoanId } from './updateShipmentRequestLoanId';
 
 export interface UpdateShipmentRequest {
   carrier?: UpdateShipmentRequestCarrier;
   expected_arrival_date?: UpdateShipmentRequestExpectedArrivalDate;
   shipping_conditions?: UpdateShipmentRequestShippingConditions;
   notes?: UpdateShipmentRequestNotes;
+  loan_id?: UpdateShipmentRequestLoanId;
 }

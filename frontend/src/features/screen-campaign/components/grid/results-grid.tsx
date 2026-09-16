@@ -7,45 +7,70 @@
  *   - Compound (pinned-left, flex, min 230) — reg# + molecule name
  *   - Structure (130) — <StructureThumbnail size={104}>
  *   - per channel:
- *       - Value (120) — formatMeasurementValue + n=replicate_count + inline hit chip + OVR badge
+ *       - Value (120) — formatMeasurementValue + n=replicate_count + the selected
+ *         stage's pass/fail verdict chip + OVR badge
  *       - Curve (150, DR only) — <DoseResponseSparkline>
- *   - Decision (pinned-right, 160) — <DecisionChipCell>
+ *   - Stage (pinned-right, 150, only while a stage is selected) — <StageOutcomeCell>
+ *   - Notes (pinned-right, 220) — <NotesCell>
  *
  * Override editing survives inline in the value cell: an OVR badge + a
- * hover pencil-edit affordance launch the shared OverrideModal.
+ * hover pencil-edit affordance launch the shared OverrideModal. In draft,
+ * checkbox multi-select surfaces a "Remove selected (n)" toolbar that drops
+ * the picked compounds from the campaign in one save.
  *
  * External chip filters wire through CampaignFilterBar helpers. Row expansion
  * and the per-row detail renderer are removed.
  */
 
+import { useQueryClient } from "@tanstack/react-query";
 import type { ColDef, ColGroupDef, ICellRendererParams, IRowNode } from "ag-grid-community";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/shared/components/ui/alert-dialog";
 import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
+import { useBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost } from "@/shared/lib/api/campaigns/campaigns";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { groupBy } from "@/shared/lib/group-by";
 import { shortId } from "@/shared/lib/utils";
 
 import { DoseResponseSparkline, useProtocolSummaries } from "@/features/screening-assay";
+import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import { type CurveClass, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
+
+import { showError, showSuccess } from "@/shared/lib/toast";
 
 import { useMoleculesByIds } from "@/features/chemical-registration";
 import { useCampaignCurves } from "../../hooks/use-campaign-curves";
+import { campaignKeys } from "../../hooks/use-campaigns";
+import { protocolColorById } from "../../lib/protocol-colors";
+import { outcomeFor } from "../../lib/stage-outcomes";
 import { type CampaignFilters, filtersActive, rowPassesFilters } from "../campaign-filter-bar";
 import { OverrideModal } from "../override-modal";
 
 import { CurveExpandDialog, type ExpandedCurve } from "./curve-expand-dialog";
-import { DecisionChipCell } from "./decision-chip-cell";
+import { NotesCell } from "./notes-cell";
+import { StageOutcomeCell } from "./stage-outcome-cell";
 
 import type {
   CampaignChannelResponse,
   CampaignMeasurementResponse,
   CampaignResponse,
   CampaignResultResponse,
+  CheckVerdict,
 } from "../../types";
 
 import type { CurveSnapshot } from "@/features/screening-assay";
@@ -97,39 +122,55 @@ function curveSnapshotFromMeasurement(
   };
 }
 
-// ── Inline hit chip + value cell ─────────────────────────────────────────────
+// ── Inline verdict chip + value cell ─────────────────────────────────────────
 
-function HitChip({ call }: { call: string | null | undefined }) {
-  if (!call) return null;
+/** The selected stage's verdict for this cell's channel. `untested` renders
+ *  nothing — the cell already shows ND/excluded/blank, so a chip would only
+ *  repeat it. */
+function VerdictChip({ verdict }: { verdict: CheckVerdict | null }) {
+  if (verdict !== "pass" && verdict !== "fail") return null;
   const cls =
-    call === "hit"
+    verdict === "pass"
       ? "border-success/40 bg-success/10 text-success"
-      : call === "miss"
-        ? "border-muted text-muted-foreground"
-        : "border-warning/40 bg-warning/10 text-warning";
-  return <span className={`ml-1 rounded-sm border px-1 py-px text-[10px] ${cls}`}>{call}</span>;
+      : "border-muted text-muted-foreground";
+  return <span className={`rounded-sm border px-1 py-px text-[10px] ${cls}`}>{verdict}</span>;
 }
 
-interface CompoundValueCellProps {
+/** True when a dose-response channel resolved this cell from a reported
+ *  endpoint row instead of a fitted curve. Exported so the grid's own
+ *  derivation is what the tests exercise. */
+export function isReportedEndpoint(
+  isDR: boolean,
+  m: Pick<CampaignMeasurementResponse, "source_readout_id" | "source_curve_id">,
+): boolean {
+  return isDR && !!m.source_readout_id && !m.source_curve_id;
+}
+
+export interface CompoundValueCellProps {
   prefix: string;
   value: number | null;
   unit: string | null | undefined;
   replicates: number | null;
-  hitCall: string | null | undefined;
+  verdict: CheckVerdict | null;
   overridden: boolean | undefined;
   overrideReason: string | null | undefined;
+  /** True when a dose-response channel resolved this cell from a reported
+   *  endpoint row instead of a fitted curve (source_readout_id set, no
+   *  source_curve_id) — the curve affordances on this row are empty. */
+  reported: boolean;
   readOnly: boolean;
   onEdit: () => void;
 }
 
-function CompoundValueCell({
+export function CompoundValueCell({
   prefix,
   value,
   unit,
   replicates,
-  hitCall,
+  verdict,
   overridden,
   overrideReason,
+  reported,
   readOnly,
   onEdit,
 }: CompoundValueCellProps) {
@@ -141,15 +182,23 @@ function CompoundValueCell({
           {formatMeasurementValue(value)}
           {unit ? ` ${unit}` : ""}
         </span>
-        <HitChip call={hitCall} />
-        {overridden && (
-          <Badge
-            variant="outline"
-            className="ml-1 text-[10px]"
-            title={overrideReason ?? "Manually overridden"}
-          >
-            OVR
-          </Badge>
+        {/* Verdict + override markers sit on their own line so they never
+            push past the 120px value column (a "pass" chip inline after
+            "13.6 uM" clipped to "pa"). */}
+        {(verdict === "pass" || verdict === "fail" || overridden || reported) && (
+          <div className="mt-0.5 flex items-center gap-1">
+            <VerdictChip verdict={verdict} />
+            {overridden && (
+              <Badge
+                variant="outline"
+                className="text-[10px]"
+                title={overrideReason ?? "Manually overridden"}
+              >
+                OVR
+              </Badge>
+            )}
+            {reported && <ReportedEndpointBadge />}
+          </div>
         )}
         {replicates != null && replicates > 1 && (
           <div className="text-[10px] text-muted-foreground">n={replicates}</div>
@@ -174,6 +223,9 @@ function CompoundValueCell({
 interface ResultsGridV2Props {
   campaign: CampaignResponse;
   filters: CampaignFilters;
+  /** Selected hit stage, or null for "All". Drives the per-cell verdict
+   *  chips, the Stage column and the stage half of the chip filters. */
+  selectedStageId: string | null;
   readOnly: boolean;
 }
 
@@ -182,7 +234,12 @@ interface ResultsGridV2Props {
 // stack carries 3-4 lines vertically inside this space.
 const ROW_HEIGHT = 170;
 
-export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Props) {
+export function ResultsGridV2({
+  campaign,
+  filters,
+  selectedStageId,
+  readOnly,
+}: ResultsGridV2Props) {
   const [overrideTarget, setOverrideTarget] = useState<{
     result: CampaignResultResponse;
     channel: CampaignChannelResponse;
@@ -223,30 +280,50 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
     [campaign.results],
   );
 
+  // ── Selected stage ──────────────────────────────────────────────────────────
+
+  const selectedStage = useMemo(
+    () =>
+      selectedStageId ? (campaign.stages.find((s) => s.id === selectedStageId) ?? null) : null,
+    [campaign.stages, selectedStageId],
+  );
+  // Readout labels for the override popover's failing-check lines.
+  const channelLabelById = useMemo(
+    () => new Map((campaign.channels ?? []).map((c) => [c.id, c.label] as const)),
+    [campaign.channels],
+  );
+
   // ── Column defs ─────────────────────────────────────────────────────────────
 
   const columnDefs = useMemo<(ColDef<RowData> | ColGroupDef<RowData>)[]>(() => {
     const sortedChannels = [...(campaign.channels ?? [])].sort(
       (a, b) => a.display_order - b.display_order,
     );
+    const colorByProtocol = protocolColorById(sortedChannels);
 
     const cols: (ColDef<RowData> | ColGroupDef<RowData>)[] = [];
 
-    // 1. Compound (pinned left, flex)
+    // 1. Compound (pinned left) — structure thumbnail beside the id/name
+    //    stack, one cell instead of two so the drawing gets the row's full
+    //    height while the pinned area stays narrow.
     cols.push({
       headerName: "Compound",
       field: "result.molecule_id",
       pinned: "left",
-      width: 180,
+      width: 270,
+      // DataGrid calls sizeColumnsToFit, which would otherwise squeeze this
+      // column below the 160px structure drawing.
+      minWidth: 270,
+      suppressSizeToFit: true,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
         if (!r) return null;
         const m = moleculesById.get(r.molecule_id);
         const label = m?.registration_number ?? shortId(r.molecule_id);
-        // Stack id → name → synonyms vertically. Saves horizontal space and
-        // makes use of the taller row. Synonyms are deduped against the
-        // primary name so we don't repeat the same string.
+        const smiles = m?.structure?.smiles ?? null;
+        // Synonyms are deduped against the primary name so we don't repeat
+        // the same string.
         const synonyms =
           m?.identifiers
             ?.map((idn) => idn.identifier)
@@ -254,44 +331,35 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
         const visibleSynonyms = synonyms.slice(0, 3);
         const extra = synonyms.length - visibleSynonyms.length;
         return (
-          <div className="flex flex-col py-2 leading-tight">
-            <EntityLink
-              type="compound"
-              id={r.molecule_id}
-              label={label}
-              className="text-sm font-medium"
-            />
-            {m?.name && <span className="text-xs text-muted-foreground truncate">{m.name}</span>}
-            {visibleSynonyms.map((s) => (
-              <span key={s} className="text-[11px] text-muted-foreground truncate">
-                {s}
-              </span>
-            ))}
-            {extra > 0 && (
-              <span className="text-[10px] text-muted-foreground/70 italic">+{extra} more</span>
-            )}
-          </div>
-        );
-      },
-    });
-
-    // 2. Structure — matches the search-page default thumbnail size (104px).
-    cols.push({
-      headerName: "Structure",
-      colId: "structure",
-      width: 150,
-      sortable: false,
-      cellRenderer: (params: ICellRendererParams<RowData>) => {
-        const r = params.data?.result;
-        if (!r) return null;
-        const m = moleculesById.get(r.molecule_id);
-        const smiles = m?.structure?.smiles ?? null;
-        if (!smiles) {
-          return <span className="text-muted-foreground">--</span>;
-        }
-        return (
-          <div className="flex h-full items-center justify-center py-1">
-            <StructureThumbnail smiles={smiles} size={130} />
+          <div className="flex h-full items-center gap-2">
+            <div className="flex h-[160px] w-[160px] shrink-0 items-center justify-center">
+              {smiles ? (
+                <StructureThumbnail smiles={smiles} size={160} />
+              ) : (
+                <span className="text-muted-foreground">--</span>
+              )}
+            </div>
+            <div className="flex min-w-0 flex-col leading-tight">
+              <EntityLink
+                type="compound"
+                id={r.molecule_id}
+                label={label}
+                className="text-sm font-medium"
+              />
+              {m?.name && (
+                <span className="text-xs text-muted-foreground truncate" title={m.name}>
+                  {m.name}
+                </span>
+              )}
+              {visibleSynonyms.map((s) => (
+                <span key={s} className="text-[11px] text-muted-foreground truncate" title={s}>
+                  {s}
+                </span>
+              ))}
+              {extra > 0 && (
+                <span className="text-[10px] text-muted-foreground/70 italic">+{extra} more</span>
+              )}
+            </div>
           </div>
         );
       },
@@ -378,15 +446,22 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
               );
             }
             const prefix = q === "<" || q === ">" ? `${q} ` : "";
+            // Verdict for this cell under the selected stage — null when no
+            // stage is selected or the stage doesn't check this readout.
+            const verdict = selectedStage
+              ? ((outcomeFor(r, selectedStage.id)?.checks.find((c) => c.channel_id === ch.id)
+                  ?.verdict as CheckVerdict | undefined) ?? null)
+              : null;
             return (
               <CompoundValueCell
                 prefix={prefix}
                 value={m.value ?? null}
                 unit={m.unit}
                 replicates={m.replicate_count ?? null}
-                hitCall={m.hit_call}
+                verdict={verdict}
                 overridden={m.is_manual_override}
                 overrideReason={m.override_reason}
+                reported={isReportedEndpoint(isDR, m)}
                 readOnly={readOnly}
                 onEdit={() => setOverrideTarget({ result: r, channel: ch, measurement: m })}
               />
@@ -399,6 +474,11 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
             headerName: "Curve",
             colId: `${ch.id}_curve`,
             width: 240,
+            // DataGrid calls sizeColumnsToFit, which would otherwise squeeze
+            // this column below the 220px figure and clip its right edge —
+            // including the intercept marker.
+            minWidth: 240,
+            suppressSizeToFit: true,
             sortable: false,
             cellRenderer: (params: ICellRendererParams<RowData>) => {
               const r = params.data?.result;
@@ -457,22 +537,48 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
       cols.push({
         headerName: protoName,
         headerClass: "ag-protocol-group-header",
+        headerStyle: { color: colorByProtocol.get(protoId) ?? "inherit" },
         children: groupChildren,
       });
     }
 
-    // 4. Decision (pinned right) — wider than a bare chip would need so the
-    //    inline reason/notes strip in DecisionChipCell has room to breathe.
+    // 4. Stage (pinned right, before Notes) — only while a stage is
+    //    selected. The outcome chip doubles as the override affordance.
+    if (selectedStage) {
+      cols.push({
+        headerName: "Stage",
+        colId: "stage",
+        pinned: "right",
+        width: 150,
+        sortable: false,
+        cellRenderer: (params: ICellRendererParams<RowData>) => {
+          const r = params.data?.result;
+          if (!r) return null;
+          return (
+            <StageOutcomeCell
+              campaignId={campaign.id}
+              result={r}
+              stage={selectedStage}
+              channelLabelById={channelLabelById}
+              readOnly={readOnly}
+            />
+          );
+        },
+      });
+    }
+
+    // 5. Notes (pinned right) — clamped free text, click-to-edit in draft.
     cols.push({
-      headerName: "Decision",
-      colId: "decision",
+      headerName: "Notes",
+      colId: "notes",
       pinned: "right",
-      width: 240,
+      width: 220,
+      minWidth: 160,
       sortable: false,
       cellRenderer: (params: ICellRendererParams<RowData>) => {
         const r = params.data?.result;
         if (!r) return null;
-        return <DecisionChipCell campaignId={campaign.id} result={r} readOnly={readOnly} />;
+        return <NotesCell campaignId={campaign.id} result={r} readOnly={readOnly} />;
       },
     });
 
@@ -485,18 +591,25 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
     curveMap,
     moleculesById,
     readOnly,
+    // Every input the cell renderers read has to be here or the memoised
+    // column defs keep rendering the previous stage's verdicts/chips.
+    selectedStage,
+    channelLabelById,
   ]);
 
   // ── External (chip) filters ─────────────────────────────────────────────────
 
-  const isExternalFilterPresent = useCallback(() => filtersActive(filters), [filters]);
+  const isExternalFilterPresent = useCallback(
+    () => filtersActive(filters, selectedStageId),
+    [filters, selectedStageId],
+  );
 
   const doesExternalFilterPass = useCallback(
     (node: IRowNode<RowData>) => {
       const r = node.data?.result;
-      return r ? rowPassesFilters(r, filters) : true;
+      return r ? rowPassesFilters(r, filters, selectedStageId) : true;
     },
-    [filters],
+    [filters, selectedStageId],
   );
 
   // ── Empty state ─────────────────────────────────────────────────────────────
@@ -522,6 +635,22 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
         isExternalFilterPresent={isExternalFilterPresent}
         doesExternalFilterPass={doesExternalFilterPass}
         searchPlaceholder={false}
+        // The chip bar is the only filter surface on this grid: AG Grid's own
+        // column menus would hide rows `rowPassesFilters` still counts as
+        // visible, and the bulk gestures read that predicate.
+        suppressFilters
+        selectionToolbar={
+          readOnly
+            ? undefined
+            : (rows) => (
+                <RemoveSelectedButton
+                  campaignId={campaign.id}
+                  rows={rows}
+                  filters={filters}
+                  selectedStageId={selectedStageId}
+                />
+              )
+        }
         suppressCellFocus
         animateRows={false}
       />
@@ -543,6 +672,85 @@ export function ResultsGridV2({ campaign, filters, readOnly }: ResultsGridV2Prop
           if (!open) setExpandedCurve(null);
         }}
       />
+    </>
+  );
+}
+
+// ── Bulk remove ───────────────────────────────────────────────────────────────
+
+/** Selection toolbar for the draft grid: drops the checked compounds from the
+ *  campaign in one save. Removal only takes the rows out of *this* campaign —
+ *  no molecule, batch or readout data is touched — but it's not undoable from
+ *  here, hence the confirm.
+ *
+ *  AG Grid keeps filtered-out nodes selected, so the selection is re-filtered
+ *  through the chip predicate: the count and the payload are the rows the
+ *  chemist can actually see. */
+export function RemoveSelectedButton({
+  campaignId,
+  rows,
+  filters,
+  selectedStageId,
+}: {
+  campaignId: string;
+  rows: RowData[];
+  filters: CampaignFilters;
+  selectedStageId: string | null;
+}) {
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const ids = rows
+    .filter((r) => rowPassesFilters(r.result, filters, selectedStageId))
+    .map((r) => r.result.id);
+  const n = ids.length;
+
+  const mutation = useBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost({
+    mutation: {
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+        showSuccess(`Removed ${n} ${n === 1 ? "compound" : "compounds"}`);
+      },
+      onError: (err) => {
+        showError(`Couldn't remove rows: ${err instanceof Error ? err.message : String(err)}`);
+      },
+    },
+  });
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+        disabled={n === 0 || mutation.isPending}
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+        Remove selected ({n})
+      </Button>
+
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Remove {n} {n === 1 ? "compound" : "compounds"} from this campaign?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The rows leave this campaign along with any notes and overrides recorded on them. The
+              molecules, batches and readout data behind them are untouched, and they can be added
+              back from their source.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => mutation.mutate({ campaignId, data: { result_ids: ids } })}
+            >
+              Remove {n}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

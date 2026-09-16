@@ -65,3 +65,38 @@ async def test_well_map_round_trips_through_jsonb(session_factory) -> None:
     assert h12.well_type == WellType.POSITIVE_CONTROL
     assert h12.batch_id is None
     assert h12.concentration is None
+
+
+@pytest.mark.integration
+async def test_search_by_owner_org_and_exclusion(session_factory) -> None:
+    """search() filters by owner_org_id and excludes org ids while keeping
+    NULL (unowned/public) rows visible."""
+    workspace_id = uuid.uuid4()
+    org_a, org_b = uuid.uuid4(), uuid.uuid4()
+
+    uow_write = AsyncUnitOfWork(session_factory)
+    async with uow_write:
+        repo = SQLAlchemyRegisteredPlateRepository(uow_write)
+        for org in (org_a, org_b, None):
+            plate = RegisteredPlate.register(
+                workspace_id=workspace_id,
+                barcode=Barcode(value=f"B-{uuid.uuid4().hex[:6]}"),
+                plate_label="p",
+                format=PlateFormat.F96,
+                plate_type=PlateType.ASSAY,
+                registered_by=uuid.uuid4(),
+                owner_org_id=org,
+            )
+            await repo.save(plate)
+        await uow_write.commit()
+
+    # Reload from a fresh unit of work — forces a real DB read.
+    uow_read = AsyncUnitOfWork(session_factory)
+    async with uow_read:
+        repo = SQLAlchemyRegisteredPlateRepository(uow_read)
+        only_a = await repo.search(workspace_id, owner_org_id=org_a)
+        without_b = await repo.search(workspace_id, exclude_owner_org_ids={org_b})
+
+    assert {p.owner_org_id for p in only_a} == {org_a}
+    owners = {p.owner_org_id for p in without_b}
+    assert org_b not in owners and org_a in owners and None in owners  # NULL stays visible

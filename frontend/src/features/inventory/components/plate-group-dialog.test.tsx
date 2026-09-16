@@ -1,0 +1,193 @@
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { PlateGroupDialog } from "./plate-group-dialog";
+
+vi.mock("@/shared/lib/api/custom-instance", () => ({
+  API_V1: "/api/v1",
+  customInstance: vi.fn(),
+}));
+vi.mock("@/shared/lib/toast", () => ({
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
+}));
+
+const mocked = vi.mocked(customInstance);
+
+// Radix Select opens via a listbox portal that calls scrollIntoView +
+// hasPointerCapture on its items — jsdom ships neither. Polyfill so the
+// open/click flow works under test (verbatim from org-plate-policy-dialog.test.tsx).
+beforeAll(() => {
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = vi.fn();
+  }
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = vi.fn(() => false);
+  }
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = vi.fn();
+  }
+});
+
+function setup(props: Partial<Parameters<typeof PlateGroupDialog>[0]> = {}) {
+  mocked.mockClear();
+  mocked.mockImplementation((opts: { url: string; method: string }) => {
+    if (opts.url.includes("/vocabularies")) return Promise.resolve([]);
+    if (opts.url.includes("/storage-locations")) {
+      return Promise.resolve([
+        { id: "loc-1", name: "Room 1148 / Freezer 4", type: "freezer", parent_id: null },
+      ]);
+    }
+    if (opts.url.endsWith("/collections")) {
+      return Promise.resolve([
+        { id: "col-1", name: "SACCZ", molecule_count: 900 },
+        { id: "col-2", name: "NadD hits", molecule_count: 12 },
+      ]);
+    }
+    return Promise.resolve({ id: "g-new", name: "New Group" });
+  });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+  return render(
+    <PlateGroupDialog
+      open
+      onOpenChange={() => {}}
+      orgId="org1"
+      parentGroupId={null}
+      group={null}
+      {...props}
+    />,
+    { wrapper },
+  );
+}
+
+describe("PlateGroupDialog", () => {
+  it("disables Save until a name is entered, then POSTs the create body", async () => {
+    setup();
+    const save = screen.getByRole("button", { name: /create/i });
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Vendor Set 1" } });
+    expect(save).not.toBeDisabled();
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "/api/v1/plate-groups",
+          method: "POST",
+          data: expect.objectContaining({
+            name: "Vendor Set 1",
+            owner_org_id: "org1",
+            parent_group_id: null,
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("edit mode PATCHes only the changed fields", async () => {
+    setup({
+      group: {
+        id: "g1",
+        name: "Old Name",
+        group_type: "vendor",
+        description: null,
+        parent_group_id: null,
+        owner_org_id: "org1",
+        plate_count: 0,
+        created_by: "u1",
+        created_at: "2026-01-01T00:00:00Z",
+        version: 1,
+        children: [],
+      },
+    });
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "New Name" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "/api/v1/plate-groups/g1",
+          method: "PATCH",
+          data: expect.objectContaining({ name: "New Name" }),
+        }),
+      ),
+    );
+  });
+
+  it("create sends the metadata fields", async () => {
+    setup({ orgId: "org1", parentGroupId: null, group: null });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "SAC1" } });
+    fireEvent.change(screen.getByLabelText("Scientist"), { target: { value: "Jane Doe" } });
+    fireEvent.change(screen.getByLabelText("Initial volume (µL)"), { target: { value: "55" } });
+    fireEvent.change(screen.getByLabelText("Initial concentration (mM)"), {
+      target: { value: "10" },
+    });
+    fireEvent.change(screen.getByLabelText("Compound count"), { target: { value: "17606" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => {
+      const call = mocked.mock.calls.find(([o]) => (o as { method: string }).method === "POST");
+      expect(call).toBeTruthy();
+      const data = (call?.[0] as { data: Record<string, unknown> }).data;
+      expect(data).toMatchObject({
+        name: "SAC1",
+        scientist: "Jane Doe",
+        initial_volume_ul: 55,
+        initial_concentration_mm: 10,
+        compound_count: 17606,
+        state: null,
+        storage_location_id: null,
+        collection_id: null,
+      });
+    });
+  });
+
+  it("create sends the collection picked from the searchable list", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "SAC1" } });
+    // SearchableSelect trigger shows its placeholder until a value is picked.
+    fireEvent.click(await screen.findByText("No collection"));
+    const item = (await screen.findByText("SACCZ")).closest(
+      "[data-slot='command-item']",
+    ) as HTMLElement;
+    fireEvent.click(item);
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => {
+      const call = mocked.mock.calls.find(([o]) => (o as { method: string }).method === "POST");
+      expect(call).toBeTruthy();
+      const data = (call?.[0] as { data: Record<string, unknown> }).data;
+      expect(data).toMatchObject({ name: "SAC1", collection_id: "col-1" });
+    });
+  });
+
+  it("edit mode shows the linked collection and PATCHes it through", async () => {
+    setup({
+      group: {
+        id: "g1",
+        name: "SAC1",
+        parent_group_id: null,
+        owner_org_id: "org1",
+        plate_count: 0,
+        created_by: "u1",
+        created_at: "2026-01-01T00:00:00Z",
+        version: 1,
+        children: [],
+        collection_id: "col-2",
+        collection_name: "NadD hits",
+      },
+    });
+    expect(await screen.findByText("NadD hits")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "/api/v1/plate-groups/g1",
+          method: "PATCH",
+          data: expect.objectContaining({ collection_id: "col-2" }),
+        }),
+      ),
+    );
+  });
+});

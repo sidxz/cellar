@@ -26,7 +26,10 @@ Per-row precedence (planner):
      molecule → ``row_conflict``. If compound unmatched but batch matched → use
      batch. If batch unmatched → ``unmatched_batch_ref`` for the row.
   2. Only compound ref → resolve via ``compound_index`` → ``molecule_id``,
-     ``batch_id=None``. Miss → ``unmatched_compound_ref``.
+     ``batch_id=None``. Miss + STRUCTURE column mapped → try the row's SMILES
+     via ``structure_index`` (built by ``build_structure_index`` for refs that
+     missed). Still a miss → ``unmatched_compound_ref`` (also reported per-row
+     in ``unmatched_compounds`` with the structure the row carried).
   3. Only batch ref → resolve via ``batch_index`` → ``(batch_id, molecule_id)``.
      Miss → ``unmatched_batch_ref``.
   4. Neither ref → row skipped (counted in ``rows_skipped``; not an error).
@@ -44,7 +47,15 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from cellar.application.screening.summary_import_models import SummaryColumnMapping
+from cellar.application.screening.summary_import_models import (
+    SummaryColumnMapping,
+    UnmatchedCompound,
+)
+from cellar.application.shared.molecule_resolver import (
+    MoleculeReference,
+    MoleculeResolver,
+    RefType,
+)
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.enums import ReadoutDataType
@@ -127,6 +138,36 @@ async def build_batch_index(
     return out
 
 
+async def build_structure_index(
+    rows: Sequence[Mapping[str, str]],
+    *,
+    mapping: SummaryColumnMapping,
+    compound_index: Mapping[str, uuid.UUID],
+    workspace_id: uuid.UUID,
+    molecule_resolver: MoleculeResolver,
+) -> dict[str, uuid.UUID]:
+    """Resolve distinct SMILES → ``molecule.id`` for rows whose ``compound_ref``
+    MISSED the identifier index. Fallback only: rows whose ref resolved by
+    identifier are never looked up by structure, and rows with no ref are not
+    candidates (neither-ref rows still skip). Reuses ``MoleculeResolver``'s SMILES
+    path (standardize → InChIKey → ``find_by_inchi_key``), exactly what the
+    collection importer does.
+    """
+    if not mapping.compound_ref or not mapping.structure:
+        return {}
+    distinct: set[str] = set()
+    for row in rows:
+        ref = (row.get(mapping.compound_ref) or "").strip()
+        smiles = (row.get(mapping.structure) or "").strip()
+        if ref and smiles and ref not in compound_index:
+            distinct.add(smiles)
+    if not distinct:
+        return {}
+    refs = [MoleculeReference(value=s, ref_type=RefType.SMILES) for s in sorted(distinct)]
+    resolved, _unresolved = await molecule_resolver.resolve(workspace_id, refs)
+    return {r.ref.value: r.molecule_id for r in resolved}
+
+
 # ---------------------------------------------------------------------------
 # Planner outputs
 # ---------------------------------------------------------------------------
@@ -170,6 +211,9 @@ class SummaryPlan:
     items: list[SummaryPlanItem] = field(default_factory=list)
     unmatched_compound_refs: frozenset[str] = frozenset()
     unmatched_batch_refs: frozenset[str] = frozenset()
+    # Per-row detail beside the flat set: which row, and the structure it
+    # carried (None when no STRUCTURE column or an empty cell).
+    unmatched_compounds: list[UnmatchedCompound] = field(default_factory=list)
     row_conflicts: list[SummaryRowConflict] = field(default_factory=list)
     errors: list[dict[str, str]] = field(default_factory=list)
     rows_skipped: int = 0
@@ -188,6 +232,7 @@ def plan_summary_rows(
     defs_by_id: Mapping[uuid.UUID, _ReadoutDefLike],
     compound_index: Mapping[str, uuid.UUID],
     batch_index: Mapping[str, tuple[uuid.UUID, uuid.UUID]],
+    structure_index: Mapping[str, uuid.UUID] | None = None,
 ) -> SummaryPlan:
     """Plan summary-import value writes from parsed rows + pre-built indexes.
 
@@ -204,9 +249,11 @@ def plan_summary_rows(
     errors: list[dict[str, str]] = []
     row_conflicts: list[SummaryRowConflict] = []
     unmatched_compounds: set[str] = set()
+    unmatched_rows: list[UnmatchedCompound] = []
     unmatched_batches: set[str] = set()
     matched_compounds: set[uuid.UUID] = set()
     rows_skipped = 0
+    structure_index = structure_index or {}
 
     for ridx, row in enumerate(rows):
         source_row = ridx + 1
@@ -216,6 +263,9 @@ def plan_summary_rows(
         batch_ref = ""
         if mapping.batch_ref:
             batch_ref = (row.get(mapping.batch_ref) or "").strip()
+        structure = ""
+        if mapping.structure:
+            structure = (row.get(mapping.structure) or "").strip()
 
         # --- Neither ref → skip (not an error) -----------------------------
         if not compound_ref and not batch_ref:
@@ -227,6 +277,8 @@ def plan_summary_rows(
             batch_ref=batch_ref,
             compound_index=compound_index,
             batch_index=batch_index,
+            structure=structure,
+            structure_index=structure_index,
             source_row=source_row,
         )
         if resolved.error is not None:
@@ -235,6 +287,13 @@ def plan_summary_rows(
             row_conflicts.append(resolved.conflict)
         if resolved.unmatched_compound_ref:
             unmatched_compounds.add(resolved.unmatched_compound_ref)
+            unmatched_rows.append(
+                UnmatchedCompound(
+                    ref=resolved.unmatched_compound_ref,
+                    row=source_row,
+                    structure=structure or None,
+                )
+            )
         if resolved.unmatched_batch_ref:
             unmatched_batches.add(resolved.unmatched_batch_ref)
         if resolved.molecule_id is None:
@@ -285,6 +344,7 @@ def plan_summary_rows(
         items=list(deduped.values()),
         unmatched_compound_refs=frozenset(unmatched_compounds),
         unmatched_batch_refs=frozenset(unmatched_batches),
+        unmatched_compounds=unmatched_rows,
         row_conflicts=row_conflicts,
         errors=errors,
         rows_skipped=rows_skipped,
@@ -313,6 +373,8 @@ def _resolve_row(
     batch_ref: str,
     compound_index: Mapping[str, uuid.UUID],
     batch_index: Mapping[str, tuple[uuid.UUID, uuid.UUID]],
+    structure: str = "",
+    structure_index: Mapping[str, uuid.UUID] | None = None,
     source_row: int,
 ) -> _RowOutcome:
     """Resolve one row's refs to ``(molecule_id, batch_id)``.
@@ -323,6 +385,12 @@ def _resolve_row(
     """
     batch_hit = batch_index.get(batch_ref) if batch_ref else None
     compound_hit = compound_index.get(compound_ref) if compound_ref else None
+    if not batch_ref and compound_hit is None and compound_ref and structure and structure_index:
+        # Identifier missed — fall back to the row's structure (STRUCTURE role).
+        # Compound-only rows ONLY: when a batch ref is present the batch is
+        # authoritative, and consulting the structure there could turn a row
+        # that resolves via its batch into a row_conflict it never was before.
+        compound_hit = structure_index.get(structure)
 
     # --- Both refs set -----------------------------------------------------
     if batch_ref and compound_ref:
@@ -334,6 +402,10 @@ def _resolve_row(
                 batch_id=None,
                 error={"row": str(source_row), "error": f"unmatched batch ref {batch_ref!r}"},
                 unmatched_batch_ref=batch_ref,
+                # Reporting only: when the compound ref ALSO missed, say so —
+                # a brand-new compound has no batches, and hiding the compound
+                # miss made the two unmatched lists disagree about the same file.
+                unmatched_compound_ref=compound_ref if compound_hit is None else "",
             )
         if compound_hit is None:
             # Batch resolves; compound ref doesn't. Batch's molecule is

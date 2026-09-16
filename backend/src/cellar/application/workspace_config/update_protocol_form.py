@@ -27,12 +27,12 @@ class UpdateProtocolFormCommand(Command):
     workspace_id: uuid.UUID
     form_id: uuid.UUID
     name: str | object = UNSET
-    description: str | None | object = UNSET
-    protocol_type: str | None | object = UNSET
+    description: str | object | None = UNSET
+    protocol_type: str | object | None = UNSET
     is_default: bool | object = UNSET
-    readout_templates: list[dict] | None | object = UNSET
-    condition_templates: list[dict] | None | object = UNSET
-    ontology_defaults: list[dict] | None | object = UNSET
+    readout_templates: list[dict] | object | None = UNSET
+    condition_templates: list[dict] | object | None = UNSET
+    ontology_defaults: list[dict] | object | None = UNSET
 
 
 class UpdateProtocolForm:

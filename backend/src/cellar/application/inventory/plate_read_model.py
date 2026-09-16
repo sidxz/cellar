@@ -31,5 +31,8 @@ class PlateReadModelService(Protocol):
     """Application-layer protocol for cross-aggregate plate queries."""
 
     async def find_plates_for_molecule(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+        self,
+        workspace_id: uuid.UUID,
+        molecule_id: uuid.UUID,
+        excluded_org_ids: set[uuid.UUID] | None = None,
     ) -> list[MoleculePlateEntry]: ...

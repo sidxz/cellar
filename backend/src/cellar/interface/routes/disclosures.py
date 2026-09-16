@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cellar.application.chemical_registration.confirm_disclosure import ConfirmDisclosureCommand
 from cellar.application.chemical_registration.disclosure_service import SubmitDisclosureCommand
@@ -57,6 +57,7 @@ class DisclosureRequestResponse(BaseModel):
     requested_by: uuid.UUID
     requested_at: datetime
     resolved_at: datetime | None = None
+    disclosure_date: date | None = None
     conflict_reason: str | None = None
     notes: str | None = None
     version: int
@@ -79,6 +80,7 @@ class DisclosureRequestResponse(BaseModel):
             requested_by=dr.requested_by,
             requested_at=dr.requested_at,
             resolved_at=dr.resolved_at,
+            disclosure_date=dr.disclosure_date,
             conflict_reason=dr.conflict_reason,
             notes=dr.notes,
             version=dr.version,
@@ -102,9 +104,10 @@ class SubmitDisclosureBody(BaseModel):
     molecule_id: uuid.UUID
     disclosed_smiles: str
     disclosing_org_id: uuid.UUID | None = None
-    scientist_name: str | None = None
+    scientist_name: str | None = Field(default=None, max_length=200)
     auto_approve: bool = True
     notes: str | None = None
+    disclosure_date: date | None = None  # declared date; today is stamped separately
 
 
 class ResolveConflictBody(BaseModel):
@@ -132,6 +135,7 @@ async def submit_disclosure(
         scientist_name=body.scientist_name,
         auto_approve=body.auto_approve,
         notes=body.notes,
+        disclosure_date=body.disclosure_date,
     )
     outcome = result_to_response(await use_case(command, auth=auth))
     return DisclosureOutcomeResponse(

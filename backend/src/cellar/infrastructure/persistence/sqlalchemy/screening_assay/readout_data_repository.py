@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 
+import sqlalchemy as sa
 from sqlalchemy import delete, func, select
 
 from cellar.domain.screening_assay.activity_types import AggregatedReadout
@@ -80,6 +81,8 @@ class SQLAlchemyReadoutDataRepository:
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
         specs: list[tuple[uuid.UUID, str | None]],
+        *,
+        wellless_only: bool = False,
     ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]:
         """Batch query: molecule_id -> (readout_def_id, normalization) -> aggregated value.
 
@@ -92,6 +95,12 @@ class SQLAlchemyReadoutDataRepository:
         share the same ``readout_definition_id``.
 
         Aggregation method comes from ``readout_definition.aggregation``.
+
+        ``wellless_only`` narrows to rows with no ``well_id``. The
+        dose-response reported-endpoint fallback passes it: a summary-imported
+        endpoint records no plate position, while a plate column mapped onto
+        the same dose-response definition produces per-well response readings
+        that must never be averaged into a fake endpoint.
         """
         from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
             ReadoutDefinitionModel,
@@ -125,6 +134,7 @@ class SQLAlchemyReadoutDataRepository:
                 ReadoutDataModel.molecule_id.in_(molecule_ids),
                 ReadoutDataModel.readout_definition_id.in_(rd_def_ids),
                 ReadoutDataModel.is_outlier == False,  # noqa: E712
+                *([ReadoutDataModel.well_id.is_(None)] if wellless_only else []),
             )
             .group_by(
                 ReadoutDataModel.molecule_id,
@@ -169,6 +179,88 @@ class SQLAlchemyReadoutDataRepository:
             )
             out.setdefault(row.molecule_id, {})[key] = entry
 
+        return out
+
+    async def find_aggregated_by_molecules_and_names(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        groups: list[tuple[str, str | None]],
+    ) -> dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]]:
+        """Raw-layer aggregation across EVERY protocol whose readout-def matches
+        a ``(normalized_name, unit)`` group.
+
+        Used by the ``any`` search column: unlike ``find_aggregated_by_molecules``
+        (which targets specific readout-def ids), this groups by the readout's
+        *name* so a criterion like "% Inhibition" pulls in the matching
+        readout-def from every protocol that defines one, not just one.
+        """
+        from cellar.domain.screening_assay.readout_name import normalize_readout_name
+        from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+            ReadoutDefinitionModel,
+        )
+
+        if not molecule_ids or not groups:
+            return {}
+        wanted = {(normalize_readout_name(n), u or "") for n, u in groups}
+        norm_name = func.lower(
+            func.btrim(func.regexp_replace(ReadoutDefinitionModel.name, r"\s+", " ", "g"))
+        ).label("norm_name")
+        unit_key = func.coalesce(ReadoutDefinitionModel.unit, "").label("unit_key")
+        stmt = (
+            select(
+                ReadoutDataModel.molecule_id,
+                ReadoutDataModel.readout_definition_id,
+                ReadoutDefinitionModel.protocol_id,
+                ReadoutDefinitionModel.name.label("readout_name"),
+                ReadoutDefinitionModel.aggregation,
+                ReadoutDefinitionModel.unit,
+                norm_name,
+                unit_key,
+                func.avg(ReadoutDataModel.value_numeric).label("avg_val"),
+                func.min(ReadoutDataModel.value_numeric).label("min_val"),
+                func.max(ReadoutDataModel.value_numeric).label("max_val"),
+                func.count(ReadoutDataModel.value_numeric).label("count_val"),
+            )
+            .join(
+                ReadoutDefinitionModel,
+                ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
+            )
+            .where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.molecule_id.in_(molecule_ids),
+                ReadoutDataModel.normalization_applied.is_(None),
+                ReadoutDataModel.is_outlier == False,  # noqa: E712
+                sa.tuple_(norm_name, unit_key).in_(list(wanted)),
+            )
+            .group_by(
+                ReadoutDataModel.molecule_id,
+                ReadoutDataModel.readout_definition_id,
+                ReadoutDefinitionModel.protocol_id,
+                ReadoutDefinitionModel.name,
+                ReadoutDefinitionModel.aggregation,
+                ReadoutDefinitionModel.unit,
+            )
+        )
+        rows = (await self._uow.session.execute(stmt)).all()
+        out: dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]] = {}
+        for row in rows:
+            agg = row.aggregation or "mean"
+            val = row.min_val if agg == "min" else row.max_val if agg == "max" else row.avg_val
+            out.setdefault(row.molecule_id, []).append(
+                (
+                    row.protocol_id,
+                    AggregatedReadout(
+                        readout_definition_id=row.readout_definition_id,
+                        readout_name=row.readout_name,
+                        value=val,
+                        qualifier=None,
+                        unit=row.unit,
+                        aggregation=agg,
+                        data_point_count=row.count_val,
+                    ),
+                )
+            )
         return out
 
     async def find_by_molecule_and_definition(
@@ -241,6 +333,23 @@ class SQLAlchemyReadoutDataRepository:
         result = await self._uow.session.execute(stmt)
         model = result.scalars().first()
         return self._to_domain(model) if model is not None else None
+
+    async def has_wellless_rows(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+        """True if the run holds raw (non-computed) readout rows with no well.
+
+        Computed rows are excluded: the calculation engine writes calculated
+        readouts well-less on welled runs, so they say nothing about the shape
+        the run was imported in.
+        """
+        stmt = select(
+            sa.exists().where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.run_id == run_id,
+                ReadoutDataModel.well_id.is_(None),
+                ReadoutDataModel.is_computed.is_(False),
+            )
+        )
+        return bool(await self._uow.session.scalar(stmt))
 
     async def find_grouped_by_condition(
         self,

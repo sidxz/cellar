@@ -62,17 +62,6 @@ class TestExternalApiKeyCreate:
         assert event.workspace_id == ws_id
         assert event.key_name == "cdd_vault"
 
-    def test_factory_no_description(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        key = ExternalApiKey.create(
-            workspace_id=ws_id,
-            key_name="bioportal",
-            label="BioPortal",
-            key_prefix="abc1...xyz9",
-            created_by=user_id,
-        )
-        assert key.description is None
 
     def test_factory_strips_whitespace(
         self, ws_id: uuid.UUID, user_id: uuid.UUID

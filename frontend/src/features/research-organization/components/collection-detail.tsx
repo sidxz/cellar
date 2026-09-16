@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { useSelectionSet } from "@/shared/hooks/use-selection-set";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { ChevronDown, Download, Pencil, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -37,6 +37,7 @@ import { useProtocolTestCounts } from "../hooks/use-protocol-test-counts";
 import { useViewMode } from "../lib/use-view-mode";
 import type { ViewMode } from "../lib/use-view-mode";
 import { AddMoleculesDialog } from "./add-molecules-dialog";
+import { CollectionPlateGroupsCard } from "./collection-plate-groups-card";
 import { CollectionHeader } from "./collection/collection-header";
 import { CreateCollectionDialog } from "./create-collection-dialog";
 import { ResultsSurface } from "./results/results-surface";
@@ -251,6 +252,8 @@ export function CollectionDetail({ collectionId }: CollectionDetailProps) {
             <div className="mt-0.5">
               <TagTable entity="collections" entityId={collection.id} canEdit={canEditTags} />
             </div>
+
+            <CollectionPlateGroupsCard collectionId={collection.id} />
 
             <ResultsSurface
               molecules={molecules}

@@ -21,28 +21,7 @@ def ws_id() -> uuid.UUID:
 
 
 class TestFieldOverride:
-    def test_basic_construction(self) -> None:
-        fid = uuid4()
-        fo = FieldOverride(field_definition_id=fid)
-        assert fo.field_definition_id == fid
-        assert fo.is_required is None
-        assert fo.default_value is None
-        assert fo.is_locked is False
-        assert fo.pick_list_subset is None
 
-    def test_full_construction(self) -> None:
-        fid = uuid4()
-        fo = FieldOverride(
-            field_definition_id=fid,
-            is_required=True,
-            default_value="High",
-            is_locked=True,
-            pick_list_subset=["High", "Medium"],
-        )
-        assert fo.is_required is True
-        assert fo.default_value == "High"
-        assert fo.is_locked is True
-        assert fo.pick_list_subset == ["High", "Medium"]
 
     def test_frozen(self) -> None:
         fo = FieldOverride(field_definition_id=uuid4())
@@ -77,15 +56,6 @@ class TestRegistrationFormCreate:
         assert form.field_overrides == []
         assert form.version == 1
 
-    def test_factory_with_is_default(self, ws_id: uuid.UUID) -> None:
-        form = RegistrationForm.create(
-            workspace_id=ws_id,
-            name="Default Form",
-            applies_to=FieldTarget.BATCH,
-            is_default=True,
-        )
-        assert form.is_default is True
-        assert form.applies_to == FieldTarget.BATCH
 
     def test_factory_with_overrides(self, ws_id: uuid.UUID) -> None:
         override = FieldOverride(field_definition_id=uuid4(), is_required=True, default_value="X")

@@ -4,10 +4,18 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { ShipmentItemType } from './shipmentItemType';
+import type { ShipmentItemResponseBarcode } from './shipmentItemResponseBarcode';
+import type { ShipmentItemResponseLabel } from './shipmentItemResponseLabel';
+import type { ShipmentItemResponseAmountValue } from './shipmentItemResponseAmountValue';
+import type { ShipmentItemResponseAmountUnit } from './shipmentItemResponseAmountUnit';
 
 export interface ShipmentItemResponse {
   id: string;
-  sample_id: string;
-  amount_value: number;
-  amount_unit: string;
+  item_type: ShipmentItemType;
+  item_id: string;
+  barcode?: ShipmentItemResponseBarcode;
+  label?: ShipmentItemResponseLabel;
+  amount_value?: ShipmentItemResponseAmountValue;
+  amount_unit?: ShipmentItemResponseAmountUnit;
 }

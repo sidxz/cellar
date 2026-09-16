@@ -4,6 +4,7 @@ A read-only query backing the create-time suggestion panel. Suggests; never
 blocks. Short-circuits to [] on a blank name so the panel stays quiet until
 the user has typed something.
 """
+
 from __future__ import annotations
 
 import uuid

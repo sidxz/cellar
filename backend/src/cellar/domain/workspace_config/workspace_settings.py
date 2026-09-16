@@ -1,7 +1,7 @@
 """WorkspaceSettings aggregate — domain configuration per workspace.
 
 Identity: id == workspace_id (singleton per workspace).
-Sentinel owns workspace identity; Cellar stores domain-specific config only.
+Duar owns workspace identity; Cellar stores domain-specific config only.
 """
 
 from __future__ import annotations

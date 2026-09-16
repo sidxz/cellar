@@ -14,12 +14,15 @@ import type {
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
   PlateMapWellModel,
+  ProtocolResponse,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
   RefitDoseResponseCurveRequest,
   RunCountsResponse as RunCountsResponseModel,
   RunResponse,
   TargetRefResponse,
+  TargetResponse,
+  TargetSyncReportResponse,
 } from "@/shared/lib/api/model";
 
 /** A run's coverage of one attached collection (covered / total + fraction).
@@ -110,7 +113,10 @@ export type TargetType =
   | "nucleic_acid"
   | "organism"
   | "cell_line"
-  | "tissue";
+  | "tissue"
+  | "domain"
+  | "protein_protein_interaction"
+  | "unknown";
 
 export const TARGET_TYPE_LABELS: Record<TargetType, string> = {
   single_protein: "Single Protein",
@@ -120,6 +126,9 @@ export const TARGET_TYPE_LABELS: Record<TargetType, string> = {
   organism: "Organism",
   cell_line: "Cell Line",
   tissue: "Tissue",
+  domain: "Domain",
+  protein_protein_interaction: "Protein–Protein Interaction",
+  unknown: "Unknown",
 };
 
 export type PlateFormat = "6" | "12" | "24" | "48" | "96" | "384" | "1536";
@@ -402,20 +411,18 @@ export interface Protocol {
   locked_by: string | null;
   lock_reason: string | null;
   locked_at: string | null;
+  /** Whether the caller could delete it right now (a draft they created, or
+   *  any draft for an admin, that nothing still uses). Only GET /protocols/{id}
+   *  fills it; absent/null elsewhere means "not computed". Typed off the DTO. */
+  can_delete?: ProtocolResponse["can_delete"];
 }
 
-export interface Target {
-  id: string;
-  workspace_id: string;
-  name: string;
-  target_type: TargetType;
-  organism: string | null;
-  gene_name: string | null;
-  uniprot_id: string | null;
-  ncbi_gene_id: string | null;
-  description: string | null;
-  target_class: string | null;
-}
+/** Read-only mirror of a prot-cellar target. Aliases the orval DTO — never
+ *  redefine its shape. `target_type` is widened by `TargetType` at use sites. */
+export type Target = TargetResponse;
+
+/** Result of `POST /targets/sync` (admin → Targets → Sync from Prot-Cellar). */
+export type TargetSyncReport = TargetSyncReportResponse;
 
 /**
  * Aliases the generated `RunResponse` so the shape can't silently drift from
@@ -470,9 +477,9 @@ export type ReadoutData = ReadoutDataResponse;
  * The backend payload is defined at
  * `backend/src/cellar/interface/routes/readout_data.py` — it has no
  * `additional_curves` / `aggregate` fields. Those are attached frontend-side
- * by the campaign curve-snapshot adapter (`snapshotToDoseResponseCurve` in
- * `screen-campaign/lib/snapshot-adapter.ts`) so the campaign expand dialog can
- * draw aggregate-mode overlays through the same `<DoseResponseChart>`.
+ * by the search compound sheet's `adaptCurve` when the chemist is looking at
+ * an aggregate of several runs, so the chart can draw the contributing curves
+ * muted underneath the representative one.
  *
  * The backend-owned shape MUST come from the generated type so it can't
  * silently drift; only the two client extensions are hand-written. Note the
@@ -575,28 +582,6 @@ export interface CreateProtocolInput {
   /** Facets keyed by slot name. Persisted atomically with the protocol so a
    *  multi-slot set can't race/drop the way separate post-create PUTs did. */
   ontology_annotations?: Record<string, OntologyTerm[]>;
-}
-
-export interface CreateTargetInput {
-  name: string;
-  target_type: TargetType;
-  organism?: string | null;
-  gene_name?: string | null;
-  uniprot_id?: string | null;
-  ncbi_gene_id?: string | null;
-  description?: string | null;
-  target_class?: string | null;
-}
-
-export interface UpdateTargetInput {
-  name?: string | null;
-  target_type?: string | null;
-  organism?: string | null;
-  gene_name?: string | null;
-  uniprot_id?: string | null;
-  ncbi_gene_id?: string | null;
-  description?: string | null;
-  target_class?: string | null;
 }
 
 export interface CreateRunInput {

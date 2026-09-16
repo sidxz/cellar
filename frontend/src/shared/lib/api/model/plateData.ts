@@ -6,6 +6,9 @@
  */
 import type { PlateMapWellModel } from './plateMapWellModel';
 import type { PlateMapSummaryModel } from './plateMapSummaryModel';
+import type { PlateDataRegisteredPlateId } from './plateDataRegisteredPlateId';
+import type { PlateDataRegisteredPlateBarcode } from './plateDataRegisteredPlateBarcode';
+import type { PlateDataRegisteredPlateLabel } from './plateDataRegisteredPlateLabel';
 
 export interface PlateData {
   plate_id: string;
@@ -13,4 +16,7 @@ export interface PlateData {
   format: string;
   wells: PlateMapWellModel[];
   summary: PlateMapSummaryModel;
+  registered_plate_id?: PlateDataRegisteredPlateId;
+  registered_plate_barcode?: PlateDataRegisteredPlateBarcode;
+  registered_plate_label?: PlateDataRegisteredPlateLabel;
 }

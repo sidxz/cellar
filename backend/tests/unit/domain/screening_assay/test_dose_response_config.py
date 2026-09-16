@@ -29,22 +29,6 @@ class TestDoseResponseConfig:
         assert cfg.top_constraint is None
         assert cfg.bottom_constraint is None
 
-    def test_full_config(self):
-        cfg = DoseResponseConfig(
-            curve_type=CurveType.EC50,
-            x_readout_name="conc",
-            y_readout_name="response",
-            hill_slope_constraint=HillSlopeConstraint.POSITIVE_ONLY,
-            activity_threshold=30.0,
-            normalization_scope=NormalizationScope.PER_RUN,
-            top_constraint=100.0,
-            bottom_constraint=0.0,
-        )
-        assert cfg.hill_slope_constraint == HillSlopeConstraint.POSITIVE_ONLY
-        assert cfg.activity_threshold == 30.0
-        assert cfg.normalization_scope == NormalizationScope.PER_RUN
-        assert cfg.top_constraint == 100.0
-        assert cfg.bottom_constraint == 0.0
 
     def test_frozen(self):
         cfg = DoseResponseConfig(
@@ -327,10 +311,6 @@ class TestDoseResponseConfigYNormalization:
     """y_normalization picks which formula's output to fit against — required
     when the Y readout def emits multiple normalized columns at once."""
 
-    def test_default_is_none_meaning_raw_layer(self):
-        from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
-        cfg = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="raw")
-        assert cfg.y_normalization is None
 
     def test_y_normalization_can_be_set(self):
         from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig

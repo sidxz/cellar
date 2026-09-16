@@ -11,6 +11,7 @@ from cellar.application.audit.audit_recording_service import (
     AuditRecordingService,
     _infer_operation_type,
 )
+from cellar.application.shared.actor_context import set_current_actor
 from cellar.domain.audit_compliance.enums import (
     ActorType,
     AuditAction,
@@ -64,6 +65,13 @@ class FakeRegisteredEvent(DomainEvent):
 class FakeMergedEvent(DomainEvent):
     workspace_id: uuid.UUID = uuid.UUID(int=0)
     user_id: uuid.UUID = uuid.UUID(int=0)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FakeBareEvent(DomainEvent):
+    """An event that carries no actor at all (the inventory shape)."""
+
+    workspace_id: uuid.UUID = uuid.UUID(int=0)
 
 
 # --- Tests ---
@@ -156,9 +164,52 @@ class TestAuditRecordingService:
         assert op.entity_type == "molecule"
         assert op.entity_id == agg_id
         assert op.workspace_id == ws_id
-        assert op.actor_type == ActorType.SYSTEM
+        assert op.user_id == user_id
+        assert op.actor_type == ActorType.USER
         assert len(op.entries) == 1
         assert op.entries[0].new_value == "FakeRegisteredEvent"
+
+    async def test_handle_event_without_user_id_uses_request_actor(
+        self, service: AuditRecordingService, repo: FakeAuditRepository
+    ) -> None:
+        actor = uuid.uuid4()
+        set_current_actor(actor)
+        try:
+            await service.handle_event(
+                FakeBareEvent(aggregate_id=uuid.uuid4(), aggregate_type="PlateLoan")
+            )
+        finally:
+            set_current_actor(None)
+
+        op = repo.saved[0]
+        assert op.user_id == actor
+        assert op.actor_type == ActorType.USER
+
+    async def test_handle_event_without_any_actor_is_system_nil(
+        self, service: AuditRecordingService, repo: FakeAuditRepository
+    ) -> None:
+        await service.handle_event(
+            FakeBareEvent(aggregate_id=uuid.uuid4(), aggregate_type="PlateLoan")
+        )
+
+        op = repo.saved[0]
+        assert op.user_id == uuid.UUID(int=0)
+        assert op.actor_type == ActorType.SYSTEM
+
+    async def test_handle_event_nil_user_id_falls_through_to_request_actor(
+        self, service: AuditRecordingService, repo: FakeAuditRepository
+    ) -> None:
+        """A nil user_id on the event means 'unknown', not 'the nil user'."""
+        actor = uuid.uuid4()
+        set_current_actor(actor)
+        try:
+            await service.handle_event(
+                FakeRegisteredEvent(aggregate_id=uuid.uuid4(), aggregate_type="molecule")
+            )
+        finally:
+            set_current_actor(None)
+
+        assert repo.saved[0].user_id == actor
 
 
 class TestInferOperationType:

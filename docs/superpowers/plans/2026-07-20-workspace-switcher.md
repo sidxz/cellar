@@ -6,7 +6,7 @@
 
 **Architecture:** Frontend-only, three files touched + one new helper + one test. Workspace scope already lives in the Sentinel authz JWT (SDK-persisted; refresh continuity already works). We add an app-owned localStorage key that *survives logout* to auto-skip the login workspace picker, and a logout-based switch affordance. Spec: `docs/superpowers/specs/2026-07-20-workspace-switcher-design.md`.
 
-**Tech Stack:** Next.js 16 App Router, React 19, `@sentinel-auth/nextjs` (authz mode), shadcn/ui, Vitest + @testing-library/react, Biome.
+**Tech Stack:** Next.js 16 App Router, React 19, `@duar-auth/nextjs` (authz mode), shadcn/ui, Vitest + @testing-library/react, Biome.
 
 ## Global Constraints
 
@@ -29,7 +29,7 @@
 - Modify: `frontend/src/app/auth/callback/page.tsx` (replace inline `workspaceSelector` render prop, lines 66–86)
 
 **Interfaces:**
-- Consumes: `AuthzWorkspaceSelectorProps` from `@sentinel-auth/nextjs` — `{ workspaces: {id,name,slug,role}[]; onSelect: (workspaceId: string) => void; isLoading: boolean }`.
+- Consumes: `AuthzWorkspaceSelectorProps` from `@duar-auth/nextjs` — `{ workspaces: {id,name,slug,role}[]; onSelect: (workspaceId: string) => void; isLoading: boolean }`.
 - Produces (Task 2 relies on these exact names): `rememberedWorkspace(): string | null`, `rememberWorkspace(id: string): void`, `forgetWorkspace(): void` from `@/shared/lib/auth/workspace-memory`; `WorkspaceSelector` component from `./workspace-selector`.
 
 - [ ] **Step 1: Write the failing test**
@@ -38,7 +38,7 @@ Create `frontend/src/app/auth/callback/workspace-selector.test.tsx`:
 
 ```tsx
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { AuthzWorkspaceSelectorProps } from "@sentinel-auth/nextjs";
+import type { AuthzWorkspaceSelectorProps } from "@duar-auth/nextjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WorkspaceSelector } from "./workspace-selector";
@@ -138,7 +138,7 @@ Create `frontend/src/app/auth/callback/workspace-selector.tsx`. The picker marku
 ```tsx
 "use client";
 
-import type { AuthzWorkspaceSelectorProps } from "@sentinel-auth/nextjs";
+import type { AuthzWorkspaceSelectorProps } from "@duar-auth/nextjs";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -214,7 +214,7 @@ import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
 import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
 import { HexLensLogo } from "@/shared/components/hex-lens-logo";
 import { Skeleton } from "@/shared/components/ui/skeleton";
-import { AuthzCallback } from "@sentinel-auth/nextjs";
+import { AuthzCallback } from "@duar-auth/nextjs";
 import { useRouter } from "next/navigation";
 import { WorkspaceSelector } from "./workspace-selector";
 ```
@@ -271,7 +271,7 @@ import { Header } from "./header";
 
 const logoutMock = vi.fn();
 
-vi.mock("@sentinel-auth/nextjs", () => ({
+vi.mock("@duar-auth/nextjs", () => ({
   useAuthz: () => ({
     user: { name: "Ada Lovelace", email: "ada@example.com" },
     logout: logoutMock,
@@ -334,7 +334,7 @@ Replace the entire contents of `frontend/src/shared/components/layout/header.tsx
 ```tsx
 "use client";
 
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import { Building2, ChevronDown, LogOut, Search } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";

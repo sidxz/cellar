@@ -3,14 +3,14 @@
 import { PageHeader } from "@/shared/components/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
-import { Crosshair, Download, Plus, TestTubes } from "lucide-react";
+import { Crosshair, Download, Plus, Settings2, TestTubes } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useCddEnabled } from "../hooks/use-cdd-enabled";
 import { CddImportDialog } from "./cdd-import-dialog";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
-import { CreateTargetDialog } from "./create-target-dialog";
 import { ProtocolBrowser } from "./protocol-browser";
 import { TargetList } from "./target-list";
 
@@ -18,7 +18,6 @@ export function ScreeningDashboard() {
   const router = useRouter();
   const [tab, setTab] = useState("protocols");
   const [createProtocolOpen, setCreateProtocolOpen] = useState(false);
-  const [createTargetOpen, setCreateTargetOpen] = useState(false);
   const [cddImportOpen, setCddImportOpen] = useState(false);
   const [createRunForProtocol, setCreateRunForProtocol] = useState<string | null>(null);
   const { enabled: cddEnabled } = useCddEnabled();
@@ -55,9 +54,11 @@ export function ScreeningDashboard() {
             </div>
           )}
           {tab === "targets" && (
-            <Button onClick={() => setCreateTargetOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Target
+            <Button asChild variant="outline">
+              <Link href="/admin/targets">
+                <Settings2 className="mr-2 h-4 w-4" />
+                Manage targets
+              </Link>
             </Button>
           )}
         </div>
@@ -89,7 +90,6 @@ export function ScreeningDashboard() {
           }}
         />
       )}
-      <CreateTargetDialog open={createTargetOpen} onOpenChange={setCreateTargetOpen} />
       <CddImportDialog
         open={cddImportOpen}
         onOpenChange={setCddImportOpen}

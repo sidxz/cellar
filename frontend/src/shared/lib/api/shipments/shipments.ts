@@ -24,14 +24,16 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  AddItemRequest,
   CellarInterfaceRoutesShipmentsImportPreviewResponse,
   CreateShipmentRequest,
   DeliverRequest,
   HTTPValidationError,
   ListShipmentsApiV1ShipmentsGetParams,
   PreviewImportRequest,
+  ResolveItemsRequest,
+  ResolvedItemResponse,
   ShipRequest,
+  ShipmentItemRequest,
   ShipmentResponse,
   ShipmentSummaryResponse,
   UpdateShipmentRequest
@@ -200,6 +202,73 @@ export function useListShipmentsApiV1ShipmentsGet<TData = Awaited<ReturnType<typ
 
 
 /**
+ * Barcodes → plate or sample items for the shipment dialog's paste box.
+
+A plate the caller can't see reports as unresolved, worded like an unknown barcode.
+ * @summary Resolve Shipment Items
+ */
+export const resolveShipmentItemsApiV1ShipmentsResolveItemsPost = (
+    resolveItemsRequest: ResolveItemsRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ResolvedItemResponse[]>(
+      {url: `/api/v1/shipments/resolve-items`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: resolveItemsRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getResolveShipmentItemsApiV1ShipmentsResolveItemsPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveShipmentItemsApiV1ShipmentsResolveItemsPost>>, TError,{data: ResolveItemsRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof resolveShipmentItemsApiV1ShipmentsResolveItemsPost>>, TError,{data: ResolveItemsRequest}, TContext> => {
+
+const mutationKey = ['resolveShipmentItemsApiV1ShipmentsResolveItemsPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveShipmentItemsApiV1ShipmentsResolveItemsPost>>, {data: ResolveItemsRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resolveShipmentItemsApiV1ShipmentsResolveItemsPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveShipmentItemsApiV1ShipmentsResolveItemsPostMutationResult = NonNullable<Awaited<ReturnType<typeof resolveShipmentItemsApiV1ShipmentsResolveItemsPost>>>
+    export type ResolveShipmentItemsApiV1ShipmentsResolveItemsPostMutationBody = ResolveItemsRequest
+    export type ResolveShipmentItemsApiV1ShipmentsResolveItemsPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Resolve Shipment Items
+ */
+export const useResolveShipmentItemsApiV1ShipmentsResolveItemsPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveShipmentItemsApiV1ShipmentsResolveItemsPost>>, TError,{data: ResolveItemsRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resolveShipmentItemsApiV1ShipmentsResolveItemsPost>>,
+        TError,
+        {data: ResolveItemsRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getResolveShipmentItemsApiV1ShipmentsResolveItemsPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
  * Validate and resolve CSV import rows before creating a shipment.
  * @summary Preview Shipment Import
  */
@@ -740,7 +809,7 @@ export const useReturnShipmentApiV1ShipmentsShipmentIdReturnPost = <TError = HTT
  */
 export const addShipmentItemApiV1ShipmentsShipmentIdItemsPost = (
     shipmentId: string,
-    addItemRequest: AddItemRequest,
+    shipmentItemRequest: ShipmentItemRequest,
  signal?: AbortSignal
 ) => {
       
@@ -748,7 +817,7 @@ export const addShipmentItemApiV1ShipmentsShipmentIdItemsPost = (
       return customInstance<ShipmentResponse>(
       {url: `/api/v1/shipments/${shipmentId}/items`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: addItemRequest, signal
+      data: shipmentItemRequest, signal
     },
       );
     }
@@ -756,8 +825,8 @@ export const addShipmentItemApiV1ShipmentsShipmentIdItemsPost = (
 
 
 export const getAddShipmentItemApiV1ShipmentsShipmentIdItemsPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>, TError,{shipmentId: string;data: AddItemRequest}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>, TError,{shipmentId: string;data: AddItemRequest}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>, TError,{shipmentId: string;data: ShipmentItemRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>, TError,{shipmentId: string;data: ShipmentItemRequest}, TContext> => {
 
 const mutationKey = ['addShipmentItemApiV1ShipmentsShipmentIdItemsPost'];
 const {mutation: mutationOptions} = options ?
@@ -769,7 +838,7 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>, {shipmentId: string;data: AddItemRequest}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>, {shipmentId: string;data: ShipmentItemRequest}> = (props) => {
           const {shipmentId,data} = props ?? {};
 
           return  addShipmentItemApiV1ShipmentsShipmentIdItemsPost(shipmentId,data,)
@@ -781,18 +850,18 @@ const {mutation: mutationOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type AddShipmentItemApiV1ShipmentsShipmentIdItemsPostMutationResult = NonNullable<Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>>
-    export type AddShipmentItemApiV1ShipmentsShipmentIdItemsPostMutationBody = AddItemRequest
+    export type AddShipmentItemApiV1ShipmentsShipmentIdItemsPostMutationBody = ShipmentItemRequest
     export type AddShipmentItemApiV1ShipmentsShipmentIdItemsPostMutationError = HTTPValidationError
 
     /**
  * @summary Add Shipment Item
  */
 export const useAddShipmentItemApiV1ShipmentsShipmentIdItemsPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>, TError,{shipmentId: string;data: AddItemRequest}, TContext>, }
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>, TError,{shipmentId: string;data: ShipmentItemRequest}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof addShipmentItemApiV1ShipmentsShipmentIdItemsPost>>,
         TError,
-        {shipmentId: string;data: AddItemRequest},
+        {shipmentId: string;data: ShipmentItemRequest},
         TContext
       > => {
 

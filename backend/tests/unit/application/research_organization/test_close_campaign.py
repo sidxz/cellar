@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Callable
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock
 
 import pytest
 from returns.result import Failure, Success
@@ -19,20 +19,15 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
-from cellar.domain.research_organization.collection import Collection
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
-    HitCall,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.events import (
-    CampaignClosed,
-    CampaignPublishedCollectionCreated,
-)
+from cellar.domain.research_organization.events import CampaignClosed
+from cellar.domain.research_organization.source_ref import RunRef, SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -44,7 +39,6 @@ from tests.unit.application.research_organization._helpers import (
     fake_auth,
     make_campaign_repo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Local builder helpers
@@ -95,13 +89,11 @@ def _make_measurement(
 def _build_campaign(
     workspace_id: uuid.UUID,
     *,
-    publishes_collection: bool = True,
     n_channels: int = 1,
     n_results: int = 1,
     protocol_id: uuid.UUID | None = None,
     readout_definition_id: uuid.UUID | None = None,
     override_indices: set[tuple[int, int]] | None = None,
-    decision: CampaignDecision = CampaignDecision.SELECTED,
 ) -> tuple[Campaign, list[CampaignChannel], list[CampaignResult]]:
     """Build a DRAFT campaign with channels/results/measurements."""
     if override_indices is None:
@@ -112,7 +104,6 @@ def _build_campaign(
         project_id=uuid.uuid4(),
         name="Test Campaign",
         description=None,
-        publishes_collection=publishes_collection,
         created_by=uuid.uuid4(),
     )
 
@@ -134,7 +125,6 @@ def _build_campaign(
             is_override = (ri, ci) in override_indices
             m = _make_measurement(result.id, ch.id, is_manual_override=is_override)
             result.add_measurement(m)
-        result.decision = decision  # type: ignore[misc]
         campaign.add_result(result)
         results.append(result)
 
@@ -143,6 +133,7 @@ def _build_campaign(
 
 def _fresh_measurement_factory(unit: str = "uM") -> Callable:
     """Returns a resolver factory that produces fresh measurements (value=99.0)."""
+
     def _factory(channel, result_id, molecule_id) -> CampaignMeasurement:
         return CampaignMeasurement(
             result_id=result_id,
@@ -153,11 +144,13 @@ def _fresh_measurement_factory(unit: str = "uM") -> Callable:
             protocol_name_snapshot="Proto",
             protocol_version_snapshot=1,
         )
+
     return _factory
 
 
 def _nd_measurement_factory() -> Callable:
     """Returns a resolver factory that produces ND measurements with placeholder unit '-'."""
+
     def _factory(channel, result_id, molecule_id) -> CampaignMeasurement:
         return CampaignMeasurement(
             result_id=result_id,
@@ -168,6 +161,7 @@ def _nd_measurement_factory() -> Callable:
             protocol_name_snapshot="Proto",
             protocol_version_snapshot=1,
         )
+
     return _factory
 
 
@@ -204,13 +198,16 @@ def _make_fake_protocol(
 
 
 def _make_command(
-    workspace_id: uuid.UUID, campaign_id: uuid.UUID, user_id: uuid.UUID | None = None
+    workspace_id: uuid.UUID,
+    campaign_id: uuid.UUID,
+    user_id: uuid.UUID | None = None,
+    note: str | None = None,
 ) -> CloseCampaignCommand:
     return CloseCampaignCommand(
         workspace_id=workspace_id,
         campaign_id=campaign_id,
         user_id=user_id or uuid.uuid4(),
-        signature_id=uuid.uuid4(),
+        note=note,
     )
 
 
@@ -222,21 +219,13 @@ def _make_use_case(
     readout_unit: str | None = "uM",
     resolver_unit: str = "uM",
     resolver_factory: Callable | None = None,
-    publishes_collection: bool = True,
-) -> tuple[CloseCampaign, AsyncMock, AsyncMock, AsyncMock, FakeResolver]:
-    """Build a CloseCampaign use case with fakes; return (uc, campaign_repo, collection_repo, protocol_repo, resolver)."""
+) -> tuple[CloseCampaign, AsyncMock, AsyncMock, FakeResolver]:
+    """Build a CloseCampaign use case with fakes; return (uc, campaign_repo, protocol_repo, resolver).
+
+    No ``collection_repo`` — soft close publishes nothing (spec §4/§5).
+    """
     saved: list[Campaign] = []
     campaign_repo = make_campaign_repo(saved=saved, find_in_ws=campaign)
-
-    coll_saved: list[Collection] = []
-    collection_repo = AsyncMock()
-
-    async def _coll_save(coll: Collection) -> None:
-        coll_saved.append(coll)
-
-    collection_repo.save = AsyncMock(side_effect=_coll_save)
-    collection_repo.add_molecules = AsyncMock(return_value=0)
-    collection_repo.saved = coll_saved  # type: ignore[attr-defined]
 
     protocols = []
     if protocol_id is not None and readout_definition_id is not None:
@@ -255,12 +244,11 @@ def _make_use_case(
     uc = CloseCampaign(
         uow=FakeUnitOfWork(),
         campaign_repo=campaign_repo,
-        collection_repo=collection_repo,
         protocol_repo=protocol_repo,
         resolver=resolver,
         dispatcher=dispatcher,
     )
-    return uc, campaign_repo, collection_repo, protocol_repo, resolver
+    return uc, campaign_repo, protocol_repo, resolver
 
 
 # ---------------------------------------------------------------------------
@@ -270,11 +258,11 @@ def _make_use_case(
 
 class TestCloseCampaign:
     # ------------------------------------------------------------------
-    # 1. Happy path with publishes_collection=True
+    # 1. Happy path — no signature, no collection, note persisted
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_happy_path_publishes_collection_true(self) -> None:
-        """1 channel, 3 results (2 SELECTED, 1 REJECTED); collection is created & frozen."""
+    async def test_happy_path_persists_note_and_source_protocols(self) -> None:
+        """1 channel, 3 results; note is persisted; no collection is touched."""
         auth = fake_auth()
         pid = uuid.uuid4()
         rdid = uuid.uuid4()
@@ -284,121 +272,61 @@ class TestCloseCampaign:
             project_id=uuid.uuid4(),
             name="Alpha",
             description=None,
-            publishes_collection=True,
             created_by=uuid.uuid4(),
         )
         ch = _make_channel(campaign.id, protocol_id=pid, readout_definition_id=rdid)
         campaign.add_channel(ch)
 
-        sel_mol_ids: list[uuid.UUID] = []
-        for i in range(3):
+        for _ in range(3):
             r = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
             r.add_measurement(_make_measurement(r.id, ch.id))
-            r.decision = CampaignDecision.SELECTED if i < 2 else CampaignDecision.REJECTED  # type: ignore[misc]
             campaign.add_result(r)
-            if i < 2:
-                sel_mol_ids.append(r.molecule_id)
 
-        uc, campaign_repo, collection_repo, protocol_repo, resolver = _make_use_case(
+        uc, campaign_repo, protocol_repo, resolver = _make_use_case(
             campaign, protocol_id=pid, readout_definition_id=rdid
         )
-        cmd = _make_command(auth.workspace_id, campaign.id)
+        cmd = _make_command(auth.workspace_id, campaign.id, note="Confirmed by wet lab")
         out = await uc(cmd, auth=auth)
 
         assert isinstance(out, Success)
         c = out.unwrap()
         assert c.status == CampaignStatus.CLOSED
+        assert c.close_note == "Confirmed by wet lab"
 
         # source_protocols populated
         assert len(c.source_protocols) == 1
         assert c.source_protocols[0]["id"] == str(pid)
         assert c.source_protocols[0]["name"] == "Test Protocol"
 
-        # collection published — save called twice: once pre-freeze (for membership), once post-freeze
-        assert c.published_collection_id is not None
-        assert len(collection_repo.saved) == 2  # same object, saved before and after freeze
-        saved_coll = collection_repo.saved[-1]  # inspect final state
-        assert saved_coll.is_frozen is True
-        assert saved_coll.derived_from_campaign_id == campaign.id
-
-        # add_molecules called with exactly the 2 SELECTED mol_ids
-        collection_repo.add_molecules.assert_awaited_once()
-        call_args = collection_repo.add_molecules.call_args
-        passed_ids = set(call_args.args[2])
-        assert passed_ids == set(sel_mol_ids)
-
-        # Dispatcher was called; events are on the campaign before commit drains them —
-        # FakeUnitOfWork only drains tracked aggregates, so inspect campaign directly.
         dispatcher = uc._dispatcher
         dispatcher.dispatch_all.assert_awaited_once()
-        # Verify aggregate registered both events (before FakeUoW clears them).
-        # Since FakeUnitOfWork doesn't auto-track aggregates, events remain in campaign.
+        # Events remain on the campaign — FakeUnitOfWork doesn't auto-drain them.
         all_events = campaign.collect_events()
         event_types = {type(e) for e in all_events}
         assert CampaignClosed in event_types
-        assert CampaignPublishedCollectionCreated in event_types
 
     # ------------------------------------------------------------------
-    # 2. Happy path with publishes_collection=False
+    # 2. No note supplied → close_note stays None
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_happy_path_publishes_collection_false(self) -> None:
-        """No collection emitted when publishes_collection=False."""
+    async def test_close_without_note_leaves_close_note_none(self) -> None:
         auth = fake_auth()
         pid = uuid.uuid4()
         rdid = uuid.uuid4()
         campaign, _, _ = _build_campaign(
-            auth.workspace_id,
-            publishes_collection=False,
-            protocol_id=pid,
-            readout_definition_id=rdid,
+            auth.workspace_id, protocol_id=pid, readout_definition_id=rdid
         )
 
-        uc, campaign_repo, collection_repo, protocol_repo, resolver = _make_use_case(
-            campaign, protocol_id=pid, readout_definition_id=rdid
-        )
+        uc, _, _, _ = _make_use_case(campaign, protocol_id=pid, readout_definition_id=rdid)
         cmd = _make_command(auth.workspace_id, campaign.id)
         out = await uc(cmd, auth=auth)
 
         assert isinstance(out, Success)
         c = out.unwrap()
-        assert c.status == CampaignStatus.CLOSED
-        assert c.published_collection_id is None
-        collection_repo.save.assert_not_awaited()
-        collection_repo.add_molecules.assert_not_awaited()
+        assert c.close_note is None
 
     # ------------------------------------------------------------------
-    # 3. publishes_collection=True with zero SELECTED results
-    # ------------------------------------------------------------------
-    @pytest.mark.asyncio
-    async def test_publishes_collection_zero_selected(self) -> None:
-        """Collection still created/frozen; add_molecules NOT called when no SELECTED results."""
-        auth = fake_auth()
-        pid = uuid.uuid4()
-        rdid = uuid.uuid4()
-        campaign, _, _ = _build_campaign(
-            auth.workspace_id,
-            publishes_collection=True,
-            protocol_id=pid,
-            readout_definition_id=rdid,
-            decision=CampaignDecision.REJECTED,  # all results REJECTED
-        )
-
-        uc, campaign_repo, collection_repo, protocol_repo, resolver = _make_use_case(
-            campaign, protocol_id=pid, readout_definition_id=rdid
-        )
-        cmd = _make_command(auth.workspace_id, campaign.id)
-        out = await uc(cmd, auth=auth)
-
-        assert isinstance(out, Success)
-        c = out.unwrap()
-        assert c.published_collection_id is not None
-        # save called twice: once before freeze (mutable), once after (frozen)
-        assert len(collection_repo.saved) == 2
-        collection_repo.add_molecules.assert_not_awaited()
-
-    # ------------------------------------------------------------------
-    # 4. Re-resolve respects manual override
+    # 3. Re-resolve respects manual override
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_manual_override_not_re_resolved(self) -> None:
@@ -413,7 +341,7 @@ class TestCloseCampaign:
             override_indices={(0, 0)},
         )
 
-        uc, _, _, _, resolver = _make_use_case(
+        uc, _, _, resolver = _make_use_case(
             campaign, protocol_id=pid, readout_definition_id=rdid
         )
         cmd = _make_command(auth.workspace_id, campaign.id)
@@ -428,7 +356,7 @@ class TestCloseCampaign:
         assert m.value == 10.0
 
     # ------------------------------------------------------------------
-    # 5. ND unit repair: unit "-" replaced with real ReadoutDefinition.unit
+    # 4. ND unit repair: unit "-" replaced with real ReadoutDefinition.unit
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_nd_unit_repaired_when_readout_has_unit(self) -> None:
@@ -442,7 +370,6 @@ class TestCloseCampaign:
             project_id=uuid.uuid4(),
             name="ND Repair",
             description=None,
-            publishes_collection=False,
             created_by=uuid.uuid4(),
         )
         ch = _make_channel(campaign.id, protocol_id=pid, readout_definition_id=rdid)
@@ -452,7 +379,7 @@ class TestCloseCampaign:
         campaign.add_result(r)
 
         # Resolver returns ND with placeholder unit "-"
-        uc, _, _, _, resolver = _make_use_case(
+        uc, _, _, resolver = _make_use_case(
             campaign,
             protocol_id=pid,
             readout_definition_id=rdid,
@@ -473,7 +400,7 @@ class TestCloseCampaign:
         assert m.id == original_id  # id preserved — no DELETE+INSERT collision
 
     # ------------------------------------------------------------------
-    # 6. ND unit NOT repaired when readout's unit is None
+    # 5. ND unit NOT repaired when readout's unit is None
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_nd_unit_not_repaired_when_readout_unit_none(self) -> None:
@@ -487,7 +414,6 @@ class TestCloseCampaign:
             project_id=uuid.uuid4(),
             name="ND No Repair",
             description=None,
-            publishes_collection=False,
             created_by=uuid.uuid4(),
         )
         ch = _make_channel(campaign.id, protocol_id=pid, readout_definition_id=rdid)
@@ -497,7 +423,7 @@ class TestCloseCampaign:
         campaign.add_result(r)
 
         # readout_unit=None → no repair
-        uc, _, _, _, resolver = _make_use_case(
+        uc, _, _, resolver = _make_use_case(
             campaign,
             protocol_id=pid,
             readout_definition_id=rdid,
@@ -513,7 +439,7 @@ class TestCloseCampaign:
         assert m.unit == "-"  # left as-is
 
     # ------------------------------------------------------------------
-    # 7. No channels → ValidationError from aggregate.close
+    # 6. No channels → ValidationError from aggregate.close
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_no_channels_returns_validation_failure(self) -> None:
@@ -524,13 +450,12 @@ class TestCloseCampaign:
             project_id=uuid.uuid4(),
             name="No Channels",
             description=None,
-            publishes_collection=False,
             created_by=uuid.uuid4(),
         )
         r = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
         campaign.add_result(r)
 
-        uc, campaign_repo, _, _, _ = _make_use_case(campaign)
+        uc, campaign_repo, _, _ = _make_use_case(campaign)
         cmd = _make_command(auth.workspace_id, campaign.id)
         out = await uc(cmd, auth=auth)
 
@@ -539,7 +464,7 @@ class TestCloseCampaign:
         campaign_repo.save.assert_not_awaited()
 
     # ------------------------------------------------------------------
-    # 8. No results → ValidationError from aggregate.close
+    # 7. No results → ValidationError from aggregate.close
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_no_results_returns_validation_failure(self) -> None:
@@ -550,14 +475,13 @@ class TestCloseCampaign:
             project_id=uuid.uuid4(),
             name="No Results",
             description=None,
-            publishes_collection=False,
             created_by=uuid.uuid4(),
         )
         ch = _make_channel(campaign.id)
         campaign.add_channel(ch)
         # no results added
 
-        uc, campaign_repo, _, _, _ = _make_use_case(campaign)
+        uc, campaign_repo, _, _ = _make_use_case(campaign)
         cmd = _make_command(auth.workspace_id, campaign.id)
         out = await uc(cmd, auth=auth)
 
@@ -566,21 +490,19 @@ class TestCloseCampaign:
         campaign_repo.save.assert_not_awaited()
 
     # ------------------------------------------------------------------
-    # 9. Campaign not found
+    # 8. Campaign not found
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_campaign_not_found_returns_not_found_failure(self) -> None:
         auth = fake_auth()
         campaign_repo = make_campaign_repo(find_in_ws=None)
         protocol_repo = _make_protocol_repo()
-        collection_repo = AsyncMock()
         dispatcher = AsyncMock()
         resolver = FakeResolver(factory=_fresh_measurement_factory())
 
         uc = CloseCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            collection_repo=collection_repo,
             protocol_repo=protocol_repo,
             resolver=resolver,
             dispatcher=dispatcher,
@@ -593,7 +515,7 @@ class TestCloseCampaign:
         campaign_repo.save.assert_not_awaited()
 
     # ------------------------------------------------------------------
-    # 10. Campaign already CLOSED → ValidationError
+    # 9. Campaign already CLOSED → ValidationError
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_already_closed_returns_validation_failure(self) -> None:
@@ -601,7 +523,7 @@ class TestCloseCampaign:
         campaign, _, _ = _build_campaign(auth.workspace_id)
         campaign.status = CampaignStatus.CLOSED  # type: ignore[misc]
 
-        uc, campaign_repo, _, _, _ = _make_use_case(campaign)
+        uc, campaign_repo, _, _ = _make_use_case(campaign)
         cmd = _make_command(auth.workspace_id, campaign.id)
         out = await uc(cmd, auth=auth)
 
@@ -610,19 +532,20 @@ class TestCloseCampaign:
         campaign_repo.save.assert_not_awaited()
 
     # ------------------------------------------------------------------
-    # 11. Unauthorized viewer → AuthorizationError
+    # 10. Unauthorized viewer → AuthorizationError
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_unauthorized_viewer_returns_authorization_failure(self) -> None:
         auth = fake_auth(role="viewer")
         campaign, _, _ = _build_campaign(auth.workspace_id)
 
-        uc, campaign_repo, _, _, _ = _make_use_case(campaign)
+        uc, campaign_repo, _, _ = _make_use_case(campaign)
         cmd = _make_command(auth.workspace_id, campaign.id)
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
+
     # ------------------------------------------------------------------
-    # 12. Deduplication: two channels sharing one protocol_id → 1 source_protocol
+    # 11. Deduplication: two channels sharing one protocol_id → 1 source_protocol
     # ------------------------------------------------------------------
     @pytest.mark.asyncio
     async def test_source_protocols_dedupes_shared_protocol(self) -> None:
@@ -637,11 +560,14 @@ class TestCloseCampaign:
             project_id=uuid.uuid4(),
             name="Dedup",
             description=None,
-            publishes_collection=False,
             created_by=uuid.uuid4(),
         )
-        ch1 = _make_channel(campaign.id, protocol_id=shared_pid, readout_definition_id=rdid1, display_order=0)
-        ch2 = _make_channel(campaign.id, protocol_id=shared_pid, readout_definition_id=rdid2, display_order=1)
+        ch1 = _make_channel(
+            campaign.id, protocol_id=shared_pid, readout_definition_id=rdid1, display_order=0
+        )
+        ch2 = _make_channel(
+            campaign.id, protocol_id=shared_pid, readout_definition_id=rdid2, display_order=1
+        )
         campaign.add_channel(ch1)
         campaign.add_channel(ch2)
 
@@ -663,7 +589,6 @@ class TestCloseCampaign:
         uc = CloseCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            collection_repo=AsyncMock(),
             protocol_repo=protocol_repo,
             resolver=resolver,
             dispatcher=dispatcher,
@@ -678,3 +603,42 @@ class TestCloseCampaign:
         # Dedup: find_by_ids called once with that one id
         protocol_repo.find_by_ids.assert_awaited_once()
         assert set(protocol_repo.find_by_ids.call_args.args[1]) == {shared_pid}
+
+    @pytest.mark.asyncio
+    async def test_resolution_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — the close-time re-resolve honours the campaign's runs."""
+        auth = fake_auth()
+        campaign, channels, results = _build_campaign(auth.workspace_id)
+        run_id = uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(run_id, channels[0].protocol_id)])
+
+        uc, _, _, resolver = _make_use_case(campaign)
+        out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
+        assert isinstance(out, Success)
+        assert resolver.run_ids_seen == [[run_id]]
+
+    @pytest.mark.asyncio
+    async def test_run_refs_alone_do_not_scope_resolution(self) -> None:
+        """A RunRef records only the run that won a pick — never the seed
+        set. A campaign whose rows carry RunRefs but which recorded no seed
+        runs resolves protocol-wide (the D4 fallback)."""
+        auth = fake_auth()
+        campaign, channels, results = _build_campaign(auth.workspace_id)
+        results[0].added_from = RunRef(run_id=uuid.uuid4())
+
+        uc, _, _, resolver = _make_use_case(campaign)
+        out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
+        assert isinstance(out, Success)
+        assert resolver.run_ids_seen == [None]
+
+    @pytest.mark.asyncio
+    async def test_close_opt_out_channel_resolves_unrestricted(self) -> None:
+        auth = fake_auth()
+        campaign, channels, results = _build_campaign(auth.workspace_id)
+        campaign.record_seed_runs([SeedRun(uuid.uuid4(), channels[0].protocol_id)])
+        channels[0].resolve_from_all_runs = True
+
+        uc, _, _, resolver = _make_use_case(campaign)
+        out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
+        assert isinstance(out, Success)
+        assert resolver.run_ids_seen == [None]

@@ -3,7 +3,6 @@
 import { EmptyState, ErrorState } from "@/shared/components/empty-state";
 import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
-import { Button } from "@/shared/components/ui/button";
 import {
   Table,
   TableBody,
@@ -12,20 +11,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { Crosshair, Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { useDeleteTarget, useTargets } from "../hooks/use-targets";
+import { useAppConfig } from "@/shared/lib/app-config";
+import { Crosshair, ExternalLink } from "lucide-react";
+import { useTargets } from "../hooks/use-targets";
 import { TARGET_TYPE_LABELS, type Target, type TargetType } from "../types";
-import { EditTargetDialog } from "./edit-target-dialog";
 
+/** Read-only mirror of prot-cellar's target catalog. Edits happen in
+ *  prot-cellar; Admin → Targets pulls them across. */
 export function TargetList() {
   const { data: targets, isLoading, error } = useTargets();
-  const deleteMutation = useDeleteTarget();
-  const [editTarget, setEditTarget] = useState<Target | null>(null);
+  const { protCellarUrl } = useAppConfig();
 
-  if (isLoading) {
-    return <SkeletonList />;
-  }
+  if (isLoading) return <SkeletonList />;
 
   if (error) {
     return (
@@ -41,7 +38,7 @@ export function TargetList() {
       <EmptyState
         icon={Crosshair}
         title="No targets"
-        description="Create your first target to associate with protocols."
+        description="Targets come from Prot-Cellar. Ask an admin to run Sync from Prot-Cellar (Admin → Targets)."
       />
     );
   }
@@ -54,9 +51,8 @@ export function TargetList() {
             <TableHead>Name</TableHead>
             <TableHead>Type</TableHead>
             <TableHead>Organism</TableHead>
-            <TableHead>Gene</TableHead>
-            <TableHead>UniProt</TableHead>
-            <TableHead className="w-20" />
+            <TableHead>ChEMBL</TableHead>
+            <TableHead className="w-12" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -68,43 +64,23 @@ export function TargetList() {
                   {TARGET_TYPE_LABELS[target.target_type as TargetType] ?? target.target_type}
                 </Badge>
               </TableCell>
-              <TableCell>{target.organism ?? "\u2014"}</TableCell>
-              <TableCell>{target.gene_name ?? "\u2014"}</TableCell>
-              <TableCell className="font-mono text-sm">{target.uniprot_id ?? "\u2014"}</TableCell>
+              <TableCell>{target.organism ?? "—"}</TableCell>
+              <TableCell className="font-mono text-sm">{target.chembl_id ?? "—"}</TableCell>
               <TableCell>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => setEditTarget(target)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => deleteMutation.mutate(target.id)}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                <a
+                  href={`${protCellarUrl}/targets/${target.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open ${target.name} in Prot-Cellar`}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-      {editTarget && (
-        <EditTargetDialog
-          target={editTarget}
-          open={!!editTarget}
-          onOpenChange={(open) => {
-            if (!open) setEditTarget(null);
-          }}
-        />
-      )}
     </div>
   );
 }

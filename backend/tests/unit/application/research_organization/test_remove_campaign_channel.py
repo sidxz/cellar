@@ -47,7 +47,6 @@ def _make_campaign_with_channel_and_result(
         project_id=uuid.uuid4(),
         name="Campaign",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
     channel = CampaignChannel(

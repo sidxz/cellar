@@ -18,6 +18,9 @@ from cellar.infrastructure.storage.fsspec_client import FsspecStorageClient
 
 
 def register_attachment(container: Container) -> None:
+    # Force cascade rules to register at DI bootstrap.
+    import cellar.infrastructure.cascade.rules_attachment  # noqa: F401
+
     def _attach_cmd(uc_cls: type):
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])

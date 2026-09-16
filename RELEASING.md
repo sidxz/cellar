@@ -43,7 +43,8 @@ frontend is compatible.
    ```
 4. CI (`.github/workflows/publish-images.yml`) then:
    - builds **only** that component and tags the image `1.4.0`, `1.4`, `1`;
-   - injects `APP_VERSION` / `GIT_SHA` / `BUILD_DATE` into the image;
+   - injects `APP_VERSION` / `APP_GIT_SHA` / `APP_BUILD_DATE` into the image — all three
+     come from `scripts/build-info.sh <component>`, the single derivation shared with `make dev`;
    - generates a `git-cliff` changelog scoped to that component since its
      previous tag and publishes a **GitHub Release** ("Backend v1.4.0").
 
@@ -64,5 +65,8 @@ honest: it is not a clean release.
 ## Not the source of truth
 
 `backend/pyproject.toml` and `frontend/package.json` carry a placeholder version
-used only as a local-dev fallback. **Do not** treat them as authoritative — the
-git tag is. There is nothing to bump in those files when releasing.
+that **nothing displays**. The git tag is authoritative; there is nothing to bump
+in those files when releasing. Locally, `make dev` exports the same identity the
+image would get (`scripts/build-info.sh` → `git describe` against the nearest
+`<component>-v*` tag, e.g. `0.1.0-3-g2b000f0`, plus the short SHA and a build
+date); with no tag at all both apps show `0.0.0+dev` / `unknown`.

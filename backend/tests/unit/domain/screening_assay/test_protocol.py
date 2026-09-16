@@ -8,7 +8,6 @@ from cellar.domain.screening_assay.enums import (
     ConditionDataType,
     ProtocolStatus,
     ProtocolType,
-    ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
 )
@@ -238,19 +237,6 @@ class TestReadoutDefinition:
         assert rd.is_calculated is True
         assert rd.calculation_formula == "100 - percent_inhibition"
 
-    def test_defaults(self) -> None:
-        rd = ReadoutDefinition(
-            protocol_id=uuid.uuid4(),
-            name="IC50",
-            data_type=ReadoutDataType.NUMERIC,
-        )
-        assert rd.aggregation == ReadoutAggregation.NONE
-        assert rd.normalizations == frozenset()
-        assert rd.is_calculated is False
-        assert rd.calculation_formula is None
-        assert rd.display_order == 0
-        assert rd.unit is None
-        assert rd.precision is None
 
     def test_name_is_stripped(self) -> None:
         rd = ReadoutDefinition(

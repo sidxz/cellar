@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from cellar.domain.inventory.enums import CommentTarget
 from cellar.domain.shared.events import DomainEvent
 
 # ---------------------------------------------------------------------------
@@ -215,6 +216,7 @@ class PlateRegistered(DomainEvent):
     format: str
     plate_type: str
     registered_by: uuid.UUID
+    owner_org_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -238,6 +240,16 @@ class PlateStatusChanged(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class PlateDisposed(DomainEvent):
     barcode: str
+
+
+# ---------------------------------------------------------------------------
+# Org plate policy events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrgPlatePolicySet(DomainEvent):
+    org_id: uuid.UUID
 
 
 # ---------------------------------------------------------------------------
@@ -268,3 +280,128 @@ class CddPlateImportCompleted(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class CddPlateImportFailed(DomainEvent):
     reason: str
+
+
+# ---------------------------------------------------------------------------
+# Plate group events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupCreated(DomainEvent):
+    name: str
+    owner_org_id: uuid.UUID
+    parent_group_id: uuid.UUID | None
+    created_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupUpdated(DomainEvent):
+    name: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupMoved(DomainEvent):
+    old_parent_group_id: uuid.UUID | None
+    new_parent_group_id: uuid.UUID | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupDeleted(DomainEvent):
+    name: str
+    owner_org_id: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateGroupMembershipChanged(DomainEvent):
+    """A plate was assigned to / removed from / moved between groups.
+
+    User decision 2026-08-13: grouping IS audited — this was the one
+    un-audited mutation class on a 21-CFR-tracked aggregate."""
+
+    plate_id: uuid.UUID
+    old_group_id: uuid.UUID | None
+    new_group_id: uuid.UUID | None
+
+
+# ---------------------------------------------------------------------------
+# Plate loan events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanRequested(DomainEvent):
+    owner_org_id: uuid.UUID
+    borrower_org_id: uuid.UUID
+    plate_ids: list[uuid.UUID]
+    requested_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsApproved(DomainEvent):
+    item_ids: list[uuid.UUID]
+    approved_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsDenied(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsCheckedOut(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsReturnRequested(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsReturned(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanItemsCancelled(DomainEvent):
+    item_ids: list[uuid.UUID]
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlateLoanClosed(DomainEvent):
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Kiosk device events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class KioskDeviceCreated(DomainEvent):
+    org_id: uuid.UUID
+    name: str
+    created_by: uuid.UUID
+
+
+@dataclass(frozen=True, kw_only=True)
+class KioskDeviceRevoked(DomainEvent):
+    org_id: uuid.UUID
+    name: str
+
+
+# ---------------------------------------------------------------------------
+# Comment events
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommentAdded(DomainEvent):
+    """A comment was appended to a loan / group / plate. ``user_id`` feeds the
+    audit catch-all's actor attribution (None for migrated legacy authors)."""
+
+    target_type: CommentTarget
+    target_id: uuid.UUID
+    loan_id: uuid.UUID | None
+    user_id: uuid.UUID | None

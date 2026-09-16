@@ -7,12 +7,11 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.admin.admin_delete_registry import get_entry
-from cellar.application.admin.cascade_service import CascadeService
+from cellar.application.admin.cascade_service import CascadePreviewResult, CascadeService
 from cellar.application.admin.tier2_entities import TIER2_ENTITY_TYPES
 from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.shared.cascade import CascadeNode
 from cellar.domain.shared.errors import (
     DomainError,
     NotFoundError,
@@ -35,7 +34,7 @@ class CascadePreview:
         self,
         input: CascadePreviewQuery,
         auth: AuthContext | None = None,
-    ) -> Result[CascadeNode, DomainError]:
+    ) -> Result[CascadePreviewResult, DomainError]:
         require_admin(auth)
         require_same_workspace(auth, input.workspace_id)
         if input.entity_type not in TIER2_ENTITY_TYPES:
@@ -45,9 +44,9 @@ class CascadePreview:
             return Failure(NotFoundError("entity_type", input.entity_type))
 
         async with self._uow:
-            node = await self._cascade_service.preview(
+            result = await self._cascade_service.preview(
                 parent_table=entry.table,
                 parent_id=input.entity_id,
                 workspace_id=input.workspace_id,
             )
-            return Success(node)
+            return Success(result)

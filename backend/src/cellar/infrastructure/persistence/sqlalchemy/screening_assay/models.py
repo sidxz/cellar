@@ -75,7 +75,8 @@ protocol_targets = Table(
         "target_id",
         Uuid(as_uuid=True),
         # RESTRICT: a referenced target must not be silently stripped from its
-        # protocols by a delete — DeleteTarget 409s first (migration 053).
+        # protocols (migration 053). Moot in practice — targets are a
+        # read-only mirror now and are never deleted locally (see sync_targets).
         ForeignKey("targets.id", ondelete="RESTRICT"),
         primary_key=True,
     ),
@@ -147,6 +148,11 @@ class TargetModel(Base, EntityModelMixin, WorkspaceIdMixin):
     description: Mapped[str | None] = mapped_column(Text)
     target_class: Mapped[str | None] = mapped_column(String(100))
     sequence: Mapped[str | None] = mapped_column(Text)
+    # Mirror of prot-cellar (spec 2026-08-24): the source's ChEMBL id and its
+    # ``version`` counter — the change signal for re-sync. NULL = a legacy
+    # locally-created row (only the cutover script should ever see one).
+    chembl_id: Mapped[str | None] = mapped_column(String(30))
+    source_version: Mapped[int | None] = mapped_column(Integer)
 
     __table_args__ = (Index("ix_target_ws_name", "workspace_id", "name"),)
 
@@ -347,6 +353,10 @@ class PlateModel(Base, EntityModelMixin):
     plate_map: Mapped[dict | None] = mapped_column(JSONB)
     parent_plate_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     template_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    # Optional link to the physical inventory plate (spec 2026-08-26 §4).
+    registered_plate_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("registered_plates.id", ondelete="SET NULL")
+    )
 
     run: Mapped[RunModel] = relationship("RunModel", back_populates="plates")
     wells: Mapped[list[WellModel]] = relationship(
@@ -356,7 +366,10 @@ class PlateModel(Base, EntityModelMixin):
         back_populates="plate",
     )
 
-    __table_args__ = (Index("ix_plate_run", "run_id"),)
+    __table_args__ = (
+        Index("ix_plate_run", "run_id"),
+        Index("ix_plates_registered_plate", "registered_plate_id"),
+    )
 
 
 class WellModel(Base, EntityModelMixin):

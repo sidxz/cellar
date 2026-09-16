@@ -1,4 +1,4 @@
-"""Integration test: RunRepository.find_by_ids."""
+"""Integration tests: RunRepository — find_by_ids and the registered-plate link round-trip."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from datetime import date
 import pytest
 import sqlalchemy as sa
 
+from cellar.domain.screening_assay.run import Plate, Run
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
     SQLAlchemyRunRepository,
 )
@@ -16,9 +17,7 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 _USER_ID = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")
 
 
-async def _insert_protocol(
-    uow: AsyncUnitOfWork, protocol_id: uuid.UUID, ws_id: uuid.UUID
-) -> None:
+async def _insert_protocol(uow: AsyncUnitOfWork, protocol_id: uuid.UUID, ws_id: uuid.UUID) -> None:
     await uow.session.execute(
         sa.text(
             "INSERT INTO protocols "
@@ -120,3 +119,53 @@ class TestFindByIds:
         async with uow:
             runs = await repo.find_by_ids(workspace_id, [r1, uuid.uuid4()])
         assert set(runs.keys()) == {r1}
+
+
+async def _insert_registered_plate(
+    uow: AsyncUnitOfWork, plate_id: uuid.UUID, ws_id: uuid.UUID, *, barcode: str
+) -> None:
+    await uow.session.execute(
+        sa.text(
+            "INSERT INTO registered_plates (id, workspace_id, barcode, plate_label, "
+            "format, plate_type, registered_by, version) "
+            "VALUES (:id, :ws, :bc, :bc, '96', 'assay', :rb, 1)"
+        ),
+        {"id": plate_id, "ws": ws_id, "bc": barcode, "rb": _USER_ID},
+    )
+
+
+@pytest.mark.asyncio
+class TestRegisteredPlateLinkRoundTrip:
+    async def test_link_persists_and_clearing_persists_null(self, uow, workspace_id):
+        proto_id, rp_id = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            await _insert_protocol(uow, proto_id, workspace_id)
+            await _insert_registered_plate(uow, rp_id, workspace_id, barcode="000123")
+            await uow.commit()
+
+        run = Run.create(
+            workspace_id=workspace_id,
+            protocol_id=proto_id,
+            run_date=date.today(),
+            operator=_USER_ID,
+        )
+        plate = Plate(run_id=run.id, plate_number=1, registered_plate_id=rp_id)
+        run.add_plate(plate)
+
+        repo = SQLAlchemyRunRepository(uow)
+        async with uow:
+            await repo.save(run)
+            await uow.commit()
+
+        async with uow:
+            loaded = await repo.find_by_id_in_workspace(workspace_id, run.id)
+            assert loaded is not None
+            assert loaded.plates[0].registered_plate_id == rp_id
+            loaded.link_plate(plate.id, None)
+            await repo.save(loaded)
+            await uow.commit()
+
+        async with uow:
+            again = await repo.find_by_id_in_workspace(workspace_id, run.id)
+            assert again is not None
+            assert again.plates[0].registered_plate_id is None

@@ -14,6 +14,7 @@ from cellar.domain.inventory.enums import (
 )
 from cellar.domain.inventory.events import (
     PlateDisposed,
+    PlateGroupMembershipChanged,
     PlateMoved,
     PlateRegistered,
     PlateStatusChanged,
@@ -93,6 +94,7 @@ class RegisteredPlate(AggregateRoot):
         *,
         id: uuid.UUID | None = None,
         workspace_id: uuid.UUID,
+        owner_org_id: uuid.UUID | None = None,
         barcode: Barcode,
         plate_label: str,
         format: PlateFormat,
@@ -104,6 +106,7 @@ class RegisteredPlate(AggregateRoot):
         parent_plate_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
         template_id: uuid.UUID | None = None,
+        group_id: uuid.UUID | None = None,
         notes: str | None = None,
         custom_fields: dict[str, Any] | None = None,
         created_at: datetime | None = None,
@@ -116,6 +119,7 @@ class RegisteredPlate(AggregateRoot):
             raise ValidationError("plate_label (label) must not be empty")
 
         self.workspace_id = workspace_id
+        self.owner_org_id = owner_org_id
         self.barcode = barcode
         self.plate_label = plate_label.strip()
         self.format = format
@@ -127,6 +131,7 @@ class RegisteredPlate(AggregateRoot):
         self.parent_plate_id = parent_plate_id
         self.project_id = project_id
         self.template_id = template_id
+        self.group_id = group_id
         self.notes = notes
         self.custom_fields: dict[str, Any] | None = dict(custom_fields) if custom_fields else None
 
@@ -139,6 +144,7 @@ class RegisteredPlate(AggregateRoot):
         cls,
         *,
         workspace_id: uuid.UUID,
+        owner_org_id: uuid.UUID | None = None,
         barcode: Barcode,
         plate_label: str,
         format: PlateFormat,
@@ -153,6 +159,7 @@ class RegisteredPlate(AggregateRoot):
         """Register a new physical plate in the inventory."""
         plate = cls(
             workspace_id=workspace_id,
+            owner_org_id=owner_org_id,
             barcode=barcode,
             plate_label=plate_label,
             format=format,
@@ -173,6 +180,7 @@ class RegisteredPlate(AggregateRoot):
                 format=format.value,
                 plate_type=plate_type.value,
                 registered_by=registered_by,
+                owner_org_id=owner_org_id,
             )
         )
         return plate
@@ -280,6 +288,23 @@ class RegisteredPlate(AggregateRoot):
             )
         )
 
+    def assign_to_group(self, group_id: uuid.UUID | None) -> None:
+        """Set or clear this plate's group. The plate-org == group-org
+        invariant is enforced by the use case, which holds both aggregates."""
+        old = self.group_id
+        self.group_id = group_id
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            PlateGroupMembershipChanged(
+                aggregate_id=self.id,
+                aggregate_type="RegisteredPlate",
+                workspace_id=self.workspace_id,
+                plate_id=self.id,
+                old_group_id=old,
+                new_group_id=group_id,
+            )
+        )
+
     # ------------------------------------------------------------------
     # Derive (copy to child plate)
     # ------------------------------------------------------------------
@@ -293,9 +318,12 @@ class RegisteredPlate(AggregateRoot):
         registered_by: uuid.UUID,
         storage_location_id: uuid.UUID | None = None,
     ) -> RegisteredPlate:
-        """Create a child plate derived from this one, copying the well map."""
+        """Create a child plate derived from this one, copying the well map and
+        owner_org_id. Ownership is a domain invariant, not a caller choice: a
+        daughter of an org's plate is that org's material regardless of operator."""
         child = RegisteredPlate.register(
             workspace_id=self.workspace_id,
+            owner_org_id=self.owner_org_id,
             barcode=barcode,
             plate_label=plate_label,
             format=self.format,
@@ -319,6 +347,7 @@ class RegisteredPlate(AggregateRoot):
         format: PlateFormat | None = ...,  # type: ignore[assignment]
         plate_type: PlateType | None = None,
         project_id: uuid.UUID | None = ...,  # type: ignore[assignment]
+        owner_org_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         storage_location_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         template_id: uuid.UUID | None = ...,  # type: ignore[assignment]
         notes: str | None = ...,  # type: ignore[assignment]
@@ -338,6 +367,8 @@ class RegisteredPlate(AggregateRoot):
             self.plate_type = plate_type
         if project_id is not ...:
             self.project_id = project_id
+        if owner_org_id is not ...:
+            self.owner_org_id = owner_org_id
         if storage_location_id is not ...:
             self.storage_location_id = storage_location_id
         if template_id is not ...:

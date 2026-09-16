@@ -128,16 +128,16 @@ A second pass against the stated intent ("snapshot for DAIKON publication; scree
 - **Work:** Compare `alembic current` vs `alembic heads` at FastAPI startup; log a structured warning when behind. ~30 minutes.
 
 ### M6. Real e-signature integration (replace `crypto.randomUUID()` stub)
-- **What:** CloseCampaign currently takes a caller-supplied `signature_id`. FE generates a random UUID in `close-sign-dialog.tsx`. Real flow: Sentinel re-auth challenge → mints an `ElectronicSignature` → use case records its id. Whole chain is stubbed.
-- **Where:** Multiple. `close-sign-dialog.tsx` (FE re-auth integration), new application-layer SignatureService (or wire AuditRecordingService to capture signatures), `CloseCampaignRequest` DTO probably loses `signature_id` (moves to a SignatureService dep), Sentinel integration for the re-auth challenge.
-- **Work:** ~1 day. Coupled to broader audit/Sentinel work.
+- **What:** CloseCampaign currently takes a caller-supplied `signature_id`. FE generates a random UUID in `close-sign-dialog.tsx`. Real flow: Duar re-auth challenge → mints an `ElectronicSignature` → use case records its id. Whole chain is stubbed.
+- **Where:** Multiple. `close-sign-dialog.tsx` (FE re-auth integration), new application-layer SignatureService (or wire AuditRecordingService to capture signatures), `CloseCampaignRequest` DTO probably loses `signature_id` (moves to a SignatureService dep), Duar integration for the re-auth challenge.
+- **Work:** ~1 day. Coupled to broader audit/Duar work.
 
 ---
 
 ## Low priority (engineering / nice-to-have)
 
-### L1. Sentinel-resolved `closed_by.name` in published JSON
-- **What:** Currently emits `{"id": uuid, "name": null}` for closed_by. Need Sentinel user-resolver hook.
+### L1. Duar-resolved `closed_by.name` in published JSON
+- **What:** Currently emits `{"id": uuid, "name": null}` for closed_by. Need Duar user-resolver hook.
 - **Where:** `backend/src/cellar/application/research_organization/get_published_campaign.py`. TODO comment exists.
 
 ### L2. Audit `signature.signed_at` in published JSON

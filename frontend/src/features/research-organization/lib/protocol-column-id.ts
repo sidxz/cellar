@@ -39,6 +39,9 @@ import type { InterceptKey, Protocol } from "@/features/screening-assay/types";
 
 // ─── Formatters (paired with the resolver below) ───────────────────────────
 
+/** The single cross-protocol "Active in" column. Carries no protocol id. */
+export const ANY_COLUMN_ID = "any";
+
 /** Token for "the best DR curve for this readout-def" — renders one cell per
  *  protocol-declared intercept by default. */
 export function drcColId(readoutDefId: string): string {

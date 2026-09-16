@@ -3,6 +3,7 @@
 import { MOLECULES_KEY } from "@/features/chemical-registration";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { PlateRunResponse } from "@/shared/lib/api/model";
 import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -13,30 +14,36 @@ import type {
   UpdatePlateInput,
   WellMapping,
 } from "../types/plates";
-
-const PLATES_KEY = ["plates"];
+import { PLATES_KEY } from "./query-keys";
 
 const plateHooks = createCrudHooks<RegisteredPlate, RegisterPlateInput, UpdatePlateInput>({
   entityName: "Plate",
   baseUrl: `${API_V1}/plates`,
-  queryKey: PLATES_KEY,
+  queryKey: [...PLATES_KEY],
 });
 
 /** Custom list — supports optional filter params with undefined values, plus tag filtering. */
-export function usePlates(params?: {
-  barcode?: string;
-  plate_type?: string;
-  status?: string;
-  format?: string;
-  tags?: string[];
-  tagLogic?: "any" | "all";
-}) {
+export function usePlates(
+  params?: {
+    barcode?: string;
+    plate_type?: string;
+    status?: string;
+    format?: string;
+    owner_org_id?: string;
+    group_id?: string;
+    tags?: string[];
+    tagLogic?: "any" | "all";
+  },
+  options?: { enabled?: boolean },
+) {
   const tags = params?.tags?.length ? params.tags : null;
   const cleanParams: Record<string, unknown> = {};
   if (params?.barcode) cleanParams.barcode = params.barcode;
   if (params?.plate_type) cleanParams.plate_type = params.plate_type;
   if (params?.status) cleanParams.status = params.status;
   if (params?.format) cleanParams.format = params.format;
+  if (params?.owner_org_id) cleanParams.owner_org_id = params.owner_org_id;
+  if (params?.group_id) cleanParams.group_id = params.group_id;
   if (tags) {
     cleanParams.tags = tags;
     cleanParams.tag_logic = params?.tagLogic ?? "any";
@@ -50,6 +57,7 @@ export function usePlates(params?: {
         method: "GET",
         params: Object.keys(cleanParams).length > 0 ? cleanParams : undefined,
       }),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -117,6 +125,19 @@ export function usePlateChildren(parentId: string | undefined) {
         method: "GET",
       }),
     enabled: !!parentId,
+  });
+}
+
+/** Runs this physical plate was used in, newest first. */
+export function usePlateRuns(plateId: string | undefined) {
+  return useQuery({
+    queryKey: [...PLATES_KEY, plateId, "runs"],
+    queryFn: () =>
+      customInstance<PlateRunResponse[]>({
+        url: `${API_V1}/plates/${plateId}/runs`,
+        method: "GET",
+      }),
+    enabled: !!plateId,
   });
 }
 

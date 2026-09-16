@@ -12,12 +12,12 @@ import {
   CommandSeparator,
 } from "@/shared/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { useAppConfig } from "@/shared/lib/app-config";
 import { cn } from "@/shared/lib/utils";
-import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, ExternalLink, X } from "lucide-react";
 import { useState } from "react";
 import { useTargets } from "../hooks/use-targets";
 import { TARGET_TYPE_LABELS, type Target, type TargetType } from "../types";
-import { CreateTargetDialog } from "./create-target-dialog";
 
 interface TargetMultiSelectProps {
   /** Currently-selected target ids. */
@@ -35,8 +35,9 @@ function typeLabel(t: Target): string {
 /**
  * Multi-select picker for biological targets — built on the same Command +
  * Popover primitives as `SearchableSelect`, but selecting many. Selected
- * targets render below as removable chips; an inline "Create target…" action
- * opens `CreateTargetDialog` and auto-selects the result. No UUID entry.
+ * targets render below as removable chips; an inline "Manage in Prot-Cellar"
+ * action opens the catalog owner in a new tab — targets are not created
+ * here. No UUID entry.
  */
 export function TargetMultiSelect({
   value,
@@ -46,8 +47,8 @@ export function TargetMultiSelect({
   className,
 }: TargetMultiSelectProps) {
   const { data: targets } = useTargets();
+  const { protCellarUrl } = useAppConfig();
   const [open, setOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
 
   const byId = new Map((targets ?? []).map((t) => [t.id, t] as const));
   const selected = value.map((id) => byId.get(id)).filter((t): t is Target => Boolean(t));
@@ -58,11 +59,6 @@ export function TargetMultiSelect({
     // stale `value` and the gesture is silently swallowed.
     if (disabled) return;
     onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
-  };
-
-  const handleCreated = (t: Target) => {
-    if (!value.includes(t.id)) onChange([...value, t.id]);
-    setCreateOpen(false);
   };
 
   return (
@@ -110,14 +106,14 @@ export function TargetMultiSelect({
               <CommandSeparator />
               <CommandGroup>
                 <CommandItem
-                  value="__create_target__"
+                  value="__manage_targets__"
                   onSelect={() => {
                     setOpen(false);
-                    setCreateOpen(true);
+                    window.open(`${protCellarUrl}/targets`, "_blank", "noopener,noreferrer");
                   }}
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create target…
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Manage in Prot-Cellar
                 </CommandItem>
               </CommandGroup>
             </CommandList>
@@ -144,12 +140,6 @@ export function TargetMultiSelect({
           ))}
         </div>
       )}
-
-      <CreateTargetDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreated={handleCreated}
-      />
     </div>
   );
 }

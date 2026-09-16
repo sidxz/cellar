@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { shortId } from "@/shared/lib/utils";
 import { Grid3x3, Paperclip, Pencil, Upload } from "lucide-react";
@@ -17,7 +18,7 @@ import { useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
-import type { PlateFormat, Run } from "../types";
+import type { PlateData, PlateFormat, Run } from "../types";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
 import { GridImportDialog } from "./grid-import-dialog";
 import { PlateHeatmap } from "./plate-heatmap";
@@ -26,6 +27,7 @@ import { ReadoutDataTable } from "./readout-data-table";
 import { RunDoseResponseResults } from "./run-dr-results";
 import { RunHeatmapPanel } from "./run-heatmap-panel";
 import { RunImportWizard } from "./run-import-wizard";
+import { RunPlateLink } from "./run-plate-link";
 import { SummaryImportWizard } from "./summary-import-wizard";
 import { ZPrimeBadge } from "./z-prime-badge";
 
@@ -161,8 +163,20 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const plates = plateMap?.plates ?? [];
   const doseUnit = plateMap?.dose_unit ?? "uM";
   const hasPlateMap = plates.length > 0 && plates.some((p) => p.wells.length > 0);
+  const canEdit = useCanEdit();
 
   const [activeTab, setActiveTab] = useHashTab("readout");
+
+  // Plate header (number + physical-plate link) above each plate map.
+  const renderPlate = (p: PlateData) => (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <span className="font-medium">Plate {p.plate_number}</span>
+        <RunPlateLink runId={run.id} plate={p} readOnly={run.is_locked || !canEdit} />
+      </div>
+      <PlateMapViewer plate={p} doseUnit={doseUnit} />
+    </div>
+  );
 
   return (
     <>
@@ -231,14 +245,12 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                   </TabsList>
                   {plates.map((p) => (
                     <TabsContent key={p.plate_id} value={p.plate_id}>
-                      <div className="mt-3">
-                        <PlateMapViewer plate={p} doseUnit={doseUnit} />
-                      </div>
+                      <div className="mt-3">{renderPlate(p)}</div>
                     </TabsContent>
                   ))}
                 </Tabs>
               ) : (
-                <PlateMapViewer plate={plates[0]} doseUnit={doseUnit} />
+                renderPlate(plates[0])
               )
             ) : run.plate_format ? (
               <div className="space-y-3">

@@ -14,6 +14,20 @@ from cellar.domain.sar_analysis.scaffold_tree_types import ScaffoldTreeResult
 from cellar.domain.sar_analysis.umap_job import UmapJob
 
 
+class MoleculeSmilesFetcher(Protocol):
+    """Lean ``(id, smiles, bemis_murcko_smiles)`` projection, workspace-scoped.
+
+    Shared by every SAR compute that needs structures rather than whole
+    Molecule aggregates: the scaffold network and the MCS today. Molecules
+    without a SMILES are dropped by the implementation — a structureless row
+    has nothing to contribute to either.
+    """
+
+    async def fetch_for_scaffold_tree(
+        self, *, molecule_ids: list[UUID], workspace_id: UUID
+    ) -> list[tuple[UUID, str, str | None]]: ...
+
+
 class ScaffoldTreeJobRepository(Protocol):
     async def save(self, job: ScaffoldTreeJob) -> None: ...
 

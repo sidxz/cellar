@@ -12,6 +12,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36",
     "asyncpg>=0.30.0",
     "alembic>=1.14.0",
+    "pymysql>=1.1",  # legacy plate-tracker migration read (scripts/migrate_legacy_plate_tracker.py); removable post-cutover
     # Validation
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
@@ -19,7 +20,7 @@ dependencies = [
     "lagom>=2.7.0",
     "returns>=0.23.0",
     # Auth
-    "sentinel-auth-sdk>=0.17.0",
+    "duar-auth>=1.0.0",
     "pyjwt[crypto]>=2.10.0",
     "httpx>=0.28.0",
     # Chemistry

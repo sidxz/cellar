@@ -104,8 +104,7 @@ class FetchActivityHeatmap:
             if payload.axis_y not in labels or payload.axis_x not in labels:
                 return Failure(
                     ValidationError(
-                        "axis_y and axis_x must be R-group labels of the run "
-                        f"({sorted(labels)})"
+                        f"axis_y and axis_x must be R-group labels of the run ({sorted(labels)})"
                     )
                 )
             projection = await self._projections.find_by_id_in_workspace(

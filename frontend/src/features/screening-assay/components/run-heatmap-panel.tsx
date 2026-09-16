@@ -30,6 +30,7 @@ import {
   type ScaleKind,
   type ValueScale,
 } from "./plate-value-heatmap";
+import { RunPlateLink } from "./run-plate-link";
 import { Z_PRIME_BADGE } from "./z-prime-badge";
 
 type ValueLayer = "raw" | "normalized";
@@ -371,6 +372,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                     {plate.summary.total_wells} wells · {plate.summary.sample_wells} samples ·{" "}
                     {plate.summary.control_wells} controls
                   </span>
+                  <RunPlateLink runId={run.id} plate={plate} readOnly />
                 </div>
                 {zp != null && zpQuality && (
                   <div className="flex items-center gap-2">

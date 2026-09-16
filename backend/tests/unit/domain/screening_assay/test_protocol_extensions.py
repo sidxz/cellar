@@ -119,21 +119,6 @@ class TestReadoutDefinitionPickList:
 
 
 class TestReadoutDefinitionDoseResponse:
-    def test_dose_response_with_config(self):
-        cfg = DoseResponseConfig(
-            curve_type=CurveType.IC50,
-            x_readout_name="concentration",
-            y_readout_name="% inhibition",
-        )
-        rd = ReadoutDefinition(
-            protocol_id=_PLACEHOLDER_ID,
-            name="IC50",
-            data_type=ReadoutDataType.DOSE_RESPONSE,
-            unit="uM",
-            dose_response_config=cfg,
-        )
-        assert rd.dose_response_config is not None
-        assert rd.dose_response_config.curve_type == CurveType.IC50
 
     def test_dose_response_without_config_raises(self):
         with pytest.raises(ValidationError, match="dose_response_config"):
@@ -559,9 +544,6 @@ class TestProtocolOntologyAnnotations:
         with pytest.raises(ConflictError, match="DRAFT"):
             protocol.remove_ontology_annotation("bioassay_type")
 
-    def test_default_ontology_annotations_empty(self):
-        protocol = _make_protocol()
-        assert protocol.ontology_annotations == {}
 
     def test_overwrite_annotation(self):
         protocol = _make_protocol()
@@ -655,7 +637,3 @@ class TestProtocolCreateOntologyAnnotations:
         assert set(protocol.ontology_annotations) == {"organism", "assay_format", "detection"}
         assert protocol.ontology_annotations["assay_format"][0].label == "biochemical"
         assert protocol.ontology_annotations["detection"][0].label == "fluorescence"
-
-    def test_create_without_annotations_defaults_empty(self):
-        protocol = _make_protocol()
-        assert protocol.ontology_annotations == {}

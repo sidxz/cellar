@@ -24,7 +24,7 @@ class UpdatePreferencesCommand(Command):
     theme: str | None = None
     sidebar_collapsed: bool | None = None
     # Use UNSET sentinel so that explicit None means "clear", while omission means "don't change"
-    default_search_columns: list[str] | None | object = UNSET
+    default_search_columns: list[str] | object | None = UNSET
 
 
 class UpdatePreferences:

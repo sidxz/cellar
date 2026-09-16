@@ -13,10 +13,9 @@ Selection rules:
 - GEOMETRIC_MEAN: log-space mean over strictly positive candidate values.
 - MANUAL_PICK: leaves the cell as ND so the user can fill it.
 
-Empty candidates yield an ND measurement (no value, no hit_call). The
-domain invariant requires a non-empty ``unit`` even for ND cells, so a
-single-char placeholder is used when no candidate is available to
-contribute one.
+Empty candidates yield an ND measurement (no value). The domain invariant
+requires a non-empty ``unit`` even for ND cells, so a single-char
+placeholder is used when no candidate is available to contribute one.
 """
 
 from __future__ import annotations
@@ -41,17 +40,16 @@ from cellar.application.screening.run_aggregation import (
 from cellar.application.screening.run_aggregation import (
     resolve_intercept as _resolve_intercept,
 )
+from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
-    HitCall,
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
 
 # Back-compat alias — channel_resolution callers still type ResolvedCandidate.
 # Remove in a follow-up commit once consumers migrate.
@@ -70,10 +68,10 @@ __all__ = [
     # Re-exported for tests / channel-side callers
     "_build_aggregate_curve_snapshot",
     "_build_curve_snapshot",
-    "_compute_hit_call",
     "_intercept_scalar",
     "_max_dose_from_raw",
     "_resolve_intercept",
+    "resolution_run_ids",
 ]
 
 # Placeholder unit used for ND cells when no candidate is available to
@@ -92,7 +90,14 @@ class ChannelResolutionQuery(Protocol):
         workspace_id: uuid.UUID,
         channel: CampaignChannel,
         molecule_id: uuid.UUID,
-    ) -> list[ResolvedCandidate]: ...
+        run_ids: list[uuid.UUID] | None = None,
+    ) -> list[ResolvedCandidate]:
+        """Candidates for one (channel, molecule) pair.
+
+        ``run_ids`` restricts the sweep to those runs; ``None`` means every
+        run of the protocol.
+        """
+        ...
 
     async def fetch_candidates_for_runs(
         self,
@@ -115,6 +120,66 @@ class ChannelResolutionQuery(Protocol):
         """
         ...
 
+    async def fetch_endpoint_candidates(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        channel: CampaignChannel,
+        molecule_id: uuid.UUID,
+        wellless_only: bool = False,
+        run_ids: list[uuid.UUID] | None = None,
+    ) -> list[ResolvedCandidate]:
+        """Raw-layer ``readout_data`` rows for the channel's readout definition.
+
+        Returned regardless of the channel's ``source_kind``. Used as the
+        reported-endpoint fallback on a dose-response channel when no curve
+        survives QC: a summary-imported "reported IC50" lands on the readout
+        layer, not as a fitted curve.
+
+        ``wellless_only`` restricts to rows with no ``well_id``. The
+        dose-response fallback passes it — a reported endpoint is well-less by
+        construction, and per-well response readings on the same definition
+        would otherwise average into a fake endpoint. Numeric readout channels
+        leave it off and keep reading per-well rows.
+
+        ``run_ids`` restricts the sweep to those runs; ``None`` means every
+        run of the protocol.
+        """
+        ...
+
+    async def fetch_endpoint_candidates_for_runs(
+        self,
+        *,
+        workspace_id: uuid.UUID,
+        run_ids: list[uuid.UUID],
+        readout_definition_id: uuid.UUID,
+        normalization_applied: str | None = None,
+        wellless_only: bool = False,
+    ) -> dict[uuid.UUID, list[ResolvedCandidate]]:
+        """Run-scoped twin of :meth:`fetch_endpoint_candidates`.
+
+        Also the READOUT_DATA implementation of
+        :meth:`fetch_candidates_for_runs`. The readout definition already pins
+        the protocol, so no ``protocol_id`` is taken. Returns
+        ``dict[molecule_id, list[ResolvedCandidate]]``.
+        """
+        ...
+
+
+def resolution_run_ids(campaign: Campaign, channel: CampaignChannel) -> list[uuid.UUID] | None:
+    """Run scope for resolving one channel of a campaign (spec D4).
+
+    ``None`` (every run of the channel's protocol) when the channel opts out
+    via ``resolve_from_all_runs`` or when the campaign has no seed runs of the
+    channel's protocol — so a mirrored counter-screen on a protocol the
+    campaign was never seeded from resolves protocol-wide without the flag.
+    Otherwise the campaign's seed run ids of that protocol. Compute once per
+    channel, not per cell.
+    """
+    if channel.resolve_from_all_runs:
+        return None
+    return campaign.seed_run_ids_for(channel.protocol_id) or None
+
 
 def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
     if not qc:
@@ -125,46 +190,6 @@ def _passes_qc(c: ResolvedCandidate, qc: dict | None) -> bool:
     return not (min_z is not None and (c.z_prime is None or c.z_prime < min_z))
 
 
-def _threshold_input_value(c: ResolvedCandidate, threshold: HitCriterion | None) -> float | None:
-    """Back-compat shim: scalar for the threshold's intercept_key.
-
-    Pre-Option-A callers pass a ``HitCriterion`` whose ``intercept_key``
-    carried the channel's intercept identity. Post-Option-A, channel
-    identity lives on the channel itself; this shim still exists for
-    protocol-level criterion evaluation paths that haven't been
-    rewired (e.g. evaluating ``recommended_hit_criteria`` outside of a
-    campaign channel).
-    """
-    return _intercept_scalar(c, threshold.intercept_key if threshold else None)
-
-
-def _compute_hit_call(value: float | None, threshold: HitCriterion | None) -> HitCall | None:
-    if value is None or threshold is None:
-        return None
-    op = threshold.operator
-    target = threshold.value
-    if op == "between":
-        if not (isinstance(target, list) and len(target) == 2):
-            return None
-        low, high = target
-        if not (isinstance(low, (int, float)) and isinstance(high, (int, float))):
-            return None
-        return HitCall.HIT if (low <= value <= high) else HitCall.MISS
-    if isinstance(target, list):
-        # 'in' operator targets a set of strings — not applicable to a
-        # numeric measurement cell. Leave hit_call unset.
-        return None
-    if op == "lt":
-        return HitCall.HIT if value < target else HitCall.MISS
-    if op == "lte":
-        return HitCall.HIT if value <= target else HitCall.MISS
-    if op == "gt":
-        return HitCall.HIT if value > target else HitCall.MISS
-    if op == "gte":
-        return HitCall.HIT if value >= target else HitCall.MISS
-    return None
-
-
 def _nd_measurement(
     *,
     result_id: uuid.UUID,
@@ -172,7 +197,23 @@ def _nd_measurement(
     unit: str,
     protocol_name: str = "",
     protocol_version: int = 0,
+    source: ResolvedCandidate | None = None,
+    pin_source: bool = True,
 ) -> CampaignMeasurement:
+    """An ND cell. ``source`` is the run the cell was resolved *from*, when one
+    exists — an Inactive curve, or a fit with no readable intercept.
+
+    Carrying its snapshot (and, unless ``pin_source`` is off, its run/curve
+    ids) is what makes "tested, no value" separable from "nothing to resolve":
+    ``stage_evaluation._is_tested_nd`` reads exactly these fields to call the
+    first a miss and the second untested. The import path
+    (``preview_run_import._apply_selection_rule`` -> ``_Picked``) already keeps
+    them, so without this a Refresh from sources / Recompute channel would
+    quietly demote every tested ND back to untested.
+
+    ``pin_source=False`` for the aggregate rules, which have no single run to
+    point at — same rule the value-carrying path below applies.
+    """
     return CampaignMeasurement(
         result_id=result_id,
         channel_id=channel_id,
@@ -181,7 +222,10 @@ def _nd_measurement(
         unit=unit or _ND_UNIT_PLACEHOLDER,
         protocol_name_snapshot=protocol_name or "-",
         protocol_version_snapshot=protocol_version,
-        hit_call=None,
+        source_run_id=source.run_id if source and pin_source else None,
+        source_curve_id=source.curve_id if source and pin_source else None,
+        run_date_snapshot=source.run_date if source and pin_source else None,
+        curve_snapshot=_build_curve_snapshot(source) if source else None,
     )
 
 
@@ -198,11 +242,31 @@ class ChannelResolver:
         channel: CampaignChannel,
         result_id: uuid.UUID,
         molecule_id: uuid.UUID,
+        run_ids: list[uuid.UUID] | None = None,
     ) -> CampaignMeasurement:
+        """Resolve one cell. ``run_ids`` scopes the sweep — see
+        :func:`resolution_run_ids`; ``None`` means every run of the protocol."""
         candidates = await self._q.fetch_candidates(
-            workspace_id=workspace_id, channel=channel, molecule_id=molecule_id
+            workspace_id=workspace_id,
+            channel=channel,
+            molecule_id=molecule_id,
+            run_ids=run_ids,
         )
         candidates = [c for c in candidates if _passes_qc(c, channel.qc_filter)]
+
+        # D1 — a QC-passing curve of any class wins, including an inactive one
+        # (which still resolves ND). Reported endpoints — summary-imported
+        # readout_data rows on the same readout definition — are considered
+        # only when no curve survives QC.
+        if not candidates and channel.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
+            endpoints = await self._q.fetch_endpoint_candidates(
+                workspace_id=workspace_id,
+                channel=channel,
+                molecule_id=molecule_id,
+                wellless_only=True,
+                run_ids=run_ids,
+            )
+            candidates = [c for c in endpoints if _passes_qc(c, channel.qc_filter)]
 
         if not candidates:
             return _nd_measurement(
@@ -219,34 +283,35 @@ class ChannelResolver:
             ik,
         )
 
-        if result.value is None:
-            # The aggregator returned ND (all candidates dropped, MANUAL_PICK,
-            # or aggregate produced no positives). Use the representative run
-            # if any to carry protocol metadata onto the ND cell.
-            rep = result.representative_run or candidates[0]
-            return _nd_measurement(
-                result_id=result_id,
-                channel_id=channel.id,
-                unit=rep.unit or _ND_UNIT_PLACEHOLDER,
-                protocol_name=rep.protocol_name,
-                protocol_version=rep.protocol_version,
-            )
-
-        pick = result.representative_run
-        assert pick is not None  # value-Some implies representative-Some
-
-        # The candidate's wire-level qualifier (e.g. ">100 µM" detection
-        # limit on a readout) is overridden by the resolver-derived
-        # qualifier (ND from inactive, GT from at_bound). Otherwise carry it
-        # through.
-        qualifier = result.qualifier if result.qualifier != ValueQualifier.EQ else pick.qualifier
-
         # Aggregate modes (mean / geometric_mean) don't have a single source
         # run / curve to pin onto the measurement — the value is synthesized.
         is_aggregate = channel.selection_rule in {
             SelectionRule.MEAN_ACROSS_RUNS,
             SelectionRule.GEOMETRIC_MEAN,
         }
+
+        if result.value is None:
+            # The aggregator returned ND (all candidates dropped, MANUAL_PICK,
+            # or aggregate produced no positives). Use the representative run
+            # if any to carry protocol metadata onto the ND cell.
+            rep = result.representative_run or candidates[0]
+            # MANUAL_PICK stays bare: its ND means "no chemist has picked yet",
+            # not "the assay produced no value", and must keep reading as
+            # untested rather than becoming a miss.
+            manual = channel.selection_rule == SelectionRule.MANUAL_PICK
+            return _nd_measurement(
+                result_id=result_id,
+                channel_id=channel.id,
+                unit=rep.unit or _ND_UNIT_PLACEHOLDER,
+                protocol_name=rep.protocol_name,
+                protocol_version=rep.protocol_version,
+                source=None if manual else rep,
+                pin_source=not is_aggregate,
+            )
+
+        pick = result.representative_run
+        assert pick is not None  # value-Some implies representative-Some
+
         source_run = None if is_aggregate else pick.run_id
         source_curve = None if is_aggregate else pick.curve_id
         source_readout = None if is_aggregate else pick.readout_id
@@ -274,9 +339,8 @@ class ChannelResolver:
             result_id=result_id,
             channel_id=channel.id,
             value=result.value,
-            value_qualifier=qualifier,
+            value_qualifier=result.qualifier,
             unit=pick.unit or _ND_UNIT_PLACEHOLDER,
-            hit_call=_compute_hit_call(result.value, channel.hit_threshold),
             source_run_id=source_run,
             source_curve_id=source_curve,
             source_readout_id=source_readout,

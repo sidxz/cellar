@@ -59,7 +59,7 @@ class UpdateCampaignMetadataCommand(Command):
     # None means "don't change"; a string means "change to this value"
     name: str | None = None
     # UNSET means "don't touch"; None means "clear the description"
-    description: str | None | object = UNSET
+    description: str | object | None = UNSET
 
 
 class UpdateCampaignMetadata:

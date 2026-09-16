@@ -65,13 +65,13 @@ dev: install stop migrate ## Install deps, stop old instances, run migrations, s
 	@lsof -ti:3000 | xargs kill 2>/dev/null || true
 	@sleep 1
 	@echo "Starting backend on :8000..."
-	@nohup sh -c '$(BACKEND) && uv run uvicorn cellar.interface.app:app --reload --port 8000' \
+	@nohup sh -c 'eval "$$(scripts/build-info.sh backend | sed s/^/export\ APP_/)" && $(BACKEND) && uv run uvicorn cellar.interface.app:app --reload --port 8000' \
 		> $(LOGDIR)/backend.log 2>&1 & echo "$$!" > $(LOGDIR)/backend.pid
 	@echo "Starting Temporal worker..."
 	@nohup sh -c '$(BACKEND) && uv run python -m cellar.infrastructure.temporal.worker' \
 		> $(LOGDIR)/worker.log 2>&1 & echo "$$!" > $(LOGDIR)/worker.pid
 	@echo "Starting frontend on :3000..."
-	@nohup sh -c '$(FRONTEND) && pnpm dev' \
+	@nohup sh -c 'eval "$$(scripts/build-info.sh frontend | sed s/^/export\ APP_/)" && $(FRONTEND) && pnpm dev' \
 		> $(LOGDIR)/frontend.log 2>&1 & echo "$$!" > $(LOGDIR)/frontend.pid
 	@sleep 1
 	@echo ""
@@ -84,13 +84,13 @@ dev: install stop migrate ## Install deps, stop old instances, run migrations, s
 
 dev-be: ## Start backend only
 	@mkdir -p $(LOGDIR)
-	@nohup sh -c '$(BACKEND) && uv run uvicorn cellar.interface.app:app --reload --port 8000' \
+	@nohup sh -c 'eval "$$(scripts/build-info.sh backend | sed s/^/export\ APP_/)" && $(BACKEND) && uv run uvicorn cellar.interface.app:app --reload --port 8000' \
 		> $(LOGDIR)/backend.log 2>&1 & echo "$$!" > $(LOGDIR)/backend.pid
 	@echo "Backend started on :8000 (PID $$(cat $(LOGDIR)/backend.pid))"
 
 dev-fe: ## Start frontend only
 	@mkdir -p $(LOGDIR)
-	@nohup sh -c '$(FRONTEND) && pnpm dev' \
+	@nohup sh -c 'eval "$$(scripts/build-info.sh frontend | sed s/^/export\ APP_/)" && $(FRONTEND) && pnpm dev' \
 		> $(LOGDIR)/frontend.log 2>&1 & echo "$$!" > $(LOGDIR)/frontend.pid
 	@echo "Frontend started on :3000 (PID $$(cat $(LOGDIR)/frontend.pid))"
 

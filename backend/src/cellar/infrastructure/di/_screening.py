@@ -5,6 +5,7 @@ primitives, plate map, fit curves, ontology search/annotations, import run reado
 
 from __future__ import annotations
 
+import httpx
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -15,6 +16,7 @@ from cellar.application.chemical_registration.protocols import StructureProcesso
 from cellar.application.inventory.ensure_batch_exists import EnsureBatchExists
 from cellar.application.inventory.export_plate_layout import ExportPlateLayout
 from cellar.application.inventory.plate_read_model import PlateReadModelService
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.registered_plates import (
     ChangeStatus,
     DeletePlate,
@@ -35,14 +37,13 @@ from cellar.application.screening.create_dose_response import CreateDoseResponse
 from cellar.application.screening.create_protocol import CreateProtocol
 from cellar.application.screening.create_readout_data import CreateReadoutData
 from cellar.application.screening.create_run import CreateRun
-from cellar.application.screening.create_target import CreateTarget
 from cellar.application.screening.cross_protocol_resolver import CrossProtocolResolver
 from cellar.application.screening.delete_compound_flag import DeleteCompoundFlag
 from cellar.application.screening.delete_run import DeleteRun
-from cellar.application.screening.delete_target import DeleteTarget
 from cellar.application.screening.dose_response_enriched_reader import (
     DoseResponseEnrichedReader,
 )
+from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.application.screening.get_collection_gap import (
     GetProtocolCollectionGap,
@@ -57,9 +58,7 @@ from cellar.application.screening.get_dose_response_curves_batch import (
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
 from cellar.application.screening.get_plate_map import GetPlateMap
-from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
-from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.get_protocol_activity import GetProtocolActivitySummary
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
 from cellar.application.screening.get_readout_data import ListReadoutDataByRun
@@ -73,9 +72,11 @@ from cellar.application.screening.import_run_file import (
 )
 from cellar.application.screening.import_run_readouts import ImportRunReadouts
 from cellar.application.screening.import_summary_file import ImportSummaryFile
+from cellar.application.screening.link_run_plate import LinkRunPlate, UnlinkRunPlate
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
 from cellar.application.screening.list_protocol_summaries import ListProtocolSummaries
+from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
 from cellar.application.screening.lock_protocol import (
@@ -168,9 +169,11 @@ from cellar.application.screening.set_run_hit_criteria import (
     ResetRunHitCriteria,
     SetRunHitCriteria,
 )
+from cellar.application.screening.sync_targets import SyncFreshness, SyncTargetsFromProtCellar
+from cellar.application.screening.target_source import TargetSource
 from cellar.application.screening.update_run import UpdateRun
-from cellar.application.screening.update_target import UpdateTarget
 from cellar.application.shared.molecule_resolver import MoleculeResolver
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.parsers import TabularParser
 from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
@@ -189,6 +192,9 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
+    SQLAlchemyPlateLoanRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_read_model_reader import (
     SQLAlchemyPlateReadModelService,
@@ -242,6 +248,8 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_reposit
     SQLAlchemyTargetRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.prot_cellar.settings import ProtCellarSettings
+from cellar.infrastructure.prot_cellar.target_source import HttpTargetSource
 
 
 def register_screening(container: Container) -> None:
@@ -346,26 +354,33 @@ def register_screening(container: Container) -> None:
     container.define(SetControlLayout, _set_control_layout)
     container.define(RemoveControlLayout, _protocol_cmd(RemoveControlLayout))
 
-    # --- Targets ---
-    def _target_cmd(uc_cls: type):
-        def _f(c: Container):
-            uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyTargetRepository(uow), c[EventDispatcher])
+    # --- Targets (read-only mirror of prot-cellar) ---
+    # TargetSource is guarded so create_container(overrides={TargetSource: stub})
+    # can pre-register an in-memory source for API tests.
+    if TargetSource not in container.defined_types:
+        container.define(
+            TargetSource,
+            Singleton(lambda c: HttpTargetSource(c[httpx.AsyncClient], ProtCellarSettings())),
+        )
+    container.define(SyncFreshness, Singleton(SyncFreshness))
 
-        return _f
+    def _sync_targets(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SyncTargetsFromProtCellar(
+            uow, SQLAlchemyTargetRepository(uow), c[TargetSource], c[SyncFreshness]
+        )
 
-    def _target_query(uc_cls: type):
-        def _f(c: Container):
-            uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyTargetRepository(uow))
+    def _list_targets(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListTargets(uow, SQLAlchemyTargetRepository(uow), sync=c[SyncTargetsFromProtCellar])
 
-        return _f
+    def _get_target(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetTarget(uow, SQLAlchemyTargetRepository(uow))
 
-    container.define(CreateTarget, _target_cmd(CreateTarget))
-    container.define(UpdateTarget, _target_cmd(UpdateTarget))
-    container.define(DeleteTarget, _target_cmd(DeleteTarget))
-    container.define(GetTarget, _target_query(GetTarget))
-    container.define(ListTargets, _target_query(ListTargets))
+    container.define(SyncTargetsFromProtCellar, _sync_targets)
+    container.define(ListTargets, _list_targets)
+    container.define(GetTarget, _get_target)
 
     # --- Compound Flags ---
     def _compound_flag_uc(uc_cls: type):
@@ -687,9 +702,29 @@ def register_screening(container: Container) -> None:
             batch_repo=SQLAlchemyBatchRepository(uow),
             molecule_resolver=resolver,
             dispatcher=c[EventDispatcher],
+            readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
         )
 
     container.define(SetUpRunPlate, _set_up_run_plate)
+
+    # `_plate_visibility` is defined further down in this function; closures
+    # bind it by the time the container resolves these.
+    def _link_run_plate(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return LinkRunPlate(
+            uow,
+            SQLAlchemyRunRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            _plate_visibility(c, uow),
+            c[EventDispatcher],
+        )
+
+    def _unlink_run_plate(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UnlinkRunPlate(uow, SQLAlchemyRunRepository(uow), c[EventDispatcher])
+
+    container.define(LinkRunPlate, _link_run_plate)
+    container.define(UnlinkRunPlate, _unlink_run_plate)
 
     def _import_run_readouts(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -754,6 +789,8 @@ def register_screening(container: Container) -> None:
             dispatcher=c[EventDispatcher],
             calculation_engine=c[ReadoutCalculationEngine],
             ensure_batch_exists=c[EnsureBatchExists],
+            plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            plate_visibility=_plate_visibility(c, uow),
         )
 
     container.define(ImportRunFile, _import_run_file)
@@ -786,6 +823,10 @@ def register_screening(container: Container) -> None:
             batch_repo=SQLAlchemyBatchRepository(uow),
             parser=c[TabularParser],
             bulk_uc=c[BulkCreateReadoutData],
+            upload_attachment=c[UploadAttachment],
+            molecule_resolver=MoleculeResolver(
+                SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]
+            ),
         )
 
     container.define(ImportSummaryFile, _import_summary_file)
@@ -802,6 +843,9 @@ def register_screening(container: Container) -> None:
             batch_repo=SQLAlchemyBatchRepository(uow),
             parser=c[TabularParser],
             uow=uow,
+            molecule_resolver=MoleculeResolver(
+                SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]
+            ),
         )
 
     container.define(PreviewSummaryImport, _preview_summary_import)
@@ -851,46 +895,64 @@ def register_screening(container: Container) -> None:
 
         return _f
 
-    def _reg_plate_query(uc_cls: type):
+    def _plate_visibility(c: Container, uow: AsyncUnitOfWork) -> PlateVisibilityService:
+        # Loan repo wired uniformly across this section (Task 7 / spec §5):
+        # only GetPlate/ListPlates/ListChildren actually consume a borrowed
+        # set, but the arg is inert for the write paths below (they never
+        # call borrowed_plate_ids or pass a non-default `borrowed` to
+        # can_view) — one shape for the whole section beats a special case.
+        return PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow))
+
+    def _reg_plate_query_with_visibility(uc_cls: type):
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow))
+            visibility = _plate_visibility(c, uow)
+            return uc_cls(uow, SQLAlchemyRegisteredPlateRepository(uow), visibility)
+
+        return _f
+
+    def _reg_plate_cmd_with_visibility(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            visibility = _plate_visibility(c, uow)
+            return uc_cls(
+                uow, SQLAlchemyRegisteredPlateRepository(uow), c[EventDispatcher], visibility
+            )
 
         return _f
 
     def _map_wells(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        visibility = _plate_visibility(c, uow)
         return MapWells(
             uow,
             SQLAlchemyRegisteredPlateRepository(uow),
             SQLAlchemyBatchRepository(uow),
             c[EventDispatcher],
+            visibility,
         )
 
     container.define(RegisterPlate, _reg_plate_cmd(RegisterPlate))
-    container.define(UpdatePlate, _reg_plate_cmd(UpdatePlate))
+    container.define(UpdatePlate, _reg_plate_cmd_with_visibility(UpdatePlate))
     container.define(MapWells, _map_wells)
-    container.define(ChangeStatus, _reg_plate_cmd(ChangeStatus))
-    container.define(DerivePlate, _reg_plate_cmd(DerivePlate))
-    container.define(GetPlate, _reg_plate_query(GetPlate))
-    container.define(ListPlates, _reg_plate_query(ListPlates))
-    container.define(ListChildren, _reg_plate_query(ListChildren))
+    container.define(ChangeStatus, _reg_plate_cmd_with_visibility(ChangeStatus))
+    container.define(DerivePlate, _reg_plate_cmd_with_visibility(DerivePlate))
+    container.define(GetPlate, _reg_plate_query_with_visibility(GetPlate))
+    container.define(ListPlates, _reg_plate_query_with_visibility(ListPlates))
+    container.define(ListChildren, _reg_plate_query_with_visibility(ListChildren))
 
     def _export_plate_layout(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        visibility = _plate_visibility(c, uow)
         return ExportPlateLayout(
             uow,
             SQLAlchemyRegisteredPlateRepository(uow),
             SQLAlchemyBatchRepository(uow),
+            visibility,
         )
 
     container.define(ExportPlateLayout, _export_plate_layout)
-
-    def _delete_reg_plate(c: Container):
-        uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return DeletePlate(uow, SQLAlchemyRegisteredPlateRepository(uow), c[EventDispatcher])
-
-    container.define(DeletePlate, _delete_reg_plate)
+    container.define(DeletePlate, _reg_plate_cmd_with_visibility(DeletePlate))
 
     # --- Plate Read Model ---
     container.define(

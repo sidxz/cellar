@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from cellar.domain.inventory.enums import PlateStatus, PlateType
 from cellar.domain.inventory.registered_plate import RegisteredPlate
@@ -38,6 +38,19 @@ class SQLAlchemyRegisteredPlateRepository(
     # Custom queries
     # ------------------------------------------------------------------
 
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[RegisteredPlate]:
+        """Bulk-fetch plates by IDs, scoped to workspace."""
+        if not ids:
+            return []
+        stmt = select(RegisteredPlateModel).where(
+            RegisteredPlateModel.workspace_id == workspace_id,
+            RegisteredPlateModel.id.in_(ids),
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
+
     async def find_by_barcode(
         self, workspace_id: uuid.UUID, barcode: str
     ) -> RegisteredPlate | None:
@@ -52,6 +65,14 @@ class SQLAlchemyRegisteredPlateRepository(
         domain = self._to_domain(model)
         self._uow.track(domain)
         return domain
+
+    async def find_by_label(self, workspace_id: uuid.UUID, label: str) -> list[RegisteredPlate]:
+        stmt = select(RegisteredPlateModel).where(
+            RegisteredPlateModel.workspace_id == workspace_id,
+            RegisteredPlateModel.plate_label == label,
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_tracked(m) for m in result.scalars().all()]
 
     async def find_by_location(
         self, workspace_id: uuid.UUID, storage_location_id: uuid.UUID
@@ -106,6 +127,11 @@ class SQLAlchemyRegisteredPlateRepository(
         format: str | None = None,
         storage_location_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
+        owner_org_id: uuid.UUID | None = None,
+        group_id: uuid.UUID | None = None,
+        exclude_owner_org_ids: set[uuid.UUID] | None = None,
+        include_plate_ids: set[uuid.UUID] | None = None,
+        owner_scope_plate_ids: set[uuid.UUID] | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
     ) -> list[RegisteredPlate]:
@@ -132,6 +158,30 @@ class SQLAlchemyRegisteredPlateRepository(
             stmt = stmt.where(RegisteredPlateModel.storage_location_id == storage_location_id)
         if project_id is not None:
             stmt = stmt.where(RegisteredPlateModel.project_id == project_id)
+        if owner_org_id is not None:
+            owner_terms = [RegisteredPlateModel.owner_org_id == owner_org_id]
+            # spec §5 "plus borrowed-by-us": when the caller filters by their
+            # OWN org, plates actively borrowed by that org count as mine.
+            # Truthy-guard mirrors the exclusion block's empty-IN gotcha.
+            if owner_scope_plate_ids:
+                owner_terms.append(RegisteredPlateModel.id.in_(owner_scope_plate_ids))
+            stmt = stmt.where(or_(*owner_terms))
+        if group_id is not None:
+            stmt = stmt.where(RegisteredPlateModel.group_id == group_id)
+        if exclude_owner_org_ids:
+            # spec §5 loan clause: a plate whose owner org is excluded is
+            # still visible if it's on active loan to the caller (borrowed
+            # plates re-admitted via `id IN include_plate_ids`). Only add
+            # that arm when the set is non-empty — same empty-IN gotcha as
+            # the exclusion set itself (SQLAlchemy's expanding bindparam
+            # renders an empty IN in a way Postgres refuses against uuid).
+            exclusion_terms = [
+                RegisteredPlateModel.owner_org_id.is_(None),
+                RegisteredPlateModel.owner_org_id.not_in(exclude_owner_org_ids),
+            ]
+            if include_plate_ids:
+                exclusion_terms.append(RegisteredPlateModel.id.in_(include_plate_ids))
+            stmt = stmt.where(or_(*exclusion_terms))
         if tags:
             stmt = stmt.where(
                 RegisteredPlateModel.id.in_(
@@ -170,7 +220,9 @@ class SQLAlchemyRegisteredPlateRepository(
             storage_location_id=model.storage_location_id,
             parent_plate_id=model.parent_plate_id,
             project_id=model.project_id,
+            owner_org_id=model.owner_org_id,
             template_id=model.template_id,
+            group_id=model.group_id,
             notes=model.notes,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -191,7 +243,9 @@ class SQLAlchemyRegisteredPlateRepository(
             storage_location_id=aggregate.storage_location_id,
             parent_plate_id=aggregate.parent_plate_id,
             project_id=aggregate.project_id,
+            owner_org_id=aggregate.owner_org_id,
             template_id=aggregate.template_id,
+            group_id=aggregate.group_id,
             notes=aggregate.notes,
             version=aggregate.version,
         )
@@ -206,5 +260,7 @@ class SQLAlchemyRegisteredPlateRepository(
         model.storage_location_id = aggregate.storage_location_id
         model.parent_plate_id = aggregate.parent_plate_id
         model.project_id = aggregate.project_id
+        model.owner_org_id = aggregate.owner_org_id
         model.template_id = aggregate.template_id
+        model.group_id = aggregate.group_id
         model.notes = aggregate.notes

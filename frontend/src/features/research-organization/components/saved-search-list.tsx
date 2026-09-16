@@ -18,7 +18,7 @@ import {
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
 import { formatRelativeDate } from "@/shared/lib/format-date";
-import { useAuthzHasRole } from "@sentinel-auth/nextjs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { AlertTriangle, MoreHorizontal, Pencil, Play, Plus, Search, Trash2 } from "lucide-react";

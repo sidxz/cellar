@@ -3,12 +3,6 @@ from __future__ import annotations
 from cellar.infrastructure.logging.settings import LoggingSettings
 
 
-def test_defaults():
-    s = LoggingSettings(_env_file=None)
-    assert s.level == "INFO"
-    assert s.format == "json"
-    assert s.level_overrides == {}
-
 
 def test_reads_env(monkeypatch):
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")

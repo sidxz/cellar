@@ -4,7 +4,7 @@ import { createElement } from "react";
 import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock customInstance so tests don't require a live Sentinel/localStorage.
+// Mock customInstance so tests don't require a live Duar/localStorage.
 const mockCustomInstance = vi.fn();
 vi.mock("@/shared/lib/api/custom-instance", () => ({
   API_V1: "/api/v1",

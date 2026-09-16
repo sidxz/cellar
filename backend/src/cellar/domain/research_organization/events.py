@@ -80,10 +80,18 @@ class CampaignCreated(DomainEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class CampaignClosed(DomainEvent):
-    """Fired when a campaign is closed (locked) with an electronic signature."""
+    """Fired when a campaign is closed (locked)."""
 
     closed_by: uuid.UUID
-    signature_id: uuid.UUID
+    note: str | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignReopened(DomainEvent):
+    """Fired when a closed campaign is reopened back to draft."""
+
+    reopened_by: uuid.UUID
+    reason: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -94,7 +102,15 @@ class CampaignSuperseded(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CampaignPublishedCollectionCreated(DomainEvent):
-    """Fired when a campaign publishes its selected molecules as a collection."""
+class CampaignCollectionAdded(DomainEvent):
+    """A library was linked to a campaign. Use-case-constructed, emitted only
+    when a link row was actually inserted (idempotent re-adds stay silent)."""
 
     collection_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CampaignCollectionRemoved(DomainEvent):
+    collection_id: uuid.UUID
+    user_id: uuid.UUID | None = None

@@ -715,19 +715,19 @@ class Protocol(AggregateRoot):
         definition_id: uuid.UUID,
         *,
         name: str | None = None,
-        description: str | None | _UnsetT = _UNSET,
+        description: str | _UnsetT | None = _UNSET,
         data_type: ReadoutDataType | None = None,
-        unit: str | None | _UnsetT = _UNSET,
+        unit: str | _UnsetT | None = _UNSET,
         aggregation: ReadoutAggregation | None = None,
-        precision: int | None | _UnsetT = _UNSET,
-        normalizations: frozenset[ReadoutNormalization] | None | _UnsetT = _UNSET,
+        precision: int | _UnsetT | None = _UNSET,
+        normalizations: frozenset[ReadoutNormalization] | _UnsetT | None = _UNSET,
         is_calculated: bool | None = None,
-        calculation_formula: str | None | _UnsetT = _UNSET,
+        calculation_formula: str | _UnsetT | None = _UNSET,
         display_order: int | None = None,
         pick_list_values: (
-            list[PickListValue | str | dict[str, object]] | None | _UnsetT
+            list[PickListValue | str | dict[str, object]] | _UnsetT | None
         ) = _UNSET,
-        dose_response_config: DoseResponseConfig | None | _UnsetT = _UNSET,
+        dose_response_config: DoseResponseConfig | _UnsetT | None = _UNSET,
     ) -> None:
         """Update fields on an existing readout definition.
 
@@ -919,8 +919,8 @@ class Protocol(AggregateRoot):
         *,
         name: str | None = None,
         data_type: ConditionDataType | None = None,
-        unit: str | None | _UnsetT = _UNSET,
-        pick_list_values: list[str] | None | _UnsetT = _UNSET,
+        unit: str | _UnsetT | None = _UNSET,
+        pick_list_values: list[str] | _UnsetT | None = _UNSET,
     ) -> None:
         """Update fields on an existing condition definition."""
         self._guard_draft()

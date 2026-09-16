@@ -72,7 +72,7 @@ A stored generic structure description defining a family of compounds through va
 | Property | Type | Description |
 |----------|------|-------------|
 | id | UUID | |
-| workspace_id | UUID | FK → Sentinel workspace |
+| workspace_id | UUID | FK → Duar workspace |
 | name | string | e.g., "Patent US12345678 Claim 1", "Kinase Scaffold Series A" |
 | description | text? | Human-readable description of the chemical space |
 | core_scaffold | string | SMARTS pattern for the fixed core structure |

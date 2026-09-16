@@ -9,7 +9,6 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.research_organization.update_campaign_channel import (
-    UNSET,
     UpdateCampaignChannel,
     UpdateCampaignChannelCommand,
 )
@@ -26,15 +25,15 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeUnitOfWork,
     FakeResolver,
+    FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
@@ -66,7 +65,6 @@ def _make_campaign_with_channel(
     *,
     selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
     qc_filter: dict | None = None,
-    hit_threshold: HitCriterion | None = None,
     add_measurement: bool = True,
     manual_override: bool = False,
 ) -> tuple[Campaign, CampaignChannel, CampaignResult]:
@@ -75,7 +73,6 @@ def _make_campaign_with_channel(
         project_id=uuid.uuid4(),
         name="Campaign",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
     channel = CampaignChannel(
@@ -88,7 +85,6 @@ def _make_campaign_with_channel(
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
         qc_filter=qc_filter,
-        hit_threshold=hit_threshold,
     )
     campaign.add_channel(channel)
     mol_id = uuid.uuid4()
@@ -139,7 +135,7 @@ class TestUpdateCampaignChannel:
             campaign_id=campaign.id,
             channel_id=channel.id,
             label="New Label",
-            # selection_rule, qc_filter, hit_threshold stay UNSET
+            # selection_rule, qc_filter stay UNSET
         )
         result_out = await uc(cmd, auth=auth)
 
@@ -149,6 +145,81 @@ class TestUpdateCampaignChannel:
         # Resolver must NOT have been called — no gating field changed
         assert resolver.calls == []
         dispatcher.dispatch_all.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_display_order_update_moves_the_channel(self) -> None:
+        auth = fake_auth()
+        campaign, channel, _result = _make_campaign_with_channel(auth.workspace_id)
+        resolver = FakeResolver(factory=_new_measurement)
+        dispatcher = AsyncMock()
+        dispatcher.dispatch_all = AsyncMock()
+
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=dispatcher,
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            display_order=3,
+        )
+        result_out = await uc(cmd, auth=auth)
+
+        assert isinstance(result_out, Success)
+        assert result_out.unwrap().channels[0].display_order == 3
+        # display_order is not a gating field — no re-resolution.
+        assert resolver.calls == []
+
+    @pytest.mark.asyncio
+    async def test_negative_display_order_returns_validation_failure(self) -> None:
+        auth = fake_auth()
+        campaign, channel, _result = _make_campaign_with_channel(auth.workspace_id)
+
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=FakeResolver(factory=_new_measurement),
+            dispatcher=AsyncMock(),
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            display_order=-1,
+        )
+        result_out = await uc(cmd, auth=auth)
+
+        assert isinstance(result_out, Failure)
+        assert isinstance(result_out.failure(), ValidationError)
+        assert channel.display_order == 0  # unchanged
+
+    @pytest.mark.asyncio
+    async def test_omitted_display_order_is_left_alone(self) -> None:
+        auth = fake_auth()
+        campaign, channel, _result = _make_campaign_with_channel(auth.workspace_id)
+        channel.display_order = 7
+        dispatcher = AsyncMock()
+        dispatcher.dispatch_all = AsyncMock()
+
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=FakeResolver(factory=_new_measurement),
+            dispatcher=dispatcher,
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            label="New Label",
+        )
+        result_out = await uc(cmd, auth=auth)
+
+        assert isinstance(result_out, Success)
+        assert result_out.unwrap().channels[0].display_order == 7
 
     @pytest.mark.asyncio
     async def test_selection_rule_change_reruns_non_override_measurements(self) -> None:
@@ -237,31 +308,6 @@ class TestUpdateCampaignChannel:
 
         assert len(resolver.calls) == 1
         assert campaign.channels[0].qc_filter is None
-
-    @pytest.mark.asyncio
-    async def test_hit_threshold_cleared_to_none_triggers_re_resolution(self) -> None:
-        auth = fake_auth()
-        campaign, channel, result = _make_campaign_with_channel(
-            auth.workspace_id,
-            hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=10.0),
-        )
-        resolver = FakeResolver(factory=_new_measurement)
-        uc = UpdateCampaignChannel(
-            uow=FakeUnitOfWork(),
-            campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
-            dispatcher=AsyncMock(),
-        )
-        cmd = UpdateCampaignChannelCommand(
-            workspace_id=auth.workspace_id,
-            campaign_id=campaign.id,
-            channel_id=channel.id,
-            hit_threshold=None,  # explicitly clearing
-        )
-        await uc(cmd, auth=auth)
-
-        assert len(resolver.calls) == 1
-        assert campaign.channels[0].hit_threshold is None
 
     @pytest.mark.asyncio
     async def test_campaign_not_in_draft_returns_validation_failure(self) -> None:
@@ -379,3 +425,75 @@ class TestUpdateCampaignChannel:
         assert rebuilt is not None
         assert rebuilt.value == 99.0  # genuinely replaced
         assert rebuilt.id == original_id  # id preserved for UPDATE semantics
+
+    @pytest.mark.asyncio
+    async def test_gating_re_resolve_is_scoped_to_the_campaigns_source_runs(self) -> None:
+        """Spec D4 — a gating PATCH re-resolves within the campaign's runs."""
+        auth = fake_auth()
+        campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
+        run_id = uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
+
+        resolver = FakeResolver(factory=_new_measurement)
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            selection_rule=SelectionRule.MEAN_ACROSS_RUNS,
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert resolver.run_ids_seen == [[run_id]]
+
+    @pytest.mark.asyncio
+    async def test_setting_resolve_from_all_runs_re_resolves_unrestricted(self) -> None:
+        """Flipping the opt-out is itself gating: every cell of the channel is
+        recomputed, now sweeping every run of the protocol."""
+        auth = fake_auth()
+        campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
+        campaign.record_seed_runs([SeedRun(uuid.uuid4(), channel.protocol_id)])
+
+        resolver = FakeResolver(factory=_new_measurement)
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            resolve_from_all_runs=True,
+        )
+        out = await uc(cmd, auth=auth)
+
+        assert isinstance(out, Success)
+        assert channel.resolve_from_all_runs is True
+        assert resolver.run_ids_seen == [None]
+        assert result.find_measurement(channel.id).value == 99.0
+
+    @pytest.mark.asyncio
+    async def test_resolve_from_all_runs_unchanged_does_not_re_resolve(self) -> None:
+        auth = fake_auth()
+        campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
+        resolver = FakeResolver(factory=_new_measurement)
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            resolver=resolver,
+            dispatcher=AsyncMock(),
+        )
+        cmd = UpdateCampaignChannelCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            channel_id=channel.id,
+            resolve_from_all_runs=False,
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert resolver.calls == []

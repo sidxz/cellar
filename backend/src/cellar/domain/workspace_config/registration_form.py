@@ -111,7 +111,7 @@ class RegistrationForm(AggregateRoot):
         self,
         *,
         name: str | object = UNSET,
-        field_overrides: list[FieldOverride] | None | object = UNSET,
+        field_overrides: list[FieldOverride] | object | None = UNSET,
     ) -> None:
         """Partial update — only provided fields are changed."""
         if name is not UNSET:

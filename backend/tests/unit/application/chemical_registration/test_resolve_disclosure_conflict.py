@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from types import TracebackType
 from typing import Self
 from unittest.mock import AsyncMock
@@ -280,6 +281,47 @@ class TestResolveAcceptAsNew:
         saved_mol = await mol_repo.find_by_id(mol.id)
         assert saved_mol is not None
         assert saved_mol.structure is not None
+
+
+    async def test_accept_as_new_applies_declared_disclosure_date(self) -> None:
+        """The date the requester asserted survives a conflict resolved later."""
+        mol = _make_undisclosed_mol()
+        mol_repo = FakeMoleculeRepo()
+        mol_repo.add(mol)
+        dr = DisclosureRequest.create(
+            workspace_id=WS_ID,
+            molecule_id=mol.id,
+            disclosed_smiles="c1ccccc1",
+            requested_by=USER_ID,
+            disclosure_date=date(2024, 3, 15),
+        )
+        dr.start_processing()
+        dr.mark_conflict(reason="CAS mismatch")
+        disclosure_repo = FakeDisclosureRepo()
+        disclosure_repo.add(dr)
+
+        uc = ResolveDisclosureConflict(
+            uow=FakeUnitOfWork(),
+            disclosure_repo=disclosure_repo,
+            molecule_repo=mol_repo,
+            merge_service=AsyncMock(),
+            structure_processor=FakeStructureProcessor(),
+            dispatcher=FakeEventDispatcher(),
+        )
+        result = await uc(
+            ResolveConflictCommand(
+                workspace_id=WS_ID,
+                disclosure_id=dr.id,
+                resolution="accept_as_new",
+                resolved_by=USER_ID,
+            ),
+            auth=FakeAuth(workspace_id=WS_ID),
+        )
+        assert isinstance(result, Success)
+        saved_mol = await mol_repo.find_by_id(mol.id)
+        assert saved_mol is not None
+        assert saved_mol.disclosure_date == date(2024, 3, 15)
+        assert saved_mol.disclosed_at is not None
 
 
 class TestValidation:

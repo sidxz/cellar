@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import { useState } from "react";
 
 import {

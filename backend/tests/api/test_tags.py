@@ -6,11 +6,24 @@ import uuid
 
 from httpx import AsyncClient
 
+from tests.api.conftest import OTHER_ORG_ID
+
 
 async def _make_collection(client: AsyncClient, name: str) -> str:
     resp = await client.post("/api/v1/collections", json={"name": name})
     assert resp.status_code == 201, resp.text
     return resp.json()["id"]
+
+
+async def _register_plate(client: AsyncClient, **overrides):
+    body = {
+        "barcode": f"PLT-{uuid.uuid4().hex[:8]}",
+        "plate_label": "Test Plate",
+        "format": "96",
+        "plate_type": "assay",
+    }
+    body.update(overrides)
+    return await client.post("/api/v1/plates", json=body)
 
 
 class TestAssignAndRead:
@@ -127,3 +140,65 @@ class TestAuth:
         resp = await viewer_client.get(f"/api/v1/collections/{cid}/tags")
         assert resp.status_code == 200
         assert [t["key"] for t in resp.json()] == ["readable"]
+
+
+class TestPlateVisibility:
+    """Per-entity plate tag routes gated by org-policy visibility (S2 Task 5c) —
+    an invisible plate's tags 404 exactly like a missing plate's would."""
+
+    async def test_get_and_assign_404_for_foreign_org(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
+    ) -> None:
+        reg = await _register_plate(client, owner_org_id=str(OTHER_ORG_ID))
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        got = await editor_client_own_org.get(f"/api/v1/plates/{plate_id}/tags")
+        assert got.status_code == 404, got.text
+
+        assigned = await editor_client_own_org.post(
+            f"/api/v1/plates/{plate_id}/tags", json={"key": "spam"}
+        )
+        assert assigned.status_code == 404, assigned.text
+
+        # Own org unaffected.
+        got_own = await editor_client_other_org.get(f"/api/v1/plates/{plate_id}/tags")
+        assert got_own.status_code == 200, got_own.text
+        assert got_own.json() == []
+
+    async def test_set_and_unassign_404_for_foreign_org_200_for_own_org(
+        self,
+        client: AsyncClient,
+        editor_client_own_org: AsyncClient,
+        editor_client_other_org: AsyncClient,
+    ) -> None:
+        reg = await _register_plate(client, owner_org_id=str(OTHER_ORG_ID))
+        assert reg.status_code == 201, reg.text
+        plate_id = reg.json()["id"]
+
+        # Own org tags it, so we have a real tag_id to probe DELETE with.
+        tagged = await editor_client_other_org.post(
+            f"/api/v1/plates/{plate_id}/tags", json={"key": "legit"}
+        )
+        assert tagged.status_code == 201, tagged.text
+        tag_id = tagged.json()["id"]
+
+        set_foreign = await editor_client_own_org.put(
+            f"/api/v1/plates/{plate_id}/tags", json={"tags": [{"key": "spam"}]}
+        )
+        assert set_foreign.status_code == 404, set_foreign.text
+
+        unassign_foreign = await editor_client_own_org.delete(
+            f"/api/v1/plates/{plate_id}/tags/{tag_id}"
+        )
+        assert unassign_foreign.status_code == 404, unassign_foreign.text
+
+        # Status quo preserved — the plate's own org can still read/write its tags.
+        set_own = await editor_client_other_org.put(
+            f"/api/v1/plates/{plate_id}/tags", json={"tags": [{"key": "legit"}, {"key": "extra"}]}
+        )
+        assert set_own.status_code == 200, set_own.text
+        assert {t["key"] for t in set_own.json()} == {"legit", "extra"}

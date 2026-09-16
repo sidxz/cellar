@@ -6,7 +6,7 @@
 
 **Architecture:** Frontend-only. Chrome components live in `src/shared/components/layout/`; per-user preferences are zustand persist stores (`ds-*` localStorage keys) applied by `FontFamilyProvider` plus an anti-flash inline script in the root layout. Spec: `docs/superpowers/specs/2026-07-16-app-chrome-harmonization-design.md`.
 
-**Tech Stack:** Next.js 16 App Router, React 19, shadcn/ui (Avatar, Button, Card, Separator, Slider, Tooltip, Sidebar), zustand + persist, next-themes, `@sentinel-auth/nextjs`, vitest + testing-library, biome.
+**Tech Stack:** Next.js 16 App Router, React 19, shadcn/ui (Avatar, Button, Card, Separator, Slider, Tooltip, Sidebar), zustand + persist, next-themes, `@duar-auth/nextjs`, vitest + testing-library, biome.
 
 ## Global Constraints
 
@@ -442,7 +442,7 @@ function renderPage() {
   const config = {
     apiUrl: "",
     appUrl: "",
-    sentinelUrl: "",
+    duarUrl: "",
     idpProvider: "google",
     googleClientId: "",
     entraIdClientId: "",
@@ -725,7 +725,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>" -- "src/app/(dashboard)/
 - Delete: `src/shared/components/font-toggle.tsx`
 
 **Interfaces:**
-- Consumes: `FontSizeControl` (Task 2); `useAuthz()` from `@sentinel-auth/nextjs` (`{ user: { name?, email? }, logout }` — same usage as today's `user-menu.tsx`).
+- Consumes: `FontSizeControl` (Task 2); `useAuthz()` from `@duar-auth/nextjs` (`{ user: { name?, email? }, logout }` — same usage as today's `user-menu.tsx`).
 - Produces: `useCommandPaletteStore` (state `{ open: boolean; setOpen(open: boolean): void; toggle(): void }`) from `@/shared/lib/stores/command-palette-store`.
 
 - [ ] **Step 1: Write the failing header test**
@@ -740,7 +740,7 @@ import { Header } from "./header";
 
 const logoutMock = vi.fn();
 
-vi.mock("@sentinel-auth/nextjs", () => ({
+vi.mock("@duar-auth/nextjs", () => ({
   useAuthz: () => ({
     user: { name: "Ada Lovelace", email: "ada@example.com" },
     logout: logoutMock,
@@ -814,7 +814,7 @@ In `src/shared/components/layout/command-palette.tsx`, replace the local state w
 ```tsx
 "use client";
 
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { useAuthz } from "@duar-auth/nextjs";
 import { LogOut, Search } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/shared/components/ui/avatar";

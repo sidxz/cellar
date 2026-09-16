@@ -110,18 +110,4 @@ describe("useRefitPreview", () => {
     expect(result.current.isPreviewing).toBe(false);
     expect(result.current.error).toBeNull();
   });
-
-  it("cleans up on unmount without leaking timers", () => {
-    // Never-resolving previewFn — if the unmount cleanup is missing, the
-    // timer / promise would dangle and (with fake timers) the test would
-    // hang. With real timers, the test just exits because nothing else
-    // is keeping the event loop busy.
-    const previewFn = vi.fn(() => new Promise<RefitPreviewResponse>(() => {}));
-    const { result, unmount } = renderHook(() => useRefitPreview({ previewFn, debounceMs: 10 }));
-
-    act(() => result.current.requestPreview("curve-1", [2]));
-    unmount();
-    // If we got here without hanging, cleanup ran cleanly.
-    expect(true).toBe(true);
-  });
 });

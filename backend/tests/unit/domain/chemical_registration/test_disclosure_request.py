@@ -1,6 +1,7 @@
 """Tests for DisclosureRequest aggregate root."""
 
 import uuid
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -99,6 +100,31 @@ class TestDisclosureRequestCreation:
         assert req.conflict_reason is None
         assert req.notes is None
         assert req.version == 1
+
+    def test_create_keeps_declared_disclosure_date(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        req = DisclosureRequest.create(
+            workspace_id=WS_ID,
+            molecule_id=molecule_id,
+            disclosed_smiles="CCO",
+            requested_by=user_id,
+            disclosure_date=date(2024, 3, 15),
+        )
+        assert req.disclosure_date == date(2024, 3, 15)
+        assert req.requested_at is not None  # observed stamp still recorded
+
+    def test_create_rejects_future_disclosure_date(
+        self, molecule_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        with pytest.raises(ValidationError, match="future"):
+            DisclosureRequest.create(
+                workspace_id=WS_ID,
+                molecule_id=molecule_id,
+                disclosed_smiles="CCO",
+                requested_by=user_id,
+                disclosure_date=datetime.now(UTC).date() + timedelta(days=1),
+            )
 
     def test_create_emits_disclosure_requested_event(
         self, molecule_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
@@ -459,27 +485,3 @@ class TestPendingConfirmation:
                 canonical_smiles="CCO",
                 inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
             )
-
-    def test_matched_molecule_id_defaults_to_none(
-        self, molecule_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        req = _make(molecule_id, user_id)
-        assert req.matched_molecule_id is None
-
-    def test_scientist_name_field(
-        self, molecule_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        req = DisclosureRequest.create(
-            workspace_id=WS_ID,
-            molecule_id=molecule_id,
-            disclosed_smiles="CCO",
-            requested_by=user_id,
-            scientist_name="Dr. Jane Smith",
-        )
-        assert req.scientist_name == "Dr. Jane Smith"
-
-    def test_scientist_name_defaults_to_none(
-        self, molecule_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        req = _make(molecule_id, user_id)
-        assert req.scientist_name is None

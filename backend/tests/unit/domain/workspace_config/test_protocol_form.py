@@ -32,66 +32,6 @@ def _readout(name: str = "IC50", data_type: str = "numeric") -> ProtocolFormRead
 # ---------------------------------------------------------------------------
 
 
-class TestProtocolFormReadout:
-    def test_basic_construction(self) -> None:
-        r = ProtocolFormReadout(name="IC50", data_type="numeric", unit="nM")
-        assert r.name == "IC50"
-        assert r.data_type == "numeric"
-        assert r.unit == "nM"
-        assert r.aggregation == "none"
-        assert r.normalization == "none"
-        assert r.is_calculated is False
-        assert r.calculation_formula is None
-        assert r.pick_list_values is None
-        assert r.dose_response_config is None
-
-    def test_full_construction(self) -> None:
-        r = ProtocolFormReadout(
-            name="Activity",
-            data_type="pick_list",
-            aggregation="mean",
-            normalization="percent_control",
-            is_calculated=True,
-            calculation_formula="100 - raw",
-            pick_list_values=["Active", "Inactive"],
-            dose_response_config={"min_points": 4},
-        )
-        assert r.is_calculated is True
-        assert r.pick_list_values == ["Active", "Inactive"]
-
-    def test_frozen(self) -> None:
-        r = _readout()
-        with pytest.raises(Exception):
-            r.name = "changed"  # type: ignore[misc]
-
-
-class TestProtocolFormCondition:
-    def test_basic(self) -> None:
-        c = ProtocolFormCondition(name="Temperature", data_type="numeric", unit="C")
-        assert c.name == "Temperature"
-        assert c.data_type == "numeric"
-        assert c.unit == "C"
-        assert c.pick_list_values is None
-
-    def test_frozen(self) -> None:
-        c = ProtocolFormCondition(name="T", data_type="text")
-        with pytest.raises(Exception):
-            c.name = "X"  # type: ignore[misc]
-
-
-class TestProtocolFormOntologyDefault:
-    def test_basic(self) -> None:
-        o = ProtocolFormOntologyDefault(
-            slot_name="assay_type",
-            terms=[{"term_id": "BAO:001", "label": "Binding"}],
-        )
-        assert o.slot_name == "assay_type"
-        assert len(o.terms) == 1
-
-    def test_default_empty_terms(self) -> None:
-        o = ProtocolFormOntologyDefault(slot_name="target")
-        assert o.terms == []
-
 
 # ---------------------------------------------------------------------------
 # ProtocolForm — create

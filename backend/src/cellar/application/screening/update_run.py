@@ -22,9 +22,9 @@ from cellar.domain.shared.errors import DomainError, NotFoundError
 class UpdateRunCommand(Command):
     workspace_id: uuid.UUID
     run_id: uuid.UUID
-    qc_metrics: dict[str, Any] | None | object = UNSET
-    notes: str | None | object = UNSET
-    conditions: dict[str, Any] | None | object = UNSET
+    qc_metrics: dict[str, Any] | object | None = UNSET
+    notes: str | object | None = UNSET
+    conditions: dict[str, Any] | object | None = UNSET
 
 
 class UpdateRun:

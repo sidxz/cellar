@@ -1,0 +1,183 @@
+"use client";
+
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type {
+  CollectionPlateGroupResponse,
+  CreatePlateGroupBody,
+  GroupTreeNodeResponse,
+  GroupTreeResponse,
+  PlateGroupDetailResponse,
+  PlateGroupResponse,
+  UpdatePlateGroupBody,
+} from "@/shared/lib/api/model";
+import { showSuccess } from "@/shared/lib/toast";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { PLATES_KEY, PLATE_GROUPS_KEY } from "./query-keys";
+
+export type PlateGroup = PlateGroupResponse;
+export type PlateGroupTree = GroupTreeResponse;
+export type PlateGroupNode = GroupTreeNodeResponse;
+export type PlateGroupDetail = PlateGroupDetailResponse;
+export type CollectionPlateGroup = CollectionPlateGroupResponse;
+
+export function usePlateGroupTree(orgId?: string, opts?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...PLATE_GROUPS_KEY, "tree", orgId ?? "mine"],
+    queryFn: ({ signal }) =>
+      customInstance<PlateGroupTree>({
+        url: `${API_V1}/plate-groups/tree`,
+        method: "GET",
+        params: orgId ? { org_id: orgId } : {},
+        signal,
+      }),
+    enabled: opts?.enabled ?? true,
+  });
+}
+
+export function usePlateGroup(groupId: string | undefined) {
+  return useQuery({
+    queryKey: [...PLATE_GROUPS_KEY, "detail", groupId],
+    queryFn: ({ signal }) =>
+      customInstance<PlateGroupDetail>({
+        url: `${API_V1}/plate-groups/${groupId}`,
+        method: "GET",
+        signal,
+      }),
+    enabled: !!groupId,
+  });
+}
+
+/** Plate groups (any level) that realize a collection, with subtree/loan counts. */
+export function useCollectionPlateGroups(collectionId: string | undefined) {
+  return useQuery({
+    queryKey: [...PLATE_GROUPS_KEY, "by-collection", collectionId],
+    queryFn: ({ signal }) =>
+      customInstance<CollectionPlateGroup[]>({
+        url: `${API_V1}/collections/${collectionId}/plate-groups`,
+        method: "GET",
+        signal,
+      }),
+    enabled: !!collectionId,
+  });
+}
+
+function useGroupMutation<TVars>(
+  request: (vars: TVars) => Parameters<typeof customInstance>[0],
+  successMessage: string,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: TVars) => customInstance<unknown>(request(vars)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PLATE_GROUPS_KEY });
+      qc.invalidateQueries({ queryKey: PLATES_KEY });
+      showSuccess(successMessage);
+    },
+    // Errors toast via the global MutationCache handler.
+  });
+}
+
+export function useCreatePlateGroup() {
+  return useGroupMutation(
+    (body: CreatePlateGroupBody) => ({
+      url: `${API_V1}/plate-groups`,
+      method: "POST" as const,
+      data: body,
+    }),
+    "Group created",
+  );
+}
+
+export function useUpdatePlateGroup() {
+  return useGroupMutation(
+    ({ groupId, ...body }: UpdatePlateGroupBody & { groupId: string }) => ({
+      url: `${API_V1}/plate-groups/${groupId}`,
+      method: "PATCH" as const,
+      data: body,
+    }),
+    "Group updated",
+  );
+}
+
+export function useMovePlateGroup() {
+  return useGroupMutation(
+    ({ groupId, parentGroupId }: { groupId: string; parentGroupId: string | null }) => ({
+      url: `${API_V1}/plate-groups/${groupId}/move`,
+      method: "POST" as const,
+      data: { parent_group_id: parentGroupId },
+    }),
+    "Group moved",
+  );
+}
+
+export function useDeletePlateGroup() {
+  return useGroupMutation(
+    ({ groupId }: { groupId: string }) => ({
+      url: `${API_V1}/plate-groups/${groupId}`,
+      method: "DELETE" as const,
+    }),
+    "Group deleted",
+  );
+}
+
+export function useAssignPlatesToGroup() {
+  return useGroupMutation(
+    ({ groupId, plateIds }: { groupId: string; plateIds: string[] }) => ({
+      url: `${API_V1}/plate-groups/${groupId}/plates`,
+      method: "POST" as const,
+      data: { plate_ids: plateIds },
+    }),
+    "Plates assigned",
+  );
+}
+
+export function useRemovePlatesFromGroup() {
+  return useGroupMutation(
+    ({ groupId, plateIds }: { groupId: string; plateIds: string[] }) => ({
+      url: `${API_V1}/plate-groups/${groupId}/plates`,
+      method: "DELETE" as const,
+      data: { plate_ids: plateIds },
+    }),
+    "Plates removed from group",
+  );
+}
+
+export interface GroupRef {
+  name: string;
+  /** Ancestry path, "SAC1 › Set 014". */
+  path: string;
+}
+
+const combineTrees = (results: { data?: PlateGroupTree }[]) => results.map((r) => r.data);
+
+/** group id → { name, path } over the trees of the given orgs. Shares the
+ * `usePlateGroupTree` cache key, so the Plate Groups page and this index
+ * never fetch the same tree twice. */
+export function useGroupIndex(orgIds: string[]): Map<string, GroupRef> {
+  const trees = useQueries({
+    queries: orgIds.map((orgId) => ({
+      queryKey: [...PLATE_GROUPS_KEY, "tree", orgId],
+      queryFn: ({ signal }: { signal?: AbortSignal }) =>
+        customInstance<PlateGroupTree>({
+          url: `${API_V1}/plate-groups/tree`,
+          method: "GET",
+          params: { org_id: orgId },
+          signal,
+        }),
+    })),
+    combine: combineTrees,
+  });
+  return useMemo(() => {
+    const index = new Map<string, GroupRef>();
+    const walk = (nodes: PlateGroupNode[], prefix: string) => {
+      for (const n of nodes) {
+        const path = prefix ? `${prefix} › ${n.name}` : n.name;
+        index.set(n.id, { name: n.name, path });
+        walk(n.children ?? [], path);
+      }
+    };
+    for (const tree of trees) if (tree) walk(tree.roots, "");
+    return index;
+  }, [trees]);
+}

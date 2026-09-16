@@ -2,7 +2,7 @@ import type {
   AdditionalCurve,
   AggregateMarker,
 } from "@/features/screening-assay/components/dose-response-figure";
-import type { TargetRef } from "@/features/screening-assay/types";
+import type { CurveClass, TargetRef } from "@/features/screening-assay/types";
 import type {
   CollectionResponse,
   CollectionType,
@@ -306,6 +306,11 @@ export interface ActivityWhereCondition {
    *  omitted = the readout-def's primary intercept (fast path:
    *  ``fitted_value`` column). */
   intercept_key?: InterceptKey | null;
+  /** Any-protocol ``readout_data`` rows only: the readout-def group to match,
+   *  by normalized name (+ ``unit``) across every protocol. Mutually exclusive
+   *  with ``readout_definition_id``. */
+  readout_name?: string;
+  unit?: string | null;
   /** For ``curve_class`` source: the allowed curve classes (multi-select).
    *  E.g. ``["full", "partial"]`` to match well-fitted curves only. */
   curve_classes?: string[];
@@ -313,7 +318,9 @@ export interface ActivityWhereCondition {
 
 export interface ActivityCriterion {
   type: "activity";
-  protocol_id: string;
+  /** Protocol to filter on. ``null`` = any protocol (curve class / potency
+   *  in µM only, run scope fixed to "any"). ``""`` = not chosen yet (UI only). */
+  protocol_id: string | null;
   /** Multi-where list — preferred shape. Each row ANDed with the others. */
   where?: ActivityWhereCondition[];
   /** Run scope. Omit (or {mode:"any"}) for cross-run match — the default. */
@@ -524,6 +531,47 @@ export interface ActivityValue {
    *  suppresses the per-curve intercept dashed lines (per-run fitted_values
    *  don't equal the cell value in aggregate modes). Mirrors CurveSnapshot. */
   aggregate?: AggregateMarker | null;
+}
+
+// ─── "any" column — CLIENT-SIDE narrowing, NOT a DTO alias ─────────────────
+// Same situation as ActivityValue: `activity_data` is `dict[str, dict[str, Any]]`
+// on the wire, so orval emits `unknown`. Produced by
+// MoleculeActivityService._build_any_activity (AnyProtocolActivity dataclass).
+export interface AnyProtocolEntry {
+  protocol_id: string;
+  protocol_name: string;
+  protocol_type: string;
+  target_names: string[];
+  /** "IC50", "EC90", "% Inhibition" */
+  label: string;
+  source: "dose_response" | "readout";
+  readout_definition_id: string;
+  /** Native unit of the owning protocol. */
+  value: number | null;
+  qualifier: string | null;
+  unit: string | null;
+  /** µM normalization — ordering only, never displayed. Null for readouts. */
+  value_um: number | null;
+  curve_class: CurveClass | null;
+  run_count: number;
+}
+
+export interface AnyProtocolActivity {
+  /** Best first (value_um asc, nulls last). */
+  entries: AnyProtocolEntry[];
+}
+
+/** Read the "any" column off an enriched row. The activity map is typed as
+ *  ActivityValue for every other key; this is the one differently-shaped
+ *  entry, so it gets a single typed accessor instead of a union type that
+ *  would force narrowing at every DR cell. */
+export function anyProtocolActivity(mol: {
+  activity?: Record<string, unknown>;
+}): AnyProtocolActivity | undefined {
+  const raw = mol.activity?.any;
+  return raw && typeof raw === "object" && Array.isArray((raw as AnyProtocolActivity).entries)
+    ? (raw as AnyProtocolActivity)
+    : undefined;
 }
 
 // ─── Report Configuration ───────────────────────────────────────────────────

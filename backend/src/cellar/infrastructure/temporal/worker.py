@@ -24,6 +24,12 @@ async def run_worker() -> None:
     """Connect to Temporal, create DI container, and run the worker forever."""
     configure_logging()
 
+    # Same invariant as the API: every on-disk write (CDD dumps, bulk-import
+    # chunks) hangs off STORAGE_ROOT, which in production must be a mounted volume.
+    from cellar.infrastructure.storage.fsspec_client import StorageSettings, ensure_storage_root
+
+    ensure_storage_root(StorageSettings())
+
     settings = TemporalSettings()
     logger.info(
         "temporal.connecting",
@@ -40,6 +46,11 @@ async def run_worker() -> None:
     container = create_container()
 
     from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    # Same precondition as the API: this image's migrations must be applied.
+    from cellar.infrastructure.persistence.schema_guard import ensure_schema_current
+
+    await ensure_schema_current(container[async_sessionmaker])
 
     from cellar.application.chemical_registration.merge_side_effect_registry import (
         MergeSideEffectRegistry,

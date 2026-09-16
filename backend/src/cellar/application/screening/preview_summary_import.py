@@ -28,6 +28,8 @@ import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.screening.readout_entry_guard import calculated_readout_error
+from cellar.application.screening.run_shape import refuse_if_welled
 from cellar.application.screening.summary_import_models import (
     SummaryColumnMapping,
     SummaryImportPlanPreview,
@@ -35,9 +37,11 @@ from cellar.application.screening.summary_import_models import (
 from cellar.application.screening.summary_import_resolver import (
     build_batch_index,
     build_compound_index,
+    build_structure_index,
     plan_summary_rows,
 )
 from cellar.application.shared.command import Command
+from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
@@ -78,6 +82,7 @@ class PreviewSummaryImport:
         batch_repo: BatchRepository,
         parser: TabularParser,
         uow: UnitOfWork,
+        molecule_resolver: MoleculeResolver,
     ) -> None:
         self._run_repo = run_repo
         self._protocol_repo = protocol_repo
@@ -86,6 +91,7 @@ class PreviewSummaryImport:
         self._batch_repo = batch_repo
         self._parser = parser
         self._uow = uow
+        self._molecule_resolver = molecule_resolver
 
     async def __call__(
         self,
@@ -112,11 +118,18 @@ class PreviewSummaryImport:
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))
 
+        if (welled := refuse_if_welled(run)) is not None:
+            return Failure(welled)
+
         protocol = await self._protocol_repo.find_by_id_in_workspace(ws, run.protocol_id)
         if protocol is None:
             return Failure(NotFoundError("Protocol", str(run.protocol_id)))
 
         defs_by_id = {d.id: d for d in protocol.readout_definitions}
+
+        calculated = calculated_readout_error(mapping.readout_columns.items(), defs_by_id)
+        if calculated is not None:
+            return Failure(calculated)
 
         try:
             table = self._parser.parse(command.content, command.filename)
@@ -144,6 +157,16 @@ class PreviewSummaryImport:
 
         compound_index = await build_compound_index(compound_refs, ws, self._molecule_repo)
         batch_index = await build_batch_index(batch_refs, ws, self._batch_repo)
+        # STRUCTURE fallback: distinct SMILES for refs that missed the identifier
+        # index (empty when no structure column is mapped). Resolution only —
+        # nothing is registered or stored.
+        structure_index = await build_structure_index(
+            rows,
+            mapping=mapping,
+            compound_index=compound_index,
+            workspace_id=ws,
+            molecule_resolver=self._molecule_resolver,
+        )
 
         plan = plan_summary_rows(
             rows,
@@ -151,6 +174,7 @@ class PreviewSummaryImport:
             defs_by_id=defs_by_id,
             compound_index=compound_index,
             batch_index=batch_index,
+            structure_index=structure_index,
         )
 
         # Per-row errors: ``plan.errors`` already covers BOTH cell-level errors
@@ -196,6 +220,7 @@ class PreviewSummaryImport:
                 matched_compound_count=plan.matched_compound_count,
                 unmatched_compound_refs=sorted(plan.unmatched_compound_refs),
                 unmatched_batch_refs=sorted(plan.unmatched_batch_refs),
+                unmatched_compounds=list(plan.unmatched_compounds),
                 values_to_insert=values_to_insert,
                 values_to_update=values_to_update,
                 rows_skipped=plan.rows_skipped,

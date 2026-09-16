@@ -6,6 +6,7 @@ import { cn } from "@/shared/lib/utils";
 import { Pencil } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { isUsableCore, useMcs } from "../hooks/use-mcs";
 import { useScaffoldTree } from "../hooks/use-scaffold-tree";
 import {
   type CoreCandidate,
@@ -13,6 +14,7 @@ import {
   buildCoreCandidates,
   pickDefaultCore,
 } from "../lib/sar-core-candidates";
+import { McsCoreChip } from "./mcs-core-chip";
 
 export interface RGroupCorePickerProps {
   /** Saved collection — server-side expansion to all members (preferred). */
@@ -41,6 +43,20 @@ const MAX_VISIBLE = 8;
  * auto-suggested ({@link pickDefaultCore}). When no scaffold clears the coverage
  * floor — a diverse, non-congeneric set — no core is suggested and the chemist
  * is guided to draw one instead of being shown a wall of singletons.
+ *
+ * The maximum common substructure is offered alongside the scaffold candidates
+ * but is never auto-suggested. It is maximal by construction, which makes it
+ * both the best core for a tight series and worthless for a loose one (a
+ * diverse set's MCS is a benzene), and it is brittle in a way coverage-ranked
+ * scaffolds are not: one control compound in the collection collapses it to
+ * whatever that straggler shares. Defaulting to a scaffold and offering the
+ * MCS means a wrong guess costs a click, not a wrong table.
+ *
+ * It earns its place most in the empty state. Candidates come only from *ring*
+ * scaffolds, and an acyclic molecule's Bemis-Murcko scaffold is empty — so an
+ * acyclic series (peptidomimetics, linker series) lands entirely in the
+ * no-scaffold bucket even when its members share a real backbone. The scaffold
+ * network cannot see that; the MCS can.
  */
 export function RGroupCorePicker({
   collectionId,
@@ -49,6 +65,8 @@ export function RGroupCorePicker({
   onCoreChange,
 }: RGroupCorePickerProps) {
   const { tree, isStarting, isPolling, error } = useScaffoldTree({ collectionId, moleculeIds });
+  const { mcs } = useMcs({ collectionId, moleculeIds });
+  const sharedCore = isUsableCore(mcs) ? mcs : null;
   const [editOpen, setEditOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
@@ -109,8 +127,15 @@ export function RGroupCorePicker({
         </Button>
       </div>
 
-      {candidates.length > 0 && (
+      {(candidates.length > 0 || sharedCore) && (
         <div className="flex flex-wrap items-start gap-2">
+          {sharedCore && (
+            <McsCoreChip
+              mcs={sharedCore}
+              isSelected={coreSmiles === sharedCore.core_smiles}
+              onSelect={onCoreChange}
+            />
+          )}
           {visible.map((c) => {
             const isSelected = coreSmiles === c.scaffoldSmiles;
             return (
@@ -156,7 +181,20 @@ export function RGroupCorePicker({
         </div>
       )}
 
-      {candidates.length === 0 && (
+      {candidates.length === 0 && sharedCore && (
+        // Not an error state: these compounds share no *ring* scaffold, which
+        // is what the candidate list is built from, but they do share
+        // something. Common for an acyclic series, whose Bemis-Murcko
+        // scaffolds are all empty. Shown plainly so the chemist can judge the
+        // structure — a benzene here means the set really is diverse.
+        <p className="text-xs text-muted-foreground">
+          No shared ring scaffold. The substructure above is the largest these{" "}
+          {sharedCore.molecule_count} compounds share ({sharedCore.num_atoms} atoms) — pick it, or{" "}
+          <span className="font-medium">Draw core</span> to choose your own.
+        </p>
+      )}
+
+      {candidates.length === 0 && !sharedCore && (
         <div className="rounded-md border border-dashed border-amber-300 bg-amber-50/50 p-3 text-xs dark:border-amber-800 dark:bg-amber-950/30">
           <p className="font-medium text-amber-900 dark:text-amber-100">
             No shared scaffold across these compounds.

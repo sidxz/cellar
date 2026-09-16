@@ -14,6 +14,7 @@ from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
 
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.registered_plates import (
     MapWells,
     MapWellsCommand,
@@ -92,8 +93,17 @@ class PlateRegistrationActivities:
         repo = SQLAlchemyRegisteredPlateRepository(uow)
         register_uc = RegisterPlate(uow=uow, repo=repo, dispatcher=self._dispatcher)
         batch_repo = SQLAlchemyBatchRepository(uow)
+        # No caller identity in a worker — auth=None below makes
+        # PlateVisibilityService short-circuit to an empty exclusion set
+        # without consulting a directory, so this never restricts the
+        # pipeline's own writes (and none is wired here on purpose).
+        visibility = PlateVisibilityService()
         map_wells_uc = MapWells(
-            uow=uow, repo=repo, batch_repo=batch_repo, dispatcher=self._dispatcher
+            uow=uow,
+            repo=repo,
+            batch_repo=batch_repo,
+            dispatcher=self._dispatcher,
+            visibility=visibility,
         )
 
         ws_id = uuid.UUID(input.workspace_id)

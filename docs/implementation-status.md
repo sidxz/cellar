@@ -4,9 +4,9 @@
 - [x] S01 — Project scaffolding (dirs, pyproject.toml, package.json, Docker Compose, CI skeleton)
 - [x] S02 — Shared kernel (Entity, AggregateRoot, DomainEvent, DomainError, all VOs, Repository Protocol, enums)
 - [x] S03 — Database infrastructure (async engine, SA base, UoW, generic repo, Alembic, RDKit extension, testcontainers)
-- [x] S04 — Auth integration (Sentinel JWT middleware, RequestContext, permission decorators, app bootstrap)
+- [x] S04 — Auth integration (Duar JWT middleware, RequestContext, permission decorators, app bootstrap)
 - [x] S05 — Domain events + audit (EventDispatcher, AuditOperation/Entry/Signature, audit SA models, append-only triggers)
-- [x] S06 — Frontend skeleton (Next.js 16, App Router, Sentinel auth flow, app shell, shadcn/ui dark mode)
+- [x] S06 — Frontend skeleton (Next.js 16, App Router, Duar auth flow, app shell, shadcn/ui dark mode)
 - [x] S07 — DI container + app layer (Lagom composition root, UseCase protocol, Result-to-HTTP mapping)
 - [x] S08 — Testing infrastructure (conftest, factory-boy, test helpers, CI pipeline green)
 
@@ -158,12 +158,25 @@ Plan: `docs/superpowers/plans/2026-05-10-screen-campaign.md`
 - [x] SC-Phase-8 — Frontend builder UI: channel configurator panel, compound pivot AG Grid (per-compound rows × per-channel columns), result decision panel, re-resolve trigger, status badge, close-campaign dialog with e-sig confirmation.
 - [x] SC-Phase-9 — Frontend closed view + supersede flow. Playwright E2E deferred — `frontend/tests/e2e/screen-campaign.spec.ts.TODO` stub left for follow-up (Playwright setup not present in CI).
 - [x] SC-Phase-10 — Documentation: Campaign aggregate section in `docs/domain-model/05-research-organization.md`, spec back-link added, implementation-status updated (this entry).
+- [x] SC-Phase-11 — **Campaign Hit Stages + Soft Close (done, 2026-09-11).** Named hit
+  stages (`CampaignStage`/`StageCriterion`, a parent-chain funnel) replace the per-channel
+  `hit_threshold` / per-cell `hit_call`; per-stage manual promote/demote (`StageOverride`) with a
+  required reason; Close & Sign replaced by a plain close/reopen toggle (no e-signature, no
+  auto-published Collection). Spec:
+  `docs/superpowers/specs/2026-09-11-campaign-hit-stages-and-soft-close-spec.md`. Domain +
+  persistence + soft close: `CampaignStage`/`StageCriterion`/`StageOverride`, the pure
+  `evaluate_stages`/`tally_stage_counts` evaluator, `Campaign.close`/`reopen`,
+  `CampaignReopened` event, ORM models + migration 074 (additive: tables, backfill, triggers,
+  `close_note`) + migration 075 (drops the five retired columns). Stages CRUD use cases + API
+  router, published-JSON `stages[]`/`stage_outcomes[]`, and the whole frontend (readouts
+  grouping, stages section + editor, filter bar + grid Stage column, override popover,
+  close/reopen dialogs, save-as-stage from mirror/run-import) are all done.
 
 ### Open Follow-ups (carry to next iteration)
 
 - **SavedSearch compound source not wired** — `SavedSearchSource` in `CreateCampaign` and `ReseedCampaign` returns `Failure(ValidationError)`; SavedSearch execution needs to be wired into the resolver before exposing this source kind in the API.
-- **E-signature is a stub** — `CloseCampaignCommand.signature_id` is caller-supplied; the frontend generates `crypto.randomUUID()`. Real Sentinel-backed signing not yet implemented.
-- **Audit `signed_at` + `closed_by.name`** — `GetPublishedCampaign` has TODOs for resolving the human-readable name via Sentinel and the `signed_at` timestamp from the AuditOperation.
+- **E-signature is a stub** — `CloseCampaignCommand.signature_id` is caller-supplied; the frontend generates `crypto.randomUUID()`. Real Duar-backed signing not yet implemented.
+- **Audit `signed_at` + `closed_by.name`** — `GetPublishedCampaign` has TODOs for resolving the human-readable name via Duar and the `signed_at` timestamp from the AuditOperation.
 - **`BatchRepository.find_by_ids` missing** — `GetPublishedCampaign` loops `find_by_id` per batch; a bulk lookup method should be added to avoid N+1 queries.
 - **Decision-panel notes field ignored** — `SetResultDecision` does not accept a `notes` field; the frontend Decision Panel sends notes that the backend currently silently drops. Extend the use case or remove the notes UI in cleanup.
 - **`RecomputeChannel` has no dedicated route** — the use case is wired in DI but no API route exposes it directly; it is callable indirectly via UpdateCampaignChannel re-resolve in practice.

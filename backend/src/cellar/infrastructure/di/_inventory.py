@@ -14,12 +14,18 @@ from cellar.application.inventory.batch_identifiers import (
     RemoveBatchIdentifier,
 )
 from cellar.application.inventory.bulk_add_batch_identifiers import BulkAddBatchIdentifiers
+from cellar.application.inventory.collection_plate_groups import (
+    CollectionPlateGroupsReader,
+    ListPlateGroupsForCollection,
+)
+from cellar.application.inventory.comments import AddComment, ListComments, TargetRepos
 from cellar.application.inventory.create_batch import CreateBatch
 from cellar.application.inventory.create_sample import CreateSample
 from cellar.application.inventory.delete_storage_location import DeleteStorageLocation
 from cellar.application.inventory.ensure_batch_exists import EnsureBatchExists
 from cellar.application.inventory.get_batch import GetBatch, ListBatchesByMolecule
 from cellar.application.inventory.get_inventory_summary import GetInventorySummary
+from cellar.application.inventory.get_plate_insights import GetPlateInsights
 from cellar.application.inventory.get_sample import GetSample, ListSamplesByBatch
 from cellar.application.inventory.import_plate_data import (
     ImportFileCache,
@@ -31,7 +37,14 @@ from cellar.application.inventory.import_templates import (
     ListImportTemplates,
 )
 from cellar.application.inventory.inventory_summary_reader import InventorySummaryReader
+from cellar.application.inventory.kiosk import ConfirmScan, ResolveScan
+from cellar.application.inventory.kiosk_devices import (
+    CreateKioskDevice,
+    ListKioskDevices,
+    RevokeKioskDevice,
+)
 from cellar.application.inventory.list_batches_global import ListBatchesGlobal
+from cellar.application.inventory.list_runs_for_plate import ListRunsForPlate
 from cellar.application.inventory.list_samples_global import ListSamplesGlobal
 from cellar.application.inventory.manage_sample import (
     AliquotSample,
@@ -46,6 +59,31 @@ from cellar.application.inventory.manage_storage import (
     ListStorageLocations,
     ListStorageLocationsWithCounts,
 )
+from cellar.application.inventory.org_plate_policy import GetOrgPlatePolicy, SetOrgPlatePolicy
+from cellar.application.inventory.plate_groups import (
+    AssignPlatesToGroup,
+    CreatePlateGroup,
+    DeletePlateGroup,
+    GetGroupTree,
+    GetPlateGroup,
+    MovePlateGroup,
+    RemovePlatesFromGroup,
+    UpdatePlateGroup,
+)
+from cellar.application.inventory.plate_insights_reader import PlateInsightsReader
+from cellar.application.inventory.plate_loans import (
+    ApproveLoanItems,
+    CancelLoanItems,
+    ConfirmLoanCheckout,
+    ConfirmLoanReturn,
+    DenyLoanItems,
+    GetLoan,
+    ListLoans,
+    RequestLoanReturn,
+    RequestPlateLoan,
+)
+from cellar.application.inventory.plate_runs_reader import PlateRunsReader
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.inventory.preview_shipment_import import PreviewShipmentImport
 from cellar.application.inventory.sample_requests import (
     ApproveSampleRequest,
@@ -57,6 +95,12 @@ from cellar.application.inventory.sample_requests import (
     RejectSampleRequest,
     StartPreparingSampleRequest,
     UpdateSampleRequest,
+)
+from cellar.application.inventory.shipment_reads import (
+    ListShipmentsForItem,
+    ListShipmentsForLoan,
+    ResolveShipmentItems,
+    ShipmentsReader,
 )
 from cellar.application.inventory.shipments import (
     AddShipmentItem,
@@ -92,6 +136,7 @@ from cellar.application.inventory.update_batch import UpdateBatch
 from cellar.application.inventory.update_storage_location import UpdateStorageLocation
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from cellar.application.screening.create_run import CreateRun
+from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.infrastructure.cache.in_memory_file_cache import InMemoryImportFileCache
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -101,11 +146,35 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory.collection_plate_groups_reader import (
+    SQLAlchemyCollectionPlateGroupsReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.comment_repository import (
+    SQLAlchemyCommentRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.import_template_repository import (
     SQLAlchemyImportTemplateRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.inventory_summary_reader import (
     SQLAlchemyInventorySummaryReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.kiosk_device_repository import (
+    SQLAlchemyKioskDeviceRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.org_plate_policy_repository import (
+    SQLAlchemyOrgPlatePolicyRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_group_repository import (
+    SQLAlchemyPlateGroupRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_insights_reader import (
+    SQLAlchemyPlateInsightsReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_loan_repository import (
+    SQLAlchemyPlateLoanRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_runs_reader import (
+    SQLAlchemyPlateRunsReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
@@ -119,11 +188,17 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.sample_request_repos
 from cellar.infrastructure.persistence.sqlalchemy.inventory.shipment_repository import (
     SQLAlchemyShipmentRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.inventory.shipments_reader import (
+    SQLAlchemyShipmentsReader,
+)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.storage_location_repository import (
     SQLAlchemyStorageLocationRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.synthesis_request_repository import (
     SQLAlchemySynthesisRequestRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
+    SQLAlchemyCollectionRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.custom_field_definition_repository import (  # noqa: E501
     SQLAlchemyCustomFieldDefinitionRepository,
@@ -362,13 +437,18 @@ def register_inventory(container: Container) -> None:
 
         return _f
 
+    # Loan repo wired into visibility so a borrower can ship the plates it holds (S17 §5).
     def _create_shipment(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
+        loan_repo = SQLAlchemyPlateLoanRepository(uow)
         return CreateShipment(
             uow,
             SQLAlchemyShipmentRepository(uow),
             c[EventDispatcher],
             sample_repo=SQLAlchemySampleRepository(uow),
+            plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            visibility=PlateVisibilityService(c[OrgDirectoryPort], loan_repo),
+            loan_repo=loan_repo,
         )
 
     container.define(CreateShipment, _create_shipment)
@@ -386,11 +466,64 @@ def register_inventory(container: Container) -> None:
             SQLAlchemyShipmentRepository(uow),
             c[EventDispatcher],
             sample_repo=SQLAlchemySampleRepository(uow),
+            plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            visibility=PlateVisibilityService(
+                c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)
+            ),
+        )
+
+    def _update_shipment(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdateShipment(
+            uow,
+            SQLAlchemyShipmentRepository(uow),
+            c[EventDispatcher],
+            loan_repo=SQLAlchemyPlateLoanRepository(uow),
+            visibility=PlateVisibilityService(c[OrgDirectoryPort]),
         )
 
     container.define(AddShipmentItem, _add_shipment_item)
-    container.define(UpdateShipment, _shipment_cmd(UpdateShipment))
+    container.define(UpdateShipment, _update_shipment)
     container.define(DeleteShipment, _shipment_cmd(DeleteShipment))
+
+    # --- Shipment read side (S17 §5): resolve-items, item/loan → shipments, labels ---
+    container.define(
+        ShipmentsReader,
+        lambda c: SQLAlchemyShipmentsReader(c[async_sessionmaker]),
+    )
+
+    def _resolve_shipment_items(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResolveShipmentItems(
+            uow,
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemySampleRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+            c[ShipmentsReader],
+        )
+
+    def _list_shipments_for_item(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListShipmentsForItem(
+            uow,
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemySampleRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+            c[ShipmentsReader],
+        )
+
+    def _list_shipments_for_loan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListShipmentsForLoan(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            c[ShipmentsReader],
+        )
+
+    container.define(ResolveShipmentItems, _resolve_shipment_items)
+    container.define(ListShipmentsForItem, _list_shipments_for_item)
+    container.define(ListShipmentsForLoan, _list_shipments_for_loan)
 
     def _preview_import(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -475,11 +608,351 @@ def register_inventory(container: Container) -> None:
             plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
             cache=c[ImportFileCache],
+            visibility=PlateVisibilityService(c[OrgDirectoryPort]),
             create_run=c[CreateRun],
             bulk_create_readout_data=c[BulkCreateReadoutData],
         )
 
     container.define(ImportPlateDataService, _import_plate_data_service)
+
+    # --- Org Plate Policies ---
+    def _get_org_plate_policy(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetOrgPlatePolicy(uow, SQLAlchemyOrgPlatePolicyRepository(uow))
+
+    def _set_org_plate_policy(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetOrgPlatePolicy(uow, SQLAlchemyOrgPlatePolicyRepository(uow), c[EventDispatcher])
+
+    container.define(GetOrgPlatePolicy, _get_org_plate_policy)
+    container.define(SetOrgPlatePolicy, _set_org_plate_policy)
+
+    # --- Plate Groups ---
+    def _create_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreatePlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyStorageLocationRepository(uow),
+            SQLAlchemyCollectionRepository(uow),
+        )
+
+    def _update_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return UpdatePlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyStorageLocationRepository(uow),
+            SQLAlchemyCollectionRepository(uow),
+        )
+
+    def _move_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return MovePlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+        )
+
+    def _delete_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeletePlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+        )
+
+    def _get_group_tree(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetGroupTree(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyCollectionRepository(uow),
+        )
+
+    def _get_plate_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetPlateGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyCollectionRepository(uow),
+        )
+
+    def _assign_plates_to_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AssignPlatesToGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+        )
+
+    def _remove_plates_from_group(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemovePlatesFromGroup(
+            uow,
+            SQLAlchemyPlateGroupRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+        )
+
+    container.define(CreatePlateGroup, _create_plate_group)
+    container.define(UpdatePlateGroup, _update_plate_group)
+    container.define(MovePlateGroup, _move_plate_group)
+    container.define(DeletePlateGroup, _delete_plate_group)
+    container.define(GetGroupTree, _get_group_tree)
+    container.define(GetPlateGroup, _get_plate_group)
+    container.define(AssignPlatesToGroup, _assign_plates_to_group)
+    container.define(RemovePlatesFromGroup, _remove_plates_from_group)
+
+    # --- Plate Loans ---
+    def _request_plate_loan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RequestPlateLoan(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyPlateGroupRepository(uow),
+            SQLAlchemyOrgPlatePolicyRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            c[OrgDirectoryPort],
+        )
+
+    def _list_loans(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListLoans(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
+        )
+
+    def _get_loan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetLoan(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
+        )
+
+    container.define(RequestPlateLoan, _request_plate_loan)
+    container.define(ListLoans, _list_loans)
+    container.define(GetLoan, _get_loan)
+
+    # --- Plate Loan item transitions ---
+    def _approve_loan_items(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ApproveLoanItems(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyOrgPlatePolicyRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
+        )
+
+    def _deny_loan_items(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DenyLoanItems(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyOrgPlatePolicyRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
+        )
+
+    def _confirm_loan_checkout(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ConfirmLoanCheckout(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyOrgPlatePolicyRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
+        )
+
+    def _request_loan_return(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RequestLoanReturn(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyOrgPlatePolicyRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
+            SQLAlchemyCommentRepository(uow),
+        )
+
+    def _confirm_loan_return(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ConfirmLoanReturn(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyOrgPlatePolicyRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
+        )
+
+    def _cancel_loan_items(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CancelLoanItems(
+            uow,
+            SQLAlchemyPlateLoanRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyOrgPlatePolicyRepository(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            SQLAlchemyPlateGroupRepository(uow),
+        )
+
+    container.define(ApproveLoanItems, _approve_loan_items)
+    container.define(DenyLoanItems, _deny_loan_items)
+    container.define(ConfirmLoanCheckout, _confirm_loan_checkout)
+    container.define(RequestLoanReturn, _request_loan_return)
+    container.define(ConfirmLoanReturn, _confirm_loan_return)
+    container.define(CancelLoanItems, _cancel_loan_items)
+
+    # --- Plate Insights (read model) ---
+    container.define(
+        PlateInsightsReader,
+        lambda c: SQLAlchemyPlateInsightsReader(c[async_sessionmaker]),
+    )
+
+    def _get_plate_insights(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetPlateInsights(
+            uow,
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            c[PlateInsightsReader],
+        )
+
+    container.define(GetPlateInsights, _get_plate_insights)
+
+    # --- Runs for plate (read model, S15 §5.4) ---
+    container.define(
+        PlateRunsReader,
+        lambda c: SQLAlchemyPlateRunsReader(c[async_sessionmaker]),
+    )
+
+    def _list_runs_for_plate(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListRunsForPlate(
+            uow,
+            SQLAlchemyRegisteredPlateRepository(uow),
+            # Loan repo wired so the borrowed-plate read carve-out applies (spec §5).
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+            c[PlateRunsReader],
+        )
+
+    container.define(ListRunsForPlate, _list_runs_for_plate)
+
+    # --- Plate groups for collection (read model, S16 §5) ---
+    container.define(
+        CollectionPlateGroupsReader,
+        lambda c: SQLAlchemyCollectionPlateGroupsReader(c[async_sessionmaker]),
+    )
+
+    def _list_plate_groups_for_collection(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListPlateGroupsForCollection(
+            uow,
+            SQLAlchemyCollectionRepository(uow),
+            PlateVisibilityService(c[OrgDirectoryPort]),
+            c[CollectionPlateGroupsReader],
+        )
+
+    container.define(ListPlateGroupsForCollection, _list_plate_groups_for_collection)
+
+    # --- Kiosk Devices ---
+    def _create_kiosk_device(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateKioskDevice(uow, SQLAlchemyKioskDeviceRepository(uow), c[EventDispatcher])
+
+    def _list_kiosk_devices(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListKioskDevices(uow, SQLAlchemyKioskDeviceRepository(uow))
+
+    def _revoke_kiosk_device(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RevokeKioskDevice(uow, SQLAlchemyKioskDeviceRepository(uow), c[EventDispatcher])
+
+    container.define(CreateKioskDevice, _create_kiosk_device)
+    container.define(ListKioskDevices, _list_kiosk_devices)
+    container.define(RevokeKioskDevice, _revoke_kiosk_device)
+
+    # --- Kiosk scan/confirm ---
+    def _resolve_scan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResolveScan(
+            uow,
+            SQLAlchemyKioskDeviceRepository(uow),
+            SQLAlchemyRegisteredPlateRepository(uow),
+            SQLAlchemyPlateLoanRepository(uow),
+        )
+
+    def _confirm_scan(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ConfirmScan(
+            uow,
+            SQLAlchemyKioskDeviceRepository(uow),
+            SQLAlchemyPlateLoanRepository(uow),
+            c[EventDispatcher],
+        )
+
+    container.define(ResolveScan, _resolve_scan)
+    container.define(ConfirmScan, _confirm_scan)
+
+    # --- Comments ---
+    def _comment_target_repos(uow: AsyncUnitOfWork) -> TargetRepos:
+        return TargetRepos(
+            plate_repo=SQLAlchemyRegisteredPlateRepository(uow),
+            group_repo=SQLAlchemyPlateGroupRepository(uow),
+            loan_repo=SQLAlchemyPlateLoanRepository(uow),
+        )
+
+    def _add_comment(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return AddComment(
+            uow,
+            SQLAlchemyCommentRepository(uow),
+            _comment_target_repos(uow),
+            c[EventDispatcher],
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+        )
+
+    def _list_comments(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListComments(
+            uow,
+            SQLAlchemyCommentRepository(uow),
+            _comment_target_repos(uow),
+            PlateVisibilityService(c[OrgDirectoryPort], SQLAlchemyPlateLoanRepository(uow)),
+        )
+
+    container.define(AddComment, _add_comment)
+    container.define(ListComments, _list_comments)
 
     # --- Admin Hard-Delete Registry (Tier 1) ---
     register_admin_delete(

@@ -1,9 +1,23 @@
 "use client";
 
+/**
+ * DoseResponseChart — cellar's *editing* shell around the suite's shared
+ * dose-response chart.
+ *
+ * The picture (plot, display toggles, PNG/SVG export, summary cards) lives in
+ * `@structflo/components/dose-response` as `DoseResponseChartView`, so every
+ * surface in every app draws the same curve the same way. This file adds only
+ * what cellar's run page can do to a curve: enter an edit session, exclude
+ * points by clicking them, preview the refit, constrain the fit, classify it,
+ * and save with a reason.
+ *
+ * A read-only surface should render `DoseResponseChartView` directly (see the
+ * campaign expand dialog or the search compound sheet) — it needs none of the
+ * hooks below.
+ */
+
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -13,12 +27,16 @@ import {
   refitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPost,
   useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet,
 } from "@/shared/lib/api/readout-data/readout-data";
-import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
-import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
-import { cn } from "@/shared/lib/utils";
-import { useAuthz } from "@sentinel-auth/nextjs";
+import { Plot } from "@/shared/lib/plotly";
+import { useAuthz } from "@duar-auth/nextjs";
+import {
+  type CapturedPoint,
+  DoseResponseChartView,
+  type EditOverlay,
+  buildCapturedPoints,
+} from "@structflo/components/dose-response";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Download, ImageIcon, Redo2, RotateCcw, Undo2 } from "lucide-react";
+import { Redo2, RotateCcw, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DOSE_RESPONSE_KEY } from "../hooks/query-keys";
 import { type DraftExclusion, useEditSession } from "../hooks/use-edit-session";
@@ -29,31 +47,7 @@ import {
   constraintsValid,
   defaultConstraintsFor,
 } from "../lib/curve-constraints";
-import {
-  PLOT_MARKER,
-  X_AXIS_FALLBACK_MAX_RATIO,
-  X_AXIS_FALLBACK_MIN_RATIO,
-  X_AXIS_FLOOR,
-  X_AXIS_MAX_RATIO,
-  X_AXIS_MIN_RATIO,
-  generate4PLPoints,
-} from "../lib/dose-response-display";
-import {
-  computeReplicateStats,
-  generate4PLCurve,
-  isDegenerateFit,
-  rSquaredColor,
-} from "../lib/dose-response-math";
-import { interceptLabel } from "../lib/intercept-label";
-import {
-  CURVE_CLASS_LABELS,
-  CURVE_TYPE_LABELS,
-  type CurveClass,
-  type CurveType,
-  type DoseResponseConfig,
-  type DoseResponseCurve,
-  narrowInterceptValues,
-} from "../types";
+import type { DoseResponseConfig, DoseResponseCurve } from "../types";
 import { CurveControls } from "./curve-controls";
 import { CurveEditHistory } from "./curve-edit-history";
 import { DoseResponsePointInventory } from "./dose-response-point-inventory";
@@ -61,8 +55,6 @@ import {
   type ExclusionReason as SaveExclusionReason,
   SaveExclusionsDialog,
 } from "./save-exclusions-dialog";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface DoseResponseChartProps {
   curves: DoseResponseCurve[];
@@ -83,10 +75,7 @@ interface DoseResponseChartProps {
   /** When the parent Run is approved / locked, BE write paths (commit-refit
    *  + classify) will return Failure on submit. Surfacing the lock as a
    *  disabled Edit-Points button + a "Locked" badge avoids the chemist
-   *  entering edit mode, making changes, then eating a 4xx on save. Pass
-   *  `undefined` from callers that don't have run state (campaign expand
-   *  dialog, search compound drawer) — those callers are already
-   *  non-interactive so the lock UI never renders. */
+   *  entering edit mode, making changes, then eating a 4xx on save. */
   runIsLocked?: boolean;
   /** Test-only override for the /refit-preview call. Production callers
    *  rely on the orval-generated default inside ``useRefitPreview``. */
@@ -94,341 +83,6 @@ interface DoseResponseChartProps {
 }
 
 type PreviewFnOverride = NonNullable<Parameters<typeof useRefitPreview>[0]>["previewFn"];
-
-const TRACE_COLORS = GROUP_PALETTE.slice(0, 8);
-
-const CURVE_CLASS_OPTIONS: CurveClass[] = ["full", "partial", "bell_shaped", "inactive"];
-
-// ─── Captured-point domain ───────────────────────────────────────────────────
-// The BE's `build_points_with_exclusions` merges `curve.raw_data +
-// curve.excluded_points`, sorts by concentration, then interprets the
-// FE-sent `excluded_indices` as positions IN THAT MERGED SORTED LIST. The
-// curve fitter, in turn, writes `raw_data = active-only` (excluded points
-// move OUT of raw_data and into excluded_points). So after any save with
-// manual exclusions, `raw_data` is SHORTER than the captured set — and the
-// chart cannot use "position in raw_data" as its idx domain anymore, or
-// click handling silently mutates the wrong point on subsequent edits.
-//
-// The fix: compute a `capturedPoints` array (raw_data + excluded_points,
-// concentration-sorted) and use IT as the idx domain everywhere — click
-// handler, inventory rows, toggleExclusion calls. This mirrors the BE's
-// view of the world exactly.
-
-/** A point in the merged + concentration-sorted captured set. */
-interface CapturedPoint {
-  concentration: number;
-  response: number;
-  /** Position in the merged + sorted captured set. This is the value sent
-   *  to the BE as part of `excluded_indices`. */
-  capturedIdx: number;
-  /** True when the point currently lives in `curve.raw_data` (i.e. is in
-   *  the active fit set as of the last save). False when it lives only in
-   *  `curve.excluded_points`. */
-  isInRawData: boolean;
-  /** When this point originated from an `excluded_points` entry with a
-   *  numeric idx, the entry is attached here so the trace builder can
-   *  classify it (manual / auto_3sigma / suggestion). */
-  exclusionEntry: Record<string, unknown> | null;
-}
-
-/** Pull a number from one of two field names; undefined / null / non-number → undefined. */
-function pickNum(obj: Record<string, unknown>, a: string, b?: string): number | undefined {
-  const v = obj[a] ?? (b ? obj[b] : undefined);
-  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
-}
-
-/**
- * Build the merged + concentration-sorted captured set for a curve. This
- * is the single source of truth for the idx domain consumed by the BE's
- * `build_points_with_exclusions`.
- *
- * Legacy `excluded_points` entries (idx=null + only-coords) are NOT
- * included here — they render via a separate read-only bucket because
- * they have no toggleable idx. Pre-041 entries with `idx` but no coords
- * resolve their coords from `raw_data[idx]` (works in the pre-save state
- * where the entry's idx is still a valid raw_data position).
- */
-function buildCapturedPoints(
-  rawData: Array<Record<string, unknown>> | null | undefined,
-  excludedPoints: Array<Record<string, unknown>> | null | undefined,
-): CapturedPoint[] {
-  type Pending = {
-    concentration: number;
-    response: number;
-    isInRawData: boolean;
-    exclusionEntry: Record<string, unknown> | null;
-    /** Position in the input raw_data array — only used for resolving
-     *  numeric-idx excluded entries that lack coords (pre-041 wire). */
-    rawIdx: number | null;
-  };
-  const pending: Pending[] = [];
-
-  // 1. Every raw_data point goes in.
-  const rd = rawData ?? [];
-  for (let i = 0; i < rd.length; i++) {
-    const pt = rd[i];
-    const conc = pickNum(pt, "concentration", "x");
-    const resp = pickNum(pt, "response", "y");
-    if (conc === undefined || resp === undefined) continue;
-    pending.push({
-      concentration: conc,
-      response: resp,
-      isInRawData: true,
-      exclusionEntry: null,
-      rawIdx: i,
-    });
-  }
-
-  // 2. excluded_points entries — three shapes to handle:
-  //    a. {idx: number, concentration, response} — post-041; coords on the
-  //       entry. If `idx` is also a valid raw_data position pointing to the
-  //       same point (pre-save state, edit-in-progress), DON'T duplicate.
-  //    b. {idx: number, concentration: null, response: null} — pre-041 wire.
-  //       Resolve coords by looking up `rawData[idx]` and ATTACH the entry
-  //       to that pending row instead of inserting a synthetic one.
-  //    c. {idx: null, concentration, response} — legacy backfill. SKIP here;
-  //       the chart's existing legacyManualExcludedXY / legacyAutoExcludedXY
-  //       buckets handle them and the inventory shows them in a read-only
-  //       section.
-  const ep = excludedPoints ?? [];
-  for (const entry of ep) {
-    const idx = entry.idx as number | null | undefined;
-    const conc = pickNum(entry, "concentration", "x");
-    const resp = pickNum(entry, "response", "y");
-
-    if (typeof idx !== "number") {
-      // Case (c) — legacy idx=null. Not part of the captured idx domain.
-      continue;
-    }
-
-    if (conc !== undefined && resp !== undefined) {
-      // Case (a) — entry has its own coords. If a raw_data point at the
-      // same idx already represents this concentration (pre-save edit
-      // state), prefer attaching to that pending row instead of inserting
-      // a duplicate.
-      const overlap = pending.find(
-        (p) => p.isInRawData && p.rawIdx === idx && Math.abs(p.concentration - conc) < 1e-12,
-      );
-      if (overlap) {
-        overlap.exclusionEntry = entry;
-        continue;
-      }
-      pending.push({
-        concentration: conc,
-        response: resp,
-        isInRawData: false,
-        exclusionEntry: entry,
-        rawIdx: null,
-      });
-      continue;
-    }
-
-    // Case (b) — entry has idx only, no coords. Resolve via rawData[idx].
-    const match = pending.find((p) => p.isInRawData && p.rawIdx === idx);
-    if (match) {
-      match.exclusionEntry = entry;
-    }
-    // If the idx is out-of-bounds AND no coords, we can't render this
-    // entry. That's the unrecoverable shape — log nothing, drop quietly.
-  }
-
-  // 3. Sort by concentration ascending — matches BE's
-  //    build_points_with_exclusions semantics exactly.
-  pending.sort((a, b) => a.concentration - b.concentration);
-
-  return pending.map((p, capturedIdx) => ({
-    concentration: p.concentration,
-    response: p.response,
-    capturedIdx,
-    isInRawData: p.isInRawData,
-    exclusionEntry: p.exclusionEntry,
-  }));
-}
-
-// ─── Summary card with interactive curve class badge ─────────────────────────
-
-interface SummaryCardProps {
-  curve: DoseResponseCurve;
-  /** Points contributing to the fit right now (captured total minus
-   *  server-persisted exclusions minus in-session draft exclusions). */
-  inFitCount: number;
-  /** Total points captured for this curve — server's view of raw_data
-   *  plus excluded_points. Stable across reloads + draft toggles. */
-  capturedTotal: number;
-  /** Server-persisted + in-session draft exclusions combined. Drives the
-   *  "{N} excluded" sub-line when > 0. */
-  excludedCount: number;
-  isInteractive: boolean;
-  onClassify: (curveId: string, curveClass: string) => void;
-  isClassifying: boolean;
-}
-
-/** Map fit-quality warning codes to user-facing labels. */
-const FIT_WARNING_LABELS: Record<string, string> = {
-  ec50_at_bound: "Hit dose-range bound — IC50 unreliable",
-  ec50_outside_dose_range: "IC50 outside tested doses",
-  low_r_squared: "Low R²",
-};
-
-function SummaryCard({
-  curve,
-  inFitCount,
-  capturedTotal,
-  excludedCount,
-  isInteractive,
-  onClassify,
-  isClassifying,
-}: SummaryCardProps) {
-  const [showClassify, setShowClassify] = useState(false);
-
-  const warnings = curve.fit_quality_warnings ?? [];
-  const isExtrapolated = warnings.includes("ec50_at_bound");
-  const notFitted = isDegenerateFit(curve);
-  // Narrow the generated wire shape (spec.kind/basis: string) to the local
-  // InterceptValue enums at the consumption edge so interceptLabel keeps its
-  // precise InterceptSpec param.
-  const interceptValues = narrowInterceptValues(curve.intercept_values);
-
-  return (
-    <Card key={curve.id} className="py-4">
-      <CardHeader className="pb-0">
-        <CardTitle className="text-sm font-mono">
-          {curve.registration_number ??
-            curve.molecule_name ??
-            CURVE_TYPE_LABELS[curve.curve_type as CurveType] ??
-            curve.curve_type}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-2 space-y-1">
-        <p className="text-sm font-mono">
-          {/* Prefer the protocol's intercept label — single source of
-              truth (spec: 2026-05-13). curve.curve_type is descriptive
-              only post-033 and ignores per-protocol relabels. */}
-          {interceptValues[0]?.spec
-            ? interceptLabel(interceptValues[0].spec)
-            : (CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type)}
-          {" = "}
-          {Number(curve.fitted_value.toPrecision(4))} {curve.fitted_unit}
-          {isExtrapolated && <span className="ml-1 text-amber-600 text-xs">(extrapolated)</span>}
-        </p>
-        {interceptValues.length > 1 && (
-          <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-muted-foreground pt-0.5">
-            {interceptValues.slice(1).map((iv, idx) => {
-              const label = interceptLabel(iv.spec);
-              if (iv.at_bound || !Number.isFinite(iv.value)) {
-                return (
-                  <span
-                    key={idx}
-                    className="rounded border px-1.5 py-0.5 text-amber-600"
-                    title="Curve does not reach this response level"
-                  >
-                    {label} = at bound
-                  </span>
-                );
-              }
-              return (
-                <span key={idx} className="rounded border px-1.5 py-0.5">
-                  {label} = {Number(iv.value.toPrecision(4))} {curve.fitted_unit}
-                  {iv.confidence_interval_low != null && iv.confidence_interval_high != null && (
-                    <span className="ml-1 opacity-70">
-                      [{iv.confidence_interval_low.toPrecision(3)}–
-                      {iv.confidence_interval_high.toPrecision(3)}]
-                    </span>
-                  )}
-                </span>
-              );
-            })}
-          </div>
-        )}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-          <span className={cn("font-medium", rSquaredColor(curve.r_squared))}>
-            R² = {curve.r_squared.toFixed(3)}
-          </span>
-          <span className="font-mono">Hill = {curve.hill_slope.toFixed(2)}</span>
-          <span className="font-mono">Top = {curve.top.toFixed(1)}%</span>
-          <span className="font-mono">Bottom = {curve.bottom.toFixed(1)}%</span>
-          {curve.confidence_interval_low != null && curve.confidence_interval_high != null && (
-            <span className="font-mono">
-              CI: {curve.confidence_interval_low.toPrecision(3)}–
-              {curve.confidence_interval_high.toPrecision(3)} {curve.fitted_unit}
-            </span>
-          )}
-          {capturedTotal > 0 && (
-            <span className="text-muted-foreground">
-              {inFitCount} of {capturedTotal} points in fit
-              {excludedCount > 0 && (
-                <span className="ml-1.5 opacity-70">· {excludedCount} excluded</span>
-              )}
-            </span>
-          )}
-          {curve.curve_class && !isInteractive && (
-            <Badge variant="outline" className="text-xs">
-              {CURVE_CLASS_LABELS[curve.curve_class as CurveClass] ?? curve.curve_class}
-            </Badge>
-          )}
-          {curve.curve_class && isInteractive && (
-            <div className="relative">
-              <Badge
-                variant="outline"
-                className="text-xs cursor-pointer hover:bg-accent transition-colors"
-                onClick={() => setShowClassify((v) => !v)}
-              >
-                {CURVE_CLASS_LABELS[curve.curve_class as CurveClass] ?? curve.curve_class}
-                <span className="ml-1 opacity-60">▾</span>
-              </Badge>
-              {showClassify && (
-                <div className="absolute left-0 top-full z-10 mt-1 w-36 rounded-md border bg-popover shadow-md">
-                  {CURVE_CLASS_OPTIONS.map((cc) => (
-                    <button
-                      key={cc}
-                      type="button"
-                      disabled={isClassifying}
-                      className={cn(
-                        "flex w-full items-center px-3 py-1.5 text-xs hover:bg-accent transition-colors",
-                        curve.curve_class === cc && "font-medium text-primary",
-                      )}
-                      onClick={() => {
-                        onClassify(curve.id, cc);
-                        setShowClassify(false);
-                      }}
-                    >
-                      {CURVE_CLASS_LABELS[cc]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        {(warnings.length > 0 || notFitted) && (
-          <div className="flex flex-wrap gap-1 pt-1">
-            {notFitted && (
-              <Badge
-                variant="outline"
-                className="text-xs border-muted-foreground/40 bg-muted text-muted-foreground"
-                title="The fit produced degenerate parameters (inactive or unfit)."
-              >
-                Curve not fitted (inactive or degenerate)
-              </Badge>
-            )}
-            {warnings.map((code) => (
-              <Badge
-                key={code}
-                variant="outline"
-                className="text-xs border-amber-400/60 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-                title={code}
-              >
-                ⚠️ {FIT_WARNING_LABELS[code] ?? code}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ─── Main component ────────────────────────────────────────────────────────────
 
 export function DoseResponseChart({
   curves,
@@ -439,7 +93,6 @@ export function DoseResponseChart({
   runIsLocked = false,
   previewFn,
 }: DoseResponseChartProps) {
-  // ── Interactive state ───────────────────────────────────────────────────────
   const { mutate: refit, isPending: isRefitting } = useRefitDoseResponse();
   const { mutate: classify, isPending: isClassifying } = useClassifyDoseResponse();
 
@@ -452,18 +105,13 @@ export function DoseResponseChart({
   // Edit mode toggle — prevents accidental point exclusion
   const [editMode, setEditMode] = useState(false);
 
-  // Display toggles
-  const [showCI, setShowCI] = useState(true);
-  const [showCrossHair, setShowCrossHair] = useState(true);
-  const [showPlateaus, setShowPlateaus] = useState(false);
-
   // Save dialog state (opened from the edit-mode banner's Save button)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 
-  // ── Edit-session state (replaces the legacy excludedMap) ──────────────────
-  // For Sprint 2, edit mode only operates on the FIRST curve — multi-curve
-  // editing is a follow-up. The run-page comparison view + the search detail
-  // drawer both pass a single curve in the common interactive case.
+  // ── Edit-session state ────────────────────────────────────────────────────
+  // Edit mode only operates on the FIRST curve — multi-curve editing is a
+  // follow-up. The run-page comparison view + the search detail drawer both
+  // pass a single curve in the common interactive case.
   const editCurve = curves[0];
   // The wire type for `excluded_points` is a loose Record<string, unknown>[]
   // so per-bounded-context (search-grid, campaign, etc.) consumers can re-shape;
@@ -488,15 +136,10 @@ export function DoseResponseChart({
   // the inventory side panel + the mutation handler (which enriches
   // outgoing exclusions with concentration/response so the BE persists
   // them on excluded_points; otherwise the BE writes null coords and the
-  // next reload has nothing to render the X marker from). Other curves
-  // re-derive this inline in the trace loop below — only editCurve needs
-  // a stable reference because its captured set drives BE round-trips.
+  // next reload has nothing to render the X marker from).
   const editCurveCaptured = useMemo<CapturedPoint[]>(() => {
     if (!editCurve) return [];
-    return buildCapturedPoints(
-      editCurve.raw_data as Array<Record<string, unknown>> | null | undefined,
-      editCurve.excluded_points as Array<Record<string, unknown>> | null | undefined,
-    );
+    return buildCapturedPoints(editCurve.raw_data, editCurve.excluded_points);
   }, [editCurve]);
   const editCurveCapturedByIdx = useMemo<Map<number, CapturedPoint>>(() => {
     const m = new Map<number, CapturedPoint>();
@@ -517,9 +160,6 @@ export function DoseResponseChart({
 
   // debounce refs per curve id
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-
-  // ref for Plotly export (downloadImage)
-  const plotContainerRef = useRef<HTMLDivElement>(null);
 
   // ── React Query: commit-path mutation for /refit ──────────────────────────
   // Uses the orval-generated client directly (rich payload — exclusions[] +
@@ -547,7 +187,7 @@ export function DoseResponseChart({
             // excluded_points entry. Without this the next reload has
             // raw_data = active-only AND an excluded entry with null
             // coords — the chart can't reconstruct where the X marker
-            // should sit. e.idx is now a capturedIdx (post-fix).
+            // should sit. e.idx is a capturedIdx.
             const cp = editCurveCapturedByIdx.get(e.idx as number);
             return {
               idx: e.idx,
@@ -589,38 +229,7 @@ export function DoseResponseChart({
     refitPreview.requestPreview(editCurve.id, draftExcludedIndices);
   }, [editMode, editCurve?.id, draftExcludedIndices]);
 
-  // The preview-fit overlay: when the hook has data, build a synthetic
-  // ``DoseResponseCurve`` with the previewed parameters so generate4PLCurve
-  // can draw a dashed preview sigmoid. The original curve's fit line stays
-  // visible underneath so the chemist sees "before vs after".
-  const previewCurveOverlay = useMemo(() => {
-    if (!editMode || !editCurve || !refitPreview.data) return null;
-    return {
-      top: refitPreview.data.top,
-      bottom: refitPreview.data.bottom,
-      fitted_value: refitPreview.data.fitted_value,
-      hill_slope: refitPreview.data.hill_slope,
-    };
-  }, [editMode, editCurve, refitPreview.data]);
-
-  // Seed per-curve UI from the protocol's config when provided so the
-  // accordion reflects what the protocol is actually doing — a user who
-  // set Top ∈ [85, 110] at the protocol level should see Range here, not
-  // a misleading "Free". Editing a per-curve value sends an explicit
-  // override; "Reset" clears the override and resnaps to these defaults.
-  // The [85,110]/[-10,10]/[0.9,1.1] defaults only make sense for
-  // percent-scale readouts (% inhibition / activation / control). For
-  // raw signal, Z-score, NONE, etc., we leave range fields empty so the
-  // user must explicitly choose ranges instead of inheriting bogus
-  // percent bounds.
-  const getConstraints = useCallback(
-    (curve: DoseResponseCurve): CurveConstraints =>
-      constraintsMap[curve.id] ??
-      defaultConstraintsFor(curve, protocolConfig, yReadoutNormalization),
-    [constraintsMap, protocolConfig, yReadoutNormalization],
-  );
-
-  // Returns the set of currently-draft-excluded raw_data indices for the
+  // Returns the set of currently-draft-excluded captured-set indices for the
   // given curve. Outside edit mode (or for non-edit curves) this is empty —
   // the server already has the persisted exclusions, no need to round-trip
   // them on a constraint refit.
@@ -634,6 +243,18 @@ export function DoseResponseChart({
       return ids;
     },
     [editMode, editCurve?.id, editSession.draft.exclusions],
+  );
+
+  // Seed per-curve UI from the protocol's config when provided so the
+  // accordion reflects what the protocol is actually doing — a user who
+  // set Top ∈ [85, 110] at the protocol level should see Range here, not
+  // a misleading "Free". Editing a per-curve value sends an explicit
+  // override; "Reset" clears the override and resnaps to these defaults.
+  const getConstraints = useCallback(
+    (curve: DoseResponseCurve): CurveConstraints =>
+      constraintsMap[curve.id] ??
+      defaultConstraintsFor(curve, protocolConfig, yReadoutNormalization),
+    [constraintsMap, protocolConfig, yReadoutNormalization],
   );
 
   const callRefit = useCallback(
@@ -703,528 +324,10 @@ export function DoseResponseChart({
     [classify],
   );
 
-  // ── Early return ────────────────────────────────────────────────────────────
-  if (curves.length === 0) {
-    return (
-      <div className="flex items-center justify-center rounded-lg border border-dashed p-12 text-sm text-muted-foreground">
-        No dose-response curves available.
-      </div>
-    );
-  }
-
-  // ── Build Plotly traces ─────────────────────────────────────────────────────
-  // PlotTrace / PlotShape / PlotAnnotation: the project doesn't depend on
-  // @types/plotly.js (react-plotly.js's wrapper here uses PlotProps with
-  // Record<string, unknown>). We mirror that shape for trace/shape/annotation
-  // builders so call sites don't need `any`.
-  type PlotTrace = Record<string, unknown>;
-  type PlotShape = Record<string, unknown>;
-  type PlotAnnotation = Record<string, unknown>;
-  const traces: PlotTrace[] = [];
-
-  // Track trace index → (curveId, pointIndex within included array) for click handling.
-  // Each clickable trace gets a traceIndex so we can map clicks back.
-  // "suggestion" is treated like "included" for click handling because the
-  // session toggle preserves source=auto_3sigma when it flips excluded.
-  //
-  // Post-fix: `capturedIdxOrder` carries the captured-set idx for each
-  // marker in the emitted trace, in render order. This is the value the
-  // click handler sends to `editSession.toggleExclusion(idx)` — which the
-  // BE then reads as a position in its merged + sorted captured set
-  // (`build_points_with_exclusions`). Previously the FE used "position in
-  // raw_data" for click-targets, which silently diverged from the BE's
-  // domain after any save that removed points from raw_data.
-  const traceIndexToCurve: Array<{
-    curveId: string;
-    type: "included" | "excluded" | "suggestion";
-    /** Captured-set indices in the order they were emitted into the
-     *  trace. Used to map a Plotly pointIndex back to the captured-set
-     *  idx — the exact value the BE consumes as `excluded_indices`. */
-    capturedIdxOrder?: number[];
-  }> = [];
-
-  for (let i = 0; i < curves.length; i++) {
-    const curve = curves[i];
-    const color = TRACE_COLORS[i % TRACE_COLORS.length];
-    const group = `curve-${curve.id}`;
-    const curveTypeLabel = CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type;
-    // Prefer the canonical registration number (CV-NNNNN) for trace labels
-    // — analysts identify compounds by reg id, not free-text name. Fall back
-    // to the molecule name only when the curve carries no reg id.
-    const compoundLabel = curve.registration_number ?? curve.molecule_name ?? null;
-    const label = compoundLabel ? `${compoundLabel} (${curveTypeLabel})` : curveTypeLabel;
-
-    // Build the merged + concentration-sorted captured set. This is the
-    // FE's mirror of the BE's `build_points_with_exclusions` — every idx
-    // we emit (for click handling, draft toggles, BE round-trip) is a
-    // position IN THIS SET, not in raw_data. See `buildCapturedPoints`
-    // for the merge / dedup semantics.
-    const captured = buildCapturedPoints(
-      curve.raw_data as Array<Record<string, unknown>> | null | undefined,
-      curve.excluded_points as Array<Record<string, unknown>> | null | undefined,
-    );
-    const localExcluded = getExcluded(curve.id);
-
-    // Classify each captured point. Localexcluded entries (in-session
-    // drafts) get a synthesized "manual + excluded" classification and
-    // override whatever the server-persisted entry says, so the chemist
-    // sees their pending toggle reflected in the trace immediately.
-    type Bucket = "included" | "suggestion" | "manualExcluded" | "autoExcluded";
-    const classify = (cp: CapturedPoint): Bucket => {
-      // Draft override — chemist clicked this point this session.
-      if (localExcluded.has(cp.capturedIdx)) return "manualExcluded";
-      const e = cp.exclusionEntry;
-      if (!e) return "included";
-      const source =
-        (e.source as string | undefined) ?? (e.reason === "auto_3sigma" ? "auto_3sigma" : "manual");
-      const excluded = typeof e.excluded === "boolean" ? (e.excluded as boolean) : true;
-      if (source === "auto_3sigma" && !excluded) return "suggestion";
-      if (source === "auto_3sigma" && excluded) return "autoExcluded";
-      if (excluded) return "manualExcluded";
-      return "included";
-    };
-
-    // Build per-bucket parallel arrays. `capturedIdxOrder` lets the click
-    // handler map a Plotly pointIndex straight to the captured-set idx
-    // without re-walking — single source of truth for click targets.
-    const includedX: number[] = [];
-    const includedY: number[] = [];
-    const includedCapturedIdxOrder: number[] = [];
-    const suggestionX: number[] = [];
-    const suggestionY: number[] = [];
-    const suggestionCapturedIdxOrder: number[] = [];
-    const manualExcludedX: number[] = [];
-    const manualExcludedY: number[] = [];
-    const manualExcludedCapturedIdxOrder: number[] = [];
-    const autoExcludedX: number[] = [];
-    const autoExcludedY: number[] = [];
-
-    for (const cp of captured) {
-      const bucket = classify(cp);
-      switch (bucket) {
-        case "included":
-          includedX.push(cp.concentration);
-          includedY.push(cp.response);
-          includedCapturedIdxOrder.push(cp.capturedIdx);
-          break;
-        case "suggestion":
-          suggestionX.push(cp.concentration);
-          suggestionY.push(cp.response);
-          suggestionCapturedIdxOrder.push(cp.capturedIdx);
-          break;
-        case "manualExcluded":
-          manualExcludedX.push(cp.concentration);
-          manualExcludedY.push(cp.response);
-          manualExcludedCapturedIdxOrder.push(cp.capturedIdx);
-          break;
-        case "autoExcluded":
-          autoExcludedX.push(cp.concentration);
-          autoExcludedY.push(cp.response);
-          break;
-      }
-    }
-
-    // Legacy idx=null entries — separate render path because they have no
-    // toggleable capturedIdx. They appear as X markers (manual) or
-    // diamonds (auto_3sigma) but are non-interactive even in edit mode.
-    const legacyAutoExcludedXY: Array<{ x: number; y: number }> = [];
-    const legacyManualExcludedXY: Array<{ x: number; y: number }> = [];
-    for (const rawPt of curve.excluded_points ?? []) {
-      const e = rawPt as {
-        idx?: number | null;
-        source?: string | null;
-        excluded?: boolean | null;
-        reason?: string | null;
-        concentration?: number | null;
-        response?: number | null;
-        x?: number | null;
-        y?: number | null;
-      };
-      if (typeof e.idx === "number") continue; // numeric-idx → already in captured
-      const source = e.source ?? (e.reason === "auto_3sigma" ? "auto_3sigma" : "manual");
-      const conc = (e.concentration ?? e.x) as number | null | undefined;
-      const resp = (e.response ?? e.y) as number | null | undefined;
-      if (typeof conc === "number" && typeof resp === "number") {
-        if (source === "auto_3sigma") {
-          legacyAutoExcludedXY.push({ x: conc, y: resp });
-        } else {
-          legacyManualExcludedXY.push({ x: conc, y: resp });
-        }
-      }
-    }
-    // Legacy rows ride along in the existing X/diamond markers — flatten
-    // into the same arrays so a single trace renders the whole bucket.
-    for (const lp of legacyManualExcludedXY) {
-      manualExcludedX.push(lp.x);
-      manualExcludedY.push(lp.y);
-      // No capturedIdxOrder entry — legacy rows are non-clickable. The
-      // click handler short-circuits if pointIndex >= capturedIdxOrder.length.
-    }
-    for (const lp of legacyAutoExcludedXY) {
-      autoExcludedX.push(lp.x);
-      autoExcludedY.push(lp.y);
-    }
-
-    // Compatibility shim for downstream code that still reads
-    // `serverIncluded.x`/`.y` (axis-range computation only). The captured
-    // set is the full domain — every X coord the chart cares about.
-    const serverIncluded = {
-      x: captured.map((p) => p.concentration),
-      y: captured.map((p) => p.response),
-    };
-
-    // Filter out NaN/non-positive values: log10 explodes on them and
-    // `fitted_value` may be NaN/0 for degenerate fits. Aggregate-mode
-    // overlays also contribute their fitted_value + raw_data so the
-    // axis range doesn't truncate sibling runs whose EC50 sits outside
-    // the rep's range.
-    const finiteFitted = Number.isFinite(curve.fitted_value) && curve.fitted_value > 0;
-    const additionalXs: number[] = [];
-    for (const ac of curve.additional_curves ?? []) {
-      const acFitted = (ac as { fitted_value?: number }).fitted_value;
-      if (typeof acFitted === "number" && Number.isFinite(acFitted) && acFitted > 0) {
-        additionalXs.push(acFitted);
-      }
-      const acRaw = (ac as { raw_data?: Array<Record<string, unknown>> | null }).raw_data;
-      if (Array.isArray(acRaw)) {
-        for (const pt of acRaw) {
-          const xv =
-            (pt as { x?: number; concentration?: number }).x ??
-            (pt as { x?: number; concentration?: number }).concentration;
-          if (typeof xv === "number" && Number.isFinite(xv) && xv > 0) {
-            additionalXs.push(xv);
-          }
-        }
-      }
-    }
-    const allX = [
-      // raw_data already covers every idx-keyed exclusion (manual + auto +
-      // suggestion) since post Task 2.7 nothing gets stripped from
-      // raw_data; legacy scalar-only rows (no idx) still need explicit
-      // inclusion so their X coords contribute to the axis range.
-      ...serverIncluded.x,
-      ...legacyAutoExcludedXY.map((p) => p.x),
-      ...legacyManualExcludedXY.map((p) => p.x),
-      ...(finiteFitted ? [curve.fitted_value] : []),
-      ...additionalXs,
-    ].filter((v) => Number.isFinite(v) && v > 0);
-    let xMin: number;
-    let xMax: number;
-    if (allX.length > 0) {
-      xMin = Math.max(Math.min(...allX) * X_AXIS_MIN_RATIO, X_AXIS_FLOOR);
-      xMax = Math.max(...allX) * X_AXIS_MAX_RATIO;
-    } else if (finiteFitted) {
-      xMin = Math.max(curve.fitted_value * X_AXIS_FALLBACK_MIN_RATIO, X_AXIS_FLOOR);
-      xMax = curve.fitted_value * X_AXIS_FALLBACK_MAX_RATIO;
-    } else {
-      // No usable scale info — pick a generic µM-range default rather
-      // than feeding NaN into Plotly's log axis.
-      xMin = 0.001;
-      xMax = 1000;
-    }
-
-    // Compute replicate stats for error bars
-    const { meanX, meanY, sdY, replicateX, replicateY } = computeReplicateStats(
-      includedX,
-      includedY,
-    );
-    const hasReplicates = replicateX.length > 0;
-
-    // Individual replicate scatter (semi-transparent, behind means) — only when replicates exist
-    if (hasReplicates) {
-      traces.push({
-        type: "scatter",
-        mode: "markers",
-        name: `${label} replicates`,
-        legendgroup: group,
-        x: replicateX,
-        y: replicateY,
-        marker: {
-          color,
-          size: PLOT_MARKER.REPLICATE_SIZE,
-          symbol: "circle",
-          opacity: PLOT_MARKER.REPLICATE_OPACITY,
-        },
-        showlegend: false,
-        hoverinfo: "skip",
-      });
-    }
-
-    // Included data points (mean values with error bars when replicates exist)
-    const displayX = hasReplicates ? meanX : includedX;
-    const displayY = hasReplicates ? meanY : includedY;
-
-    if (displayX.length > 0) {
-      const traceIdx = traces.length;
-      // capturedIdxOrder only applies when we render the raw points
-      // (no replicate aggregation). When `hasReplicates` is true the
-      // markers are MEAN positions and a single click doesn't map to a
-      // single captured-set entry — fall back to no order (click handler
-      // short-circuits). This matches pre-fix behavior for replicated runs.
-      traceIndexToCurve[traceIdx] = {
-        curveId: curve.id,
-        type: "included",
-        capturedIdxOrder: hasReplicates ? undefined : includedCapturedIdxOrder,
-      };
-      traces.push({
-        type: "scatter",
-        mode: "markers",
-        name: label,
-        legendgroup: group,
-        x: displayX,
-        y: displayY,
-        marker: {
-          color,
-          size: isInteractive ? PLOT_MARKER.POINT_SIZE_INTERACTIVE : PLOT_MARKER.POINT_SIZE_STATIC,
-          symbol: "circle",
-          line: isInteractive ? { color: "rgba(255,255,255,0.3)", width: 1 } : undefined,
-        },
-        ...(hasReplicates && {
-          error_y: {
-            type: "data",
-            array: sdY,
-            visible: true,
-            color,
-            thickness: 1.5,
-            width: 4,
-          },
-        }),
-        showlegend: true,
-        hovertemplate: editMode
-          ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to exclude</i><extra></extra>"
-          : "x: %{x:.4g}<br>y: %{y:.4g}<extra></extra>",
-      });
-    }
-
-    // Auto-3σ suggestions (yellow halo, open circle).
-    // Per Task 2.7 these are points the fitter flagged as outliers but
-    // does NOT silently remove — they stay in the fit until a chemist
-    // accepts them. The amber open circle calls attention to "the system
-    // suggests excluding this point" without removing it from the
-    // sigmoid the chemist sees.
-    if (suggestionX.length > 0) {
-      const traceIdx = traces.length;
-      // "suggestion" reuses the "included" click path so the toggle flips
-      // excluded → true on the existing entry (preserving source=auto_3sigma).
-      traceIndexToCurve[traceIdx] = {
-        curveId: curve.id,
-        type: "suggestion",
-        capturedIdxOrder: suggestionCapturedIdxOrder,
-      };
-      traces.push({
-        type: "scatter",
-        mode: "markers",
-        name: `${label} (suggested 3σ)`,
-        legendgroup: group,
-        x: suggestionX,
-        y: suggestionY,
-        marker: {
-          color: CHART_COLORS.warning,
-          size: 14,
-          symbol: "circle-open",
-          line: { color: CHART_COLORS.warning, width: 2.5 },
-        },
-        showlegend: false,
-        hovertemplate: editMode
-          ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>Suggested 3σ outlier — click to exclude</i><extra></extra>"
-          : "x: %{x:.4g}<br>y: %{y:.4g}<br><i>Suggested 3σ outlier</i><extra></extra>",
-      });
-    }
-
-    // Manually excluded points (x marker)
-    if (manualExcludedX.length > 0) {
-      const traceIdx = traces.length;
-      traceIndexToCurve[traceIdx] = {
-        curveId: curve.id,
-        type: "excluded",
-        capturedIdxOrder: manualExcludedCapturedIdxOrder,
-      };
-      traces.push({
-        type: "scatter",
-        mode: "markers",
-        name: `${label} (excluded)`,
-        legendgroup: group,
-        x: manualExcludedX,
-        y: manualExcludedY,
-        marker: {
-          color,
-          size: PLOT_MARKER.EXCLUDED_SIZE,
-          symbol: "x",
-          opacity: PLOT_MARKER.MANUAL_EXCLUDED_OPACITY,
-        },
-        showlegend: false,
-        hovertemplate: editMode
-          ? "x: %{x:.4g}<br>y: %{y:.4g}<br><i>click to include</i><extra></extra>"
-          : "x: %{x:.4g}<br>y: %{y:.4g}<extra></extra>",
-      });
-    }
-
-    // Auto-excluded points (diamond marker, 3σ outliers)
-    if (autoExcludedX.length > 0) {
-      traces.push({
-        type: "scatter",
-        mode: "markers",
-        name: `${label} (auto-excluded)`,
-        legendgroup: group,
-        x: autoExcludedX,
-        y: autoExcludedY,
-        marker: {
-          color,
-          size: PLOT_MARKER.EXCLUDED_SIZE,
-          symbol: "diamond",
-          opacity: PLOT_MARKER.AUTO_EXCLUDED_OPACITY,
-        },
-        showlegend: false,
-        hovertemplate:
-          "x: %{x:.4g}<br>y: %{y:.4g}<br><i>Auto-excluded (3\u03c3 outlier)</i><extra></extra>",
-      });
-    }
-
-    // Fitted 4PL sigmoid line (non-clickable). Skip for inactive / failed
-    // fits — there's no meaningful sigmoid to draw, just data points.
-    const skipFitLine = isDegenerateFit(curve);
-    if (!skipFitLine) {
-      const { x: lineX, y: lineY } = generate4PLCurve(curve, xMin, xMax);
-      traces.push({
-        type: "scatter",
-        mode: "lines",
-        name: `${label} fit`,
-        legendgroup: group,
-        x: lineX,
-        y: lineY,
-        line: { color, width: 2 },
-        showlegend: includedX.length === 0,
-        hoverinfo: "skip",
-      });
-    }
-
-    // Confidence interval band (shaded area between CI low/high EC50 curves)
-    if (
-      !skipFitLine &&
-      showCI &&
-      curve.confidence_interval_low != null &&
-      curve.confidence_interval_high != null
-    ) {
-      const ciLowCurve = { ...curve, fitted_value: curve.confidence_interval_low };
-      const ciHighCurve = { ...curve, fitted_value: curve.confidence_interval_high };
-      const { x: ciX, y: ciLowY } = generate4PLCurve(ciLowCurve, xMin, xMax);
-      const { y: ciHighY } = generate4PLCurve(ciHighCurve, xMin, xMax);
-
-      // Upper bound
-      traces.push({
-        type: "scatter",
-        mode: "lines",
-        x: ciX,
-        y: ciHighY,
-        line: { width: 0 },
-        legendgroup: group,
-        showlegend: false,
-        hoverinfo: "skip",
-      });
-      // Lower bound (fill to upper)
-      traces.push({
-        type: "scatter",
-        mode: "lines",
-        x: ciX,
-        y: ciLowY,
-        line: { width: 0 },
-        fill: "tonexty",
-        fillcolor: `${color}15`,
-        legendgroup: group,
-        showlegend: false,
-        hoverinfo: "skip",
-      });
-    }
-
-    // Aggregate-mode overlay: muted dashed sigmoids for each non-rep
-    // contributor so the chemist can see whether the runs agree. Same
-    // color as the primary so the family reads as one cluster; only
-    // opacity + dash style distinguish. Skip inactive sibling fits —
-    // drawing a sigmoid for a curve that doesn't represent a real
-    // response would mislead.
-    for (const acRaw of curve.additional_curves ?? []) {
-      const ac = acRaw as {
-        fitted_value?: number;
-        top?: number;
-        bottom?: number;
-        hill_slope?: number;
-        curve_class?: string | null;
-        run_date?: string | null;
-      };
-      if (ac.curve_class === "inactive") continue;
-      if (
-        typeof ac.fitted_value !== "number" ||
-        typeof ac.top !== "number" ||
-        typeof ac.bottom !== "number" ||
-        typeof ac.hill_slope !== "number" ||
-        !Number.isFinite(ac.fitted_value) ||
-        ac.fitted_value <= 0
-      ) {
-        continue;
-      }
-      const { x: ovX, y: ovY } = generate4PLPoints(
-        {
-          top: ac.top,
-          bottom: ac.bottom,
-          fitted_value: ac.fitted_value,
-          hill_slope: ac.hill_slope,
-        },
-        xMin,
-        xMax,
-      );
-      const runLabel = ac.run_date ? `Run ${ac.run_date}` : "Contributing run";
-      traces.push({
-        type: "scatter",
-        mode: "lines",
-        name: runLabel,
-        legendgroup: group,
-        x: ovX,
-        y: ovY,
-        line: { color, width: 1.5, dash: "dot" },
-        opacity: 0.35,
-        showlegend: false,
-        hovertemplate: `${runLabel}<br>fitted_value=${ac.fitted_value.toPrecision(3)}<extra></extra>`,
-      });
-    }
-
-    // ── Preview-fit overlay (edit mode only) ──────────────────────────────
-    // When the chemist is editing the active curve AND the /refit-preview
-    // hook has returned a fresh fit, overlay it as a dashed indigo line so
-    // they can see how dropping/keeping a point would shift the sigmoid
-    // BEFORE committing. The original (committed) fit stays visible
-    // underneath for direct comparison.
-    if (
-      previewCurveOverlay &&
-      editCurve &&
-      curve.id === editCurve.id &&
-      Number.isFinite(previewCurveOverlay.fitted_value) &&
-      previewCurveOverlay.fitted_value > 0
-    ) {
-      const { x: pvX, y: pvY } = generate4PLPoints(previewCurveOverlay, xMin, xMax);
-      traces.push({
-        type: "scatter",
-        mode: "lines",
-        name: "Preview fit",
-        legendgroup: group,
-        x: pvX,
-        y: pvY,
-        line: { color: CHART_COLORS.success, width: 2, dash: "dash" },
-        opacity: 0.85,
-        showlegend: true,
-        hovertemplate: `Preview fit<br>fitted_value=${previewCurveOverlay.fitted_value.toPrecision(3)}<extra></extra>`,
-      });
-    }
-  }
-
-  // ── Edit-mode lifecycle helpers ─────────────────────────────────────────
-  const handleEnterEdit = useCallback(() => {
-    setEditMode(true);
-  }, []);
-
+  // ── Edit-mode lifecycle ───────────────────────────────────────────────────
   const handleCancelEdit = useCallback(() => {
     if (editSession.dirtyCount > 0) {
       // V1 simplicity — window.confirm is keyboard-accessible and free.
-      // A custom dialog can replace this in Sprint 3 if chemists request it.
       const ok =
         typeof window === "undefined"
           ? true
@@ -1241,9 +344,9 @@ export function DoseResponseChart({
   // ── Keyboard shortcuts (edit mode only) ────────────────────────────────────
   // Cmd/Ctrl+Z = undo, Cmd/Ctrl+Shift+Z (or Cmd/Ctrl+Y) = redo, Esc = cancel.
   // Listener attaches at the document level only while editMode is true so
-  // non-editing renders (search results grid, campaign thumbnails) never
-  // see the global handler. The textarea/input guard lets the save dialog's
-  // note field handle native Cmd+Z text-editing unaffected.
+  // non-editing renders never see the global handler. The textarea/input guard
+  // lets the save dialog's note field handle native Cmd+Z text-editing
+  // unaffected.
   useEffect(() => {
     if (!editMode) return;
     function onKeyDown(e: KeyboardEvent) {
@@ -1287,582 +390,190 @@ export function DoseResponseChart({
     [editCurve, editSession.draft.exclusions, refitCommitMutation],
   );
 
-  // ── Plotly click handler ────────────────────────────────────────────────────
-  // In edit mode, clicks toggle a point's draft exclusion via the session.
-  // Every clickable trace now carries `capturedIdxOrder` (built alongside the
-  // trace's x/y arrays), so the Plotly pointIndex maps straight to a
-  // captured-set idx — the exact value the BE expects in `excluded_indices`.
-  // Pre-fix this code walked raw_data with isHiddenFromIncluded counting,
-  // which silently diverged from the BE's domain after any save that
-  // shortened raw_data.
-  const handlePlotClick = useCallback(
-    // biome-ignore lint/suspicious/noExplicitAny: Plotly click event is untyped by the lib; fields read defensively below
-    (event: any) => {
-      if (!isInteractive || !editMode || !editCurve) return;
-      const pt = event?.points?.[0];
-      if (!pt) return;
-
-      const traceIdx: number = pt.curveNumber;
-      const pointIdx: number = pt.pointIndex;
-      const traceInfo = traceIndexToCurve[traceIdx];
-      if (!traceInfo) return;
-
-      const { curveId, capturedIdxOrder } = traceInfo;
-      // Only the active edit curve is mutable in Sprint 2.
-      if (curveId !== editCurve.id) return;
-
-      // No capturedIdxOrder → click is on a legacy idx=null marker (non-
-      // toggleable) or a replicate-aggregated mean marker (no 1:1 mapping).
-      // Either way, ignore.
-      if (!capturedIdxOrder) return;
-      const capturedIdx = capturedIdxOrder[pointIdx];
-      if (typeof capturedIdx !== "number") return;
-      editSession.toggleExclusion(capturedIdx);
-    },
-    [isInteractive, editMode, editCurve, editSession, traceIndexToCurve],
-  );
-
-  // Build overlay shapes and annotations based on toggle state
-  const shapes: PlotShape[] = [];
-  const annotations: PlotAnnotation[] = [];
-  for (let i = 0; i < curves.length; i++) {
-    const curve = curves[i];
-    const color = TRACE_COLORS[i % TRACE_COLORS.length];
-    const midY = (curve.top + curve.bottom) / 2;
-    const ec50 = curve.fitted_value;
-    const unitLabel = curve.fitted_unit ? ` ${curve.fitted_unit}` : "";
-    const degenerate = isDegenerateFit(curve);
-
-    // Aggregate-mode cells carry their own marker at the cell's
-    // gmean/mean. The rep curve's fitted_value points at the latest
-    // run's intercept (not the aggregate) — drawing a cross-hair there
-    // would mislead, so suppress every per-curve annotation in
-    // aggregate mode and rely on the single amber marker below.
-    const isAggregateMode = curve.aggregate != null && Number.isFinite(curve.aggregate.marker_x);
-
-    // Cross-hair: dotted lines + marker + label at (EC50, midpoint).
-    // Suppress for inactive/degenerate fits — the EC50 isn't meaningful.
-    if (showCrossHair && !degenerate && !isAggregateMode) {
-      shapes.push({
-        type: "line",
-        xref: "paper",
-        x0: 0,
-        x1: 1,
-        yref: "y",
-        y0: midY,
-        y1: midY,
-        line: { color, width: 1, dash: "dot" },
-        opacity: 0.4,
-      });
-      shapes.push({
-        type: "line",
-        xref: "x",
-        x0: ec50,
-        x1: ec50,
-        yref: "paper",
-        y0: 0,
-        y1: 1,
-        line: { color, width: 1, dash: "dot" },
-        opacity: 0.4,
-      });
-      traces.push({
-        type: "scatter",
-        mode: "markers",
-        x: [ec50],
-        y: [midY],
-        marker: {
-          color: CHART_COLORS.warning,
-          size: 10,
-          line: { color: CHART_COLORS.error, width: 2 },
-          symbol: "circle",
-        },
-        showlegend: false,
-        hovertemplate: `${CURVE_TYPE_LABELS[curve.curve_type as CurveType] ?? curve.curve_type} = ${ec50.toPrecision(3)}${unitLabel}<extra></extra>`,
-      });
-      annotations.push({
-        x: Math.log10(ec50),
-        y: midY,
-        xref: "x",
-        yref: "y",
-        text: `<b>${ec50.toPrecision(3)}${unitLabel}</b>`,
-        showarrow: true,
-        arrowhead: 2,
-        arrowsize: 0.8,
-        arrowcolor: CHART_COLORS.error,
-        ax: 0,
-        ay: -35,
-        font: { color: CHART_COLORS.error, size: 11 },
-      });
-    }
-
-    // Additional intercepts (e.g. IC90 alongside the primary IC50). The first
-    // entry of intercept_values is the primary (already drawn above as the
-    // cross-hair); slice(1) gives the extras. Skip at-bound / non-finite —
-    // the curve doesn't reach that response level so a vertical line would
-    // be misleading. Different dash style ("longdash" vs the primary's "dot")
-    // keeps the primary visually distinct.
-    if (
-      showCrossHair &&
-      !degenerate &&
-      !isAggregateMode &&
-      curve.intercept_values &&
-      curve.intercept_values.length > 1
-    ) {
-      for (const iv of curve.intercept_values.slice(1)) {
-        if (iv.at_bound || !Number.isFinite(iv.value)) continue;
-        // `spec.level` is a percentage (50 for IC50, 90 for IC90), so it
-        // needs /100 to interpolate between top and bottom. Without the
-        // divide an IC90 marker lands at ~90× the curve range above bottom
-        // and Plotly's autoscale stretches the Y axis to 10k, collapsing
-        // the actual sigmoid into a flat line.
-        const yLevel =
-          iv.spec.basis === "relative_percent"
-            ? curve.bottom + (iv.spec.level / 100) * (curve.top - curve.bottom)
-            : iv.spec.level;
-        const label =
-          iv.spec.label ??
-          `${iv.spec.kind.toUpperCase()}${iv.spec.level.toString().replace(/\.0$/, "")}`;
-        shapes.push({
-          type: "line",
-          xref: "x",
-          x0: iv.value,
-          x1: iv.value,
-          yref: "paper",
-          y0: 0,
-          y1: 1,
-          line: { color, width: 1, dash: "longdash" },
-          opacity: 0.45,
-        });
-        traces.push({
-          type: "scatter",
-          mode: "markers",
-          x: [iv.value],
-          y: [yLevel],
-          marker: {
-            color,
-            size: 8,
-            line: { color: CHART_AXIS.tick, width: 1 },
-            symbol: "diamond",
-          },
-          showlegend: false,
-          hovertemplate: `${label} = ${iv.value.toPrecision(3)}${unitLabel}<extra></extra>`,
-        });
-        annotations.push({
-          x: Math.log10(iv.value),
-          y: yLevel,
-          xref: "x",
-          yref: "y",
-          text: `<b>${label}</b>`,
-          showarrow: false,
-          font: { color, size: 10 },
-          xanchor: "left",
-          yanchor: "bottom",
-          xshift: 4,
-          yshift: 2,
-        });
-      }
-    }
-
-    // Aggregate-mode marker: single solid amber line at the cell's
-    // aggregate value (gmean / mean). Replaces the per-curve cross-hair
-    // because the rep curve's fitted_value doesn't equal the cell value
-    // in aggregate modes — drawing a phantom intercept at the wrong
-    // place is exactly the bug we're fixing.
-    if (isAggregateMode && showCrossHair) {
-      const aggMx = curve.aggregate!.marker_x;
-      const aggLabel = curve.aggregate!.marker_label;
-      shapes.push({
-        type: "line",
-        xref: "x",
-        x0: aggMx,
-        x1: aggMx,
-        yref: "paper",
-        y0: 0,
-        y1: 1,
-        line: { color: CHART_COLORS.warning, width: 1.5 },
-        opacity: 0.95,
-      });
-      annotations.push({
-        x: Math.log10(aggMx),
-        y: midY,
-        xref: "x",
-        yref: "y",
-        text: `<b>${aggLabel} = ${aggMx.toPrecision(3)}${unitLabel}</b>`,
-        showarrow: true,
-        arrowhead: 2,
-        arrowsize: 0.8,
-        arrowcolor: CHART_COLORS.warning,
-        ax: 0,
-        ay: -35,
-        font: { color: CHART_COLORS.warning, size: 11 },
-      });
-    }
-
-    // Plateau lines: horizontal dashed at top and bottom asymptotes
-    if (showPlateaus && !degenerate) {
-      shapes.push({
-        type: "line",
-        xref: "paper",
-        x0: 0,
-        x1: 1,
-        yref: "y",
-        y0: curve.top,
-        y1: curve.top,
-        line: { color, width: 1, dash: "dash" },
-        opacity: 0.3,
-      });
-      shapes.push({
-        type: "line",
-        xref: "paper",
-        x0: 0,
-        x1: 1,
-        yref: "y",
-        y0: curve.bottom,
-        y1: curve.bottom,
-        line: { color, width: 1, dash: "dash" },
-        opacity: 0.3,
-      });
-      annotations.push({
-        x: 1,
-        y: curve.top,
-        xref: "paper",
-        yref: "y",
-        text: `Top: ${curve.top.toFixed(1)}%`,
-        showarrow: false,
-        font: { color, size: 9 },
-        xanchor: "right",
-      });
-      annotations.push({
-        x: 1,
-        y: curve.bottom,
-        xref: "paper",
-        yref: "y",
-        text: `Bottom: ${curve.bottom.toFixed(1)}%`,
-        showarrow: false,
-        font: { color, size: 9 },
-        xanchor: "right",
-      });
-    }
-  }
-
-  const layout = {
-    height: 350,
-    autosize: true,
-    paper_bgcolor: "transparent",
-    plot_bgcolor: "transparent",
-    font: { color: CHART_AXIS.tick },
-    xaxis: {
-      title: {
-        text: curves[0]?.fitted_unit ? `Concentration (${curves[0].fitted_unit})` : "Concentration",
-      },
-      type: "log" as const,
-      gridcolor: "rgba(113,113,122,0.2)",
-      zerolinecolor: "rgba(113,113,122,0.3)",
-    },
-    yaxis: {
-      title: { text: "Response (%)" },
-      gridcolor: "rgba(113,113,122,0.2)",
-      zerolinecolor: "rgba(113,113,122,0.3)",
-    },
-    legend: {
-      orientation: "h" as const,
-      y: -0.2,
-      font: { color: CHART_AXIS.tick },
-    },
-    shapes,
-    annotations,
-    // Right margin gives the last X-axis tick label (e.g. "100") room
-    // before the panel edge — narrow side-panel layouts were clipping it.
-    margin: { t: 20, b: 60, l: 60, r: 32 },
-    clickmode: editMode ? "event" : undefined,
-    dragmode: editMode ? false : "zoom",
-  };
-
-  const config = {
-    displayModeBar: false,
-    responsive: true,
-    modeBarButtonsToRemove: ["lasso2d", "select2d"] as string[],
-  };
-
   const dirtyCount = editSession.dirtyCount;
   const isSaving = refitCommitMutation.isPending;
+  const isEditing = editMode && editCurve != null;
 
-  // Pre-render the Plot block — the same chart appears whether or not the
-  // side panel is open, so we factor it out to keep the JSX legible.
-  const plotBlock = (
-    <div ref={plotContainerRef} className="min-w-0 overflow-hidden h-full">
-      <Plot
-        data={traces}
-        layout={layout}
-        config={config}
-        style={{ width: "100%" }}
-        useResizeHandler
-        onClick={editMode ? handlePlotClick : undefined}
-      />
-    </div>
-  );
+  // The "after" fit from the preview hook, overlaid dashed on the committed
+  // fit so the chemist sees before-vs-after before saving anything.
+  const previewFit = useMemo(() => {
+    if (!isEditing || !refitPreview.data) return null;
+    return {
+      top: refitPreview.data.top,
+      bottom: refitPreview.data.bottom,
+      fitted_value: refitPreview.data.fitted_value,
+      hill_slope: refitPreview.data.hill_slope,
+    };
+  }, [isEditing, refitPreview.data]);
+
+  const draftExcluded = useMemo(() => new Set(draftExcludedIndices), [draftExcludedIndices]);
+
+  const edit: EditOverlay | undefined = isEditing
+    ? {
+        curveId: editCurve.id,
+        draftExcluded,
+        draftExcludedCount: editSession.draft.exclusions.filter((e) => e.excluded).length,
+        previewFit,
+        onPointClick: (_curveId, capturedIdx) => editSession.toggleExclusion(capturedIdx),
+      }
+    : undefined;
 
   return (
-    <div className={cn("space-y-4", className)}>
-      {/* Controls bar — toggles to an edit banner in edit mode */}
-      {!editMode && (
-        <div className="flex items-center gap-4 flex-wrap">
-          {isInteractive && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleEnterEdit}
-                disabled={runIsLocked}
-                title={runIsLocked ? "Unapprove run to edit curves" : undefined}
-              >
-                Edit Points
-              </Button>
-              {runIsLocked && (
-                <Badge
-                  variant="outline"
-                  className="text-xs"
-                  title="Run is approved — DR curves are read-only. Unapprove the run to edit."
-                >
-                  Locked
-                </Badge>
-              )}
-              <CurveEditHistory
-                events={editHistoryQuery.data?.events ?? []}
-                isLoading={editHistoryQuery.isLoading}
-              />
-            </>
-          )}
-          <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox
-                checked={showCrossHair}
-                onCheckedChange={(v) => setShowCrossHair(v === true)}
-              />
-              {CURVE_TYPE_LABELS[curves[0]?.curve_type as CurveType] ?? "Fitted"} marker
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox checked={showCI} onCheckedChange={(v) => setShowCI(v === true)} />
-              95% CI band
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <Checkbox
-                checked={showPlateaus}
-                onCheckedChange={(v) => setShowPlateaus(v === true)}
-              />
-              Top/Bottom
-            </label>
-          </div>
-          <div className="flex items-center gap-1.5 ml-4 border-l pl-4 border-border">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => {
-                const plotEl = plotContainerRef.current?.querySelector(
-                  ".js-plotly-plot",
-                ) as HTMLElement | null;
-                if (plotEl) {
-                  getPlotlyGlobal()?.downloadImage?.(plotEl, {
-                    format: "png",
-                    width: 1200,
-                    height: 600,
-                    filename: "dose-response",
-                  });
-                }
-              }}
-            >
-              <ImageIcon className="mr-1 h-3.5 w-3.5" />
-              PNG
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => {
-                const plotEl = plotContainerRef.current?.querySelector(
-                  ".js-plotly-plot",
-                ) as HTMLElement | null;
-                if (plotEl) {
-                  getPlotlyGlobal()?.downloadImage?.(plotEl, {
-                    format: "svg",
-                    width: 1200,
-                    height: 600,
-                    filename: "dose-response",
-                  });
-                }
-              }}
-            >
-              <Download className="mr-1 h-3.5 w-3.5" />
-              SVG
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {editMode && (
-        <div className="flex items-center gap-2 flex-wrap rounded-md border border-primary/40 bg-primary/5 px-3 py-2">
-          <span className="text-sm font-medium">
-            Editing — {dirtyCount} unsaved change{dirtyCount === 1 ? "" : "s"}
-          </span>
-          <div className="ml-auto flex items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2"
-              onClick={editSession.undo}
-              disabled={!editSession.canUndo || isSaving}
-              title="Undo (Cmd+Z)"
-              aria-label="Undo"
-            >
-              <Undo2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2"
-              onClick={editSession.redo}
-              disabled={!editSession.canRedo || isSaving}
-              title="Redo (Cmd+Shift+Z)"
-              aria-label="Redo"
-            >
-              <Redo2 className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={editSession.resetToSaved}
-              disabled={dirtyCount === 0 || isSaving}
-              title="Reset to saved"
-            >
-              <RotateCcw className="mr-1 h-3.5 w-3.5" />
-              Reset
-            </Button>
+    <DoseResponseChartView
+      curves={curves}
+      plot={Plot}
+      className={className}
+      interactive={isInteractive}
+      edit={edit}
+      onClassify={isInteractive ? handleClassify : undefined}
+      isClassifying={isClassifying}
+      controlsSlot={
+        isInteractive ? (
+          <>
             <Button
               variant="outline"
               size="sm"
-              className="h-7 px-3 text-xs"
-              onClick={handleCancelEdit}
-              disabled={isSaving}
+              onClick={() => setEditMode(true)}
+              disabled={runIsLocked}
+              title={runIsLocked ? "Unapprove run to edit curves" : undefined}
             >
-              Cancel
+              Edit Points
             </Button>
-            <Button
-              variant="default"
-              size="sm"
-              className="h-7 px-3 text-xs"
-              onClick={() => setSaveDialogOpen(true)}
-              disabled={dirtyCount === 0 || isSaving}
-            >
-              Save{dirtyCount > 0 ? ` ${dirtyCount}` : ""}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Chart + (in edit mode) side panel.
-          `min-w-0` lets the chart shrink inside flex/grid parents (side
-          panels, sheets) instead of forcing horizontal overflow. */}
-      {editMode && editCurve ? (
-        <ResizablePanelGroup orientation="horizontal" className="h-[420px] rounded-md border">
-          <ResizablePanel defaultSize={65} minSize={40} maxSize={80}>
-            {plotBlock}
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={35} minSize={20} maxSize={60}>
-            <div className="h-full overflow-auto p-3" aria-label="Point inventory">
-              {/* Inventory rows are keyed by capturedIdx — the same domain
-                  the BE consumes. Row positions match the BE's
-                  build_points_with_exclusions ordering (concentration
-                  ascending across the merged raw_data + excluded_points set),
-                  NOT the position-in-raw_data ordering. This is what fixes
-                  the post-save click-handling drift. */}
-              <DoseResponsePointInventory
-                rawData={editCurveCaptured.map((p) => ({
-                  concentration: p.concentration,
-                  response: p.response,
-                }))}
-                exclusions={editSession.draft.exclusions}
-                onToggle={editSession.toggleExclusion}
-              />
+            {runIsLocked && (
+              <Badge
+                variant="outline"
+                className="text-xs"
+                title="Run is approved — DR curves are read-only. Unapprove the run to edit."
+              >
+                Locked
+              </Badge>
+            )}
+            <CurveEditHistory
+              events={editHistoryQuery.data?.events ?? []}
+              isLoading={editHistoryQuery.isLoading}
+            />
+          </>
+        ) : undefined
+      }
+      barSlot={
+        isEditing ? (
+          <div className="flex items-center gap-2 flex-wrap rounded-md border border-primary/40 bg-primary/5 px-3 py-2">
+            <span className="text-sm font-medium">
+              Editing — {dirtyCount} unsaved change{dirtyCount === 1 ? "" : "s"}
+            </span>
+            <div className="ml-auto flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={editSession.undo}
+                disabled={!editSession.canUndo || isSaving}
+                title="Undo (Cmd+Z)"
+                aria-label="Undo"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={editSession.redo}
+                disabled={!editSession.canRedo || isSaving}
+                title="Redo (Cmd+Shift+Z)"
+                aria-label="Redo"
+              >
+                <Redo2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={editSession.resetToSaved}
+                disabled={dirtyCount === 0 || isSaving}
+                title="Reset to saved"
+              >
+                <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                Reset
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={handleCancelEdit}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={() => setSaveDialogOpen(true)}
+                disabled={dirtyCount === 0 || isSaving}
+              >
+                Save{dirtyCount > 0 ? ` ${dirtyCount}` : ""}
+              </Button>
             </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      ) : (
-        plotBlock
-      )}
-
-      {editCurve && (
-        <SaveExclusionsDialog
-          open={saveDialogOpen}
-          onOpenChange={setSaveDialogOpen}
-          onSave={handleSaveSubmit}
-          dirtyCount={dirtyCount}
-          isSaving={isSaving}
-        />
-      )}
-
-      {/* Per-curve constraint controls (interactive only) */}
-      {isInteractive && curves.length > 0 && (
-        <div className="space-y-3">
-          {curves.map((curve) => (
-            <CurveControls
-              key={curve.id}
-              curve={curve}
-              excludedIndices={getExcluded(curve.id)}
-              constraints={getConstraints(curve)}
-              onConstraintChange={(patch) => handleConstraintChange(curve, patch)}
-              onReset={() => handleReset(curve)}
-              isPending={isRefitting}
+          </div>
+        ) : undefined
+      }
+      plotWrapper={
+        isEditing
+          ? (plot) => (
+              <ResizablePanelGroup orientation="horizontal" className="h-[420px] rounded-md border">
+                <ResizablePanel defaultSize={65} minSize={40} maxSize={80}>
+                  {plot}
+                </ResizablePanel>
+                <ResizableHandle withHandle />
+                <ResizablePanel defaultSize={35} minSize={20} maxSize={60}>
+                  <div className="h-full overflow-auto p-3" aria-label="Point inventory">
+                    {/* Inventory rows are keyed by capturedIdx — the same
+                        domain the BE consumes, so row positions match its
+                        build_points_with_exclusions ordering (concentration
+                        ascending across the merged raw_data + excluded_points
+                        set), NOT position-in-raw_data. */}
+                    <DoseResponsePointInventory
+                      rawData={editCurveCaptured.map((p) => ({
+                        concentration: p.concentration,
+                        response: p.response,
+                      }))}
+                      exclusions={editSession.draft.exclusions}
+                      onToggle={editSession.toggleExclusion}
+                    />
+                  </div>
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            )
+          : undefined
+      }
+      footerSlot={
+        <>
+          {editCurve && (
+            <SaveExclusionsDialog
+              open={saveDialogOpen}
+              onOpenChange={setSaveDialogOpen}
+              onSave={handleSaveSubmit}
+              dirtyCount={dirtyCount}
+              isSaving={isSaving}
             />
-          ))}
-        </div>
-      )}
-
-      {/* Summary cards — single-curve case spans full width so the card
-          isn't stranded in a 1/3 column with 2/3 of the panel empty
-          (search-detail side panel hits this constantly). Multi-curve case
-          keeps the responsive grid for the run-page comparison view. */}
-      <div
-        className={cn(
-          "grid grid-cols-1 gap-3",
-          curves.length > 1 && "sm:grid-cols-2 lg:grid-cols-3",
-        )}
-      >
-        {curves.map((curve) => {
-          // Counter must reflect ALL exclusion sources, not just the in-session
-          // draft. On reload localExcluded is empty but excluded_points carries
-          // anything the server already persisted — pre-fix this hid every
-          // server-side exclusion behind "10/10".
-          const capturedTotal =
-            (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
-          const serverExcludedCount = curve.excluded_points?.length ?? 0;
-          // For the active edit curve, the draft IS the source of truth — it
-          // was seeded from server's excluded_points so adding both would
-          // double-count. For non-edit curves, fall back to the legacy combo.
-          let excludedCount: number;
-          if (editMode && curve.id === editCurve?.id) {
-            excludedCount = editSession.draft.exclusions.filter((e) => e.excluded).length;
-          } else {
-            const localExcluded = getExcluded(curve.id);
-            excludedCount = serverExcludedCount + localExcluded.size;
-          }
-          const inFitCount = Math.max(0, capturedTotal - excludedCount);
-          return (
-            <SummaryCard
-              key={curve.id}
-              curve={curve}
-              inFitCount={inFitCount}
-              capturedTotal={capturedTotal}
-              excludedCount={excludedCount}
-              isInteractive={isInteractive}
-              onClassify={handleClassify}
-              isClassifying={isClassifying}
-            />
-          );
-        })}
-      </div>
-    </div>
+          )}
+          {isInteractive && curves.length > 0 && (
+            <div className="space-y-3">
+              {curves.map((curve) => (
+                <CurveControls
+                  key={curve.id}
+                  curve={curve}
+                  excludedIndices={getExcluded(curve.id)}
+                  constraints={getConstraints(curve)}
+                  onConstraintChange={(patch) => handleConstraintChange(curve, patch)}
+                  onReset={() => handleReset(curve)}
+                  isPending={isRefitting}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      }
+    />
   );
 }

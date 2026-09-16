@@ -24,7 +24,6 @@ from cellar.domain.research_organization.enums import (
     QualifierHandling,
     SelectionRule,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.interface.dependencies import (
     AddCampaignChannelDep,
     AuthDep,
@@ -62,10 +61,10 @@ async def add_campaign_channel(
         selection_rule=SelectionRule(body.selection_rule),
         qualifier_handling=QualifierHandling(body.qualifier_handling),
         qc_filter=body.qc_filter,
-        hit_threshold=body.hit_threshold.to_domain() if body.hit_threshold is not None else None,
         display_order=body.display_order,
         normalization_applied=body.normalization_applied,
         intercept_key=body.intercept_key.to_domain() if body.intercept_key is not None else None,
+        resolve_from_all_runs=body.resolve_from_all_runs,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
@@ -82,7 +81,7 @@ async def update_campaign_channel(
     """Update a campaign channel.
 
     Semantics: omitted fields are left unchanged (UNSET); null-valued fields
-    are cleared where applicable (qc_filter, hit_threshold).
+    are cleared where applicable (qc_filter).
     """
     provided = body.model_fields_set
 
@@ -93,10 +92,16 @@ async def update_campaign_channel(
         if "selection_rule" in provided and body.selection_rule is not None
         else UNSET
     )
-    qc_filter: dict | None | object = body.qc_filter if "qc_filter" in provided else UNSET
-    hit_threshold: HitCriterion | None | object = (
-        (body.hit_threshold.to_domain() if (body.hit_threshold is not None) else None)
-        if "hit_threshold" in provided
+    qc_filter: dict | object | None = body.qc_filter if "qc_filter" in provided else UNSET
+    display_order: int | object = (
+        body.display_order
+        if "display_order" in provided and body.display_order is not None
+        else UNSET
+    )
+
+    resolve_from_all_runs: bool | object = (
+        body.resolve_from_all_runs
+        if "resolve_from_all_runs" in provided and body.resolve_from_all_runs is not None
         else UNSET
     )
 
@@ -107,7 +112,8 @@ async def update_campaign_channel(
         label=label,
         selection_rule=selection_rule,
         qc_filter=qc_filter,
-        hit_threshold=hit_threshold,
+        display_order=display_order,
+        resolve_from_all_runs=resolve_from_all_runs,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
@@ -137,11 +143,14 @@ async def mirror_protocol_channels(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         protocol_id=body.protocol_id,
+        stage_name=body.stage_name,
+        parent_stage_id=body.parent_stage_id,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
     return MirrorProtocolOutcomeResponse(
         channels_created=outcome.channels_created,
         channels_skipped=outcome.channels_skipped,
+        stage_created=outcome.stage_created,
         campaign=CampaignResponse.from_domain(outcome.campaign),
     )
 

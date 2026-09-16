@@ -6,9 +6,11 @@ in protocol_targets and the similarity query joins them live, avoiding a
 derived-data drift surface. Recomputed on every save by the repository; never
 hand-set.
 """
+
 from __future__ import annotations
 
 from cellar.domain.screening_assay.protocol import Protocol
+from cellar.domain.screening_assay.readout_name import normalize_readout_name
 from cellar.domain.shared.ontology import OntologyTerm
 
 # v1: protocol_type + readout schema. v2: adds the `facets` map (ontology
@@ -26,13 +28,9 @@ def normalize_facet_id(facet_id: str) -> str:
     builder and the similarity query so their keys always agree."""
     s = facet_id.strip()
     if s.startswith(_FREE_TEXT_PREFIX):
-        label = s[len(_FREE_TEXT_PREFIX):]
+        label = s[len(_FREE_TEXT_PREFIX) :]
         return _FREE_TEXT_PREFIX + " ".join(label.lower().split())
     return " ".join(s.lower().split())
-
-
-def _normalize_readout_name(name: str) -> str:
-    return " ".join(name.strip().lower().split())
 
 
 def _facet_key(term: OntologyTerm) -> str:
@@ -41,13 +39,16 @@ def _facet_key(term: OntologyTerm) -> str:
     Grounded terms cluster by their (lowercased) ontology id; free-text terms
     by a normalized label so casing/whitespace variants converge.
     """
-    raw = f"{_FREE_TEXT_PREFIX}{term.label}" if term.ontology_source == "free_text" else term.term_id
+    if term.ontology_source == "free_text":
+        raw = f"{_FREE_TEXT_PREFIX}{term.label}"
+    else:
+        raw = term.term_id
     return normalize_facet_id(raw)
 
 
 def compute_protocol_fingerprint(protocol: Protocol) -> dict:
     readout_kinds = sorted(
-        {_normalize_readout_name(rd.name) for rd in protocol.readout_definitions if rd.name.strip()}
+        {normalize_readout_name(rd.name) for rd in protocol.readout_definitions if rd.name.strip()}
     )
     readout_data_types = sorted({rd.data_type.value for rd in protocol.readout_definitions})
     facets = {

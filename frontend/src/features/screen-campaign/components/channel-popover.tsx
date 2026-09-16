@@ -9,7 +9,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -26,16 +26,12 @@ import {
 } from "@/shared/components/ui/select";
 
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
-import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
-import { deriveChannelHitDefaults } from "@/features/screening-assay/lib/hit-criteria-defaults";
 import {
   interceptKeyId,
   interceptLabel,
-  narrowInterceptKey,
   parseInterceptKeyId,
 } from "@/features/screening-assay/lib/intercept-label";
 import {
-  type HitCriterion,
   type InterceptKey,
   type InterceptSpec,
   READOUT_NORMALIZATION_LABELS,
@@ -75,59 +71,23 @@ const channelSchema = z.object({
   qualifier_handling: z.enum(["include_qualified", "exclude_qualified", "treat_as_limit"]),
   require_approved: z.boolean(),
   min_z_prime: z.number().min(0).max(1),
-  // Hit threshold — operator "none" means "no threshold". For between, low/high; otherwise single value.
-  // (Radix Select forbids empty-string values, hence the explicit "none" sentinel.)
-  hit_operator: z.enum(["none", "lt", "lte", "gt", "gte", "between"]),
-  hit_value: z.string(),
-  hit_value_low: z.string(),
-  hit_value_high: z.string(),
-  /** Stringified `${kind}:${level}` id of the dose-response intercept the
-   *  threshold compares against. Empty string when the readout has no
-   *  intercepts (legacy / non-DR). Resolved to the primary's id at form
-   *  init when no existing channel state is present. */
-  hit_intercept_key: z.string(),
+  /** Stringified `${kind}:${level}` id of the dose-response intercept this
+   *  channel surfaces. "" = primary (also covers non-DR / single-intercept
+   *  readouts, which have nothing to choose). Create-mode only — intercept
+   *  identity is locked after creation, like source_kind. */
+  intercept_key_id: z.string(),
   // Normalization layer for readout_data channels. "raw" sentinel maps to the
   // raw layer (NULL on the wire); any other value selects that formula.
   // Locked at create-time — Radix Select forbids empty-string values, hence
   // the explicit sentinel.
   normalization_applied: z.string(),
+  /** Opt out of the campaign's run scope: by default a readout resolves only
+   *  from the runs the campaign was seeded from; on, it resolves from every
+   *  run of its protocol (a counter-screen measured whenever). */
+  resolve_from_all_runs: z.boolean(),
 });
 
 type ChannelFormValues = z.infer<typeof channelSchema>;
-
-// ── Helper ────────────────────────────────────────────────────────────────────
-
-export function parseHitThreshold(
-  t: unknown,
-): { operator: string; value: number | number[]; intercept_key: InterceptKey | null } | null {
-  if (!t || typeof t !== "object") return null;
-  const obj = t as {
-    operator?: string;
-    value?: unknown;
-    intercept_key?: { kind?: unknown; level?: unknown } | null;
-  };
-  if (!obj.operator) return null;
-
-  // Defensive parse of intercept_key — legacy channels saved before
-  // Surface #7 (commit db04e938) have no field at all; primary-targeting
-  // channels store explicit null; secondary-targeting channels store
-  // `{kind, level}`. Treat the first two cases identically.
-  let intercept_key: InterceptKey | null = null;
-  if (obj.intercept_key && typeof obj.intercept_key === "object") {
-    const ik = obj.intercept_key;
-    if ((ik.kind === "ec" || ik.kind === "ic") && typeof ik.level === "number") {
-      intercept_key = { kind: ik.kind, level: ik.level };
-    }
-  }
-
-  if (typeof obj.value === "number") {
-    return { operator: obj.operator, value: obj.value, intercept_key };
-  }
-  if (Array.isArray(obj.value) && obj.value.every((v) => typeof v === "number")) {
-    return { operator: obj.operator, value: obj.value as number[], intercept_key };
-  }
-  return null;
-}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -184,28 +144,6 @@ export function ChannelPopoverForm({
 
   // Parse existing qc_filter — it's typed as `{ [key: string]: unknown } | null`
   const existingQc = existing?.qc_filter as Record<string, unknown> | null | undefined;
-  // Parse existing hit_threshold once per `existing` ref change. Memoizing
-  // gives us a stable identity so the edit-mode useEffect below can take
-  // it as a dep without re-firing every render (parseHitThreshold returns
-  // a fresh object each call).
-  const existingHit = useMemo(() => parseHitThreshold(existing?.hit_threshold), [existing]);
-  const defaultHitOperator: ChannelFormValues["hit_operator"] =
-    (existingHit?.operator as ChannelFormValues["hit_operator"] | undefined) ?? "none";
-  const defaultHitValue =
-    existingHit && typeof existingHit.value === "number" ? String(existingHit.value) : "";
-  const defaultHitLow =
-    existingHit && Array.isArray(existingHit.value) ? String(existingHit.value[0]) : "";
-  const defaultHitHigh =
-    existingHit && Array.isArray(existingHit.value) ? String(existingHit.value[1]) : "";
-  // Default to the channel's own intercept_key (post-Option-A: top-level
-  // field). Falls back to the threshold's intercept_key for legacy data
-  // saved before the channel-level field existed. Primary-targeting
-  // channels carry null in both — those fall through to "" here and get
-  // resolved to the protocol's primary intercept id by the useEffect
-  // below once fullProtocol arrives.
-  const persistedInterceptKey =
-    narrowInterceptKey(existing?.intercept_key) ?? existingHit?.intercept_key ?? null;
-  const defaultHitInterceptKey = persistedInterceptKey ? interceptKeyId(persistedInterceptKey) : "";
 
   const {
     register,
@@ -235,79 +173,16 @@ export function ChannelPopoverForm({
           | "treat_as_limit") ?? "include_qualified",
       require_approved: (existingQc?.require_approved as boolean | undefined) ?? false,
       min_z_prime: (existingQc?.min_z_prime as number | undefined) ?? 0,
-      hit_operator: defaultHitOperator,
-      hit_value: defaultHitValue,
-      hit_value_low: defaultHitLow,
-      hit_value_high: defaultHitHigh,
-      hit_intercept_key: defaultHitInterceptKey,
+      // Create-mode only (see the Intercept field below) — edit mode never
+      // reads or writes this, so there's no existing-channel default to derive.
+      intercept_key_id: "",
       normalization_applied: existing?.normalization_applied ?? "raw",
+      resolve_from_all_runs: existing?.resolve_from_all_runs ?? false,
     },
   });
 
   const watchedProtocol = watch("protocol_id");
   const watchedReadoutId = watch("readout_definition_id");
-
-  // Pre-fill hit threshold from protocol recommendations when a readout is
-  // selected in create mode. Shares the same carry-forward rules as the
-  // "Add from runs" dialog (see deriveChannelHitDefaults). Never fires when
-  // editing an existing channel.
-  useEffect(() => {
-    if (existing) return;
-    if (!watchedReadoutId || !fullProtocol?.readout_definitions) return;
-    const rd = fullProtocol.readout_definitions.find((r) => r.id === watchedReadoutId);
-    if (!rd?.name) return;
-
-    const defaults = deriveChannelHitDefaults(
-      (fullProtocol.recommended_hit_criteria ?? []) as unknown as HitCriterion[],
-      { name: rd.name, data_type: rd.data_type },
-    );
-
-    setValue(
-      "hit_operator",
-      (defaults.hit_operator === ""
-        ? "none"
-        : defaults.hit_operator) as ChannelFormValues["hit_operator"],
-    );
-    setValue("hit_value", defaults.hit_value);
-    setValue("hit_value_low", defaults.hit_value_low);
-    setValue("hit_value_high", defaults.hit_value_high);
-
-    // Intercept picker: prefer the carried-forward key from the matching
-    // recommendation; fall back to the readout's primary intercept so the
-    // picker isn't blank. Empty when the readout declares no intercepts.
-    const intercepts = rd.dose_response_config?.intercepts ?? [];
-    if (intercepts.length === 0) {
-      setValue("hit_intercept_key", "");
-    } else if (defaults.intercept_key) {
-      setValue("hit_intercept_key", interceptKeyId(defaults.intercept_key));
-    } else {
-      setValue("hit_intercept_key", interceptKeyId(intercepts[0]));
-    }
-  }, [watchedReadoutId, existing, fullProtocol, setValue]);
-
-  // Edit mode: once fullProtocol resolves, fill `hit_intercept_key` with
-  // the channel's persisted key (post-Option-A: top-level; falls back to
-  // the threshold's for legacy) OR the readout's primary — needed because
-  // we can't compute the primary's id at defaultValues time (the protocol
-  // fetch is async).
-  useEffect(() => {
-    if (!existing) return;
-    if (!fullProtocol?.readout_definitions) return;
-    const rd = fullProtocol.readout_definitions.find(
-      (r) => r.id === existing.readout_definition_id,
-    );
-    const intercepts = rd?.dose_response_config?.intercepts ?? [];
-    if (intercepts.length === 0) {
-      setValue("hit_intercept_key", "");
-      return;
-    }
-    const persisted =
-      narrowInterceptKey(existing.intercept_key) ?? existingHit?.intercept_key ?? null;
-    setValue(
-      "hit_intercept_key",
-      persisted ? interceptKeyId(persisted) : interceptKeyId(intercepts[0]),
-    );
-  }, [fullProtocol, existing, existingHit, setValue]);
 
   // Auto-pick the readout's primary normalization layer when the readout is
   // chosen (create mode only). Chemists want "% Inhibition" by default, not
@@ -345,16 +220,28 @@ export function ChannelPopoverForm({
         ? { require_approved: values.require_approved, min_z_prime: values.min_z_prime }
         : undefined;
 
-    // Resolve the intercept_key for the persisted threshold. Only meaningful
-    // when the channel reads from a dose-response curve — otherwise no curve
-    // exists to look up an intercept on. Per Surface #7's convention, the
-    // primary intercept is stored as `null` (terse wire shape); only
-    // secondary intercepts persist an explicit `{kind, level}`. This keeps
-    // legacy channels coherent and tracks the protocol's current primary
-    // if intercepts are reordered later.
+    if (isEdit && existing) {
+      updateMutation.mutate({
+        campaignId,
+        channelId: existing.id,
+        data: {
+          label: values.label,
+          selection_rule: values.selection_rule,
+          qc_filter: qcFilter ?? null,
+          resolve_from_all_runs: values.resolve_from_all_runs,
+        },
+      });
+      return;
+    }
+
+    // Resolve the intercept_key for the new channel. Only meaningful for
+    // dose-response channels — otherwise no curve exists to look up an
+    // intercept on. The primary intercept is stored as `null` (terse wire
+    // shape); only a chosen secondary intercept persists an explicit
+    // `{kind, level}`.
     const computeInterceptKey = (): InterceptKey | null => {
       if (values.source_kind !== "dose_response_curve") return null;
-      const parsed = parseInterceptKeyId(values.hit_intercept_key);
+      const parsed = parseInterceptKeyId(values.intercept_key_id);
       if (!parsed) return null;
       const rd = fullProtocol?.readout_definitions?.find(
         (r) => r.id === values.readout_definition_id,
@@ -366,84 +253,36 @@ export function ChannelPopoverForm({
       return parsed;
     };
 
-    // Build hit_threshold from split form fields. "" = no threshold.
-    let hitThreshold: {
-      readout_name: string;
-      operator: string;
-      value: number | number[];
-      intercept_key: InterceptKey | null;
-    } | null = null;
-    if (values.hit_operator === "between") {
-      const low = values.hit_value_low === "" ? null : Number(values.hit_value_low);
-      const high = values.hit_value_high === "" ? null : Number(values.hit_value_high);
-      if (
-        low !== null &&
-        !Number.isNaN(low) &&
-        high !== null &&
-        !Number.isNaN(high) &&
-        low <= high
-      ) {
-        hitThreshold = {
-          readout_name: values.label,
-          operator: "between",
-          value: [low, high],
-          intercept_key: computeInterceptKey(),
-        };
-      }
-    } else if (values.hit_operator !== "none") {
-      const num = values.hit_value === "" ? null : Number(values.hit_value);
-      if (num !== null && !Number.isNaN(num)) {
-        hitThreshold = {
-          readout_name: values.label,
-          operator: values.hit_operator,
-          value: num,
-          intercept_key: computeInterceptKey(),
-        };
-      }
-    }
-
-    if (isEdit && existing) {
-      updateMutation.mutate({
-        campaignId,
-        channelId: existing.id,
-        data: {
-          label: values.label,
-          selection_rule: values.selection_rule,
-          qc_filter: qcFilter ?? null,
-          hit_threshold: hitThreshold,
-        },
-      });
-    } else {
-      // "raw" sentinel → wire NULL so the resolver picks the raw layer. DR-curve
-      // channels ignore the field entirely on the backend, so we send null.
-      const normalizationApplied =
-        values.source_kind === "readout_data" && values.normalization_applied !== "raw"
-          ? values.normalization_applied
-          : null;
-      addMutation.mutate({
-        campaignId,
-        data: {
-          label: values.label,
-          protocol_id: values.protocol_id,
-          readout_definition_id: values.readout_definition_id,
-          source_kind: values.source_kind,
-          selection_rule: values.selection_rule,
-          qualifier_handling: values.qualifier_handling,
-          qc_filter: qcFilter ?? null,
-          hit_threshold: hitThreshold,
-          normalization_applied: normalizationApplied,
-          // Channel-level intercept identity (Option A). Survives the wire
-          // even when hit_threshold is null (display-only channel for a
-          // secondary intercept).
-          intercept_key: computeInterceptKey(),
-        },
-      });
-    }
+    // "raw" sentinel → wire NULL so the resolver picks the raw layer. DR-curve
+    // channels ignore the field entirely on the backend, so we send null.
+    const normalizationApplied =
+      values.source_kind === "readout_data" && values.normalization_applied !== "raw"
+        ? values.normalization_applied
+        : null;
+    addMutation.mutate({
+      campaignId,
+      data: {
+        label: values.label,
+        protocol_id: values.protocol_id,
+        readout_definition_id: values.readout_definition_id,
+        source_kind: values.source_kind,
+        selection_rule: values.selection_rule,
+        qualifier_handling: values.qualifier_handling,
+        qc_filter: qcFilter ?? null,
+        normalization_applied: normalizationApplied,
+        // Channel-level intercept identity (Option A). Locked after
+        // creation — a chemist wanting a different intercept creates a new
+        // channel.
+        intercept_key: computeInterceptKey(),
+        resolve_from_all_runs: values.resolve_from_all_runs,
+      },
+    });
   };
 
   const isPending = addMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
   const readouts = fullProtocol?.readout_definitions ?? [];
+  const existingReadoutName = readouts.find((r) => r.id === existing?.readout_definition_id)?.name;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 w-[360px] max-w-full">
@@ -537,6 +376,17 @@ export function ChannelPopoverForm({
         </div>
       )}
 
+      {/* Which protocol readout this channel reads from — never editable
+          after creation, so this is a plain locked line rather than a picker. */}
+      {isEdit && existing && (
+        <div className="text-xs text-muted-foreground">
+          Protocol:{" "}
+          <span className="font-medium text-foreground">
+            {fullProtocol?.name ?? "…"} › {existingReadoutName ?? "…"}
+          </span>
+        </div>
+      )}
+
       {/* Normalization layer — only for readout_data, create mode, when the
           chosen readout actually emits normalizations. Locked after creation
           for the same reason source_kind is: changing it would invalidate
@@ -607,149 +457,55 @@ export function ChannelPopoverForm({
         />
       </div>
 
-      {/* Hit threshold — operator + value(s). Drives the hit/miss chip on each cell.
-          Show the channel's unit suffix + a "Hit if … > N %" caption so chemists
-          can see at a glance what value the threshold compares against. */}
-      {(() => {
-        const rd = fullProtocol?.readout_definitions?.find((r) => r.id === watchedReadoutId);
-        const sourceKind = watch("source_kind");
-        const normValue = watch("normalization_applied");
-        const normalization =
-          sourceKind === "readout_data" && normValue && normValue !== "raw" ? normValue : null;
-        const unit = channelUnit({
-          sourceKind,
-          rawUnit: rd?.unit ?? null,
-          normalization,
-          doseUnit: fullProtocol?.dose_unit ?? null,
-        });
-        const label = watch("label");
-        const op = watch("hit_operator");
-        const opSym: Record<string, string> = {
-          lt: "<",
-          lte: "≤",
-          gt: ">",
-          gte: "≥",
-        };
-        const single = watch("hit_value");
-        const lo = watch("hit_value_low");
-        const hi = watch("hit_value_high");
-
-        // Intercept picker — DR-curve channels with ≥2 declared intercepts
-        // get a "EC50 / EC90 / IC10" selector inline with the operator
-        // dropdown. Single-intercept readouts implicitly target the primary
-        // (= the only one) so no picker is needed. Non-DR channels read raw
-        // values; intercepts don't apply.
-        const intercepts: InterceptSpec[] = rd?.dose_response_config?.intercepts ?? [];
-        const showInterceptPicker =
-          op !== "none" &&
-          sourceKind === "dose_response_curve" &&
-          rd?.data_type === "dose_response" &&
-          intercepts.length >= 2;
-        const interceptKeyVal = watch("hit_intercept_key");
-        const selectedSpec = (() => {
-          const parsed = parseInterceptKeyId(interceptKeyVal);
-          if (!parsed) return null;
-          return intercepts.find((s) => s.kind === parsed.kind && s.level === parsed.level) ?? null;
-        })();
-        const interceptText =
-          showInterceptPicker && selectedSpec ? ` ${interceptLabel(selectedSpec)}` : "";
-
-        let caption: string | null = null;
-        if (op === "between") {
-          if (lo.trim() && hi.trim() && !Number.isNaN(Number(lo)) && !Number.isNaN(Number(hi))) {
-            caption = `Hit if ${label || "value"}${interceptText} is between ${lo} and ${hi}${unit ? ` ${unit}` : ""}`;
+      {/* Intercept — create-mode only, DR-curve channels whose readout
+          declares ≥2 intercepts (e.g. EC50 + EC90). Single-intercept and
+          non-DR readouts have nothing to choose and implicitly target the
+          primary. Locked after creation like source_kind: a chemist wanting
+          a different intercept creates a new channel. */}
+      {!isEdit &&
+        (() => {
+          const rd = readouts.find((r) => r.id === watchedReadoutId);
+          const intercepts: InterceptSpec[] = rd?.dose_response_config?.intercepts ?? [];
+          if (
+            watch("source_kind") !== "dose_response_curve" ||
+            rd?.data_type !== "dose_response" ||
+            intercepts.length < 2
+          ) {
+            return null;
           }
-        } else if (op !== "none" && single.trim() && !Number.isNaN(Number(single))) {
-          const sym = opSym[op] ?? op;
-          caption = `Hit if ${label || "value"}${interceptText} ${sym} ${single}${unit ? ` ${unit}` : ""}`;
-        }
-        return (
-          <div className="space-y-1">
-            <Label>Hit threshold</Label>
-            <div className="flex items-end gap-2 flex-wrap">
-              {showInterceptPicker && (
-                <Controller
-                  name="hit_intercept_key"
-                  control={control}
-                  render={({ field }) => (
-                    <Select
-                      value={field.value || interceptKeyId(intercepts[0])}
-                      onValueChange={field.onChange}
-                    >
-                      <SelectTrigger className="w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {intercepts.map((spec, idx) => {
-                          const id = interceptKeyId(spec);
-                          return (
-                            <SelectItem key={id} value={id}>
-                              {interceptLabel(spec)}
-                              {idx === 0 && (
-                                <span className="ml-1 text-xs text-muted-foreground">
-                                  (primary)
-                                </span>
-                              )}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              )}
+          return (
+            <div className="space-y-1">
+              <Label>Intercept</Label>
               <Controller
-                name="hit_operator"
+                name="intercept_key_id"
                 control={control}
                 render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="w-36">
+                  <Select
+                    value={field.value || interceptKeyId(intercepts[0])}
+                    onValueChange={field.onChange}
+                  >
+                    <SelectTrigger className="w-40">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">(no threshold)</SelectItem>
-                      <SelectItem value="lt">&lt; less than</SelectItem>
-                      <SelectItem value="lte">≤ at most</SelectItem>
-                      <SelectItem value="gt">&gt; greater than</SelectItem>
-                      <SelectItem value="gte">≥ at least</SelectItem>
-                      <SelectItem value="between">between (range)</SelectItem>
+                      {intercepts.map((spec, idx) => {
+                        const id = interceptKeyId(spec);
+                        return (
+                          <SelectItem key={id} value={id}>
+                            {interceptLabel(spec)}
+                            {idx === 0 && (
+                              <span className="ml-1 text-xs text-muted-foreground">(primary)</span>
+                            )}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 )}
               />
-              {op === "between" ? (
-                <div className="flex items-end gap-1 flex-1 min-w-0">
-                  <Input
-                    {...register("hit_value_low")}
-                    placeholder="low"
-                    type="number"
-                    className="h-9 text-sm"
-                  />
-                  <span className="text-muted-foreground text-xs pb-2.5">and</span>
-                  <Input
-                    {...register("hit_value_high")}
-                    placeholder="high"
-                    type="number"
-                    className="h-9 text-sm"
-                  />
-                  {unit && <span className="text-muted-foreground text-xs pb-2.5">{unit}</span>}
-                </div>
-              ) : op !== "none" ? (
-                <div className="flex items-end gap-1 flex-1 min-w-0">
-                  <Input
-                    {...register("hit_value")}
-                    placeholder="threshold"
-                    type="number"
-                    className="h-9 text-sm flex-1 min-w-0"
-                  />
-                  {unit && <span className="text-muted-foreground text-xs pb-2.5">{unit}</span>}
-                </div>
-              ) : null}
             </div>
-            {caption && <p className="text-[11px] text-muted-foreground italic">{caption}</p>}
-          </div>
-        );
-      })()}
+          );
+        })()}
 
       {/* Qualifier handling — only at create time. */}
       {!isEdit && (
@@ -815,6 +571,32 @@ export function ChannelPopoverForm({
             <span>0.5</span>
             <span>1</span>
           </div>
+        </div>
+      </div>
+
+      {/* Run scope. A campaign resolves from the runs it was seeded from;
+          this opts one readout out of that, so it pulls from every run of
+          its protocol — the counter-screen that gets measured whenever. */}
+      <div className="flex items-start gap-2">
+        <Controller
+          name="resolve_from_all_runs"
+          control={control}
+          render={({ field }) => (
+            <Checkbox
+              checked={field.value}
+              onCheckedChange={(v) => field.onChange(v === true)}
+              id="resolve-from-all-runs"
+              className="mt-0.5"
+            />
+          )}
+        />
+        <div className="space-y-0.5">
+          <label htmlFor="resolve-from-all-runs" className="text-sm cursor-pointer">
+            Resolve from all runs of the protocol
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Off: only the runs this campaign was seeded from.
+          </p>
         </div>
       </div>
 

@@ -50,9 +50,7 @@ def _summary(idx: int) -> BatchSummary:
 def _candidate(
     molecule_id: uuid.UUID, *, batches: tuple[BatchSummary, ...] = ()
 ) -> CompoundCandidate:
-    return CompoundCandidate(
-        molecule_id=molecule_id, molecule_name="MOL-A", batches=batches
-    )
+    return CompoundCandidate(molecule_id=molecule_id, molecule_name="MOL-A", batches=batches)
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +224,33 @@ class TestBothRefs:
         assert out.per_row[0].source == "batch_ref"
         # Still surface the compound miss so the chemist sees the bad data.
         assert "MISSING" in out.unmatched_compound_refs
+
+    def test_both_miss_reports_compound_and_batch(self) -> None:
+        """A brand-new compound has no batches: both refs miss, both are reported.
+
+        Resolution is unchanged (row still unresolved, batch still authoritative);
+        this is reporting only, so ``unmatched_compound_refs`` stays truthful
+        whether or not a batch column was mapped.
+        """
+        rows = [_row(batch_ref="NEW-1-001", compound_ref="NEW-1")]
+        out = resolve_rows(rows, batch_index={}, compound_index={})
+        assert out.per_row[0].molecule_id is None
+        assert out.per_row[0].error is not None
+        assert out.per_row[0].error.kind == "unmatched_batch_ref"
+        assert out.unmatched_batch_refs == frozenset({"NEW-1-001"})
+        assert out.unmatched_compound_refs == frozenset({"NEW-1"})
+
+    def test_batch_misses_compound_hits_reports_batch_only(self) -> None:
+        molecule_id = uuid.uuid4()
+        rows = [_row(batch_ref="GHOST", compound_ref="MOL-A")]
+        out = resolve_rows(
+            rows,
+            batch_index={},
+            compound_index={"MOL-A": _candidate(molecule_id, batches=(_summary(1),))},
+        )
+        assert out.per_row[0].molecule_id is None  # batch stays authoritative
+        assert out.unmatched_batch_refs == frozenset({"GHOST"})
+        assert out.unmatched_compound_refs == frozenset()
 
 
 # ---------------------------------------------------------------------------

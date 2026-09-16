@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
@@ -12,17 +13,23 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import (
+    CampaignStage,
+    StageCriterion,
+    StageOverride,
+)
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
-    HitCall,
     QualifierHandling,
     SelectionRule,
+    StageKind,
+    StageOutcome,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import SourceRef
-from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.research_organization.repository import CampaignCollectionLinkResult
+from cellar.domain.research_organization.source_ref import SeedRun, SourceRef
+from cellar.domain.shared.hit_criterion import InterceptKey
 from cellar.domain.shared.target_ref import TargetRef
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -35,6 +42,11 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CampaignMeasurementModel,
     CampaignModel,
     CampaignResultModel,
+    CampaignStageModel,
+    CampaignStageOverrideModel,
+    CollectionModel,
+    CollectionMoleculeModel,
+    campaign_collections,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     RunModel,
@@ -67,6 +79,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
     def _to_domain(self, model: CampaignModel) -> Campaign:
         channels = [self._channel_to_domain(cm) for cm in model.channels]
         results = [self._result_to_domain(rm) for rm in model.results]
+        stages = [self._stage_to_domain(sm) for sm in model.stages]
         return Campaign(
             id=model.id,
             workspace_id=model.workspace_id,
@@ -74,20 +87,20 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             name=model.name,
             description=model.description,
             status=CampaignStatus(model.status),
-            publishes_collection=model.publishes_collection,
             source_protocols=list(model.source_protocols or []),
             closed_at=model.closed_at,
             closed_by=model.closed_by,
-            signature_id=model.signature_id,
             supersedes_campaign_id=model.supersedes_campaign_id,
             superseded_by_campaign_id=model.superseded_by_campaign_id,
-            published_collection_id=model.published_collection_id,
             created_by=model.created_by,
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
             channels=channels,
             results=results,
+            stages=stages,
+            close_note=model.close_note,
+            seed_runs=[SeedRun.from_dict(s) for s in (model.seed_runs or [])],
         )
 
     def _to_model(self, aggregate: Campaign) -> CampaignModel:
@@ -98,32 +111,31 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             name=aggregate.name,
             description=aggregate.description,
             status=aggregate.status.value,
-            publishes_collection=aggregate.publishes_collection,
             source_protocols=list(aggregate.source_protocols),
             closed_at=aggregate.closed_at,
             closed_by=aggregate.closed_by,
-            signature_id=aggregate.signature_id,
             supersedes_campaign_id=aggregate.supersedes_campaign_id,
             superseded_by_campaign_id=aggregate.superseded_by_campaign_id,
-            published_collection_id=aggregate.published_collection_id,
             created_by=aggregate.created_by,
             version=aggregate.version,
             channels=[self._channel_to_model(c) for c in aggregate.channels],
             results=[self._result_to_model(r) for r in aggregate.results],
+            stages=[self._stage_to_model(s) for s in aggregate.stages],
+            close_note=aggregate.close_note,
+            seed_runs=[s.to_dict() for s in aggregate.seed_runs],
         )
 
     def _update_model(self, model: CampaignModel, aggregate: Campaign) -> None:
         model.name = aggregate.name
         model.description = aggregate.description
         model.status = aggregate.status.value
-        model.publishes_collection = aggregate.publishes_collection
         model.source_protocols = list(aggregate.source_protocols)
         model.closed_at = aggregate.closed_at
         model.closed_by = aggregate.closed_by
-        model.signature_id = aggregate.signature_id
         model.supersedes_campaign_id = aggregate.supersedes_campaign_id
         model.superseded_by_campaign_id = aggregate.superseded_by_campaign_id
-        model.published_collection_id = aggregate.published_collection_id
+        model.close_note = aggregate.close_note
+        model.seed_runs = [s.to_dict() for s in aggregate.seed_runs]
 
         # Reconcile channels by id
         existing_channels = {ch.id: ch for ch in model.channels}
@@ -149,6 +161,18 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             if existing_id not in aggregate_result_ids:
                 model.results.remove(existing_r)
 
+        # Reconcile stages by id
+        existing_stages = {s.id: s for s in model.stages}
+        aggregate_stage_ids = {s.id for s in aggregate.stages}
+        for s in aggregate.stages:
+            if s.id in existing_stages:
+                self._stage_update_model(existing_stages[s.id], s)
+            else:
+                model.stages.append(self._stage_to_model(s))
+        for existing_id, existing_s in list(existing_stages.items()):
+            if existing_id not in aggregate_stage_ids:
+                model.stages.remove(existing_s)
+
     # ------------------------------------------------------------------
     # Channel mapping
     # ------------------------------------------------------------------
@@ -166,13 +190,11 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             selection_rule=SelectionRule(model.selection_rule),
             qualifier_handling=QualifierHandling(model.qualifier_handling),
             qc_filter=model.qc_filter,
-            hit_threshold=(
-                HitCriterion.from_dict(model.hit_threshold) if model.hit_threshold else None
-            ),
             normalization_applied=model.normalization_applied,
             intercept_key=(
                 InterceptKey.from_dict(model.intercept_key) if model.intercept_key else None
             ),
+            resolve_from_all_runs=model.resolve_from_all_runs,
         )
 
     @staticmethod
@@ -188,9 +210,9 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             selection_rule=ch.selection_rule.value,
             qualifier_handling=ch.qualifier_handling.value,
             qc_filter=ch.qc_filter,
-            hit_threshold=ch.hit_threshold.to_dict() if ch.hit_threshold else None,
             normalization_applied=ch.normalization_applied,
             intercept_key=ch.intercept_key.to_dict() if ch.intercept_key else None,
+            resolve_from_all_runs=ch.resolve_from_all_runs,
         )
 
     @staticmethod
@@ -203,9 +225,79 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.selection_rule = ch.selection_rule.value
         model.qualifier_handling = ch.qualifier_handling.value
         model.qc_filter = ch.qc_filter
-        model.hit_threshold = ch.hit_threshold.to_dict() if ch.hit_threshold else None
         model.normalization_applied = ch.normalization_applied
         model.intercept_key = ch.intercept_key.to_dict() if ch.intercept_key else None
+        model.resolve_from_all_runs = ch.resolve_from_all_runs
+
+    # ------------------------------------------------------------------
+    # Stage mapping
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _stage_to_domain(model: CampaignStageModel) -> CampaignStage:
+        return CampaignStage(
+            id=model.id,
+            campaign_id=model.campaign_id,
+            name=model.name,
+            display_order=model.display_order,
+            parent_stage_id=model.parent_stage_id,
+            kind=StageKind(model.kind),
+            criteria=[StageCriterion.from_dict(c) for c in model.criteria],
+        )
+
+    @staticmethod
+    def _stage_to_model(stage: CampaignStage) -> CampaignStageModel:
+        return CampaignStageModel(
+            id=stage.id,
+            campaign_id=stage.campaign_id,
+            name=stage.name,
+            parent_stage_id=stage.parent_stage_id,
+            display_order=stage.display_order,
+            kind=stage.kind.value,
+            criteria=[c.to_dict() for c in stage.criteria],
+        )
+
+    @staticmethod
+    def _stage_update_model(model: CampaignStageModel, stage: CampaignStage) -> None:
+        model.name = stage.name
+        model.parent_stage_id = stage.parent_stage_id
+        model.display_order = stage.display_order
+        model.kind = stage.kind.value
+        model.criteria = [c.to_dict() for c in stage.criteria]
+
+    # ------------------------------------------------------------------
+    # Stage override mapping — StageOverride carries no id of its own;
+    # identity is the (result, stage) pair (see uq_campaign_stage_override_result_stage).
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _override_to_domain(model: CampaignStageOverrideModel) -> StageOverride:
+        return StageOverride(
+            result_id=model.result_id,
+            stage_id=model.stage_id,
+            forced_outcome=StageOutcome(model.forced_outcome),
+            reason=model.reason,
+            overridden_by=model.overridden_by,
+            overridden_at=model.overridden_at,
+        )
+
+    @staticmethod
+    def _override_to_model(override: StageOverride) -> CampaignStageOverrideModel:
+        return CampaignStageOverrideModel(
+            result_id=override.result_id,
+            stage_id=override.stage_id,
+            forced_outcome=override.forced_outcome.value,
+            reason=override.reason,
+            overridden_by=override.overridden_by,
+            overridden_at=override.overridden_at,
+        )
+
+    @staticmethod
+    def _override_update_model(model: CampaignStageOverrideModel, override: StageOverride) -> None:
+        model.forced_outcome = override.forced_outcome.value
+        model.reason = override.reason
+        model.overridden_by = override.overridden_by
+        model.overridden_at = override.overridden_at
 
     # ------------------------------------------------------------------
     # Result mapping
@@ -220,11 +312,12 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             campaign_id=model.campaign_id,
             molecule_id=model.molecule_id,
             representative_batch_id=model.representative_batch_id,
-            decision=CampaignDecision(model.decision),
-            decision_reason=model.decision_reason,
             notes=model.notes,
             added_from=added_from,
             measurements=[self._measurement_to_domain(mm) for mm in model.measurements],
+            stage_overrides={
+                om.stage_id: self._override_to_domain(om) for om in model.stage_overrides
+            },
         )
 
     def _result_to_model(self, r: CampaignResult) -> CampaignResultModel:
@@ -233,18 +326,15 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             campaign_id=r.campaign_id,
             molecule_id=r.molecule_id,
             representative_batch_id=r.representative_batch_id,
-            decision=r.decision.value,
-            decision_reason=r.decision_reason,
             notes=r.notes,
             added_from=r.added_from.to_dict() if r.added_from is not None else None,
             measurements=[self._measurement_to_model(m) for m in r.measurements],
+            stage_overrides=[self._override_to_model(so) for so in r.stage_overrides.values()],
         )
 
     def _result_update_model(self, model: CampaignResultModel, r: CampaignResult) -> None:
         model.molecule_id = r.molecule_id
         model.representative_batch_id = r.representative_batch_id
-        model.decision = r.decision.value
-        model.decision_reason = r.decision_reason
         model.notes = r.notes
         # added_from is immutable after first write — only set if not already persisted
         if model.added_from is None and r.added_from is not None:
@@ -262,6 +352,18 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             if existing_id not in aggregate_ids:
                 model.measurements.remove(existing_m)
 
+        # Reconcile stage overrides by stage_id (not model id — see above)
+        existing_overrides = {om.stage_id: om for om in model.stage_overrides}
+        aggregate_stage_ids = set(r.stage_overrides.keys())
+        for stage_id, override in r.stage_overrides.items():
+            if stage_id in existing_overrides:
+                self._override_update_model(existing_overrides[stage_id], override)
+            else:
+                model.stage_overrides.append(self._override_to_model(override))
+        for existing_stage_id, existing_om in list(existing_overrides.items()):
+            if existing_stage_id not in aggregate_stage_ids:
+                model.stage_overrides.remove(existing_om)
+
     # ------------------------------------------------------------------
     # Measurement mapping
     # ------------------------------------------------------------------
@@ -277,7 +379,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             value=model.value,
             value_qualifier=ValueQualifier(model.value_qualifier),
             unit=model.unit,
-            hit_call=HitCall(model.hit_call) if model.hit_call else None,
             is_manual_override=model.is_manual_override,
             source_run_id=model.source_run_id,
             source_curve_id=model.source_curve_id,
@@ -303,7 +404,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             value=m.value,
             value_qualifier=m.value_qualifier.value,
             unit=m.unit,
-            hit_call=m.hit_call.value if m.hit_call else None,
             is_manual_override=m.is_manual_override,
             source_run_id=m.source_run_id,
             source_curve_id=m.source_curve_id,
@@ -328,7 +428,6 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.value = m.value
         model.value_qualifier = m.value_qualifier.value
         model.unit = m.unit
-        model.hit_call = m.hit_call.value if m.hit_call else None
         model.is_manual_override = m.is_manual_override
         model.source_run_id = m.source_run_id
         model.source_curve_id = m.source_curve_id
@@ -359,6 +458,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         tag_logic: str = "any",
         target_ids: list[uuid.UUID] | None = None,
         target_logic: str = "any",
+        status: CampaignStatus | None = None,
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(
             CampaignModel.workspace_id == workspace_id,
@@ -382,6 +482,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                     )
                 )
             )
+        if status is not None:
+            stmt = stmt.where(CampaignModel.status == status.value)
         stmt = stmt.order_by(CampaignModel.id)
         if cursor_id is not None:
             stmt = stmt.where(CampaignModel.id > cursor_id)
@@ -400,6 +502,7 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         tag_logic: str = "any",
         target_ids: list[uuid.UUID] | None = None,
         target_logic: str = "any",
+        status: CampaignStatus | None = None,
     ) -> list[Campaign]:
         stmt = select(CampaignModel).where(CampaignModel.workspace_id == workspace_id)
         if tags:
@@ -420,6 +523,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                     )
                 )
             )
+        if status is not None:
+            stmt = stmt.where(CampaignModel.status == status.value)
         stmt = stmt.order_by(CampaignModel.id)
         if cursor_id is not None:
             stmt = stmt.where(CampaignModel.id > cursor_id)
@@ -438,6 +543,113 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             CampaignStatus.CLOSED.value,
             CampaignStatus.SUPERSEDED.value,
         }
+
+    async def find_status(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> CampaignStatus | None:
+        stmt = select(CampaignModel.status).where(
+            CampaignModel.id == campaign_id,
+            CampaignModel.workspace_id == workspace_id,
+        )
+        status = (await self._session.execute(stmt)).scalar_one_or_none()
+        return CampaignStatus(status) if status is not None else None
+
+    async def find_seed_run_ids(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> list[uuid.UUID] | None:
+        stmt = select(CampaignModel.seed_runs).where(
+            CampaignModel.id == campaign_id,
+            CampaignModel.workspace_id == workspace_id,
+        )
+        rows = (await self._session.execute(stmt)).one_or_none()
+        if rows is None:
+            return None
+        return [SeedRun.from_dict(s).run_id for s in (rows[0] or [])]
+
+    # ------------------------------------------------------------------
+    # Campaign-collection links (association, not aggregate state)
+    # ------------------------------------------------------------------
+
+    async def list_collection_ids(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        stmt = (
+            select(campaign_collections.c.collection_id)
+            .join(
+                CollectionModel,
+                CollectionModel.id == campaign_collections.c.collection_id,
+            )
+            .where(
+                campaign_collections.c.campaign_id == campaign_id,
+                CollectionModel.workspace_id == workspace_id,
+            )
+        )
+        return list((await self._session.execute(stmt)).scalars())
+
+    async def collection_members_among(
+        self,
+        workspace_id: uuid.UUID,
+        collection_ids: list[uuid.UUID],
+        molecule_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, set[uuid.UUID]]:
+        """Which of ``molecule_ids`` belong to each of ``collection_ids``.
+
+        Bounded by the caller's molecule set, not by library size: a campaign
+        of 900 rows costs the same against a 300k-member deck as against a
+        small one. Collections with no listed member are absent from the
+        result — callers read them as the empty set.
+        """
+        if not collection_ids or not molecule_ids:
+            return {}
+        stmt = (
+            select(
+                CollectionMoleculeModel.collection_id,
+                CollectionMoleculeModel.molecule_id,
+            )
+            .join(
+                CollectionModel,
+                CollectionModel.id == CollectionMoleculeModel.collection_id,
+            )
+            .where(
+                CollectionMoleculeModel.collection_id.in_(collection_ids),
+                CollectionMoleculeModel.molecule_id.in_(molecule_ids),
+                CollectionModel.workspace_id == workspace_id,
+            )
+        )
+        members: dict[uuid.UUID, set[uuid.UUID]] = {}
+        for collection_id, molecule_id in (await self._session.execute(stmt)).all():
+            members.setdefault(collection_id, set()).add(molecule_id)
+        return members
+
+    async def add_collection(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> CampaignCollectionLinkResult:
+        """Link a library to a campaign (idempotent). Workspace-checked on both sides."""
+        if not await self._owns(CampaignModel, campaign_id, workspace_id):
+            return CampaignCollectionLinkResult.OWNER_NOT_FOUND
+        if not await self._owns(CollectionModel, collection_id, workspace_id):
+            return CampaignCollectionLinkResult.COLLECTION_NOT_FOUND
+        result = await self._session.execute(
+            pg_insert(campaign_collections)
+            .values(campaign_id=campaign_id, collection_id=collection_id)
+            .on_conflict_do_nothing()
+        )
+        if result.rowcount:
+            return CampaignCollectionLinkResult.ADDED
+        return CampaignCollectionLinkResult.ALREADY_LINKED
+
+    async def remove_collection(
+        self, workspace_id: uuid.UUID, campaign_id: uuid.UUID, collection_id: uuid.UUID
+    ) -> bool:
+        if not await self._owns(CampaignModel, campaign_id, workspace_id):
+            return False
+        result = await self._session.execute(
+            delete(campaign_collections).where(
+                campaign_collections.c.campaign_id == campaign_id,
+                campaign_collections.c.collection_id == collection_id,
+            )
+        )
+        return bool(result.rowcount)
 
     async def project_targets(
         self, workspace_id: uuid.UUID, campaigns: list[Campaign]

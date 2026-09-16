@@ -118,7 +118,7 @@ class OntologySlotDefinition(AggregateRoot):
         *,
         label: str | object = UNSET,
         ontology_sources: list[str] | object = UNSET,
-        root_concept_id: str | None | object = UNSET,
+        root_concept_id: str | object | None = UNSET,
         is_required: bool | object = UNSET,
         allow_free_text: bool | object = UNSET,
         display_order: int | object = UNSET,

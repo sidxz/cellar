@@ -6,13 +6,8 @@ from cellar.infrastructure.logging.context import (
     bind_request_context,
     bind_user_context,
     clear_request_context,
-    get_logger,
 )
 
-
-def test_get_logger_returns_bound_logger():
-    log = get_logger("x")
-    assert hasattr(log, "info")
 
 
 def test_bind_request_then_clear():

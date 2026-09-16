@@ -50,6 +50,7 @@ from cellar.application.attachment.upload_attachment import (
     UploadAttachmentCommand,
 )
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.screening.compound_ref_resolver import resolve_rows
 
 # Re-exported here so existing callers `from import_run_file import WellConflict`
@@ -58,6 +59,7 @@ from cellar.application.screening.compound_ref_resolver import resolve_rows
 from cellar.application.screening.import_plan import (  # noqa: F401
     ReadoutConflict,
     WellConflict,
+    _autolink_new_plates,
     _ImportPlan,
     _ReadoutWrite,
     _scan_conflicts,
@@ -99,11 +101,13 @@ from cellar.application.screening.preview_run_file import PreviewRunFile, Reprev
 from cellar.application.screening.readout_calculation_engine import (
     ReadoutCalculationEngine,
 )
+from cellar.application.screening.readout_entry_guard import calculated_readout_error
+from cellar.application.screening.run_shape import refuse_if_wellless
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.chemical_registration.repository import MoleculeRepository
-from cellar.domain.inventory.repository import BatchRepository
+from cellar.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
 from cellar.domain.screening_assay.enums import ReadoutDataType
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.repository import (
@@ -171,6 +175,8 @@ class ImportRunFile:
         dispatcher: EventDispatcherProtocol | None = None,
         calculation_engine: ReadoutCalculationEngine | None = None,
         ensure_batch_exists=None,  # EnsureBatchExists | None; optional for back-compat
+        plate_repo: RegisteredPlateRepository | None = None,
+        plate_visibility: PlateVisibilityService | None = None,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -184,6 +190,9 @@ class ImportRunFile:
         self._dispatcher = dispatcher
         self._calc_engine = calculation_engine
         self._ensure_batch_exists = ensure_batch_exists
+        # Both or neither: without them new plates are simply not auto-linked.
+        self._plate_repo = plate_repo
+        self._plate_visibility = plate_visibility
 
     async def __call__(
         self,
@@ -208,7 +217,7 @@ class ImportRunFile:
         # has already succeeded if we got here.
         if isinstance(result, Success):
             unwrapped = result.unwrap()
-            if unwrapped.readouts_created > 0 or unwrapped.wells_created > 0:
+            if unwrapped.values_inserted > 0 or unwrapped.wells_created > 0:
                 await self._maybe_run_calc_engine(input, unwrapped)
             await self._maybe_attach_raw_file(input, preview, unwrapped, auth)
         return result
@@ -226,6 +235,10 @@ class ImportRunFile:
         if run.is_locked:
             return Failure(ConflictError("Cannot import into a locked run"))
 
+        wellless = await refuse_if_wellless(self._readout_data_repo, cmd.workspace_id, run.id)
+        if wellless is not None:
+            return Failure(wellless)
+
         # 2. Load protocol — its dose_unit is the canonical unit.
         protocol = await self._protocol_repo.find_by_id_in_workspace(
             cmd.workspace_id, run.protocol_id
@@ -237,6 +250,12 @@ class ImportRunFile:
         # readout columns with data_type so the normalizer parses each
         # column with the right value kind.
         rd_by_id = {rd.id: rd for rd in protocol.readout_definitions}
+        calculated = calculated_readout_error(
+            ((rc.header, rc.readout_definition_id) for rc in cmd.mapping.readout_columns),
+            rd_by_id,
+        )
+        if calculated is not None:
+            return Failure(calculated)
         typed_readouts: list[ReadoutColumn] = []
         for rc in cmd.mapping.readout_columns:
             rd = rd_by_id.get(rc.readout_definition_id)
@@ -397,16 +416,23 @@ class ImportRunFile:
         # 8. Apply plan: create new plates, attach new wells, write new
         # readouts. Existing entities are reused as-is.
         result = ImportRunFileResult(
-            rows_total=len(normalized.rows),
-            skipped_rows=normalized.skipped_rows,
-            conflicts_well_metadata=list(plan.well_conflicts),
-            conflicts_readout=list(plan.readout_conflicts),
+            total_rows=preview.table.row_count,
+            rows_skipped=normalized.skipped_rows,
+            well_conflicts=list(plan.well_conflicts),
+            readout_conflicts=list(plan.readout_conflicts),
             controls_from_template=plan.controls_from_template,
             controls_unclassified=plan.controls_unclassified,
-            unmatched_batches=sorted(resolutions.unmatched_batch_refs),
+            matched_compound_count=resolutions.matched_compound_count,
+            unmatched_batch_refs=sorted(resolutions.unmatched_batch_refs),
             unmatched_compound_refs=sorted(resolutions.unmatched_compound_refs),
             auto_created_batches=auto_created_batches,
         )
+
+        # Auto-link new plates to the inventory plate their file name names.
+        if self._plate_repo is not None and self._plate_visibility is not None:
+            await _autolink_new_plates(
+                plan, self._plate_repo, self._plate_visibility, cmd.workspace_id, auth
+            )
 
         # Track new plates first so we can emit creation counters.
         for new_plate in plan.new_plates:
@@ -443,7 +469,7 @@ class ImportRunFile:
         await self._run_repo.save(run)
         if new_readouts:
             await self._readout_data_repo.save_bulk(new_readouts)
-            result.readouts_created = len(new_readouts)
+            result.values_inserted = len(new_readouts)
 
         await self._uow.commit()
         return Success(result)

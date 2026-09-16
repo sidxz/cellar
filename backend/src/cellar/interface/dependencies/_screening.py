@@ -7,8 +7,6 @@ from typing import Annotated
 from fastapi import Depends
 
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
-from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
-from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.condition_grouping_service import ConditionGroupingService
 from cellar.application.screening.create_compound_flag import CreateCompoundFlag
@@ -16,10 +14,9 @@ from cellar.application.screening.create_dose_response import CreateDoseResponse
 from cellar.application.screening.create_protocol import CreateProtocol
 from cellar.application.screening.create_readout_data import CreateReadoutData
 from cellar.application.screening.create_run import CreateRun
-from cellar.application.screening.create_target import CreateTarget
 from cellar.application.screening.delete_compound_flag import DeleteCompoundFlag
 from cellar.application.screening.delete_run import DeleteRun
-from cellar.application.screening.delete_target import DeleteTarget
+from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.application.screening.get_collection_gap import (
     GetProtocolCollectionGap,
@@ -39,9 +36,11 @@ from cellar.application.screening.get_run import GetRun, ListRunsByProtocol
 from cellar.application.screening.get_target import GetTarget, ListTargets
 from cellar.application.screening.import_run_readouts import ImportRunReadouts
 from cellar.application.screening.import_summary_file import ImportSummaryFile
+from cellar.application.screening.link_run_plate import LinkRunPlate, UnlinkRunPlate
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
 from cellar.application.screening.list_protocol_summaries import ListProtocolSummaries
+from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
 from cellar.application.screening.lock_protocol import LockProtocol, UnlockProtocol
@@ -116,8 +115,8 @@ from cellar.application.screening.set_run_hit_criteria import (
     ResetRunHitCriteria,
     SetRunHitCriteria,
 )
+from cellar.application.screening.sync_targets import SyncTargetsFromProtCellar
 from cellar.application.screening.update_run import UpdateRun
-from cellar.application.screening.update_target import UpdateTarget
 
 from ._core import _get_use_case
 
@@ -143,13 +142,10 @@ __all__ = [
     # Readouts + dose-response
     "CreateReadoutDataDep",
     "CreateRunDep",
-    # Targets
-    "CreateTargetDep",
     "DeleteCompoundFlagDep",
     "DeletePlateTemplateDep",
     "DeleteProtocolDep",
     "DeleteRunDep",
-    "DeleteTargetDep",
     "FindSimilarProtocolsDep",
     "FitDoseResponseCurvesDep",
     "GetCompoundCurvesDep",
@@ -169,6 +165,7 @@ __all__ = [
     "GetTargetDep",
     "ImportRunReadoutsDep",
     "ImportSummaryFileDep",
+    "LinkRunPlateDep",
     # Compound flags
     "ListCompoundFlagsDep",
     "ListDoseResponseByRunDep",
@@ -212,6 +209,8 @@ __all__ = [
     "SetRunHitCriteriaDep",
     "SetUpRunPlateDep",
     "StartRunDep",
+    "SyncTargetsDep",
+    "UnlinkRunPlateDep",
     "UnlockProtocolDep",
     "UnlockRunDep",
     "UpdateConditionDefinitionDep",
@@ -219,7 +218,6 @@ __all__ = [
     "UpdateProtocolDep",
     "UpdateReadoutDefinitionDep",
     "UpdateRunDep",
-    "UpdateTargetDep",
     "VersionProtocolDep",
 ]
 
@@ -295,11 +293,11 @@ SetControlLayoutDep = Annotated[SetControlLayout, Depends(_get_use_case(SetContr
 RemoveControlLayoutDep = Annotated[
     RemoveControlLayout, Depends(_get_use_case(RemoveControlLayout))
 ]
-CreateTargetDep = Annotated[CreateTarget, Depends(_get_use_case(CreateTarget))]
 GetTargetDep = Annotated[GetTarget, Depends(_get_use_case(GetTarget))]
 ListTargetsDep = Annotated[ListTargets, Depends(_get_use_case(ListTargets))]
-UpdateTargetDep = Annotated[UpdateTarget, Depends(_get_use_case(UpdateTarget))]
-DeleteTargetDep = Annotated[DeleteTarget, Depends(_get_use_case(DeleteTarget))]
+SyncTargetsDep = Annotated[
+    SyncTargetsFromProtCellar, Depends(_get_use_case(SyncTargetsFromProtCellar))
+]
 ConditionGroupingServiceDep = Annotated[
     ConditionGroupingService, Depends(_get_use_case(ConditionGroupingService))
 ]
@@ -401,6 +399,8 @@ ListPlateTemplatesDep = Annotated[ListPlateTemplates, Depends(_get_use_case(List
 # --- Plate setup + readout import dependencies ---
 ParsePlateMapFileDep = Annotated[ParsePlateMapFile, Depends(_get_use_case(ParsePlateMapFile))]
 SetUpRunPlateDep = Annotated[SetUpRunPlate, Depends(_get_use_case(SetUpRunPlate))]
+LinkRunPlateDep = Annotated[LinkRunPlate, Depends(_get_use_case(LinkRunPlate))]
+UnlinkRunPlateDep = Annotated[UnlinkRunPlate, Depends(_get_use_case(UnlinkRunPlate))]
 ImportRunReadoutsDep = Annotated[ImportRunReadouts, Depends(_get_use_case(ImportRunReadouts))]
 PreviewSummaryFileDep = Annotated[PreviewSummaryFile, Depends(_get_use_case(PreviewSummaryFile))]
 PreviewSummaryImportDep = Annotated[

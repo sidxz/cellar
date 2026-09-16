@@ -7,6 +7,7 @@ import pytest
 from cellar.domain.inventory.enums import PlateStatus, PlateType
 from cellar.domain.inventory.events import (
     PlateDisposed,
+    PlateGroupMembershipChanged,
     PlateMoved,
     PlateRegistered,
     PlateStatusChanged,
@@ -155,9 +156,86 @@ class TestMove:
         assert events[0].new_location_id == new_loc
 
 
+class TestOwnerOrgId:
+    def test_register_with_owner_org(self):
+        org_id = uuid.uuid4()
+        plate = _make_plate(owner_org_id=org_id)
+        assert plate.owner_org_id == org_id
+        event = plate.collect_events()[0]
+        assert event.owner_org_id == org_id
+
+
+    def test_update_owner_org_sentinel(self):
+        plate = _make_plate(owner_org_id=uuid.uuid4())
+        original = plate.owner_org_id
+        plate.update(notes="touched")  # sentinel: owner unchanged
+        assert plate.owner_org_id == original
+        plate.update(owner_org_id=None)  # explicit clear
+        assert plate.owner_org_id is None
+
+    def test_derive_inherits_parent_owner_org(self):
+        org_id = uuid.uuid4()
+        parent = _make_plate(owner_org_id=org_id)
+        child = parent.derive(
+            barcode=Barcode(value="PLT-CHILD"),
+            plate_label="Child",
+            plate_type=PlateType.DAUGHTER,
+            registered_by=uuid.uuid4(),
+        )
+        assert child.owner_org_id == org_id
+
+    def test_derive_from_public_parent_stays_public(self):
+        parent = _make_plate()
+        child = parent.derive(
+            barcode=Barcode(value="PLT-CHILD2"),
+            plate_label="Child",
+            plate_type=PlateType.DAUGHTER,
+            registered_by=uuid.uuid4(),
+        )
+        assert child.owner_org_id is None
+
+
 class TestFormatImmutability:
     def test_cannot_change_format_with_mapped_wells(self):
         plate = _make_plate(format=PlateFormat.F96)
         plate.map_wells({"A1": _wa(batch_id=uuid.uuid4())})
         with pytest.raises(ValidationError, match="format"):
             plate.update(format=PlateFormat.F384)
+
+
+class TestGroupAssignment:
+    def test_assign_and_clear_group(self) -> None:
+        plate = _make_plate()
+        gid = uuid.uuid4()
+        plate.assign_to_group(gid)
+        assert plate.group_id == gid
+        plate.assign_to_group(None)
+        assert plate.group_id is None
+
+    def test_derive_does_not_copy_group(self) -> None:
+        plate = _make_plate()
+        plate.assign_to_group(uuid.uuid4())
+        child = plate.derive(
+            barcode=Barcode(value="CHILD-001"),
+            plate_label="child",
+            plate_type=PlateType.DAUGHTER,
+            registered_by=uuid.uuid4(),
+        )
+        assert child.group_id is None
+
+    def test_assign_to_group_emits_membership_event(self) -> None:
+        plate = _make_plate()
+        plate.clear_events()
+        gid = uuid.uuid4()
+        plate.assign_to_group(gid)
+        events = plate.collect_events()
+        assert len(events) == 1
+        assert isinstance(events[0], PlateGroupMembershipChanged)
+        assert events[0].plate_id == plate.id
+        assert events[0].old_group_id is None
+        assert events[0].new_group_id == gid
+        plate.clear_events()
+        plate.assign_to_group(None)
+        (cleared,) = plate.collect_events()
+        assert cleared.old_group_id == gid
+        assert cleared.new_group_id is None

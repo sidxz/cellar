@@ -7,7 +7,13 @@ from typing import Protocol, runtime_checkable
 
 from cellar.domain.inventory.batch import Batch
 from cellar.domain.inventory.cdd_plate_import import CddPlateImport
+from cellar.domain.inventory.comment import Comment
+from cellar.domain.inventory.enums import CommentTarget
 from cellar.domain.inventory.import_template import ImportTemplate
+from cellar.domain.inventory.kiosk_device import KioskDevice
+from cellar.domain.inventory.org_plate_policy import OrgPlatePolicy
+from cellar.domain.inventory.plate_group import PlateGroup
+from cellar.domain.inventory.plate_loan import PlateLoan
 from cellar.domain.inventory.registered_plate import RegisteredPlate
 from cellar.domain.inventory.sample import Sample
 from cellar.domain.inventory.sample_request import SampleRequest
@@ -162,9 +168,15 @@ class RegisteredPlateRepository(Protocol):
     async def find_by_id_in_workspace(
         self, workspace_id: uuid.UUID, id: uuid.UUID
     ) -> RegisteredPlate | None: ...
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[RegisteredPlate]: ...
     async def find_by_barcode(
         self, workspace_id: uuid.UUID, barcode: str
     ) -> RegisteredPlate | None: ...
+    async def find_by_label(
+        self, workspace_id: uuid.UUID, label: str
+    ) -> list[RegisteredPlate]: ...
     async def find_by_location(
         self, workspace_id: uuid.UUID, storage_location_id: uuid.UUID
     ) -> list[RegisteredPlate]: ...
@@ -185,11 +197,76 @@ class RegisteredPlateRepository(Protocol):
         format: str | None = None,
         storage_location_id: uuid.UUID | None = None,
         project_id: uuid.UUID | None = None,
+        owner_org_id: uuid.UUID | None = None,
+        group_id: uuid.UUID | None = None,
+        exclude_owner_org_ids: set[uuid.UUID] | None = None,
+        include_plate_ids: set[uuid.UUID] | None = None,
+        owner_scope_plate_ids: set[uuid.UUID] | None = None,
         tags: list[uuid.UUID] | None = None,
         tag_logic: str = "any",
     ) -> list[RegisteredPlate]: ...
     async def save(self, aggregate: RegisteredPlate) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class PlateGroupRepository(Protocol):
+    """Repository for PlateGroup aggregates."""
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> PlateGroup | None: ...
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[PlateGroup]: ...
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID, *, owner_org_id: uuid.UUID | None = None
+    ) -> list[PlateGroup]: ...
+    async def find_children(
+        self, workspace_id: uuid.UUID, parent_group_id: uuid.UUID
+    ) -> list[PlateGroup]: ...
+    async def find_by_name(
+        self,
+        workspace_id: uuid.UUID,
+        owner_org_id: uuid.UUID,
+        parent_group_id: uuid.UUID | None,
+        name: str,
+    ) -> PlateGroup | None: ...
+    async def count_plates_by_group(
+        self, workspace_id: uuid.UUID, owner_org_id: uuid.UUID | None = None
+    ) -> dict[uuid.UUID, int]: ...
+    async def plate_formats_by_group(
+        self, workspace_id: uuid.UUID, owner_org_id: uuid.UUID | None = None
+    ) -> dict[uuid.UUID, list[str]]: ...
+    async def save(self, aggregate: PlateGroup) -> None: ...
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class PlateLoanRepository(Protocol):
+    """Repository for PlateLoan aggregates (items loaded eagerly)."""
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> PlateLoan | None: ...
+    async def find_by_workspace(
+        self,
+        workspace_id: uuid.UUID,
+        *,
+        status: str | None = None,
+        owner_org_id: uuid.UUID | None = None,
+        borrower_org_id: uuid.UUID | None = None,
+        requested_by: uuid.UUID | None = None,
+        plate_id: uuid.UUID | None = None,
+        overdue: bool = False,
+    ) -> list[PlateLoan]: ...
+    async def active_plate_ids(
+        self, workspace_id: uuid.UUID, plate_ids: list[uuid.UUID]
+    ) -> set[uuid.UUID]: ...
+    async def borrowed_plate_ids(
+        self, workspace_id: uuid.UUID, borrower_org_id: uuid.UUID
+    ) -> set[uuid.UUID]: ...
+    async def save(self, aggregate: PlateLoan) -> None: ...
 
 
 @runtime_checkable
@@ -205,6 +282,16 @@ class ImportTemplateRepository(Protocol):
 
 
 @runtime_checkable
+class OrgPlatePolicyRepository(Protocol):
+    """Repository for OrgPlatePolicy aggregates — keyed by (workspace_id, org_id)."""
+
+    async def find_by_org(
+        self, workspace_id: uuid.UUID, org_id: uuid.UUID
+    ) -> OrgPlatePolicy | None: ...
+    async def save(self, aggregate: OrgPlatePolicy) -> None: ...
+
+
+@runtime_checkable
 class CddPlateImportRepository(Protocol):
     """Repository for CddPlateImport aggregates."""
 
@@ -216,3 +303,37 @@ class CddPlateImportRepository(Protocol):
     ) -> CddPlateImport | None: ...
     async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[CddPlateImport]: ...
     async def save(self, aggregate: CddPlateImport) -> None: ...
+
+
+@runtime_checkable
+class KioskDeviceRepository(Protocol):
+    """Repository for KioskDevice aggregates.
+
+    ``find_active_by_token_hash`` is deliberately workspace-unscoped — the
+    token IS the identity (unique index) — and returns only active rows.
+    ``touch_last_seen`` is a direct UPDATE that does NOT bump ``version``
+    (telemetry, not domain state — avoids optimistic conflicts between
+    rapid scans).
+    """
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> KioskDevice | None: ...
+    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[KioskDevice]: ...
+    async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> KioskDevice | None: ...
+    async def find_active_by_token_hash(self, token_hash: str) -> KioskDevice | None: ...
+    async def touch_last_seen(self, device_id: uuid.UUID) -> None: ...
+    async def save(self, aggregate: KioskDevice) -> None: ...
+
+
+@runtime_checkable
+class CommentRepository(Protocol):
+    """Append-only comments on loans / groups / plates (spec 2026-08-25 §7)."""
+
+    async def list_for_target(
+        self, workspace_id: uuid.UUID, target_type: CommentTarget, target_id: uuid.UUID
+    ) -> list[Comment]: ...
+    async def list_for_loan(
+        self, workspace_id: uuid.UUID, loan_id: uuid.UUID
+    ) -> list[Comment]: ...
+    async def save(self, aggregate: Comment) -> None: ...

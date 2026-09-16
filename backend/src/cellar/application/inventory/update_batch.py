@@ -28,21 +28,21 @@ from cellar.domain.workspace_config.enums import FieldTarget
 class UpdateBatchCommand(Command):
     workspace_id: uuid.UUID
     batch_id: uuid.UUID
-    salt_entry_id: uuid.UUID | None | object = UNSET
-    salt_name: str | None | object = UNSET
-    salt_smiles: str | None | object = UNSET
+    salt_entry_id: uuid.UUID | object | None = UNSET
+    salt_name: str | object | None = UNSET
+    salt_smiles: str | object | None = UNSET
     salt_stoichiometry: int | object = UNSET
-    formula_weight: float | None | object = UNSET
-    purity: float | None | object = UNSET
+    formula_weight: float | object | None = UNSET
+    purity: float | object | None = UNSET
     amount_value: float | None = None
     amount_unit: str | None = None
-    concentration_value: float | None | object = UNSET
-    concentration_unit: str | None | object = UNSET
-    appearance: str | None | object = UNSET
-    expiry_date: date | None | object = UNSET
-    notebook_reference: str | None | object = UNSET
-    storage_conditions_notes: str | None | object = UNSET
-    custom_fields: dict[str, Any] | None | object = UNSET
+    concentration_value: float | object | None = UNSET
+    concentration_unit: str | object | None = UNSET
+    appearance: str | object | None = UNSET
+    expiry_date: date | object | None = UNSET
+    notebook_reference: str | object | None = UNSET
+    storage_conditions_notes: str | object | None = UNSET
+    custom_fields: dict[str, Any] | object | None = UNSET
 
 
 class UpdateBatch:

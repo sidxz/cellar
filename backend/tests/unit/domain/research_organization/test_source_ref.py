@@ -4,7 +4,6 @@ import uuid
 
 import pytest
 
-from cellar.domain.research_organization.enums import CampaignDecision
 from cellar.domain.research_organization.source_ref import (
     CampaignRef,
     CollectionRef,
@@ -87,24 +86,34 @@ def test_campaign_ref_requires_campaign_id():
 
 
 def test_campaign_ref_round_trip():
-    cid = uuid.uuid4()
-    src = CampaignRef(
-        campaign_id=cid,
-        decision_filter=[CampaignDecision.SELECTED, CampaignDecision.DEFERRED],
-    )
+    cid, sid = uuid.uuid4(), uuid.uuid4()
+    src = CampaignRef(campaign_id=cid, stage_id=sid)
     data = src.to_dict()
     assert data["kind"] == "campaign"
-    assert data["decision_filter"] == ["selected", "deferred"]
+    assert data["stage_id"] == str(sid)
     back = SourceRef.from_dict(data)
     assert isinstance(back, CampaignRef)
     assert back.campaign_id == cid
-    assert CampaignDecision.SELECTED in back.decision_filter
-    assert CampaignDecision.DEFERRED in back.decision_filter
+    assert back.stage_id == sid
 
 
-def test_campaign_ref_defaults_to_selected_only():
+def test_campaign_ref_defaults_to_no_stage_filter():
     src = CampaignRef(campaign_id=uuid.uuid4())
-    assert src.decision_filter == [CampaignDecision.SELECTED]
+    assert src.stage_id is None
+    assert src.to_dict()["stage_id"] is None
+
+
+def test_campaign_ref_ignores_legacy_decision_filter():
+    """Rows persisted before migration 076 still carry ``decision_filter``."""
+    back = SourceRef.from_dict(
+        {
+            "kind": "campaign",
+            "campaign_id": str(uuid.uuid4()),
+            "decision_filter": ["selected"],
+        }
+    )
+    assert isinstance(back, CampaignRef)
+    assert back.stage_id is None
 
 
 def test_campaign_ref_kind_is_campaign_not_derived_from_campaign():

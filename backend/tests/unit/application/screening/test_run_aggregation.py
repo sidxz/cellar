@@ -103,6 +103,69 @@ def test_resolve_intercept_missing_intercept_returns_nd():
     assert q is ValueQualifier.ND
 
 
+def _reported(
+    value: float,
+    qualifier: ValueQualifier = ValueQualifier.EQ,
+    intercept_values: list[dict] | None = None,
+) -> ResolvedRun:
+    """A readout row (no curve): a summary-imported reported endpoint."""
+    return ResolvedRun(
+        run_id=uuid.uuid4(),
+        run_date=date(2026, 1, 1),
+        run_approved=True,
+        curve_id=None,
+        value=value,
+        qualifier=qualifier,
+        unit="uM",
+        z_prime=None,
+        protocol_name="Test",
+        protocol_version=1,
+        readout_id=uuid.uuid4(),
+        intercept_values=intercept_values,
+    )
+
+
+def test_resolve_intercept_readout_row_keeps_its_reported_qualifier():
+    """A CRO's ">50" is a censored endpoint, not a measured 50."""
+    value, q = resolve_intercept(_reported(50.0, ValueQualifier.GT), None)
+    assert value == 50.0
+    assert q is ValueQualifier.GT
+
+
+def test_resolve_intercept_readout_row_fills_only_its_primary_intercept_channel():
+    """A reported IC50 lands in an IC50 channel however it was keyed, and never
+    in the IC90 channel beside it."""
+    run = _reported(
+        32.0,
+        ValueQualifier.GT,
+        intercept_values=[{"spec": {"kind": "ic", "level": 50.0}, "value": 32.0}],
+    )
+
+    assert resolve_intercept(run, InterceptKey(kind="ic", level=50.0)) == (
+        32.0,
+        ValueQualifier.GT,
+    )
+    assert resolve_intercept(run, InterceptKey(kind="ic", level=90.0)) == (
+        None,
+        ValueQualifier.ND,
+    )
+
+
+def test_resolve_intercept_readout_row_without_an_intercept_is_nd_on_a_keyed_channel():
+    value, q = resolve_intercept(_reported(32.0), InterceptKey(kind="ic", level=90.0))
+    assert value is None
+    assert q is ValueQualifier.ND
+
+
+def test_mean_skips_censored_reported_rows():
+    runs = [_reported(10.0), _reported(50.0, ValueQualifier.GT)]
+    out = apply_selection_rule(
+        runs, SelectionRule.MEAN_ACROSS_RUNS, QualifierHandling.INCLUDE_QUALIFIED, None
+    )
+    assert out.value == 10.0
+    assert out.qualifier is ValueQualifier.EQ
+
+
 # ---- apply_selection_rule ----
 
 

@@ -8,7 +8,6 @@ from enum import Enum
 from typing import Protocol, runtime_checkable
 
 from cellar.domain.screening_assay.activity_types import AggregatedReadout
-from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
 from cellar.domain.screening_assay.collection_coverage import (
     CollectionCoverage,
     EffectiveCollectionCoverage,
@@ -16,6 +15,7 @@ from cellar.domain.screening_assay.collection_coverage import (
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.plate_template import PlateTemplate
 from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
+from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_import_template import RunImportTemplate
@@ -65,6 +65,13 @@ class ProtocolRepository(Protocol):
         self, workspace_id: uuid.UUID, parent_protocol_id: uuid.UUID
     ) -> AssayProtocol | None: ...
     async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> AssayProtocol | None: ...
+    async def find_usages(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[str]:
+        """What still points at this protocol, one chemist-readable phrase each
+        (``'campaign "Test-2" (2 readouts)'``, ``'3 runs'``). Empty when nothing
+        does. A protocol with any usage must not be deleted: several of these
+        references carry no foreign key, so the database would not stop it."""
+        ...
+
     async def find_similar(
         self,
         workspace_id: uuid.UUID,
@@ -190,16 +197,6 @@ class TargetRepository(Protocol):
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
     ) -> list[Target]: ...
-    async def count_references(
-        self, workspace_id: uuid.UUID, target_id: uuid.UUID
-    ) -> tuple[int, int]:
-        """``(protocol_count, run_count)`` of link rows referencing the target.
-
-        Used by DeleteTarget to refuse (409) deleting an in-use target instead
-        of letting the RESTRICT FK raise.
-        """
-        ...
-
     async def save(self, entity: Target) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
@@ -311,7 +308,25 @@ class ReadoutDataRepository(Protocol):
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
         specs: list[tuple[uuid.UUID, str | None]],
-    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]: ...
+        *,
+        wellless_only: bool = False,
+    ) -> dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]]:
+        """``wellless_only`` restricts to ``well_id IS NULL`` — the
+        reported-endpoint fallback's guard, so per-well response readings on a
+        dose-response definition can't be averaged into a fake endpoint."""
+        ...
+
+    async def find_aggregated_by_molecules_and_names(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        groups: list[tuple[str, str | None]],
+    ) -> dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]]:
+        """Raw-layer aggregation across EVERY protocol whose readout-def matches
+        a ``(normalized_name, unit)`` group. Returns, per molecule, one
+        ``(protocol_id, AggregatedReadout)`` per matching readout-def."""
+        ...
+
     async def find_by_molecule_and_definition(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, readout_definition_id: uuid.UUID
     ) -> list: ...
@@ -330,6 +345,15 @@ class ReadoutDataRepository(Protocol):
         overwrite an existing endpoint value instead of inserting a duplicate.
         Outlier-flagged rows are intentionally NOT filtered out, so a re-import can
         overwrite an existing endpoint value even if it was previously flagged.
+        """
+        ...
+
+    async def has_wellless_rows(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+        """True if the run holds raw (non-computed) readout rows with no well.
+
+        Computed rows are excluded: the calculation engine writes calculated
+        readouts well-less on welled runs, so they say nothing about the shape
+        the run was imported in.
         """
         ...
 
@@ -389,6 +413,33 @@ class CollectionCoverageReader(Protocol):
         limit: int = 100,
     ) -> list[uuid.UUID]:
         """Page the collection molecules no run of the protocol has screened."""
+        ...
+
+    async def runs_coverage(
+        self,
+        workspace_id: uuid.UUID,
+        collection_ids: list[uuid.UUID],
+        run_ids: list[uuid.UUID],
+    ) -> list[CollectionCoverage]:
+        """Coverage of each named collection across an explicit set of runs.
+
+        Unlike ``run_coverage``/``protocol_coverage`` the runs are given, not
+        derived from ``run_collections`` or a protocol — the caller owns the
+        link (a campaign names both its libraries and its seed runs). With no
+        runs every collection reports ``covered = 0``.
+        """
+        ...
+
+    async def runs_gap(
+        self,
+        workspace_id: uuid.UUID,
+        collection_id: uuid.UUID,
+        run_ids: list[uuid.UUID],
+        *,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[uuid.UUID]:
+        """Page the collection molecules none of the given runs has screened."""
         ...
 
 

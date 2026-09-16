@@ -39,13 +39,16 @@ from cellar.application.research_organization.preview_run_import import (
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSourcesCommand,
 )
+from cellar.application.research_organization.reopen_campaign import (
+    ReopenCampaignCommand,
+)
 from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaignCommand,
 )
 from cellar.application.research_organization.update_campaign_metadata import (
     UpdateCampaignMetadataCommand,
 )
-from cellar.domain.research_organization.enums import CampaignDecision
+from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.interface.dependencies import (
     AddResultsFromCampaignDep,
     AddResultsFromCollectionDep,
@@ -57,6 +60,7 @@ from cellar.interface.dependencies import (
     ListCampaignsDep,
     PreviewRunImportDep,
     RefreshFromSourcesDep,
+    ReopenCampaignDep,
     SupersedeCampaignDep,
     UpdateCampaignMetadataDep,
 )
@@ -68,9 +72,11 @@ from cellar.interface.routes._campaign_dtos import (
     AddFromRunsRequest,
     AddResultsOutcomeResponse,
     CampaignResponse,
+    CampaignSummaryResponse,
     CloseCampaignRequest,
     CreateCampaignRequest,
     PreviewRunImportRequest,
+    ReopenCampaignRequest,
     SupersedeRequest,
     UpdateCampaignRequest,
 )
@@ -90,7 +96,6 @@ async def create_campaign(
         project_id=body.project_id,
         name=body.name,
         description=body.description,
-        publishes_collection=body.publishes_collection,
         created_by=auth.user_id,
         supersedes_campaign_id=body.supersedes_campaign_id,
     )
@@ -98,7 +103,7 @@ async def create_campaign(
     return CampaignResponse.from_domain(campaign)
 
 
-@router.get("", response_model=PaginatedResponse[CampaignResponse])
+@router.get("", response_model=PaginatedResponse[CampaignSummaryResponse])
 async def list_campaigns(
     auth: AuthDep,
     uc: ListCampaignsDep,
@@ -109,8 +114,12 @@ async def list_campaigns(
     tag_logic: Literal["any", "all"] = Query(default="any"),
     targets: list[uuid.UUID] | None = Query(default=None),
     target_logic: Literal["any", "all"] = Query(default="any"),
-) -> PaginatedResponse[CampaignResponse]:
-    """List campaigns in the workspace, optionally filtered by project/tags/targets."""
+    status: Literal["draft", "closed", "superseded"] | None = Query(default=None),
+) -> PaginatedResponse[CampaignSummaryResponse]:
+    """List campaigns in the workspace, filtered by project/tags/targets/status.
+
+    Items are summaries — stage ``counts`` but no result rows.
+    """
     query = ListCampaignsQuery(
         workspace_id=auth.workspace_id,
         project_id=project_id,
@@ -120,14 +129,29 @@ async def list_campaigns(
         tag_logic=tag_logic,
         target_ids=targets,
         target_logic=target_logic,
+        status=CampaignStatus(status) if status is not None else None,
     )
     out = result_to_response(await uc(query, auth=auth))
     return PaginatedResponse(
         items=[
-            CampaignResponse.from_domain(c, targets=out.targets_by_campaign.get(c.id, []))
+            CampaignSummaryResponse.from_domain(c, targets=out.targets_by_campaign.get(c.id, []))
             for c in out.page.items
         ],
         next_cursor=out.page.next_cursor,
+    )
+
+
+@router.get("/{campaign_id}/summary", response_model=CampaignSummaryResponse)
+async def get_campaign_summary(
+    campaign_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetCampaignDep,
+) -> CampaignSummaryResponse:
+    """Get a campaign without its result rows (channels, stages + funnel counts)."""
+    query = GetCampaignQuery(workspace_id=auth.workspace_id, campaign_id=campaign_id)
+    out = result_to_response(await uc(query, auth=auth))
+    return CampaignSummaryResponse.from_domain(
+        out.campaign, out.scientist_by_run_id, targets=out.targets
     )
 
 
@@ -195,7 +219,7 @@ async def add_results_from_campaign(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         source_campaign_id=body.source_campaign_id,
-        decision_filter=[CampaignDecision(d) for d in body.decision_filter],
+        stage_id=body.stage_id,
         description=body.description,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
@@ -243,9 +267,10 @@ async def add_results_from_runs(
         channel_configs=[c.to_domain() for c in body.channel_configs],
         filter_mode=body.filter_mode,
         scope=body.scope,
-        default_decision=CampaignDecision(body.default_decision),
         description=body.description,
         refresh_existing_cells=body.refresh_existing_cells,
+        stage_name=body.stage_name,
+        parent_stage_id=body.parent_stage_id,
     )
     outcome = result_to_response(await uc(cmd, auth=auth))
     return AddResultsOutcomeResponse.from_outcome(outcome)
@@ -273,14 +298,30 @@ async def close_campaign(
     auth: AuthDep,
     uc: CloseCampaignDep,
 ) -> CampaignResponse:
-    """Lock a DRAFT campaign and optionally publish a frozen Collection."""
+    """Lock a DRAFT campaign. No signature, no published Collection."""
     cmd = CloseCampaignCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         user_id=auth.user_id,
-        signature_id=body.signature_id,
-        signature_meaning=body.signature_meaning,
-        publishes_collection=body.publishes_collection,
+        note=body.note,
+    )
+    campaign = result_to_response(await uc(cmd, auth=auth))
+    return CampaignResponse.from_domain(campaign)
+
+
+@router.post("/{campaign_id}/reopen", response_model=CampaignResponse)
+async def reopen_campaign(
+    campaign_id: uuid.UUID,
+    body: ReopenCampaignRequest,
+    auth: AuthDep,
+    uc: ReopenCampaignDep,
+) -> CampaignResponse:
+    """Move a CLOSED campaign back to DRAFT. Superseded campaigns refuse this."""
+    cmd = ReopenCampaignCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        user_id=auth.user_id,
+        reason=body.reason,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)

@@ -1,20 +1,28 @@
-"""Campaign result-row + decision endpoints.
+"""Campaign result-row endpoints.
 
-Covers per-row CRUD (add / remove), per-row decision changes, bulk-decision
-updates, and per-cell manual overrides.
+Covers the paged row read, per-row CRUD (add / remove), bulk row removal,
+per-row notes edits, and per-cell manual overrides.
+
+Every write here answers 204. They used to return the whole
+``CampaignResponse``, so editing one cell on a 16,900-row campaign serialised
+the entire result matrix back to say so. No caller wanted it — cellar's own
+grid invalidates and refetches, and daikon's client ignores the body — and a
+write that reports "here is everything" hides which thing it actually changed.
+Read the new state with ``GET /campaigns/{id}`` or the paged read above.
 """
 
 from __future__ import annotations
 
 import uuid
+from typing import Annotated, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query, Response
 
 from cellar.application.research_organization.add_result_row import (
     AddResultRowCommand,
 )
-from cellar.application.research_organization.bulk_set_result_decisions import (
-    BulkSetResultDecisionsCommand,
+from cellar.application.research_organization.list_campaign_results import (
+    ListCampaignResultsQuery,
 )
 from cellar.application.research_organization.override_result_cell import (
     OverrideResultCellCommand,
@@ -22,96 +30,110 @@ from cellar.application.research_organization.override_result_cell import (
 from cellar.application.research_organization.remove_result_row import (
     RemoveResultRowCommand,
 )
-from cellar.application.research_organization.set_result_decision import (
-    SetResultDecisionCommand,
+from cellar.application.research_organization.set_result_notes import (
+    SetResultNotesCommand,
 )
-from cellar.domain.research_organization.enums import (
-    CampaignDecision,
-    HitCall,
-    ValueQualifier,
-)
+from cellar.domain.research_organization.enums import StageOutcome, ValueQualifier
 from cellar.interface.dependencies import (
     AddResultRowDep,
     AuthDep,
-    BulkSetResultDecisionsDep,
+    ListCampaignResultsDep,
     OverrideResultCellDep,
     RemoveResultRowDep,
-    SetResultDecisionDep,
+    SetResultNotesDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.pagination import (
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    PaginatedResponse,
+    clamp_limit,
+    parse_cursor,
+)
 from cellar.interface.routes._campaign_dtos import (
     AddResultRowRequest,
-    BulkSetResultDecisionsRequest,
-    BulkSetResultDecisionsResponse,
-    CampaignResponse,
+    BulkRemoveResultsRequest,
+    CampaignResultResponse,
     OverrideCellRequest,
-    SetResultDecisionRequest,
+    SetResultNotesRequest,
 )
 
 router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 
 
-# NOTE: route order matters. FastAPI matches in registration order, so the
-# literal `/bulk-decision` MUST be registered before `/{result_id}` —
-# otherwise the path-parameter route swallows "bulk-decision" as a
-# ``result_id`` value and fails UUID validation with a 422.
-@router.patch(
-    "/{campaign_id}/results/bulk-decision",
-    response_model=BulkSetResultDecisionsResponse,
-)
-async def bulk_set_result_decisions(
+@router.get("/{campaign_id}/results", response_model=PaginatedResponse[CampaignResultResponse])
+async def list_campaign_results(
     campaign_id: uuid.UUID,
-    body: BulkSetResultDecisionsRequest,
     auth: AuthDep,
-    uc: BulkSetResultDecisionsDep,
-) -> BulkSetResultDecisionsResponse:
-    """Bulk-set decision for many CampaignResult rows in one transaction.
+    uc: ListCampaignResultsDep,
+    stage_id: uuid.UUID | None = None,
+    outcome: Annotated[
+        list[StageOutcome] | None,
+        Query(description="Verdict at stage_id to keep; may repeat to keep any of them"),
+    ] = None,
+    order_by: Annotated[
+        uuid.UUID | None, Query(description="Channel id to sort by; omit for row order")
+    ] = None,
+    direction: Literal["asc", "desc"] = "asc",
+    cursor: str | None = None,
+    limit: Annotated[int, Query(le=MAX_PAGE_SIZE, ge=1)] = DEFAULT_PAGE_SIZE,
+) -> PaginatedResponse[CampaignResultResponse]:
+    """One page of a campaign's result rows, filtered and ordered server-side.
 
-    The frontend posts the currently-filtered ``result_ids`` so chemists can
-    "Mark all visible as Selected/Deferred/Rejected" without hitting the
-    per-row endpoint 100+ times.
+    ``outcome`` filters on the verdict at ``stage_id`` **after** overrides —
+    the same value the row's ``stage_outcomes`` reports — and needs
+    ``stage_id``. It may repeat (``&outcome=hit&outcome=miss``) to keep a row
+    whose verdict is any of them; all four of ``hit``/``miss``/``untested``/
+    ``pending`` is exactly the stage's ``population`` in the summary read.
+    ``order_by`` names a channel: plain values sort first, then censored ones,
+    with ND and excluded cells last in either direction.
+    ``total_count`` is the filtered count, so a page can say "50 of 214".
+
+    The full ``GET /campaigns/{id}`` read is unchanged; use this when you want
+    a page rather than the matrix.
     """
-    cmd = BulkSetResultDecisionsCommand(
+    query = ListCampaignResultsQuery(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
-        result_ids=body.result_ids,
-        decision=CampaignDecision(body.decision),
-        reason=body.reason,
+        stage_id=stage_id,
+        outcome=tuple(outcome or ()),
+        order_by_channel_id=order_by,
+        descending=direction == "desc",
+        cursor_id=parse_cursor(cursor),
+        limit=clamp_limit(limit),
     )
-    outcome = result_to_response(await uc(cmd, auth=auth))
-    return BulkSetResultDecisionsResponse(
-        campaign=CampaignResponse.from_domain(outcome.campaign),
-        updated_count=outcome.updated_count,
-        missing_ids=outcome.missing_ids,
+    out = result_to_response(await uc(query, auth=auth))
+    return PaginatedResponse(
+        items=[
+            CampaignResultResponse.from_domain(r, out.outcomes.get(r.id)) for r in out.page.items
+        ],
+        next_cursor=out.page.next_cursor,
+        total_count=out.page.total_count,
     )
 
 
-@router.patch("/{campaign_id}/results/{result_id}", response_model=CampaignResponse)
-async def set_result_decision(
+@router.patch("/{campaign_id}/results/{result_id}", status_code=204)
+async def set_result_notes(
     campaign_id: uuid.UUID,
     result_id: uuid.UUID,
-    body: SetResultDecisionRequest,
+    body: SetResultNotesRequest,
     auth: AuthDep,
-    uc: SetResultDecisionDep,
-) -> CampaignResponse:
-    """Set a screener's per-compound decision (SELECTED / DEFERRED / REJECTED)."""
-    cmd_kwargs: dict = {
-        "workspace_id": auth.workspace_id,
-        "campaign_id": campaign_id,
-        "result_id": result_id,
-        "decision": CampaignDecision(body.decision),
-        "reason": body.reason,
-    }
-    if "notes" in body.model_fields_set:
-        cmd_kwargs["notes"] = body.notes
-    cmd = SetResultDecisionCommand(**cmd_kwargs)
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    uc: SetResultNotesDep,
+) -> Response:
+    """Set (or, with ``null``, clear) the free-text notes on one result row."""
+    cmd = SetResultNotesCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        result_id=result_id,
+        notes=body.notes,
+    )
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
 
 
 @router.patch(
     "/{campaign_id}/results/{result_id}/cells/{channel_id}",
-    response_model=CampaignResponse,
+    status_code=204,
 )
 async def override_result_cell(
     campaign_id: uuid.UUID,
@@ -120,7 +142,7 @@ async def override_result_cell(
     body: OverrideCellRequest,
     auth: AuthDep,
     uc: OverrideResultCellDep,
-) -> CampaignResponse:
+) -> Response:
     """Manually override a single (result, channel) measurement cell."""
     cmd = OverrideResultCellCommand(
         workspace_id=auth.workspace_id,
@@ -130,42 +152,62 @@ async def override_result_cell(
         value=body.value,
         value_qualifier=ValueQualifier(body.value_qualifier),
         unit=body.unit,
-        hit_call=HitCall(body.hit_call) if body.hit_call is not None else None,
         reason=body.reason,
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
 
 
-@router.post("/{campaign_id}/results", response_model=CampaignResponse)
+@router.post("/{campaign_id}/results", status_code=204)
 async def add_result_row(
     campaign_id: uuid.UUID,
     body: AddResultRowRequest,
     auth: AuthDep,
     uc: AddResultRowDep,
-) -> CampaignResponse:
+) -> Response:
     """Add a new compound result row (manual attribution) to a DRAFT campaign."""
     cmd = AddResultRowCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         molecule_id=body.molecule_id,
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
 
 
-@router.delete("/{campaign_id}/results/{result_id}", response_model=CampaignResponse)
+@router.delete("/{campaign_id}/results/{result_id}", status_code=204)
 async def remove_result_row(
     campaign_id: uuid.UUID,
     result_id: uuid.UUID,
     auth: AuthDep,
     uc: RemoveResultRowDep,
-) -> CampaignResponse:
+) -> Response:
     """Remove a compound result row and its measurements from a DRAFT campaign."""
     cmd = RemoveResultRowCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
-        result_id=result_id,
+        result_ids=[result_id],
     )
-    campaign = result_to_response(await uc(cmd, auth=auth))
-    return CampaignResponse.from_domain(campaign)
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
+
+
+@router.post("/{campaign_id}/results/bulk-remove", status_code=204)
+async def bulk_remove_result_rows(
+    campaign_id: uuid.UUID,
+    body: BulkRemoveResultsRequest,
+    auth: AuthDep,
+    uc: RemoveResultRowDep,
+) -> Response:
+    """Remove N compound result rows from a DRAFT campaign in one save.
+
+    POST rather than DELETE because some proxies drop DELETE bodies. 404 on
+    the first unknown result id, with nothing removed.
+    """
+    cmd = RemoveResultRowCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        result_ids=body.result_ids,
+    )
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)

@@ -5,3 +5,7 @@
  */
 
 export const BATCHES_KEY = ["batches"];
+export const PLATES_KEY = ["plates"] as const;
+export const PLATE_GROUPS_KEY = ["plate-groups"] as const;
+export const LOANS_KEY = ["plate-loans"] as const;
+export const COMMENTS_KEY = ["comments"] as const;

@@ -67,19 +67,19 @@ class UpdateReadoutDefinitionCommand(Command):
     protocol_id: uuid.UUID
     definition_id: uuid.UUID
     name: str | None = None
-    description: str | None | object = _UNSET
+    description: str | object | None = _UNSET
     data_type: str | None = None
-    unit: str | None | object = _UNSET
+    unit: str | object | None = _UNSET
     aggregation: str | None = None
-    precision: int | None | object = _UNSET
+    precision: int | object | None = _UNSET
     # List of formula names. ``_UNSET`` = leave unchanged; empty list =
     # clear all normalizations.
-    normalizations: list[str] | None | object = _UNSET
+    normalizations: list[str] | object | None = _UNSET
     is_calculated: bool | None = None
-    calculation_formula: str | None | object = _UNSET
+    calculation_formula: str | object | None = _UNSET
     display_order: int | None = None
-    pick_list_values: list[dict | str] | None | object = _UNSET
-    dose_response_config: dict | None | object = _UNSET
+    pick_list_values: list[dict | str] | object | None = _UNSET
+    dose_response_config: dict | object | None = _UNSET
 
 
 # ---------------------------------------------------------------------------

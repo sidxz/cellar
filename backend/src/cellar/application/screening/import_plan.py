@@ -8,6 +8,10 @@ exactly what to write and what to skip — pure logic, no I/O.
 ``WellConflict`` and ``ReadoutConflict`` are public DTOs surfaced through
 the preview/import results; the underscore-prefixed types are
 implementation details consumed by ``ImportRunFile``.
+
+``_autolink_new_plates`` is the one I/O step here: after the scan, each new
+plate's file name is resolved against inventory (S15 spec §5.3) so the
+import can point it at the physical plate. Misses are silent.
 """
 
 from __future__ import annotations
@@ -15,11 +19,15 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
+from cellar.application.auth import AuthContext
+from cellar.application.inventory.plate_reference import resolve_plate_reference
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.screening.compound_ref_resolver import Resolutions
 from cellar.application.screening.long_format_normalizer import (
     NormalizedTable,
     WellPosition,
 )
+from cellar.domain.inventory.repository import RegisteredPlateRepository
 from cellar.domain.screening_assay.enums import WellType
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.run import Plate, Run, Well
@@ -295,6 +303,32 @@ def _scan_conflicts(
             plan.create_readout_count += 1
 
     return plan
+
+
+async def _autolink_new_plates(
+    plan: _ImportPlan,
+    plate_repo: RegisteredPlateRepository,
+    visibility: PlateVisibilityService,
+    workspace_id: uuid.UUID,
+    auth: AuthContext | None,
+) -> None:
+    """Point each new plate at the inventory plate its file name resolves to.
+
+    Barcode-or-label resolution (``resolve_plate_reference``), only to plates
+    the importing actor may view (borrowed carve-out included; ``auth=None``
+    worker calls see everything). A miss leaves ``registered_plate_id`` null.
+    """
+    if not plan.new_plates:
+        return
+    excluded = await visibility.excluded_org_ids(workspace_id, auth)
+    borrowed = await visibility.borrowed_plate_ids(workspace_id, auth)
+    for plate in plan.new_plates:
+        name = (plate.plate_map or {}).get("name")
+        if not isinstance(name, str):
+            continue
+        found = await resolve_plate_reference(plate_repo, workspace_id, name)
+        if found is not None and visibility.can_view(found, auth, excluded, borrowed):
+            plate.registered_plate_id = found.id
 
 
 def _well_metadata_mismatch(

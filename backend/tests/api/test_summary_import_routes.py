@@ -162,8 +162,14 @@ class TestSummaryImportRoutes:
         out = import_resp.json()
         assert out["values_inserted"] == 1
         assert out["values_updated"] == 0
-        assert out["rows_processed"] == 1
+        assert out["total_rows"] == 1
+        assert out["matched_compound_count"] == 1
+        assert out["unmatched_compound_refs"] == []
+        assert out["unmatched_compounds"] == []
         assert out["errors"] == []
+        # The raw file is attached to the run (audit trail), mirroring the plate importer.
+        assert out["attachment_warning"] is None
+        assert uuid.UUID(out["attachment_id"])
 
     async def test_import_missing_run_returns_404(
         self,
@@ -230,6 +236,32 @@ class TestSummaryImportRoutes:
         assert resp.status_code == 200, resp.text
         out = resp.json()
         assert unknown in out["unmatched_compound_refs"]
+        assert out["unmatched_compounds"] == [{"ref": unknown, "row": 1, "structure": None}]
+
+    async def test_resolve_accepts_structure_mapping(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        fake_auth: FakeAuth,
+    ) -> None:
+        """`structure` is accepted on the mapping and the SMILES is echoed per unmatched row."""
+        ws = fake_auth.workspace_id
+        run_id, ic50_id, _reg = await _seed(session_factory, ws)
+        unknown = f"NOPE-{uuid.uuid4().hex[:8]}"
+        csv = f"Compound,SMILES,IC50\n{unknown},CCO,5.2\n".encode()
+        mapping = {
+            "compound_ref": "Compound",
+            "structure": "SMILES",
+            "readout_columns": {"IC50": str(ic50_id)},
+        }
+        resp = await client.post(
+            f"/api/v1/runs/{run_id}/resolve-summary-file",
+            files={"file": ("summary.csv", csv, "text/csv")},
+            data={"mapping": json.dumps(mapping)},
+        )
+        assert resp.status_code == 200, resp.text
+        out = resp.json()
+        assert out["unmatched_compounds"] == [{"ref": unknown, "row": 1, "structure": "CCO"}]
 
     async def test_resolve_malformed_mapping_returns_422(
         self,

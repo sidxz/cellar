@@ -10,11 +10,10 @@ from returns.result import Failure, Result, Success
 
 from cellar.application.auth import (
     AuthContext,
-    require_admin,
     require_editor,
     require_same_workspace,
 )
-from cellar.application.screening.get_protocol import ProtocolWithTargets
+from cellar.application.screening.get_protocol import ProtocolWithTargets, may_delete_protocol
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.pagination import PageResult
@@ -26,7 +25,12 @@ from cellar.domain.screening_assay.events import ProtocolTargetAdded, ProtocolTa
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.protocol_versioning_service import ProtocolVersioningService
 from cellar.domain.screening_assay.repository import ProtocolRepository, TargetLinkResult
-from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
+from cellar.domain.shared.errors import (
+    AuthorizationError,
+    ConflictError,
+    DomainError,
+    NotFoundError,
+)
 from cellar.domain.shared.hit_criterion import HitCriterion
 
 
@@ -165,9 +169,9 @@ class UpdateProtocolCommand(Command):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
     name: str | None = None
-    description: str | None | object = UNSET
-    category: str | None | object = UNSET
-    recommended_hit_criteria: list[dict] | None | object = UNSET
+    description: str | object | None = UNSET
+    category: str | object | None = UNSET
+    recommended_hit_criteria: list[dict] | object | None = UNSET
     pos_control_signal: str | None = None
 
 
@@ -270,7 +274,8 @@ class RemoveProtocolTargetCommand(Command):
 
 
 class DeleteProtocol:
-    """Delete a DRAFT protocol. Only drafts can be deleted."""
+    """Delete a DRAFT protocol: its creator (an editor) or an admin, and only
+    while nothing still points at it."""
 
     def __init__(
         self,
@@ -285,7 +290,7 @@ class DeleteProtocol:
     async def __call__(
         self, input: DeleteProtocolCommand, auth: AuthContext | None = None
     ) -> Result[None, DomainError]:
-        require_admin(auth)
+        require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
@@ -299,6 +304,19 @@ class DeleteProtocol:
                     ConflictError(
                         f"Cannot delete protocol in '{protocol.status}' status — "
                         "only DRAFT protocols can be deleted"
+                    )
+                )
+            if not may_delete_protocol(protocol, auth):
+                raise AuthorizationError("Only the draft's creator or an admin can delete it")
+
+            # ponytail: check-then-delete in one transaction, no row lock. A
+            # channel mirrored onto the draft in the same instant can slip
+            # through; lock the protocol row if that race ever shows up.
+            usages = await self._repo.find_usages(input.workspace_id, protocol.id)
+            if usages:
+                return Failure(
+                    ConflictError(
+                        f"Protocol '{protocol.name}' is still used by: {'; '.join(usages)}"
                     )
                 )
 

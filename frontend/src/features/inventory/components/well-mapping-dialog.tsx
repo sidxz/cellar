@@ -344,7 +344,7 @@ export function WellMappingDialog({
               setSelectedWell(pos);
               const well = wellMap[pos];
               if (well) {
-                setBatchId(well.batch_id);
+                setBatchId(well.batch_id ?? "");
                 setConcValue(well.concentration_value?.toString() ?? "");
                 setConcUnit(well.concentration_unit ?? "mM");
                 setRole(well.well_type ?? "sample");

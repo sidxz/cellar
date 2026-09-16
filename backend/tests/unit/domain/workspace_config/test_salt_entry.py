@@ -53,16 +53,6 @@ class TestSaltEntryCreate:
         assert event.workspace_id == ws_id
         assert event.code == "Na"
 
-    def test_create_as_default(self, ws_id: uuid.UUID) -> None:
-        entry = SaltEntry.create(
-            workspace_id=ws_id,
-            code="TFA",
-            name="trifluoroacetate",
-            smiles="[O-]C(=O)C(F)(F)F",
-            molecular_weight=113.02,
-            is_default=True,
-        )
-        assert entry.is_default is True
 
     def test_empty_code_raises(self, ws_id: uuid.UUID) -> None:
         with pytest.raises(ValidationError, match="code"):

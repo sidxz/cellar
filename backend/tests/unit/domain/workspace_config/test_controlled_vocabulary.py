@@ -52,11 +52,6 @@ class TestControlledVocabularyCreate:
         )
         assert vocab.name == "Route"
 
-    def test_default_empty_terms(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
-        vocab = ControlledVocabulary.create(
-            workspace_id=ws_id, name="New List", created_by=user_id
-        )
-        assert vocab.terms == []
 
     def test_duplicate_terms_raises(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
         with pytest.raises(ValidationError, match="unique"):

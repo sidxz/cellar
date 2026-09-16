@@ -1,10 +1,11 @@
 "use client";
 
 import { TargetChips } from "@/features/screening-assay/components/target-chips";
+import { TagChips } from "@/features/tagging/components/tag-chips";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Download, FileText, Lock, Pencil, RefreshCw } from "lucide-react";
+import { AlertTriangle, Download, FileText, Lock, Pencil, RefreshCw, Unlock } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -17,21 +18,21 @@ import { CampaignStatusChip } from "../campaign-status-chip";
 
 interface HeaderStripProps {
   campaign: CampaignResponse;
-  /** Show draft-mode action buttons (Refresh / Preview / Close & Sign). */
+  /** Show draft-mode action buttons (Refresh / Preview / Close). */
   isDraft: boolean;
+  /** Editors may tag campaigns in any status; the chips row sits under the description. */
+  canEditTags?: boolean;
   refreshing?: boolean;
   onRefresh: () => void;
   onPreview: () => void;
-  onCloseAndSign: () => void;
+  onClose: () => void;
 
   // ── Closed-mode metadata + actions (optional; surfaced when !isDraft) ────────
   /** ISO timestamp from `campaign.closed_at` (when status is closed/superseded). */
   closedAt?: string | null;
-  /** UUID from `campaign.closed_by`. Name resolution via Sentinel is a known
+  /** UUID from `campaign.closed_by`. Name resolution via Duar is a known
    *  follow-up (A2); show the first 8 chars as a stable placeholder. */
   closedBy?: string | null;
-  /** UUID from `campaign.signature_id`. Per the no-UUID rule we show a slice. */
-  signatureId?: string | null;
   /** UUID from `campaign.supersedes_campaign_id`. Renders a link if present. */
   supersedesId?: string | null;
   /** UUID from `campaign.superseded_by_campaign_id`. Renders the amber banner. */
@@ -45,18 +46,20 @@ interface HeaderStripProps {
   downloadLabel?: string;
   /** Supersede action — only relevant for closed campaigns that aren't yet superseded. */
   onSupersede?: () => void;
+  /** Reopen action — only rendered when `campaign.status === "closed"` (not superseded). */
+  onReopen?: () => void;
 }
 
 export function HeaderStrip({
   campaign,
   isDraft,
+  canEditTags = false,
   refreshing,
   onRefresh,
   onPreview,
-  onCloseAndSign,
+  onClose,
   closedAt,
   closedBy,
-  signatureId,
   supersedesId,
   supersededBy,
   projectId,
@@ -64,15 +67,14 @@ export function HeaderStrip({
   downloadDisabled,
   downloadLabel,
   onSupersede,
+  onReopen,
 }: HeaderStripProps) {
   const channelCount = campaign.channels?.length ?? 0;
   const compoundCount = campaign.results?.length ?? 0;
 
-  // Closed-metadata muted line. Resolves closed_by (Sentinel UUID) to the
-  // member's display name via <MemberName />; the e-signature UUID is hidden
-  // from the visible header and surfaced only via a hover tooltip so it
-  // stays auditable without polluting the chemist's reading line.
-  const hasClosedMeta = !!(closedAt || closedBy || signatureId);
+  // Closed-metadata muted line. Resolves closed_by (Duar UUID) to the
+  // member's display name via <MemberName />.
+  const hasClosedMeta = !!(closedAt || closedBy || campaign.close_note);
 
   return (
     <header className="flex flex-col gap-1 border-b px-6 py-4">
@@ -129,9 +131,9 @@ export function HeaderStrip({
                 <FileText className="h-4 w-4" />
                 Preview as published
               </Button>
-              <Button size="sm" onClick={onCloseAndSign}>
+              <Button size="sm" onClick={onClose}>
                 <Lock className="h-4 w-4" />
-                Close &amp; Sign
+                Close
               </Button>
             </>
           ) : (
@@ -147,6 +149,12 @@ export function HeaderStrip({
                   {downloadLabel ?? "Download JSON"}
                 </Button>
               )}
+              {onReopen && campaign.status === "closed" && (
+                <Button variant="outline" size="sm" onClick={onReopen}>
+                  <Unlock className="h-4 w-4" />
+                  Reopen
+                </Button>
+              )}
               {onSupersede && (
                 <Button variant="outline" size="sm" onClick={onSupersede}>
                   <Lock className="h-4 w-4" />
@@ -158,6 +166,7 @@ export function HeaderStrip({
         </div>
       </div>
       <DescriptionRow campaign={campaign} editable={isDraft} />
+      <TagChips entity="campaigns" entityId={campaign.id} canEdit={canEditTags} />
       {!isDraft && hasClosedMeta && (
         <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2">
           {closedAt && (
@@ -174,14 +183,7 @@ export function HeaderStrip({
               by <MemberName id={closedBy} />
             </span>
           )}
-          {signatureId && (
-            <span
-              className="cursor-help underline decoration-dotted decoration-muted-foreground/40 underline-offset-2"
-              title={`E-signature ID (audit only): ${signatureId}`}
-            >
-              Signed
-            </span>
-          )}
+          {campaign.close_note && <span>· Note: {campaign.close_note}</span>}
         </p>
       )}
     </header>

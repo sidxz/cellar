@@ -4,8 +4,8 @@
  * OverrideModal — shared across ResultsGrid (legacy V1) and ResultsGridV2.
  *
  * Allows the user to manually override a single campaign measurement cell:
- * qualifier / value / unit / hit-call / reason (B8: reason required when
- * the value differs from the auto-resolved one).
+ * qualifier / value / unit / reason (B8: reason required when the value
+ * differs from the auto-resolved one).
  */
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -33,26 +33,6 @@ import type {
   CampaignResultResponse,
 } from "../types";
 
-// ── HitCallChip (modal-only helper) ──────────────────────────────────────────
-
-const HIT_COLORS: Record<string, string> = {
-  hit: "bg-orange-100 text-orange-800",
-  confirmed_hit: "bg-orange-200 text-orange-900",
-  inactive: "bg-blue-50 text-blue-700",
-  inconclusive: "bg-gray-100 text-gray-600",
-};
-
-function HitCallChip({ hitCall }: { hitCall: string }) {
-  const cls = HIT_COLORS[hitCall] ?? "bg-gray-100 text-gray-600";
-  return (
-    <span
-      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}
-    >
-      {hitCall.replace("_", " ")}
-    </span>
-  );
-}
-
 // ── OverrideModal ─────────────────────────────────────────────────────────────
 
 export interface OverrideModalProps {
@@ -76,11 +56,6 @@ export function OverrideModal({
   const [value, setValue] = useState(String(measurement?.value ?? ""));
   const [qualifier, setQualifier] = useState(measurement?.value_qualifier ?? "=");
   const [unit, setUnit] = useState(measurement?.unit ?? "");
-  // Radix Select forbids empty-string item values, so use "none" as the
-  // internal sentinel and translate to undefined on submit.
-  const [hitCall, setHitCall] = useState<string>(
-    (measurement?.hit_call as string | undefined) ?? "none",
-  );
   const [reason, setReason] = useState(measurement?.override_reason ?? "");
 
   const isPlaceholderQualifier = qualifier === "nd" || qualifier === "excluded";
@@ -92,7 +67,6 @@ export function OverrideModal({
     if (v === "nd" || v === "excluded") {
       setValue("");
       setUnit("");
-      setHitCall("none");
     }
   };
 
@@ -103,8 +77,7 @@ export function OverrideModal({
     return (
       numValue !== (measurement.value ?? null) ||
       qualifier !== measurement.value_qualifier ||
-      (!isPlaceholderQualifier && unit !== measurement.unit) ||
-      hitCall !== ((measurement.hit_call as string | undefined) ?? "none")
+      (!isPlaceholderQualifier && unit !== measurement.unit)
     );
   })();
   const reasonRequired = valueDiffersFromAuto;
@@ -131,7 +104,6 @@ export function OverrideModal({
         value: isPlaceholderQualifier ? null : value !== "" ? Number(value) : undefined,
         value_qualifier: qualifier,
         unit: isPlaceholderQualifier ? "" : unit,
-        hit_call: isPlaceholderQualifier || hitCall === "none" ? undefined : hitCall,
         reason: reason.trim() || undefined,
       },
     });
@@ -150,11 +122,6 @@ export function OverrideModal({
             <p>
               {measurement.value_qualifier !== "=" ? measurement.value_qualifier : ""}
               {formatMeasurementValue(measurement.value)} {measurement.unit}
-              {measurement.hit_call && (
-                <span className="ml-2">
-                  <HitCallChip hitCall={measurement.hit_call as string} />
-                </span>
-              )}
               {measurement.is_manual_override && (
                 <Badge variant="secondary" className="ml-2 text-xs">
                   overridden
@@ -214,23 +181,6 @@ export function OverrideModal({
                 disabled={isPlaceholderQualifier}
               />
             </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label>Hit call (optional)</Label>
-            <Select value={hitCall} onValueChange={setHitCall} disabled={isPlaceholderQualifier}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {["hit", "miss", "inconclusive"].map((h) => (
-                  <SelectItem key={h} value={h}>
-                    {h}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
 
           {/* B8: reason — required when value differs from auto-resolved */}

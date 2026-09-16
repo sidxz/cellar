@@ -55,21 +55,18 @@ function StructureRendererInner({
           return;
         }
 
-        let svgStr: string;
+        // No background rect: RDKit's default is an opaque white one, which
+        // `dark:invert` turns pure black — the app background must show through.
+        const drawOpts: Record<string, unknown> = { width, height, clearBackground: false };
 
         if (highlightSmarts) {
           const qmol = rdkit.get_qmol(highlightSmarts);
           if (qmol?.is_valid()) {
-            const matchJson = mol.get_substruct_match(qmol);
-            svgStr = mol.get_svg_with_highlights(matchJson);
-            qmol.delete();
-          } else {
-            svgStr = mol.get_svg(width, height);
-            qmol?.delete();
+            Object.assign(drawOpts, JSON.parse(mol.get_substruct_match(qmol)));
           }
-        } else {
-          svgStr = mol.get_svg(width, height);
+          qmol?.delete();
         }
+        const svgStr: string = mol.get_svg_with_highlights(JSON.stringify(drawOpts));
 
         mol.delete();
 

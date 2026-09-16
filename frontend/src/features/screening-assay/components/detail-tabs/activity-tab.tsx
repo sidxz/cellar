@@ -13,6 +13,7 @@ import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colo
 import { groupBy } from "@/shared/lib/group-by";
 import { Plot } from "@/shared/lib/plotly";
 import { shortId } from "@/shared/lib/utils";
+import { DoseResponseChartView } from "@structflo/components/dose-response";
 import type { ColDef } from "ag-grid-community";
 import { Eye, Filter, FlaskConical, FolderPlus, Settings2, Star } from "lucide-react";
 import { useMemo } from "react";
@@ -21,7 +22,6 @@ import type { CompoundActivity, CurveClass, Protocol } from "../../types";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
 import { CurveClassBadge } from "../curve-class-badge";
 import { CurveNavigator } from "../curve-navigator";
-import { DoseResponseChart } from "../dose-response-chart";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
 import { buildColumnDefs } from "./activity-tab-columns";
 import { criterionLabel, useActivityTab } from "./use-activity-tab";
@@ -390,81 +390,61 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                   {curvesLoading ? (
                     <Skeleton className="h-[300px] w-full" />
                   ) : compoundCurves && compoundCurves.length > 0 ? (
-                    (() => {
-                      const drDef = protocol.readout_definitions.find(
-                        (rd) => rd.dose_response_config != null,
-                      );
-                      const yName = drDef?.dose_response_config?.y_readout_name;
-                      const yDef = yName
-                        ? protocol.readout_definitions.find((r) => r.name === yName)
-                        : undefined;
-                      return (
-                        <>
-                          <DoseResponseChart
-                            curves={compoundCurves}
-                            isInteractive={false}
-                            protocolConfig={drDef?.dose_response_config ?? null}
-                            yReadoutNormalization={
-                              drDef?.dose_response_config?.y_normalization ??
-                              yDef?.normalizations?.find((n) => n !== "none") ??
-                              null
-                            }
-                          />
-                          <div className="rounded-lg border">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b bg-muted/50">
-                                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                    Run
-                                  </th>
-                                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                    Batch
-                                  </th>
-                                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                    Fitted Value
-                                  </th>
-                                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                    R²
-                                  </th>
-                                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                    Class
-                                  </th>
-                                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">
-                                    Hill Slope
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {compoundCurves.map((curve) => (
-                                  <tr key={curve.id} className="border-b last:border-0">
-                                    <td className="px-3 py-2 font-mono text-xs">
-                                      {shortId(curve.run_id)}
-                                    </td>
-                                    <td className="px-3 py-2 text-xs text-muted-foreground">
-                                      {curve.batch_number ?? shortId(curve.batch_id)}
-                                    </td>
-                                    <td className="px-3 py-2 font-mono">
-                                      {curve.fitted_value.toPrecision(4)} {curve.fitted_unit}
-                                    </td>
-                                    <td className="px-3 py-2 font-mono">
-                                      {curve.r_squared.toFixed(3)}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      {curve.curve_class
-                                        ? curveClassBadge(curve.curve_class as CurveClass)
-                                        : "--"}
-                                    </td>
-                                    <td className="px-3 py-2 font-mono">
-                                      {curve.hill_slope.toFixed(2)}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </>
-                      );
-                    })()
+                    <>
+                      <DoseResponseChartView curves={compoundCurves} plot={Plot} />
+                      <div className="rounded-lg border">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                                Run
+                              </th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                                Batch
+                              </th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                                Fitted Value
+                              </th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                                R²
+                              </th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                                Class
+                              </th>
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">
+                                Hill Slope
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {compoundCurves.map((curve) => (
+                              <tr key={curve.id} className="border-b last:border-0">
+                                <td className="px-3 py-2 font-mono text-xs">
+                                  {shortId(curve.run_id)}
+                                </td>
+                                <td className="px-3 py-2 text-xs text-muted-foreground">
+                                  {curve.batch_number ?? shortId(curve.batch_id)}
+                                </td>
+                                <td className="px-3 py-2 font-mono">
+                                  {curve.fitted_value.toPrecision(4)} {curve.fitted_unit}
+                                </td>
+                                <td className="px-3 py-2 font-mono">
+                                  {curve.r_squared.toFixed(3)}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {curve.curve_class
+                                    ? curveClassBadge(curve.curve_class as CurveClass)
+                                    : "--"}
+                                </td>
+                                <td className="px-3 py-2 font-mono">
+                                  {curve.hill_slope.toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       No dose-response curves available for this compound.

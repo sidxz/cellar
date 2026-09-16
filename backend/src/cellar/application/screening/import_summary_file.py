@@ -26,17 +26,24 @@ Mirrors ``PreviewSummaryFile`` conventions: Railway ``Result``,
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import structlog
 from returns.result import Failure, Result, Success
 
+from cellar.application.attachment.upload_attachment import (
+    UploadAttachment,
+    UploadAttachmentCommand,
+)
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.screening.bulk_create_readout_data import (
     BulkCreateReadoutData,
     BulkCreateReadoutDataCommand,
     ReadoutDataItem,
 )
+from cellar.application.screening.import_run_file_preview_store import _guess_content_type
+from cellar.application.screening.readout_entry_guard import calculated_readout_error
+from cellar.application.screening.run_shape import refuse_if_welled
 from cellar.application.screening.summary_import_models import (
     SummaryColumnMapping,
     SummaryImportResult,
@@ -44,11 +51,14 @@ from cellar.application.screening.summary_import_models import (
 from cellar.application.screening.summary_import_resolver import (
     build_batch_index,
     build_compound_index,
+    build_structure_index,
     plan_summary_rows,
 )
 from cellar.application.shared.command import Command
+from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.repository import (
@@ -72,6 +82,7 @@ class ImportSummaryFileCommand(Command):
     filename: str
     content: bytes
     mapping: SummaryColumnMapping
+    content_type: str | None = None
 
 
 class ImportSummaryFile:
@@ -87,6 +98,8 @@ class ImportSummaryFile:
         batch_repo: BatchRepository,
         parser: TabularParser,
         bulk_uc: BulkCreateReadoutData,
+        upload_attachment: UploadAttachment,
+        molecule_resolver: MoleculeResolver,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
@@ -96,6 +109,8 @@ class ImportSummaryFile:
         self._batch_repo = batch_repo
         self._parser = parser
         self._bulk = bulk_uc
+        self._upload_attachment = upload_attachment
+        self._molecule_resolver = molecule_resolver
 
     async def __call__(
         self,
@@ -109,7 +124,48 @@ class ImportSummaryFile:
         # ``self._bulk`` opens its OWN write UoW (separate instance) that commits
         # + closes independently, so the read session is never torn down under us.
         async with self._uow:
-            return await self._execute(command, auth)
+            result = await self._execute(command, auth)
+
+        # Attach the raw upload in its own UoW after the import is committed —
+        # best-effort, exactly like the plate importer: losing the readouts to
+        # save the file would be the worse trade.
+        if isinstance(result, Success):
+            return Success(await self._attach_raw_file(command, result.unwrap(), auth))
+        return result
+
+    async def _attach_raw_file(
+        self,
+        cmd: ImportSummaryFileCommand,
+        result: SummaryImportResult,
+        auth: AuthContext | None,
+    ) -> SummaryImportResult:
+        """Persist the upload as a Run attachment; warn (never fail) on error."""
+        if auth is None:
+            return replace(result, attachment_warning="no auth context — skipped")
+        upload_cmd = UploadAttachmentCommand(
+            workspace_id=cmd.workspace_id,
+            attachable_type=AttachableType.RUN,
+            attachable_id=cmd.run_id,
+            uploaded_by=auth.user_id,
+            file_name=cmd.filename,
+            mime_type=cmd.content_type or _guess_content_type(cmd.filename),
+            file_data=cmd.content,
+        )
+        try:
+            attached = await self._upload_attachment(upload_cmd, auth=auth)
+        except Exception as exc:
+            _log.warning(
+                "summary_import.attachment_failed",
+                run_id=str(cmd.run_id),
+                workspace_id=str(cmd.workspace_id),
+                file_name=cmd.filename,
+                error=str(exc),
+                exc_info=True,
+            )
+            return replace(result, attachment_warning=f"attachment failed: {exc}")
+        if isinstance(attached, Failure):
+            return replace(result, attachment_warning=str(attached.failure()))
+        return replace(result, attachment_id=attached.unwrap().id)
 
     async def _execute(
         self,
@@ -124,11 +180,18 @@ class ImportSummaryFile:
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))
 
+        if (welled := refuse_if_welled(run)) is not None:
+            return Failure(welled)
+
         protocol = await self._protocol_repo.find_by_id_in_workspace(ws, run.protocol_id)
         if protocol is None:
             return Failure(NotFoundError("Protocol", str(run.protocol_id)))
 
         defs_by_id = {d.id: d for d in protocol.readout_definitions}
+
+        calculated = calculated_readout_error(mapping.readout_columns.items(), defs_by_id)
+        if calculated is not None:
+            return Failure(calculated)
 
         try:
             table = self._parser.parse(command.content, command.filename)
@@ -157,6 +220,16 @@ class ImportSummaryFile:
 
         compound_index = await build_compound_index(compound_refs, ws, self._molecule_repo)
         batch_index = await build_batch_index(batch_refs, ws, self._batch_repo)
+        # STRUCTURE fallback: distinct SMILES for refs that missed the identifier
+        # index (empty when no structure column is mapped). Resolution only —
+        # nothing is registered or stored; the column never reaches the write.
+        structure_index = await build_structure_index(
+            rows,
+            mapping=mapping,
+            compound_index=compound_index,
+            workspace_id=ws,
+            molecule_resolver=self._molecule_resolver,
+        )
 
         # Pure planner: resolves each row, routes values, dedups on the resolved
         # key (last-wins), and collects cell-level + unmatched-ref errors.
@@ -166,6 +239,7 @@ class ImportSummaryFile:
             defs_by_id=defs_by_id,
             compound_index=compound_index,
             batch_index=batch_index,
+            structure_index=structure_index,
         )
 
         # Build bulk items from the RESOLVED ids — no registration_number /
@@ -221,7 +295,7 @@ class ImportSummaryFile:
             "summary_file.imported",
             workspace_id=str(ws),
             run_id=str(run_id),
-            rows_processed=table.row_count,
+            total_rows=table.row_count,
             values_inserted=values_inserted,
             values_updated=values_updated,
             rows_skipped=plan.rows_skipped,
@@ -230,7 +304,11 @@ class ImportSummaryFile:
 
         return Success(
             SummaryImportResult(
-                rows_processed=table.row_count,
+                total_rows=table.row_count,
+                matched_compound_count=plan.matched_compound_count,
+                unmatched_compound_refs=sorted(plan.unmatched_compound_refs),
+                unmatched_batch_refs=sorted(plan.unmatched_batch_refs),
+                unmatched_compounds=list(plan.unmatched_compounds),
                 values_inserted=values_inserted,
                 values_updated=values_updated,
                 rows_skipped=plan.rows_skipped,

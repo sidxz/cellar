@@ -8,17 +8,6 @@ from cellar.domain.research_organization.bulk_add_types import (
 )
 
 
-def test_bulk_add_row_carries_optional_identifiers():
-    row = BulkAddRow(
-        row_index=3,
-        registration_number="CC-000001",
-        smiles="c1ccccc1O",
-        name="phenol",
-    )
-    assert row.row_index == 3
-    assert row.external_id is None
-    assert row.notes is None
-
 
 def test_bulk_add_result_aggregates_counts_from_outcomes():
     mol_id = uuid.uuid4()

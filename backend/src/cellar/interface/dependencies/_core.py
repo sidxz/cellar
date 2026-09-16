@@ -7,6 +7,7 @@ Everything else in the package imports :func:`_get_use_case` from here.
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Annotated, Any
 
 from fastapi import Depends, Request
@@ -16,11 +17,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.audit.audit_recording_service import AuditRecordingService
 from cellar.application.inventory.salt_matcher import SaltMatcher
+from cellar.application.shared.actor_context import set_current_actor
 from cellar.application.shared.unit_of_work import (
     UnitOfWork,  # noqa: F401  (re-exported for compat)
 )
 from cellar.application.user.get_preferences import GetPreferences
 from cellar.application.user.update_preferences import UpdatePreferences
+from cellar.infrastructure.duar.auth import get_duar
+from cellar.infrastructure.duar.org_directory import OrgDirectory
+from cellar.infrastructure.duar.settings import DuarSettings
 from cellar.infrastructure.logging import bind_user_context
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_repository import (
@@ -28,7 +33,6 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.salt_entry_re
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.rdkit.fingerprints.registry import FingerprintRegistry
-from cellar.infrastructure.sentinel.auth import get_sentinel
 
 __all__ = [
     "AuditServiceDep",
@@ -36,6 +40,7 @@ __all__ = [
     "EventDispatcherDep",
     "FingerprintRegistryDep",
     "GetPreferencesDep",
+    "OrgDirectoryDep",
     "SaltMatcherUoWDep",
     "SessionFactoryDep",
     "UoWDep",
@@ -45,6 +50,7 @@ __all__ = [
     "get_auth",
     "get_container",
     "get_event_dispatcher",
+    "get_org_directory",
     "get_preferences_command",
     "get_preferences_query",
     "get_salt_matcher_uow",
@@ -114,54 +120,74 @@ def get_preferences_command(
     return container[UpdatePreferences]
 
 
-# Sentinel auth dependency — stable wrapper so dependency_overrides work in tests.
-# Lazy init: don't crash at import time if Sentinel env vars aren't set.
-# Uses a reject-all stub when Sentinel is unavailable so auth is never bypassed.
+# Duar auth dependency — stable wrapper so dependency_overrides work in tests.
+# Lazy init: don't crash at import time if Duar env vars aren't set.
+# Uses a reject-all stub when Duar is unavailable so auth is never bypassed.
 
 
-async def _sentinel_not_configured() -> None:
-    """Stub dependency that rejects all requests when Sentinel is not configured."""
+async def _duar_not_configured() -> None:
+    """Stub dependency that rejects all requests when Duar is not configured."""
     from fastapi import HTTPException
 
     raise HTTPException(
         status_code=503,
-        detail="Sentinel auth not configured. Set SENTINEL_URL and SENTINEL_SERVICE_KEY.",
+        detail="Duar auth not configured. Set DUAR_URL and DUAR_SERVICE_KEY.",
     )
 
 
-# Sentinel is "configured" only when SENTINEL_SERVICE_KEY is explicitly set —
+# Duar is "configured" only when DUAR_SERVICE_KEY is explicitly set —
 # the pydantic-settings default ("") is a missing-config signal, not a usable
 # service key. The URL has a localhost default so dev still works; if you want
 # prod fail-fast on missing URL too, set it explicitly in the deployment env.
-_sentinel: object | None = None
-if not os.environ.get("SENTINEL_SERVICE_KEY"):
-    _sentinel_get_auth = _sentinel_not_configured
+_duar: object | None = None
+if not os.environ.get("DUAR_SERVICE_KEY"):
+    _duar_get_auth = _duar_not_configured
 else:
     try:
-        _sentinel = get_sentinel()
-        _sentinel_get_auth = _sentinel.get_auth
+        _duar = get_duar()
+        _duar_get_auth = _duar.get_auth
     except (ValueError, ValidationError):
-        # Sentinel env vars malformed — fall back to a reject-all stub. Any
+        # Duar env vars malformed — fall back to a reject-all stub. Any
         # other exception (import error, network, etc.) is a real bug and
         # must surface at startup.
-        _sentinel = None
-        _sentinel_get_auth = _sentinel_not_configured
+        _duar = None
+        _duar_get_auth = _duar_not_configured
+
+
+# Duar org directory (read-only list of orgs for pickers/labels) — same
+# "configured only if DUAR_SERVICE_KEY is set" guard as `_duar` above.
+_org_directory: OrgDirectory | None = None
+if _duar is not None:
+    _settings = DuarSettings()
+    _org_directory = OrgDirectory(base_url=_settings.url, service_key=_settings.service_key)
+
+
+def get_org_directory() -> OrgDirectory:
+    if _org_directory is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail="Duar auth not configured.")
+    return _org_directory
+
+
+OrgDirectoryDep = Annotated[OrgDirectory, Depends(get_org_directory)]
 
 
 async def get_auth(
     request: Request,
-    auth: Annotated[Any, Depends(_sentinel_get_auth)],
+    auth: Annotated[Any, Depends(_duar_get_auth)],
 ) -> Any:
     """Stable auth dependency wrapper — overridable via dependency_overrides.
 
     Also binds the authenticated user/workspace into the logging context and
     onto ``request.state`` so the access-log line can include them.
     """
-    user_id = getattr(auth, "user_id", None)
+    raw_user_id = getattr(auth, "user_id", None)
     workspace_id = getattr(auth, "workspace_id", None)
-    user_id = str(user_id) if user_id is not None else None
+    user_id = str(raw_user_id) if raw_user_id is not None else None
     workspace_id = str(workspace_id) if workspace_id is not None else None
     bind_user_context(user_id=user_id, workspace_id=workspace_id)
+    set_current_actor(raw_user_id if isinstance(raw_user_id, uuid.UUID) else None)
     request.state.user_id = user_id
     request.state.workspace_id = workspace_id
     return auth

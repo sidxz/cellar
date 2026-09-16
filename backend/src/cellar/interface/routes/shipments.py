@@ -1,9 +1,10 @@
-"""Shipment API routes."""
+"""Shipment API routes — the container for a trip: plates + samples, in or out."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from dataclasses import asdict
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -13,6 +14,16 @@ from cellar.application.inventory.preview_shipment_import import (
     ImportRow,
     PreviewShipmentImport,
     PreviewShipmentImportQuery,
+)
+from cellar.application.inventory.shipment_reads import (
+    ItemKey,
+    ItemLabel,
+    ResolvedItem,
+    ResolveShipmentItemsQuery,
+    ShipmentLink,
+    ShipmentsReader,
+    UnresolvedItem,
+    enrich_shipments,
 )
 from cellar.application.inventory.shipments import (
     AddShipmentItem,
@@ -38,8 +49,14 @@ from cellar.application.inventory.shipments import (
     UpdateShipmentCommand,
 )
 from cellar.application.shared.sentinel import UNSET
+from cellar.domain.inventory.enums import ShipmentDirection, ShipmentItemType
 from cellar.domain.inventory.shipment import Shipment, ShipmentItem
-from cellar.interface.dependencies import AuthDep, _get_use_case
+from cellar.interface.dependencies import (
+    AuthDep,
+    ResolveShipmentItemsDep,
+    ShipmentsReaderDep,
+    _get_use_case,
+)
 from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["shipments"])
@@ -52,17 +69,28 @@ router = APIRouter(prefix="/api/v1", tags=["shipments"])
 
 class ShipmentItemResponse(BaseModel):
     id: uuid.UUID
-    sample_id: uuid.UUID
-    amount_value: float
-    amount_unit: str
+    item_type: ShipmentItemType
+    item_id: uuid.UUID
+    # Enriched from one batched plate + sample fetch per response; None if the
+    # item was deleted since (loose polymorphic reference, no FK).
+    barcode: str | None = None
+    label: str | None = None
+    amount_value: float | None = None
+    amount_unit: str | None = None
 
     @classmethod
-    def from_domain(cls, i: ShipmentItem) -> ShipmentItemResponse:
+    def from_domain(
+        cls, i: ShipmentItem, labels: dict[ItemKey, ItemLabel]
+    ) -> ShipmentItemResponse:
+        lbl = labels.get((i.item_type, i.item_id))
         return cls(
             id=i.id,
-            sample_id=i.sample_id,
-            amount_value=i.amount_shipped.value,
-            amount_unit=i.amount_shipped.unit.value,
+            item_type=i.item_type,
+            item_id=i.item_id,
+            barcode=lbl.barcode if lbl else None,
+            label=lbl.label if lbl else None,
+            amount_value=i.amount_shipped.value if i.amount_shipped else None,
+            amount_unit=i.amount_shipped.unit.value if i.amount_shipped else None,
         )
 
 
@@ -71,6 +99,8 @@ class ShipmentResponse(BaseModel):
     workspace_id: uuid.UUID
     destination_org_id: uuid.UUID
     sender_id: uuid.UUID
+    direction: ShipmentDirection
+    loan_id: uuid.UUID | None = None
     tracking_number: str | None = None
     carrier: str | None = None
     shipping_date: str | None = None
@@ -82,12 +112,14 @@ class ShipmentResponse(BaseModel):
     items: list[ShipmentItemResponse]
 
     @classmethod
-    def from_domain(cls, s: Shipment) -> ShipmentResponse:
+    def from_domain(cls, s: Shipment, labels: dict[ItemKey, ItemLabel]) -> ShipmentResponse:
         return cls(
             id=s.id,
             workspace_id=s.workspace_id,
             destination_org_id=s.destination_org_id,
             sender_id=s.sender_id,
+            direction=s.direction,
+            loan_id=s.loan_id,
             tracking_number=s.tracking_number,
             carrier=s.carrier,
             shipping_date=s.shipping_date.isoformat() if s.shipping_date else None,
@@ -98,7 +130,7 @@ class ShipmentResponse(BaseModel):
             shipping_conditions=s.shipping_conditions,
             status=s.status.value,
             notes=s.notes,
-            items=[ShipmentItemResponse.from_domain(i) for i in s.items],
+            items=[ShipmentItemResponse.from_domain(i, labels) for i in s.items],
         )
 
 
@@ -108,6 +140,8 @@ class ShipmentSummaryResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     destination_org_id: uuid.UUID
+    direction: ShipmentDirection
+    loan_id: uuid.UUID | None = None
     tracking_number: str | None = None
     carrier: str | None = None
     status: str
@@ -119,11 +153,47 @@ class ShipmentSummaryResponse(BaseModel):
             id=s.id,
             workspace_id=s.workspace_id,
             destination_org_id=s.destination_org_id,
+            direction=s.direction,
+            loan_id=s.loan_id,
             tracking_number=s.tracking_number,
             carrier=s.carrier,
             status=s.status.value,
             item_count=len(s.items),
         )
+
+
+class ShipmentLinkResponse(BaseModel):
+    """A shipment as seen from a plate, a sample or a loan page (newest first)."""
+
+    shipment_id: uuid.UUID
+    direction: ShipmentDirection
+    status: str
+    destination_org_id: uuid.UUID
+    tracking_number: str | None = None
+    carrier: str | None = None
+    shipping_date: date | None = None
+    received_date: date | None = None
+    amount_value: float | None = None
+    amount_unit: str | None = None
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, r: ShipmentLink) -> ShipmentLinkResponse:
+        return cls(**asdict(r))
+
+
+class ResolvedItemResponse(BaseModel):
+    """One pasted barcode: either resolved (type/id/label) or an error."""
+
+    barcode: str
+    item_type: ShipmentItemType | None = None
+    item_id: uuid.UUID | None = None
+    label: str | None = None
+    error: str | None = None
+
+    @classmethod
+    def from_result(cls, r: ResolvedItem | UnresolvedItem) -> ResolvedItemResponse:
+        return cls(**asdict(r))
 
 
 # ---------------------------------------------------------------------------
@@ -132,13 +202,24 @@ class ShipmentSummaryResponse(BaseModel):
 
 
 class ShipmentItemRequest(BaseModel):
-    sample_id: uuid.UUID
-    amount_value: float
-    amount_unit: str
+    item_type: ShipmentItemType
+    item_id: uuid.UUID
+    amount_value: float | None = None
+    amount_unit: str | None = None
+
+    def to_input(self) -> ShipmentItemInput:
+        return ShipmentItemInput(
+            item_type=self.item_type,
+            item_id=self.item_id,
+            amount_value=self.amount_value,
+            amount_unit=self.amount_unit,
+        )
 
 
 class CreateShipmentRequest(BaseModel):
     destination_org_id: uuid.UUID
+    direction: ShipmentDirection = ShipmentDirection.OUTBOUND
+    loan_id: uuid.UUID | None = None
     carrier: str | None = None
     expected_arrival_date: date | None = None
     shipping_conditions: str | None = None
@@ -155,17 +236,16 @@ class DeliverRequest(BaseModel):
     received_date: date | None = None
 
 
-class AddItemRequest(BaseModel):
-    sample_id: uuid.UUID
-    amount_value: float
-    amount_unit: str
-
-
 class UpdateShipmentRequest(BaseModel):
     carrier: str | None = None
     expected_arrival_date: date | None = None
     shipping_conditions: str | None = None
     notes: str | None = None
+    loan_id: uuid.UUID | None = None
+
+
+class ResolveItemsRequest(BaseModel):
+    barcodes: list[str]
 
 
 # --- Import preview models ---
@@ -242,6 +322,14 @@ DeleteShipmentDep = Annotated[DeleteShipment, Depends(_get_use_case(DeleteShipme
 PreviewImportDep = Annotated[PreviewShipmentImport, Depends(_get_use_case(PreviewShipmentImport))]
 
 
+async def _respond(
+    shipment: Shipment, reader: ShipmentsReader, workspace_id: uuid.UUID
+) -> ShipmentResponse:
+    """Label the items (one plate + one sample fetch) and build the full response."""
+    labels = await enrich_shipments(workspace_id, [shipment], reader)
+    return ShipmentResponse.from_domain(shipment, labels)
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -249,30 +337,24 @@ PreviewImportDep = Annotated[PreviewShipmentImport, Depends(_get_use_case(Previe
 
 @router.post("/shipments", response_model=ShipmentResponse, status_code=201)
 async def create_shipment(
-    body: CreateShipmentRequest, auth: AuthDep, uc: CreateShipmentDep
+    body: CreateShipmentRequest, auth: AuthDep, uc: CreateShipmentDep, reader: ShipmentsReaderDep
 ) -> ShipmentResponse:
     result = await uc(
         CreateShipmentCommand(
             workspace_id=auth.workspace_id,
             sender_id=auth.user_id,
             destination_org_id=body.destination_org_id,
+            direction=body.direction,
+            loan_id=body.loan_id,
             carrier=body.carrier,
             expected_arrival_date=body.expected_arrival_date,
             shipping_conditions=body.shipping_conditions,
             notes=body.notes,
-            items=[
-                ShipmentItemInput(
-                    sample_id=item.sample_id,
-                    amount_value=item.amount_value,
-                    amount_unit=item.amount_unit,
-                )
-                for item in body.items
-            ],
+            items=[item.to_input() for item in body.items],
         ),
         auth=auth,
     )
-    shipment = result_to_response(result)
-    return ShipmentResponse.from_domain(shipment)
+    return await _respond(result_to_response(result), reader, auth.workspace_id)
 
 
 @router.get("/shipments", response_model=list[ShipmentSummaryResponse])
@@ -285,6 +367,21 @@ async def list_shipments(
     )
     shipments = result_to_response(result)
     return [ShipmentSummaryResponse.from_domain(s) for s in shipments]
+
+
+@router.post("/shipments/resolve-items", response_model=list[ResolvedItemResponse])
+async def resolve_shipment_items(
+    body: ResolveItemsRequest, auth: AuthDep, uc: ResolveShipmentItemsDep
+) -> list[ResolvedItemResponse]:
+    """Barcodes → plate or sample items for the shipment dialog's paste box.
+
+    A plate the caller can't see reports as unresolved, worded like an unknown barcode.
+    """
+    result = await uc(
+        ResolveShipmentItemsQuery(workspace_id=auth.workspace_id, barcodes=body.barcodes),
+        auth=auth,
+    )
+    return [ResolvedItemResponse.from_result(r) for r in result_to_response(result)]
 
 
 @router.post("/shipments/import/preview", response_model=ImportPreviewResponse)
@@ -346,13 +443,12 @@ async def preview_shipment_import(
 
 @router.get("/shipments/{shipment_id}", response_model=ShipmentResponse)
 async def get_shipment(
-    shipment_id: uuid.UUID, auth: AuthDep, uc: GetShipmentDep
+    shipment_id: uuid.UUID, auth: AuthDep, uc: GetShipmentDep, reader: ShipmentsReaderDep
 ) -> ShipmentResponse:
     result = await uc(
         GetShipmentQuery(workspace_id=auth.workspace_id, shipment_id=shipment_id), auth=auth
     )
-    shipment = result_to_response(result)
-    return ShipmentResponse.from_domain(shipment)
+    return await _respond(result_to_response(result), reader, auth.workspace_id)
 
 
 @router.patch("/shipments/{shipment_id}", response_model=ShipmentResponse)
@@ -361,23 +457,22 @@ async def update_shipment(
     body: UpdateShipmentRequest,
     auth: AuthDep,
     uc: UpdateShipmentDep,
+    reader: ShipmentsReaderDep,
 ) -> ShipmentResponse:
-
+    sent = body.model_fields_set
     cmd = UpdateShipmentCommand(
         workspace_id=auth.workspace_id,
         shipment_id=shipment_id,
-        carrier=body.carrier if "carrier" in body.model_fields_set else UNSET,
+        carrier=body.carrier if "carrier" in sent else UNSET,
         expected_arrival_date=body.expected_arrival_date
-        if "expected_arrival_date" in body.model_fields_set
+        if "expected_arrival_date" in sent
         else UNSET,
-        shipping_conditions=body.shipping_conditions
-        if "shipping_conditions" in body.model_fields_set
-        else UNSET,
-        notes=body.notes if "notes" in body.model_fields_set else UNSET,
+        shipping_conditions=body.shipping_conditions if "shipping_conditions" in sent else UNSET,
+        notes=body.notes if "notes" in sent else UNSET,
+        loan_id=body.loan_id if "loan_id" in sent else UNSET,
     )
     result = await uc(cmd, auth=auth)
-    shipment = result_to_response(result)
-    return ShipmentResponse.from_domain(shipment)
+    return await _respond(result_to_response(result), reader, auth.workspace_id)
 
 
 @router.delete("/shipments/{shipment_id}", status_code=204)
@@ -390,7 +485,11 @@ async def delete_shipment(shipment_id: uuid.UUID, auth: AuthDep, uc: DeleteShipm
 
 @router.post("/shipments/{shipment_id}/ship", response_model=ShipmentResponse)
 async def ship_shipment(
-    shipment_id: uuid.UUID, body: ShipRequest, auth: AuthDep, uc: ShipShipmentDep
+    shipment_id: uuid.UUID,
+    body: ShipRequest,
+    auth: AuthDep,
+    uc: ShipShipmentDep,
+    reader: ShipmentsReaderDep,
 ) -> ShipmentResponse:
     result = await uc(
         ShipShipmentCommand(
@@ -401,24 +500,26 @@ async def ship_shipment(
         ),
         auth=auth,
     )
-    shipment = result_to_response(result)
-    return ShipmentResponse.from_domain(shipment)
+    return await _respond(result_to_response(result), reader, auth.workspace_id)
 
 
 @router.post("/shipments/{shipment_id}/in-transit", response_model=ShipmentResponse)
 async def mark_in_transit(
-    shipment_id: uuid.UUID, auth: AuthDep, uc: MarkShipmentInTransitDep
+    shipment_id: uuid.UUID, auth: AuthDep, uc: MarkShipmentInTransitDep, reader: ShipmentsReaderDep
 ) -> ShipmentResponse:
     result = await uc(
         MarkInTransitCommand(workspace_id=auth.workspace_id, shipment_id=shipment_id), auth=auth
     )
-    shipment = result_to_response(result)
-    return ShipmentResponse.from_domain(shipment)
+    return await _respond(result_to_response(result), reader, auth.workspace_id)
 
 
 @router.post("/shipments/{shipment_id}/deliver", response_model=ShipmentResponse)
 async def deliver_shipment(
-    shipment_id: uuid.UUID, body: DeliverRequest, auth: AuthDep, uc: DeliverShipmentDep
+    shipment_id: uuid.UUID,
+    body: DeliverRequest,
+    auth: AuthDep,
+    uc: DeliverShipmentDep,
+    reader: ShipmentsReaderDep,
 ) -> ShipmentResponse:
     result = await uc(
         DeliverShipmentCommand(
@@ -428,34 +529,31 @@ async def deliver_shipment(
         ),
         auth=auth,
     )
-    shipment = result_to_response(result)
-    return ShipmentResponse.from_domain(shipment)
+    return await _respond(result_to_response(result), reader, auth.workspace_id)
 
 
 @router.post("/shipments/{shipment_id}/return", response_model=ShipmentResponse)
 async def return_shipment(
-    shipment_id: uuid.UUID, auth: AuthDep, uc: ReturnShipmentDep
+    shipment_id: uuid.UUID, auth: AuthDep, uc: ReturnShipmentDep, reader: ShipmentsReaderDep
 ) -> ShipmentResponse:
     result = await uc(
         ReturnShipmentCommand(workspace_id=auth.workspace_id, shipment_id=shipment_id), auth=auth
     )
-    shipment = result_to_response(result)
-    return ShipmentResponse.from_domain(shipment)
+    return await _respond(result_to_response(result), reader, auth.workspace_id)
 
 
 @router.post("/shipments/{shipment_id}/items", response_model=ShipmentResponse, status_code=201)
 async def add_shipment_item(
-    shipment_id: uuid.UUID, body: AddItemRequest, auth: AuthDep, uc: AddShipmentItemDep
+    shipment_id: uuid.UUID,
+    body: ShipmentItemRequest,
+    auth: AuthDep,
+    uc: AddShipmentItemDep,
+    reader: ShipmentsReaderDep,
 ) -> ShipmentResponse:
     result = await uc(
         AddShipmentItemCommand(
-            workspace_id=auth.workspace_id,
-            shipment_id=shipment_id,
-            sample_id=body.sample_id,
-            amount_value=body.amount_value,
-            amount_unit=body.amount_unit,
+            workspace_id=auth.workspace_id, shipment_id=shipment_id, item=body.to_input()
         ),
         auth=auth,
     )
-    shipment = result_to_response(result)
-    return ShipmentResponse.from_domain(shipment)
+    return await _respond(result_to_response(result), reader, auth.workspace_id)

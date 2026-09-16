@@ -6,12 +6,6 @@ import pytest
 from cellar.application.research_organization.collection_import_templates import (
     CreateCollectionImportTemplate,
     CreateCollectionImportTemplateCommand,
-    DeleteCollectionImportTemplate,
-    DeleteCollectionImportTemplateCommand,
-    ListCollectionImportTemplates,
-    ListCollectionImportTemplatesQuery,
-    UpdateCollectionImportTemplate,
-    UpdateCollectionImportTemplateCommand,
     score_template_against_headers,
 )
 from cellar.domain.research_organization.collection_import_template import (
@@ -77,13 +71,3 @@ def test_scoring_overlap_threshold():
     assert score_template_against_headers(tpl, ["Reg No.", "Foo"]) == 0.5
     assert score_template_against_headers(tpl, ["X", "Y"]) == 0.0
 
-
-def test_use_case_and_command_classes_are_importable():
-    # Smoke-import — the wizard/route layer needs every use case + command
-    # surface exported from this module.
-    assert UpdateCollectionImportTemplate is not None
-    assert UpdateCollectionImportTemplateCommand is not None
-    assert DeleteCollectionImportTemplate is not None
-    assert DeleteCollectionImportTemplateCommand is not None
-    assert ListCollectionImportTemplates is not None
-    assert ListCollectionImportTemplatesQuery is not None

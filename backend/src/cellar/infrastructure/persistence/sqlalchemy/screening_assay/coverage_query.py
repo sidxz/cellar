@@ -174,6 +174,93 @@ class SQLAlchemyCollectionCoverageQuery:
             for cid, name, ctype, run_count in attach_rows
         ]
 
+    async def runs_coverage(
+        self,
+        workspace_id: uuid.UUID,
+        collection_ids: list[uuid.UUID],
+        run_ids: list[uuid.UUID],
+    ) -> list[CollectionCoverage]:
+        if not collection_ids:
+            return []
+        ref_stmt = (
+            select(CollectionModel.id, CollectionModel.name, CollectionModel.type)
+            .where(
+                CollectionModel.id.in_(collection_ids),
+                CollectionModel.workspace_id == workspace_id,
+            )
+            .order_by(CollectionModel.name, CollectionModel.id)
+        )
+        ref_rows = (await self._uow.session.execute(ref_stmt)).all()
+        if not ref_rows:
+            return []
+
+        covered: dict[uuid.UUID, int] = {}
+        if run_ids:
+            # A molecule counts once per collection however many of the runs
+            # read it — the union, not the sum.
+            covered_stmt = (
+                select(
+                    CollectionMoleculeModel.collection_id,
+                    func.count(func.distinct(ReadoutDataModel.molecule_id)),
+                )
+                .select_from(CollectionMoleculeModel)
+                .join(
+                    ReadoutDataModel,
+                    and_(
+                        ReadoutDataModel.molecule_id == CollectionMoleculeModel.molecule_id,
+                        ReadoutDataModel.run_id.in_(run_ids),
+                    ),
+                )
+                .where(CollectionMoleculeModel.collection_id.in_([r[0] for r in ref_rows]))
+                .group_by(CollectionMoleculeModel.collection_id)
+            )
+            covered = {
+                row[0]: row[1] for row in (await self._uow.session.execute(covered_stmt)).all()
+            }
+        sizes = await self._collection_sizes([r[0] for r in ref_rows])
+
+        return [
+            CollectionCoverage(
+                ref=CollectionRef(id=cid, name=name, type=ctype),
+                covered=covered.get(cid, 0),
+                total=sizes.get(cid, 0),
+            )
+            for cid, name, ctype in ref_rows
+        ]
+
+    async def runs_gap(
+        self,
+        workspace_id: uuid.UUID,
+        collection_id: uuid.UUID,
+        run_ids: list[uuid.UUID],
+        *,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[uuid.UUID]:
+        stmt = (
+            select(CollectionMoleculeModel.molecule_id)
+            .join(CollectionModel, CollectionMoleculeModel.collection_id == CollectionModel.id)
+            .where(
+                CollectionMoleculeModel.collection_id == collection_id,
+                CollectionModel.workspace_id == workspace_id,
+            )
+            .order_by(CollectionMoleculeModel.added_at, CollectionMoleculeModel.molecule_id)
+            .offset(offset)
+            .limit(limit)
+        )
+        if run_ids:
+            screened = (
+                select(ReadoutDataModel.molecule_id)
+                .where(
+                    ReadoutDataModel.run_id.in_(run_ids),
+                    ReadoutDataModel.molecule_id == CollectionMoleculeModel.molecule_id,
+                )
+                .exists()
+            )
+            stmt = stmt.where(~screened)
+        rows = await self._uow.session.execute(stmt)
+        return list(rows.scalars())
+
     async def run_gap(
         self,
         workspace_id: uuid.UUID,

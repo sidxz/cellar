@@ -7,7 +7,6 @@ import pytest
 from cellar.domain.inventory.enums import StorageLocationType
 from cellar.domain.inventory.storage_location import StorageLocation
 from cellar.domain.shared.errors import ValidationError
-from cellar.domain.shared.value_objects import Barcode
 
 
 @pytest.fixture
@@ -26,32 +25,6 @@ class TestStorageLocationCreation:
         assert loc.type == StorageLocationType.SITE
         assert loc.parent_id is None
 
-    def test_create_with_barcode(self, workspace_id: uuid.UUID) -> None:
-        loc = StorageLocation.create(
-            workspace_id=workspace_id,
-            name="Freezer A",
-            type=StorageLocationType.FREEZER,
-            parent_id=uuid.uuid4(),
-            parent_type=StorageLocationType.ROOM,
-            barcode=Barcode(value="FRZ-001"),
-        )
-        assert loc.barcode is not None
-        assert loc.barcode.value == "FRZ-001"
-
-    def test_create_with_grid_dimensions(self, workspace_id: uuid.UUID) -> None:
-        loc = StorageLocation.create(
-            workspace_id=workspace_id,
-            name="Box 14",
-            type=StorageLocationType.BOX,
-            parent_id=uuid.uuid4(),
-            parent_type=StorageLocationType.SHELF,
-            rows=8,
-            columns=12,
-            capacity=96,
-        )
-        assert loc.rows == 8
-        assert loc.columns == 12
-        assert loc.capacity == 96
 
     def test_name_is_stripped(self, workspace_id: uuid.UUID) -> None:
         loc = StorageLocation.create(

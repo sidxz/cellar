@@ -1,4 +1,4 @@
-"""FastAPI application factory with Sentinel auth, DI container, and error handlers."""
+"""FastAPI application factory with Duar auth, DI container, and error handlers."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from cellar.infrastructure.di.container import create_container
+from cellar.infrastructure.duar.auth import get_duar
 from cellar.infrastructure.logging import configure_logging
-from cellar.infrastructure.sentinel.auth import get_sentinel
 from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.middleware.request_context import RequestContextMiddleware
 from cellar.version import build_info
@@ -18,17 +18,34 @@ from cellar.version import build_info
 
 def create_app() -> FastAPI:
     """Build the FastAPI application with auth, CORS, DI, and error handling."""
-    sentinel = get_sentinel()
+    duar = get_duar()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        """App lifespan — initialize container, register Sentinel actions, cleanup."""
+        """App lifespan — initialize container, register Duar actions, cleanup."""
         # Structured logging (reads LOG_LEVEL / LOG_FORMAT / LOG_LEVEL_OVERRIDES)
         configure_logging()
+
+        # File storage must be usable (and, in production, on a mounted volume)
+        # before we serve a single request — otherwise attachments/exports are lost.
+        from cellar.infrastructure.storage.fsspec_client import (
+            StorageSettings,
+            ensure_storage_root,
+        )
+
+        ensure_storage_root(StorageSettings())
 
         # Initialize DI container and attach to app state
         container = create_container()
         app.state.container = container
+
+        # Schema must be at this image's migration head before we serve a request.
+        # Migrations are the deploy job's work; this only refuses to run without them.
+        from sqlalchemy.ext.asyncio import async_sessionmaker as _async_sm
+
+        from cellar.infrastructure.persistence.schema_guard import ensure_schema_current
+
+        await ensure_schema_current(container[_async_sm])
 
         # Wire audit event handler — catch-all for all domain events
         from sqlalchemy.ext.asyncio import async_sessionmaker as async_sm
@@ -166,8 +183,8 @@ def create_app() -> FastAPI:
         container.define(SarActivityProjectionOrchestrator, Singleton(lambda: activity_proj_orch))
         container.define(UmapClusterOrchestrator, Singleton(lambda: umap_orch))
 
-        # Delegate to Sentinel's lifespan (registers service actions, fetches JWKS)
-        async with sentinel.lifespan(app):
+        # Delegate to Duar's lifespan (registers service actions, fetches JWKS)
+        async with duar.lifespan(app):
             yield
 
         # Cleanup: close httpx client used by vault integration
@@ -193,10 +210,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Auth middleware — validates IdP + Sentinel authz tokens
-    sentinel.protect(
+    # Auth middleware — validates IdP + Duar authz tokens
+    duar.protect(
         app,
-        exclude_paths=["/health", "/version", "/docs", "/openapi.json"],
+        # /api/v1/kiosk uses X-Kiosk-Token device auth (spec §10). SDK match is
+        # exact-or-prefix-with-slash-boundary, so /api/v1/kiosk-devices (admin,
+        # session-authed) is NOT excluded.
+        exclude_paths=["/health", "/version", "/docs", "/openapi.json", "/api/v1/kiosk"],
     )
 
     # CORS — added last so it runs first (LIFO)
@@ -224,6 +244,7 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.disclosures import router as disclosure_router
     from cellar.interface.routes.merge import router as merge_router
     from cellar.interface.routes.molecules import router as mol_router
+    from cellar.interface.routes.org_directory import router as org_directory_router
     from cellar.interface.routes.organizations import router as org_router
     from cellar.interface.routes.protocols import router as protocol_router
     from cellar.interface.routes.readout_data import router as readout_data_router
@@ -242,6 +263,7 @@ def create_app() -> FastAPI:
 
     app.include_router(user_router)
     app.include_router(org_router)
+    app.include_router(org_directory_router)
     app.include_router(settings_router)
     app.include_router(vocab_router)
     from cellar.interface.routes.export import legacy_router as export_legacy_router
@@ -270,21 +292,39 @@ def create_app() -> FastAPI:
     app.include_router(shipment_router)
     app.include_router(synth_req_router)
 
+    from cellar.interface.routes.comments import router as comments_router
+    from cellar.interface.routes.kiosk import router as kiosk_router
+    from cellar.interface.routes.kiosk_devices import router as kiosk_device_router
+    from cellar.interface.routes.org_plate_policies import router as org_plate_policy_router
+    from cellar.interface.routes.plate_groups import router as plate_group_router
+    from cellar.interface.routes.plate_loans import router as plate_loan_router
     from cellar.interface.routes.plate_templates import router as plate_template_router
     from cellar.interface.routes.registered_plates import router as registered_plates_router
 
     app.include_router(plate_template_router)
     app.include_router(registered_plates_router)
+    app.include_router(plate_group_router)
+    app.include_router(org_plate_policy_router)
+    app.include_router(plate_loan_router)
+    app.include_router(comments_router)
+    app.include_router(kiosk_device_router)
+    app.include_router(kiosk_router)
 
     from cellar.interface.routes.campaigns import router as campaign_router
     from cellar.interface.routes.campaigns_channels import (
         router as campaign_channels_router,
+    )
+    from cellar.interface.routes.campaigns_collections import (
+        router as campaign_collections_router,
     )
     from cellar.interface.routes.campaigns_publishing import (
         router as campaign_publishing_router,
     )
     from cellar.interface.routes.campaigns_results import (
         router as campaign_results_router,
+    )
+    from cellar.interface.routes.campaigns_stages import (
+        router as campaign_stages_router,
     )
     from cellar.interface.routes.collection_import_previews import (
         router as collection_import_previews_router,
@@ -305,6 +345,8 @@ def create_app() -> FastAPI:
     app.include_router(saved_search_router)
     app.include_router(campaign_router)
     app.include_router(campaign_channels_router)
+    app.include_router(campaign_collections_router)
+    app.include_router(campaign_stages_router)
     app.include_router(campaign_results_router)
     app.include_router(campaign_publishing_router)
 
@@ -325,6 +367,10 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.umap_cluster import router as umap_cluster_router
 
     app.include_router(umap_cluster_router)
+
+    from cellar.interface.routes.mcs import router as mcs_router
+
+    app.include_router(mcs_router)
 
     from cellar.interface.routes.molecule_activity import router as molecule_activity_router
 

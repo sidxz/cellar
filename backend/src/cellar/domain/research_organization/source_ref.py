@@ -8,18 +8,18 @@ Discriminants:
 - ``ManualRef``      — manual / one-at-a-time addition via AddResultRow.
 - ``CollectionRef``  — pulled from a Collection's membership.
 - ``SavedSearchRef`` — pulled from a SavedSearch execution (deferred).
-- ``CampaignRef``    — pulled from another campaign's results filtered
-                        by decision (draft / closed / superseded all OK).
+- ``CampaignRef``    — pulled from another campaign's results, optionally
+                        filtered to hits at one of its stages (draft /
+                        closed / superseded all OK).
 - ``RunRef``         — pulled from a protocol run's molecule set.
 """
 
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from cellar.domain.research_organization.enums import CampaignDecision
 from cellar.domain.shared.errors import ValidationError
 
 
@@ -34,8 +34,7 @@ def source_group_key(ref: dict[str, Any]) -> tuple[Any, ...]:
 
     Operates on a ``SourceRef.to_dict()`` payload so both the interface DTO
     and the published-view projection share one definition. List-valued
-    fields (e.g. ``CampaignRef.decision_filter``) are frozen to tuples so
-    the key stays hashable.
+    fields are frozen to tuples so the key stays hashable.
     """
     kind = ref.get("kind", "manual")
     ids = tuple(
@@ -74,10 +73,10 @@ class SourceRef:
                 description=data.get("description"),
             )
         if kind == "campaign":
-            decisions = data.get("decision_filter") or ["selected"]
+            stage_id = data.get("stage_id")
             return CampaignRef(
                 campaign_id=uuid.UUID(data["campaign_id"]),
-                decision_filter=[CampaignDecision(v) for v in decisions],
+                stage_id=uuid.UUID(stage_id) if stage_id else None,
                 description=data.get("description"),
             )
         if kind == "run":
@@ -145,7 +144,10 @@ class SavedSearchRef(SourceRef):
 
 @dataclass(frozen=True)
 class CampaignRef(SourceRef):
-    """Result was pulled from another campaign's results filtered by decision.
+    """Result was pulled from another campaign's results.
+
+    ``stage_id`` records which stage of the source campaign the pull was
+    filtered to (hits at that stage); ``None`` means every result.
 
     Accepts any campaign status (draft / closed / superseded) — the
     curator decides what's valid.
@@ -153,9 +155,7 @@ class CampaignRef(SourceRef):
 
     kind: ClassVar[str] = "campaign"
     campaign_id: uuid.UUID = None  # type: ignore[assignment]
-    decision_filter: list[CampaignDecision] = field(
-        default_factory=lambda: [CampaignDecision.SELECTED]
-    )
+    stage_id: uuid.UUID | None = None
     description: str | None = None
 
     def __post_init__(self) -> None:
@@ -166,7 +166,7 @@ class CampaignRef(SourceRef):
         return {
             "kind": self.kind,
             "campaign_id": str(self.campaign_id),
-            "decision_filter": [d.value for d in self.decision_filter],
+            "stage_id": str(self.stage_id) if self.stage_id else None,
             "description": self.description,
         }
 
@@ -189,3 +189,27 @@ class RunRef(SourceRef):
             "run_id": str(self.run_id),
             "description": self.description,
         }
+
+
+@dataclass(frozen=True)
+class SeedRun:
+    """One run a campaign was seeded from (add-from-runs), with its protocol.
+
+    Recorded on the campaign itself, never derived from row ``RunRef``s: a
+    ``RunRef`` names only the run that won a pick, so a union of them drops
+    runs whose values never won (a three-run mean would collapse to one run).
+    ``protocol_id`` lets resolution scope each channel to the seed runs of
+    its own protocol (spec D4).
+    """
+
+    run_id: uuid.UUID
+    protocol_id: uuid.UUID
+
+    def to_dict(self) -> dict[str, str]:
+        return {"run_id": str(self.run_id), "protocol_id": str(self.protocol_id)}
+
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> SeedRun:
+        return SeedRun(
+            run_id=uuid.UUID(data["run_id"]), protocol_id=uuid.UUID(data["protocol_id"])
+        )

@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 
 import sqlalchemy as sa
-from returns.result import Success
+from returns.result import Failure, Success
 
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from cellar.application.screening.import_summary_file import (
@@ -21,7 +21,10 @@ from cellar.application.screening.import_summary_file import (
     ImportSummaryFileCommand,
 )
 from cellar.application.screening.summary_import_models import SummaryColumnMapping
+from cellar.application.shared.molecule_resolver import MoleculeResolver
+from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
+from cellar.domain.shared.errors import ConflictError, ValidationError
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
@@ -39,6 +42,8 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository
     SQLAlchemyRunRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.infrastructure.rdkit.scaffold_calculator import MurckoScaffoldCalculator
+from cellar.infrastructure.rdkit.structure_processor import StructureProcessor
 from tests.fakes.fake_auth import FakeAuth
 from tests.fixtures.dose_response_curves import (
     _insert_org,
@@ -60,14 +65,24 @@ async def _insert_readout_def_typed(
     name: str,
     data_type: str,
     display_order: int,
+    is_calculated: bool = False,
 ) -> None:
     await uow.session.execute(
         sa.text(
             "INSERT INTO readout_definitions "
-            "(id, protocol_id, name, data_type, display_order, is_calculated) "
-            "VALUES (:id, :proto, :name, :dt, :ord, false)"
+            "(id, protocol_id, name, data_type, display_order, is_calculated, "
+            "calculation_formula) "
+            "VALUES (:id, :proto, :name, :dt, :ord, :calc, :formula)"
         ),
-        {"id": rd_id, "proto": protocol_id, "name": name, "dt": data_type, "ord": display_order},
+        {
+            "id": rd_id,
+            "proto": protocol_id,
+            "name": name,
+            "dt": data_type,
+            "ord": display_order,
+            "calc": is_calculated,
+            "formula": "[IC50] * 2" if is_calculated else None,
+        },
     )
 
 
@@ -140,7 +155,17 @@ async def _insert_molecule(
     )
 
 
-def _build_use_case(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummaryFile:
+class _FakeAttachment:
+    id = uuid.uuid4()
+
+
+async def _ok_upload(upload_cmd, auth=None):
+    return Success(_FakeAttachment())
+
+
+def _build_use_case(
+    read_uow: AsyncUnitOfWork, session_factory, upload_attachment=None
+) -> ImportSummaryFile:
     # The orchestrating use case owns + enters ``read_uow`` itself; the delegated
     # bulk use case opens its own write UoW. They MUST be separate instances so
     # the bulk's commit/close does not tear down the read session used for the
@@ -169,6 +194,11 @@ def _build_use_case(read_uow: AsyncUnitOfWork, session_factory) -> ImportSummary
         batch_repo=SQLAlchemyBatchRepository(read_uow),
         parser=TabularFileParser(),
         bulk_uc=bulk,
+        upload_attachment=upload_attachment or _ok_upload,
+        molecule_resolver=MoleculeResolver(
+            SQLAlchemyMoleculeRepository(read_uow),
+            StructureProcessor(scaffold_calculator=MurckoScaffoldCalculator()),
+        ),
     )
 
 
@@ -180,15 +210,84 @@ async def _wellless(session_factory, workspace_id, run_id):
         return [r for r in rows if r.well_id is None and not r.is_computed]
 
 
-async def _run_import(session_factory, command, auth):
+async def _run_import(session_factory, command, auth, upload_attachment=None):
     """Run the import. The use case now owns + enters its own read UoW, so the
     caller just builds it and awaits (mirrors how the route calls it)."""
     read_uow = AsyncUnitOfWork(session_factory)
-    uc = _build_use_case(read_uow, session_factory)
+    uc = _build_use_case(read_uow, session_factory, upload_attachment)
     return await uc(command, auth=auth)
 
 
+async def _seed_one_readout(session_factory, workspace_id):
+    """Org + protocol + numeric IC50 def + run + resolvable molecule.
+
+    Returns (run_id, ic50_id, reg).
+    """
+    org_id, protocol_id, run_id, ic50_id, molecule_id = (uuid.uuid4() for _ in range(5))
+    reg = f"REG-{uuid.uuid4().hex[:8]}"
+    seed_uow = AsyncUnitOfWork(session_factory)
+    async with seed_uow:
+        await _insert_org(seed_uow, org_id, workspace_id)
+        await _insert_protocol(seed_uow, protocol_id, workspace_id)
+        await _insert_readout_def_typed(
+            seed_uow, ic50_id, protocol_id, name="IC50", data_type="numeric", display_order=0
+        )
+        await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+        await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+        await seed_uow.commit()
+    return run_id, ic50_id, reg
+
+
+async def _insert_plate_with_well(session_factory, run_id: uuid.UUID) -> None:
+    """Give a run one plate carrying one well — i.e. make it welled."""
+    plate_id = uuid.uuid4()
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        await uow.session.execute(
+            sa.text("INSERT INTO plates (id, run_id, plate_number) VALUES (:id, :run, 1)"),
+            {"id": plate_id, "run": run_id},
+        )
+        await uow.session.execute(
+            sa.text(
+                'INSERT INTO wells (id, plate_id, "row", "column", well_type) '
+                "VALUES (:id, :plate, 'A', 1, 'sample')"
+            ),
+            {"id": uuid.uuid4(), "plate": plate_id},
+        )
+        await uow.commit()
+
+
 class TestImportSummaryFile:
+    async def test_import_onto_a_welled_run_is_refused(
+        self, session_factory, workspace_id
+    ) -> None:
+        """A run whose measurements live in wells keeps that shape — a well-less
+        summary file is refused and nothing is written."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        run_id, ic50_id, reg = await _seed_one_readout(session_factory, workspace_id)
+        await _insert_plate_with_well(session_factory, run_id)
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},5.2\n".encode(),
+                mapping=SummaryColumnMapping(
+                    compound_ref="Compound", readout_columns={"IC50": ic50_id}
+                ),
+            ),
+            auth,
+        )
+
+        assert isinstance(result, Failure), result
+        error = result.failure()
+        assert isinstance(error, ConflictError)
+        assert "1 plate(s) with wells" in str(error)
+
+        assert await _wellless(session_factory, workspace_id, run_id) == []
+
     async def test_insert_then_update_accounting(self, session_factory, workspace_id) -> None:
         molecule_id = uuid.uuid4()
         reg = f"REG-{uuid.uuid4().hex[:8]}"
@@ -209,9 +308,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         first = await _run_import(
             session_factory,
@@ -255,6 +352,125 @@ class TestImportSummaryFile:
         rows = await _wellless(session_factory, workspace_id, run_id)
         assert len(rows) == 1
         assert rows[0].value.value == 9.9
+
+    async def test_mapping_onto_a_calculated_readout_is_refused(
+        self, session_factory, workspace_id
+    ) -> None:
+        """A calculated readout is computed from its formula — a column bound to
+        one is refused outright and nothing is written."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        molecule_id, org_id, protocol_id, run_id, calc_id = (uuid.uuid4() for _ in range(5))
+        reg = f"REG-{uuid.uuid4().hex[:8]}"
+
+        seed_uow = AsyncUnitOfWork(session_factory)
+        async with seed_uow:
+            await _insert_org(seed_uow, org_id, workspace_id)
+            await _insert_protocol(seed_uow, protocol_id, workspace_id)
+            await _insert_readout_def_typed(
+                seed_uow,
+                calc_id,
+                protocol_id,
+                name="Percent Inhibition",
+                data_type="numeric",
+                display_order=0,
+                is_calculated=True,
+            )
+            await _insert_run(seed_uow, run_id, protocol_id, workspace_id)
+            await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
+            await seed_uow.commit()
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,Percent Inhibition\n{reg},42\n".encode(),
+                mapping=SummaryColumnMapping(
+                    compound_ref="Compound",
+                    readout_columns={"Percent Inhibition": calc_id},
+                ),
+            ),
+            auth,
+        )
+
+        assert isinstance(result, Failure), result
+        error = result.failure()
+        assert isinstance(error, ValidationError)
+        assert "Percent Inhibition" in str(error)
+        assert "calculated" in str(error)
+
+        assert await _wellless(session_factory, workspace_id, run_id) == []
+
+    async def test_attaches_raw_file_to_run(self, session_factory, workspace_id) -> None:
+        """The uploaded bytes land as a Run attachment (audit trail), id on the result."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        run_id, ic50_id, reg = await _seed_one_readout(session_factory, workspace_id)
+        csv = f"Compound,IC50\n{reg},5.2\n".encode()
+        seen: list = []
+
+        async def _capture(upload_cmd, auth=None):
+            seen.append(upload_cmd)
+            return Success(_FakeAttachment())
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=csv,
+                content_type="text/csv",
+                mapping=SummaryColumnMapping(
+                    compound_ref="Compound", readout_columns={"IC50": ic50_id}
+                ),
+            ),
+            auth,
+            upload_attachment=_capture,
+        )
+        assert isinstance(result, Success), result
+        assert len(seen) == 1
+        cmd = seen[0]
+        assert cmd.file_data == csv
+        assert cmd.file_name == "summary.csv"
+        assert cmd.mime_type == "text/csv"
+        assert cmd.attachable_type == AttachableType.RUN
+        assert cmd.attachable_id == run_id
+        assert cmd.uploaded_by == auth.user_id
+        assert result.unwrap().attachment_id == _FakeAttachment.id
+        assert result.unwrap().attachment_warning is None
+
+    async def test_attachment_failure_warns_never_fails(
+        self, session_factory, workspace_id
+    ) -> None:
+        """Best-effort: a broken attachment store must not lose the readouts."""
+        auth = FakeAuth(role="editor", workspace_id=workspace_id)
+        run_id, ic50_id, reg = await _seed_one_readout(session_factory, workspace_id)
+
+        async def _boom(upload_cmd, auth=None):
+            raise OSError("disk full")
+
+        result = await _run_import(
+            session_factory,
+            ImportSummaryFileCommand(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                filename="summary.csv",
+                content=f"Compound,IC50\n{reg},5.2\n".encode(),
+                content_type="text/csv",
+                mapping=SummaryColumnMapping(
+                    compound_ref="Compound", readout_columns={"IC50": ic50_id}
+                ),
+            ),
+            auth,
+            upload_attachment=_boom,
+        )
+        assert isinstance(result, Success), result
+        res = result.unwrap()
+        assert res.values_inserted == 1
+        assert res.attachment_id is None
+        assert "disk full" in (res.attachment_warning or "")
+        assert len(await _wellless(session_factory, workspace_id, run_id)) == 1
 
     async def test_text_readout_stores_value_text(self, session_factory, workspace_id) -> None:
         molecule_id = uuid.uuid4()
@@ -324,9 +540,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         result = await _run_import(
             session_factory,
@@ -368,9 +582,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         result = await _run_import(
             session_factory,
@@ -418,9 +630,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         first = await _run_import(
             session_factory,
@@ -488,9 +698,7 @@ class TestImportSummaryFile:
             await _insert_molecule(seed_uow, molecule_id, workspace_id, reg)
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         result = await _run_import(
             session_factory,
@@ -512,9 +720,7 @@ class TestImportSummaryFile:
         assert len(rows) == 1
         assert rows[0].value.value == 5.2
 
-    async def test_multiple_readout_columns_one_row(
-        self, session_factory, workspace_id
-    ) -> None:
+    async def test_multiple_readout_columns_one_row(self, session_factory, workspace_id) -> None:
         """A single row with two readout columns stores two values for the
         compound (one per readout definition)."""
         molecule_id = uuid.uuid4()
@@ -601,9 +807,7 @@ class TestImportSummaryFile:
             )
             await seed_uow.commit()
 
-        mapping = SummaryColumnMapping(
-            compound_ref="Compound", readout_columns={"IC50": ic50_id}
-        )
+        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
 
         # compound_ref carries the CUSTOM identifier, not the reg number.
         result = await _run_import(

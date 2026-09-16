@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import replace
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -27,22 +27,25 @@ from cellar.domain.research_organization.campaign_measurement import (
     CampaignMeasurement,
 )
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import (
+    CampaignStage,
+    StageCriterion,
+)
 from cellar.domain.research_organization.enums import (
-    CampaignDecision,
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import AuthorizationError, ValidationError
+from cellar.domain.shared.hit_criterion import HitCriterion
 from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -50,10 +53,26 @@ from tests.unit.application.research_organization._helpers import (
 
 
 class FakeChannelQuery:
-    def __init__(self, candidates_by_channel=None) -> None:
+    def __init__(self, candidates_by_channel=None, endpoints_by_channel=None) -> None:
         self._data = candidates_by_channel or {}
+        self._endpoints = endpoints_by_channel or {}
+
+    @staticmethod
+    def _scoped(data, key, run_ids):
+        run_set = set(run_ids)
+        out: dict[uuid.UUID, list[ResolvedCandidate]] = {}
+        for mol_id, cands in data.get(key, {}).items():
+            kept = [c for c in cands if c.run_id in run_set]
+            if kept:
+                out[mol_id] = kept
+        return out
 
     async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
+        return []
+
+    async def fetch_endpoint_candidates(
+        self, *, workspace_id, channel, molecule_id, wellless_only=False
+    ):
         return []
 
     async def fetch_candidates_for_runs(
@@ -66,15 +85,18 @@ class FakeChannelQuery:
         source_kind,
         normalization_applied=None,
     ):
-        run_set = set(run_ids)
-        out: dict[uuid.UUID, list[ResolvedCandidate]] = {}
-        for mol_id, cands in self._data.get(
-            (protocol_id, readout_definition_id), {}
-        ).items():
-            kept = [c for c in cands if c.run_id in run_set]
-            if kept:
-                out[mol_id] = kept
-        return out
+        return self._scoped(self._data, (protocol_id, readout_definition_id), run_ids)
+
+    async def fetch_endpoint_candidates_for_runs(
+        self,
+        *,
+        workspace_id,
+        run_ids,
+        readout_definition_id,
+        normalization_applied=None,
+        wellless_only=False,
+    ):
+        return self._scoped(self._endpoints, readout_definition_id, run_ids)
 
 
 def _candidate(
@@ -108,15 +130,30 @@ def _draft_campaign(workspace_id) -> Campaign:
         project_id=uuid.uuid4(),
         name="C",
         description=None,
-        publishes_collection=True,
         created_by=uuid.uuid4(),
     )
 
 
-def _run_repo(run_ids):
+def _run_repo(run_ids, protocol_id=None):
+    """Fake RunRepository — ``find_by_ids`` returns ``{id: run}`` like the port."""
     repo = AsyncMock()
-    repo.find_by_ids = AsyncMock(return_value=[SimpleNamespace(id=r) for r in run_ids])
+    repo.find_by_ids = AsyncMock(
+        return_value={
+            r: SimpleNamespace(id=r, protocol_id=protocol_id or uuid.uuid4()) for r in run_ids
+        }
+    )
     return repo
+
+
+def _readout_config(proto, readout, rule=SelectionRule.LATEST_APPROVED_RUN, **kw):
+    return ChannelImportConfig(
+        protocol_id=proto,
+        readout_definition_id=readout,
+        label="IC50",
+        source_kind=ChannelSourceKind.READOUT_DATA,
+        selection_rule=rule,
+        **kw,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +249,6 @@ class TestAddResultsFromRuns:
                 )
             ],
             scope="hits_only",
-            default_decision=CampaignDecision.SELECTED,
         )
         out = await uc(cmd, auth=auth)
         assert isinstance(out, Success)
@@ -220,11 +256,10 @@ class TestAddResultsFromRuns:
         assert outcome.added == 1
         assert outcome.channels_created == 1
         assert outcome.channels_reused == 0
-        only = next(r for r in campaign.results if r.molecule_id == mol_hit)
-        assert only.decision == CampaignDecision.SELECTED
+        assert any(r.molecule_id == mol_hit for r in campaign.results)
 
     @pytest.mark.asyncio
-    async def test_scope_all_adds_everyone_with_caller_decision(self) -> None:
+    async def test_scope_all_adds_everyone(self) -> None:
         auth = fake_auth()
         campaign = _draft_campaign(auth.workspace_id)
         proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
@@ -256,13 +291,11 @@ class TestAddResultsFromRuns:
                 )
             ],
             scope="all",
-            default_decision=CampaignDecision.DEFERRED,
         )
         out = await uc(cmd, auth=auth)
         assert isinstance(out, Success)
         assert out.unwrap().added == 2
-        decisions = {r.decision for r in campaign.results}
-        assert decisions == {CampaignDecision.DEFERRED}
+        assert {r.molecule_id for r in campaign.results} == {m1, m2}
 
     @pytest.mark.asyncio
     async def test_channel_reuse_when_matching_exists(self) -> None:
@@ -315,11 +348,12 @@ class TestAddResultsFromRuns:
         outcome = out.unwrap()
         assert outcome.channels_reused == 1
         assert outcome.channels_created == 0
-        # Original channel still exists (id stable); rule + threshold updated
+        # Original channel still exists (id stable); selection rule updated.
+        # The threshold is import-time filtering only — never persisted to
+        # the channel record.
         assert len(campaign.channels) == 1
         assert campaign.channels[0].id == existing.id
         assert campaign.channels[0].selection_rule == SelectionRule.MEAN_ACROSS_RUNS
-        assert campaign.channels[0].hit_threshold == new_threshold
 
     @pytest.mark.asyncio
     async def test_idempotent_rerun_does_not_duplicate(self) -> None:
@@ -569,3 +603,620 @@ class TestAddResultsFromRuns:
         assert set(
             campaign.results[0].measurements[0].contributing_run_ids
         ) == {r1, r2}
+
+    # ------------------------------------------------------------------
+    # seed runs (spec D4) — every input run is recorded, on every call
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_every_input_run_is_recorded_even_when_its_value_never_wins(self) -> None:
+        """Latest-run rule over two runs: the row's RunRef names one run, but
+        both are seed runs, in the order the chemist selected them."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, mol = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        r_old, r_new = uuid.uuid4(), uuid.uuid4()
+        candidates = {
+            (proto, readout): {
+                mol: [
+                    _candidate(value=10.0, run_id=r_old, run_date=date(2026, 1, 1)),
+                    _candidate(value=14.0, run_id=r_new, run_date=date(2026, 6, 1)),
+                ]
+            }
+        }
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([r_old, r_new], protocol_id=proto),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[r_new, r_old],
+            channel_configs=[_readout_config(proto, readout)],
+            scope="all",
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert campaign.results[0].measurements[0].source_run_id == r_new
+        assert campaign.seed_runs == [SeedRun(r_new, proto), SeedRun(r_old, proto)]
+
+    @pytest.mark.asyncio
+    async def test_mean_across_runs_records_all_runs(self) -> None:
+        """An aggregate pick has no single source run; the seed set is still
+        every run imported from."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, mol = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        r1, r2, r3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        candidates = {
+            (proto, readout): {
+                mol: [_candidate(value=v, run_id=r) for v, r in ((1.0, r1), (2.0, r2), (3.0, r3))]
+            }
+        }
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([r1, r2, r3], protocol_id=proto),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[r1, r2, r3],
+            channel_configs=[_readout_config(proto, readout, SelectionRule.MEAN_ACROSS_RUNS)],
+            scope="all",
+        )
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert campaign.results[0].measurements[0].value == 2.0
+        assert campaign.seed_run_ids_for(proto) == [r1, r2, r3]
+
+    @pytest.mark.asyncio
+    async def test_refresh_existing_cells_records_the_new_run(self) -> None:
+        """"Add run R2, refresh existing cells" adds no row but must widen the
+        seed set, or the next refresh/close reverts the cells to R1."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, mol = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        r1, r2 = uuid.uuid4(), uuid.uuid4()
+        campaign.record_seed_runs([SeedRun(r1, proto)])
+        channel = CampaignChannel(
+            campaign_id=campaign.id,
+            label="IC50",
+            display_order=0,
+            protocol_id=proto,
+            readout_definition_id=readout,
+            source_kind=ChannelSourceKind.READOUT_DATA,
+            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        )
+        campaign.channels.append(channel)
+        campaign.results.append(CampaignResult(campaign_id=campaign.id, molecule_id=mol))
+
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=r2)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([r2], protocol_id=proto),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[r2],
+            channel_configs=[_readout_config(proto, readout)],
+            scope="all",
+            refresh_existing_cells=True,
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 0
+        assert campaign.results[0].find_measurement(channel.id).value == 42.0
+        assert campaign.seed_run_ids_for(proto) == [r1, r2]
+
+    @pytest.mark.asyncio
+    async def test_hits_only_import_that_adds_no_row_still_records_the_run(self) -> None:
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, mol, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        candidates = {(proto, readout): {mol: [_candidate(value=9000.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id], protocol_id=proto),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                _readout_config(
+                    proto,
+                    readout,
+                    hit_threshold=HitCriterion(readout_name="IC50", operator="lte", value=100.0),
+                    use_for_filter=True,
+                )
+            ],
+            scope="hits_only",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 0
+        assert campaign.seed_runs == [SeedRun(run_id, proto)]
+
+    # ------------------------------------------------------------------
+    # stage_name (Task 12)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_stage_created_with_criteria_bound_to_channels(self) -> None:
+        """stage_name + N filtering configs -> one CampaignStage, N criteria,
+        each bound to the channel its own config resolved to."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto1, readout1, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        proto2, readout2 = uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+        candidates = {
+            (proto1, readout1): {mol: [_candidate(value=42.0, run_id=run_id)]},
+            (proto2, readout2): {mol: [_candidate(value=7.0, run_id=run_id)]},
+        }
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto1,
+                    readout_definition_id=readout1,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="IC50", operator="lt", value=1000.0
+                    ),
+                ),
+                ChannelImportConfig(
+                    protocol_id=proto2,
+                    readout_definition_id=readout2,
+                    label="CC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="CC50", operator="gt", value=5.0
+                    ),
+                ),
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is True
+        assert len(campaign.stages) == 1
+        stage = campaign.stages[0]
+        assert stage.name == "Primary Hits"
+        assert stage.parent_stage_id is None
+        assert len(stage.criteria) == 2
+
+        ic50_channel = next(
+            ch for ch in campaign.channels if ch.readout_definition_id == readout1
+        )
+        cc50_channel = next(
+            ch for ch in campaign.channels if ch.readout_definition_id == readout2
+        )
+        by_channel = {c.channel_id: c for c in stage.criteria}
+        assert by_channel[ic50_channel.id].operator == "lt"
+        assert by_channel[ic50_channel.id].value == 1000.0
+        assert by_channel[cc50_channel.id].operator == "gt"
+        assert by_channel[cc50_channel.id].value == 5.0
+
+    @pytest.mark.asyncio
+    async def test_no_stage_when_no_filter_criteria(self) -> None:
+        """stage_name given but no config has use_for_filter+hit_threshold ->
+        no stage is created; not an error."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    # no hit_threshold -> nothing qualifies for the stage
+                )
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is False
+        assert campaign.stages == []
+
+    @pytest.mark.asyncio
+    async def test_stage_skips_in_operator_configs(self) -> None:
+        """A config whose hit_threshold uses the string-based 'in' operator
+        contributes no StageCriterion (StageCriterion — unlike HitCriterion —
+        doesn't support it, same as the mirror-protocol path); the stage is
+        still built from the remaining numeric config(s)."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto1, readout1, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        proto2, readout2 = uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+        candidates = {
+            (proto1, readout1): {mol: [_candidate(value=42.0, run_id=run_id)]},
+            (proto2, readout2): {mol: [_candidate(value=7.0, run_id=run_id)]},
+        }
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto1,
+                    readout_definition_id=readout1,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
+                ),
+                ChannelImportConfig(
+                    protocol_id=proto2,
+                    readout_definition_id=readout2,
+                    label="Curve Class",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="Curve Class", operator="in", value=["full"]
+                    ),
+                ),
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is True
+        assert len(campaign.stages) == 1
+        stage = campaign.stages[0]
+        assert len(stage.criteria) == 1  # the 'in' config contributed nothing
+        ic50_channel = next(ch for ch in campaign.channels if ch.readout_definition_id == readout1)
+        assert stage.criteria[0].channel_id == ic50_channel.id
+
+    @pytest.mark.asyncio
+    async def test_stage_name_reuses_existing_stage(self) -> None:
+        """Re-importing under a name already on the campaign rewrites that
+        stage's criteria instead of failing on the uniqueness rule."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+
+        other_channel = CampaignChannel(
+            campaign_id=campaign.id,
+            label="Other",
+            display_order=0,
+            protocol_id=uuid.uuid4(),
+            readout_definition_id=uuid.uuid4(),
+            source_kind=ChannelSourceKind.READOUT_DATA,
+            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        )
+        campaign.channels.append(other_channel)
+        existing_stage = CampaignStage(
+            campaign_id=campaign.id,
+            name="Primary Hits",
+            display_order=0,
+            criteria=[StageCriterion(channel_id=other_channel.id, operator="lt", value=1.0)],
+        )
+        campaign.add_stage(existing_stage)
+
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(
+                        readout_name="IC50", operator="lt", value=1000.0
+                    ),
+                )
+            ],
+            scope="all",
+            stage_name="primary HITS",  # same stage, different casing
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is False
+        # Reused in place — same stage id, criteria replaced by this import's.
+        assert len(campaign.stages) == 1
+        stage = campaign.stages[0]
+        assert stage.id == existing_stage.id
+        assert stage.name == "Primary Hits"
+        imported_channel = next(
+            ch for ch in campaign.channels if ch.readout_definition_id == readout
+        )
+        assert len(stage.criteria) == 1
+        assert stage.criteria[0].channel_id == imported_channel.id
+        assert stage.criteria[0].value == 1000.0
+
+    @pytest.mark.asyncio
+    async def test_stage_created_under_parent_stage_id(self) -> None:
+        """parent_stage_id attaches the new stage under an existing one."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+
+        parent = CampaignStage(campaign_id=campaign.id, name="Triage", display_order=0)
+        campaign.add_stage(parent)
+
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
+                )
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+            parent_stage_id=parent.id,
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().stage_created is True
+        child = next(s for s in campaign.stages if s.name == "Primary Hits")
+        assert child.parent_stage_id == parent.id
+
+    @pytest.mark.asyncio
+    async def test_unknown_parent_stage_id_returns_failure(self) -> None:
+        """A parent that isn't on the campaign is a 422, not a silent detach."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+
+        candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(candidates),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
+                )
+            ],
+            scope="all",
+            stage_name="Primary Hits",
+            parent_stage_id=uuid.uuid4(),
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Failure)
+        assert isinstance(out.failure(), ValidationError)
+        assert campaign.stages == []
+
+    # ---- D1: dose-response fallback to reported endpoint rows ----
+
+    @staticmethod
+    def _curve_candidate(*, value: float, run_id: uuid.UUID) -> ResolvedCandidate:
+        c = _candidate(value=value, run_id=run_id)
+        return replace(c, curve_id=uuid.uuid4(), readout_id=None, curve_class="full")
+
+    @pytest.mark.asyncio
+    async def test_dr_config_falls_back_to_endpoint_when_molecule_has_no_curve(
+        self,
+    ) -> None:
+        """A DR channel imports a molecule that only has a summary-imported
+        reported endpoint; a molecule with a fitted curve keeps its curve."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol_curve, mol_endpoint = uuid.uuid4(), uuid.uuid4()
+        curve = self._curve_candidate(value=10.0, run_id=run_id)
+        curve_mol_endpoint = _candidate(value=999.0, run_id=run_id)
+        endpoint = _candidate(value=32.0, run_id=run_id)
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(
+                {(proto, readout): {mol_curve: [curve]}},
+                {
+                    readout: {
+                        mol_curve: [curve_mol_endpoint],
+                        mol_endpoint: [endpoint],
+                    }
+                },
+            ),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                )
+            ],
+            scope="all",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 2
+
+        by_mol = {r.molecule_id: r for r in campaign.results}
+        endpoint_cell = by_mol[mol_endpoint].measurements[0]
+        assert endpoint_cell.value == 32.0
+        assert endpoint_cell.source_readout_id == endpoint.readout_id
+        assert endpoint_cell.source_curve_id is None
+
+        # The molecule with a curve keeps the curve — its endpoint row is ignored.
+        curve_cell = by_mol[mol_curve].measurements[0]
+        assert curve_cell.value == 10.0
+        assert curve_cell.source_curve_id == curve.curve_id
+        assert curve_cell.source_readout_id is None
+
+    @pytest.mark.asyncio
+    async def test_readout_config_does_not_fetch_endpoint_fallback(self) -> None:
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol = uuid.uuid4()
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(
+                {},
+                {readout: {mol: [_candidate(value=32.0, run_id=run_id)]}},
+            ),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.READOUT_DATA,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                )
+            ],
+            scope="all",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 0
+
+    @pytest.mark.asyncio
+    async def test_allowed_curve_classes_does_not_filter_endpoint_fallbacks(
+        self,
+    ) -> None:
+        """allowed_curve_classes is a curve attribute: it must not reject the
+        endpoint fallback (which carries no curve_class), while a molecule whose
+        only curve is out of class is still skipped."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        proto, readout, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        mol_inactive_curve, mol_endpoint = uuid.uuid4(), uuid.uuid4()
+        inactive = replace(
+            self._curve_candidate(value=10.0, run_id=run_id), curve_class="inactive"
+        )
+        endpoint = _candidate(value=32.0, run_id=run_id)
+        uc = AddResultsFromRuns(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            run_repo=_run_repo([run_id]),
+            channel_query=FakeChannelQuery(
+                {(proto, readout): {mol_inactive_curve: [inactive]}},
+                {readout: {mol_endpoint: [endpoint]}},
+            ),
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromRunsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            run_ids=[run_id],
+            channel_configs=[
+                ChannelImportConfig(
+                    protocol_id=proto,
+                    readout_definition_id=readout,
+                    label="IC50",
+                    source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    allowed_curve_classes={"active"},
+                )
+            ],
+            scope="all",
+        )
+        out = await uc(cmd, auth=auth)
+        assert isinstance(out, Success)
+        assert out.unwrap().added == 1
+        assert [r.molecule_id for r in campaign.results] == [mol_endpoint]
+        cell = campaign.results[0].measurements[0]
+        assert cell.value == 32.0
+        assert cell.source_readout_id == endpoint.readout_id

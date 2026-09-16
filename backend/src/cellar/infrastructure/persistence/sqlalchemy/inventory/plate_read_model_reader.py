@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.application.inventory.plate_read_model import MoleculePlateEntry
@@ -22,10 +22,27 @@ class SQLAlchemyPlateReadModelService:
         self._session_factory = session_factory
 
     async def find_plates_for_molecule(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
+        self,
+        workspace_id: uuid.UUID,
+        molecule_id: uuid.UUID,
+        excluded_org_ids: set[uuid.UUID] | None = None,
+        include_plate_ids: set[uuid.UUID] | None = None,
     ) -> list[MoleculePlateEntry]:
-        """Find all registered plates containing batches of this molecule."""
-        sql = text("""
+        """Find all registered plates containing batches of this molecule.
+
+        ``excluded_org_ids`` mirrors the NULL-preserving exclusion clause used
+        by ``RegisteredPlateRepository.search`` — a plate with no owner org is
+        never excluded, only plates explicitly owned by a private foreign org.
+        ``include_plate_ids`` (spec §5 loan clause) re-admits plates on active
+        loan to the caller's org even when their owner org is excluded — same
+        shape as that method's ``include_plate_ids`` arm. Both clauses are
+        only added when their set is non-empty: SQLAlchemy's expanding
+        bindparam renders an empty ``IN`` as a typeless ``CAST(NULL AS
+        INTEGER)`` placeholder subquery, which Postgres refuses to compare
+        against a ``uuid`` column (``operator does not exist: uuid =
+        integer``) even though the subquery returns no rows.
+        """
+        base_sql = """
             SELECT
                 rp.id AS plate_id,
                 rp.barcode,
@@ -43,13 +60,25 @@ class SQLAlchemyPlateReadModelService:
             WHERE rp.workspace_id = :workspace_id
               AND b.workspace_id = :workspace_id
               AND b.molecule_id = :molecule_id
-            ORDER BY rp.barcode, well_entry.key
-        """)
+        """
+        params: dict[str, object] = {"workspace_id": workspace_id, "molecule_id": molecule_id}
+
+        if excluded_org_ids:
+            clause = "rp.owner_org_id IS NULL OR rp.owner_org_id NOT IN :excluded_org_ids"
+            bind_params = [bindparam("excluded_org_ids", expanding=True)]
+            params["excluded_org_ids"] = list(excluded_org_ids)
+            if include_plate_ids:
+                clause += " OR rp.id IN :include_plate_ids"
+                bind_params.append(bindparam("include_plate_ids", expanding=True))
+                params["include_plate_ids"] = list(include_plate_ids)
+            sql = text(
+                base_sql + f" AND ({clause})" + " ORDER BY rp.barcode, well_entry.key"
+            ).bindparams(*bind_params)
+        else:
+            sql = text(base_sql + " ORDER BY rp.barcode, well_entry.key")
 
         async with self._session_factory() as session:
-            result = await session.execute(
-                sql, {"workspace_id": workspace_id, "molecule_id": molecule_id}
-            )
+            result = await session.execute(sql, params)
             rows = result.fetchall()
         return [
             MoleculePlateEntry(

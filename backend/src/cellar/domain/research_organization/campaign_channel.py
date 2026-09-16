@@ -1,9 +1,10 @@
 """CampaignChannel — owned entity defining one column in a campaign snapshot.
 
 A Channel binds a protocol's readout to a selection rule (which run/value to
-pick), an optional QC filter, optional qualifier handling, and an optional
-hit-threshold (typically carried forward from the protocol's HitCriterion).
-At close, the channel produces one CampaignMeasurement per CampaignResult.
+pick), an optional QC filter, and optional qualifier handling. At close, the
+channel produces one CampaignMeasurement per CampaignResult. Hit/miss
+criteria live on ``CampaignStage`` instead of the channel (see the
+campaign-hit-stages spec §5).
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
 )
 from cellar.domain.shared.errors import ValidationError
-from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.shared.hit_criterion import InterceptKey
 
 
 @dataclass
@@ -33,7 +34,6 @@ class CampaignChannel:
     display_order: int
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     qc_filter: dict[str, Any] | None = None
-    hit_threshold: HitCriterion | None = None
     #: Which normalization layer of the readout this channel reads. None for
     #: the raw layer (``normalization_applied IS NULL``); set to a formula
     #: name (e.g. ``"percent_inhibition"``) to pick the computed layer.
@@ -46,13 +46,23 @@ class CampaignChannel:
     #: EC50). ``None`` means the curve's primary intercept — preserves
     #: legacy single-intercept channels. Channel identity is set at
     #: creation and never changes (a chemist wanting a different intercept
-    #: creates a new channel). The threshold's ``intercept_key`` is treated
-    #: as informational; the channel's value is authoritative.
+    #: creates a new channel).
     intercept_key: InterceptKey | None = None
+    #: Opt out of the campaign's run scope. A campaign seeded from runs
+    #: resolves every channel against only those runs (spec D4); a channel
+    #: with this flag set resolves protocol-wide instead — the counter-screen
+    #: or physchem readout that was measured whenever, not in the campaign's
+    #: own screening runs.
+    resolve_from_all_runs: bool = False
 
     def __post_init__(self) -> None:
         if not self.label or not self.label.strip():
             raise ValidationError("CampaignChannel.label must not be empty")
         self.label = self.label.strip()
-        if self.display_order < 0:
+        self.reorder(self.display_order)
+
+    def reorder(self, display_order: int) -> None:
+        """Move this channel to a new grid position (re-validates the invariant)."""
+        if display_order < 0:
             raise ValidationError("CampaignChannel.display_order must be ≥ 0")
+        self.display_order = display_order

@@ -1,17 +1,43 @@
 "use client";
 
-import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { API_V1 } from "@/shared/lib/api/custom-instance";
-import type { CreateTargetInput, Target, UpdateTargetInput } from "../types";
+import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { PaginatedResponse } from "@/shared/types/pagination";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Target, TargetSyncReport } from "../types";
 
-const targetHooks = createCrudHooks<Target, CreateTargetInput, UpdateTargetInput>({
-  entityName: "Target",
-  baseUrl: `${API_V1}/targets`,
-  queryKey: ["targets"],
-});
+export const TARGETS_KEY = ["targets"];
 
-export const useTargets = targetHooks.useList;
-export const useTarget = targetHooks.useGet;
-export const useCreateTarget = targetHooks.useCreate;
-export const useUpdateTarget = targetHooks.useUpdate;
-export const useDeleteTarget = targetHooks.useDelete;
+/** Every target in the mirror. Pickers must see the whole catalog, so this
+ *  follows the cursor to the end instead of taking the server's default page. */
+async function fetchAllTargets(): Promise<Target[]> {
+  const items: Target[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 50; page++) {
+    const result: PaginatedResponse<Target> = await customInstance({
+      url: `${API_V1}/targets`,
+      method: "GET",
+      params: { limit: 200, ...(cursor ? { cursor } : {}) },
+    });
+    items.push(...result.items);
+    cursor = result.next_cursor;
+    if (!cursor) return items;
+  }
+  throw new Error("targets: cursor pagination did not terminate after 50 pages");
+}
+
+export function useTargets() {
+  return useQuery({ queryKey: TARGETS_KEY, queryFn: fetchAllTargets });
+}
+
+/** Admin-only full sync from prot-cellar. Errors carry the backend message
+ *  (e.g. "prot-cellar refused … requires the editor role"). */
+export function useSyncTargets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      customInstance<TargetSyncReport>({ url: `${API_V1}/targets/sync`, method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TARGETS_KEY });
+    },
+  });
+}

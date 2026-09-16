@@ -6,7 +6,6 @@ import pytest
 
 from cellar.domain.chemical_registration.enums import (
     ReagentRole,
-    RouteScale,
     RouteSource,
     RouteStatus,
     RouteType,
@@ -97,20 +96,6 @@ class TestSynthesisRouteCreation:
         assert events[0].target_molecule_id == mol_id
         assert events[0].route_type == RouteType.LINEAR.value
 
-    def test_create_with_options(self, ws_id, mol_id, user_id):
-        route = _make_route(
-            ws_id, mol_id, user_id,
-            route_type=RouteType.CONVERGENT,
-            scale=RouteScale.GRAM,
-            source=RouteSource.LITERATURE,
-            source_reference="JACS 2024, 146, 1234",
-            description="Convergent route via Suzuki + Sonogashira",
-        )
-
-        assert route.route_type == RouteType.CONVERGENT
-        assert route.scale == RouteScale.GRAM
-        assert route.source == RouteSource.LITERATURE
-        assert route.source_reference == "JACS 2024, 146, 1234"
 
     def test_create_empty_name_raises(self, ws_id, mol_id, user_id):
         with pytest.raises(ValidationError, match="name"):

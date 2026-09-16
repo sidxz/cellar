@@ -6,14 +6,14 @@
  * 2-step flow:
  *   Step 1 "configure" — pick a protocol, multi-select runs, edit per-readout
  *                        channel configs (rule + hit threshold + use-for-filter),
- *                        global toggles (AND/OR, hits-only, default decision).
+ *                        global toggles (AND/OR, hits-only).
  *   Step 2 "preview"   — debounced preview (~300ms) renders a chip header +
  *                        molecule table with structure thumbnails + per-channel
  *                        cells. Commit posts /add-from-runs and closes.
  *
  * Backend invariants this dialog mirrors:
  *   - filter_mode default = "all"  (AND across active hit-criteria)
- *   - scope         default = "hits_only" (default_decision = SELECTED)
+ *   - scope         default = "hits_only"
  *   - At least one run AND at least one channel_config required to enable Next.
  */
 
@@ -55,6 +55,7 @@ import {
 import { useSelectionSet } from "@/shared/hooks/use-selection-set";
 import { formatDate } from "@/shared/lib/format-date";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
+import { showSuccess } from "@/shared/lib/toast";
 
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
@@ -74,6 +75,9 @@ import {
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 
 import { campaignKeys } from "../hooks/use-campaigns";
+import { stageNameNotice } from "../lib/stage-name-notice";
+import type { CampaignStageResponse } from "../types";
+import { ROOT_SENTINEL } from "./stage-popover";
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -131,6 +135,10 @@ function channelConfigKey(readoutDefId: string, interceptKey: InterceptKey | nul
 interface AddFromRunsDialogProps {
   campaignId: string;
   projectId: string;
+  /** This campaign's stages — they fill the parent picker and drive the
+   *  reuse advisory under the stage name (a colliding name reuses that
+   *  stage, except a manual one, which the backend refuses). */
+  stages: CampaignStageResponse[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -140,9 +148,14 @@ interface AddFromRunsDialogProps {
 export function AddFromRunsDialog({
   campaignId,
   projectId,
+  stages,
   open,
   onOpenChange,
 }: AddFromRunsDialogProps) {
+  const parentOptions = useMemo(
+    () => [...stages].sort((a, b) => a.display_order - b.display_order),
+    [stages],
+  );
   const qc = useQueryClient();
   const [step, setStep] = useState<"configure" | "preview">("configure");
 
@@ -159,11 +172,17 @@ export function AddFromRunsDialog({
   // — Global toggles —
   const [filterMode, setFilterMode] = useState<"any" | "all">("all");
   const [scope, setScope] = useState<"hits_only" | "all">("hits_only");
-  const [defaultDecision, setDefaultDecision] = useState<"selected" | "deferred" | "rejected">(
-    "selected",
-  );
   const [refreshExisting, setRefreshExisting] = useState(false);
   const [approvedOnly, setApprovedOnly] = useState(true);
+  // "Save these criteria as a hit stage" — shown once any channel config has
+  // a threshold. Name + default checked-state derive per-protocol (see
+  // onProtocolChange below, which also guards against colliding with an
+  // existing stage name); inert here since the checkbox isn't shown until a
+  // protocol is chosen.
+  const [saveStage, setSaveStage] = useState(false);
+  const [stageName, setStageName] = useState("Imported hits");
+  // ROOT_SENTINEL = "no parent" (Radix Select forbids an empty item value).
+  const [stageParentId, setStageParentId] = useState<string>(ROOT_SENTINEL);
 
   // — Data —
   const { data: protocolsData } = useProtocolSummaries([projectId]);
@@ -283,8 +302,14 @@ export function AddFromRunsDialog({
   const previewMutation = usePreviewRunImportApiV1CampaignsCampaignIdPreviewRunImportPost();
   const addMutation = useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data) => {
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
+        // Built from the backend's actual outcome, not from the checkbox
+        // intent — the backend only creates a stage when >=1 config both
+        // opts into filtering and has a threshold (see stage_name payload
+        // gating below), so intent alone can overclaim.
+        const stageNote = data.stage_created ? ` and created stage "${stageName.trim()}"` : "";
+        showSuccess(`Added ${data.added} compound${data.added === 1 ? "" : "s"}${stageNote}`);
         handleClose();
       },
     },
@@ -384,13 +409,22 @@ export function AddFromRunsDialog({
     setUserEditedConfigs(new Map());
     setFilterMode("all");
     setScope("hits_only");
-    setDefaultDecision("selected");
     setRefreshExisting(false);
     setApprovedOnly(true);
+    setSaveStage(false);
+    setStageName("Imported hits");
+    setStageParentId(ROOT_SENTINEL);
     onOpenChange(false);
   }
 
   const canGoToPreview = selectedRunIds.size > 0 && channelConfigs.length > 0;
+  // Gates both the "Save as hit stage" checkbox/name-input visibility and
+  // whether stage_name is sent at all (see buildPayload's caller below) —
+  // the backend only creates a stage from configs that both opt into
+  // filtering and carry a threshold.
+  const hasThreshold = channelConfigs.some((c) => c.hit_operator !== "");
+  const trimmedStageName = stageName.trim();
+  const nameNotice = hasThreshold && saveStage ? stageNameNotice(stages, stageName) : null;
 
   // — Debounced preview refresh —
   const [previewData, setPreviewData] = useState<{
@@ -458,6 +492,14 @@ export function AddFromRunsDialog({
               setProtocolId(id);
               runSelection.clear();
               setUserEditedConfigs(new Map());
+              const proto = protocols.find((pr) => pr.id === id);
+              const defaultName = proto ? `${proto.name} hits` : "Imported hits";
+              setStageName(defaultName);
+              // A repeat import of the same protocol reuses that stage
+              // (criteria replaced), so a collision is fine — only a manual
+              // stage of that name, which the backend refuses, defaults the
+              // checkbox off.
+              setSaveStage(stageNameNotice(stages, defaultName)?.blocking !== true);
             }}
             runs={filteredRuns}
             selectedRunIds={selectedRunIds}
@@ -483,10 +525,17 @@ export function AddFromRunsDialog({
             onFilterModeChange={setFilterMode}
             scope={scope}
             onScopeChange={setScope}
-            defaultDecision={defaultDecision}
-            onDefaultDecisionChange={setDefaultDecision}
             refreshExisting={refreshExisting}
             onRefreshExistingChange={setRefreshExisting}
+            hasThreshold={hasThreshold}
+            saveStage={saveStage}
+            onSaveStageChange={setSaveStage}
+            stageNotice={nameNotice}
+            stageName={stageName}
+            onStageNameChange={setStageName}
+            parentOptions={parentOptions}
+            stageParentId={stageParentId}
+            onStageParentChange={setStageParentId}
           />
         ) : (
           <PreviewStep data={previewData} isLoading={previewMutation.isPending && !previewData} />
@@ -502,7 +551,7 @@ export function AddFromRunsDialog({
             </Button>
           ) : (
             <Button
-              disabled={!previewData || addMutation.isPending}
+              disabled={!previewData || addMutation.isPending || nameNotice?.blocking}
               onClick={() => {
                 const payload = buildPayload();
                 addMutation.mutate({
@@ -510,8 +559,12 @@ export function AddFromRunsDialog({
                   data: {
                     ...payload,
                     scope,
-                    default_decision: defaultDecision,
                     refresh_existing_cells: refreshExisting,
+                    stage_name: hasThreshold && saveStage ? trimmedStageName : null,
+                    parent_stage_id:
+                      hasThreshold && saveStage && stageParentId !== ROOT_SENTINEL
+                        ? stageParentId
+                        : null,
                   } as never,
                 });
               }}
@@ -560,10 +613,23 @@ interface ConfigureStepProps {
   onFilterModeChange: (v: "any" | "all") => void;
   scope: "hits_only" | "all";
   onScopeChange: (v: "hits_only" | "all") => void;
-  defaultDecision: "selected" | "deferred" | "rejected";
-  onDefaultDecisionChange: (v: "selected" | "deferred" | "rejected") => void;
   refreshExisting: boolean;
   onRefreshExistingChange: (v: boolean) => void;
+  /** Whether at least one channel config has a threshold — gates the
+   *  "Save as hit stage" checkbox below. */
+  hasThreshold: boolean;
+  saveStage: boolean;
+  onSaveStageChange: (v: boolean) => void;
+  /** Set when the typed stage name matches an existing stage: an advisory
+   *  that its criteria will be replaced, or — for a manual stage — a
+   *  blocking error. */
+  stageNotice: { text: string; blocking: boolean } | null;
+  stageName: string;
+  onStageNameChange: (v: string) => void;
+  /** Stages the new one can hang under, in display order. */
+  parentOptions: CampaignStageResponse[];
+  stageParentId: string;
+  onStageParentChange: (v: string) => void;
 }
 
 function ConfigureStep(p: ConfigureStepProps) {
@@ -887,34 +953,61 @@ function ConfigureStep(p: ConfigureStepProps) {
               </RadioGroup>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs">Default decision on new rows</Label>
-              <RadioGroup
-                value={p.defaultDecision}
-                onValueChange={(v) =>
-                  p.onDefaultDecisionChange(v as ConfigureStepProps["defaultDecision"])
-                }
-                className="flex gap-4 text-xs"
-              >
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <RadioGroupItem value="selected" id="dec-sel" />
-                  <span>Selected</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <RadioGroupItem value="deferred" id="dec-def" />
-                  <span>Deferred</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <RadioGroupItem value="rejected" id="dec-rej" />
-                  <span>Rejected</span>
-                </label>
-              </RadioGroup>
-            </div>
-
             <label className="flex items-center gap-2 text-xs cursor-pointer">
               <Switch checked={p.refreshExisting} onCheckedChange={p.onRefreshExistingChange} />
               Refresh non-override cells for molecules already in this campaign
             </label>
+
+            {p.hasThreshold && (
+              <div className="space-y-2 border-t pt-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="save-stage"
+                    checked={p.saveStage}
+                    onCheckedChange={(v) => p.onSaveStageChange(v === true)}
+                  />
+                  <Label htmlFor="save-stage" className="text-xs cursor-pointer">
+                    Save these criteria as a hit stage
+                  </Label>
+                </div>
+                {p.saveStage && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Stage name</Label>
+                      <Input
+                        value={p.stageName}
+                        onChange={(e) => p.onStageNameChange(e.target.value)}
+                        placeholder="e.g. Screening hits"
+                        className="h-8 text-sm"
+                      />
+                      {p.stageNotice && (
+                        <p
+                          className={`text-xs ${p.stageNotice.blocking ? "text-destructive" : "text-muted-foreground"}`}
+                        >
+                          {p.stageNotice.text}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Parent stage</Label>
+                      <Select value={p.stageParentId} onValueChange={p.onStageParentChange}>
+                        <SelectTrigger className="h-8 text-sm" aria-label="Parent stage">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={ROOT_SENTINEL}>None (root)</SelectItem>
+                          {p.parentOptions.map((st) => (
+                            <SelectItem key={st.id} value={st.id}>
+                              {st.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}

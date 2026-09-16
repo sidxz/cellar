@@ -18,6 +18,7 @@ from openpyxl import Workbook
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
+from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.repository import BatchRepository, RegisteredPlateRepository
@@ -63,10 +64,12 @@ class ExportPlateLayout:
         uow: UnitOfWork,
         repo: RegisteredPlateRepository,
         batch_repo: BatchRepository,
+        visibility: PlateVisibilityService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._batch_repo = batch_repo
+        self._visibility = visibility
 
     async def __call__(
         self, input: ExportPlateLayoutQuery, auth: AuthContext | None = None
@@ -77,6 +80,11 @@ class ExportPlateLayout:
         async with self._uow:
             plate = await self._repo.find_by_id_in_workspace(input.workspace_id, input.plate_id)
             if plate is None:
+                return Failure(NotFoundError("RegisteredPlate", str(input.plate_id)))
+            excluded = await self._visibility.excluded_org_ids(input.workspace_id, auth)
+            if not self._visibility.can_view(plate, auth, excluded):
+                # No existence leak — a plate hidden by org policy 404s exactly
+                # like a plate that doesn't exist.
                 return Failure(NotFoundError("RegisteredPlate", str(input.plate_id)))
 
             # Resolve well batch UUIDs back to human-readable batch numbers.

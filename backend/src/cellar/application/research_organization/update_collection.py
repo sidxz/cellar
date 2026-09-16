@@ -24,9 +24,9 @@ class UpdateCollectionCommand(Command):
     workspace_id: uuid.UUID
     collection_id: uuid.UUID
     name: str | object = UNSET
-    description: str | None | object = UNSET
-    project_id: uuid.UUID | None | object = UNSET
-    owned_by_org_id: uuid.UUID | None | object = UNSET
+    description: str | object | None = UNSET
+    project_id: uuid.UUID | object | None = UNSET
+    owned_by_org_id: uuid.UUID | object | None = UNSET
     visibility: str | object = UNSET
     type: str | object = UNSET
 

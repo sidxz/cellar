@@ -22,7 +22,7 @@ class UpdateVocabularyCommand(Command):
     workspace_id: uuid.UUID
     vocab_id: uuid.UUID
     name: str | None = None
-    terms: list[str] | None | object = UNSET
+    terms: list[str] | object | None = UNSET
     is_locked: bool | None = None
 
 

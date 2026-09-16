@@ -76,6 +76,20 @@ class ShipmentStatus(StrEnum):
     RETURNED = "returned"
 
 
+class ShipmentItemType(StrEnum):
+    """What a shipment item points at (spec 2026-08-26 §2)."""
+
+    PLATE = "plate"
+    SAMPLE = "sample"
+
+
+class ShipmentDirection(StrEnum):
+    """Which way the box travels; inbound = arriving (vendor library, CRO return)."""
+
+    OUTBOUND = "outbound"
+    INBOUND = "inbound"
+
+
 class SynthesisRequestStatus(StrEnum):
     """10-state lifecycle of a synthesis request."""
 
@@ -164,3 +178,58 @@ VALID_PLATE_TRANSITIONS: dict[PlateStatus, set[PlateStatus]] = {
     PlateStatus.DEPLETED: {PlateStatus.DISPOSED},
     PlateStatus.DISPOSED: set(),
 }
+
+
+class LoanConfirmationMode(StrEnum):
+    """How a plate loan handoff is confirmed, per org policy."""
+
+    KIOSK_SCAN = "kiosk_scan"
+    ADMIN_CONFIRM = "admin_confirm"
+    NONE = "none"
+
+
+class LoanStatus(StrEnum):
+    """Lifecycle status of a plate loan."""
+
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+class LoanItemStatus(StrEnum):
+    """Status of a plate within a loan."""
+
+    REQUESTED = "requested"
+    APPROVED = "approved"
+    CHECKED_OUT = "checked_out"
+    RETURN_PENDING = "return_pending"
+    RETURNED = "returned"
+    DENIED = "denied"
+    CANCELLED = "cancelled"
+
+
+ACTIVE_LOAN_ITEM_STATUSES: frozenset[LoanItemStatus] = frozenset(
+    {
+        LoanItemStatus.REQUESTED,
+        LoanItemStatus.APPROVED,
+        LoanItemStatus.CHECKED_OUT,
+        LoanItemStatus.RETURN_PENDING,
+    }
+)
+
+# target -> allowed sources (approve-all/deny-all etc. filter by these)
+VALID_LOAN_ITEM_TRANSITIONS: dict[LoanItemStatus, frozenset[LoanItemStatus]] = {
+    LoanItemStatus.APPROVED: frozenset({LoanItemStatus.REQUESTED}),
+    LoanItemStatus.DENIED: frozenset({LoanItemStatus.REQUESTED}),
+    LoanItemStatus.CHECKED_OUT: frozenset({LoanItemStatus.APPROVED}),
+    LoanItemStatus.RETURN_PENDING: frozenset({LoanItemStatus.CHECKED_OUT}),
+    LoanItemStatus.RETURNED: frozenset({LoanItemStatus.RETURN_PENDING}),
+    LoanItemStatus.CANCELLED: frozenset({LoanItemStatus.REQUESTED, LoanItemStatus.APPROVED}),
+}
+
+
+class CommentTarget(StrEnum):
+    """What a plate-tracking comment is attached to (spec 2026-08-25 §7)."""
+
+    PLATE_LOAN = "plate_loan"
+    PLATE_GROUP = "plate_group"
+    PLATE = "plate"

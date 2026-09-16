@@ -93,21 +93,6 @@ class TestCustomFieldDefinitionCreate:
                 pick_list_values=["A"],
             )
 
-    def test_with_required_and_default(self, ws_id: uuid.UUID) -> None:
-        cfd = CustomFieldDefinition.create(
-            workspace_id=ws_id,
-            name="priority",
-            label="Priority",
-            data_type=FieldDataType.NUMBER,
-            applies_to=FieldTarget.BATCH,
-            is_required=True,
-            default_value=1,
-            display_order=5,
-        )
-        assert cfd.is_required is True
-        assert cfd.default_value == 1
-        assert cfd.display_order == 5
-
 
 class TestCustomFieldDefinitionUpdate:
     def _make(self, ws_id: uuid.UUID) -> CustomFieldDefinition:

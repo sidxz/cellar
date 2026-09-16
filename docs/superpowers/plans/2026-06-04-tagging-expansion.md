@@ -1219,7 +1219,7 @@ git commit -m "feat(tagging): allow runs/campaigns/batches/plates as taggable en
 
 ### Task 8: Mount `TagTable` on the six detail pages
 
-The editor component: `<TagTable entity="<collection>" entityId={<id>} canEdit={canEditTags} />`, with `const canEditTags = useAuthzHasRole("editor")` (import `{ useAuthzHasRole } from "@sentinel-auth/nextjs"`; import `{ TagTable } from "@/features/tagging/components/tag-table"`).
+The editor component: `<TagTable entity="<collection>" entityId={<id>} canEdit={canEditTags} />`, with `const canEditTags = useAuthzHasRole("editor")` (import `{ useAuthzHasRole } from "@duar-auth/nextjs"`; import `{ TagTable } from "@/features/tagging/components/tag-table"`).
 
 **Files (one mount each):**
 - Modify: `frontend/src/features/screening-assay/components/protocol-detail.tsx` (or its overview tab)

@@ -1,12 +1,12 @@
-"""UpdateCampaignChannel — mutate label, selection rule, qc_filter, or hit_threshold.
+"""UpdateCampaignChannel — mutate label, display order, selection rule, or qc_filter.
 
 Uses the UNSET sentinel to distinguish "don't touch this field" from
-``None`` (which is a meaningful value for ``hit_threshold`` and
-``qc_filter`` — it clears them).
+``None`` (which is a meaningful value for ``qc_filter`` — it clears it).
 
-When a gating field (selection_rule, qc_filter, hit_threshold) actually
-changes value, every non-manual-override measurement for this channel
-across all results is re-resolved via ``ChannelResolver``.
+When a gating field (selection_rule, qc_filter, resolve_from_all_runs)
+actually changes value,
+every non-manual-override measurement for this channel across all results
+is re-resolved via ``ChannelResolver``.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.research_organization.channel_resolution import (
     ChannelResolver,
+    resolution_run_ids,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
@@ -35,7 +36,6 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion
 
 
 class _Unset:
@@ -63,8 +63,10 @@ class UpdateCampaignChannelCommand(Command):
     # UNSET means "don't touch"; None means "clear the value"
     label: str | object = UNSET
     selection_rule: SelectionRule | object = UNSET
-    qc_filter: dict | None | object = UNSET
-    hit_threshold: HitCriterion | None | object = UNSET
+    qc_filter: dict | object | None = UNSET
+    display_order: int | object = UNSET
+    #: Opt out of the campaign's run scope — gating, like selection_rule.
+    resolve_from_all_runs: bool | object = UNSET
 
 
 class UpdateCampaignChannel:
@@ -75,9 +77,10 @@ class UpdateCampaignChannel:
       2. Load campaign; check status is DRAFT.
       3. Locate the channel by id.
       4. Detect which fields are changing (sentinel-aware).
-      5. Mutate label in-place when supplied.
-      6. If any gating field (selection_rule, qc_filter, hit_threshold) changed,
-         re-resolve every non-manual-override measurement for this channel.
+      5. Mutate label / display_order in-place when supplied.
+      6. If any gating field (selection_rule, qc_filter, resolve_from_all_runs)
+         changed, re-resolve
+         every non-manual-override measurement for this channel.
       7. Bump ``campaign.updated_at``.
       8. Save + commit; dispatch events; return ``Success(campaign)``.
     """
@@ -132,10 +135,10 @@ class UpdateCampaignChannel:
                     gating_changed = True
                 channel.qc_filter = input.qc_filter  # type: ignore[assignment]
 
-            if not isinstance(input.hit_threshold, _Unset):
-                if input.hit_threshold != channel.hit_threshold:
+            if not isinstance(input.resolve_from_all_runs, _Unset):
+                if input.resolve_from_all_runs != channel.resolve_from_all_runs:
                     gating_changed = True
-                channel.hit_threshold = input.hit_threshold  # type: ignore[assignment]
+                channel.resolve_from_all_runs = bool(input.resolve_from_all_runs)
 
             if not isinstance(input.label, _Unset):
                 label = input.label
@@ -143,8 +146,15 @@ class UpdateCampaignChannel:
                     return Failure(ValidationError("CampaignChannel.label must not be empty"))
                 channel.label = label.strip()
 
+            if not isinstance(input.display_order, _Unset):
+                try:
+                    channel.reorder(input.display_order)  # type: ignore[arg-type]
+                except ValidationError as exc:
+                    return Failure(exc)
+
             # Re-resolve non-override measurements when gating fields changed
             if gating_changed:
+                run_ids = resolution_run_ids(campaign, channel)
                 for result in campaign.results:
                     measurement = result.find_measurement(channel.id)
                     if measurement is None:
@@ -156,6 +166,7 @@ class UpdateCampaignChannel:
                         channel=channel,
                         result_id=result.id,
                         molecule_id=result.molecule_id,
+                        run_ids=run_ids,
                     )
                     new_measurement.id = measurement.id  # preserve id → UPDATE not DELETE+INSERT
                     result.remove_measurement_for_channel(channel.id)

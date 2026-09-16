@@ -18,6 +18,7 @@ import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
+from cellar.application.screening.run_shape import refuse_if_welled
 from cellar.application.screening.summary_import_models import (
     SummaryHeaderSuggestion,
     SummaryPreviewResult,
@@ -60,6 +61,15 @@ _BATCH_HEADERS = frozenset(
         "batch_id",
         "lot",
         "lot_number",
+    }
+)
+_STRUCTURE_HEADERS = frozenset(
+    {
+        "smiles",
+        "structure",
+        "canonical_smiles",
+        "isomeric_smiles",
+        "smiles_string",
     }
 )
 
@@ -120,6 +130,11 @@ class PreviewSummaryFile:
         if run is None:
             return Failure(NotFoundError("Run", str(run_id)))
 
+        # One run, one shape — refuse at upload time rather than letting the
+        # chemist map columns first and hit the refusal at the dry-run step.
+        if (welled := refuse_if_welled(run)) is not None:
+            return Failure(welled)
+
         protocol = await self._protocol_repo.find_by_id_in_workspace(workspace_id, run.protocol_id)
         if protocol is None:
             return Failure(NotFoundError("Protocol", str(run.protocol_id)))
@@ -137,8 +152,10 @@ class PreviewSummaryFile:
             )
 
         # Index protocol readout-defs by normalized name for O(1) lookup.
+        # Calculated readouts are derived from their formula, so they are never
+        # a valid import target — leave them out so nothing suggests one.
         readout_by_name: dict[str, uuid.UUID] = {
-            _norm(rd.name): rd.id for rd in protocol.readout_definitions
+            _norm(rd.name): rd.id for rd in protocol.readout_definitions if not rd.is_calculated
         }
 
         suggestions = _infer_suggestions(table.headers, readout_by_name)
@@ -170,11 +187,12 @@ def _infer_suggestions(
 ) -> list[SummaryHeaderSuggestion]:
     """Build a role suggestion per header.
 
-    First-match-wins for compound_ref / batch_ref so only one column claims
-    each ref role; readout matches are independent of that gate.
+    First-match-wins for compound_ref / structure / batch_ref so only one
+    column claims each ref role; readout matches are independent of that gate.
     """
     suggestions: list[SummaryHeaderSuggestion] = []
     compound_assigned = False
+    structure_assigned = False
     batch_assigned = False
 
     for header in headers:
@@ -198,6 +216,17 @@ def _infer_suggestions(
                 SummaryHeaderSuggestion(
                     header=header,
                     role=SummaryRole.COMPOUND_REF,
+                    confidence="high",
+                )
+            )
+            continue
+
+        if norm in _STRUCTURE_HEADERS and not structure_assigned:
+            structure_assigned = True
+            suggestions.append(
+                SummaryHeaderSuggestion(
+                    header=header,
+                    role=SummaryRole.STRUCTURE,
                     confidence="high",
                 )
             )

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
+from cellar.application.inventory.registered_plates import GetPlate, GetPlateQuery
 from cellar.application.workspace_config.tagging.assign_tag import AssignTagCommand
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTagCommand
 from cellar.application.workspace_config.tagging.get_tags_for_entity import (
@@ -31,6 +33,7 @@ from cellar.domain.workspace_config.tagging.tag import (
     TaggableEntityType,
 )
 from cellar.interface.dependencies import AuthDep
+from cellar.interface.dependencies._inventory import GetPlateDep
 from cellar.interface.dependencies._workspace_config import (
     AssignTagDep,
     DeleteTagDep,
@@ -140,6 +143,29 @@ def _resolve_entity_type(entity_collection: str) -> TaggableEntityType:
     return entity_type
 
 
+async def _ensure_plate_visible(
+    entity_collection: str,
+    entity_id: uuid.UUID,
+    auth: Any,
+    get_plate: GetPlate,
+) -> None:
+    """Gate plate tag reads/writes on org-policy visibility (S2 Task 5c).
+
+    An invisible plate's tags 404 exactly like a missing plate's would — no
+    existence oracle via the tagging surface. Reuses ``GetPlate`` so the
+    not-found idiom (and the underlying ``can_view`` check) is the single
+    source of truth, not re-implemented here. Only the ``plates`` collection
+    carries an owner-org policy; other entity types are unaffected.
+    """
+    if entity_collection != "plates":
+        return
+    result_to_response(
+        await get_plate(
+            GetPlateQuery(workspace_id=auth.workspace_id, plate_id=entity_id), auth=auth
+        )
+    )
+
+
 # --- Management ---
 router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
 
@@ -243,7 +269,9 @@ async def get_entity_tags(
     entity_id: uuid.UUID,
     auth: AuthDep,
     use_case: GetTagsForEntityDep,
+    get_plate: GetPlateDep,
 ) -> list[EntityTagResponse]:
+    await _ensure_plate_visible(entity_collection, entity_id, auth, get_plate)
     query = GetTagsForEntityQuery(
         workspace_id=auth.workspace_id,
         entity_type=_resolve_entity_type(entity_collection),
@@ -264,7 +292,9 @@ async def assign_entity_tag(
     body: AssignTagBody,
     auth: AuthDep,
     use_case: AssignTagDep,
+    get_plate: GetPlateDep,
 ) -> TagResponse:
+    await _ensure_plate_visible(entity_collection, entity_id, auth, get_plate)
     command = AssignTagCommand(
         workspace_id=auth.workspace_id,
         entity_type=_resolve_entity_type(entity_collection),
@@ -284,7 +314,9 @@ async def set_entity_tags(
     body: SetEntityTagsBody,
     auth: AuthDep,
     use_case: SetEntityTagsDep,
+    get_plate: GetPlateDep,
 ) -> list[TagResponse]:
+    await _ensure_plate_visible(entity_collection, entity_id, auth, get_plate)
     command = SetEntityTagsCommand(
         workspace_id=auth.workspace_id,
         entity_type=_resolve_entity_type(entity_collection),
@@ -303,7 +335,9 @@ async def unassign_entity_tag(
     tag_id: uuid.UUID,
     auth: AuthDep,
     use_case: UnassignTagDep,
+    get_plate: GetPlateDep,
 ) -> Response:
+    await _ensure_plate_visible(entity_collection, entity_id, auth, get_plate)
     command = UnassignTagCommand(
         workspace_id=auth.workspace_id,
         entity_type=_resolve_entity_type(entity_collection),

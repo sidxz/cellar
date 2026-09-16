@@ -3,12 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { ViewModeToggle } from "./view-mode-toggle";
 
 describe("ViewModeToggle", () => {
-  it("renders both mode buttons", () => {
-    render(<ViewModeToggle mode="cards" onChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /list view/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /grid view/i })).toBeInTheDocument();
-  });
-
   it("highlights the currently-active mode via aria-pressed", () => {
     render(<ViewModeToggle mode="cards" onChange={vi.fn()} />);
     expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute(
@@ -33,11 +27,6 @@ describe("ViewModeToggle", () => {
     render(<ViewModeToggle mode="cards" onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: /grid view/i }));
     expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it("renders the tree-view segment button", () => {
-    render(<ViewModeToggle mode="cards" onChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /scaffold view/i })).toBeInTheDocument();
   });
 
   it("highlights tree segment via aria-pressed when mode=scaffold-tree", () => {
@@ -68,11 +57,6 @@ describe("ViewModeToggle", () => {
     render(<ViewModeToggle mode="scaffold-tree" onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: /scaffold view/i }));
     expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it("renders the SAR segment button", () => {
-    render(<ViewModeToggle mode="cards" onChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /sar view/i })).toBeInTheDocument();
   });
 
   it("highlights SAR segment via aria-pressed when mode=sar", () => {

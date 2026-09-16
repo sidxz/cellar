@@ -10,6 +10,7 @@ from enum import StrEnum
 class SummaryRole(StrEnum):
     COMPOUND_REF = "compound_ref"
     BATCH_REF = "batch_ref"
+    STRUCTURE = "structure"  # SMILES column; fallback resolution only, never stored
     READOUT = "readout"
     IGNORE = "ignore"
 
@@ -29,8 +30,20 @@ class SummaryColumnMapping:
 
     compound_ref: str | None = None  # header providing registration numbers
     batch_ref: str | None = None  # header providing batch numbers
+    # header providing SMILES. Used ONLY to resolve compound refs that miss
+    # the identifier lookup (mirrors the collection importer). Never stored.
+    structure: str | None = None
     # header -> readout_definition_id
     readout_columns: dict[str, uuid.UUID] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class UnmatchedCompound:
+    """One file row whose compound ref resolved by neither identifier nor structure."""
+
+    ref: str
+    row: int  # 1-based file row
+    structure: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -52,6 +65,9 @@ class SummaryImportPlanPreview:
     matched_compound_count: int
     unmatched_compound_refs: list[str] = field(default_factory=list)
     unmatched_batch_refs: list[str] = field(default_factory=list)
+    # Per-row detail beside the flat list: which row, and the structure it
+    # carried (None when no STRUCTURE column or an empty cell).
+    unmatched_compounds: list[UnmatchedCompound] = field(default_factory=list)
     values_to_insert: int = 0
     values_to_update: int = 0
     rows_skipped: int = 0
@@ -60,8 +76,18 @@ class SummaryImportPlanPreview:
 
 @dataclass(frozen=True, kw_only=True)
 class SummaryImportResult:
-    rows_processed: int = 0
+    """Outcome of a committed summary import. Same vocabulary as the preview."""
+
+    total_rows: int = 0
+    matched_compound_count: int = 0
+    unmatched_compound_refs: list[str] = field(default_factory=list)
+    unmatched_batch_refs: list[str] = field(default_factory=list)
+    unmatched_compounds: list[UnmatchedCompound] = field(default_factory=list)
     values_inserted: int = 0
     values_updated: int = 0
     rows_skipped: int = 0
     errors: list[dict[str, str]] = field(default_factory=list)
+    # Raw upload attached to the run (audit trail). Best-effort: a failed
+    # attachment sets ``attachment_warning`` and never fails the import.
+    attachment_id: uuid.UUID | None = None
+    attachment_warning: str | None = None

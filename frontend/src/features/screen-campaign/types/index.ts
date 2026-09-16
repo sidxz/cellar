@@ -5,7 +5,7 @@
 // the domain-specific string-literal union types here so the feature layer
 // has a stable, named vocabulary without a runtime dep on generated code.
 
-import type { CampaignChannelResponse } from "@/shared/lib/api/model";
+import type { CampaignChannelResponse, CampaignStageResponseKind } from "@/shared/lib/api/model";
 
 export type {
   CampaignResponse,
@@ -17,13 +17,26 @@ export type {
   AddChannelRequest,
   UpdateChannelRequest,
   CloseCampaignRequest,
+  ReopenCampaignRequest,
   SupersedeRequest,
-  SetResultDecisionRequest,
+  SetResultNotesRequest,
   OverrideCellRequest,
   AddFromCollectionRequest,
   AddFromCampaignRequest,
   AddFromRunRequest,
   AddResultsOutcomeResponse,
+  CampaignStageResponse,
+  CampaignCollectionCoverageResponse,
+  CollectionStageCountsResponse,
+  StageCriterionDTO,
+  StageOutcomeResponse,
+  AddStageRequest,
+  UpdateStageRequest,
+  SetStageOverrideRequest,
+  StageCountsResponse,
+  CampaignSummaryResponse,
+  BulkStageOverrideRequest,
+  BulkRemoveResultsRequest,
 } from "@/shared/lib/api/model";
 
 // ─── Domain enums ────────────────────────────────────────────────────────────
@@ -33,9 +46,13 @@ export type {
 
 export type CampaignStatus = "draft" | "closed" | "superseded";
 
-export type CampaignDecision = "selected" | "deferred" | "rejected";
+export type StageOutcome = "hit" | "miss" | "untested" | "pending" | "not_in_stage";
 
-export type HitCall = "hit" | "miss" | "inconclusive";
+/** How a stage decides its members: evaluated from `criteria`, or hand-picked
+ *  (every row starts `pending` until an override promotes/demotes it). */
+export type StageKind = CampaignStageResponseKind;
+
+export type CheckVerdict = "pass" | "fail" | "untested";
 
 export type SelectionRule =
   | "latest_approved_run"
@@ -65,10 +82,4 @@ export const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, string> = {
   draft: "Draft",
   closed: "Closed",
   superseded: "Superseded",
-};
-
-export const CAMPAIGN_DECISION_LABELS: Record<CampaignDecision, string> = {
-  selected: "Selected",
-  deferred: "Deferred",
-  rejected: "Rejected",
 };

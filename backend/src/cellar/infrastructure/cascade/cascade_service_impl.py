@@ -16,12 +16,12 @@ import uuid
 from sqlalchemy import select
 
 from cellar.application.admin.cascade_service import (
+    CascadePreviewResult,
     CascadeService,
     InboundReference,
 )
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.audit_compliance.models import AuditEntry
-from cellar.domain.shared.cascade import CascadeNode
 from cellar.infrastructure.cascade.cascade_runner import CascadeRunner
 from cellar.infrastructure.cascade.inbound_refs import find_inbound_references
 from cellar.infrastructure.cascade.label_fields import label_for_table
@@ -43,7 +43,7 @@ class UoWBackedCascadeService:
         workspace_id: uuid.UUID,
         parent_table: str,
         parent_id: uuid.UUID,
-    ) -> CascadeNode:
+    ) -> CascadePreviewResult:
         runner = CascadeRunner(self._uow.session)  # infra-to-infra: OK
         return await runner.preview(
             workspace_id=workspace_id,

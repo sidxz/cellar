@@ -108,7 +108,7 @@ class ExternalApiKey(AggregateRoot):
         self,
         *,
         label: str | object = UNSET,
-        description: str | None | object = UNSET,
+        description: str | object | None = UNSET,
     ) -> None:
         """Partial update — only provided fields are changed."""
         if label is not UNSET:

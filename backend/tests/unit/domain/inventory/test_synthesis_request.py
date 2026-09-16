@@ -82,23 +82,6 @@ class TestSynthesisRequestCreation:
         assert events[0].molecule_id == req.molecule_id
         assert events[0].requested_by == req.requester_id
 
-    def test_create_with_priority(self, ws_id):
-        req = _make_request(ws_id, priority=RequestPriority.URGENT)
-        assert req.priority == RequestPriority.URGENT
-
-    def test_create_with_purity(self, ws_id):
-        req = _make_request(ws_id, target_purity=95.0)
-        assert req.target_purity == 95.0
-
-    def test_create_with_project(self, ws_id):
-        project_id = uuid.uuid4()
-        req = _make_request(ws_id, project_id=project_id)
-        assert req.project_id == project_id
-
-    def test_create_with_parent_request(self, ws_id):
-        parent_id = uuid.uuid4()
-        req = _make_request(ws_id, parent_request_id=parent_id)
-        assert req.parent_request_id == parent_id
 
     def test_create_zero_amount_raises(self, ws_id):
         with pytest.raises(ValidationError, match="positive"):

@@ -48,8 +48,8 @@ class UpdateConditionDefinitionCommand(Command):
     definition_id: uuid.UUID
     name: str | None = None
     data_type: str | None = None
-    unit: str | None | object = _UNSET
-    pick_list_values: list[str] | None | object = _UNSET
+    unit: str | object | None = _UNSET
+    pick_list_values: list[str] | object | None = _UNSET
 
 
 # ---------------------------------------------------------------------------

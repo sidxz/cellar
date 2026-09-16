@@ -70,12 +70,6 @@ function renderWizard() {
 }
 
 describe("SummaryImportWizard", () => {
-  it("renders the dialog with the title when open", () => {
-    hookState.value = baseHook();
-    renderWizard();
-    expect(screen.getByText("Import Summary Results")).toBeInTheDocument();
-  });
-
   it("step 1 shows the upload affordance", () => {
     hookState.value = baseHook({ step: 1 });
     renderWizard();
@@ -154,20 +148,43 @@ describe("SummaryImportWizard", () => {
     ).toBeInTheDocument();
   });
 
-  it("step 4 shows the result summary counts", () => {
+  it("step 4 says the source file was saved to the run", () => {
     hookState.value = baseHook({
       step: 4,
       result: {
-        rows_processed: 10,
-        values_inserted: 8,
-        values_updated: 1,
-        rows_skipped: 1,
+        total_rows: 1,
+        matched_compound_count: 1,
+        values_inserted: 1,
+        values_updated: 0,
+        rows_skipped: 0,
         errors: [],
+        attachment_id: "att-1",
+        attachment_warning: null,
       },
     });
     renderWizard();
-    expect(screen.getByText(/import complete/i)).toBeInTheDocument();
-    expect(screen.getByText("Inserted")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /done/i })).toBeInTheDocument();
+    expect(screen.getByText(/source file saved to the run/i)).toBeInTheDocument();
+    expect(screen.queryByText(/file attachment failed/i)).not.toBeInTheDocument();
+  });
+
+  it("step 4 surfaces an attachment warning without hiding the import result", () => {
+    hookState.value = baseHook({
+      step: 4,
+      result: {
+        total_rows: 1,
+        matched_compound_count: 1,
+        values_inserted: 1,
+        values_updated: 0,
+        rows_skipped: 0,
+        errors: [],
+        attachment_id: null,
+        attachment_warning: "attachment failed: disk full",
+      },
+    });
+    renderWizard();
+    expect(screen.getByText("Import complete")).toBeInTheDocument();
+    expect(
+      screen.getByText(/file attachment failed: attachment failed: disk full/i),
+    ).toBeInTheDocument();
   });
 });

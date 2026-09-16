@@ -7,6 +7,7 @@ import { useMemo } from "react";
 
 import type { Molecule } from "@/features/chemical-registration/types";
 import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
+import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import {
   findInterceptValue,
   formatInterceptDisplay,
@@ -25,12 +26,14 @@ import { Badge } from "@/shared/components/ui/badge";
 import { groupBy } from "@/shared/lib/group-by";
 import { cn } from "@/shared/lib/utils";
 import {
+  ANY_COLUMN_ID,
   type ResolvedColumn,
   drcColId,
   resolveColumns as resolveColumnsShared,
 } from "../../lib/protocol-column-id";
 import { type AggregationMode, useAggregationMode } from "../../lib/use-aggregation-mode";
-import type { ActivityValue, ReportConfig } from "../../types";
+import { type ActivityValue, type ReportConfig, anyProtocolActivity } from "../../types";
+import { ActiveInCell } from "./active-in-cell";
 import { DoseResponseCell } from "./dose-response-cell";
 import { InterceptCell } from "./intercept-cell";
 
@@ -359,6 +362,7 @@ export function buildDrcColumns(
                 renderNullAs="nothing"
               />
             ) : null}
+            {av.source === "readout" ? <ReportedEndpointBadge className="ml-1" /> : null}
           </span>
         );
       },
@@ -520,6 +524,33 @@ function buildMoleculeColumn(imageSize: string): ColDef<EnrichedMolecule> {
   };
 }
 
+/** The cross-protocol "Active in" column. Sorts client-side by the best
+ *  µM-normalized entry (nulls last), like the other activity columns. */
+export function buildActiveInColumn(): ColDef<EnrichedMolecule> {
+  return {
+    headerName: "Active in",
+    colId: ANY_COLUMN_ID,
+    width: 320,
+    filter: false,
+    valueGetter: (p) => {
+      const first = p.data ? anyProtocolActivity(p.data)?.entries[0] : undefined;
+      return first?.value_um ?? null;
+    },
+    // AG Grid negates the whole comparator for desc sort, so a plain
+    // "nulls last" return would flip to "nulls first" on desc — direction
+    // must be baked in explicitly to keep nulls last both ways.
+    comparator: (a: number | null, b: number | null, _nA, _nB, isDescending) => {
+      if (a == null && b == null) return 0;
+      if (a == null) return isDescending ? -1 : 1;
+      if (b == null) return isDescending ? 1 : -1;
+      return a - b;
+    },
+    cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => (
+      <ActiveInCell value={params.data ? anyProtocolActivity(params.data) : undefined} />
+    ),
+  };
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function ResultsGrid({
@@ -556,8 +587,9 @@ export function ResultsGrid({
     const molecule = buildMoleculeColumn(reportConfig.imageSize);
     const sim = hasSimilarityScores ? [buildSimilarityColumn()] : [];
     const props = buildPropertyColumns(reportConfig.visibleFields.properties);
+    const activeIn = protocolColumns.includes(ANY_COLUMN_ID) ? [buildActiveInColumn()] : [];
     const protoGroups = buildProtocolColumnGroups(protocolColumns, protocols, aggregationMode);
-    return [molecule, ...sim, ...props, ...protoGroups];
+    return [molecule, ...sim, ...activeIn, ...props, ...protoGroups];
   }, [
     reportConfig.imageSize,
     reportConfig.visibleFields.properties,
