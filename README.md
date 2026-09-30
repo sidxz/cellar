@@ -7,15 +7,13 @@
 
 <h1 align="center">ChemCellar</h1>
 
-<p align="center">Open-source compound management and screening, on infrastructure your group controls.</p>
+<p align="center">Open-source, self-hosted compound registration, management and screening app.</p>
 
 <p align="center">
   <img src=".github/readme/figure.webp" width="640" alt="A 384-well dose-response plate coloured by percent inhibition, with one compound's structure, properties and fitted curve">
 </p>
 
 ChemCellar registers compounds, runs screens and records what to make next. The structure you register is the same record your assay results, SAR tables and freezer locations point to, so nothing is copied between systems and nothing drifts. It runs on your own hardware, behind your own identity provider.
-
-> The figures on this page are illustrations drawn from ChemCellar's data model, not screenshots. The structures are public compounds; identifiers and most values are made up. Screenshots of the running application will follow.
 
 ## What it does
 
