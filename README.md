@@ -88,4 +88,4 @@ ChemCellar is one of a family: [DocuStore](https://docustore.io) extracts compou
 
 ## License
 
-To be added. ChemCellar will be released under a permissive license.
+ChemCellar is released under the [GNU Affero General Public License v3.0](LICENSE).
