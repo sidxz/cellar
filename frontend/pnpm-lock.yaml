@@ -56,9 +56,6 @@ importers:
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0
-      gsap:
-        specifier: ^3.15.0
-        version: 3.15.0
       ketcher-core:
         specifier: ^3.12.0
         version: 3.17.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -3840,9 +3837,6 @@ packages:
 
   grid-index@1.1.0:
     resolution: {integrity: sha512-HZRwumpOGUrHyxO5bqKZL0B0GlUpwtCAzZ42sgxUPniu33R1LSFH5yrIcBCHjkctCAh3mtWKcKd9J4vDDdeVHA==}
-
-  gsap@3.15.0:
-    resolution: {integrity: sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==}
 
   has-bigints@1.1.0:
     resolution: {integrity: sha512-R3pbpkcIqv2Pm3dUwgjclDRVmWpTJW2DcMzcIhEXEx1oh/CEMObMm3KLmRJOdvhM7o4uQBnwr8pzRK2sJWIqfg==}
@@ -10008,8 +10002,6 @@ snapshots:
   graceful-fs@4.2.11: {}
 
   grid-index@1.1.0: {}
-
-  gsap@3.15.0: {}
 
   has-bigints@1.1.0: {}
 

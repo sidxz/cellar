@@ -1,0 +1,92 @@
+/* The login-page plate: a faint well grid, and the wells on a dose-response
+   curve glowing in a sweep. The wave-in comes from the product site's hero. */
+
+.login-plate {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--background);
+  /* a well: a faint wash of the text colour with a little lime, so it follows the theme */
+  --well: color-mix(
+    in srgb,
+    var(--lime) 18%,
+    color-mix(in srgb, var(--foreground) 12%, var(--background))
+  );
+}
+.login-plate svg {
+  /* pinned to whole pixels, and no mask: a centred translate lands on a half
+     pixel when the panel width is odd, and a mask composites the svg through
+     a layer; either resamples every circle soft */
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  overflow: visible;
+  shape-rendering: geometricPrecision;
+}
+.login-plate circle {
+  fill: var(--well);
+}
+.login-plate .trace {
+  filter: drop-shadow(0 0 6px var(--lime));
+}
+.login-plate .trace circle {
+  fill: var(--lime);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* wave in: wells arrive column by column. Opacity only: a transform on
+     every circle leaves them rasterised soft */
+  .login-plate.anim circle {
+    opacity: 0;
+    transition: opacity 0.45s ease calc(var(--c) * 22ms + var(--r) * 8ms + 100ms);
+  }
+  .login-plate.is-in circle {
+    opacity: 1;
+  }
+  .login-plate.anim .trace circle,
+  .login-plate.is-in .trace circle {
+    opacity: 0;
+    transition: none;
+  }
+
+  /* three curves take turns: each sweeps low dose to high, holds, and fades
+     as the next one starts. 24s = 3 curves × 8s; --g is the curve, --i the
+     well's place along it */
+  .login-plate .trace circle {
+    animation: trace 24s ease-in-out infinite;
+    animation-delay: calc(1.6s + var(--g) * 8s + var(--i) * 55ms);
+  }
+  @keyframes trace {
+    0% {
+      opacity: 0;
+    }
+    2%,
+    20% {
+      opacity: 1;
+    }
+    28%,
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* noise: a few wells twinkle on their own, each at its own phase */
+  .login-plate .trace circle.noise {
+    animation: twinkle 7s ease-in-out infinite;
+    animation-delay: calc(var(--p) * -7s);
+  }
+  @keyframes twinkle {
+    0%,
+    100% {
+      opacity: 0;
+    }
+    35%,
+    55% {
+      opacity: 0.75;
+    }
+  }
+}

@@ -1,8 +1,7 @@
 "use client";
 
-import { CHEM_ITEMS } from "@/shared/components/backgrounds/chem-items";
-import { GridMotion } from "@/shared/components/backgrounds/grid-motion";
 import { HexLensLogo } from "@/shared/components/hex-lens-logo";
+import { LoginPlate } from "@/shared/components/login-plate/login-plate";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { forgetWorkspace } from "@/shared/lib/auth/workspace-memory";
 import { AuthzCallback } from "@duar-auth/nextjs";
@@ -14,13 +13,13 @@ export default function CallbackPage() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-background">
-      {/* ── Left: animated background only ── */}
-      <div className="absolute inset-0 md:right-[460px]">
-        <GridMotion items={CHEM_ITEMS} />
+      {/* ── Left: a live screening plate ── */}
+      <div className="absolute inset-0 hidden md:block">
+        <LoginPlate />
       </div>
 
       {/* ── Right: branding + callback ── */}
-      <div className="relative z-20 flex min-h-screen flex-col md:ml-auto md:w-[460px] md:border-l md:border-sidebar-border md:bg-sidebar">
+      <div className="relative z-20 flex min-h-screen flex-col md:ml-auto md:w-[460px] md:bg-sidebar/35 md:backdrop-blur-sm md:backdrop-saturate-150">
         {/* Top-right branding */}
         <div
           className="flex flex-col items-end px-8 pt-8"
