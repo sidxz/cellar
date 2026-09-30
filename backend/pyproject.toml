@@ -21,7 +21,7 @@ dependencies = [
     "returns>=0.23.0",
     # Auth
     "duar-auth>=1.0.0",
-    "pyjwt[crypto]>=2.10.0",
+    "pyjwt[crypto]>=2.14.0",
     "httpx>=0.28.0",
     # Chemistry
     "rdkit>=2024.9.1",

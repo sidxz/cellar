@@ -40,6 +40,11 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
+# The runtime needs node only. npm, corepack and pnpm come with the base image
+# and carry their own dependency trees, which is where most image CVEs land.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
+  /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx
+
 RUN adduser -D -u 1001 cellar
 USER cellar
 

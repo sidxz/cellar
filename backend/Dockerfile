@@ -5,12 +5,18 @@ WORKDIR /app
 # RDKit's drawing extension (rdMolDraw2D) links against these system libs;
 # the slim base omits them, so the app fails to import at runtime without them.
 RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends \
     libxrender1 \
     libxext6 \
     libx11-6 \
     libexpat1 \
   && rm -rf /var/lib/apt/lists/*
+
+# uv owns the venv; the base image's pip (and the wheels ensurepip carries)
+# only add a dependency tree that scanners flag and nothing at runtime uses.
+RUN python -m pip uninstall -y pip \
+  && rm -rf /usr/local/lib/python3.13/ensurepip /root/.cache/pip
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
