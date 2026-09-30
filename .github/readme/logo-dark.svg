@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="96" height="96">
+  <!-- The hex-lens mark: a magnifier whose lens is a benzene ring. See docs/branding/hex-lens-logo.svg. -->
+  <polygon points="14,6.5 20.5,10.25 20.5,17.75 14,21.5 7.5,17.75 7.5,10.25" fill="none" stroke="#cff23f" stroke-width="2.4"/>
+  <line x1="20.3" y1="17.55" x2="26.1" y2="23.35" stroke="#f3eff7" stroke-width="3.2"/>
+</svg>
