@@ -21,6 +21,10 @@
    as well as button fill, so on light it must be the dark lime. Bright lime
    is fill-only here: sidebar wash, active item, selection, hover tints. */
 :root:not([data-theme="dark"]) {
+  /* page surface: white with a breath of lime, so the app feels warm, not clinical */
+  --ds-surface: color-mix(in srgb, var(--lime) 3%, white);
+  --ds-surface-elevated: var(--ds-surface);
+
   --ds-accent: var(--lime-text);
   --ds-accent-hover: #4e6509;
   --ds-accent-light: color-mix(in srgb, var(--lime) 28%, white);

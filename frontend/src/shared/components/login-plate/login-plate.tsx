@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./login-plate.css";
 import { mulberry32, noiseWells, tracePoints, vars } from "./lib";
 
@@ -39,14 +39,17 @@ export function LoginPlate({ panel = 460 }: { panel?: number }) {
     return () => observer.disconnect();
   }, []);
 
-  // wave in once, after the first measured render
-  useEffect(() => {
-    if (!grid.rows || phase || window.matchMedia("(prefers-reduced-motion: reduce)").matches)
-      return;
+  // Wave in once, before the first measured render paints (or the full plate
+  // flashes). Guarded by a ref and without a cleanup: a cleanup keyed on phase
+  // would cancel the frame that sets "is-in" and leave the wells invisible.
+  const started = useRef(false);
+  useLayoutEffect(() => {
+    if (!grid.rows || started.current) return;
+    started.current = true;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     setPhase("anim");
-    const raf = requestAnimationFrame(() => requestAnimationFrame(() => setPhase("anim is-in")));
-    return () => cancelAnimationFrame(raf);
-  }, [grid.rows, phase]);
+    requestAnimationFrame(() => requestAnimationFrame(() => setPhase("anim is-in")));
+  }, [grid.rows]);
 
   const { traces, noise } = useMemo(() => {
     const random = mulberry32(5);

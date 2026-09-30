@@ -27,11 +27,13 @@
 .login-plate circle {
   fill: var(--well);
 }
-.login-plate .trace {
-  filter: drop-shadow(0 0 6px var(--lime));
-}
+/* the glow is a translucent stroke, not a filter: a filter on a group of
+   animating circles re-rasterises the whole plate every frame */
 .login-plate .trace circle {
   fill: var(--lime);
+  stroke: var(--lime);
+  stroke-opacity: 0.35;
+  stroke-width: 6;
   opacity: 0;
 }
 
@@ -71,9 +73,7 @@
       opacity: 0;
     }
   }
-}
 
-@media (prefers-reduced-motion: no-preference) {
   /* noise: a few wells twinkle on their own, each at its own phase */
   .login-plate .trace circle.noise {
     animation: twinkle 7s ease-in-out infinite;

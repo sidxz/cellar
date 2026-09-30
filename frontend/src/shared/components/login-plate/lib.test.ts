@@ -53,3 +53,20 @@ describe("noise", () => {
     }
   });
 });
+
+describe("no well is emitted twice", () => {
+  it("in a jittered trace or in the noise, so React keys stay unique", () => {
+    const random = mulberry32(5);
+    for (const curve of [
+      { dx: -0.14, k: 1.5 },
+      { dx: 0.1, k: 2 },
+      { dx: -0.02, k: 1.2 },
+    ]) {
+      const pts = tracePoints(30, 70, 28, 460, curve, 3, random);
+      expect(new Set(pts.map(([r, c]) => `${r}:${c}`)).size).toBe(pts.length);
+    }
+    const noise = noiseWells(30, 70, 28, 460, 30, random);
+    expect(new Set(noise.map(([r, c]) => `${r}:${c}`)).size).toBe(noise.length);
+    expect(noise.length).toBe(30);
+  });
+});

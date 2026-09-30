@@ -51,6 +51,7 @@ export function tracePoints(
     cy0 + spanH / 2 - spanH / (1 + Math.exp((-(x - cx0) / (spanW / 10)) * curve.k));
 
   const out: Array<[number, number, number]> = [];
+  const seen = new Set<number>();
   const c0 = Math.floor((cx0 - spanW / 2) / pitch);
   const c1 = Math.ceil((cx0 + spanW / 2) / pitch);
   for (let c = c0; c <= c1; c++) {
@@ -65,7 +66,9 @@ export function tracePoints(
     for (let r = rA; r <= rB; r++) {
       if (random && random() < 0.12) continue;
       const rr = random && random() < 0.1 ? r + (random() < 0.5 ? -1 : 1) : r;
-      if (rr >= 0 && rr < rows) out.push([rr, c, c - c0]);
+      if (rr < 0 || rr >= rows || seen.has(rr * cols + c)) continue;
+      seen.add(rr * cols + c);
+      out.push([rr, c, c - c0]);
     }
   }
   return out;
@@ -82,9 +85,12 @@ export function noiseWells(
   random: () => number,
 ): Array<[row: number, col: number, phase: number]> {
   const visibleCols = Math.max(1, Math.floor((cols * pitch - panel) / pitch));
-  return Array.from({ length: count }, () => [
-    Math.floor(random() * rows),
-    Math.floor(random() * visibleCols),
-    random(),
-  ]);
+  const out = new Map<number, [number, number, number]>();
+  // a few extra draws cover collisions; a tiny plate may still yield fewer
+  for (let i = 0; i < count * 3 && out.size < count; i++) {
+    const r = Math.floor(random() * rows);
+    const c = Math.floor(random() * visibleCols);
+    if (!out.has(r * cols + c)) out.set(r * cols + c, [r, c, random()]);
+  }
+  return [...out.values()];
 }
