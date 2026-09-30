@@ -31,17 +31,24 @@ frontend is compatible.
 ## Cutting a release
 
 1. Make sure `main` is green and pulled locally.
-2. Pick the next version per the table above. Inspect what changed:
+2. Run the security gate locally and make sure it passes:
+   ```bash
+   make security-scan   # Trivy: lockfiles, secrets, then both images
+   ```
+   It fails on any fixable HIGH/CRITICAL finding. Fix the dependency or base
+   image; only add an id to `.trivyignore`, with the reason, when the code
+   cannot run or the fix is a scheduled major. Never tag over a red scan.
+3. Pick the next version per the table above. Inspect what changed:
    ```bash
    # commits touching the backend since its last tag
    git log "$(git tag --list 'backend-v*' --sort=-creatordate | head -1)"..HEAD -- backend/
    ```
-3. Tag and push:
+4. Tag and push:
    ```bash
    git tag backend-v1.4.0      # or frontend-v2.1.0
    git push origin backend-v1.4.0
    ```
-4. CI (`.github/workflows/publish-images.yml`) then:
+5. CI (`.github/workflows/publish-images.yml`) then:
    - builds **only** that component and tags the image `1.4.0`, `1.4`, `1`;
    - injects `APP_VERSION` / `APP_GIT_SHA` / `APP_BUILD_DATE` into the image — all three
      come from `scripts/build-info.sh <component>`, the single derivation shared with `make dev`;

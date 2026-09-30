@@ -24,7 +24,7 @@ LOGDIR   := .logs
 COMPOSE_INFRA := docker compose -f docker-compose.infra.yml
 COMPOSE_PROD  := docker compose -f docker-compose.infra.yml -f docker-compose.prod.yml
 
-.PHONY: help up down install dev dev-be dev-fe dev-worker stop migrate test test-api test-all lint nuke restart status logs logs-dev prod-up prod-down prod-logs prod-pull export-data import-data
+.PHONY: help up down install dev dev-be dev-fe dev-worker stop migrate test test-api test-all lint security-scan nuke restart status logs logs-dev prod-up prod-down prod-logs prod-pull export-data import-data
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -152,6 +152,14 @@ test-all: ## Run all tests
 
 lint: ## Run import-linter only
 	$(BACKEND) && uv run lint-imports
+
+security-scan: ## Trivy gate before a release: repo lockfiles + secrets, then both images; fails on fixable HIGH/CRITICAL
+	@command -v trivy >/dev/null || { echo "trivy is not installed: brew install trivy"; exit 1; }
+	trivy fs --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+	  --skip-dirs node_modules,.venv,.next,.claude,snapshots,backend/data,.logs .
+	$(COMPOSE_INFRA) -f docker-compose.yml build backend frontend
+	trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 $(notdir $(CURDIR))-backend
+	trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 $(notdir $(CURDIR))-frontend
 
 # ── Cleanup ────────────────────────────────────────────────────
 

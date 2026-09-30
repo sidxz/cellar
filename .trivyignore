@@ -1,0 +1,7 @@
+# Accepted findings for `make security-scan` (see RELEASING.md). One id per
+# line, each with why it is accepted and what removes it.
+
+# maplibre-gl 4.7.1: pinned by plotly.js 3, present only inside plotly's
+# prebuilt bundle, and the app draws no map traces, so the code never runs.
+# plotly.js 4 depends on maplibre-gl 6.9; the entry goes when that major lands.
+CVE-2026-85061
