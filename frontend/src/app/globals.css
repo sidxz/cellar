@@ -5,6 +5,52 @@
    @structflo/components is dropped and its charts render unstyled. */
 @source "../../node_modules/@structflo/components/src";
 
+/* ── ChemCellar accent: lime (site palette) overrides the suite's blue ──
+   Overrides the --ds-* primitives after the import so the shadcn bridge
+   (primary/ring/sidebar/accent) picks them up without touching components.
+   Lime is fill-only on light surfaces (1.3:1 on white); text and focus rings
+   use a dark lime that clears WCAG AA. On dark surfaces lime is text-safe. */
+:root {
+  --lime: #cff23f;
+  --lime-text: #5f7a0b; /* 4.9:1 on white */
+}
+
+/* :not() keeps the light values out of dark mode: the package's dark block
+   is [data-theme="dark"], same specificity as :root, and this file loads later.
+   --ds-accent feeds --primary, which shadcn uses as text (text-primary, 94×)
+   as well as button fill, so on light it must be the dark lime. Bright lime
+   is fill-only here: sidebar wash, active item, selection, hover tints. */
+:root:not([data-theme="dark"]) {
+  --ds-accent: var(--lime-text);
+  --ds-accent-hover: #4e6509;
+  --ds-accent-light: color-mix(in srgb, var(--lime) 28%, white);
+  --ds-accent-muted: color-mix(in srgb, var(--lime) 45%, white);
+  --ds-accent-subtle: color-mix(in srgb, var(--lime) 12%, white);
+  --ds-accent-text: var(--lime-text);
+  --ds-info: var(--lime-text);
+
+  --ds-sidebar: color-mix(in srgb, var(--lime) 7%, #f6f4f9);
+  --ds-sidebar-active: color-mix(in srgb, var(--lime) 35%, transparent);
+  --ds-sidebar-border: color-mix(in srgb, var(--lime) 12%, #e3deea);
+
+  --chart-1: var(--lime-text);
+}
+
+[data-theme="dark"] {
+  --ds-accent: var(--lime);
+  --ds-accent-hover: #dbf766;
+  --ds-accent-light: color-mix(in srgb, var(--lime) 16%, transparent);
+  --ds-accent-muted: color-mix(in srgb, var(--lime) 28%, transparent);
+  --ds-accent-subtle: color-mix(in srgb, var(--lime) 8%, transparent);
+  --ds-accent-text: var(--lime);
+  --ds-info: var(--lime);
+
+  --ds-sidebar-active: color-mix(in srgb, var(--lime) 14%, transparent);
+
+  --primary-foreground: #1a1024;
+  --chart-1: var(--lime);
+}
+
 /* ── Auth page entrance animation ─────────────────────────── */
 @keyframes auth-enter {
   from {
