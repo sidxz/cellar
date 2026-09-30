@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/logo-dark.svg">
-    <img src=".github/readme/logo-light.svg" width="96" height="96" alt="">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/hex-lens-dark.svg">
+    <img src=".github/readme/hex-lens-light.svg" width="96" height="96" alt="">
   </picture>
 </p>
 
@@ -35,11 +35,11 @@ ChemCellar registers compounds, runs screens and records what to make next. The 
   <img src=".github/readme/cluster-map.webp" width="900" alt="A cluster map of 1,920 compounds coloured by potency, with a lasso around one series and a panel summarizing the selection">
 </p>
 
-**Campaigns.** Define the stages and the criteria that move a compound forward. Promote or demote with a reason; every override is attributed. A censored value such as "> 10 µM" that cannot prove a criterion does not pass it. Campaign results are published to DAIKON.
+**Campaigns.** Define the stages and the criteria that move a compound forward. Promote or demote with a reason; every override is attributed. A value reported as "> 10 µM" cannot prove a criterion, so it does not pass it. Campaign results are published to DAIKON.
 
 **Inventory.** Freezer, rack, box, position. Loans, shipments and synthesis requests, each followed through to a new batch. A kiosk mode with barcode scanning for check-out and check-in.
 
-**The record.** Every change lands in an append-only audit trail, enforced in the database. Censored values keep their qualifier through every table, criterion and export.
+**The record.** Every change lands in an append-only audit trail, enforced in the database. A result reported as ">" or "<" keeps that sign through every table, criterion and export.
 
 <p align="center">
   <img src=".github/readme/scheme.webp" width="900" alt="The workflow drawn as a reaction scheme: compound, batch, run, result, decision">
