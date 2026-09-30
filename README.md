@@ -84,7 +84,7 @@ Python is managed with `uv`, JavaScript with `pnpm`. The domain model, conventio
 
 ## Related
 
-ChemCellar is one of a family: [DocuStore](https://docustore.io) extracts compounds and bioactivity from documents, and DAIKON tracks discovery projects and pipelines. ChemCellar publishes campaign results to DAIKON.
+ChemCellar is one of a family: [DocuStore](https://docustore.io) extracts compounds and bioactivity from documents, and DAIKON tracks discovery projects and pipelines.
 
 ## License
 
