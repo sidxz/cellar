@@ -14,7 +14,7 @@ export function ProtocolLibraryRow({ protocol, onSelect }: ProtocolLibraryRowPro
     <button
       type="button"
       onClick={() => onSelect?.(protocol.id)}
-      className="flex w-full items-center gap-3 rounded-md border-b px-3 py-2 text-left hover:bg-muted"
+      className="flex w-full items-center gap-3 rounded-md border-b px-3 py-2 text-left text-sm hover:bg-muted"
     >
       <span className="min-w-0 flex-1 truncate font-medium">{protocol.name}</span>
       <span className="w-28 shrink-0 text-xs text-muted-foreground">
