@@ -264,7 +264,7 @@ function BulkProcessing() {
   // Kick off the bulk job on mount
   // biome-ignore lint/correctness/useExhaustiveDependencies: kick off the bulk job once on mount (guarded by hasStarted ref); the captured bulkInput/startMutation must not re-trigger the job.
   useEffect(() => {
-    if (hasStarted.current || !bulkInput.file) return;
+    if (hasStarted.current || !bulkInput.file || !bulkInput.originatingOrgId) return;
     hasStarted.current = true;
 
     startMutation

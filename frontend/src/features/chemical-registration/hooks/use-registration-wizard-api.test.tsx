@@ -24,6 +24,7 @@ describe("useStartBulkRegistration", () => {
       result.current.mutateAsync({
         file: new File(["name,smiles\n"], "rows.csv"),
         originating_org_id: "org-1",
+        file_format: "csv",
         project_ids: ["p-1", "p-2"],
       }),
     );

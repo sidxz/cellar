@@ -1,6 +1,7 @@
 "use client";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import type { BodyStartBulkRegistrationApiV1BulkRegistrationsPost } from "@/shared/lib/api/model";
 import { JOB_POLL_SLOW_INTERVAL_MS } from "@/shared/lib/timing";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -105,14 +106,11 @@ export function useBulkRegistrationItems(
 
 // ─── Bulk Registration ──────────────────────────────────────────────────────
 
-export interface StartBulkRegistrationInput {
-  file: File;
-  originating_org_id: string | null;
-  file_format?: "csv" | "xlsx" | "sdf";
-  create_batch_on_duplicate?: boolean | null;
-  /** Projects every compound in the file is added to. */
-  project_ids?: string[];
-}
+/** The generated multipart body; orval types the upload as `string`, the hook takes the File. */
+export type StartBulkRegistrationInput = Omit<
+  BodyStartBulkRegistrationApiV1BulkRegistrationsPost,
+  "file"
+> & { file: File };
 
 /** POST /api/v1/bulk-registrations — multipart/form-data upload. */
 export function useStartBulkRegistration() {
