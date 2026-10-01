@@ -377,6 +377,8 @@ class RegisterMoleculeBody(BaseModel):
     batch: BatchBody | None = None
     auto_approve: bool = True
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
+    # Projects to put the compound in (new or matched); optional.
+    project_ids: list[uuid.UUID] = []
 
 
 class PreviewRegistrationItemBody(BaseModel):
@@ -449,6 +451,7 @@ async def register_molecule(
         custom_fields=body.custom_fields,
         registered_by=auth.user_id,
         auto_approve=body.auto_approve,
+        project_ids=body.project_ids,
     )
     outcome = result_to_response(await use_case(command, auth=auth))
 
