@@ -4,7 +4,7 @@ import type { Protocol } from "@/features/screening-assay/types";
 import { Button } from "@/shared/components/ui/button";
 import { Separator } from "@/shared/components/ui/separator";
 import { RotateCcw, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchCount } from "../../hooks/use-search-count";
 import { ANY_COLUMN_ID, drcColId, rdColId } from "../../lib/protocol-column-id";
 import type {
@@ -604,19 +604,25 @@ export function SearchForm({
       ? countQuery.error.message.replace(/^API error: \d+ — /, "")
       : null;
 
-  // ⌘/Ctrl+Enter from anywhere inside the form fires Search.
-  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+  // ⌘/Ctrl+Enter fires Search from anywhere on the page. Listening on the
+  // form div alone missed the commonest flow — pick a protocol, then ⌘↵ —
+  // because closing a picker popover leaves focus on <body>. Dialogs
+  // (structure editor, save search) keep the shortcut to themselves.
+  const handleSearchRef = useRef(handleSearch);
+  handleSearchRef.current = handleSearch;
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
+      if (e.target instanceof Element && e.target.closest('[role="dialog"]')) return;
       e.preventDefault();
-      handleSearch();
+      handleSearchRef.current();
     }
-  }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
-    <div
-      className="rounded-lg border border-border bg-card overflow-hidden"
-      onKeyDown={handleKeyDown}
-    >
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="p-4 pb-2">
         {/* Header: projects only — Search/Reset moved to sticky bottom bar. */}
         <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">

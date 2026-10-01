@@ -22,17 +22,24 @@ export function activityValueToCurveSnapshot(
     !av.raw_data ||
     av.raw_data.length === 0 ||
     av.source !== "dose_response" ||
-    av.curve_params == null ||
-    av.value == null
+    av.curve_params == null
   ) {
     return null;
   }
+  // An inactive curve reports ND (value null), yet its flat points are what
+  // the chemist checks to trust the call. The figure draws inactive curves as
+  // markers only (no sigmoid, no intercept line); the fit's own scalar just
+  // satisfies the snapshot shape.
+  const fittedValue =
+    av.value ??
+    (av.curve_params.curve_class === "inactive" ? av.intercept_values?.[0]?.value : null);
+  if (fittedValue == null) return null;
   const selectedIntercept =
-    selected?.value != null && Number.isFinite(selected.value) && selected.value !== av.value
+    selected?.value != null && Number.isFinite(selected.value) && selected.value !== fittedValue
       ? { value: selected.value, label: selected.label }
       : null;
   return {
-    fitted_value: av.value,
+    fitted_value: fittedValue,
     top: av.curve_params.top,
     bottom: av.curve_params.bottom,
     hill_slope: av.curve_params.hill_slope,
