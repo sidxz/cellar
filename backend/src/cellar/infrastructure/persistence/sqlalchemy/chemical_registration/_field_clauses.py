@@ -242,6 +242,8 @@ def _run_date_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> Colu
 
     conditions: list[ColumnElement] = [
         ReadoutDataModel.workspace_id == workspace_id,
+        # Control wells (molecule_id NULL) would poison a negated NOT IN.
+        ReadoutDataModel.molecule_id.is_not(None),
         RunModel.workspace_id == workspace_id,
     ]
     if date_from:

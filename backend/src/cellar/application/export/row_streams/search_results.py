@@ -83,7 +83,10 @@ class SearchResultsRowStream:
             ),
             cursor_id=_parse_uuid(cursor) if cursor else None,
             limit=limit,
-            project_ids=[_parse_uuid(p) for p in (self.payload.get("project_ids") or [])],
+            # None (not []) when absent: [] means "unassigned molecules only"
+            # to the visibility clause, which would drop every compound that
+            # belongs to a project from an export the grid showed in full.
+            project_ids=[_parse_uuid(p) for p in (self.payload.get("project_ids") or [])] or None,
             sort_by=self.payload.get("sort_by"),
             sort_dir=self.payload.get("sort_dir"),
         )

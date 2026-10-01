@@ -15,7 +15,7 @@ import {
 } from "@/shared/components/ui/select";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Collapsible } from "radix-ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   BatchCriterion,
   BatchFieldType,
@@ -661,22 +661,29 @@ function KeywordListTerm({
   onChange: (c: KeywordListCriterion) => void;
   onRemove: () => void;
 }) {
-  // Local state prevents cursor jumps from round-tripping through
-  // criterion.values on every keystroke. Sync to parent only on blur.
+  // The textarea keeps its own text (so "CC-1, " isn't rewritten to "CC-1"
+  // mid-typing) but commits the parsed list on every change — committing only
+  // on blur meant Cmd+Enter from inside the textarea searched without it.
   const [rawText, setRawText] = useState(criterion.values.join("\n"));
-
-  // Re-sync local text when criterion changes externally (e.g. loading saved search)
   const canonicalValues = criterion.values.join(",");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-sync local text only when the canonical value string changes externally; keying on `criterion.values` directly would clobber in-progress edits on every parent re-render.
+  const lastCommitted = useRef(canonicalValues);
+
+  // Re-sync only when the values change from outside (saved-search load),
+  // never from our own commits.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the canonical string so parent re-renders with an equal list don't clobber the text.
   useEffect(() => {
+    if (canonicalValues === lastCommitted.current) return;
+    lastCommitted.current = canonicalValues;
     setRawText(criterion.values.join("\n"));
   }, [canonicalValues]);
 
-  function handleBlur() {
-    const parsed = rawText
+  function handleTextChange(text: string) {
+    setRawText(text);
+    const parsed = text
       .split(/[,;\t\r\n]+/)
-      .map((s) => s.trim())
+      .map((v) => v.trim())
       .filter(Boolean);
+    lastCommitted.current = parsed.join(",");
     onChange({ ...criterion, values: parsed });
   }
 
@@ -708,8 +715,7 @@ function KeywordListTerm({
           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring h-20 font-mono text-xs resize-y"
           placeholder="Paste a column from Excel, one per line, or comma-separated…"
           value={rawText}
-          onChange={(e) => setRawText(e.target.value)}
-          onBlur={handleBlur}
+          onChange={(e) => handleTextChange(e.target.value)}
         />
       </div>
       <Button variant="ghost" size="icon" className="mt-5 h-9 w-9 shrink-0" onClick={onRemove}>

@@ -610,9 +610,13 @@ export function SearchForm({
   // (structure editor, save search) keep the shortcut to themselves.
   const handleSearchRef = useRef(handleSearch);
   handleSearchRef.current = handleSearch;
+  const isLoadingRef = useRef(isLoading);
+  isLoadingRef.current = isLoading;
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return;
+      // Held keys auto-repeat; the Search button is disabled while one runs.
+      if (e.repeat || isLoadingRef.current) return;
       if (e.target instanceof Element && e.target.closest('[role="dialog"]')) return;
       e.preventDefault();
       handleSearchRef.current();

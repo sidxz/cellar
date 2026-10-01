@@ -1511,3 +1511,96 @@ class TestChemistSearchCorrectness:
             }
         ]
         assert mol not in await _ids(client, any_lt)
+
+    async def test_control_wells_do_not_empty_every_run_or_negated_filters(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """Control wells store readouts with molecule_id NULL. One failing
+        control in a NOT IN subquery used to make "every run" (and negated
+        readout filters) match no compound at all."""
+        mol = await _register(client, org_id, "EveryRunMol", "CCCCCCCCCCCCCCCCCN")
+        protocol_id = await _seed_numeric_readout(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol),
+            readout_name="Signal",
+            unit="AU",
+            value=80.0,
+        )
+        async with uow:
+            rd_id, run_id = (
+                await uow.session.execute(
+                    sa.text(
+                        "SELECT rd.id, r.id FROM readout_definitions rd "
+                        "JOIN runs r ON r.protocol_id = rd.protocol_id WHERE rd.protocol_id = :p"
+                    ),
+                    {"p": protocol_id},
+                )
+            ).one()
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO readout_data (id, workspace_id, run_id, well_id, molecule_id, "
+                    "readout_definition_id, value_numeric, is_outlier, is_computed) "
+                    "VALUES (:id, :ws, :run, :well, NULL, :rd, 1, false, false)"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "ws": workspace_id,
+                    "run": run_id,
+                    "well": uuid.uuid4(),
+                    "rd": rd_id,
+                },
+            )
+            await uow.commit()
+
+        cond = {
+            "source": "readout_data",
+            "readout_definition_id": str(rd_id),
+            "operator": "gt",
+            "value": 50,
+        }
+        every_run = [
+            {
+                "type": "activity",
+                "protocol_id": str(protocol_id),
+                "run_scope": {"mode": "all"},
+                "where": [cond],
+            }
+        ]
+        assert mol in await _ids(client, every_run)
+        negated_fail = [
+            {
+                "type": "activity",
+                "protocol_id": str(protocol_id),
+                "negate": True,
+                "where": [{**cond, "value": 90}],
+            }
+        ]
+        assert mol in await _ids(client, negated_fail)
+
+    async def test_export_keeps_compounds_that_belong_to_a_project(
+        self, client: AsyncClient, org_id: str
+    ) -> None:
+        """No project chips selected: the grid shows a project's compounds, so
+        the export must too (it used to apply "unassigned only")."""
+        import asyncio
+
+        mol = await _register(client, org_id, "ProjectMol", "CCCCCCCCCCCCCCCCCCN")
+        proj = await client.post("/api/v1/projects", json={"name": "Export Scope Project"})
+        assert proj.status_code == 201, proj.text
+        add = await client.post(f"/api/v1/projects/{proj.json()['id']}/molecules/{mol}")
+        assert add.status_code == 204, add.text
+
+        query = {"criteria": [{"type": "keyword_list", "ref_type": "uuid", "values": [mol]}]}
+        assert mol in await _ids(client, query["criteria"])
+        start = await client.post(
+            "/api/v1/exports", json={"format": "csv", "payload": {"query": query}}
+        )
+        job_id = start.json()["job_id"]
+        for _ in range(50):
+            body = (await client.get(f"/api/v1/exports/{job_id}")).json()
+            if body["status"] in {"ready", "failed"}:
+                break
+            await asyncio.sleep(0.1)
+        assert body["status"] == "ready", body
+        assert body["row_count"] == 1

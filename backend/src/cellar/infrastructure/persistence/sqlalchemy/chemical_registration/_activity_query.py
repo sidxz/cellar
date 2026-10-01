@@ -213,6 +213,10 @@ def _activity_where_clause(
         base_filters = [
             ReadoutDataModel.workspace_id == workspace_id,
             ReadoutDataModel.readout_definition_id == rd_id,
+            # Control / blank wells carry molecule_id NULL; one NULL in a
+            # NOT IN subquery ("every run" counterexamples, negated filters)
+            # makes it match nothing.
+            ReadoutDataModel.molecule_id.is_not(None),
             ReadoutDataModel.is_outlier == False,  # noqa: E712
             ReadoutDataModel.normalization_applied == normalization
             if normalization
@@ -421,6 +425,7 @@ def _readout_name_any_protocol_clause(
         )
         .where(
             ReadoutDataModel.workspace_id == workspace_id,
+            ReadoutDataModel.molecule_id.is_not(None),  # control wells; see per-protocol path
             ReadoutDataModel.is_outlier == False,  # noqa: E712
             ReadoutDataModel.normalization_applied.is_(None),
             _sql_normalized_name(ReadoutDefinitionModel.name) == normalize_readout_name(name),
@@ -443,6 +448,8 @@ def _activity_presence_clause(
     # data point ultimately attaches to a run, and run carries protocol.
     conds: list[ColumnElement] = [
         ReadoutDataModel.workspace_id == workspace_id,
+        # Control wells (molecule_id NULL) would poison a negated NOT IN.
+        ReadoutDataModel.molecule_id.is_not(None),
         RunModel.workspace_id == workspace_id,
     ]
     if protocol_id is not None:

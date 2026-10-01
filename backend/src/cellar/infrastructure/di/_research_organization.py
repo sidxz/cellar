@@ -399,9 +399,8 @@ def register_research_organization(container: Container) -> None:
 
     # --- Execute Search ---
     def _search_reference_resolver(c: Container, uow: AsyncUnitOfWork) -> SearchReferenceResolver:
-        processor = c[StructureProcessorProtocol]
         return SearchReferenceResolver(
-            MoleculeResolver(SQLAlchemyMoleculeRepository(uow), processor), processor
+            SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]
         )
 
     def _execute_search(c: Container):

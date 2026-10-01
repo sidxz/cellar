@@ -675,6 +675,9 @@ export function ResultsGrid({
       `}</style>
       <DataGrid<EnrichedMolecule>
         rowData={results}
+        // Stable ids keep ticked rows ticked when Load More appends a page
+        // (without them AG Grid treats every row as new and drops selection).
+        getRowId={(p) => p.data.id}
         columnDefs={columnDefs}
         loading={loading}
         emptyState={

@@ -567,7 +567,8 @@ function SearchPageInner() {
           query: currentQuery,
           ...(backendCols.length ? { protocol_columns: backendCols } : {}),
           aggregation: aggregationModeToWire(aggregationMode),
-          ...(projectIds.length ? { project_ids: projectIds } : {}),
+          // Project scope already rides in `query` as a project criterion —
+          // the export runs exactly the grid's search.
           sort_by: sortBy,
           sort_dir: sortDir,
           // Mirror the chemist's on-screen grid: structure visibility,
@@ -577,7 +578,7 @@ function SearchPageInner() {
         },
       };
     },
-    [currentQuery, protocolColumns, aggregationMode, projectIds, sortBy, sortDir, reportConfig],
+    [currentQuery, protocolColumns, aggregationMode, sortBy, sortDir, reportConfig],
   );
 
   // ── Add to collection ──────────────────────────────────────────────────
