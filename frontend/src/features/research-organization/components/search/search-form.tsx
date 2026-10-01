@@ -9,6 +9,7 @@ import { useSearchCount } from "../../hooks/use-search-count";
 import { ANY_COLUMN_ID, drcColId, rdColId } from "../../lib/protocol-column-id";
 import type {
   ActivityCriterion,
+  ActivityWhereCondition,
   GroupCriterion,
   PropertyCriterion,
   ScaffoldCriterion,
@@ -42,6 +43,11 @@ import {
   tagSectionToCriteria,
 } from "./tag-section";
 
+/** Server-side page size for compound search results. Driven by what the
+ * AG Grid viewport can comfortably render before the user scrolls; keep in
+ * sync with the cursor pagination contract on the backend. */
+export const SEARCH_PAGE_SIZE = 100;
+
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 interface SearchFormProps {
@@ -49,6 +55,8 @@ interface SearchFormProps {
   projectIds: string[];
   onProjectsChange: (ids: string[]) => void;
   onSearch: (query: SearchQuery, protocolColumns: string[]) => void;
+  /** Called after the form clears itself — the page drops its results. */
+  onReset: () => void;
   isLoading?: boolean;
   /** Full protocol records (with readout_definitions) — used to pick sensible
    *  default columns when a criterion filters by protocol only. */
@@ -57,7 +65,7 @@ interface SearchFormProps {
 
 // ─── Helpers: decompose SearchQuery into section states ─────────────────────
 
-function decomposeQuery(query: SearchQuery | undefined) {
+export function decomposeQuery(query: SearchQuery | undefined) {
   const activityCriteria: ActivityCriterion[] = [];
   const protocolConjunctions: ProtocolConjunction[] = [];
   const textCriteria: TextCriterion[] = [];
@@ -92,18 +100,22 @@ function decomposeQuery(query: SearchQuery | undefined) {
         projectIds = [...c.project_ids];
         break;
       case "activity":
-        // Top-level activity criteria were ANDed
-        protocolConjunctions.push(activityCriteria.length === 0 ? "and" : "and");
+        // Top-level activity criteria are ANDed with what came before.
+        protocolConjunctions.push("and");
         activityCriteria.push(c);
         break;
       case "group": {
-        // GroupCriterion with activity criteria — extract with the group's logic
+        // A group joins the rows before it with AND (that's how
+        // composeCriteria emits it); its members join each other with the
+        // group's logic. Giving the first member the group logic too turned
+        // "A and (B or C)" into "A or B or C" on the next compose.
         const group = c as GroupCriterion;
+        let first = true;
         for (const gc of group.criteria) {
           if (gc.type === "activity") {
-            // First item in group gets conjunction from context; rest get group logic
-            protocolConjunctions.push(activityCriteria.length === 0 ? group.logic : group.logic);
+            protocolConjunctions.push(first ? "and" : group.logic);
             activityCriteria.push(gc as ActivityCriterion);
+            first = false;
           }
         }
         break;
@@ -185,7 +197,10 @@ function deriveProtocolColumns(
       continue;
     }
     if (!c.protocol_id) continue;
-    const conds =
+    const conds: Pick<
+      ActivityWhereCondition,
+      "source" | "readout_definition_id" | "normalization"
+    >[] =
       Array.isArray(c.where) && c.where.length > 0
         ? c.where
         : c.readout_definition_id
@@ -195,7 +210,9 @@ function deriveProtocolColumns(
     for (const cond of conds) {
       if (!cond.readout_definition_id) continue;
       if (cond.source === "readout_data") {
-        add(rdColId(c.protocol_id, cond.readout_definition_id));
+        // Show the layer that was filtered on (4-segment id = normalized view).
+        const col = rdColId(c.protocol_id, cond.readout_definition_id);
+        add(cond.normalization ? `${col}:${cond.normalization}` : col);
       } else {
         add(drcColId(cond.readout_definition_id));
       }
@@ -262,6 +279,19 @@ function defaultProtocolColumns(protocolId: string, protocols: Protocol[]): stri
   return rdCols;
 }
 
+/** A numeric row is ready once it has something to compare against: a value,
+ *  or for "between" at least one of min / max (open-ended ranges are valid —
+ *  "MW ≤ 500" is the commonest med-chem filter). */
+function hasNumericBound(c: {
+  operator?: string;
+  value?: unknown;
+  min?: number;
+  max?: number;
+}): boolean {
+  if (c.operator === "between") return c.min != null || c.max != null;
+  return typeof c.value === "number" && !Number.isNaN(c.value);
+}
+
 // Walks the composed criteria tree looking for any similarity structure clause.
 // We surface a "ranked list, top N shown" caption when one is present, since
 // the count covers *candidates above the threshold* but the result panel only
@@ -284,6 +314,7 @@ export function SearchForm({
   projectIds,
   onProjectsChange,
   onSearch,
+  onReset,
   isLoading,
   protocols,
 }: SearchFormProps) {
@@ -433,14 +464,13 @@ export function SearchForm({
           structureCriterion.smiles &&
           structureCriterion.smiles.length > 0) ||
         (structureCriterion.search_type === "exact" &&
-          structureCriterion.inchi_key &&
-          structureCriterion.inchi_key.length > 0);
+          !!(structureCriterion.inchi_key || structureCriterion.smiles));
       if (hasValue) criteria.push(structureCriterion);
     }
 
-    // Properties
+    // Properties — a row counts once it has a bound (Min, Max or both).
     for (const c of propertyCriteria) {
-      criteria.push(c);
+      if (hasNumericBound(c)) criteria.push(c);
     }
 
     // Collections
@@ -468,12 +498,24 @@ export function SearchForm({
 
     // Advanced: selectivity
     for (const c of advanced.selectivity) {
-      if (c.target_readout_definition_id && c.counter_readout_definition_id) criteria.push(c);
+      if (
+        c.target_readout_definition_id &&
+        c.counter_readout_definition_id &&
+        c.ratio_value != null
+      ) {
+        criteria.push(c);
+      }
     }
 
-    // Advanced: batch
+    // Advanced: batch — skip rows still waiting for a value
     for (const c of advanced.batch) {
-      criteria.push(c);
+      const ready =
+        c.field_type === "date"
+          ? !!(c.date_from || c.date_to)
+          : c.field_type === "numeric"
+            ? hasNumericBound(c)
+            : typeof c.value === "string" && c.value.trim().length > 0;
+      if (ready) criteria.push(c);
     }
 
     // Advanced: run date
@@ -483,7 +525,11 @@ export function SearchForm({
 
     // Advanced: custom fields
     for (const c of advanced.customFields) {
-      if (c.field) criteria.push(c);
+      const ready =
+        c.mode === "numeric"
+          ? hasNumericBound(c)
+          : typeof c.value === "string" && c.value.trim().length > 0;
+      if (c.field.trim() && ready) criteria.push(c);
     }
 
     // Advanced: keyword lists
@@ -523,6 +569,7 @@ export function SearchForm({
     setAdvanced(emptyAdvancedFilters());
     setTagValue(defaultTagSectionValue());
     onProjectsChange([]);
+    onReset();
   }
 
   // Compose once per render; both the filter-count display and the live
@@ -549,6 +596,13 @@ export function SearchForm({
   const countQuery = useSearchCount(composedQuery, criteriaCount > 0);
   const totalCount = countQuery.data?.total_count;
   const countIsFetching = countQuery.isFetching;
+  // A 422 from the count (bad SMILES, unknown field…) is the earliest place
+  // the chemist can learn the query is wrong — show it instead of a stale
+  // number. ApiError.message reads "API error: 422 — <detail>".
+  const countError =
+    !countQuery.isDebouncing && countQuery.error instanceof Error
+      ? countQuery.error.message.replace(/^API error: \d+ — /, "")
+      : null;
 
   // ⌘/Ctrl+Enter from anywhere inside the form fires Search.
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -651,7 +705,11 @@ export function SearchForm({
               }`}
               aria-live="polite"
             >
-              {totalCount !== undefined ? (
+              {countError ? (
+                <span className="font-medium text-destructive" title={countError}>
+                  {countError}
+                </span>
+              ) : totalCount !== undefined ? (
                 <>
                   <span
                     className={`tabular-nums ${
@@ -663,8 +721,10 @@ export function SearchForm({
                     {totalCount.toLocaleString()}
                   </span>{" "}
                   compound{totalCount === 1 ? "" : "s"} match
-                  {isSimilarityQuery && (
-                    <span className="ml-1.5 text-muted-foreground/70">· ranked, top 50 shown</span>
+                  {isSimilarityQuery && totalCount > SEARCH_PAGE_SIZE && (
+                    <span className="ml-1.5 text-muted-foreground/70">
+                      · ranked, top {SEARCH_PAGE_SIZE} per page
+                    </span>
                   )}
                 </>
               ) : (

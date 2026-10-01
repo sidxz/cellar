@@ -311,6 +311,10 @@ export interface ActivityWhereCondition {
    *  with ``readout_definition_id``. */
   readout_name?: string;
   unit?: string | null;
+  /** Per-protocol ``readout_data`` only: which stored layer to compare —
+   *  a normalization such as ``percent_inhibition``, or null/omitted for the
+   *  raw values. Raw and normalized rows share a readout-def. */
+  normalization?: string | null;
   /** For ``curve_class`` source: the allowed curve classes (multi-select).
    *  E.g. ``["full", "partial"]`` to match well-fitted curves only. */
   curve_classes?: string[];
@@ -379,7 +383,8 @@ export interface SelectivityCriterion {
    *  cytotoxicity, off-target, etc.). */
   counter_readout_definition_id: string;
   ratio_operator: PropertyOperator;
-  ratio_value: number;
+  /** Fold window; undefined while the chemist is still typing. */
+  ratio_value?: number;
 }
 
 export interface GroupCriterion {
@@ -576,26 +581,23 @@ export function anyProtocolActivity(mol: {
 
 // ─── Report Configuration ───────────────────────────────────────────────────
 
-export type DetailLevel = "summary" | "run_batch" | "details";
-export type PlotScale = "protocol" | "min_max" | "per_molecule";
 export type ImageSize = "small" | "medium" | "large";
 
+/** What the results grid + exports show. Every key here is honored by both
+ *  the on-screen grid and the export column builder — options that only one
+ *  side understood used to sit in the customizer doing nothing. */
 export interface ReportConfig {
-  detailLevel: DetailLevel;
-  plotScale: PlotScale;
-  showPlotLegend: boolean;
   imageSize: ImageSize;
-  columnWidth: number;
   visibleFields: VisibleFields;
 }
 
 export interface VisibleFields {
+  /** "structure" (image), "registration_number", "smiles", "inchi_key". */
   structure: string[];
+  /** Descriptor keys (`MoleculeDescriptors`), e.g. molecular_weight, logp. */
   properties: string[];
-  collections: boolean;
+  /** "name", "lifecycle_stage". */
   molecule: string[];
-  batch: string[];
-  protocols: Record<string, string[]>;
 }
 
 // ─── Curve Parameters ───────────────────────────────────────────────────────

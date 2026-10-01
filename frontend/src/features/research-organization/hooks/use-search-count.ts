@@ -29,17 +29,25 @@ export function useSearchCount(query: SearchQuery, enabled: boolean) {
   const serialized = JSON.stringify(query);
   const debouncedKey = useDebounce(serialized, SEARCH_DEBOUNCE_MS);
 
-  return useQuery({
+  // Gate on the debounced query too: when the first criterion appears,
+  // `enabled` flips immediately while the key still holds the old empty
+  // query — which would fetch (and flash) the whole-workspace count.
+  const debouncedQuery = JSON.parse(debouncedKey) as SearchQuery;
+
+  const result = useQuery({
     queryKey: [...COUNT_KEY, debouncedKey],
     queryFn: () =>
       customInstance<CountResponse>({
         url: `${API_V1}/search/count`,
         method: "POST",
-        data: { query: JSON.parse(debouncedKey) as SearchQuery },
+        data: { query: debouncedQuery },
       }),
-    enabled,
+    enabled: enabled && debouncedQuery.criteria.length > 0,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIME.SHORT,
     retry: false,
   });
+  // True while the form has moved on but the debounced key hasn't caught up —
+  // the result (and any error) still describes the previous query.
+  return { ...result, isDebouncing: serialized !== debouncedKey };
 }

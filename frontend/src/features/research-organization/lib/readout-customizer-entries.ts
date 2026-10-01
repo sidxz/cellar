@@ -13,9 +13,15 @@
  *   - `drc:<rd_id>`                       — DR primary intercept
  *   - `drc:<rd_id>:<kind>:<level>`        — DR secondary intercept (EC90, …)
  *   - `rd:<protocol_id>:<rd_id>`          — raw numeric readout
+ *   - `rd:<protocol_id>:<rd_id>:<norm>`   — a normalized layer (% inhibition…),
+ *     which is what the grid shows by default for normalized readouts
  */
 import { interceptOptionLabel } from "@/features/screening-assay/lib/intercept-label";
-import type { Protocol } from "@/features/screening-assay/types";
+import {
+  type Protocol,
+  READOUT_NORMALIZATION_LABELS,
+  type ReadoutNormalization,
+} from "@/features/screening-assay/types";
 import { drcColId, drcInterceptColId, rdColId } from "./protocol-column-id";
 
 export interface ReadoutCustomizerEntry {
@@ -70,7 +76,7 @@ export function buildReadoutCustomizerEntries(
         // Legacy DR readout with no declared intercepts — one parent entry.
         entries.push({
           key: drcColId(rd.id),
-          label: rd.name + (rd.unit ? ` (${rd.unit})` : ""),
+          label: `${rd.name} (${protocol.dose_unit})`,
         });
         continue;
       }
@@ -84,16 +90,21 @@ export function buildReadoutCustomizerEntries(
         // computing check-state.
         const key = drcInterceptColId(rd.id, s);
         const label = interceptOptionLabel(rd.name, primary, s);
-        entries.push({
-          key,
-          label: rd.unit ? `${label} (${rd.unit})` : label,
-        });
+        // Potencies are in the protocol's dose unit (what the grid shows).
+        entries.push({ key, label: `${label} (${protocol.dose_unit})` });
       }
     } else if (rd.data_type === "numeric") {
       entries.push({
         key: rdColId(protocolId, rd.id),
         label: rd.name + (rd.unit ? ` (${rd.unit})` : ""),
       });
+      for (const norm of rd.normalizations ?? []) {
+        if (norm === "none") continue;
+        entries.push({
+          key: `${rdColId(protocolId, rd.id)}:${norm}`,
+          label: `${rd.name} · ${READOUT_NORMALIZATION_LABELS[norm as ReadoutNormalization] ?? norm}`,
+        });
+      }
     }
   }
   return entries;

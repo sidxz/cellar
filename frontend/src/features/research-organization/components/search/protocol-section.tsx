@@ -294,6 +294,7 @@ function WhereRow({ cond, isFirst, options, anyProtocol, onChange, onRemove }: W
               ...parsed,
               readout_name: parsed.readout_name,
               unit: parsed.unit,
+              normalization: parsed.normalization ?? undefined,
               operator: cond.operator === "eq" || isCurveClass ? "lt" : cond.operator,
               curve_classes: undefined,
             });
@@ -457,6 +458,7 @@ function WhereOptionList({
           {dr.map((o) => (
             <SelectItem key={o.id} value={o.id}>
               {o.label}
+              {o.unit && !o.id.startsWith("any:") ? ` (${o.unit})` : ""}
             </SelectItem>
           ))}
         </>
@@ -654,7 +656,9 @@ function ActivityRow({
             value={conjunction}
             onValueChange={(v) => onConjunctionChange(v as ProtocolConjunction)}
           >
-            <SelectTrigger className="h-8 w-[4.5rem] text-sm shrink-0">
+            {/* px-2: the default px-3 + chevron left too little room and
+                "and" rendered as "anc". */}
+            <SelectTrigger className="h-8 w-[4.5rem] px-2 text-sm shrink-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

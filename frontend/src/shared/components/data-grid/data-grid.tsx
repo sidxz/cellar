@@ -201,9 +201,10 @@ export function DataGrid<TData = unknown>({
   const handleRowClicked = useCallback(
     (event: RowClickedEvent<TData>) => {
       if (!onRowClick || !event.data) return;
-      // Don't navigate if clicking on an action button
+      // Don't navigate if clicking on an action button or ticking the
+      // selection checkbox — picking rows must not open each one.
       const target = event.event?.target as HTMLElement | null;
-      if (target?.closest("button, a, [role='button']")) return;
+      if (target?.closest("button, a, [role='button'], [col-id='__select__']")) return;
       onRowClick(event.data);
     },
     [onRowClick],

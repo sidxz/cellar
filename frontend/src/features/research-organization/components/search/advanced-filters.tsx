@@ -1,7 +1,8 @@
 "use client";
 
-import { useProtocol, useProtocols } from "@/features/screening-assay/hooks/use-protocols";
-import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
+import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
+import { interceptOptionLabel } from "@/features/screening-assay/lib/intercept-label";
+import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -72,11 +73,6 @@ const REF_TYPE_OPTIONS: { value: RefType; label: string }[] = [
   { value: "inchi_key", label: "InChI Key" },
 ];
 
-const CUSTOM_FIELD_MODE_OPTIONS: { value: CustomFieldMode; label: string }[] = [
-  { value: "text", label: "Text" },
-  { value: "numeric", label: "Numeric" },
-];
-
 // ─── Default factories ──────────────────────────────────────────────────────
 
 function defaultSelectivity(): SelectivityCriterion {
@@ -113,6 +109,74 @@ function defaultKeywordList(): KeywordListCriterion {
 
 // ─── Selectivity sub-component ──────────────────────────────────────────────
 
+interface DrReadoutOption {
+  id: string;
+  label: string;
+  unit: string | null;
+}
+
+/** Every dose-response readout in the workspace, ordered by protocol. One
+ *  picker per side (instead of protocol → readout) means a saved search
+ *  re-opens showing what it filters, and protocols without a curve fit
+ *  (summary-imported IC50s) never lead to an empty second dropdown. */
+function useDrReadoutGroups(): { protocol: string; readouts: DrReadoutOption[] }[] {
+  const { data: protocols } = useProtocols();
+  return (protocols ?? [])
+    .map((p) => ({
+      protocol: p.name,
+      readouts: (p.readout_definitions ?? [])
+        .filter((rd) => rd.dose_response_config)
+        .map((rd) => {
+          const spec = rd.dose_response_config?.intercepts?.[0];
+          return {
+            id: rd.id,
+            label: spec ? interceptOptionLabel(rd.name, spec, spec) : rd.name,
+            unit: p.dose_unit ?? null,
+          };
+        }),
+    }))
+    .filter((g) => g.readouts.length > 0)
+    .sort((a, b) => a.protocol.localeCompare(b.protocol));
+}
+
+function DrReadoutSelect({
+  label,
+  value,
+  groups,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  groups: { protocol: string; readouts: DrReadoutOption[] }[];
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="min-w-0 flex-1 basis-64">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Select value={value || undefined} onValueChange={onChange}>
+        <SelectTrigger className="h-9 w-full">
+          <SelectValue placeholder="Pick a dose-response readout…" />
+        </SelectTrigger>
+        <SelectContent>
+          {groups.length === 0 && (
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">
+              No protocol has a dose-response readout yet.
+            </div>
+          )}
+          {groups.flatMap((g) =>
+            g.readouts.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {g.protocol} › {r.label}
+                {r.unit ? ` (${r.unit})` : ""}
+              </SelectItem>
+            )),
+          )}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function SelectivityTerm({
   criterion,
   onChange,
@@ -122,133 +186,39 @@ function SelectivityTerm({
   onChange: (c: SelectivityCriterion) => void;
   onRemove: () => void;
 }) {
-  const { data: protocols } = useProtocols();
-  const activeProtocols = protocols?.filter((p) => p.status === "active");
-
-  // The selectivity criterion stores readout-def UUIDs (post-033), but the
-  // user picks Protocol -> Readout. Two transient picker-state values let
-  // us scope the readout-def dropdown to a chosen protocol without
-  // mutating the criterion until both halves are selected.
-  const [targetProtocolId, setTargetProtocolId] = useState<string>("");
-  const [counterProtocolId, setCounterProtocolId] = useState<string>("");
-  const { data: targetProtocol } = useProtocol(targetProtocolId);
-  const { data: counterProtocol } = useProtocol(counterProtocolId);
-
-  const targetDrReadouts =
-    targetProtocol?.readout_definitions?.filter((rd) => rd.dose_response_config) ?? [];
-  const counterDrReadouts =
-    counterProtocol?.readout_definitions?.filter((rd) => rd.dose_response_config) ?? [];
+  const groups = useDrReadoutGroups();
 
   return (
     <div className="space-y-2 rounded border border-dashed border-border p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">
-          Selectivity -- counter / target ratio
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">
+          Selectivity window = counter-screen potency ÷ target potency (both in µM). A ratio ≥ 100
+          means at least 100× more potent on the target. Inactive curves never count.
         </span>
         <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onRemove}>
           <Trash2 className="h-4 w-4 text-muted-foreground" />
         </Button>
       </div>
-      <div className="flex items-end gap-2 flex-wrap">
-        <div className="w-44">
-          <Label className="text-xs text-muted-foreground">Target Protocol</Label>
-          <Select
-            value={targetProtocolId || undefined}
-            onValueChange={(v) => {
-              setTargetProtocolId(v);
-              onChange({ ...criterion, target_readout_definition_id: "" });
-            }}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-              {activeProtocols?.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="w-44">
-          <Label className="text-xs text-muted-foreground">Readout</Label>
-          <Select
-            value={criterion.target_readout_definition_id || undefined}
-            onValueChange={(v) => onChange({ ...criterion, target_readout_definition_id: v })}
-            disabled={!targetProtocolId}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-              {targetDrReadouts.map((rd) => {
-                const ct = rd.dose_response_config?.curve_type;
-                const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
-                return (
-                  <SelectItem key={rd.id} value={rd.id}>
-                    {rd.name}
-                    {suffix}
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="flex items-end gap-2 flex-wrap">
-        <div className="w-44">
-          <Label className="text-xs text-muted-foreground">Counter Protocol</Label>
-          <Select
-            value={counterProtocolId || undefined}
-            onValueChange={(v) => {
-              setCounterProtocolId(v);
-              onChange({ ...criterion, counter_readout_definition_id: "" });
-            }}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-              {activeProtocols?.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="w-44">
-          <Label className="text-xs text-muted-foreground">Readout</Label>
-          <Select
-            value={criterion.counter_readout_definition_id || undefined}
-            onValueChange={(v) => onChange({ ...criterion, counter_readout_definition_id: v })}
-            disabled={!counterProtocolId}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-              {counterDrReadouts.map((rd) => {
-                const ct = rd.dose_response_config?.curve_type;
-                const suffix = ct ? ` (${CURVE_TYPE_LABELS[ct] ?? ct.toUpperCase()})` : "";
-                return (
-                  <SelectItem key={rd.id} value={rd.id}>
-                    {rd.name}
-                    {suffix}
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <DrReadoutSelect
+          label="Target"
+          value={criterion.target_readout_definition_id}
+          groups={groups}
+          onChange={(v) => onChange({ ...criterion, target_readout_definition_id: v })}
+        />
+        <DrReadoutSelect
+          label="Counter-screen"
+          value={criterion.counter_readout_definition_id}
+          groups={groups}
+          onChange={(v) => onChange({ ...criterion, counter_readout_definition_id: v })}
+        />
         <div className="w-20">
           <Label className="text-xs text-muted-foreground">Ratio</Label>
           <Select
             value={criterion.ratio_operator}
             onValueChange={(v) => onChange({ ...criterion, ratio_operator: v as PropertyOperator })}
           >
-            <SelectTrigger className="h-9">
+            <SelectTrigger className="h-9 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -261,14 +231,18 @@ function SelectivityTerm({
           </Select>
         </div>
         <div className="w-24">
-          <Label className="text-xs text-muted-foreground">Value</Label>
+          <Label className="text-xs text-muted-foreground">Fold</Label>
           <Input
             className="h-9"
             type="number"
+            min={0}
             placeholder="e.g. 100"
             value={criterion.ratio_value ?? ""}
             onChange={(e) =>
-              onChange({ ...criterion, ratio_value: e.target.value ? Number(e.target.value) : 0 })
+              onChange({
+                ...criterion,
+                ratio_value: e.target.value ? Number(e.target.value) : undefined,
+              })
             }
           />
         </div>
@@ -319,7 +293,7 @@ function BatchTerm({
             }
           }}
         >
-          <SelectTrigger className="h-9">
+          <SelectTrigger className="h-9 w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -340,7 +314,7 @@ function BatchTerm({
               value={criterion.field || "batch_number"}
               onValueChange={(v) => onChange({ ...criterion, field: v })}
             >
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-9 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -358,7 +332,7 @@ function BatchTerm({
               value={(criterion.operator as string) || "contains"}
               onValueChange={(v) => onChange({ ...criterion, operator: v as TextOperator })}
             >
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-9 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -390,7 +364,7 @@ function BatchTerm({
               value={criterion.field || "purity"}
               onValueChange={(v) => onChange({ ...criterion, field: v })}
             >
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-9 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -408,7 +382,7 @@ function BatchTerm({
               value={(criterion.operator as string) || "gte"}
               onValueChange={(v) => onChange({ ...criterion, operator: v as PropertyOperator })}
             >
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-9 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -556,52 +530,40 @@ function CustomFieldTerm({
 }) {
   const isNumeric = criterion.mode === "numeric";
   const isBetween = criterion.operator === "between";
+  // Molecule custom fields are workspace-defined — pick one instead of
+  // guessing its stored key. The definition's type decides text vs numeric.
+  const { data: definitions } = useCustomFields("molecule", true);
 
   return (
     <div className="flex items-end gap-2 flex-wrap">
-      <div className="w-36">
-        <Label className="text-xs text-muted-foreground">Field Name</Label>
-        <Input
-          className="h-9"
-          placeholder="e.g. solubility"
-          value={criterion.field}
-          onChange={(e) => onChange({ ...criterion, field: e.target.value })}
-        />
-      </div>
-      <div className="w-28">
-        <Label className="text-xs text-muted-foreground">Mode</Label>
+      <div className="w-56">
+        <Label className="text-xs text-muted-foreground">Field</Label>
         <Select
-          value={criterion.mode}
-          onValueChange={(v) => {
-            const m = v as CustomFieldMode;
-            if (m === "text") {
-              onChange({
-                ...criterion,
-                mode: m,
-                operator: "contains",
-                value: "",
-                min: undefined,
-                max: undefined,
-              });
-            } else {
-              onChange({
-                ...criterion,
-                mode: m,
-                operator: "gte",
-                value: undefined,
-                min: undefined,
-                max: undefined,
-              });
-            }
+          value={criterion.field || undefined}
+          disabled={!definitions?.length}
+          onValueChange={(name) => {
+            const def = definitions?.find((d) => d.name === name);
+            const mode: CustomFieldMode = def?.data_type === "number" ? "numeric" : "text";
+            onChange(
+              mode === "numeric"
+                ? { type: "custom_field", field: name, mode, operator: "gte" }
+                : { type: "custom_field", field: name, mode, operator: "contains", value: "" },
+            );
           }}
         >
-          <SelectTrigger className="h-9">
-            <SelectValue />
+          <SelectTrigger className="h-9 w-full">
+            <SelectValue
+              placeholder={
+                definitions && definitions.length === 0
+                  ? "No molecule custom fields defined"
+                  : "Pick a field…"
+              }
+            />
           </SelectTrigger>
           <SelectContent>
-            {CUSTOM_FIELD_MODE_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
+            {definitions?.map((d) => (
+              <SelectItem key={d.id} value={d.name}>
+                {d.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -615,7 +577,7 @@ function CustomFieldTerm({
             onChange({ ...criterion, operator: v as TextOperator | PropertyOperator })
           }
         >
-          <SelectTrigger className="h-9">
+          <SelectTrigger className="h-9 w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -712,7 +674,7 @@ function KeywordListTerm({
 
   function handleBlur() {
     const parsed = rawText
-      .split(/[,\n]+/)
+      .split(/[,;\t\r\n]+/)
       .map((s) => s.trim())
       .filter(Boolean);
     onChange({ ...criterion, values: parsed });
@@ -726,7 +688,7 @@ function KeywordListTerm({
           value={criterion.ref_type}
           onValueChange={(v) => onChange({ ...criterion, ref_type: v as RefType })}
         >
-          <SelectTrigger className="h-9">
+          <SelectTrigger className="h-9 w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -744,7 +706,7 @@ function KeywordListTerm({
         </Label>
         <textarea
           className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring h-20 font-mono text-xs resize-y"
-          placeholder="One per line, or comma-separated..."
+          placeholder="Paste a column from Excel, one per line, or comma-separated…"
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
           onBlur={handleBlur}
