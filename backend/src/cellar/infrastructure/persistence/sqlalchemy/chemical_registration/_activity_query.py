@@ -15,6 +15,7 @@ from sqlalchemy import column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import ColumnElement
 
+from cellar.domain.screening_assay.enums import CurveClass
 from cellar.domain.screening_assay.readout_name import normalize_readout_name
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
@@ -186,6 +187,7 @@ def _activity_where_clause(
                 msg = f"Invalid intercept_key on activity where: {ik!r}"
                 raise ValueError(msg)
             data_col = _jsonb_intercept_value(kind, float(level))
+        data_col = reportable_curve_value(data_col, DoseResponseCurveModel.curve_class)
         molecule_col = DoseResponseCurveModel.molecule_id
         run_id_col = DoseResponseCurveModel.run_id
         base_filters = [
@@ -196,10 +198,18 @@ def _activity_where_clause(
         data_col = ReadoutDataModel.value_numeric
         molecule_col = ReadoutDataModel.molecule_id
         run_id_col = ReadoutDataModel.run_id
+        # A readout-def stores its raw rows and each normalized layer
+        # (``normalization_applied``, e.g. percent_inhibition) side by side.
+        # Mixing them compares "% inhibition > 50" against raw signal counts,
+        # so a condition targets exactly one layer — raw unless it names one.
+        normalization = cond.get("normalization")
         base_filters = [
             ReadoutDataModel.workspace_id == workspace_id,
             ReadoutDataModel.readout_definition_id == rd_id,
             ReadoutDataModel.is_outlier == False,  # noqa: E712
+            ReadoutDataModel.normalization_applied == normalization
+            if normalization
+            else ReadoutDataModel.normalization_applied.is_(None),
         ]
     else:
         msg = f"Unknown activity where source: {source!r}"
@@ -209,7 +219,9 @@ def _activity_where_clause(
     if scope_filter is not None:
         base_filters.append(scope_filter)
 
-    value_filter = _value_filter(data_col, cond)
+    # coalesce: an ND value (inactive curve, missing intercept) satisfies no
+    # cutoff — and in "all" mode it is a counterexample, not a skipped row.
+    value_filter = sa.func.coalesce(_value_filter(data_col, cond), sa.false())
 
     # "all" semantics: molecule has at least one satisfying row AND no
     # non-satisfying row in scope. Implemented as IN(positive) AND NOT IN(negative).
@@ -272,14 +284,28 @@ def _value_filter(data_col: Any, cond: dict[str, Any]) -> ColumnElement:
     return getattr(data_col, op_name)(cond["value"])
 
 
-def _to_micromolar(expr: Any) -> ColumnElement:
+def reportable_curve_value(value: Any, curve_class: Any) -> ColumnElement:
+    """A curve's value as the grid reports it: NULL (ND) when the curve is
+    inactive. An inactive fit's scalar is an arbitrary asymptote parameter
+    (see ``run_aggregation.resolve_intercept``), so a potency cutoff must not
+    match it — "IC50 < 10 µM" returning inactive compounds is a false hit."""
+    return sa.case((curve_class == CurveClass.INACTIVE.value, sa.null()), else_=value)
+
+
+def to_micromolar(
+    expr: Any,
+    *,
+    dose_unit: Any = ProtocolModel.dose_unit,
+    molecular_weight: Any = MoleculeModel.molecular_weight,
+) -> ColumnElement:
     """Express ``expr`` (a value in the owning protocol's ``dose_unit``) in µM.
 
     Molar units scale by a constant; mg/mL needs the molecule's molecular
     weight (µM = mg/mL × 1e6 / MW) and yields NULL when MW is unknown, so
     that curve simply cannot match a cutoff. The CASE is generated from
     ``ConcentrationUnit`` so a new unit cannot be silently mis-scaled.
-    Callers must join ``ProtocolModel`` and ``MoleculeModel``.
+    Callers must join the protocol + molecule the two columns come from
+    (defaults: the un-aliased ``ProtocolModel`` / ``MoleculeModel``).
     """
     whens = []
     for unit in ConcentrationUnit:
@@ -287,9 +313,9 @@ def _to_micromolar(expr: Any) -> ColumnElement:
         f = (
             sa.literal(factor)
             if factor is not None
-            else 1_000_000.0 / sa.func.nullif(MoleculeModel.molecular_weight, 0)
+            else 1_000_000.0 / sa.func.nullif(molecular_weight, 0)
         )
-        whens.append((ProtocolModel.dose_unit == unit.value, f))
+        whens.append((dose_unit == unit.value, f))
     return expr * sa.case(*whens, else_=None)
 
 
@@ -319,7 +345,10 @@ def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) 
         .where(
             DoseResponseCurveModel.workspace_id == workspace_id,
             ProtocolModel.workspace_id == workspace_id,
-            _value_filter(_to_micromolar(expr), cond),
+            _value_filter(
+                to_micromolar(reportable_curve_value(expr, DoseResponseCurveModel.curve_class)),
+                cond,
+            ),
         )
     )
     return MoleculeModel.id.in_(sub)

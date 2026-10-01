@@ -380,6 +380,7 @@ async def _seed_multi_run_dr(
     dose_unit: str = "uM",
     fitted_value: float = 5.0,
     intercepts: list[tuple[str, float, float]] | None = None,
+    curve_class: CurveClass = CurveClass.FULL,
 ) -> tuple[uuid.UUID, uuid.UUID, list[uuid.UUID]]:
     """Seed a protocol + DR readout-def + N runs + N curves for one molecule.
 
@@ -484,7 +485,7 @@ async def _seed_multi_run_dr(
                 bottom=0.0,
                 r_squared=0.97,
                 num_points=8,
-                curve_class=CurveClass.FULL,
+                curve_class=curve_class,
                 raw_data=[],
                 intercept_values=intercept_values,
             )
@@ -1120,3 +1121,279 @@ class TestActivityAnyProtocol:
 
         assert mol_id in await ids_for(1.0)
         assert mol_id not in await ids_for(target_um / 10)
+
+
+# ---------------------------------------------------------------------------
+# Chemist-facing correctness: what a med-chemist types must mean what it says.
+# ---------------------------------------------------------------------------
+
+
+async def _register(client: AsyncClient, org_id: str, name: str, smiles: str) -> str:
+    resp = await client.post(
+        "/api/v1/molecules",
+        json={"name": name, "smiles": smiles, "originating_org_id": org_id},
+    )
+    assert resp.status_code == 201, resp.text
+    return str(resp.json()["molecule"]["id"])
+
+
+async def _ids(client: AsyncClient, criteria: list[dict]) -> set[str]:
+    res = await client.post(
+        "/api/v1/search/execute", json={"query": {"criteria": criteria, "logic": "and"}}
+    )
+    assert res.status_code == 200, res.text
+    return {m["id"] for m in res.json()["items"]}
+
+
+async def _count_status(client: AsyncClient, criteria: list[dict]) -> int:
+    res = await client.post(
+        "/api/v1/search/count", json={"query": {"criteria": criteria, "logic": "and"}}
+    )
+    return res.status_code
+
+
+class TestChemistSearchCorrectness:
+    async def test_potency_cutoff_ignores_inactive_curves(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """An inactive fit parks a meaningless scalar on fitted_value (here
+        0.001 µM). The grid reports it ND, so "IC50 < 10" must not call it a hit
+        — not per-protocol, not across protocols, not in "every run" mode."""
+        active = await _register(client, org_id, "ActiveHit", "CCCCCCN")
+        inactive = await _register(client, org_id, "InactiveJunk", "CCCCCCCN")
+        proto_a, rd_a, _ = await _seed_multi_run_dr(
+            uow, workspace_id=workspace_id, molecule_id=uuid.UUID(active), run_count=1
+        )
+        proto_i, rd_i, _ = await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(inactive),
+            run_count=1,
+            fitted_value=0.001,
+            curve_class=CurveClass.INACTIVE,
+        )
+
+        def where(rd: uuid.UUID) -> list[dict]:
+            return [
+                {
+                    "source": "dr_curve",
+                    "readout_definition_id": str(rd),
+                    "operator": "lt",
+                    "value": 10,
+                }
+            ]
+
+        assert active in await _ids(
+            client, [{"type": "activity", "protocol_id": str(proto_a), "where": where(rd_a)}]
+        )
+        assert inactive not in await _ids(
+            client, [{"type": "activity", "protocol_id": str(proto_i), "where": where(rd_i)}]
+        )
+        assert inactive not in await _ids(
+            client,
+            [
+                {
+                    "type": "activity",
+                    "protocol_id": str(proto_i),
+                    "run_scope": {"mode": "all"},
+                    "where": where(rd_i),
+                }
+            ],
+        )
+        any_protocol = await _ids(
+            client,
+            [
+                {
+                    "type": "activity",
+                    "protocol_id": None,
+                    "where": [{"source": "dr_curve", "operator": "lt", "value": 10}],
+                }
+            ],
+        )
+        assert active in any_protocol
+        assert inactive not in any_protocol
+
+    async def test_readout_filter_targets_one_layer(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """Raw signal and its % inhibition layer share a readout-def. A raw
+        filter must not match normalized rows, and naming the layer must."""
+        mol = await _register(client, org_id, "LayerMol", "CCCCCCCCCN")
+        protocol_id = await _seed_numeric_readout(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol),
+            readout_name="Signal",
+            unit="AU",
+            value=0.2,
+        )
+        async with uow:
+            rd_id, run_id = (
+                await uow.session.execute(
+                    sa.text(
+                        "SELECT rd.id, r.id FROM readout_definitions rd "
+                        "JOIN runs r ON r.protocol_id = rd.protocol_id WHERE rd.protocol_id = :p"
+                    ),
+                    {"p": protocol_id},
+                )
+            ).one()
+            await uow.session.execute(
+                sa.text(
+                    # Plate-derived layer rows carry a well (the well-less
+                    # unique index only covers summary imports).
+                    "INSERT INTO readout_data (id, workspace_id, run_id, well_id, molecule_id, "
+                    "readout_definition_id, value_numeric, is_outlier, is_computed, "
+                    "normalization_applied) "
+                    "VALUES (:id, :ws, :run, :well, :mol, :rd, 95, false, false, "
+                    "'percent_inhibition')"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "ws": workspace_id,
+                    "run": run_id,
+                    "well": uuid.uuid4(),
+                    "mol": mol,
+                    "rd": rd_id,
+                },
+            )
+            await uow.commit()
+
+        def crit(**layer: str) -> list[dict]:
+            cond = {
+                "source": "readout_data",
+                "readout_definition_id": str(rd_id),
+                "operator": "gt",
+                "value": 50,
+                **layer,
+            }
+            return [{"type": "activity", "protocol_id": str(protocol_id), "where": [cond]}]
+
+        assert mol not in await _ids(client, crit())
+        assert mol in await _ids(client, crit(normalization="percent_inhibition"))
+
+    async def test_selectivity_normalizes_units_and_skips_inactive(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """Target 50 nM (= 0.05 µM) vs counter 10 µM is a 200× window. Divided
+        raw (10 / 50) it would read 0.2× — the unit bug this pins."""
+        mol = await _register(client, org_id, "SelectiveMol", "CCCCCCCCCCN")
+        _, target_rd, _ = await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol),
+            run_count=1,
+            dose_unit="nM",
+            fitted_value=50.0,
+        )
+        _, counter_rd, _ = await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol),
+            run_count=1,
+            fitted_value=10.0,
+        )
+        _, inactive_rd, _ = await _seed_multi_run_dr(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol),
+            run_count=1,
+            fitted_value=1000.0,
+            curve_class=CurveClass.INACTIVE,
+        )
+
+        def sel(counter: uuid.UUID, ratio: float) -> list[dict]:
+            return [
+                {
+                    "type": "selectivity",
+                    "target_readout_definition_id": str(target_rd),
+                    "counter_readout_definition_id": str(counter),
+                    "ratio_operator": "gte",
+                    "ratio_value": ratio,
+                }
+            ]
+
+        assert mol in await _ids(client, sel(counter_rd, 100))
+        assert mol not in await _ids(client, sel(counter_rd, 300))
+        assert mol not in await _ids(client, sel(inactive_rd, 1))
+
+    async def test_half_filled_numeric_rows_are_422_not_500(self, client: AsyncClient) -> None:
+        for criterion in (
+            {"type": "property", "field": "molecular_weight", "operator": "between"},
+            {"type": "property", "field": "logp", "operator": "lte"},
+            {"type": "batch", "field_type": "numeric", "field": "purity", "operator": "gte"},
+            {"type": "custom_field", "field": "sol", "mode": "numeric", "operator": "gt"},
+            {
+                "type": "selectivity",
+                "target_readout_definition_id": str(uuid.uuid4()),
+                "counter_readout_definition_id": str(uuid.uuid4()),
+                "ratio_operator": "gte",
+            },
+        ):
+            assert await _count_status(client, [criterion]) == 422, criterion
+
+    async def test_open_ended_property_range(self, client: AsyncClient, org_id: str) -> None:
+        """Only a max (MW ≤ 100) — the most common med-chem filter."""
+        small = await _register(client, org_id, "Methanol", "CO")
+        big = await _register(client, org_id, "Decane", "CCCCCCCCCC")
+        hits = await _ids(
+            client,
+            [{"type": "property", "field": "molecular_weight", "operator": "between", "max": 100}],
+        )
+        assert small in hits
+        assert big not in hits
+
+    async def test_any_keyword_matches_names_and_external_ids(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        by_name = await _register(client, org_id, "Kinostatin", "CCCCCCCCCCCN")
+        by_ext = await _register(client, org_id, "Unrelated", "CCCCCCCCCCCCN")
+        async with uow:
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO molecule_identifiers (id, molecule_id, workspace_id, identifier, "
+                    "identifier_type, source, registered_by) "
+                    "VALUES (:id, :mol, :ws, 'VENDOR-KINO-77', 'custom', 'vendor', :user)"
+                ),
+                {"id": uuid.uuid4(), "mol": by_ext, "ws": workspace_id, "user": _SEED_USER_ID},
+            )
+            await uow.commit()
+
+        def any_(value: str) -> list[dict]:
+            return [{"type": "text", "field": "any", "operator": "contains", "value": value}]
+
+        assert by_name in await _ids(client, any_("kinostatin"))
+        assert by_ext in await _ids(client, any_("KINO-77"))
+        assert by_ext not in await _ids(client, any_("kinostatin"))
+
+    async def test_keyword_list_and_exact_resolve_pasted_structures(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        aspirin = await _register(client, org_id, "Aspirin", "CC(=O)Oc1ccccc1C(=O)O")
+        ext = await _register(client, org_id, "ExtOnly", "CCCCCCCCCCCCCN")
+        async with uow:
+            await uow.session.execute(
+                sa.text(
+                    "INSERT INTO molecule_identifiers (id, molecule_id, workspace_id, identifier, "
+                    "identifier_type, source, registered_by) "
+                    "VALUES (:id, :mol, :ws, 'EXT-000123', 'custom', 'vendor', :user)"
+                ),
+                {"id": uuid.uuid4(), "mol": ext, "ws": workspace_id, "user": _SEED_USER_ID},
+            )
+            await uow.commit()
+
+        def kwl(ref_type: str, values: list[str]) -> list[dict]:
+            return [{"type": "keyword_list", "ref_type": ref_type, "values": values}]
+
+        # Kekulé SMILES for aspirin still standardizes to the registered compound.
+        assert aspirin in await _ids(client, kwl("smiles", ["CC(=O)OC1=CC=CC=C1C(O)=O"]))
+        assert ext in await _ids(client, kwl("external_id", ["EXT-000123"]))
+        assert await _ids(client, kwl("external_id", ["NO-SUCH-ID"])) == set()
+        assert aspirin in await _ids(
+            client, [{"type": "structure", "kind": "exact", "smiles": "OC(=O)c1ccccc1OC(C)=O"}]
+        )
+        assert (
+            await _count_status(
+                client, [{"type": "structure", "kind": "exact", "smiles": "not-a-smiles"}]
+            )
+            == 422
+        )

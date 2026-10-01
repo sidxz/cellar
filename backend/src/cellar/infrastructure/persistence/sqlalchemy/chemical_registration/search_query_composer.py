@@ -112,7 +112,7 @@ def compose_criteria(query: dict[str, Any], *, workspace_id: uuid.UUID) -> Colum
     for criterion in criteria:
         ctype = criterion["type"]
         if ctype == "text":
-            clause = _text_clause(criterion)
+            clause = _text_clause(criterion, workspace_id)
         elif ctype == "property":
             clause = _property_clause(criterion)
         elif ctype == "structure":
@@ -193,7 +193,7 @@ def _group_clause(
         if ctype == "group":
             clause = _group_clause(sub, workspace_id, _depth=_depth + 1)
         elif ctype == "text":
-            clause = _text_clause(sub)
+            clause = _text_clause(sub, workspace_id)
         elif ctype == "property":
             clause = _property_clause(sub)
         elif ctype == "structure":

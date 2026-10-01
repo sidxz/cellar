@@ -104,6 +104,9 @@ from cellar.application.research_organization.remove_campaign_channel import Rem
 from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
+from cellar.application.research_organization.search_reference_resolution import (
+    SearchReferenceResolver,
+)
 from cellar.application.research_organization.set_result_notes import SetResultNotes
 from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
@@ -395,6 +398,12 @@ def register_research_organization(container: Container) -> None:
     container.define(ListSavedSearches, _ss_query(ListSavedSearches))
 
     # --- Execute Search ---
+    def _search_reference_resolver(c: Container, uow: AsyncUnitOfWork) -> SearchReferenceResolver:
+        processor = c[StructureProcessorProtocol]
+        return SearchReferenceResolver(
+            MoleculeResolver(SQLAlchemyMoleculeRepository(uow), processor), processor
+        )
+
     def _execute_search(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ExecuteSearch(
@@ -408,6 +417,7 @@ def register_research_organization(container: Container) -> None:
                 protocol_repo=SQLAlchemyProtocolRepository(uow),
                 run_repo=SQLAlchemyRunRepository(uow),
             ),
+            reference_resolver=_search_reference_resolver(c, uow),
         )
 
     container.define(ExecuteSearch, _execute_search)
@@ -419,6 +429,7 @@ def register_research_organization(container: Container) -> None:
             uow,
             c[MoleculeReader],
             SQLAlchemySavedSearchRepository(uow),
+            reference_resolver=_search_reference_resolver(c, uow),
         )
 
     container.define(CountSearch, _count_search)
