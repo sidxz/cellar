@@ -175,6 +175,7 @@ def _activity_where_clause(
         msg = "where condition with readout_definition_id needs protocol_id"
         raise ValueError(msg)
 
+    qualifier_col: Any = None  # readout rows only — curves carry no qualifier
     if source == "dr_curve":
         # Pick the column to filter on. The primary intercept is the headline
         # `fitted_value` (indexed, fast). Secondary intercepts (EC90 on an EC50-
@@ -201,6 +202,7 @@ def _activity_where_clause(
         ]
     elif source == "readout_data":
         data_col = ReadoutDataModel.value_numeric
+        qualifier_col = ReadoutDataModel.value_qualifier
         molecule_col = ReadoutDataModel.molecule_id
         run_id_col = ReadoutDataModel.run_id
         # A readout-def stores its raw rows and each normalized layer
@@ -226,7 +228,12 @@ def _activity_where_clause(
 
     # coalesce: an ND value (inactive curve, missing intercept) satisfies no
     # cutoff — and in "all" mode it is a counterexample, not a skipped row.
-    value_filter = sa.func.coalesce(_value_filter(data_col, cond), sa.false())
+    raw_filter = (
+        _qualified_value_filter(data_col, qualifier_col, cond)
+        if source == "readout_data"
+        else _value_filter(data_col, cond)
+    )
+    value_filter = sa.func.coalesce(raw_filter, sa.false())
 
     # "all" semantics: molecule has at least one satisfying row AND no
     # non-satisfying row in scope. Implemented as IN(positive) AND NOT IN(negative).
@@ -287,6 +294,42 @@ def _value_filter(data_col: Any, cond: dict[str, Any]) -> ColumnElement:
         msg = f"activity operator {operator!r} requires value"
         raise ValueError(msg)
     return getattr(data_col, op_name)(cond["value"])
+
+
+_LOWER_BOUND = (">", ">=")  # true value lies above the reported number
+_UPPER_BOUND = ("<", "<=")  # true value lies below it
+
+
+def _qualified_value_filter(value_col: Any, qualifier_col: Any, cond: dict[str, Any]) -> Any:
+    """``_value_filter`` for reported readouts, which may be censored.
+
+    ">50" means the true value is above 50, so it satisfies a cutoff only
+    when that is certain: it matches "> 40" but not "< 60" (a CRO's ">50 µM"
+    is no hit for "IC50 < 60"). "<0.1" mirrors it. A bound never equals or
+    falls between exact values. Unqualified, "=" and "~" compare as-is.
+    """
+    plain = _value_filter(value_col, cond)  # also validates operator/value
+    op = cond.get("operator", "lt")
+    if op in ("gt", "gte"):
+        x = cond["value"]
+        sure = (
+            sa.or_(value_col > x, sa.and_(qualifier_col == ">", value_col == x))
+            if op == "gt"
+            else value_col >= x
+        )
+        censored = sa.and_(qualifier_col.in_(_LOWER_BOUND), sure)
+    elif op in ("lt", "lte"):
+        x = cond["value"]
+        sure = (
+            sa.or_(value_col < x, sa.and_(qualifier_col == "<", value_col == x))
+            if op == "lt"
+            else value_col <= x
+        )
+        censored = sa.and_(qualifier_col.in_(_UPPER_BOUND), sure)
+    else:
+        censored = sa.false()
+    exact = sa.or_(qualifier_col.is_(None), qualifier_col.not_in(_LOWER_BOUND + _UPPER_BOUND))
+    return sa.or_(sa.and_(exact, plain), censored)
 
 
 def reportable_curve_value(value: Any, curve_class: Any) -> ColumnElement:
@@ -382,7 +425,9 @@ def _readout_name_any_protocol_clause(
             ReadoutDataModel.normalization_applied.is_(None),
             _sql_normalized_name(ReadoutDefinitionModel.name) == normalize_readout_name(name),
             sa.func.coalesce(ReadoutDefinitionModel.unit, "") == unit,
-            _value_filter(ReadoutDataModel.value_numeric, cond),
+            _qualified_value_filter(
+                ReadoutDataModel.value_numeric, ReadoutDataModel.value_qualifier, cond
+            ),
         )
     )
     return MoleculeModel.id.in_(sub)

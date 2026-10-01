@@ -1454,3 +1454,60 @@ class TestChemistSearchCorrectness:
             await asyncio.sleep(0.1)
         assert body["status"] == "ready", body
         assert body["row_count"] == 1
+
+    async def test_censored_readout_values_match_only_when_certain(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """A reported ">50" IC50 is no hit for "< 60" — and is one for "> 40"."""
+        mol = await _register(client, org_id, "CensoredMol", "CCCCCCCCCCCCCCCCN")
+        protocol_id = await _seed_numeric_readout(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol),
+            readout_name="IC50",
+            unit="uM",
+            value=50.0,
+        )
+        async with uow:
+            rd_id = (
+                await uow.session.execute(
+                    sa.text("SELECT id FROM readout_definitions WHERE protocol_id = :p"),
+                    {"p": protocol_id},
+                )
+            ).scalar_one()
+            await uow.session.execute(
+                sa.text("UPDATE readout_data SET value_qualifier = '>' WHERE molecule_id = :m"),
+                {"m": mol},
+            )
+            await uow.commit()
+
+        def crit(op: str, value: float) -> list[dict]:
+            cond = {"source": "readout_data", "readout_definition_id": str(rd_id)}
+            return [
+                {
+                    "type": "activity",
+                    "protocol_id": str(protocol_id),
+                    "where": [{**cond, "operator": op, "value": value}],
+                }
+            ]
+
+        assert mol not in await _ids(client, crit("lt", 60))
+        assert mol in await _ids(client, crit("gt", 40))
+        assert mol in await _ids(client, crit("gt", 50))
+        assert mol not in await _ids(client, crit("gt", 60))
+        any_lt = [
+            {
+                "type": "activity",
+                "protocol_id": None,
+                "where": [
+                    {
+                        "source": "readout_data",
+                        "readout_name": "IC50",
+                        "unit": "uM",
+                        "operator": "lt",
+                        "value": 60,
+                    }
+                ],
+            }
+        ]
+        assert mol not in await _ids(client, any_lt)
