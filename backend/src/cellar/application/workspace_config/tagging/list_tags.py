@@ -12,7 +12,7 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError
 from cellar.domain.workspace_config.tagging.repository import TagRepository
-from cellar.domain.workspace_config.tagging.tag import Tag
+from cellar.domain.workspace_config.tagging.tag import Tag, TaggableEntityType
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -20,6 +20,8 @@ class ListTagsQuery(Query):
     workspace_id: uuid.UUID
     q: str | None = None
     created_by: uuid.UUID | None = None
+    #: Only tags in use on this entity type (e.g. the compound-search picker).
+    entity_type: TaggableEntityType | None = None
     limit: int = 50
 
 
@@ -38,6 +40,7 @@ class ListTags:
                 input.workspace_id,
                 q=input.q,
                 created_by=input.created_by,
+                entity_type=input.entity_type,
                 limit=input.limit,
             )
         return Success(tags)

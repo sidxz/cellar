@@ -176,12 +176,14 @@ async def list_tags(
     use_case: ListTagsDep,
     q: str | None = None,
     mine: bool = False,
+    entity_type: TaggableEntityType | None = None,
     limit: int = 50,
 ) -> list[TagResponse]:
     query = ListTagsQuery(
         workspace_id=auth.workspace_id,
         q=q,
         created_by=auth.user_id if mine else None,
+        entity_type=entity_type,
         limit=limit,
     )
     tags = result_to_response(await use_case(query, auth=auth))

@@ -31,13 +31,23 @@ class TestListTags:
         repo.search = AsyncMock(return_value=[tag])
         uc = ListTags(FakeUnitOfWork(), repo)
 
-        query = ListTagsQuery(workspace_id=auth.workspace_id, q="kin", created_by=auth.user_id, limit=10)
+        query = ListTagsQuery(
+            workspace_id=auth.workspace_id,
+            q="kin",
+            created_by=auth.user_id,
+            entity_type=TaggableEntityType.MOLECULE,
+            limit=10,
+        )
         result = await uc(query, auth=auth)
 
         assert isinstance(result, Success)
         assert result.unwrap() == [tag]
         repo.search.assert_awaited_once_with(
-            auth.workspace_id, q="kin", created_by=auth.user_id, limit=10
+            auth.workspace_id,
+            q="kin",
+            created_by=auth.user_id,
+            entity_type=TaggableEntityType.MOLECULE,
+            limit=10,
         )
 
 

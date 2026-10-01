@@ -85,15 +85,11 @@ class TestAssignAndRead:
 
 class TestErrors:
     async def test_assign_to_missing_collection_404(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            f"/api/v1/collections/{uuid.uuid4()}/tags", json={"key": "x"}
-        )
+        resp = await client.post(f"/api/v1/collections/{uuid.uuid4()}/tags", json={"key": "x"})
         assert resp.status_code == 404
 
     async def test_unknown_entity_collection_404(self, client: AsyncClient) -> None:
-        resp = await client.post(
-            f"/api/v1/widgets/{uuid.uuid4()}/tags", json={"key": "x"}
-        )
+        resp = await client.post(f"/api/v1/widgets/{uuid.uuid4()}/tags", json={"key": "x"})
         assert resp.status_code == 404
 
     async def test_empty_key_422(self, client: AsyncClient) -> None:
@@ -127,14 +123,10 @@ class TestAuth:
         self, client: AsyncClient, viewer_client: AsyncClient
     ) -> None:
         cid = await _make_collection(client, "TagCol-8")  # admin creates the collection
-        resp = await viewer_client.post(
-            f"/api/v1/collections/{cid}/tags", json={"key": "x"}
-        )
+        resp = await viewer_client.post(f"/api/v1/collections/{cid}/tags", json={"key": "x"})
         assert resp.status_code == 403
 
-    async def test_viewer_can_read(
-        self, client: AsyncClient, viewer_client: AsyncClient
-    ) -> None:
+    async def test_viewer_can_read(self, client: AsyncClient, viewer_client: AsyncClient) -> None:
         cid = await _make_collection(client, "TagCol-9")
         await client.post(f"/api/v1/collections/{cid}/tags", json={"key": "readable"})
         resp = await viewer_client.get(f"/api/v1/collections/{cid}/tags")
@@ -202,3 +194,24 @@ class TestPlateVisibility:
         )
         assert set_own.status_code == 200, set_own.text
         assert {t["key"] for t in set_own.json()} == {"legit", "extra"}
+
+
+class TestListByEntityType:
+    async def test_entity_type_keeps_only_tags_used_on_that_type(
+        self, client: AsyncClient
+    ) -> None:
+        """The compound-search picker asks for Molecule tags: a tag only ever
+        put on a collection would match no compound."""
+        cid = await _make_collection(client, "TagCol-entity")
+        await client.post(f"/api/v1/collections/{cid}/tags", json={"key": "coll-only"})
+
+        all_tags = await client.get("/api/v1/tags")
+        assert "coll-only" in {t["key"] for t in all_tags.json()}
+
+        for entity, expected in (("Collection", True), ("Molecule", False)):
+            got = await client.get("/api/v1/tags", params={"entity_type": entity})
+            assert got.status_code == 200, got.text
+            assert ("coll-only" in {t["key"] for t in got.json()}) is expected, entity
+
+        bad = await client.get("/api/v1/tags", params={"entity_type": "Widget"})
+        assert bad.status_code == 422
