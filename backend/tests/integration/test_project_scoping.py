@@ -292,3 +292,29 @@ class TestMoleculeProjectAssociation:
             mols = await mol_repo.find_active(ws_id, project_ids=[])
             mol_ids = {m.id for m in mols}
             assert mol_ids == {m3_id}
+
+    async def test_add_to_project_many_returns_only_new_links(self, uow: AsyncUnitOfWork) -> None:
+        ws_id, p1, p2, m1_id, m2_id, m3_id = await self._setup(uow)  # m1 already in p1
+
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            added = await mol_repo.add_to_project_many(ws_id, p1.id, [m1_id, m3_id, m3_id])
+            await uow.commit()
+
+        assert added == [m3_id]
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            assert await mol_repo.find_project_ids(ws_id, m3_id) == [p1.id]
+
+    async def test_add_to_project_many_ignores_other_workspace(self, uow: AsyncUnitOfWork) -> None:
+        ws_id, p1, p2, m1_id, m2_id, m3_id = await self._setup(uow)
+
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            added = await mol_repo.add_to_project_many(uuid.uuid4(), p1.id, [m3_id])
+            await uow.commit()
+
+        assert added == []
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            assert await mol_repo.find_project_ids(ws_id, m3_id) == []
