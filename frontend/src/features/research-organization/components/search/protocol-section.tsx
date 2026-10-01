@@ -91,7 +91,9 @@ function defaultActivityCriterion(): ActivityCriterion {
 function defaultWhereCondition(): ActivityWhereCondition {
   // The user must pick a readout before the row is sendable; we seed
   // with an empty id and dr_curve source which is the most common choice.
-  return { source: "dr_curve", readout_definition_id: "", operator: "lt", value: 0 };
+  // No value until the chemist types one: a seeded "< 0" made every new
+  // potency row match nothing (and the live count flash 0).
+  return { source: "dr_curve", readout_definition_id: "", operator: "lt" };
 }
 
 /** Read where[] from a criterion, normalizing the inline single-where shape
@@ -192,7 +194,7 @@ function WhereList({ where, options, anyProtocol = false, onChange }: WhereListP
         ...where,
         parsed.source === "curve_class"
           ? { ...parsed, operator: "eq", curve_classes: [] }
-          : { ...parsed, operator: "lt", value: 0 },
+          : { ...parsed, operator: "lt" },
       ]);
       return;
     }
