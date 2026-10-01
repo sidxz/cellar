@@ -164,6 +164,7 @@ class RegistrationActivities:
                 originating_org_id=org_id,
                 registered_by=submitted_by,
                 promote_name_as_identifier=has_explicit_name,
+                project_ids=[uuid.UUID(p) for p in input.project_ids],
             )
 
             result = await register_uc(cmd)

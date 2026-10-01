@@ -87,6 +87,7 @@ def _create_test_app(
     from cellar.interface.routes.settings import router as settings_router
     from cellar.interface.routes.vocabularies import router as vocab_router
     from cellar.interface.routes.molecules import router as mol_router
+    from cellar.interface.routes.bulk_registration import router as bulk_reg_router
     from cellar.interface.routes.attachments import router as attachment_router
     from cellar.interface.routes.disclosures import router as disclosure_router
     from cellar.interface.routes.export import router as export_router
@@ -205,6 +206,7 @@ def _create_test_app(
     app.include_router(targets_router)
     app.include_router(inventory_hub_router)
     app.include_router(version_router)
+    app.include_router(bulk_reg_router)
 
     # Override the stable auth wrapper (not the sentinel SDK directly)
     app.dependency_overrides[get_auth] = lambda: fake_auth

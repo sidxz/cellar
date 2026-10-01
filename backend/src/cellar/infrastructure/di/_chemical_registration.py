@@ -543,14 +543,19 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(ListBulkRegistrationItems, _list_bulk_reg_items)
 
-    container.define(
-        StartBulkRegistration,
-        lambda c: StartBulkRegistration(
+    def _start_bulk_registration(c: Container) -> StartBulkRegistration:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return StartBulkRegistration(
             orchestrator=c[BulkRegistrationOrchestrator],
             sync_service=c[BulkRegistrationService],
             parser=c[BulkFileParserProtocol],
-        ),
-    )
+            uow=uow,
+            project_access=ProjectAccess(
+                SQLAlchemyProjectRepository(uow), SQLAlchemyProjectMemberRepository(uow)
+            ),
+        )
+
+    container.define(StartBulkRegistration, _start_bulk_registration)
     container.define(
         GetBulkRegistrationRuntimeStatus,
         lambda c: GetBulkRegistrationRuntimeStatus(

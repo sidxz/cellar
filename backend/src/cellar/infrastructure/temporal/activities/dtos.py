@@ -46,6 +46,7 @@ class ChunkInput:
     items: list[ChunkItem] = field(default_factory=list)
     chunk_index: int = 0
     create_batch_on_duplicate: bool | None = None
+    project_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
