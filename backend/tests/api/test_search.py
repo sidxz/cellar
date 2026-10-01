@@ -1420,3 +1420,37 @@ class TestChemistSearchCorrectness:
 
         assert mol in await _ids(client, latest_lt(5.05))
         assert mol not in await _ids(client, latest_lt(4.9))
+
+    async def test_search_export_with_activity_columns_completes(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """Exporting a search that carries a dose-response column must render
+        (it failed on every such export once ListProtocols started returning
+        ProtocolWithTargets)."""
+        import asyncio
+
+        mol = await _register(client, org_id, "ExportMol", "CCCCCCCCCCCCCCCN")
+        _, rd, _ = await _seed_multi_run_dr(
+            uow, workspace_id=workspace_id, molecule_id=uuid.UUID(mol), run_count=1
+        )
+        start = await client.post(
+            "/api/v1/exports",
+            json={
+                "format": "csv",
+                "payload": {
+                    "query": {
+                        "criteria": [{"type": "keyword_list", "ref_type": "uuid", "values": [mol]}]
+                    },
+                    "protocol_columns": [f"drc:{rd}"],
+                },
+            },
+        )
+        assert start.status_code == 202, start.text
+        job_id = start.json()["job_id"]
+        for _ in range(50):
+            body = (await client.get(f"/api/v1/exports/{job_id}")).json()
+            if body["status"] in {"ready", "failed"}:
+                break
+            await asyncio.sleep(0.1)
+        assert body["status"] == "ready", body
+        assert body["row_count"] == 1

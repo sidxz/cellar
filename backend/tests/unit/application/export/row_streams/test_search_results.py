@@ -344,6 +344,7 @@ async def test_intercepts_collapse_to_one_column_per_label():
     drc_cfg = MagicMock(); drc_cfg.intercepts = [ic_ec50, ic_ec90]
     rd = MagicMock(); rd.id = rd_id; rd.name = "Resazurin"; rd.unit = "µM"; rd.dose_response_config = drc_cfg
     proto = MagicMock(); proto.id = uuid.uuid4(); proto.name = "Mtb_WCA"; proto.readout_definitions = [rd]
+    proto.dose_unit = "uM"  # potencies are labelled with the protocol dose unit
 
     page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
     stream = SearchResultsRowStream(
@@ -369,7 +370,7 @@ async def test_intercepts_collapse_to_one_column_per_label():
     assert suffixes == {"value"}, f"Expected only ::value suffix, got {suffixes}"
     assert {c.header for c in intercept_cols} == {"EC50", "EC90"}
     assert all(c.group == "Mtb_WCA" for c in intercept_cols)
-    assert all(c.unit == "µM" for c in intercept_cols)
+    assert all(c.unit == "uM" for c in intercept_cols)
 
 
 # ---------------------------------------------------------------------------

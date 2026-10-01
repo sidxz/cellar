@@ -38,6 +38,7 @@ async def test_csv_writes_headers_and_rows(tmp_path: Path):
         row_count_hint=2,
     )
     text = out.open(encoding="utf-8-sig", newline="").read()
-    assert text.startswith("Reg #,MW,Mtb::EC50,Mtb::EC50::q\r\n")
+    # Unit rides in the header so the scale survives the hand-off to other tools.
+    assert text.startswith("Reg #,MW,Mtb::EC50 (µM),Mtb::EC50::q\r\n")
     assert "CV-1,421.5,1.23,=\r\n" in text
     assert "CV-2,380.1,,ND\r\n" in text

@@ -152,6 +152,13 @@ _PROPERTY_COLUMNS: dict[str, tuple[str, str]] = {
     "molecular_formula": ("Formula", "text"),
 }
 
+_NORMALIZATION_LABELS: dict[str | None, str] = {
+    "percent_inhibition": "% Inhibition",
+    "percent_activation": "% Activation",
+    "percent_control": "% Control",
+    "z_score": "Z-Score",
+}
+
 # Molecule (non-structural) column id → (header, kind).
 _MOLECULE_COLUMNS: dict[str, tuple[str, str]] = {
     "name": ("Name", "text"),
@@ -266,12 +273,19 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
         )
         rd_name = rd.name if rd else "Readout"
         proto_name = proto.name if proto else "Protocol"
+        # 4-segment token = a normalized layer ("raw AU (% Inhibition)"), whose
+        # values are not in the readout's raw unit.
+        normalization = parts[3] if len(parts) > 3 else None
         return [
             ColumnSpec(
                 key=f"{token}::value",
-                header=rd_name,
+                header=(
+                    f"{rd_name} ({_NORMALIZATION_LABELS.get(normalization, normalization)})"
+                    if normalization
+                    else rd_name
+                ),
                 kind="number",
-                unit=getattr(rd, "unit", None),
+                unit=None if normalization else getattr(rd, "unit", None),
                 group=proto_name,
             )
         ]
@@ -323,7 +337,10 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
                     key=f"{base_key}::value",
                     header=f"{prefix}{label}",
                     kind="number",
-                    unit=getattr(rd, "unit", None),
+                    # Fitted potencies are stored in the protocol's dose unit
+                    # (the grid shows the same); the readout's own unit field
+                    # can disagree (COX-2: "nM" on µM values).
+                    unit=str(proto.dose_unit) if proto else getattr(rd, "unit", None),
                     group=proto_name,
                 )
             )

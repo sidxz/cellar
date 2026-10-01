@@ -23,7 +23,7 @@ class CsvRenderer:
         out_cols = [c for c in columns if c.kind != "image_curve"]
         with out_path.open("w", encoding="utf-8-sig", newline="") as fh:
             writer = csv.writer(fh)
-            writer.writerow([c.header for c in out_cols])
+            writer.writerow([c.display_header for c in out_cols])
             async for batch in batches:
                 for row in batch:
                     writer.writerow([_serialize(row.cells.get(c.key)) for c in out_cols])
