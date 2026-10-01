@@ -120,57 +120,90 @@ function buildSimilarityColumn(): ColDef<EnrichedMolecule> {
   };
 }
 
+// Every property the customizer offers (keys = `MoleculeDescriptors` fields,
+// shared with the export column builder). Listed in display order.
+const PROPERTY_COLUMNS: Record<
+  string,
+  { header: string; width: number; digits?: number; tooltip?: string }
+> = {
+  molecular_weight: { header: "MW", width: 90, digits: 1 },
+  logp: { header: "LogP", width: 80, digits: 2 },
+  tpsa: {
+    header: "TPSA",
+    width: 80,
+    digits: 1,
+    tooltip: "Topological polar surface area (Veber's rule — predicts permeability)",
+  },
+  hbd: { header: "HBD", width: 70, tooltip: "Hydrogen-bond donors (Lipinski Rule of Five)" },
+  hba: { header: "HBA", width: 70, tooltip: "Hydrogen-bond acceptors (Lipinski Rule of Five)" },
+  rotatable_bonds: { header: "RotB", width: 70, tooltip: "Rotatable bonds" },
+  heavy_atom_count: { header: "HAC", width: 70, tooltip: "Heavy atom count" },
+  aromatic_rings: { header: "ArRings", width: 80, tooltip: "Aromatic rings" },
+  ring_count: { header: "Rings", width: 70, tooltip: "Ring count" },
+  ro5_violations: { header: "Ro5", width: 70, tooltip: "Lipinski Rule-of-Five violations" },
+  molecular_formula: { header: "Formula", width: 140 },
+};
+
 function buildPropertyColumns(visibleProperties: string[]): ColDef<EnrichedMolecule>[] {
+  return Object.entries(PROPERTY_COLUMNS)
+    .filter(([key]) => visibleProperties.includes(key))
+    .map(([key, spec]) => ({
+      headerName: spec.header,
+      colId: `prop:${key}`,
+      width: spec.width,
+      ...(spec.tooltip ? { headerTooltip: spec.tooltip } : {}),
+      valueGetter: (p) =>
+        (p.data?.descriptors as Record<string, number | string | null> | null)?.[key] ?? null,
+      valueFormatter: (p) =>
+        p.value == null
+          ? "—"
+          : spec.digits != null
+            ? Number(p.value).toFixed(spec.digits)
+            : String(p.value),
+    }));
+}
+
+/** SMILES / InChIKey / lifecycle columns the customizer can switch on. */
+function buildIdentityColumns(
+  structureFields: string[],
+  moleculeFields: string[],
+): ColDef<EnrichedMolecule>[] {
   const cols: ColDef<EnrichedMolecule>[] = [];
-
-  if (visibleProperties.includes("molecular_weight")) {
+  const mono = (value: string | null | undefined) =>
+    value ? (
+      <span className="block truncate font-mono text-xs" title={value}>
+        {value}
+      </span>
+    ) : (
+      <span className="text-muted-foreground">—</span>
+    );
+  if (structureFields.includes("smiles")) {
     cols.push({
-      headerName: "MW",
-      width: 90,
-      valueGetter: (p) => p.data?.descriptors?.molecular_weight ?? null,
-      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(1) : "—"),
+      headerName: "SMILES",
+      colId: "smiles",
+      width: 220,
+      valueGetter: (p) => p.data?.structure?.smiles ?? null,
+      cellRenderer: (p: ICellRendererParams<EnrichedMolecule>) => mono(p.data?.structure?.smiles),
     });
   }
-
-  if (visibleProperties.includes("logp")) {
+  if (structureFields.includes("inchi_key")) {
     cols.push({
-      headerName: "LogP",
-      width: 80,
-      valueGetter: (p) => p.data?.descriptors?.logp ?? null,
-      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(2) : "—"),
+      headerName: "InChIKey",
+      colId: "inchi_key",
+      width: 220,
+      valueGetter: (p) => p.data?.structure?.inchi_key ?? null,
+      cellRenderer: (p: ICellRendererParams<EnrichedMolecule>) =>
+        mono(p.data?.structure?.inchi_key),
     });
   }
-
-  if (visibleProperties.includes("hbd")) {
+  if (moleculeFields.includes("lifecycle_stage")) {
     cols.push({
-      headerName: "HBD",
-      width: 70,
-      headerTooltip: "Hydrogen-bond donors (Lipinski Rule of Five)",
-      valueGetter: (p) => p.data?.descriptors?.hbd ?? null,
-      valueFormatter: (p) => (p.value != null ? String(p.value) : "—"),
+      headerName: "Stage",
+      colId: "lifecycle_stage",
+      width: 110,
+      valueGetter: (p) => p.data?.lifecycle_stage ?? null,
     });
   }
-
-  if (visibleProperties.includes("hba")) {
-    cols.push({
-      headerName: "HBA",
-      width: 70,
-      headerTooltip: "Hydrogen-bond acceptors (Lipinski Rule of Five)",
-      valueGetter: (p) => p.data?.descriptors?.hba ?? null,
-      valueFormatter: (p) => (p.value != null ? String(p.value) : "—"),
-    });
-  }
-
-  if (visibleProperties.includes("tpsa")) {
-    cols.push({
-      headerName: "TPSA",
-      width: 80,
-      headerTooltip: "Topological polar surface area (Veber's rule — predicts permeability)",
-      valueGetter: (p) => p.data?.descriptors?.tpsa ?? null,
-      valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(1) : "—"),
-    });
-  }
-
   return cols;
 }
 
@@ -477,16 +510,21 @@ function buildProtocolColumnGroups(
   return groups;
 }
 
-// Fixed molecule column (structure + identity stack) — no standalone checkbox
-// column because DataGrid's suppressSelectColumn + enableMultiSelect lets each
-// caller host the checkbox inside the Molecule cell via the grid's built-in
-// headerCheckboxSelection. Here we use DataGrid's auto-prepended __select__
-// column for simplicity (suppressSelectColumn=false, enableMultiSelect=true).
-function buildMoleculeColumn(imageSize: string): ColDef<EnrichedMolecule> {
+// Fixed molecule column (structure + identity stack). Row selection uses
+// DataGrid's auto-prepended __select__ checkbox column (enableMultiSelect).
+function buildMoleculeColumn(
+  imageSize: string,
+  structureFields: string[],
+  moleculeFields: string[],
+): ColDef<EnrichedMolecule> {
+  const showImage = structureFields.includes("structure");
+  const showReg = structureFields.includes("registration_number");
+  const showName = moleculeFields.includes("name");
   const thumbSize = imageSize === "large" ? 260 : imageSize === "medium" ? 156 : 72;
+  const imageWidth = imageSize === "large" ? 290 : imageSize === "medium" ? 200 : 130;
   return {
     headerName: "Molecule",
-    width: imageSize === "large" ? 290 : imageSize === "medium" ? 200 : 130,
+    width: showImage ? imageWidth : 150,
     pinned: "left",
     sortable: false,
     filter: false,
@@ -497,26 +535,28 @@ function buildMoleculeColumn(imageSize: string): ColDef<EnrichedMolecule> {
       const smiles = mol.structure?.smiles;
       return (
         <div className="flex h-full flex-col items-center justify-center py-2">
-          {smiles ? (
-            <StructureThumbnail smiles={smiles} size={thumbSize} />
-          ) : (
-            <div
-              className="shrink-0 rounded bg-muted"
-              style={{ width: thumbSize, height: thumbSize }}
-            />
-          )}
-          <div className="mt-1 text-center min-w-0 w-full">
-            {mol.registration_number ? (
-              <EntityLink
-                type="compound"
-                id={mol.id}
-                label={mol.registration_number}
-                className="block truncate text-xs"
-              />
+          {showImage &&
+            (smiles ? (
+              <StructureThumbnail smiles={smiles} size={thumbSize} />
             ) : (
-              <p className="truncate font-mono text-xs text-muted-foreground">—</p>
-            )}
-            <p className="truncate text-sm">{mol.name || "Unnamed"}</p>
+              <div
+                className="shrink-0 rounded bg-muted"
+                style={{ width: thumbSize, height: thumbSize }}
+              />
+            ))}
+          <div className={cn("text-center min-w-0 w-full", showImage && "mt-1")}>
+            {showReg &&
+              (mol.registration_number ? (
+                <EntityLink
+                  type="compound"
+                  id={mol.id}
+                  label={mol.registration_number}
+                  className="block truncate text-xs"
+                />
+              ) : (
+                <p className="truncate font-mono text-xs text-muted-foreground">—</p>
+              ))}
+            {showName && <p className="truncate text-sm">{mol.name || "Unnamed"}</p>}
           </div>
         </div>
       );
@@ -566,7 +606,12 @@ export function ResultsGrid({
   toolbarLeft,
   toolbarActions,
 }: ResultsGridProps) {
-  const rowHeight = ROW_HEIGHTS[reportConfig.imageSize] ?? 150;
+  const { structure: structureFields, molecule: moleculeFields } = reportConfig.visibleFields;
+  // Without the structure image a row only holds text — don't keep the
+  // image-sized height (a plot cell still needs ~90px).
+  const rowHeight = structureFields.includes("structure")
+    ? (ROW_HEIGHTS[reportConfig.imageSize] ?? 150)
+    : 96;
 
   // Show the similarity column only when at least one row actually carries
   // a score (i.e. the active search was a similarity search). Substructure /
@@ -584,14 +629,17 @@ export function ResultsGrid({
   const { mode: aggregationMode } = useAggregationMode();
 
   const columnDefs = useMemo<(ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[]>(() => {
-    const molecule = buildMoleculeColumn(reportConfig.imageSize);
+    const molecule = buildMoleculeColumn(reportConfig.imageSize, structureFields, moleculeFields);
+    const identity = buildIdentityColumns(structureFields, moleculeFields);
     const sim = hasSimilarityScores ? [buildSimilarityColumn()] : [];
     const props = buildPropertyColumns(reportConfig.visibleFields.properties);
     const activeIn = protocolColumns.includes(ANY_COLUMN_ID) ? [buildActiveInColumn()] : [];
     const protoGroups = buildProtocolColumnGroups(protocolColumns, protocols, aggregationMode);
-    return [molecule, ...sim, ...activeIn, ...props, ...protoGroups];
+    return [molecule, ...identity, ...sim, ...activeIn, ...props, ...protoGroups];
   }, [
     reportConfig.imageSize,
+    structureFields,
+    moleculeFields,
     reportConfig.visibleFields.properties,
     protocolColumns,
     protocols,
@@ -627,6 +675,9 @@ export function ResultsGrid({
       `}</style>
       <DataGrid<EnrichedMolecule>
         rowData={results}
+        // Stable ids keep ticked rows ticked when Load More appends a page
+        // (without them AG Grid treats every row as new and drops selection).
+        getRowId={(p) => p.data.id}
         columnDefs={columnDefs}
         loading={loading}
         emptyState={
@@ -637,7 +688,6 @@ export function ResultsGrid({
         headerHeight={36}
         groupHeaderHeight={32}
         enableMultiSelect
-        suppressSelectColumn
         searchPlaceholder={false}
         toolbarLeft={toolbarLeft}
         toolbarActions={toolbarActionsWithExport}

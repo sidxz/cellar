@@ -186,6 +186,38 @@ describe("buildActivityWhereOptions", () => {
   });
 });
 
+describe("normalized readout layers", () => {
+  it("offers the raw values and each normalization as separate filters", () => {
+    // Raw signal (AU ~0.1) and % inhibition (0–100) share a readout-def; one
+    // filter over both compared "> 50" against two different scales.
+    const opts = buildActivityWhereOptions(
+      proto([
+        rd({
+          id: RD_NUM,
+          name: "raw AU",
+          unit: "AU",
+          normalizations: ["none", "percent_inhibition"],
+        } as Partial<ReadoutDefinition> & { id: string }),
+      ]),
+    );
+    expect(opts.map((o) => [o.label, o.normalization ?? null])).toEqual([
+      ["raw AU", null],
+      ["raw AU · % Inhibition", "percent_inhibition"],
+    ]);
+    const parsed = parseWhereOptionId(opts[1].id);
+    expect(parsed?.normalization).toBe("percent_inhibition");
+    expect(
+      whereConditionOptionId({
+        source: "readout_data",
+        readout_definition_id: RD_NUM,
+        operator: "gt",
+        normalization: "percent_inhibition",
+      }),
+    ).toBe(opts[1].id);
+    expect(parseWhereOptionId(opts[0].id)?.normalization).toBeNull();
+  });
+});
+
 describe("parseWhereOptionId / whereConditionOptionId roundtrip", () => {
   it("preserves a primary DR option", () => {
     const id = `dr_curve:${RD_DR}`;

@@ -451,27 +451,41 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
     # Project association methods
     # ------------------------------------------------------------------
 
+    async def add_to_project_many(
+        self,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+    ) -> list[uuid.UUID]:
+        """Link molecules to a project in one statement; returns the ids newly linked.
+
+        Defense-in-depth: the SELECT only yields molecules of ``workspace_id``.
+        ``ON CONFLICT DO NOTHING`` makes repeats free, so RETURNING lists only
+        new links (callers emit one audit event per new link).
+        """
+        if not molecule_ids:
+            return []
+        # A molecule saved earlier in this unit of work must be visible to the
+        # INSERT … SELECT below (registration links in the same transaction).
+        await self._session.flush()
+        owned = select(MoleculeModel.id, sa.literal(project_id, type_=sa.Uuid)).where(
+            MoleculeModel.workspace_id == workspace_id,
+            MoleculeModel.id.in_(set(molecule_ids)),
+        )
+        stmt = (
+            pg_insert(molecule_projects)
+            .from_select(["molecule_id", "project_id"], owned)
+            .on_conflict_do_nothing()
+            .returning(molecule_projects.c.molecule_id)
+        )
+        result = await self._session.execute(stmt)
+        return [row[0] for row in result]
+
     async def add_to_project(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, project_id: uuid.UUID
     ) -> None:
-        """Link a molecule to a project (idempotent via ON CONFLICT DO NOTHING).
-
-        Defense-in-depth: only inserts if the molecule belongs to the workspace.
-        """
-        # Verify molecule belongs to workspace before inserting
-        ownership_stmt = select(MoleculeModel.id).where(
-            MoleculeModel.id == molecule_id,
-            MoleculeModel.workspace_id == workspace_id,
-        )
-        ownership_result = await self._session.execute(ownership_stmt)
-        if ownership_result.scalar_one_or_none() is None:
-            return
-        stmt = (
-            pg_insert(molecule_projects)
-            .values(molecule_id=molecule_id, project_id=project_id)
-            .on_conflict_do_nothing()
-        )
-        await self._session.execute(stmt)
+        """Link one molecule to a project (idempotent)."""
+        await self.add_to_project_many(workspace_id, project_id, [molecule_id])
 
     async def remove_from_project(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, project_id: uuid.UUID

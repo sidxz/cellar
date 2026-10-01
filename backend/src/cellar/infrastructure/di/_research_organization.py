@@ -81,7 +81,7 @@ from cellar.application.research_organization.manage_campaign_collections import
     RemoveCampaignCollection,
 )
 from cellar.application.research_organization.manage_molecule_projects import (
-    AddMoleculeToProject,
+    AddMoleculesToProject,
     ListMoleculeProjects,
     RemoveMoleculeFromProject,
 )
@@ -96,6 +96,7 @@ from cellar.application.research_organization.mirror_protocol_channels import (
 )
 from cellar.application.research_organization.override_result_cell import OverrideResultCell
 from cellar.application.research_organization.preview_run_import import PreviewRunImport
+from cellar.application.research_organization.project_links import ProjectAccess
 from cellar.application.research_organization.recompute_channel import RecomputeChannel
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSources,
@@ -104,6 +105,9 @@ from cellar.application.research_organization.remove_campaign_channel import Rem
 from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
+from cellar.application.research_organization.search_reference_resolution import (
+    SearchReferenceResolver,
+)
 from cellar.application.research_organization.set_result_notes import SetResultNotes
 from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
@@ -250,7 +254,20 @@ def register_research_organization(container: Container) -> None:
 
         return _f
 
-    container.define(AddMoleculeToProject, _mol_project_cmd(AddMoleculeToProject))
+    def _add_molecules_to_project(c: Container) -> AddMoleculesToProject:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        mol_repo = SQLAlchemyMoleculeRepository(uow)
+        return AddMoleculesToProject(
+            uow,
+            MoleculeResolver(mol_repo, c[StructureProcessorProtocol]),
+            mol_repo,
+            ProjectAccess(
+                SQLAlchemyProjectRepository(uow), SQLAlchemyProjectMemberRepository(uow)
+            ),
+            c[EventDispatcher],
+        )
+
+    container.define(AddMoleculesToProject, _add_molecules_to_project)
     container.define(RemoveMoleculeFromProject, _mol_project_cmd(RemoveMoleculeFromProject))
 
     def _list_mol_projects(c: Container):
@@ -395,6 +412,11 @@ def register_research_organization(container: Container) -> None:
     container.define(ListSavedSearches, _ss_query(ListSavedSearches))
 
     # --- Execute Search ---
+    def _search_reference_resolver(c: Container, uow: AsyncUnitOfWork) -> SearchReferenceResolver:
+        return SearchReferenceResolver(
+            SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]
+        )
+
     def _execute_search(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return ExecuteSearch(
@@ -408,6 +430,7 @@ def register_research_organization(container: Container) -> None:
                 protocol_repo=SQLAlchemyProtocolRepository(uow),
                 run_repo=SQLAlchemyRunRepository(uow),
             ),
+            reference_resolver=_search_reference_resolver(c, uow),
         )
 
     container.define(ExecuteSearch, _execute_search)
@@ -419,6 +442,7 @@ def register_research_organization(container: Container) -> None:
             uow,
             c[MoleculeReader],
             SQLAlchemySavedSearchRepository(uow),
+            reference_resolver=_search_reference_resolver(c, uow),
         )
 
     container.define(CountSearch, _count_search)

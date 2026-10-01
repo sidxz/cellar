@@ -48,6 +48,6 @@ async def test_sdf_writes_mol_blocks_and_data_tags(tmp_path: Path):
     # RDKit SDWriter emits ">  <Header>  (N) " — assert with the angle-bracket prefix only.
     assert "<Reg #>" in text
     assert "CV-1" in text
-    assert "<Mtb::EC50>" in text
+    assert "<Mtb::EC50 (µM)>" in text
     assert "1.23" in text
     assert text.count("$$$$") == 1   # 2nd row has no SMILES → skipped

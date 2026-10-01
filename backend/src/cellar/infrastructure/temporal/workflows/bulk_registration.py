@@ -11,6 +11,7 @@ Uses continue_as_new every 2000 chunks for very large files (>500K molecules).
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -45,6 +46,7 @@ class BulkRegistrationWorkflowInput:
     storage_path: str  # absolute path to the uploaded file
     filename: str
     create_batch_on_duplicate: bool | None = None
+    project_ids: list[str] = field(default_factory=list)
     # For continue_as_new
     resume_bulk_reg_id: str | None = None
     resume_chunk_index: int = 0
@@ -86,6 +88,31 @@ class BulkRegistrationProgress:
             + self.merge_candidate_count
             + self.conflict_count
         )
+
+
+def _continue_input(
+    input: BulkRegistrationWorkflowInput,
+    *,
+    bulk_reg_id: str,
+    progress: BulkRegistrationProgress,
+    remaining_chunks: list[list[dict]],
+) -> BulkRegistrationWorkflowInput:
+    """Next run's input: every option of this run (``dataclasses.replace``, so a
+    new option can't be forgotten here) plus the progress to resume from."""
+    return dataclasses.replace(
+        input,
+        resume_bulk_reg_id=bulk_reg_id,
+        resume_chunk_index=progress.chunks_processed,
+        resume_total_count=progress.total_count,
+        resume_registered=progress.registered_count,
+        resume_duplicate=progress.duplicate_count,
+        resume_error=progress.error_count,
+        resume_disclosed=progress.disclosed_count,
+        resume_merge_candidate=progress.merge_candidate_count,
+        resume_conflict=progress.conflict_count,
+        resume_merge_candidates_list=progress.merge_candidates,
+        resume_chunks=remaining_chunks,
+    )
 
 
 _CONTINUE_AS_NEW_EVERY = 2000  # chunks
@@ -169,6 +196,7 @@ class BulkRegistrationWorkflow:
                     items=items,
                     chunk_index=i,
                     create_batch_on_duplicate=input.create_batch_on_duplicate,
+                    project_ids=input.project_ids,
                 ),
                 start_to_close_timeout=timedelta(minutes=5),
                 heartbeat_timeout=timedelta(seconds=120),
@@ -228,26 +256,11 @@ class BulkRegistrationWorkflow:
             # Continue-as-new for very large files
             if chunks_in_this_run >= _CONTINUE_AS_NEW_EVERY and i + 1 < len(chunks):
                 workflow.continue_as_new(
-                    BulkRegistrationWorkflowInput(
-                        workspace_id=input.workspace_id,
-                        originating_org_id=input.originating_org_id,
-                        submitted_by=input.submitted_by,
-                        source_file=input.source_file,
-                        file_format=input.file_format,
-                        storage_path=input.storage_path,
-                        filename=input.filename,
-                        create_batch_on_duplicate=input.create_batch_on_duplicate,
-                        resume_bulk_reg_id=bulk_reg_id,
-                        resume_chunk_index=self._progress.chunks_processed,
-                        resume_total_count=self._progress.total_count,
-                        resume_registered=self._progress.registered_count,
-                        resume_duplicate=self._progress.duplicate_count,
-                        resume_error=self._progress.error_count,
-                        resume_disclosed=self._progress.disclosed_count,
-                        resume_merge_candidate=self._progress.merge_candidate_count,
-                        resume_conflict=self._progress.conflict_count,
-                        resume_merge_candidates_list=self._progress.merge_candidates,
-                        resume_chunks=chunks[i + 1 :],
+                    _continue_input(
+                        input,
+                        bulk_reg_id=bulk_reg_id,
+                        progress=self._progress,
+                        remaining_chunks=chunks[i + 1 :],
                     )
                 )
 

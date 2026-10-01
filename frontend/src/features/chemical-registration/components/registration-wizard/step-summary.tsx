@@ -22,6 +22,7 @@ import { useState } from "react";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { useBulkRegistrationItems } from "../../hooks/use-registration-wizard-api";
 import type { BulkRegItemAction } from "../../types/registration-wizard";
+import { ProjectNames } from "./project-names";
 
 // ─── Action label map ────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ export function StepSummary() {
 function SingleSummary() {
   const router = useRouter();
   const singleResult = useRegistrationWizard((s) => s.singleResult);
+  const projectIds = useRegistrationWizard((s) => s.singleInput.projectIds);
   const reset = useRegistrationWizard((s) => s.reset);
 
   if (!singleResult) {
@@ -95,6 +97,11 @@ function SingleSummary() {
               <span className="font-mono">{batch.batch_number}</span>
             </SummaryRow>
           )}
+          {projectIds.length > 0 && (
+            <SummaryRow label="Added to">
+              <ProjectNames ids={projectIds} />
+            </SummaryRow>
+          )}
         </dl>
 
         {/* Actions */}
@@ -119,6 +126,7 @@ function BulkSummary() {
   const router = useRouter();
   const progress = useRegistrationWizard((s) => s.progress);
   const workflowId = useRegistrationWizard((s) => s.workflowId);
+  const projectIds = useRegistrationWizard((s) => s.bulkInput.projectIds);
   const reset = useRegistrationWizard((s) => s.reset);
 
   if (!progress) {
@@ -212,6 +220,11 @@ function BulkSummary() {
                 }
               />
             </SummaryRow>
+            {projectIds.length > 0 && (
+              <SummaryRow label="Added to">
+                <ProjectNames ids={projectIds} />
+              </SummaryRow>
+            )}
           </dl>
 
           {/* Conflict note */}

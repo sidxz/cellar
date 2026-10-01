@@ -30,8 +30,14 @@ def _structure_clause(criterion: dict[str, Any]) -> ColumnElement:
     kind = criterion.get("kind") or criterion.get("search_type")
 
     if kind == "exact":
-        inchi_key = criterion["inchi_key"]
-        return MoleculeModel.inchi_key == inchi_key
+        # A SMILES exact match is standardized to its InChIKey by the
+        # application layer (``resolve_search_references``) — the composer
+        # has no access to the registration standardizer.
+        inchi_key = criterion.get("inchi_key")
+        if not inchi_key:
+            msg = "exact match needs an InChIKey (or a SMILES resolved to one)"
+            raise ValueError(msg)
+        return MoleculeModel.inchi_key == inchi_key.strip().upper()
 
     if kind == "substructure":
         return _substructure_clause(criterion)

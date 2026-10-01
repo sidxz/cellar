@@ -14,15 +14,18 @@ from cellar.application.auth import (
     require_same_workspace,
     require_workspace_role,
 )
+from cellar.application.research_organization.collection_membership import MembershipResult
+from cellar.application.research_organization.project_links import (
+    ProjectAccess,
+    link_molecules_to_projects,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.molecule_resolver import MoleculeReference, MoleculeResolver
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
-from cellar.domain.research_organization.events import (
-    EntityAddedToProject,
-    EntityRemovedFromProject,
-)
+from cellar.domain.research_organization.events import EntityRemovedFromProject
 from cellar.domain.research_organization.project_membership import ProjectRole
 from cellar.domain.research_organization.repository import (
     ProjectMemberRepository,
@@ -31,78 +34,61 @@ from cellar.domain.research_organization.repository import (
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 # ---------------------------------------------------------------------------
-# AddMoleculeToProject
+# AddMoleculesToProject
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, kw_only=True)
-class AddMoleculeToProjectCommand(Command):
+class AddMoleculesToProjectCommand(Command):
     workspace_id: uuid.UUID
     project_id: uuid.UUID
-    molecule_id: uuid.UUID
+    refs: list[MoleculeReference]
 
 
-class AddMoleculeToProject:
-    """Associate a molecule with a project."""
+class AddMoleculesToProject:
+    """Put compounds into a project by any reference a chemist has
+    (UUID, reg #, external id, SMILES, InChIKey, name)."""
 
     def __init__(
         self,
         uow: UnitOfWork,
-        project_repo: ProjectRepository,
+        resolver: MoleculeResolver,
         molecule_repo: MoleculeRepository,
-        member_repo: ProjectMemberRepository,
+        project_access: ProjectAccess,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
-        self._project_repo = project_repo
+        self._resolver = resolver
         self._molecule_repo = molecule_repo
-        self._member_repo = member_repo
+        self._project_access = project_access
         self._dispatcher = dispatcher
 
     async def __call__(
-        self, input: AddMoleculeToProjectCommand, auth: AuthContext | None = None
-    ) -> Result[None, DomainError]:
+        self, input: AddMoleculesToProjectCommand, auth: AuthContext | None = None
+    ) -> Result[MembershipResult, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
-            project = await self._project_repo.find_by_id_in_workspace(
-                input.workspace_id, input.project_id
+            denied = await self._project_access.check_editable(
+                input.workspace_id, [input.project_id], auth
             )
-            if project is None:
-                return Failure(NotFoundError("Project", str(input.project_id)))
-
-            molecule = await self._molecule_repo.find_by_id_in_workspace(
-                input.workspace_id, input.molecule_id
+            if denied is not None:
+                return Failure(denied)
+            resolved, unresolved = await self._resolver.resolve(input.workspace_id, input.refs)
+            molecule_ids = list(dict.fromkeys(r.molecule_id for r in resolved))
+            link_events = await link_molecules_to_projects(
+                self._molecule_repo, input.workspace_id, [input.project_id], molecule_ids
             )
-            if molecule is None:
-                return Failure(NotFoundError("Molecule", str(input.molecule_id)))
-
-            # Check caller has at least editor-level project access (or is admin)
-            if auth is not None:
-                caller_role = await self._member_repo.get_role(
-                    input.workspace_id, input.project_id, auth.user_id
-                )
-                require_project_role(auth, caller_role, ProjectRole.EDITOR)
-
-            await self._molecule_repo.add_to_project(
-                input.workspace_id, input.molecule_id, input.project_id
-            )
-
-            events = await self._uow.commit()
-
-        events.append(
-            EntityAddedToProject(
-                aggregate_id=input.project_id,
-                aggregate_type="Project",
-                workspace_id=input.workspace_id,
-                entity_type="molecule",
-                entity_id=input.molecule_id,
-                project_id=input.project_id,
+            events = [*await self._uow.commit(), *link_events]
+        await self._dispatcher.dispatch_all(events)
+        added = [e.entity_id for e in link_events]
+        return Success(
+            MembershipResult(
+                added=added,
+                already_present=len(molecule_ids) - len(added),
+                unresolved=unresolved,
             )
         )
-        await self._dispatcher.dispatch_all(events)
-
-        return Success(None)
 
 
 # ---------------------------------------------------------------------------

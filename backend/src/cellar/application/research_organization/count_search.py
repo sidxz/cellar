@@ -17,6 +17,9 @@ from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace
 from cellar.application.chemical_registration.molecule_reader import MoleculeReader
+from cellar.application.research_organization.search_reference_resolution import (
+    SearchReferenceResolver,
+)
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.repository import SavedSearchRepository
@@ -43,10 +46,12 @@ class CountSearch:
         uow: UnitOfWork,
         molecule_reader: MoleculeReader,
         saved_search_repo: SavedSearchRepository,
+        reference_resolver: SearchReferenceResolver | None = None,
     ) -> None:
         self._uow = uow
         self._mol_reader = molecule_reader
         self._ss_repo = saved_search_repo
+        self._reference_resolver = reference_resolver
 
     async def __call__(
         self, input: CountSearchQuery, auth: AuthContext | None = None
@@ -67,6 +72,8 @@ class CountSearch:
                 query_dict = input.query  # type: ignore[assignment]
 
             try:
+                if self._reference_resolver is not None:
+                    query_dict = await self._reference_resolver(input.workspace_id, query_dict)
                 total = await self._mol_reader.count_by_query(
                     input.workspace_id,
                     query_dict,

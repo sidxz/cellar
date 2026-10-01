@@ -23,7 +23,7 @@ const SEARCH_TYPES: { value: StructureSearchType; label: string }[] = [
 
 const PLACEHOLDERS: Record<StructureSearchType, string> = {
   substructure: "e.g. c1ccccc1",
-  exact: "InChI Key, e.g. BSYNRYMUTXBXSQ-UHFFFAOYSA-N",
+  exact: "SMILES or InChIKey, e.g. CC(=O)Oc1ccccc1C(=O)O",
   similarity: "e.g. CCO",
 };
 
@@ -75,10 +75,22 @@ function defaultStructureCriterion(): StructureCriterion {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const INCHI_KEY_RE = /^[A-Z]{14}-[A-Z]{10}-[A-Z]$/;
+
 function getInputValue(c: StructureCriterion): string {
   if (c.search_type === "substructure") return c.smiles_or_smarts ?? c.smarts ?? "";
   if (c.search_type === "similarity") return c.smiles ?? "";
-  return c.inchi_key ?? "";
+  return c.inchi_key ?? c.smiles ?? "";
+}
+
+/** The query as a plain structure, if it is one — what survives a switch
+ *  between substructure / similarity / exact. A SMARTS pattern or an
+ *  InChIKey has no meaning in the other modes, so it doesn't carry. */
+function carriedStructure(c: StructureCriterion): string {
+  if (c.search_type === "substructure") {
+    return c.query_kind === "smarts" ? "" : (c.smiles_or_smarts ?? c.smarts ?? "");
+  }
+  return c.smiles ?? "";
 }
 
 function setInputValue(c: StructureCriterion, value: string): StructureCriterion {
@@ -92,7 +104,11 @@ function setInputValue(c: StructureCriterion, value: string): StructureCriterion
     };
   }
   if (c.search_type === "similarity") return { ...c, smiles: value };
-  return { ...c, inchi_key: value };
+  // Exact accepts either: a pasted InChIKey matches directly, anything else
+  // is a SMILES the backend standardizes the way registration did.
+  return INCHI_KEY_RE.test(value.trim().toUpperCase())
+    ? { ...c, inchi_key: value.trim().toUpperCase(), smiles: undefined }
+    : { ...c, smiles: value, inchi_key: undefined };
 }
 
 function setStructureFromEditor(
@@ -119,8 +135,7 @@ function getPreviewSmiles(c: StructureCriterion): string | undefined {
     const v = c.smiles_or_smarts ?? c.smarts;
     return v || undefined;
   }
-  if (c.search_type === "similarity") return c.smiles || undefined;
-  return undefined;
+  return c.smiles || undefined;
 }
 
 function hasValue(c: StructureCriterion): boolean {
@@ -128,7 +143,7 @@ function hasValue(c: StructureCriterion): boolean {
     return ((c.smiles_or_smarts ?? c.smarts)?.length ?? 0) > 0;
   }
   if (c.search_type === "similarity") return (c.smiles?.length ?? 0) > 0;
-  return (c.inchi_key?.length ?? 0) > 0;
+  return (c.inchi_key?.length ?? 0) > 0 || (c.smiles?.length ?? 0) > 0;
 }
 
 // ─── Section ─────────────────────────────────────────────────────────────────
@@ -147,7 +162,6 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
   const currentMode = c.mode ?? "similar";
   const previewSmiles = getPreviewSmiles(c);
   const inputValue = getInputValue(c);
-  const isStructureMode = c.search_type !== "exact";
   const editorOutputFormat: "smiles" | "smarts" | "auto" =
     c.search_type === "substructure" ? "auto" : "smiles";
   const filled = hasValue(c);
@@ -163,7 +177,8 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
       base.mode = "similar";
       base.threshold = modes.find((m) => m.name === "similar")?.default_threshold ?? 0.7;
     }
-    onChange(base);
+    const carried = carriedStructure(c);
+    onChange(carried ? setInputValue(base, carried) : base);
   }
 
   function handleModeChange(mode: SearchMode) {
@@ -329,31 +344,27 @@ export function StructureSection({ criterion, onChange }: StructureSectionProps)
           value={inputValue}
           onChange={(e) => handleInputChange(e.target.value)}
         />
-        {isStructureMode && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 px-2.5 gap-1.5 shrink-0"
-            onClick={() => setEditorOpen(true)}
-            title="Draw structure with Ketcher"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            <span>{filled ? "Edit structure" : "Draw structure"}</span>
-          </Button>
-        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 px-2.5 gap-1.5 shrink-0"
+          onClick={() => setEditorOpen(true)}
+          title="Draw structure with Ketcher"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          <span>{filled ? "Edit structure" : "Draw structure"}</span>
+        </Button>
       </div>
 
       {/* Structure editor dialog */}
-      {isStructureMode && (
-        <StructureEditorDialog
-          open={editorOpen}
-          onOpenChange={setEditorOpen}
-          initialStructure={previewSmiles ?? ""}
-          onApply={handleEditorApply}
-          outputFormat={editorOutputFormat}
-        />
-      )}
+      <StructureEditorDialog
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        initialStructure={previewSmiles ?? ""}
+        onApply={handleEditorApply}
+        outputFormat={editorOutputFormat}
+      />
     </div>
   );
 }

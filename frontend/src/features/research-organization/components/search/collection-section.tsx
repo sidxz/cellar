@@ -95,7 +95,10 @@ function CollectionTerm({
               <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
             </button>
           </PopoverTrigger>
-          <PopoverContent className="w-64 p-0" align="start">
+          <PopoverContent
+            className="w-[max(16rem,var(--radix-popover-trigger-width))] p-0"
+            align="start"
+          >
             <Command>
               <CommandInput placeholder="Search collections…" className="h-8 text-sm" />
               <CommandList>
@@ -117,7 +120,10 @@ function CollectionTerm({
                           term.collection_id === c.id ? "opacity-100" : "opacity-0",
                         )}
                       />
-                      {c.name} ({c.molecule_count})
+                      <span className="truncate">{c.name}</span>
+                      <span className="ml-auto pl-2 tabular-nums text-xs text-muted-foreground">
+                        {c.molecule_count}
+                      </span>
                     </CommandItem>
                   ))}
                 </CommandGroup>

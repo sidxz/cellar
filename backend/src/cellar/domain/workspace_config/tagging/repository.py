@@ -39,9 +39,13 @@ class TagRepository(Protocol):
         *,
         q: str | None = None,
         created_by: uuid.UUID | None = None,
+        entity_type: TaggableEntityType | None = None,
         limit: int = 50,
     ) -> list[Tag]:
-        """Autocomplete / listing — substring match on normalized key/value."""
+        """Autocomplete / listing — substring match on normalized key/value.
+
+        ``entity_type`` keeps only tags in use on that entity type (a compound
+        search offers compound tags, not ones only ever put on protocols)."""
         ...
 
     async def save(self, aggregate: Tag) -> None: ...

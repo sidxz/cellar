@@ -104,7 +104,9 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
 
         <PopoverContent
           align="start"
-          className="w-56 p-0"
+          // Program names are long ("Respiration and oxidative
+          // phosphorylation") — w-56 truncated most of them.
+          className="w-80 p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <Command>
@@ -127,7 +129,9 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
                         tabIndex={-1}
                         aria-label={project.name}
                       />
-                      <span className="truncate">{project.name}</span>
+                      <span className="truncate" title={project.name}>
+                        {project.name}
+                      </span>
                     </CommandItem>
                   );
                 })}

@@ -43,6 +43,7 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._field_c
     _custom_field_clause,
     _keyword_list_clause,
     _project_clause,
+    _project_membership_clause,
     _property_clause,
     _run_date_clause,
     _tag_clause,
@@ -79,6 +80,7 @@ __all__ = [
     "_normalize_where",
     "_parse_metric",
     "_project_clause",
+    "_project_membership_clause",
     "_property_clause",
     "_resolve_algorithm_and_metric",
     "_run_date_clause",
@@ -112,7 +114,7 @@ def compose_criteria(query: dict[str, Any], *, workspace_id: uuid.UUID) -> Colum
     for criterion in criteria:
         ctype = criterion["type"]
         if ctype == "text":
-            clause = _text_clause(criterion)
+            clause = _text_clause(criterion, workspace_id)
         elif ctype == "property":
             clause = _property_clause(criterion)
         elif ctype == "structure":
@@ -124,7 +126,7 @@ def compose_criteria(query: dict[str, Any], *, workspace_id: uuid.UUID) -> Colum
         elif ctype == "collection":
             clause = _collection_clause(criterion, workspace_id)
         elif ctype == "project":
-            clause = _project_clause(criterion, workspace_id)
+            clause = _project_membership_clause(criterion, workspace_id)
         elif ctype == "keyword_list":
             clause = _keyword_list_clause(criterion)
         elif ctype == "run_date":
@@ -193,7 +195,7 @@ def _group_clause(
         if ctype == "group":
             clause = _group_clause(sub, workspace_id, _depth=_depth + 1)
         elif ctype == "text":
-            clause = _text_clause(sub)
+            clause = _text_clause(sub, workspace_id)
         elif ctype == "property":
             clause = _property_clause(sub)
         elif ctype == "structure":
@@ -205,7 +207,7 @@ def _group_clause(
         elif ctype == "collection":
             clause = _collection_clause(sub, workspace_id)
         elif ctype == "project":
-            clause = _project_clause(sub, workspace_id)
+            clause = _project_membership_clause(sub, workspace_id)
         elif ctype == "keyword_list":
             clause = _keyword_list_clause(sub)
         elif ctype == "run_date":

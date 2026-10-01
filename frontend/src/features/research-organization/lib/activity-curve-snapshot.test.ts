@@ -35,6 +35,19 @@ describe("activityValueToCurveSnapshot", () => {
     expect(activityValueToCurveSnapshot({ ...DR, value: null } as never)).toBeNull();
   });
 
+  it("keeps an inactive curve's points even though its value is ND", () => {
+    const inactive = {
+      ...DR,
+      value: null,
+      curve_params: { top: 5, bottom: 0, hill_slope: 1, curve_class: "inactive" },
+      intercept_values: [{ spec: { kind: "ic", level: 50 }, value: 0.0008, at_bound: false }],
+    } as never;
+    expect(activityValueToCurveSnapshot(inactive)).toMatchObject({
+      curve_class: "inactive",
+      fitted_value: 0.0008,
+    });
+  });
+
   it("marks the selected intercept when it differs from the primary fitted_value", () => {
     // Colored by IC90 (5.0) while the primary is 1.5 → a distinct marker at 5.0.
     const snap = activityValueToCurveSnapshot(DR, { value: 5.0, label: "IC90" });

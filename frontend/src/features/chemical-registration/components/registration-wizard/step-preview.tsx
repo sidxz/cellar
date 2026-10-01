@@ -12,6 +12,7 @@ import {
   usePreviewRegistration,
 } from "../../hooks/use-registration-wizard-api";
 import type { PreviewItem, PreviewRegistrationItemResponse } from "../../types/registration-wizard";
+import { ProjectNames } from "./project-names";
 
 /** Backend caps a forecast request at 500 items; larger files go in chunks. */
 const FORECAST_CHUNK = 500;
@@ -148,6 +149,11 @@ export function StepPreview() {
           <p className="text-sm text-muted-foreground">
             Review the parsed rows before kicking off the import.
           </p>
+          {bulkInput.projectIds.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Will be added to: <ProjectNames ids={bulkInput.projectIds} />
+            </p>
+          )}
         </div>
       </div>
 

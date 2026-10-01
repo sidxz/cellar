@@ -15,6 +15,7 @@ from sqlalchemy import column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import ColumnElement
 
+from cellar.domain.screening_assay.enums import CurveClass
 from cellar.domain.screening_assay.readout_name import normalize_readout_name
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
@@ -27,6 +28,11 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     ReadoutDefinitionModel,
     RunModel,
 )
+
+# "Latest run" = the experiment run most recently (run date), the same order
+# the results grid uses to pick a compound's latest value. created_at only
+# breaks ties — an old run imported today is not the latest experiment.
+_LATEST_RUN_ORDER = (RunModel.run_date.desc(), RunModel.created_at.desc())
 
 _ACTIVITY_OP_MAP: dict[str, str] = {
     "eq": "__eq__",
@@ -169,6 +175,7 @@ def _activity_where_clause(
         msg = "where condition with readout_definition_id needs protocol_id"
         raise ValueError(msg)
 
+    qualifier_col: Any = None  # readout rows only — curves carry no qualifier
     if source == "dr_curve":
         # Pick the column to filter on. The primary intercept is the headline
         # `fitted_value` (indexed, fast). Secondary intercepts (EC90 on an EC50-
@@ -186,6 +193,7 @@ def _activity_where_clause(
                 msg = f"Invalid intercept_key on activity where: {ik!r}"
                 raise ValueError(msg)
             data_col = _jsonb_intercept_value(kind, float(level))
+        data_col = reportable_curve_value(data_col, DoseResponseCurveModel.curve_class)
         molecule_col = DoseResponseCurveModel.molecule_id
         run_id_col = DoseResponseCurveModel.run_id
         base_filters = [
@@ -194,12 +202,25 @@ def _activity_where_clause(
         ]
     elif source == "readout_data":
         data_col = ReadoutDataModel.value_numeric
+        qualifier_col = ReadoutDataModel.value_qualifier
         molecule_col = ReadoutDataModel.molecule_id
         run_id_col = ReadoutDataModel.run_id
+        # A readout-def stores its raw rows and each normalized layer
+        # (``normalization_applied``, e.g. percent_inhibition) side by side.
+        # Mixing them compares "% inhibition > 50" against raw signal counts,
+        # so a condition targets exactly one layer — raw unless it names one.
+        normalization = cond.get("normalization")
         base_filters = [
             ReadoutDataModel.workspace_id == workspace_id,
             ReadoutDataModel.readout_definition_id == rd_id,
+            # Control / blank wells carry molecule_id NULL; one NULL in a
+            # NOT IN subquery ("every run" counterexamples, negated filters)
+            # makes it match nothing.
+            ReadoutDataModel.molecule_id.is_not(None),
             ReadoutDataModel.is_outlier == False,  # noqa: E712
+            ReadoutDataModel.normalization_applied == normalization
+            if normalization
+            else ReadoutDataModel.normalization_applied.is_(None),
         ]
     else:
         msg = f"Unknown activity where source: {source!r}"
@@ -209,7 +230,14 @@ def _activity_where_clause(
     if scope_filter is not None:
         base_filters.append(scope_filter)
 
-    value_filter = _value_filter(data_col, cond)
+    # coalesce: an ND value (inactive curve, missing intercept) satisfies no
+    # cutoff — and in "all" mode it is a counterexample, not a skipped row.
+    raw_filter = (
+        _qualified_value_filter(data_col, qualifier_col, cond)
+        if source == "readout_data"
+        else _value_filter(data_col, cond)
+    )
+    value_filter = sa.func.coalesce(raw_filter, sa.false())
 
     # "all" semantics: molecule has at least one satisfying row AND no
     # non-satisfying row in scope. Implemented as IN(positive) AND NOT IN(negative).
@@ -272,14 +300,64 @@ def _value_filter(data_col: Any, cond: dict[str, Any]) -> ColumnElement:
     return getattr(data_col, op_name)(cond["value"])
 
 
-def _to_micromolar(expr: Any) -> ColumnElement:
+_LOWER_BOUND = (">", ">=")  # true value lies above the reported number
+_UPPER_BOUND = ("<", "<=")  # true value lies below it
+
+
+def _qualified_value_filter(value_col: Any, qualifier_col: Any, cond: dict[str, Any]) -> Any:
+    """``_value_filter`` for reported readouts, which may be censored.
+
+    ">50" means the true value is above 50, so it satisfies a cutoff only
+    when that is certain: it matches "> 40" but not "< 60" (a CRO's ">50 µM"
+    is no hit for "IC50 < 60"). "<0.1" mirrors it. A bound never equals or
+    falls between exact values. Unqualified, "=" and "~" compare as-is.
+    """
+    plain = _value_filter(value_col, cond)  # also validates operator/value
+    op = cond.get("operator", "lt")
+    if op in ("gt", "gte"):
+        x = cond["value"]
+        sure = (
+            sa.or_(value_col > x, sa.and_(qualifier_col == ">", value_col == x))
+            if op == "gt"
+            else value_col >= x
+        )
+        censored = sa.and_(qualifier_col.in_(_LOWER_BOUND), sure)
+    elif op in ("lt", "lte"):
+        x = cond["value"]
+        sure = (
+            sa.or_(value_col < x, sa.and_(qualifier_col == "<", value_col == x))
+            if op == "lt"
+            else value_col <= x
+        )
+        censored = sa.and_(qualifier_col.in_(_UPPER_BOUND), sure)
+    else:
+        censored = sa.false()
+    exact = sa.or_(qualifier_col.is_(None), qualifier_col.not_in(_LOWER_BOUND + _UPPER_BOUND))
+    return sa.or_(sa.and_(exact, plain), censored)
+
+
+def reportable_curve_value(value: Any, curve_class: Any) -> ColumnElement:
+    """A curve's value as the grid reports it: NULL (ND) when the curve is
+    inactive. An inactive fit's scalar is an arbitrary asymptote parameter
+    (see ``run_aggregation.resolve_intercept``), so a potency cutoff must not
+    match it — "IC50 < 10 µM" returning inactive compounds is a false hit."""
+    return sa.case((curve_class == CurveClass.INACTIVE.value, sa.null()), else_=value)
+
+
+def to_micromolar(
+    expr: Any,
+    *,
+    dose_unit: Any = ProtocolModel.dose_unit,
+    molecular_weight: Any = MoleculeModel.molecular_weight,
+) -> ColumnElement:
     """Express ``expr`` (a value in the owning protocol's ``dose_unit``) in µM.
 
     Molar units scale by a constant; mg/mL needs the molecule's molecular
     weight (µM = mg/mL × 1e6 / MW) and yields NULL when MW is unknown, so
     that curve simply cannot match a cutoff. The CASE is generated from
     ``ConcentrationUnit`` so a new unit cannot be silently mis-scaled.
-    Callers must join ``ProtocolModel`` and ``MoleculeModel``.
+    Callers must join the protocol + molecule the two columns come from
+    (defaults: the un-aliased ``ProtocolModel`` / ``MoleculeModel``).
     """
     whens = []
     for unit in ConcentrationUnit:
@@ -287,9 +365,9 @@ def _to_micromolar(expr: Any) -> ColumnElement:
         f = (
             sa.literal(factor)
             if factor is not None
-            else 1_000_000.0 / sa.func.nullif(MoleculeModel.molecular_weight, 0)
+            else 1_000_000.0 / sa.func.nullif(molecular_weight, 0)
         )
-        whens.append((ProtocolModel.dose_unit == unit.value, f))
+        whens.append((dose_unit == unit.value, f))
     return expr * sa.case(*whens, else_=None)
 
 
@@ -319,7 +397,10 @@ def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) 
         .where(
             DoseResponseCurveModel.workspace_id == workspace_id,
             ProtocolModel.workspace_id == workspace_id,
-            _value_filter(_to_micromolar(expr), cond),
+            _value_filter(
+                to_micromolar(reportable_curve_value(expr, DoseResponseCurveModel.curve_class)),
+                cond,
+            ),
         )
     )
     return MoleculeModel.id.in_(sub)
@@ -344,11 +425,14 @@ def _readout_name_any_protocol_clause(
         )
         .where(
             ReadoutDataModel.workspace_id == workspace_id,
+            ReadoutDataModel.molecule_id.is_not(None),  # control wells; see per-protocol path
             ReadoutDataModel.is_outlier == False,  # noqa: E712
             ReadoutDataModel.normalization_applied.is_(None),
             _sql_normalized_name(ReadoutDefinitionModel.name) == normalize_readout_name(name),
             sa.func.coalesce(ReadoutDefinitionModel.unit, "") == unit,
-            _value_filter(ReadoutDataModel.value_numeric, cond),
+            _qualified_value_filter(
+                ReadoutDataModel.value_numeric, ReadoutDataModel.value_qualifier, cond
+            ),
         )
     )
     return MoleculeModel.id.in_(sub)
@@ -364,6 +448,8 @@ def _activity_presence_clause(
     # data point ultimately attaches to a run, and run carries protocol.
     conds: list[ColumnElement] = [
         ReadoutDataModel.workspace_id == workspace_id,
+        # Control wells (molecule_id NULL) would poison a negated NOT IN.
+        ReadoutDataModel.molecule_id.is_not(None),
         RunModel.workspace_id == workspace_id,
     ]
     if protocol_id is not None:
@@ -401,7 +487,7 @@ def _activity_presence_clause(
                         RunModel.workspace_id == workspace_id,
                         RunModel.protocol_id == protocol_id,
                     )
-                    .order_by(RunModel.created_at.desc())
+                    .order_by(*_LATEST_RUN_ORDER)
                     .limit(1)
                 )
             )
@@ -483,7 +569,7 @@ def _run_scope_filter(
                 RunModel.workspace_id == workspace_id,
                 RunModel.protocol_id == protocol_id,
             )
-            .order_by(RunModel.created_at.desc())
+            .order_by(*_LATEST_RUN_ORDER)
             .limit(1)
         )
         return run_id_col.in_(latest_run_sq)

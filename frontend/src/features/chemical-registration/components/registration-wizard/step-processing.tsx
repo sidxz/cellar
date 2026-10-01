@@ -15,6 +15,7 @@ import {
 } from "../../hooks/use-registration-wizard-api";
 import type { RegisterMoleculeInput } from "../../types";
 import type { SubmitDisclosureInput } from "../../types/disclosure";
+import { ProjectNames } from "./project-names";
 
 // ---------------------------------------------------------------------------
 // StepProcessing
@@ -110,6 +111,7 @@ function SingleProcessing() {
         })),
         originating_org_id: singleInput.originatingOrgId!,
         custom_fields: singleInput.customFields,
+        project_ids: singleInput.projectIds,
       };
 
       registerMutation
@@ -211,6 +213,9 @@ function SingleProcessing() {
                   value={singleInput.externalIds.map((e) => e.identifier).join(", ")}
                 />
               )}
+              {singleInput.projectIds.length > 0 && (
+                <Row label="Projects" value={<ProjectNames ids={singleInput.projectIds} />} />
+              )}
             </>
           )}
         </div>
@@ -229,7 +234,7 @@ function SingleProcessing() {
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="flex gap-2">
       <span className="text-muted-foreground w-24 shrink-0">{label}:</span>
@@ -259,7 +264,7 @@ function BulkProcessing() {
   // Kick off the bulk job on mount
   // biome-ignore lint/correctness/useExhaustiveDependencies: kick off the bulk job once on mount (guarded by hasStarted ref); the captured bulkInput/startMutation must not re-trigger the job.
   useEffect(() => {
-    if (hasStarted.current || !bulkInput.file) return;
+    if (hasStarted.current || !bulkInput.file || !bulkInput.originatingOrgId) return;
     hasStarted.current = true;
 
     startMutation
@@ -268,6 +273,7 @@ function BulkProcessing() {
         file_format: bulkInput.fileFormat,
         originating_org_id: bulkInput.originatingOrgId,
         create_batch_on_duplicate: bulkInput.createBatchOnDuplicate,
+        project_ids: bulkInput.projectIds,
       })
       .then((data) => {
         setWorkflowId(data.workflow_id);

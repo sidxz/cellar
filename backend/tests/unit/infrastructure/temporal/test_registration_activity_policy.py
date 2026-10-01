@@ -247,6 +247,7 @@ async def _run_process_chunk_simple(
     chunk_input: ChunkInput,
     *,
     outcome: MagicMock,
+    commands: list | None = None,
 ) -> object:
     """Invoke process_chunk with all external I/O patched out.
 
@@ -260,7 +261,12 @@ async def _run_process_chunk_simple(
     mock_uow.__aenter__ = AsyncMock(return_value=mock_uow)
     mock_uow.__aexit__ = AsyncMock(return_value=False)
 
-    mock_register_uc = AsyncMock(return_value=Success(outcome))
+    async def _register(cmd, *args, **kwargs):
+        if commands is not None:
+            commands.append(cmd)
+        return Success(outcome)
+
+    mock_register_uc = AsyncMock(side_effect=_register)
     mock_register_cls = MagicMock(return_value=mock_register_uc)
 
     with (
@@ -306,3 +312,33 @@ async def _run_process_chunk_simple(
         ),
     ):
         return await activity_instance.process_chunk(chunk_input)
+
+
+@pytest.mark.asyncio
+async def test_chunk_forwards_project_ids_to_registration():
+    """The chunk turns ChunkInput.project_ids into RegisterMoleculeCommand.project_ids."""
+    project_id = uuid.uuid4()
+    outcome = _make_outcome(is_new=True, action=RegistrationAction.REGISTERED)
+    activity_instance = RegistrationActivities(
+        session_factory=AsyncMock(),
+        dispatcher=AsyncMock(),
+        structure_processor=AsyncMock(),
+        side_effect_registry=MagicMock(),
+        settings_repo_factory=MagicMock(
+            return_value=_make_ws_repo(create_batch_on_duplicate=False)
+        ),
+    )
+    chunk_input = _make_chunk_input()
+    chunk_input.project_ids = [str(project_id)]
+    captured: list = []
+
+    with patch.object(
+        registration_module,
+        "_create_batch",
+        AsyncMock(return_value=(BATCH_ID, "CVB-0001", False)),
+    ):
+        await _run_process_chunk_simple(
+            activity_instance, chunk_input, outcome=outcome, commands=captured
+        )
+
+    assert captured[0].project_ids == [project_id]

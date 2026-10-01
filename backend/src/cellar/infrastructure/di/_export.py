@@ -7,7 +7,6 @@ import os
 from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from cellar.application.chemical_registration.molecule_reader import MoleculeReader
 from cellar.application.export.cancel_export import CancelExport
 from cellar.application.export.get_export_status import GetExportStatus
 from cellar.application.export.list_exports import ListExports
@@ -19,25 +18,12 @@ from cellar.application.export.row_streams.search_results import SearchResultsRo
 from cellar.application.export.start_export import StartExport
 from cellar.application.research_organization.execute_search import ExecuteSearch
 from cellar.application.screening.get_protocol import ListProtocols, ListProtocolsQuery
-from cellar.application.screening.molecule_activity_service import MoleculeActivityService
 from cellar.domain.export.repository import ExportJobRepository
 from cellar.infrastructure.persistence.sqlalchemy.export.export_job_repository import (
     SqlAlchemyExportJobRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (  # noqa: E501
-    SQLAlchemySavedSearchRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
-    SQLAlchemyDoseResponseCurveRepository,
-)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
-    SQLAlchemyReadoutDataRepository,
-)
-from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
-    SQLAlchemyRunRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.storage.fsspec_client import FsspecStorageClient
@@ -56,26 +42,16 @@ def register_export(container: Container) -> None:
     # ── RenderExport ───────────────────────────────────────────────────────────
     def _render_export(c: Container) -> RenderExport:
         session_factory = c[async_sessionmaker]
-        molecule_reader = c[MoleculeReader]
         storage = c[FsspecStorageClient]
         uow = AsyncUnitOfWork(session_factory)
         repo = SqlAlchemyExportJobRepository(uow)
 
         def _build_search_stream(job):  # type: ignore[no-untyped-def]
-            # Per-job fresh UoW + ExecuteSearch so sessions don't bleed across jobs.
-            j_uow = AsyncUnitOfWork(session_factory)
-            execute_search = ExecuteSearch(
-                j_uow,
-                molecule_reader,
-                SQLAlchemySavedSearchRepository(j_uow),
-                activity_service=MoleculeActivityService(
-                    uow=j_uow,
-                    readout_repo=SQLAlchemyReadoutDataRepository(j_uow),
-                    curve_repo=SQLAlchemyDoseResponseCurveRepository(j_uow),
-                    protocol_repo=SQLAlchemyProtocolRepository(j_uow),
-                    run_repo=SQLAlchemyRunRepository(j_uow),
-                ),
-            )
+            # The container's ExecuteSearch factory builds a fresh UoW per
+            # resolve, so sessions don't bleed across jobs — and the export runs
+            # exactly the search the /search endpoint runs (a hand-built copy
+            # here had drifted from it).
+            execute_search = c[ExecuteSearch]
 
             async def _protocols_reader(workspace_id):  # type: ignore[no-untyped-def]
                 from returns.result import Success
@@ -83,7 +59,11 @@ def register_export(container: Container) -> None:
                 p_uow = AsyncUnitOfWork(session_factory)
                 lp = ListProtocols(p_uow, SQLAlchemyProtocolRepository(p_uow))
                 result = await lp(ListProtocolsQuery(workspace_id=workspace_id), auth=None)
-                return result.unwrap().items if isinstance(result, Success) else []
+                if not isinstance(result, Success):
+                    return []
+                # ListProtocols yields ProtocolWithTargets; the column builder
+                # needs the Protocol itself (id, name, readout_definitions).
+                return [item.protocol for item in result.unwrap().items]
 
             return SearchResultsRowStream(
                 workspace_id=job.workspace_id,

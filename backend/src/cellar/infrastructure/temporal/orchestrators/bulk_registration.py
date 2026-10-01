@@ -49,6 +49,7 @@ class TemporalBulkRegistrationOrchestrator:
                 storage_path=storage_path,
                 filename=request.filename,
                 create_batch_on_duplicate=request.create_batch_on_duplicate,
+                project_ids=[str(p) for p in request.project_ids],
             ),
             id=workflow_id,
             task_queue=MAIN_TASK_QUEUE,

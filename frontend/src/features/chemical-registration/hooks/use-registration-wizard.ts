@@ -37,6 +37,7 @@ const DEFAULT_SINGLE_INPUT: SingleInput = {
   scientistName: "",
   disclosingOrgId: null,
   notes: "",
+  projectIds: [],
 };
 
 const DEFAULT_BULK_INPUT: BulkInput = {
@@ -45,6 +46,7 @@ const DEFAULT_BULK_INPUT: BulkInput = {
   parsedRows: [],
   originatingOrgId: null,
   createBatchOnDuplicate: false,
+  projectIds: [],
 };
 
 // ─── Store interface ─────────────────────────────────────────────────────────

@@ -74,6 +74,7 @@ class StartBulkRegistrationCommand(Command):
     submitted_by: uuid.UUID
     originating_org_id: uuid.UUID
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
+    project_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -178,6 +179,7 @@ class BulkRegistrationService:
             submitted_by=input.submitted_by,
             auth=auth,
             effective_policy_default=effective_policy_default,
+            project_ids=input.project_ids,
         )
 
         # 3. Complete
@@ -205,6 +207,7 @@ class BulkRegistrationService:
         submitted_by: uuid.UUID,
         auth: AuthContext | None,
         effective_policy_default: bool,
+        project_ids: list[uuid.UUID],
     ) -> list[BulkRegistrationItemResult]:
         results: list[BulkRegistrationItemResult] = []
         register_uc = RegisterMolecule(
@@ -253,6 +256,7 @@ class BulkRegistrationService:
                 originating_org_id=originating_org_id,
                 registered_by=submitted_by,
                 promote_name_as_identifier=has_explicit_name,
+                project_ids=project_ids,
             )
 
             result = await register_uc(cmd, auth=auth)

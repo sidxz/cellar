@@ -11,7 +11,7 @@ case absorbs the branching that previously lived in the route.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from returns.result import Failure, Result, Success
@@ -35,7 +35,9 @@ from cellar.application.chemical_registration.preview_bulk_registration_file imp
 from cellar.application.orchestration.workflow_status import (
     WorkflowOrchestratorUnavailable,
 )
+from cellar.application.research_organization.project_links import ProjectAccess
 from cellar.application.shared.command import Command
+from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
 from cellar.domain.shared.errors import DomainError, ValidationError
 
@@ -51,6 +53,7 @@ class StartBulkRegistrationFromFileCommand(Command):
     file_format: str
     content: bytes
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
+    project_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -75,10 +78,14 @@ class StartBulkRegistration:
         orchestrator: BulkRegistrationOrchestrator,
         sync_service: BulkRegistrationService,
         parser: BulkFileParserProtocol,
+        uow: UnitOfWork,
+        project_access: ProjectAccess,
     ) -> None:
         self._orchestrator = orchestrator
         self._sync_service = sync_service
         self._parser = parser
+        self._uow = uow
+        self._project_access = project_access
 
     async def __call__(
         self,
@@ -100,6 +107,16 @@ class StartBulkRegistration:
         except ValueError:
             return Failure(ValidationError(f"Unsupported file format: {input.file_format!r}"))
 
+        if input.project_ids:
+            # Validate once here: the worker registers rows as the system and
+            # trusts this list.
+            async with self._uow:
+                denied = await self._project_access.check_editable(
+                    input.workspace_id, input.project_ids, auth
+                )
+            if denied is not None:
+                return Failure(denied)
+
         request = StartBulkRegistrationRequest(
             workspace_id=input.workspace_id,
             originating_org_id=input.originating_org_id,
@@ -108,6 +125,7 @@ class StartBulkRegistration:
             file_format=input.file_format,
             content=input.content,
             create_batch_on_duplicate=input.create_batch_on_duplicate,
+            project_ids=input.project_ids,
         )
 
         try:
@@ -150,6 +168,7 @@ class StartBulkRegistration:
                 submitted_by=input.submitted_by,
                 originating_org_id=input.originating_org_id,
                 create_batch_on_duplicate=input.create_batch_on_duplicate,
+                project_ids=input.project_ids,
             ),
             auth=auth,
         )

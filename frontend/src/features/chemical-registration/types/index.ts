@@ -117,17 +117,8 @@ export interface BatchInput {
 // Backend DTO — aliased from the orval-generated model (source of truth).
 export type RegistrationResponse = import("@/shared/lib/api/model").RegistrationResponse;
 
-export interface RegisterMoleculeInput {
-  name: string;
-  smiles?: string | null;
-  molecule_type?: string;
-  external_ids?: { identifier: string; identifier_type: string }[];
-  originating_org_id: string;
-  custom_fields?: Record<string, unknown> | null;
-  batch?: BatchInput | null;
-  create_batch_on_duplicate?: boolean | null;
-  auto_approve?: boolean;
-}
+// Backend DTO — aliased from the orval-generated model (source of truth).
+export type RegisterMoleculeInput = import("@/shared/lib/api/model").RegisterMoleculeBody;
 
 export interface UpdateMoleculeInput {
   lifecycle_stage?: string;

@@ -58,6 +58,18 @@ class MoleculeRepository(Protocol):
         self, workspace_id: uuid.UUID, identifiers: set[str]
     ) -> dict[str, uuid.UUID]: ...
 
+    async def add_to_project_many(
+        self,
+        workspace_id: uuid.UUID,
+        project_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+    ) -> list[uuid.UUID]:
+        """Link molecules to a project; returns the ids newly linked.
+
+        Ids outside the workspace are ignored; already-linked ids are skipped.
+        """
+        ...
+
     async def find_active(
         self,
         workspace_id: uuid.UUID,

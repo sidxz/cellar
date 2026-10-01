@@ -94,6 +94,7 @@ from cellar.application.inventory.salt_matcher import SaltMatcher
 from cellar.application.inventory.sync_batch_identifier_mirrors import (
     SyncBatchIdentifierMirrors,
 )
+from cellar.application.research_organization.project_links import ProjectAccess
 from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.messaging.merge_handlers import (
@@ -143,6 +144,15 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository imp
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_merge_side_effect import (  # noqa: E501
     CollectionMergeSideEffect,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.molecule_project_merge_side_effect import (  # noqa: E501
+    MoleculeProjectMergeSideEffect,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_member_repository import (  # noqa: E501
+    SQLAlchemyProjectMemberRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_repository import (
+    SQLAlchemyProjectRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.molecule_tag_merge_side_effect import (
     MoleculeTagMergeSideEffect,
@@ -233,6 +243,9 @@ def register_chemical_registration(container: Container) -> None:
             custom_field_validator=validator,
             disclosure_service=ds,
             workspace_settings_repo=ws_settings_repo,
+            project_access=ProjectAccess(
+                SQLAlchemyProjectRepository(uow), SQLAlchemyProjectMemberRepository(uow)
+            ),
         )
 
     container.define(RegisterMolecule, _register_molecule)
@@ -342,6 +355,7 @@ def register_chemical_registration(container: Container) -> None:
                 SynthesisRouteMergeSideEffect(),
                 SynthesisRequestMergeSideEffect(),
                 CollectionMergeSideEffect(),
+                MoleculeProjectMergeSideEffect(),
                 MoleculeTagMergeSideEffect(),
                 AttachmentMergeSideEffect(c[FsspecStorageClient]),
             ]
@@ -529,14 +543,19 @@ def register_chemical_registration(container: Container) -> None:
 
     container.define(ListBulkRegistrationItems, _list_bulk_reg_items)
 
-    container.define(
-        StartBulkRegistration,
-        lambda c: StartBulkRegistration(
+    def _start_bulk_registration(c: Container) -> StartBulkRegistration:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return StartBulkRegistration(
             orchestrator=c[BulkRegistrationOrchestrator],
             sync_service=c[BulkRegistrationService],
             parser=c[BulkFileParserProtocol],
-        ),
-    )
+            uow=uow,
+            project_access=ProjectAccess(
+                SQLAlchemyProjectRepository(uow), SQLAlchemyProjectMemberRepository(uow)
+            ),
+        )
+
+    container.define(StartBulkRegistration, _start_bulk_registration)
     container.define(
         GetBulkRegistrationRuntimeStatus,
         lambda c: GetBulkRegistrationRuntimeStatus(

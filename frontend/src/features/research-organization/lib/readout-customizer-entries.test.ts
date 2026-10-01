@@ -33,6 +33,8 @@ function proto(rds: ReadoutDefinition[]): Protocol {
   return {
     id: PROTO_ID,
     name: "P",
+    // Potency labels carry the protocol dose unit — what the grid shows.
+    dose_unit: "uM",
     readout_definitions: rds,
   } as unknown as Protocol;
 }
@@ -107,7 +109,26 @@ describe("buildReadoutCustomizerEntries", () => {
       }),
     ]);
     const entries = buildReadoutCustomizerEntries(protocol, PROTO_ID);
-    expect(entries).toEqual([{ key: `drc:${RD_DR}`, label: "Legacy" }]);
+    expect(entries).toEqual([{ key: `drc:${RD_DR}`, label: "Legacy (uM)" }]);
+  });
+
+  it("adds one entry per normalized layer of a numeric readout", () => {
+    // The grid shows `rd:<p>:<rd>:percent_inhibition` by default for a
+    // normalized readout; without a matching entry the customizer could
+    // never show or untick it.
+    const protocol = proto([
+      rd({
+        id: RD_NUM,
+        name: "raw AU",
+        unit: "AU",
+        data_type: "numeric",
+        normalizations: ["none", "percent_inhibition"],
+      } as Partial<ReadoutDefinition> & { id: string }),
+    ]);
+    expect(buildReadoutCustomizerEntries(protocol, PROTO_ID)).toEqual([
+      { key: `rd:${PROTO_ID}:${RD_NUM}`, label: "raw AU (AU)" },
+      { key: `rd:${PROTO_ID}:${RD_NUM}:percent_inhibition`, label: "raw AU · % Inhibition" },
+    ]);
   });
 
   it("returns [] when the protocol hasn't loaded yet", () => {

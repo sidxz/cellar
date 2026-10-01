@@ -24,6 +24,12 @@ class ColumnSpec:
     unit: str | None = None
     group: str | None = None  # logical column-group (e.g. protocol name)
 
+    @property
+    def display_header(self) -> str:
+        """Header with its unit — "IC50 (uM)". A bare "IC50" in a CSV handed
+        to another tool loses the scale of every value under it."""
+        return f"{self.header} ({self.unit})" if self.unit else self.header
+
 
 @dataclass
 class ExportRow:

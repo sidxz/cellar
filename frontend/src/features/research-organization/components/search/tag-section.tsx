@@ -49,6 +49,7 @@ export function TagSection({ value, onChange }: TagSectionProps) {
           </Select>
         </div>
         <TagFilter
+          entityType="Molecule"
           value={{ tagIds: value.tagIds, tagLogic: value.tagLogic }}
           onChange={(v) => onChange({ ...value, tagIds: v.tagIds, tagLogic: v.tagLogic })}
         />

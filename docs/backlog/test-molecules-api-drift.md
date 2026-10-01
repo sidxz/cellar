@@ -9,3 +9,7 @@
 
 Also pre-existing: `tests/unit/application/export/renderers/test_pdf_renderer.py::test_pdf_renders_a_small_report`
 fails on a clean `main` (verified by stashing during the decision-removal work); not investigated.
+
+**2026-10-01 (search chemist pass):** both still fail on `fix/search-chemist-pass`, unrelated to it.
+PDF root cause: WeasyPrint can't `dlopen('libgobject-2.0-0')` — the GLib/Pango system libs aren't
+installed on this Mac (`brew install pango` provides them); not a code bug.

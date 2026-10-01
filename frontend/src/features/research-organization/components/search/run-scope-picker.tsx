@@ -52,7 +52,7 @@ const MODE_OPTIONS: {
   {
     value: "latest",
     label: "Latest run",
-    description: "Restrict to the single most recent approved run for this protocol.",
+    description: "Restrict to this protocol's most recent run (by run date).",
   },
   {
     value: "past_n_days",

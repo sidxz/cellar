@@ -3,16 +3,25 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import date
 
 import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+from cellar.application.chemical_registration.merge_side_effect_registry import (
+    MergeSideEffectRegistry,
+)
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 # Force screening_assay models so protocol_projects / runs join targets resolve.
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
+from tests.api.conftest import _create_test_app
+from tests.fakes.fake_auth import FakeAuth
 
 
 class TestListProjects:
@@ -311,3 +320,130 @@ class TestProjectScopeStats:
         assert "last_activity_at" in body
         assert "member_count" in body
         assert isinstance(body["member_ids"], list)
+
+
+async def _org(client: AsyncClient) -> str:
+    resp = await client.post(
+        "/api/v1/organizations",
+        json={"name": f"BulkProjOrg-{uuid.uuid4().hex[:6]}", "org_type": "internal"},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+async def _mol(client: AsyncClient, org_id: str, name: str, smiles: str) -> dict:
+    resp = await client.post(
+        "/api/v1/molecules",
+        json={"name": name, "smiles": smiles, "originating_org_id": org_id},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["molecule"]
+
+
+@asynccontextmanager
+async def _client_as(
+    database_url: str, workspace_id: uuid.UUID, **auth_kwargs
+) -> AsyncIterator[AsyncClient]:
+    app = _create_test_app(database_url, FakeAuth(workspace_id=workspace_id, **auth_kwargs))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:  # type: ignore[arg-type]
+        yield ac
+    await app.state.container[AsyncEngine].dispose()
+
+
+class TestBulkAddMoleculesToProject:
+    async def test_mixed_references_resolve_and_report(self, client: AsyncClient) -> None:
+        org = await _org(client)
+        a = await _mol(client, org, "BulkA", "CCCCCCCCCCO")
+        b = await _mol(client, org, "BulkB", "CCCCCCCCCCCO")
+        proj = (await client.post("/api/v1/projects", json={"name": "Bulk P"})).json()["id"]
+
+        resp = await client.post(
+            f"/api/v1/projects/{proj}/molecules",
+            json={
+                "references": [
+                    {"value": a["registration_number"], "ref_type": "registration_number"},
+                    {"value": b["id"], "ref_type": "uuid"},
+                    {"value": "NO-SUCH-CMPD", "ref_type": "registration_number"},
+                ]
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["added_count"] == 2
+        assert body["already_present"] == 0
+        assert [u["value"] for u in body["unresolved"]] == ["NO-SUCH-CMPD"]
+
+        stats = await client.get("/api/v1/projects/stats", params={"project_ids": [proj]})
+        assert stats.json()[proj]["molecule_count"] == 2
+
+    async def test_repeats_count_as_already_present(self, client: AsyncClient) -> None:
+        org = await _org(client)
+        a = await _mol(client, org, "RepeatA", "CCCCCCCCCCCCO")
+        proj = (await client.post("/api/v1/projects", json={"name": "Repeat P"})).json()["id"]
+        ref = {"references": [{"value": a["id"], "ref_type": "uuid"}]}
+
+        first = (await client.post(f"/api/v1/projects/{proj}/molecules", json=ref)).json()
+        assert first["added_count"] == 1
+        again = (await client.post(f"/api/v1/projects/{proj}/molecules", json=ref)).json()
+        assert again["added_count"] == 0
+        assert again["already_present"] == 1
+
+    async def test_unknown_project_404(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            f"/api/v1/projects/{uuid.uuid4()}/molecules", json={"references": []}
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"] == "NotFoundError"
+
+    async def test_archived_project_422(self, client: AsyncClient) -> None:
+        proj = (await client.post("/api/v1/projects", json={"name": "Old P"})).json()["id"]
+        assert (await client.post(f"/api/v1/projects/{proj}/archive")).status_code == 200
+        resp = await client.post(f"/api/v1/projects/{proj}/molecules", json={"references": []})
+        assert resp.status_code == 422
+
+    async def test_non_member_editor_403(
+        self, client: AsyncClient, database_url: str, workspace_id: uuid.UUID
+    ) -> None:
+        proj = (await client.post("/api/v1/projects", json={"name": "Private P"})).json()["id"]
+        async with _client_as(
+            database_url, workspace_id, role="editor", user_id=uuid.uuid4()
+        ) as stranger:
+            resp = await stranger.post(
+                f"/api/v1/projects/{proj}/molecules", json={"references": []}
+            )
+        assert resp.status_code == 403
+
+    async def test_single_add_route_keeps_its_contract(self, client: AsyncClient) -> None:
+        org = await _org(client)
+        a = await _mol(client, org, "SingleA", "CCCCCCCCCCCCCO")
+        proj = (await client.post("/api/v1/projects", json={"name": "Single P"})).json()["id"]
+
+        added = await client.post(f"/api/v1/projects/{proj}/molecules/{a['id']}")
+        assert added.status_code == 204
+        missing = await client.post(f"/api/v1/projects/{proj}/molecules/{uuid.uuid4()}")
+        assert missing.status_code == 404
+
+
+async def test_molecule_merge_carries_project_links(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID
+) -> None:
+    """The app's merge registry moves the merged-away compound's project links."""
+    app = _create_test_app(database_url, FakeAuth(role="admin", workspace_id=workspace_id))
+    container = app.state.container
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:  # type: ignore[arg-type]
+        org = await _org(c)
+        src = await _mol(c, org, "MergeSrc", "CCCCCCCCCCCCCCCO")
+        tgt = await _mol(c, org, "MergeTgt", "CCCCCCCCCCCCCCCCO")
+        proj = (await c.post("/api/v1/projects", json={"name": "Merge P"})).json()["id"]
+        assert (await c.post(f"/api/v1/projects/{proj}/molecules/{src['id']}")).status_code == 204
+
+        uow = AsyncUnitOfWork(container[async_sessionmaker])
+        async with uow:
+            await container[MergeSideEffectRegistry].execute_all(
+                uow, uuid.UUID(src["id"]), uuid.UUID(tgt["id"])
+            )
+            await uow.commit()
+
+        linked = await c.get(f"/api/v1/molecules/{tgt['id']}/projects")
+        assert proj in set(linked.json())
+    await container[AsyncEngine].dispose()

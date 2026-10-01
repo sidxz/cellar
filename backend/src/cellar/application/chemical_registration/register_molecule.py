@@ -21,6 +21,10 @@ from cellar.application.chemical_registration.registration_classifier import (
     classify_undisclosed,
     collect_identifiers,
 )
+from cellar.application.research_organization.project_links import (
+    ProjectAccess,
+    link_molecules_to_projects,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -34,6 +38,7 @@ from cellar.domain.chemical_registration.repository import (
     MoleculeRepository,
 )
 from cellar.domain.shared.errors import ConflictError, DomainError, ValidationError
+from cellar.domain.shared.events import DomainEvent
 from cellar.domain.workspace_config.enums import FieldTarget
 from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
 from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
@@ -81,6 +86,8 @@ class RegisterMoleculeCommand(Command):
     qc_warn_threshold: int | None = None
     promote_name_as_identifier: bool = True  # False for auto-generated names
     auto_approve: bool = True  # False from wizard — merge candidates need confirmation
+    # Projects to put the surviving compound in (new, matched or disclosed).
+    project_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 def _matched(forecast: RegistrationForecast) -> Molecule:
@@ -113,6 +120,7 @@ class RegisterMolecule:
         disclosure_repo: DisclosureRequestRepository | None = None,
         disclosure_service: DisclosureService | None = None,
         workspace_settings_repo: WorkspaceSettingsRepository | None = None,
+        project_access: ProjectAccess | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -122,6 +130,7 @@ class RegisterMolecule:
         self._disclosure_repo = disclosure_repo
         self._disclosure_service = disclosure_service
         self._workspace_settings_repo = workspace_settings_repo
+        self._project_access = project_access
 
     async def __call__(
         self,
@@ -130,12 +139,33 @@ class RegisterMolecule:
     ) -> Result[RegistrationOutcome, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
+        if input.project_ids and self._project_access is not None and auth is not None:
+            # Read-only: enter and leave the UoW without committing.
+            async with self._uow:
+                denied = await self._project_access.check_editable(
+                    input.workspace_id, input.project_ids, auth
+                )
+            if denied is not None:
+                return Failure(denied)
 
         if input.smiles is not None:
             return await self._register_disclosed(input)
         if input.disclosure_date is not None:
             return Failure(ValidationError("disclosure_date requires a structure (smiles)"))
         return await self._register_undisclosed(input)
+
+    async def _link_projects(
+        self, input: RegisterMoleculeCommand, molecule_id: uuid.UUID
+    ) -> list[DomainEvent]:
+        """Link the surviving compound to the command's projects inside the
+        caller's open unit of work; returns the audit events to dispatch."""
+        if not input.project_ids:
+            return []
+        return list(
+            await link_molecules_to_projects(
+                self._repo, input.workspace_id, input.project_ids, [molecule_id]
+            )
+        )
 
     def _collect_all_identifiers(self, input: RegisterMoleculeCommand) -> set[str]:
         """Name + external ids — the identifiers this registration will claim."""
@@ -314,7 +344,8 @@ class RegisterMolecule:
                     is_new=False,
                     resolved_to_molecule_id=existing_by_inchi.id,
                 )
-                events = await self._uow.commit()
+                link_events = await self._link_projects(input, existing_by_inchi.id)
+                events = [*await self._uow.commit(), *link_events]
                 outcome = RegistrationOutcome(
                     molecule=existing_by_inchi,
                     is_new=False,
@@ -354,7 +385,8 @@ class RegisterMolecule:
                     inchi_key,
                     is_new=True,
                 )
-                events = await self._uow.commit()
+                link_events = await self._link_projects(input, mol.id)
+                events = [*await self._uow.commit(), *link_events]
                 outcome = RegistrationOutcome(
                     molecule=mol,
                     is_new=True,
@@ -391,6 +423,19 @@ class RegisterMolecule:
                 action = RegistrationAction.DEDUPLICATED
             else:
                 action = RegistrationAction.DISCLOSED
+
+            surviving_id = (
+                d_outcome.merged_into_molecule_id
+                if d_outcome.was_merged and d_outcome.merged_into_molecule_id
+                else delegate_to_disclosure.id
+            )
+            if input.project_ids:
+                # The disclosure service committed on its own UoW; link in a
+                # short one of ours.
+                async with self._uow:
+                    link_events = await self._link_projects(input, surviving_id)
+                    await self._uow.commit()
+                await self._dispatcher.dispatch_all(link_events)
 
             return Success(
                 RegistrationOutcome(
@@ -435,7 +480,8 @@ class RegisterMolecule:
             if matched_molecule is not None:
                 self._add_name_and_ids(matched_molecule, input, source="duplicate")
                 await self._repo.save(matched_molecule)
-                events = await self._uow.commit()
+                link_events = await self._link_projects(input, matched_molecule.id)
+                events = [*await self._uow.commit(), *link_events]
 
         if matched_molecule is not None:
             await self._dispatcher.dispatch_all(events)
@@ -470,7 +516,8 @@ class RegisterMolecule:
             self._add_name_and_ids(mol, input, source="name")
 
             await self._repo.save(mol)
-            events = await self._uow.commit()
+            link_events = await self._link_projects(input, mol.id)
+            events = [*await self._uow.commit(), *link_events]
 
         await self._dispatcher.dispatch_all(events)
         return Success(

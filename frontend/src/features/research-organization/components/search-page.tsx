@@ -33,16 +33,11 @@ import { ReportCustomizer } from "./search/report-customizer";
 import { ResultsGrid } from "./search/results-grid";
 import { ResultsToolbarActions, ResultsToolbarLeft } from "./search/results-toolbar";
 import { SaveSearchDialog } from "./search/save-search-dialog";
-import { SearchForm } from "./search/search-form";
+import { SEARCH_PAGE_SIZE, SearchForm } from "./search/search-form";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type EnrichedMolecule = Molecule & { activity?: Record<string, ActivityValue> };
-
-/** Server-side page size for compound search results. Driven by what the
- * AG Grid viewport can comfortably render before the user scrolls; keep in
- * sync with the cursor pagination contract on the backend. */
-const SEARCH_PAGE_SIZE = 100;
 
 // ─── Search state reducer ───────────────────────────────────────────────────
 
@@ -159,6 +154,13 @@ function SearchPageInner() {
 
   // ── Project scoping (independent of search state) ──────────────────────
   const [projectIds, setProjectIds] = useState<string[]>([]);
+
+  // The query the form re-parses into its sections. Only set by loads that
+  // come from OUTSIDE the form (saved search, scaffold handoff) — re-parsing
+  // the form's own executed query wiped half-filled rows and re-derived the
+  // protocol and/or grouping differently, so a second Search ran a
+  // different query than the first.
+  const [formSeed, setFormSeed] = useState<SearchQuery | undefined>(undefined);
 
   // ── Dialogs (independent of search state) ─────────────────────────────
   const [reportOpen, setReportOpen] = useState(false);
@@ -482,6 +484,7 @@ function SearchPageInner() {
     previousAggregationModeRef.current = aggMode;
     setAggregationMode(aggMode);
 
+    setFormSeed(query);
     dispatch({ type: "searchStart", query, protocolColumns: restoredColumns });
 
     const backendCols = toBackendProtocolColumns(restoredColumns);
@@ -544,6 +547,7 @@ function SearchPageInner() {
     if (!pendingScaffoldQuery) return;
     const query = pendingScaffoldQuery;
     setPendingScaffoldQuery(null);
+    setFormSeed(query);
     handleSearch(query, []);
   }, [pendingScaffoldQuery, handleSearch]);
 
@@ -563,24 +567,18 @@ function SearchPageInner() {
           query: currentQuery,
           ...(backendCols.length ? { protocol_columns: backendCols } : {}),
           aggregation: aggregationModeToWire(aggregationMode),
-          ...(projectIds.length ? { project_ids: projectIds } : {}),
+          // Project scope already rides in `query` as a project criterion —
+          // the export runs exactly the grid's search.
           sort_by: sortBy,
           sort_dir: sortDir,
           // Mirror the chemist's on-screen grid: structure visibility,
           // property column whitelist, image size. The BE column builder
           // reads this and trims columns / sizes images accordingly.
-          reportConfig: {
-            detailLevel: reportConfig.detailLevel,
-            plotScale: reportConfig.plotScale,
-            showPlotLegend: reportConfig.showPlotLegend,
-            imageSize: reportConfig.imageSize,
-            columnWidth: reportConfig.columnWidth,
-            visibleFields: reportConfig.visibleFields,
-          },
+          reportConfig,
         },
       };
     },
-    [currentQuery, protocolColumns, aggregationMode, projectIds, sortBy, sortDir, reportConfig],
+    [currentQuery, protocolColumns, aggregationMode, sortBy, sortDir, reportConfig],
   );
 
   // ── Add to collection ──────────────────────────────────────────────────
@@ -588,15 +586,6 @@ function SearchPageInner() {
     if (gridSelectedIds.size === 0) return;
     setPickerMolIds(Array.from(gridSelectedIds));
   }, [gridSelectedIds]);
-
-  // ── Select all / none ──────────────────────────────────────────────────
-  const handleSelectAll = useCallback(() => {
-    dispatch({ type: "setGridSelection", ids: new Set(results.map((m) => m.id)) });
-  }, [results]);
-
-  const handleSelectNone = useCallback(() => {
-    dispatch({ type: "setGridSelection", ids: new Set() });
-  }, []);
 
   // ── Row click -> detail panel ──────────────────────────────────────────
   const handleRowClick = useCallback(
@@ -626,10 +615,11 @@ function SearchPageInner() {
       <div className="space-y-2">
         {/* Search form — always visible */}
         <SearchForm
-          initialQuery={currentQuery ?? undefined}
+          initialQuery={formSeed}
           projectIds={projectIds}
           onProjectsChange={setProjectIds}
           onSearch={handleSearch}
+          onReset={() => dispatch({ type: "reset" })}
           isLoading={searchMutation.isPending}
           protocols={protocols ?? []}
         />
@@ -648,12 +638,7 @@ function SearchPageInner() {
               onRowClick={handleRowClick}
               selectedIds={gridSelectedIds}
               toolbarLeft={
-                <ResultsToolbarLeft
-                  resultCount={totalCount}
-                  selectedCount={gridSelectedIds.size}
-                  onSelectAll={handleSelectAll}
-                  onSelectNone={handleSelectNone}
-                />
+                <ResultsToolbarLeft resultCount={totalCount} selectedCount={gridSelectedIds.size} />
               }
               toolbarActions={
                 <ResultsToolbarActions

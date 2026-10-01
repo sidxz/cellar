@@ -100,7 +100,7 @@ class ExcelRenderer:
         else:
             _HEADER_ROWS = 1
 
-        header_row = [(f"{c.header} ({c.unit})" if c.unit else c.header) for c in columns]
+        header_row = [c.display_header for c in columns]
         ws.append(header_row)
 
         embed_images = options.include_sparklines and row_count_hint <= SPARKLINE_ROW_CAP

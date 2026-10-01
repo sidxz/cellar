@@ -31,6 +31,8 @@ import {
   type CurveClass,
   type InterceptKey,
   type Protocol,
+  READOUT_NORMALIZATION_LABELS,
+  type ReadoutNormalization,
 } from "@/features/screening-assay/types";
 import type { ActivityWhereCondition, ActivityWhereSource } from "../types";
 
@@ -54,6 +56,9 @@ export interface WhereOption {
    *  for the *primary* intercept of a DR readout, for numeric readouts,
    *  and for the curve-class entry. */
   intercept_key: InterceptKey | null;
+  /** Numeric readouts only: the normalized layer (e.g. percent_inhibition)
+   *  this option filters; null = the raw values. */
+  normalization?: string | null;
   /** Which section heading the picker should render this under. */
   group: WhereOptionGroup;
   /** Any-protocol options: how many protocols measure this. */
@@ -88,7 +93,7 @@ export function buildActivityWhereOptions(protocol: Protocol | undefined): Where
         out.push({
           id: drOptionId(rd.id, null),
           label: `${rd.name} (${dr.curve_type.toUpperCase()})`,
-          unit: rd.unit,
+          unit: protocol.dose_unit,
           source: "dr_curve",
           readout_definition_id: rd.id,
           intercept_key: null,
@@ -105,7 +110,9 @@ export function buildActivityWhereOptions(protocol: Protocol | undefined): Where
           // Dedupe-aware label: "EC50" readout + EC90 intercept reads as
           // "EC90", not "EC50 EC90". See `interceptOptionLabel`.
           label: interceptOptionLabel(rd.name, primary, s),
-          unit: rd.unit,
+          // Fitted potencies are stored in the protocol's dose unit (the
+          // grid shows the same), not the readout-def's own unit field.
+          unit: protocol.dose_unit,
           source: "dr_curve",
           readout_definition_id: rd.id,
           // Primary stays unkeyed so a saved search survives an intercept
@@ -117,7 +124,7 @@ export function buildActivityWhereOptions(protocol: Protocol | undefined): Where
       }
     } else if (rd.data_type === "numeric") {
       out.push({
-        id: numericOptionId(rd.id),
+        id: numericOptionId(rd.id, null),
         label: rd.name,
         unit: rd.unit,
         source: "readout_data",
@@ -125,6 +132,21 @@ export function buildActivityWhereOptions(protocol: Protocol | undefined): Where
         intercept_key: null,
         group: "numeric_readout",
       });
+      // Each configured normalization is its own filterable layer — the
+      // chemist thinks "% inhibition > 50", not "raw signal < 12000".
+      for (const norm of rd.normalizations ?? []) {
+        if (norm === "none") continue;
+        out.push({
+          id: numericOptionId(rd.id, norm),
+          label: `${rd.name} · ${READOUT_NORMALIZATION_LABELS[norm as ReadoutNormalization] ?? norm}`,
+          unit: null,
+          normalization: norm,
+          source: "readout_data",
+          readout_definition_id: rd.id,
+          intercept_key: null,
+          group: "numeric_readout",
+        });
+      }
     }
   }
 
@@ -238,8 +260,8 @@ function drOptionId(rdId: string, key: InterceptKey | null): string {
   return `dr_curve:${rdId}:${key.kind}:${key.level}`;
 }
 
-function numericOptionId(rdId: string): string {
-  return `readout_data:${rdId}`;
+function numericOptionId(rdId: string, normalization: string | null): string {
+  return normalization ? `readout_data:${rdId}:${normalization}` : `readout_data:${rdId}`;
 }
 
 /** Reverse the picker id back into a where-condition seed. Returns null
@@ -249,7 +271,7 @@ export function parseWhereOptionId(
   id: string,
 ): Pick<
   ActivityWhereCondition,
-  "source" | "readout_definition_id" | "intercept_key" | "readout_name" | "unit"
+  "source" | "readout_definition_id" | "intercept_key" | "readout_name" | "unit" | "normalization"
 > | null {
   if (id === CURVE_CLASS_OPTION_ID) {
     return { source: "curve_class", readout_definition_id: "", intercept_key: null };
@@ -306,6 +328,7 @@ export function parseWhereOptionId(
       source: "readout_data",
       readout_definition_id: parts[1],
       intercept_key: null,
+      normalization: parts[2] || null,
     };
   }
   return null;
@@ -328,6 +351,8 @@ export function whereConditionOptionId(cond: ActivityWhereCondition, anyProtocol
     }
     return "";
   }
-  if (cond.source === "readout_data") return numericOptionId(cond.readout_definition_id);
+  if (cond.source === "readout_data") {
+    return numericOptionId(cond.readout_definition_id, cond.normalization ?? null);
+  }
   return drOptionId(cond.readout_definition_id, cond.intercept_key ?? null);
 }

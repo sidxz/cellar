@@ -11,6 +11,9 @@ from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace
 from cellar.application.chemical_registration.molecule_reader import MoleculeReader
+from cellar.application.research_organization.search_reference_resolution import (
+    SearchReferenceResolver,
+)
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
 from cellar.application.shared.pagination import EnrichedPageResult
 from cellar.application.shared.query import Query
@@ -54,11 +57,13 @@ class ExecuteSearch:
         molecule_reader: MoleculeReader,
         saved_search_repo: SavedSearchRepository,
         activity_service: MoleculeActivityService | None = None,
+        reference_resolver: SearchReferenceResolver | None = None,
     ) -> None:
         self._uow = uow
         self._mol_reader = molecule_reader
         self._ss_repo = saved_search_repo
         self._activity_service = activity_service
+        self._reference_resolver = reference_resolver
 
     async def __call__(
         self, input: ExecuteSearchQuery, auth: AuthContext | None = None
@@ -84,6 +89,8 @@ class ExecuteSearch:
             # Delegate to reader — fetch limit + 1 for next_cursor detection
             fetch_limit = input.limit + 1
             try:
+                if self._reference_resolver is not None:
+                    query_dict = await self._reference_resolver(input.workspace_id, query_dict)
                 raw_results = await self._mol_reader.search_by_query(
                     input.workspace_id,
                     query_dict,

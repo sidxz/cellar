@@ -292,3 +292,64 @@ class TestMoleculeProjectAssociation:
             mols = await mol_repo.find_active(ws_id, project_ids=[])
             mol_ids = {m.id for m in mols}
             assert mol_ids == {m3_id}
+
+    async def test_add_to_project_many_returns_only_new_links(self, uow: AsyncUnitOfWork) -> None:
+        ws_id, p1, p2, m1_id, m2_id, m3_id = await self._setup(uow)  # m1 already in p1
+
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            added = await mol_repo.add_to_project_many(ws_id, p1.id, [m1_id, m3_id, m3_id])
+            await uow.commit()
+
+        assert added == [m3_id]
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            assert await mol_repo.find_project_ids(ws_id, m3_id) == [p1.id]
+
+    async def test_add_to_project_many_ignores_other_workspace(self, uow: AsyncUnitOfWork) -> None:
+        ws_id, p1, p2, m1_id, m2_id, m3_id = await self._setup(uow)
+
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            added = await mol_repo.add_to_project_many(uuid.uuid4(), p1.id, [m3_id])
+            await uow.commit()
+
+        assert added == []
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            assert await mol_repo.find_project_ids(ws_id, m3_id) == []
+
+
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.molecule_project_merge_side_effect import (  # noqa: E402, E501
+    MoleculeProjectMergeSideEffect,
+)
+
+
+@pytest.mark.integration
+class TestMoleculeProjectMergeSideEffect:
+    async def test_links_move_to_survivor_and_dedupe(self, uow: AsyncUnitOfWork) -> None:
+        ws_id, user_id = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            proj_repo = SQLAlchemyProjectRepository(uow)
+            shared = Project.create(workspace_id=ws_id, name="Shared", created_by=user_id)
+            only_src = Project.create(workspace_id=ws_id, name="OnlySrc", created_by=user_id)
+            await proj_repo.save(shared)
+            await proj_repo.save(only_src)
+            await uow.commit()
+        src, tgt = uuid.uuid4(), uuid.uuid4()
+        await _insert_molecule_raw(uow, src, ws_id, f"CV-{src.hex[:5]}")
+        await _insert_molecule_raw(uow, tgt, ws_id, f"CV-{tgt.hex[:5]}")
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            await mol_repo.add_to_project_many(ws_id, shared.id, [src, tgt])
+            await mol_repo.add_to_project_many(ws_id, only_src.id, [src])
+            await uow.commit()
+
+        async with uow:
+            await MoleculeProjectMergeSideEffect().on_merge(uow, src, tgt)
+            await uow.commit()
+
+        async with uow:
+            mol_repo = SQLAlchemyMoleculeRepository(uow)
+            assert set(await mol_repo.find_project_ids(ws_id, tgt)) == {shared.id, only_src.id}
+            assert await mol_repo.find_project_ids(ws_id, src) == []

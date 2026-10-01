@@ -10,9 +10,17 @@ import uuid
 from typing import Any
 
 import sqlalchemy as sa
+from sqlalchemy.orm import aliased
 from sqlalchemy.sql import ColumnElement
 
 from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._activity_query import (
+    reportable_curve_value,
+    to_micromolar,
+)
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._field_clauses import (
+    numeric_comparison,
+)
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
@@ -21,6 +29,7 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
+    ProtocolModel,
 )
 
 # ── Batch field maps ────────────────────────────────────────────────────────
@@ -60,7 +69,10 @@ def _batch_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnE
 
         column = BATCH_TEXT_FIELDS[field_name]
         operator = criterion.get("operator", "contains")
-        value = criterion["value"]
+        value = criterion.get("value")
+        if not value:
+            msg = "batch text criterion needs a value"
+            raise ValueError(msg)
 
         if operator == "contains":
             cond = column.ilike(f"%{escape_like(value)}%", escape="\\")
@@ -79,27 +91,7 @@ def _batch_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnE
         if field_name not in BATCH_NUMERIC_FIELDS:
             msg = f"Unknown batch numeric field: {field_name}"
             raise ValueError(msg)
-
-        column = BATCH_NUMERIC_FIELDS[field_name]
-        operator = criterion.get("operator", "eq")
-        value = criterion.get("value")
-
-        op_map = {
-            "eq": "__eq__",
-            "lt": "__lt__",
-            "lte": "__le__",
-            "gt": "__gt__",
-            "gte": "__ge__",
-        }
-
-        if operator == "between":
-            cond = column.between(criterion["min"], criterion["max"])
-        elif operator in op_map:
-            cond = getattr(column, op_map[operator])(value)
-        else:
-            msg = f"Unknown batch numeric operator: {operator}"
-            raise ValueError(msg)
-
+        cond = numeric_comparison(BATCH_NUMERIC_FIELDS[field_name], criterion, "batch")
         return MoleculeModel.id.in_(sa.select(BatchModel.molecule_id).where(*ws_filter, cond))
 
     elif field_type == "date":
@@ -126,15 +118,20 @@ def _batch_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnE
 def _selectivity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
     """Filter molecules by cross-protocol selectivity ratio.
 
-    Finds molecules where ``counter_fitted_value / target_fitted_value``
-    meets the specified ratio threshold.  A high ratio means the compound
-    is much more potent at the target than the counter-screen.
+    Finds molecules where ``counter_potency / target_potency`` meets the
+    specified ratio threshold.  A high ratio means the compound is much more
+    potent at the target than the counter-screen.
 
     Each side names a DR readout-def — a readout-def is the column ("Target
     IC50", "Counter IC50", "Cytotoxicity LD50"). Protocol and curve_type are
     implied by it; sorting/joining by ``(protocol, curve_type)`` was
     ambiguous on multi-DR protocols (two DRs sharing a curve_type were
     indistinguishable).
+
+    Both potencies are normalized to µM through their own protocol's
+    ``dose_unit`` before dividing — a target in nM against a counter-screen
+    in µM is otherwise off by 1000×. Inactive curves report ND (no potency),
+    so they never form a ratio.
 
     Example criterion::
 
@@ -149,35 +146,44 @@ def _selectivity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> C
     target_rd = criterion["target_readout_definition_id"]
     counter_rd = criterion["counter_readout_definition_id"]
     ratio_op = criterion.get("ratio_operator", "gte")
-    ratio_val = criterion["ratio_value"]
-
-    op_map = {
-        "eq": "__eq__",
-        "lt": "__lt__",
-        "lte": "__le__",
-        "gt": "__gt__",
-        "gte": "__ge__",
-    }
-    op_name = op_map.get(ratio_op)
-    if not op_name:
-        msg = f"Unknown selectivity ratio operator: {ratio_op}"
+    if ratio_op == "between":
+        msg = "Unknown selectivity ratio operator: between"
+        raise ValueError(msg)
+    if criterion.get("ratio_value") is None:
+        msg = "selectivity criterion needs a ratio_value"
         raise ValueError(msg)
 
-    t = DoseResponseCurveModel.__table__.alias("target_drc")
-    c = DoseResponseCurveModel.__table__.alias("counter_drc")
+    t = aliased(DoseResponseCurveModel, name="target_drc")
+    c = aliased(DoseResponseCurveModel, name="counter_drc")
+    tp = aliased(ProtocolModel, name="target_protocol")
+    cp = aliased(ProtocolModel, name="counter_protocol")
+    mol = aliased(MoleculeModel, name="selectivity_molecule")
 
-    ratio_expr = sa.cast(c.c.fitted_value, sa.Numeric) / sa.func.nullif(
-        sa.cast(t.c.fitted_value, sa.Numeric), 0
+    def potency_um(curve: Any, protocol: Any) -> ColumnElement:
+        return to_micromolar(
+            reportable_curve_value(curve.fitted_value, curve.curve_class),
+            dose_unit=protocol.dose_unit,
+            molecular_weight=mol.molecular_weight,
+        )
+
+    ratio_expr = potency_um(c, cp) / sa.func.nullif(potency_um(t, tp), 0)
+    ratio_cond = numeric_comparison(
+        ratio_expr,
+        {"operator": ratio_op, "value": criterion["ratio_value"]},
+        "selectivity ratio",
     )
 
     return MoleculeModel.id.in_(
-        sa.select(t.c.molecule_id)
-        .join(c, t.c.molecule_id == c.c.molecule_id)
+        sa.select(t.molecule_id)
+        .join(c, t.molecule_id == c.molecule_id)
+        .join(tp, t.protocol_id == tp.id)
+        .join(cp, c.protocol_id == cp.id)
+        .join(mol, t.molecule_id == mol.id)
         .where(
-            t.c.workspace_id == workspace_id,
-            t.c.readout_definition_id == target_rd,
-            c.c.workspace_id == workspace_id,
-            c.c.readout_definition_id == counter_rd,
-            getattr(ratio_expr, op_name)(ratio_val),
+            t.workspace_id == workspace_id,
+            t.readout_definition_id == target_rd,
+            c.workspace_id == workspace_id,
+            c.readout_definition_id == counter_rd,
+            ratio_cond,
         )
     )

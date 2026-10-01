@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import column, delete, func, or_, select, table
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from cellar.domain.workspace_config.tagging.tag import Tag, TagName
+from cellar.domain.workspace_config.tagging.tag import Tag, TaggableEntityType, TagName
 from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
@@ -17,7 +17,7 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.models import TagModel
 # Read-only handle to the cross-type assignment view (created in migrations
 # 047/050). Declared via table()/column() so it is NOT registered in the ORM
 # metadata — alembic won't try to manage it.
-_tag_links_all = table("tag_links_all", column("tag_id"))
+_tag_links_all = table("tag_links_all", column("tag_id"), column("entity_type"))
 
 
 def tag_model_to_domain(model: TagModel) -> Tag:
@@ -108,20 +108,21 @@ class SQLAlchemyTagRepository(SQLAlchemyRepository[Tag, TagModel]):
         *,
         q: str | None = None,
         created_by: uuid.UUID | None = None,
+        entity_type: TaggableEntityType | None = None,
         limit: int = 50,
     ) -> list[Tag]:
         # Usage count per tag across every entity type — drives most-used-first
         # ordering. Aggregated from the cross-type view; the per-table tag_id
         # indexes back it. If ever measured slow at very high assignment
         # cardinality, a maintained usage_count column is the documented next step.
-        usage = (
-            select(_tag_links_all.c.tag_id, func.count().label("n"))
-            .group_by(_tag_links_all.c.tag_id)
-            .subquery()
-        )
+        # With ``entity_type`` the count is that type's only, and unused tags drop.
+        usage_q = select(_tag_links_all.c.tag_id, func.count().label("n"))
+        if entity_type is not None:
+            usage_q = usage_q.where(_tag_links_all.c.entity_type == entity_type.value)
+        usage = usage_q.group_by(_tag_links_all.c.tag_id).subquery()
         stmt = (
             select(TagModel)
-            .outerjoin(usage, usage.c.tag_id == TagModel.id)
+            .join(usage, usage.c.tag_id == TagModel.id, isouter=entity_type is None)
             .where(TagModel.workspace_id == workspace_id)
         )
         if q and q.strip():

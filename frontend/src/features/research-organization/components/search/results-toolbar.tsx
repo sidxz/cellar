@@ -3,7 +3,8 @@
 /**
  * Two sibling render-only fragments composing the search-page toolbar:
  *
- *   - {@link ResultsToolbarLeft}: result count + select-all/none status line.
+ *   - {@link ResultsToolbarLeft}: result count + selection status (rows are
+ *     picked with the grid's checkbox column; its header box selects all).
  *   - {@link ResultsToolbarActions}: action buttons (Add to Collection /
  *     Customize Report / Save Search).
  *
@@ -21,16 +22,9 @@ import { AggregationControl } from "./aggregation-control";
 interface ResultsToolbarLeftProps {
   resultCount: number | null;
   selectedCount: number;
-  onSelectAll: () => void;
-  onSelectNone: () => void;
 }
 
-export function ResultsToolbarLeft({
-  resultCount,
-  selectedCount,
-  onSelectAll,
-  onSelectNone,
-}: ResultsToolbarLeftProps) {
+export function ResultsToolbarLeft({ resultCount, selectedCount }: ResultsToolbarLeftProps) {
   return (
     <>
       <span className="text-sm text-muted-foreground">
@@ -39,16 +33,6 @@ export function ResultsToolbarLeft({
       {selectedCount > 0 && (
         <span className="text-sm text-primary font-medium">· {selectedCount} selected</span>
       )}
-      <span className="text-sm text-muted-foreground/60">
-        Select:{" "}
-        <button type="button" onClick={onSelectAll} className="text-primary hover:text-primary/80">
-          all
-        </button>
-        {" / "}
-        <button type="button" onClick={onSelectNone} className="text-primary hover:text-primary/80">
-          none
-        </button>
-      </span>
     </>
   );
 }

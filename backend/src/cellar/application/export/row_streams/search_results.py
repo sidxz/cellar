@@ -83,7 +83,10 @@ class SearchResultsRowStream:
             ),
             cursor_id=_parse_uuid(cursor) if cursor else None,
             limit=limit,
-            project_ids=[_parse_uuid(p) for p in (self.payload.get("project_ids") or [])],
+            # None (not []) when absent: [] means "unassigned molecules only"
+            # to the visibility clause, which would drop every compound that
+            # belongs to a project from an export the grid showed in full.
+            project_ids=[_parse_uuid(p) for p in (self.payload.get("project_ids") or [])] or None,
             sort_by=self.payload.get("sort_by"),
             sort_dir=self.payload.get("sort_dir"),
         )
@@ -116,16 +119,11 @@ class SearchResultsRowStream:
             "name": mol.name,
             "smiles": getattr(mol.structure, "smiles", None) if mol.structure else None,
             "inchi_key": getattr(mol.structure, "inchi_key", None) if mol.structure else None,
-            "molecular_formula": (
-                getattr(mol.descriptors, "molecular_formula", None) if mol.descriptors else None
-            ),
-            "molecular_weight": (
-                getattr(mol.descriptors, "molecular_weight", None) if mol.descriptors else None
-            ),
-            "logp": getattr(mol.descriptors, "logp", None) if mol.descriptors else None,
-            "hbd": getattr(mol.descriptors, "hbd", None) if mol.descriptors else None,
-            "hba": getattr(mol.descriptors, "hba", None) if mol.descriptors else None,
-            "tpsa": getattr(mol.descriptors, "tpsa", None) if mol.descriptors else None,
+            "lifecycle_stage": str(mol.lifecycle_stage) if mol.lifecycle_stage else None,
+            **{
+                key: getattr(mol.descriptors, key, None) if mol.descriptors else None
+                for key in _PROPERTY_COLUMNS
+            },
             "activity": (activity_data or {}).get(str(mol.id)) or {},
         }
         cells: dict[str, Any] = {}
@@ -141,14 +139,27 @@ class SearchResultsRowStream:
 
 # Property column id → (header, kind). The default set matches the FE
 # ReportConfig.visibleFields.properties default (Lipinski + Veber).
+# Keys are ``ComputedDescriptors`` fields — the same ids the FE customizer
+# (report-customizer.tsx PROPERTY_FIELDS) and grid use.
 _PROPERTY_COLUMNS: dict[str, tuple[str, str]] = {
     "molecular_weight": ("MW", "number"),
     "logp": ("LogP", "number"),
+    "tpsa": ("TPSA", "number"),
     "hbd": ("HBD", "number"),
     "hba": ("HBA", "number"),
-    "tpsa": ("TPSA", "number"),
+    "rotatable_bonds": ("RotB", "number"),
+    "heavy_atom_count": ("Heavy Atoms", "number"),
+    "aromatic_rings": ("Aromatic Rings", "number"),
+    "ring_count": ("Rings", "number"),
+    "ro5_violations": ("Ro5 Violations", "number"),
     "molecular_formula": ("Formula", "text"),
-    "inchi_key": ("InChIKey", "text"),
+}
+
+_NORMALIZATION_LABELS: dict[str | None, str] = {
+    "percent_inhibition": "% Inhibition",
+    "percent_activation": "% Activation",
+    "percent_control": "% Control",
+    "z_score": "Z-Score",
 }
 
 # Molecule (non-structural) column id → (header, kind).
@@ -265,12 +276,19 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
         )
         rd_name = rd.name if rd else "Readout"
         proto_name = proto.name if proto else "Protocol"
+        # 4-segment token = a normalized layer ("raw AU (% Inhibition)"), whose
+        # values are not in the readout's raw unit.
+        normalization = parts[3] if len(parts) > 3 else None
         return [
             ColumnSpec(
                 key=f"{token}::value",
-                header=rd_name,
+                header=(
+                    f"{rd_name} ({_NORMALIZATION_LABELS.get(normalization, normalization)})"
+                    if normalization
+                    else rd_name
+                ),
                 kind="number",
-                unit=getattr(rd, "unit", None),
+                unit=None if normalization else getattr(rd, "unit", None),
                 group=proto_name,
             )
         ]
@@ -322,7 +340,10 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
                     key=f"{base_key}::value",
                     header=f"{prefix}{label}",
                     kind="number",
-                    unit=getattr(rd, "unit", None),
+                    # Fitted potencies are stored in the protocol's dose unit
+                    # (the grid shows the same); the readout's own unit field
+                    # can disagree (COX-2: "nM" on µM values).
+                    unit=str(proto.dose_unit) if proto else getattr(rd, "unit", None),
                     group=proto_name,
                 )
             )
