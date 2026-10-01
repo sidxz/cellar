@@ -1397,3 +1397,26 @@ class TestChemistSearchCorrectness:
             )
             == 422
         )
+
+    async def test_latest_run_scope_means_most_recent_run_date(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """Run 0 is dated today (IC50 5.0), run 1 yesterday (IC50 5.1)."""
+        mol = await _register(client, org_id, "LatestMol", "CCCCCCCCCCCCCCN")
+        proto, rd, _ = await _seed_multi_run_dr(
+            uow, workspace_id=workspace_id, molecule_id=uuid.UUID(mol), run_count=2
+        )
+
+        def latest_lt(value: float) -> list[dict]:
+            cond = {"source": "dr_curve", "readout_definition_id": str(rd), "operator": "lt"}
+            return [
+                {
+                    "type": "activity",
+                    "protocol_id": str(proto),
+                    "run_scope": {"mode": "latest"},
+                    "where": [{**cond, "value": value}],
+                }
+            ]
+
+        assert mol in await _ids(client, latest_lt(5.05))
+        assert mol not in await _ids(client, latest_lt(4.9))

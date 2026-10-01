@@ -29,6 +29,11 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     RunModel,
 )
 
+# "Latest run" = the experiment run most recently (run date), the same order
+# the results grid uses to pick a compound's latest value. created_at only
+# breaks ties — an old run imported today is not the latest experiment.
+_LATEST_RUN_ORDER = (RunModel.run_date.desc(), RunModel.created_at.desc())
+
 _ACTIVITY_OP_MAP: dict[str, str] = {
     "eq": "__eq__",
     "lt": "__lt__",
@@ -430,7 +435,7 @@ def _activity_presence_clause(
                         RunModel.workspace_id == workspace_id,
                         RunModel.protocol_id == protocol_id,
                     )
-                    .order_by(RunModel.created_at.desc())
+                    .order_by(*_LATEST_RUN_ORDER)
                     .limit(1)
                 )
             )
@@ -512,7 +517,7 @@ def _run_scope_filter(
                 RunModel.workspace_id == workspace_id,
                 RunModel.protocol_id == protocol_id,
             )
-            .order_by(RunModel.created_at.desc())
+            .order_by(*_LATEST_RUN_ORDER)
             .limit(1)
         )
         return run_id_col.in_(latest_run_sq)
