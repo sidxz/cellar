@@ -13,6 +13,11 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from cellar.application.chemical_registration.merge_side_effect_registry import (
+    MergeSideEffectRegistry,
+)
+from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+
 # Force screening_assay models so protocol_projects / runs join targets resolve.
 import cellar.infrastructure.persistence.sqlalchemy.screening_assay.models  # noqa: F401
 from tests.api.conftest import _create_test_app
@@ -417,3 +422,28 @@ class TestBulkAddMoleculesToProject:
         assert added.status_code == 204
         missing = await client.post(f"/api/v1/projects/{proj}/molecules/{uuid.uuid4()}")
         assert missing.status_code == 404
+
+
+async def test_molecule_merge_carries_project_links(
+    database_url: str, _run_migrations: None, workspace_id: uuid.UUID
+) -> None:
+    """The app's merge registry moves the merged-away compound's project links."""
+    app = _create_test_app(database_url, FakeAuth(role="admin", workspace_id=workspace_id))
+    container = app.state.container
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:  # type: ignore[arg-type]
+        org = await _org(c)
+        src = await _mol(c, org, "MergeSrc", "CCCCCCCCCCCCCCCO")
+        tgt = await _mol(c, org, "MergeTgt", "CCCCCCCCCCCCCCCCO")
+        proj = (await c.post("/api/v1/projects", json={"name": "Merge P"})).json()["id"]
+        assert (await c.post(f"/api/v1/projects/{proj}/molecules/{src['id']}")).status_code == 204
+
+        uow = AsyncUnitOfWork(container[async_sessionmaker])
+        async with uow:
+            await container[MergeSideEffectRegistry].execute_all(
+                uow, uuid.UUID(src["id"]), uuid.UUID(tgt["id"])
+            )
+            await uow.commit()
+
+        linked = await c.get(f"/api/v1/molecules/{tgt['id']}/projects")
+        assert proj in set(linked.json())
+    await container[AsyncEngine].dispose()

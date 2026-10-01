@@ -144,6 +144,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository imp
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_merge_side_effect import (  # noqa: E501
     CollectionMergeSideEffect,
 )
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.molecule_project_merge_side_effect import (  # noqa: E501
+    MoleculeProjectMergeSideEffect,
+)
 from cellar.infrastructure.persistence.sqlalchemy.tagging.molecule_tag_merge_side_effect import (
     MoleculeTagMergeSideEffect,
 )
@@ -342,6 +345,7 @@ def register_chemical_registration(container: Container) -> None:
                 SynthesisRouteMergeSideEffect(),
                 SynthesisRequestMergeSideEffect(),
                 CollectionMergeSideEffect(),
+                MoleculeProjectMergeSideEffect(),
                 MoleculeTagMergeSideEffect(),
                 AttachmentMergeSideEffect(c[FsspecStorageClient]),
             ]
