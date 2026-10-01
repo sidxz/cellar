@@ -116,16 +116,11 @@ class SearchResultsRowStream:
             "name": mol.name,
             "smiles": getattr(mol.structure, "smiles", None) if mol.structure else None,
             "inchi_key": getattr(mol.structure, "inchi_key", None) if mol.structure else None,
-            "molecular_formula": (
-                getattr(mol.descriptors, "molecular_formula", None) if mol.descriptors else None
-            ),
-            "molecular_weight": (
-                getattr(mol.descriptors, "molecular_weight", None) if mol.descriptors else None
-            ),
-            "logp": getattr(mol.descriptors, "logp", None) if mol.descriptors else None,
-            "hbd": getattr(mol.descriptors, "hbd", None) if mol.descriptors else None,
-            "hba": getattr(mol.descriptors, "hba", None) if mol.descriptors else None,
-            "tpsa": getattr(mol.descriptors, "tpsa", None) if mol.descriptors else None,
+            "lifecycle_stage": str(mol.lifecycle_stage) if mol.lifecycle_stage else None,
+            **{
+                key: getattr(mol.descriptors, key, None) if mol.descriptors else None
+                for key in _PROPERTY_COLUMNS
+            },
             "activity": (activity_data or {}).get(str(mol.id)) or {},
         }
         cells: dict[str, Any] = {}
@@ -141,14 +136,20 @@ class SearchResultsRowStream:
 
 # Property column id → (header, kind). The default set matches the FE
 # ReportConfig.visibleFields.properties default (Lipinski + Veber).
+# Keys are ``ComputedDescriptors`` fields — the same ids the FE customizer
+# (report-customizer.tsx PROPERTY_FIELDS) and grid use.
 _PROPERTY_COLUMNS: dict[str, tuple[str, str]] = {
     "molecular_weight": ("MW", "number"),
     "logp": ("LogP", "number"),
+    "tpsa": ("TPSA", "number"),
     "hbd": ("HBD", "number"),
     "hba": ("HBA", "number"),
-    "tpsa": ("TPSA", "number"),
+    "rotatable_bonds": ("RotB", "number"),
+    "heavy_atom_count": ("Heavy Atoms", "number"),
+    "aromatic_rings": ("Aromatic Rings", "number"),
+    "ring_count": ("Rings", "number"),
+    "ro5_violations": ("Ro5 Violations", "number"),
     "molecular_formula": ("Formula", "text"),
-    "inchi_key": ("InChIKey", "text"),
 }
 
 # Molecule (non-structural) column id → (header, kind).

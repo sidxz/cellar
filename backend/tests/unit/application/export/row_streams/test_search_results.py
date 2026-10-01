@@ -474,3 +474,36 @@ def test_cell_value_any_joins_entries():
          "qualifier": None},
     ]}}}
     assert _cell_value(spec, raw) == "Beta: IC50 5 nM; Alpha: IC50 >5 uM; Gamma: % Inhibition —"
+
+
+@pytest.mark.asyncio
+async def test_every_customizer_field_reaches_the_export_row():
+    """Each option the Customize Report panel offers must produce a filled
+    column — Stage and the extra descriptors used to export blank."""
+    mol = _mol("CV-2")
+    mol.lifecycle_stage = "lead"
+    mol.descriptors.ro5_violations = 1
+    mol.descriptors.heavy_atom_count = 3
+    page = MagicMock(items=[mol], next_cursor=None, total_count=1)
+    stream = SearchResultsRowStream(
+        workspace_id=uuid.uuid4(),
+        payload={
+            "query": {"criteria": []},
+            "protocol_columns": [],
+            "reportConfig": {
+                "imageSize": "small",
+                "visibleFields": {
+                    "structure": ["registration_number"],
+                    "properties": ["ro5_violations", "heavy_atom_count"],
+                    "molecule": ["lifecycle_stage"],
+                },
+            },
+        },
+        execute_search=AsyncMock(return_value=_success(page)),
+        protocols_reader=AsyncMock(return_value=[]),
+        requested_by=uuid.uuid4(),
+    )
+    rows = [row async for batch in stream.iter_batches(10) for row in batch]
+    assert rows[0].cells["lifecycle_stage"] == "lead"
+    assert rows[0].cells["ro5_violations"] == 1
+    assert rows[0].cells["heavy_atom_count"] == 3
