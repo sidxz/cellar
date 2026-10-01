@@ -1,6 +1,6 @@
 # Register molecules to projects — bulk add + project at registration
 
-**Date:** 2026-10-01 · **Status:** approved design, awaiting spec review
+**Date:** 2026-10-01 · **Status:** approved; plan at `docs/superpowers/plans/2026-10-01-register-molecules-to-projects.md`
 **Context:** project chips on `/search` now return only compounds *registered to* the
 project (`_project_membership_clause`, ruling 2026-10-01). The only way to register a
 compound to a project today is one at a time from the compound page, so every chip in
@@ -26,13 +26,13 @@ registration. Search-results "Add to project" (option 2) was not chosen.
 
 - `ref_type` ∈ `uuid | registration_number | external_id | smiles | inchi_key | name` —
   the `MoleculeReferenceBody` shape `POST /collections/{id}/molecules` already takes.
-- Response `200`:
-  `{ "added": [uuid…], "already_present": n, "unresolved": [{ "value", "ref_type", "reason" }] }`
-  (mirrors the collection `MembershipResult`).
+- Response `201`:
+  `{ "added_count": n, "already_present": n, "unresolved": [{ "value", "ref_type", "reason" }] }`
+  — the collection add contract, same response models.
 - New use case `AddMoleculesToProject` (application/research_organization): resolve via
   the existing `MoleculeResolver`, then one `MoleculeRepository.add_to_project_many(
-  workspace_id, project_id, molecule_ids) -> int` — a single
-  `INSERT … SELECT … WHERE molecule.workspace_id = :ws ON CONFLICT DO NOTHING`.
+  workspace_id, project_id, molecule_ids) -> list[uuid]` (ids newly linked) — a single
+  `INSERT … SELECT … WHERE molecule.workspace_id = :ws ON CONFLICT DO NOTHING RETURNING`.
 - Access via the shared project-access check (§4). Unknown project → 404.
 - Audit: one `EntityAddedToProject` per *newly* linked compound (unchanged event, so the
   audit trail stays per compound).
@@ -104,7 +104,8 @@ registration. Search-results "Add to project" (option 2) was not chosen.
 
 ## 4. Access and errors
 
-- One application check, `ProjectAccess.require_editable(workspace_id, project_ids, auth)`
+- One application check, `ProjectAccess.check_editable(workspace_id, project_ids, auth)
+  -> DomainError | None` (railway style: callers return `Failure(err)`)
   (project repo + member repo): each project exists in the workspace (404), is not
   archived (422 "Project … is archived"), and the caller is admin or holds ≥ editor
   project role (403 naming the project). Used by `AddMoleculesToProject`, by
