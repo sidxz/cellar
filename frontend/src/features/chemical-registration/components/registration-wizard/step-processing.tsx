@@ -15,6 +15,7 @@ import {
 } from "../../hooks/use-registration-wizard-api";
 import type { RegisterMoleculeInput } from "../../types";
 import type { SubmitDisclosureInput } from "../../types/disclosure";
+import { ProjectNames } from "./project-names";
 
 // ---------------------------------------------------------------------------
 // StepProcessing
@@ -212,6 +213,9 @@ function SingleProcessing() {
                   value={singleInput.externalIds.map((e) => e.identifier).join(", ")}
                 />
               )}
+              {singleInput.projectIds.length > 0 && (
+                <Row label="Projects" value={<ProjectNames ids={singleInput.projectIds} />} />
+              )}
             </>
           )}
         </div>
@@ -230,7 +234,7 @@ function SingleProcessing() {
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
     <div className="flex gap-2">
       <span className="text-muted-foreground w-24 shrink-0">{label}:</span>
