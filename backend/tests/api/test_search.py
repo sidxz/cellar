@@ -1604,3 +1604,25 @@ class TestChemistSearchCorrectness:
             await asyncio.sleep(0.1)
         assert body["status"] == "ready", body
         assert body["row_count"] == 1
+
+    async def test_project_chip_returns_only_compounds_registered_to_it(
+        self, client: AsyncClient, org_id: str
+    ) -> None:
+        """The chip reads "N compounds" = registered to the project; selecting it
+        must return exactly those, not every unassigned compound as well."""
+        member = await _register(client, org_id, "ChipMember", "CCCCCCCCCCCCCCCCCCCN")
+        stranger = await _register(client, org_id, "ChipStranger", "CCCCCCCCCCCCCCCCCCCCN")
+        proj = (await client.post("/api/v1/projects", json={"name": "Chip Project"})).json()["id"]
+        add = await client.post(f"/api/v1/projects/{proj}/molecules/{member}")
+        assert add.status_code == 204, add.text
+
+        chip = [{"type": "project", "project_ids": [proj]}]
+        hits = await _ids(client, chip)
+        assert member in hits
+        assert stranger not in hits
+
+        count = await client.post(
+            "/api/v1/search/count", json={"query": {"criteria": chip, "logic": "and"}}
+        )
+        stats = await client.get("/api/v1/projects/stats", params={"project_ids": [proj]})
+        assert count.json()["total_count"] == stats.json()[proj]["molecule_count"] == 1

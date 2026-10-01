@@ -3,13 +3,11 @@
 **Found:** 2026-10-01, testing every `/search` control as a chemist (branch `fix/search-chemist-pass`).
 Fixed items are in that branch's commits; these were left on purpose.
 
-- **Project chip semantics (needs a product decision).** The chip shows "N compounds" = registered
-  to the project (`molecule_projects`), but the `{type:"project"}` criterion reuses the visibility
-  clause `_project_clause` = *unassigned compounds + the project's*. In saclab-dev no compound is
-  registered to any project, so every chip reads "0 compounds" while the search returns all 61k.
-  Options: (a) registered-only (matches the chip; dev returns 0), (b) registered **or tested in a
-  protocol linked to the project** (useful immediately; chip count must change to match),
-  (c) keep and relabel. Recommendation: (b).
+- ~~**Project chip semantics.**~~ Decided 2026-10-01 (option a): the chip's `{type:"project"}`
+  criterion now means *registered to the selected projects* (`_project_membership_clause`),
+  matching the chip's "N compounds". The reader's `project_ids` visibility rule (`_project_clause`,
+  unassigned + project) is unchanged. In saclab-dev nothing is registered to a project yet, so
+  every chip returns 0 until compounds are assigned.
 - **Detail sheet shows a scalar for inactive curves.** `@structflo/components` `summary-card.tsx`
   prints `IC50 = 0.00077 uM` next to an "Inactive" badge (grid says ND). Fix upstream: render "ND"
   when `curve_class === "inactive"`. Inactive plots also auto-scale Y to ±5 %, making noise look like

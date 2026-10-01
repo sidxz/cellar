@@ -174,6 +174,31 @@ def _tag_clause(criterion: dict[str, Any]) -> ColumnElement:
     )
 
 
+def _project_membership_clause(
+    criterion: dict[str, Any], workspace_id: uuid.UUID
+) -> ColumnElement:
+    """The search panel's project chips: compounds registered to any of the
+    selected projects (``molecule_projects``) — the set the chip's
+    "N compounds" counts. No projects selected = no restriction.
+
+    Deliberately not ``_project_clause``: that is the *visibility* rule
+    (unassigned compounds + the project's) the reader applies for
+    ``project_ids``, under which a chip reading "0 compounds" returned the
+    whole unassigned library.
+    """
+    project_ids = criterion.get("project_ids") or []
+    if not project_ids:
+        return sa.true()
+    return MoleculeModel.id.in_(
+        sa.select(molecule_projects.c.molecule_id)
+        .join(ProjectModel, molecule_projects.c.project_id == ProjectModel.id)
+        .where(
+            ProjectModel.workspace_id == workspace_id,
+            molecule_projects.c.project_id.in_(project_ids),
+        )
+    )
+
+
 def _project_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
     """Filter molecules by project membership, scoped to workspace.
 
