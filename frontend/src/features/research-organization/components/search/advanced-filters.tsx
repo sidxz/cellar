@@ -682,7 +682,7 @@ function KeywordListTerm({
 
   return (
     <div className="flex items-start gap-2">
-      <div className="w-44">
+      <div className="w-52">
         <Label className="text-xs text-muted-foreground">Identifier Type</Label>
         <Select
           value={criterion.ref_type}
@@ -753,6 +753,12 @@ export function AdvancedFilters({ state, onChange }: AdvancedFiltersProps) {
     state.runDate.length +
     state.customFields.length +
     state.keywordLists.length;
+  // A loaded saved search that uses these filters must show them — a
+  // collapsed panel hides half the query the chemist is looking at.
+  const hasTerms = totalTerms > 0;
+  useEffect(() => {
+    if (hasTerms) setOpen(true);
+  }, [hasTerms]);
 
   return (
     <Collapsible.Root open={open} onOpenChange={setOpen}>
