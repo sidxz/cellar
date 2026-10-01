@@ -1,5 +1,6 @@
 "use client";
 
+import { ProjectFilter } from "@/features/research-organization/components/search/project-filter";
 import { useCddEnabled } from "@/features/screening-assay/hooks/use-cdd-enabled";
 import { CustomFieldsRenderer } from "@/features/workspace-config/components/custom-fields-renderer";
 import { useCustomFields } from "@/features/workspace-config/hooks/use-custom-fields";
@@ -471,6 +472,19 @@ function SingleInputForm() {
         </div>
       )}
 
+      {/* Projects — optional; hidden in disclosure mode */}
+      {!singleInput.disclosureMode && (
+        <div className="grid gap-2">
+          <Label>
+            Projects <span className="text-xs text-muted-foreground">(optional)</span>
+          </Label>
+          <ProjectFilter
+            selectedIds={singleInput.projectIds}
+            onChange={(ids) => updateSingleInput({ projectIds: ids })}
+          />
+        </div>
+      )}
+
       {/* External identifiers — hidden in disclosure mode */}
       {!singleInput.disclosureMode && (
         <div className="grid gap-3">
@@ -646,6 +660,20 @@ function BulkInputForm() {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">Applied to all compounds in the file.</p>
+      </div>
+
+      {/* Projects — optional, one choice for the whole file */}
+      <div className="grid gap-2">
+        <Label>
+          Projects <span className="text-xs text-muted-foreground">(optional)</span>
+        </Label>
+        <ProjectFilter
+          selectedIds={bulkInput.projectIds}
+          onChange={(ids) => updateBulkInput({ projectIds: ids })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Every compound in the file — new or already registered — is added to these projects.
+        </p>
       </div>
 
       {/* Batch-on-duplicate checkbox */}

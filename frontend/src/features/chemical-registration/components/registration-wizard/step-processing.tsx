@@ -110,6 +110,7 @@ function SingleProcessing() {
         })),
         originating_org_id: singleInput.originatingOrgId!,
         custom_fields: singleInput.customFields,
+        project_ids: singleInput.projectIds,
       };
 
       registerMutation
@@ -268,6 +269,7 @@ function BulkProcessing() {
         file_format: bulkInput.fileFormat,
         originating_org_id: bulkInput.originatingOrgId,
         create_batch_on_duplicate: bulkInput.createBatchOnDuplicate,
+        project_ids: bulkInput.projectIds,
       })
       .then((data) => {
         setWorkflowId(data.workflow_id);

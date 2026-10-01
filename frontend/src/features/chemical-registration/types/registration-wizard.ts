@@ -38,6 +38,8 @@ export interface SingleInput {
   scientistName: string;
   disclosingOrgId: string | null;
   notes: string;
+  /** Projects the registered compound is added to (optional). */
+  projectIds: string[];
 }
 
 export interface BulkRow {
@@ -61,6 +63,8 @@ export interface BulkInput {
   parsedRows: BulkRow[];
   originatingOrgId: string | null;
   createBatchOnDuplicate: boolean;
+  /** Projects every compound in the file is added to (optional). */
+  projectIds: string[];
 }
 
 // ─── Preview (parse-only) result returned by /preview ───────────────────────
