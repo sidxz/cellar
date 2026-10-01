@@ -17,7 +17,7 @@ from cellar.application.research_organization.get_project_scope_stats import (
     GetProjectScopeStatsQuery,
 )
 from cellar.application.research_organization.manage_molecule_projects import (
-    AddMoleculeToProjectCommand,
+    AddMoleculesToProjectCommand,
     RemoveMoleculeFromProjectCommand,
 )
 from cellar.application.research_organization.manage_project_members import (
@@ -27,10 +27,12 @@ from cellar.application.research_organization.manage_project_members import (
     UpdateProjectMemberRoleCommand,
 )
 from cellar.application.research_organization.update_project import UpdateProjectCommand
+from cellar.application.shared.molecule_resolver import MoleculeReference, RefType
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.research_organization.project import Project, ProjectStatus
+from cellar.domain.shared.errors import NotFoundError
 from cellar.interface.dependencies import (
-    AddMoleculeToProjectDep,
+    AddMoleculesToProjectDep,
     AddProjectMemberDep,
     ArchiveProjectDep,
     AuthDep,
@@ -46,6 +48,11 @@ from cellar.interface.dependencies import (
 )
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
+from cellar.interface.routes.collections import (
+    AddMoleculesBody,
+    MembershipResultResponse,
+    UnresolvedMoleculeResponse,
+)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
@@ -300,22 +307,61 @@ async def remove_member(
     return Response(status_code=204)
 
 
+@router.post(
+    "/{project_id}/molecules",
+    response_model=MembershipResultResponse,
+    status_code=201,
+)
+async def add_molecules_to_project(
+    project_id: uuid.UUID,
+    body: AddMoleculesBody,
+    auth: AuthDep,
+    use_case: AddMoleculesToProjectDep,
+) -> MembershipResultResponse:
+    """Put compounds into the project by UUID, reg #, external id, SMILES,
+    InChIKey or name. Unmatched values come back in ``unresolved``."""
+    refs = [
+        MoleculeReference(value=r.value, ref_type=RefType(r.ref_type)) for r in body.references
+    ]
+    result = result_to_response(
+        await use_case(
+            AddMoleculesToProjectCommand(
+                workspace_id=auth.workspace_id, project_id=project_id, refs=refs
+            ),
+            auth=auth,
+        )
+    )
+    return MembershipResultResponse(
+        added_count=len(result.added),
+        already_present=result.already_present,
+        unresolved=[
+            UnresolvedMoleculeResponse(
+                value=u.ref.value, ref_type=u.ref.ref_type.value, reason=u.reason
+            )
+            for u in result.unresolved
+        ],
+    )
+
+
 @router.post("/{project_id}/molecules/{molecule_id}", status_code=204)
 async def add_molecule_to_project(
     project_id: uuid.UUID,
     molecule_id: uuid.UUID,
     auth: AuthDep,
-    use_case: AddMoleculeToProjectDep,
+    use_case: AddMoleculesToProjectDep,
 ) -> Response:
-    result = await use_case(
-        AddMoleculeToProjectCommand(
-            workspace_id=auth.workspace_id,
-            project_id=project_id,
-            molecule_id=molecule_id,
-        ),
-        auth=auth,
+    result = result_to_response(
+        await use_case(
+            AddMoleculesToProjectCommand(
+                workspace_id=auth.workspace_id,
+                project_id=project_id,
+                refs=[MoleculeReference(value=str(molecule_id), ref_type=RefType.UUID)],
+            ),
+            auth=auth,
+        )
     )
-    result_to_response(result)
+    if result.unresolved:
+        raise NotFoundError("Molecule", str(molecule_id))
     return Response(status_code=204)
 
 

@@ -81,7 +81,7 @@ from cellar.application.research_organization.manage_campaign_collections import
     RemoveCampaignCollection,
 )
 from cellar.application.research_organization.manage_molecule_projects import (
-    AddMoleculeToProject,
+    AddMoleculesToProject,
     ListMoleculeProjects,
     RemoveMoleculeFromProject,
 )
@@ -96,6 +96,7 @@ from cellar.application.research_organization.mirror_protocol_channels import (
 )
 from cellar.application.research_organization.override_result_cell import OverrideResultCell
 from cellar.application.research_organization.preview_run_import import PreviewRunImport
+from cellar.application.research_organization.project_links import ProjectAccess
 from cellar.application.research_organization.recompute_channel import RecomputeChannel
 from cellar.application.research_organization.refresh_campaign_from_sources import (
     RefreshFromSources,
@@ -253,7 +254,20 @@ def register_research_organization(container: Container) -> None:
 
         return _f
 
-    container.define(AddMoleculeToProject, _mol_project_cmd(AddMoleculeToProject))
+    def _add_molecules_to_project(c: Container) -> AddMoleculesToProject:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        mol_repo = SQLAlchemyMoleculeRepository(uow)
+        return AddMoleculesToProject(
+            uow,
+            MoleculeResolver(mol_repo, c[StructureProcessorProtocol]),
+            mol_repo,
+            ProjectAccess(
+                SQLAlchemyProjectRepository(uow), SQLAlchemyProjectMemberRepository(uow)
+            ),
+            c[EventDispatcher],
+        )
+
+    container.define(AddMoleculesToProject, _add_molecules_to_project)
     container.define(RemoveMoleculeFromProject, _mol_project_cmd(RemoveMoleculeFromProject))
 
     def _list_mol_projects(c: Container):

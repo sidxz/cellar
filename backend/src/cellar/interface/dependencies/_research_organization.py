@@ -75,7 +75,7 @@ from cellar.application.research_organization.manage_campaign_collections import
     RemoveCampaignCollection,
 )
 from cellar.application.research_organization.manage_molecule_projects import (
-    AddMoleculeToProject,
+    AddMoleculesToProject,
     ListMoleculeProjects,
     RemoveMoleculeFromProject,
 )
@@ -129,8 +129,8 @@ __all__ = [
     "AddCampaignChannelDep",
     "AddCampaignCollectionDep",
     "AddCampaignStageDep",
-    "AddMoleculeToProjectDep",
     "AddMoleculesToCollectionDep",
+    "AddMoleculesToProjectDep",
     # Project members + molecule-project links
     "AddProjectMemberDep",
     "AddResultRowDep",
@@ -262,8 +262,8 @@ UpdateProjectMemberRoleDep = Annotated[
     UpdateProjectMemberRole, Depends(_get_use_case(UpdateProjectMemberRole))
 ]
 ListProjectMembersDep = Annotated[ListProjectMembers, Depends(_get_use_case(ListProjectMembers))]
-AddMoleculeToProjectDep = Annotated[
-    AddMoleculeToProject, Depends(_get_use_case(AddMoleculeToProject))
+AddMoleculesToProjectDep = Annotated[
+    AddMoleculesToProject, Depends(_get_use_case(AddMoleculesToProject))
 ]
 RemoveMoleculeFromProjectDep = Annotated[
     RemoveMoleculeFromProject, Depends(_get_use_case(RemoveMoleculeFromProject))
