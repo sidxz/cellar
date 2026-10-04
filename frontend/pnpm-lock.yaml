@@ -9,14 +9,14 @@ importers:
   .:
     dependencies:
       '@duar-auth/js':
-        specifier: ^1.3.0
-        version: 1.3.0
+        specifier: ^1.4.1
+        version: 1.4.1
       '@duar-auth/nextjs':
-        specifier: ^1.3.0
-        version: 1.3.0(@duar-auth/js@1.3.0)(@duar-auth/react@1.3.0(@duar-auth/js@1.3.0)(react@19.2.8))(next@16.3.3(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
+        specifier: ^1.4.1
+        version: 1.4.1(@duar-auth/js@1.4.1)(@duar-auth/react@1.4.1(@duar-auth/js@1.4.1)(react@19.2.8))(next@16.3.3(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       '@duar-auth/react':
-        specifier: ^1.3.0
-        version: 1.3.0(@duar-auth/js@1.3.0)(react@19.2.8)
+        specifier: ^1.4.1
+        version: 1.4.1(@duar-auth/js@1.4.1)(react@19.2.8)
       '@hookform/resolvers':
         specifier: ^5.0.0
         version: 5.9.1(ajv-errors@3.0.0(ajv@8.20.0))(ajv-formats@2.1.1(ajv@8.20.0))(ajv@8.20.0)(react-hook-form@7.86.0(react@19.2.8))(zod@3.25.76)
@@ -384,21 +384,21 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@duar-auth/js@1.3.0':
-    resolution: {integrity: sha512-T6XtF5q24jAlZs6rOJ6uqzcGlqWY1jMjDHehdk/j6P2S8rGsqla2I11cWBY6rif2K/9vQMGCfRALCenOKd3gHw==}
+  '@duar-auth/js@1.4.1':
+    resolution: {integrity: sha512-Dg5Ll4u0+P5gNRRTvCOSiO15TTIABybS7gaYfR2po69qxb9KkC8YYOsf9Wxdtsd6KYaHl5IdxqwPWagH9xe6dQ==}
 
-  '@duar-auth/nextjs@1.3.0':
-    resolution: {integrity: sha512-ucJnNDkIpwGj91ZluDkIVUCSBWpCMkZZEESmj1wDKe7WpJrFkiIYmlk5wFH6GICn0cSwzmKu9e83SeS5QyhRmg==}
+  '@duar-auth/nextjs@1.4.1':
+    resolution: {integrity: sha512-hE315rimbTVEG9kZ20p1F7Q/aEjaoBHfuyeXF5uNbNWeargbf8kteT3uO77Jy6IhfjpMPbQsOFE4J7uNiLd0XA==}
     peerDependencies:
-      '@duar-auth/js': ^1.3.0
-      '@duar-auth/react': ^1.3.0
-      next: ^14.0.0 || ^15.0.0 || ^16.0.0
+      '@duar-auth/js': ^1.4.1
+      '@duar-auth/react': ^1.4.1
+      next: ^14.2.25 || ^15.5.18 || ^16.2.11
       react: ^18.0.0 || ^19.0.0
 
-  '@duar-auth/react@1.3.0':
-    resolution: {integrity: sha512-ro1/xANmj+FTiuuqdOcapTpZ7bkYIypnw16raNaZEXy18L/nK8WAyjnxTAuVyNilIqizKsLluMPQXi3khYHiFQ==}
+  '@duar-auth/react@1.4.1':
+    resolution: {integrity: sha512-0NRSdIHK9ayeVmeZAa36vT+7fEFQ3+goN//WYXmvcnVu5w83GkLKR9iC6K0qqngpaH4pUXHJZjtZ3iLCwSpz/w==}
     peerDependencies:
-      '@duar-auth/js': ^1.3.0
+      '@duar-auth/js': ^1.4.1
       react: ^18.0.0 || ^19.0.0
 
   '@emnapi/runtime@1.11.3':
@@ -6263,20 +6263,21 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@duar-auth/js@1.3.0':
+  '@duar-auth/js@1.4.1':
     dependencies:
       jose: 5.10.0
 
-  '@duar-auth/nextjs@1.3.0(@duar-auth/js@1.3.0)(@duar-auth/react@1.3.0(@duar-auth/js@1.3.0)(react@19.2.8))(next@16.3.3(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
+  '@duar-auth/nextjs@1.4.1(@duar-auth/js@1.4.1)(@duar-auth/react@1.4.1(@duar-auth/js@1.4.1)(react@19.2.8))(next@16.3.3(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@duar-auth/js': 1.3.0
-      '@duar-auth/react': 1.3.0(@duar-auth/js@1.3.0)(react@19.2.8)
+      '@duar-auth/js': 1.4.1
+      '@duar-auth/react': 1.4.1(@duar-auth/js@1.4.1)(react@19.2.8)
+      jose: 5.10.0
       next: 16.3.3(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react: 19.2.8
 
-  '@duar-auth/react@1.3.0(@duar-auth/js@1.3.0)(react@19.2.8)':
+  '@duar-auth/react@1.4.1(@duar-auth/js@1.4.1)(react@19.2.8)':
     dependencies:
-      '@duar-auth/js': 1.3.0
+      '@duar-auth/js': 1.4.1
       react: 19.2.8
 
   '@emnapi/runtime@1.11.3':

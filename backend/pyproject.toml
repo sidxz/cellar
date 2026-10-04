@@ -20,7 +20,7 @@ dependencies = [
     "lagom>=2.7.0",
     "returns>=0.23.0",
     # Auth
-    "duar-auth>=1.0.0",
+    "duar-auth>=1.4.1",
     "pyjwt[crypto]>=2.14.0",
     "httpx>=0.28.0",
     # Chemistry
