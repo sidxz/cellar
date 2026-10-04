@@ -18,7 +18,8 @@ services:
       STORAGE_ROOT: /data/storage
       LOG_LEVEL: DEBUG
       INFISICAL_BASE_URL: http://infisical:8080
-      INFISICAL_TOKEN: ${INFISICAL_TOKEN:-}
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
     volumes:
       - file-storage:/data/storage
@@ -42,7 +43,8 @@ services:
       APP_ENV: development
       LOG_LEVEL: DEBUG
       INFISICAL_BASE_URL: http://infisical:8080
-      INFISICAL_TOKEN: ${INFISICAL_TOKEN:-}
+      INFISICAL_CLIENT_ID: ${INFISICAL_CLIENT_ID:-}
+      INFISICAL_CLIENT_SECRET: ${INFISICAL_CLIENT_SECRET:-}
       INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID:-}
     ports:
       - "8000:8000"

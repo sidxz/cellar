@@ -36,17 +36,19 @@ def _build_secret_provider() -> SecretProvider:
     """Infisical (if configured) → env vars."""
     providers: list = []
 
-    infisical_token = os.environ.get("INFISICAL_TOKEN")
+    infisical_client_id = os.environ.get("INFISICAL_CLIENT_ID")
+    infisical_client_secret = os.environ.get("INFISICAL_CLIENT_SECRET")
     infisical_project = os.environ.get("INFISICAL_PROJECT_ID")
     infisical_url = os.environ.get("INFISICAL_BASE_URL", "http://localhost:8089")
 
-    if infisical_token and infisical_project:
+    if infisical_client_id and infisical_client_secret and infisical_project:
         from cellar.infrastructure.secrets.infisical_provider import InfisicalSecretProvider
 
         providers.append(
             InfisicalSecretProvider(
                 base_url=infisical_url,
-                token=infisical_token,
+                client_id=infisical_client_id,
+                client_secret=infisical_client_secret,
                 project_id=infisical_project,
                 client=httpx.AsyncClient(),
             )
