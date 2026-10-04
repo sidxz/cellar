@@ -225,7 +225,7 @@ class CddVaultClient:
                 timeout=120.0,
                 follow_redirects=False,
             ) as response:
-                if not response.is_redirect:
+                if not response.has_redirect_location:
                     await _write_body(response, dest_path)
                     return
                 redirect_url = response.headers["location"]

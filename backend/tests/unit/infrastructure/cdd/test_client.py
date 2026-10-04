@@ -187,3 +187,14 @@ async def test_stream_export_not_ready_is_not_reported_as_bad_key(
     assert exc_info.value.status_code == 403
     assert not isinstance(exc_info.value, CddAuthError)
     assert not dest.exists()
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_stream_export_3xx_without_location_is_a_client_error(
+    client: CddVaultClient, tmp_path
+):
+    respx.get(EXPORT_URL).mock(return_value=httpx.Response(304))
+    with pytest.raises(CddClientError) as exc_info:
+        await client.stream_export_to_file(VAULT_ID, API_KEY, 77, str(tmp_path / "raw.json"))
+    assert exc_info.value.status_code == 304
