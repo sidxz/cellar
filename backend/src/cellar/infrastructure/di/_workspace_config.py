@@ -31,9 +31,6 @@ from cellar.application.workspace_config.get_data_source import GetDataSource
 from cellar.application.workspace_config.get_data_source_for_import import (
     GetDataSourceForImport,
 )
-from cellar.application.workspace_config.get_external_api_key_secret import (
-    GetExternalApiKeySecret,
-)
 from cellar.application.workspace_config.get_organization import GetOrganization
 from cellar.application.workspace_config.get_registration_form import GetRegistrationForm
 from cellar.application.workspace_config.get_workspace_settings import GetWorkspaceSettings
@@ -287,7 +284,6 @@ def register_workspace_config(container: Container) -> None:
     container.define(UpdateExternalApiKey, _apikey_cmd(UpdateExternalApiKey))
     container.define(DeleteExternalApiKey, _apikey_cmd(DeleteExternalApiKey))
     container.define(ListExternalApiKeys, _apikey_query(ListExternalApiKeys))
-    container.define(GetExternalApiKeySecret, lambda c: GetExternalApiKeySecret(c[SecretProvider]))
 
     # --- Data Sources ---
     def _ds_cmd(uc_cls: type):
