@@ -5,8 +5,8 @@ Designed for reuse across protocol, run, molecule, plate, project imports.
 
 CDD molecule export is async:
   1. POST /molecules/query  (JSON body with "async": true) → {id, status: "new"}
-  2. GET  /exports/{id}     → {status: "started"} (poll)
-  3. GET  /exports/{id}     → 302 redirect to result (follow it)
+  2. GET  /export_progress/{id} → {status: "started"} (poll)
+  3. GET  /exports/{id}     → the file itself (200) or a 302 redirect to it
   4. Result JSON            → {count, objects: [{smiles, ...}]}
 """
 
@@ -177,33 +177,20 @@ class CddVaultClient:
         elif modified_after is not None:
             body["modified_after"] = modified_after
         elif max_molecules is not None:
-            all_ids, _ = await self.list_molecule_ids(
-                vault_id,
-                api_key,
-                page_size=max_molecules,
-            )
+            all_ids, _ = await self.list_molecule_ids(vault_id, api_key)
             ids_to_export = all_ids[:max_molecules]
             body["molecules"] = ",".join(str(i) for i in ids_to_export)
 
         return await self.start_export(vault_id, api_key, "molecules", body=body)
 
-    async def list_molecule_ids(
-        self,
-        vault_id: str,
-        api_key: str,
-        *,
-        offset: int = 0,
-        page_size: int = 1000,
-    ) -> tuple[list[int], int]:
-        """Fetch molecule IDs using only_ids=true (sync, fast, no structures).
+    async def list_molecule_ids(self, vault_id: str, api_key: str) -> tuple[list[int], int]:
+        """Fetch every molecule ID using only_ids (sync, fast, no structures).
 
+        The vault ignores page_size/offset for only_ids and returns all IDs.
         Returns (list_of_cdd_ids, total_count).
         """
-        url = (
-            f"{BASE_URL}/vaults/{vault_id}/molecules"
-            f"?only_ids=true&page_size={page_size}&offset={offset}"
-        )
-        data = await self._get(url, api_key)
+        url = f"{BASE_URL}/vaults/{vault_id}/molecules/query"
+        data = await self._post_query(url, api_key, {"only_ids": True})
         if isinstance(data, list):
             return data, len(data)
         raw_objects = data.get("objects", [])
@@ -225,50 +212,38 @@ class CddVaultClient:
     ) -> None:
         """Download a finished export result by streaming to disk.
 
-        Follows the 302 redirect to the presigned S3 URL and writes the
-        response body in chunks — never holds the full payload in memory.
+        The vault serves the file directly (200) or redirects (302) to a
+        presigned S3 URL. Either way the body is written in chunks — never
+        held fully in memory.
         """
         url = f"{BASE_URL}/vaults/{vault_id}/exports/{export_id}"
         try:
-            response = await self._http.get(
+            async with self._http.stream(
+                "GET",
                 url,
                 headers=self._headers(api_key),
                 timeout=120.0,
                 follow_redirects=False,
-            )
-        except (httpx.ConnectError, httpx.TimeoutException) as exc:
-            raise CddConnectionError(f"Cannot reach CDD Vault: {exc}") from exc
-
-        if response.status_code != 302:
-            raise CddClientError(
-                f"Expected 302 redirect for finished export, got {response.status_code}",
-                status_code=response.status_code,
-            )
-
-        redirect_url = response.headers["location"]
-        # Presigned S3 URL — do NOT send CDD auth header, stream to disk
-        try:
+            ) as response:
+                if not response.is_redirect:
+                    await _write_body(response, dest_path)
+                    return
+                redirect_url = response.headers["location"]
+            # Presigned S3 URL — do NOT send CDD auth header
             async with self._http.stream(
                 "GET",
                 redirect_url,
                 timeout=1800.0,
                 follow_redirects=True,
-            ) as stream:
-                if not stream.is_success:
-                    raise CddClientError(
-                        f"Export download failed: {stream.status_code}",
-                        status_code=stream.status_code,
-                    )
-                with open(dest_path, "wb") as f:
-                    async for chunk in stream.aiter_bytes(chunk_size=65536):
-                        f.write(chunk)
+            ) as response:
+                await _write_body(response, dest_path)
         except (httpx.ConnectError, httpx.TimeoutException) as exc:
-            raise CddConnectionError(f"Export download timed out: {exc}") from exc
+            raise CddConnectionError(f"Cannot download CDD export: {exc}") from exc
 
     async def get_molecule_count(self, vault_id: str, api_key: str) -> int:
-        """Get total molecule count via a sync metadata-only call."""
-        url = f"{BASE_URL}/vaults/{vault_id}/molecules?page_size=1&offset=0"
-        data = await self._get(url, api_key)
+        """Get total molecule count via a one-row sync query."""
+        url = f"{BASE_URL}/vaults/{vault_id}/molecules/query"
+        data = await self._post_query(url, api_key, {"page_size": 1})
         return data.get("count", 0) if isinstance(data, dict) else 0
 
     async def get_plate_count(self, vault_id: str, api_key: str) -> int:
@@ -276,3 +251,15 @@ class CddVaultClient:
         url = f"{BASE_URL}/vaults/{vault_id}/plates?page_size=1&offset=0"
         data = await self._get(url, api_key)
         return data.get("count", 0) if isinstance(data, dict) else 0
+
+
+async def _write_body(response: httpx.Response, dest_path: str) -> None:
+    """Stream a successful download response to ``dest_path``."""
+    if not response.is_success:
+        raise CddClientError(
+            f"Export download failed: {response.status_code}",
+            status_code=response.status_code,
+        )
+    with open(dest_path, "wb") as f:
+        async for chunk in response.aiter_bytes(chunk_size=65536):
+            f.write(chunk)

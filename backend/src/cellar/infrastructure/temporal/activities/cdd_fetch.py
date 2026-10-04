@@ -2,7 +2,7 @@
 
 CDD Vault uses an async export model for molecules:
 1. Trigger export → get export_id
-2. Poll /exports/{id} until finished (302 redirect to results)
+2. Poll /export_progress/{id} until finished, then download /exports/{id}
 3. Save result JSON to disk (too large for Temporal payloads)
 
 API key is NEVER in Temporal history. Activities receive a ``secret_ref``
@@ -18,6 +18,7 @@ from pathlib import Path
 import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from cellar.application.cdd_import.molecule_mapper import map_cdd_molecules
 from cellar.application.cdd_import.plate_mapper import map_cdd_plate
@@ -124,8 +125,13 @@ class CddFetchActivities:
             activity.heartbeat(f"export {input.export_id}: {status}")
             return CddPollExportOutput(finished=False)
 
-        if status == "canceled":
-            raise RuntimeError(f"CDD export {input.export_id} was canceled")
+        # "downloaded" = finished and fetched before (a retry after a crash).
+        # Anything else (failed, canceled) is final — retrying cannot fix it.
+        if status not in ("finished", "downloaded"):
+            raise ApplicationError(
+                f"CDD export {input.export_id} ended with status {status!r}",
+                non_retryable=True,
+            )
 
         # Export finished — set up storage directory
         export_dir = StorageSettings().subdir("cdd-exports") / str(input.export_id)
