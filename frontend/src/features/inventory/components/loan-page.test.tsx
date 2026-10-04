@@ -3,7 +3,7 @@ import type { MeResponse } from "@/shared/lib/api/model";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoanPage } from "./loan-page";
 
 vi.mock("@/shared/lib/api/custom-instance", () => ({ API_V1: "/api/v1", customInstance: vi.fn() }));
@@ -13,6 +13,12 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/inventory/loans/l1",
 }));
 const mocked = vi.mocked(customInstance);
+// The authz token's loan-approval grant (Duar action), on unless a test drops it.
+const grant = vi.hoisted(() => ({ approve: true }));
+vi.mock("@duar-auth/nextjs", () => ({ useAuthzHasAction: () => grant.approve }));
+beforeEach(() => {
+  grant.approve = true;
+});
 
 const loan = {
   id: "l1",
@@ -93,6 +99,13 @@ describe("LoanPage verbs by authority", () => {
     expect(await screen.findByRole("button", { name: /approve \(1\)/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /deny \(1\)/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /request return/i })).not.toBeInTheDocument();
+  });
+  it("owner-org editor without the loan-approval grant sees no owner verbs", async () => {
+    grant.approve = false;
+    setup(me("org-A"));
+    await screen.findByText("0001");
+    expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /deny/i })).not.toBeInTheDocument();
   });
   it("foreign-org workspace admin sees owner verbs", async () => {
     setup(me("org-Z", true));

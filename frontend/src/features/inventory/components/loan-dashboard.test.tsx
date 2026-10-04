@@ -2,7 +2,7 @@ import { customInstance } from "@/shared/lib/api/custom-instance";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoanDashboard } from "./loan-dashboard";
 
 vi.mock("@/shared/lib/api/custom-instance", () => ({ API_V1: "/api/v1", customInstance: vi.fn() }));
@@ -12,6 +12,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
 const mocked = vi.mocked(customInstance);
+// The authz token's loan-approval grant (Duar action), on unless a test drops it.
+const grant = vi.hoisted(() => ({ approve: true }));
+vi.mock("@duar-auth/nextjs", () => ({ useAuthzHasAction: () => grant.approve }));
 
 const item = (id: string, status: string) => ({
   id,
@@ -109,5 +112,19 @@ describe("LoanDashboard open tab", () => {
         expect.objectContaining({ params: expect.objectContaining({ status: "closed" }) }),
       ),
     );
+  });
+});
+
+describe("LoanDashboard without the loan-approval grant", () => {
+  beforeEach(() => {
+    grant.approve = false;
+    setup();
+  });
+  afterEach(() => {
+    grant.approve = true;
+  });
+  it("an owner-org editor gets no To approve chip", async () => {
+    await screen.findByText("Maia Young");
+    expect(screen.queryByRole("button", { name: /to approve/i })).not.toBeInTheDocument();
   });
 });

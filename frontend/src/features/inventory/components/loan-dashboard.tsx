@@ -5,7 +5,6 @@ import { PageHeader } from "@/shared/components/page-header";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { Button } from "@/shared/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
-import { useCurrentUser } from "@/shared/hooks/use-current-user";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { useOrgs } from "@/shared/hooks/use-orgs";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
@@ -14,6 +13,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { useLoanViewer } from "../hooks/use-loan-viewer";
 import { LOAN_VARIANT, type PlateLoan, useLoans } from "../hooks/use-plate-loans";
 import {
   INBOX_LABELS,
@@ -31,7 +31,7 @@ import { RequestLoanDialog } from "./request-loan-dialog";
 
 export function LoanDashboard() {
   const router = useRouter();
-  const { data: me } = useCurrentUser();
+  const me = useLoanViewer();
   const { data: orgs } = useOrgs();
   const memberName = useMemberNames();
   const [tab, setTab] = useHashTab("open");
