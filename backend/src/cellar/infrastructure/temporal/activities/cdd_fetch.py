@@ -11,8 +11,10 @@ and resolve the actual key from SecretProvider at execution time.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
+from collections.abc import Awaitable
 from pathlib import Path
 
 import structlog
@@ -46,6 +48,45 @@ from cellar.infrastructure.temporal.activities.dtos import (
 from cellar.infrastructure.temporal.task_queues import CHUNK_SIZE
 
 logger = structlog.get_logger(__name__)
+
+# The import workflows give the poll activities a 60 s heartbeat timeout.
+_HEARTBEAT_EVERY = 10.0
+
+
+async def _while_heartbeating[T](work: Awaitable[T], details: str) -> T:
+    """Await ``work``, heartbeating now and every ``_HEARTBEAT_EVERY`` seconds until it ends."""
+    task = asyncio.ensure_future(work)
+    try:
+        while True:
+            activity.heartbeat(details)
+            done, _ = await asyncio.wait({task}, timeout=_HEARTBEAT_EVERY)
+            if done:
+                return task.result()
+    finally:
+        task.cancel()
+
+
+def _split_export(raw_path: Path, export_dir: Path) -> tuple[int, int]:
+    """Parse a downloaded export into a manifest plus chunk files. Blocking: run it in a thread.
+
+    Returns ``(count, number_of_objects)``.
+    """
+    # Parse from disk (file-based, avoids double-memory of response.json())
+    with open(raw_path) as f:
+        data = json.load(f)
+
+    objects = data.get("objects", [])
+    count = data.get("count", len(objects))
+
+    # Write manifest
+    (export_dir / "manifest.json").write_text(json.dumps({"count": len(objects)}))
+
+    # Split into chunk files
+    for i in range(0, len(objects), CHUNK_SIZE):
+        chunk_path = export_dir / f"chunk_{i:06d}.json"
+        chunk_path.write_text(json.dumps(objects[i : i + CHUNK_SIZE]))
+
+    return count, len(objects)
 
 
 class CddFetchActivities:
@@ -149,12 +190,14 @@ class CddFetchActivities:
         # skip the download — reuse what we already have.
         if not raw_path.exists():
             logger.info("cdd_fetch.export_streaming", export_id=input.export_id)
-            activity.heartbeat(f"export {input.export_id}: downloading")
-            await client.stream_export_to_file(
-                input.vault_id,
-                api_key,
-                input.export_id,
-                str(tmp_path),
+            await _while_heartbeating(
+                client.stream_export_to_file(
+                    input.vault_id,
+                    api_key,
+                    input.export_id,
+                    str(tmp_path),
+                ),
+                f"export {input.export_id}: downloading",
             )
             # Atomic rename — only complete downloads get the final name
             tmp_path.rename(raw_path)
@@ -172,29 +215,20 @@ class CddFetchActivities:
                 raw_bytes=raw_size,
             )
 
-        # Parse from disk (file-based, avoids double-memory of response.json())
-        activity.heartbeat(f"export {input.export_id}: parsing")
-        with open(raw_path) as f:
-            data = json.load(f)
-
-        objects = data.get("objects", [])
-        count = data.get("count", len(objects))
+        # In a thread so the loop keeps heartbeating. ponytail: json.load holds the GIL, so
+        # the bare parse still stalls heartbeats (~4 s/GB); stream-parse if exports near 10 GB.
+        count, object_count = await _while_heartbeating(
+            asyncio.to_thread(_split_export, raw_path, export_dir),
+            f"export {input.export_id}: parsing",
+        )
         logger.info("cdd_fetch.export_parsed", export_id=input.export_id, object_count=count)
-
-        # Write manifest
-        (export_dir / "manifest.json").write_text(json.dumps({"count": len(objects)}))
-
-        # Split into chunk files
-        for i in range(0, len(objects), CHUNK_SIZE):
-            chunk_path = export_dir / f"chunk_{i:06d}.json"
-            chunk_path.write_text(json.dumps(objects[i : i + CHUNK_SIZE]))
 
         total_bytes = sum(f.stat().st_size for f in export_dir.glob("chunk_*.json"))
         logger.info(
             "cdd_fetch.export_saved",
             export_dir=str(export_dir),
             total_bytes=total_bytes,
-            chunk_count=(len(objects) + CHUNK_SIZE - 1) // CHUNK_SIZE,
+            chunk_count=(object_count + CHUNK_SIZE - 1) // CHUNK_SIZE,
         )
 
         return CddPollExportOutput(finished=True, count=count, storage_path=str(export_dir))
