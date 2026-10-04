@@ -1,3 +1,4 @@
+import { canEdit } from "@/shared/hooks/use-current-user";
 import type { MeResponse } from "@/shared/lib/api/model";
 import {
   LoanItemStatus,
@@ -29,14 +30,28 @@ export const VERB_LABELS: Record<LoanVerb, string> = {
 export const OWNER_VERBS: LoanVerb[] = ["approve", "deny", "confirm-out", "confirm-in"];
 export const BORROWER_VERBS: LoanVerb[] = ["request-return", "cancel"];
 
-/** Mirrors the server: workspace admins and the owner org. */
-export function ownerAuthority(loan: PlateLoan, me: MeResponse | undefined): boolean {
-  return !!me && (me.is_admin === true || me.org_id === loan.owner_org_id);
+/** Duar action the server's owner-side loan check needs (backend
+ * `LOAN_APPROVE_ACTION`); workspace admins don't. */
+export const LOAN_APPROVE_ACTION = "cellar:approve_loan";
+
+/** The `/user/me` identity plus whether the authz token grants
+ * {@link LOAN_APPROVE_ACTION}. */
+export type LoanViewer = MeResponse & { canApproveLoans: boolean };
+
+/** Mirrors `require_loan_authority`: an editor or above who is a workspace
+ * admin, or in the owner org and holding the loan-approval action. */
+export function ownerAuthority(loan: PlateLoan, me: LoanViewer | undefined): boolean {
+  return (
+    !!me &&
+    canEdit(me) &&
+    (me.is_admin === true || (me.org_id === loan.owner_org_id && me.canApproveLoans))
+  );
 }
 
-/** Mirrors `_require_borrower_authority`: workspace admins and the borrower org. */
+/** Mirrors `_require_borrower_authority`: an editor or above who is a
+ * workspace admin or in the borrower org. */
 export function borrowerAuthority(loan: PlateLoan, me: MeResponse | undefined): boolean {
-  return !!me && (me.is_admin === true || me.org_id === loan.borrower_org_id);
+  return !!me && canEdit(me) && (me.is_admin === true || me.org_id === loan.borrower_org_id);
 }
 
 export function eligibleItems(loan: PlateLoan, verb: LoanVerb): PlateLoanItem[] {
@@ -44,7 +59,7 @@ export function eligibleItems(loan: PlateLoan, verb: LoanVerb): PlateLoanItem[] 
 }
 
 /** Verbs the viewer may press that have ≥ 1 eligible item, owner verbs first. */
-export function availableVerbs(loan: PlateLoan, me: MeResponse | undefined): LoanVerb[] {
+export function availableVerbs(loan: PlateLoan, me: LoanViewer | undefined): LoanVerb[] {
   const verbs = [
     ...(ownerAuthority(loan, me) ? OWNER_VERBS : []),
     ...(borrowerAuthority(loan, me) ? BORROWER_VERBS : []),

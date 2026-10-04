@@ -2,6 +2,7 @@
 
 import { AppSidebar } from "@/shared/components/layout/app-sidebar";
 import { Header } from "@/shared/components/layout/header";
+import { RouteAccess } from "@/shared/components/layout/route-access";
 import { SidebarInset, SidebarProvider } from "@/shared/components/ui/sidebar";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { usePreferencesSync } from "@/shared/hooks/use-preferences-sync";
@@ -46,7 +47,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <AppSidebar />
       <SidebarInset>
         <Header />
-        <main className="flex-1 overflow-auto p-4">{children}</main>
+        <main className="flex-1 overflow-auto p-4">
+          <RouteAccess>{children}</RouteAccess>
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

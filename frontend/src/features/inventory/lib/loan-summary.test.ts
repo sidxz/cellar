@@ -1,4 +1,3 @@
-import type { MeResponse } from "@/shared/lib/api/model";
 import { describe, expect, it } from "vitest";
 import type { PlateLoan } from "../hooks/use-plate-loans";
 import {
@@ -13,6 +12,7 @@ import {
   setSummary,
   sortOpenLoans,
 } from "./loan-summary";
+import type { LoanViewer } from "./loan-verbs";
 
 const item = (id: string, status: string, group?: [string, string]) => ({
   id,
@@ -39,7 +39,7 @@ const mk = (over: Partial<Omit<PlateLoan, "items">> & { items: unknown[] }) =>
     version: 1,
     ...over,
   }) as unknown as PlateLoan;
-const me = (org: string, admin = false, user = "u9") =>
+const me = (org: string, admin = false, user = "u9", canApproveLoans = true) =>
   ({
     user_id: user,
     email: "",
@@ -47,7 +47,8 @@ const me = (org: string, admin = false, user = "u9") =>
     org_id: org,
     is_admin: admin,
     workspace_role: "editor",
-  }) as MeResponse;
+    canApproveLoans,
+  }) as LoanViewer;
 const TODAY = "2026-08-25";
 
 describe("sets", () => {
@@ -128,6 +129,13 @@ describe("inbox", () => {
       "check_in",
       "hand_out",
       "overdue",
+    ]);
+  });
+  it("an owner-org editor without the approval grant sees the waiting side", () => {
+    expect([...loanInboxKeys(loan, me("A", false, "u9", false), TODAY)].sort()).toEqual([
+      "awaiting_approval",
+      "overdue",
+      "ready_for_pickup",
     ]);
   });
   it("borrower side keys + mine for the requester", () => {

@@ -1,7 +1,12 @@
-import type { MeResponse } from "@/shared/lib/api/model";
 import { describe, expect, it } from "vitest";
 import type { PlateLoan } from "../hooks/use-plate-loans";
-import { availableVerbs, borrowerAuthority, eligibleItems, ownerAuthority } from "./loan-verbs";
+import {
+  type LoanViewer,
+  availableVerbs,
+  borrowerAuthority,
+  eligibleItems,
+  ownerAuthority,
+} from "./loan-verbs";
 
 const loan = {
   id: "l1",
@@ -31,7 +36,7 @@ const loan = {
   workspace_id: "w",
   version: 1,
 } as unknown as PlateLoan;
-const me = (org: string, admin = false) =>
+const me = (org: string, admin = false, canApproveLoans = true) =>
   ({
     user_id: "u9",
     email: "",
@@ -39,7 +44,9 @@ const me = (org: string, admin = false) =>
     org_id: org,
     is_admin: admin,
     workspace_role: admin ? "admin" : "editor",
-  }) as MeResponse;
+    canApproveLoans,
+  }) as LoanViewer;
+const viewer = (org: string) => ({ ...me(org), workspace_role: "viewer" }) as LoanViewer;
 
 describe("authority", () => {
   it("owner org / admin have owner authority; borrower org / admin have borrower authority", () => {
@@ -51,11 +58,22 @@ describe("authority", () => {
     expect(borrowerAuthority(loan, me("org-A"))).toBe(false);
     expect(borrowerAuthority(loan, me("org-Z", true))).toBe(true);
   });
+  it("the owner org also needs the loan-approval grant; admins don't", () => {
+    expect(ownerAuthority(loan, me("org-A", false, false))).toBe(false);
+    expect(ownerAuthority(loan, me("org-Z", true, false))).toBe(true);
+  });
+  it("viewers have no authority on either side, even in the right org", () => {
+    expect(ownerAuthority(loan, viewer("org-A"))).toBe(false);
+    expect(borrowerAuthority(loan, viewer("org-B"))).toBe(false);
+  });
 });
 
 describe("availableVerbs", () => {
   it("owner sees approve/deny for the requested item only (no approved/return_pending items)", () => {
     expect(availableVerbs(loan, me("org-A"))).toEqual(["approve", "deny"]);
+  });
+  it("an owner-org editor without the grant gets no owner verbs", () => {
+    expect(availableVerbs(loan, me("org-A", false, false))).toEqual([]);
   });
   it("borrower sees request-return (checked_out) and cancel (requested)", () => {
     expect(availableVerbs(loan, me("org-B"))).toEqual(["request-return", "cancel"]);

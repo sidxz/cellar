@@ -1,6 +1,6 @@
 import type { MeResponse } from "@/shared/lib/api/model";
 import { LoanItemStatus, LoanStatus, type PlateLoan } from "../hooks/use-plate-loans";
-import { ownerAuthority } from "./loan-verbs";
+import { type LoanViewer, ownerAuthority } from "./loan-verbs";
 
 export interface LoanSet {
   /** null = items with no group. */
@@ -112,7 +112,7 @@ export const INBOX_LABELS: Record<InboxKey, string> = {
  * when the viewer can approve (so a self-checkout never shows both sides). */
 export function loanInboxKeys(
   loan: PlateLoan,
-  me: MeResponse | undefined,
+  me: LoanViewer | undefined,
   today: string = todayISO(),
 ): Set<InboxKey> {
   const keys = new Set<InboxKey>();
@@ -133,7 +133,7 @@ export function loanInboxKeys(
 /** Number of LOANS per chip. */
 export function inboxCounts(
   loans: PlateLoan[],
-  me: MeResponse | undefined,
+  me: LoanViewer | undefined,
   today: string = todayISO(),
 ): Record<InboxKey, number> {
   const counts = Object.fromEntries(INBOX_ORDER.map((k) => [k, 0])) as Record<InboxKey, number>;

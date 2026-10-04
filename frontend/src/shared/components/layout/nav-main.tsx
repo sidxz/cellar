@@ -11,7 +11,8 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/shared/components/ui/sidebar";
-import { activeHref, navigation } from "@/shared/lib/navigation";
+import { useAllowsRole } from "@/shared/hooks/use-allows-role";
+import { activeHref, navigation, visibleNavigation } from "@/shared/lib/navigation";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -19,13 +20,14 @@ import { Collapsible } from "radix-ui";
 
 export function NavMain() {
   const pathname = usePathname();
+  const groups = visibleNavigation(navigation, useAllowsRole());
   // One active entry for the whole sidebar — longest matching href wins, so a
   // section root ("/inventory") never stays lit under a sibling's page.
   const active = activeHref(navigation, pathname);
 
   return (
     <>
-      {navigation.map((group) => (
+      {groups.map((group) => (
         <SidebarGroup key={group.label}>
           <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
           <SidebarGroupContent>

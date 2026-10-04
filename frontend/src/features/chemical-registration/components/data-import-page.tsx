@@ -26,6 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { formatDateTime } from "@/shared/lib/format-date";
 import { isTerminalImportStatus } from "@/shared/lib/job-status";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, Square, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -65,6 +66,8 @@ export function DataImportPage() {
   const startMutation = useStartCddMoleculeImport();
   const forceFailMutation = useForceFailImport();
   const cancelMutation = useCancelCddMoleculeImport();
+  // Force-failing an import is admin-only in the backend.
+  const isAdmin = useAuthzHasRole("admin");
 
   // Find active import from history (survives page reload)
   const activeImport = history?.find((imp) => !isTerminalImportStatus(imp.status));
@@ -413,7 +416,7 @@ export function DataImportPage() {
                           {imp.total_count.toLocaleString()}
                         </TableCell>
                         <TableCell>
-                          {!isTerminalImportStatus(imp.status) && (
+                          {isAdmin && !isTerminalImportStatus(imp.status) && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -455,6 +458,8 @@ function PlateImportTab() {
   const startPlate = useStartCddPlateImport();
   const cancelPlate = useCancelCddPlateImport();
   const forceFailPlate = useForceFailPlateImport();
+  // Force-failing an import is admin-only in the backend.
+  const isAdmin = useAuthzHasRole("admin");
 
   const activePlateImport = plateHistory?.find((imp) => !isTerminalImportStatus(imp.status));
 
@@ -663,7 +668,7 @@ function PlateImportTab() {
                     {imp.total_count.toLocaleString()}
                   </TableCell>
                   <TableCell>
-                    {!isTerminalImportStatus(imp.status) && (
+                    {isAdmin && !isTerminalImportStatus(imp.status) && (
                       <Button
                         variant="ghost"
                         size="sm"

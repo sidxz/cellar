@@ -13,13 +13,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { canEdit, useCurrentUser } from "@/shared/hooks/use-current-user";
+import { canEdit } from "@/shared/hooks/use-current-user";
 import { useOrgs } from "@/shared/hooks/use-orgs";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { formatDate, formatDateTime, formatDue } from "@/shared/lib/format-date";
 import { cn } from "@/shared/lib/utils";
 import Link from "next/link";
 import { Fragment, useState } from "react";
+import { useLoanViewer } from "../hooks/use-loan-viewer";
 import {
   LOAN_VARIANT,
   type LoanVerb,
@@ -40,7 +41,7 @@ export interface LoanPageProps {
 
 export function LoanPage({ loanId }: LoanPageProps) {
   const query = useLoan(loanId);
-  const { data: me } = useCurrentUser();
+  const me = useLoanViewer();
   const { data: orgs } = useOrgs();
   const memberName = useMemberNames();
   const action = useLoanItemsAction();
