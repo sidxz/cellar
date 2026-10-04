@@ -1,3 +1,4 @@
+import type { WorkspaceRole } from "@duar-auth/nextjs";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeftRight,
@@ -35,6 +36,9 @@ export interface NavItem {
   icon: LucideIcon;
   /** Tailwind text color for the icon (sidebar only); omit for muted default. */
   iconClass?: string;
+  /** Lowest workspace role that can use the page: the role its writes need in
+   * the backend. Omit when every member can use it. */
+  requires?: WorkspaceRole;
   children?: NavItem[];
 }
 
@@ -107,8 +111,18 @@ export const navigation: NavGroup[] = [
         icon: Grid3x3,
         iconClass: "text-violet-500",
         children: [
-          { title: "Plate Templates", href: "/assays/plate-templates", icon: Grid3x3 },
-          { title: "Protocol Forms", href: "/admin/protocol-forms", icon: FileText },
+          {
+            title: "Plate Templates",
+            href: "/assays/plate-templates",
+            icon: Grid3x3,
+            requires: "editor",
+          },
+          {
+            title: "Protocol Forms",
+            href: "/admin/protocol-forms",
+            icon: FileText,
+            requires: "admin",
+          },
         ],
       },
       {
@@ -117,9 +131,19 @@ export const navigation: NavGroup[] = [
         icon: FormInput,
         iconClass: "text-emerald-500",
         children: [
-          { title: "Registration Forms", href: "/admin/registration-forms", icon: FormInput },
-          { title: "Custom Fields", href: "/admin/custom-fields", icon: SlidersHorizontal },
-          { title: "Salt Catalog", href: "/admin/salt-catalog", icon: Pipette },
+          {
+            title: "Registration Forms",
+            href: "/admin/registration-forms",
+            icon: FormInput,
+            requires: "editor",
+          },
+          {
+            title: "Custom Fields",
+            href: "/admin/custom-fields",
+            icon: SlidersHorizontal,
+            requires: "editor",
+          },
+          { title: "Salt Catalog", href: "/admin/salt-catalog", icon: Pipette, requires: "editor" },
         ],
       },
       {
@@ -128,9 +152,19 @@ export const navigation: NavGroup[] = [
         icon: BookOpen,
         iconClass: "text-indigo-500",
         children: [
-          { title: "Vocabularies", href: "/admin/vocabularies", icon: BookOpen },
-          { title: "Ontology Slots", href: "/admin/ontology-slots", icon: BookOpen },
-          { title: "Tags", href: "/admin/tags", icon: Tag },
+          {
+            title: "Vocabularies",
+            href: "/admin/vocabularies",
+            icon: BookOpen,
+            requires: "editor",
+          },
+          {
+            title: "Ontology Slots",
+            href: "/admin/ontology-slots",
+            icon: BookOpen,
+            requires: "admin",
+          },
+          { title: "Tags", href: "/admin/tags", icon: Tag, requires: "admin" },
         ],
       },
       {
@@ -139,12 +173,22 @@ export const navigation: NavGroup[] = [
         icon: Building2,
         iconClass: "text-sky-500",
         children: [
-          { title: "Organizations", href: "/admin/organizations", icon: Building2 },
-          { title: "Data Sources", href: "/admin/data-sources", icon: Database },
-          { title: "Targets", href: "/admin/targets", icon: Crosshair },
-          { title: "API Keys", href: "/admin/api-keys", icon: KeyRound },
-          { title: "Kiosk Devices", href: "/admin/kiosk-devices", icon: ScanLine },
-          { title: "Settings", href: "/admin/settings", icon: Settings },
+          {
+            title: "Organizations",
+            href: "/admin/organizations",
+            icon: Building2,
+            requires: "editor",
+          },
+          { title: "Data Sources", href: "/admin/data-sources", icon: Database, requires: "admin" },
+          { title: "Targets", href: "/admin/targets", icon: Crosshair, requires: "admin" },
+          { title: "API Keys", href: "/admin/api-keys", icon: KeyRound, requires: "admin" },
+          {
+            title: "Kiosk Devices",
+            href: "/admin/kiosk-devices",
+            icon: ScanLine,
+            requires: "admin",
+          },
+          { title: "Settings", href: "/admin/settings", icon: Settings, requires: "admin" },
         ],
       },
       { title: "Audit Log", href: "/admin/audit", icon: ShieldCheck, iconClass: "text-red-500" },
@@ -153,7 +197,14 @@ export const navigation: NavGroup[] = [
         href: "/admin/data-import/cdd",
         icon: DatabaseZap,
         iconClass: "text-amber-500",
-        children: [{ title: "CDD Vault", href: "/admin/data-import/cdd", icon: DatabaseZap }],
+        children: [
+          {
+            title: "CDD Vault",
+            href: "/admin/data-import/cdd",
+            icon: DatabaseZap,
+            requires: "editor",
+          },
+        ],
       },
     ],
   },
@@ -162,8 +213,10 @@ export const navigation: NavGroup[] = [
 /** The nav entry (top-level or child) active for a pathname: the LONGEST href
  * that is the path itself or a whole-segment prefix of it. A section root such
  * as "/inventory" therefore lights up on "/inventory/batches/…" but not on
- * "/inventory/plates", where the sibling's longer href wins. A child inherits
- * its parent's iconClass so page headers stay colour-consistent with the rail. */
+ * "/inventory/plates", where the sibling's longer href wins. A parent shares
+ * its first child's href; on that tie the child (the actual page, with its own
+ * `requires`) wins. A child inherits its parent's iconClass so page headers
+ * stay colour-consistent with the rail. */
 export function activeNavItem(groups: NavGroup[], pathname: string): NavItem | null {
   let best: NavItem | null = null;
   const consider = (item: NavItem, parent?: NavItem) => {
@@ -175,8 +228,8 @@ export function activeNavItem(groups: NavGroup[], pathname: string): NavItem | n
   };
   for (const group of groups) {
     for (const item of group.items) {
-      consider(item);
       for (const child of item.children ?? []) consider(child, item);
+      consider(item);
     }
   }
   return best;
@@ -185,4 +238,25 @@ export function activeNavItem(groups: NavGroup[], pathname: string): NavItem | n
 /** Which nav href is active for a pathname — see {@link activeNavItem}. */
 export function activeHref(groups: NavGroup[], pathname: string): string | null {
   return activeNavItem(groups, pathname)?.href ?? null;
+}
+
+/** The nav a user can use: entries whose `requires` they hold, parents with at
+ * least one such child, and groups left with at least one entry. `allows`
+ * answers "does the user hold at least this role?". */
+export function visibleNavigation(
+  groups: NavGroup[],
+  allows: (role: WorkspaceRole) => boolean,
+): NavGroup[] {
+  const usable = (item: NavItem) => !item.requires || allows(item.requires);
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.flatMap((item) => {
+        if (!usable(item)) return [];
+        if (!item.children) return [item];
+        const children = item.children.filter(usable);
+        return children.length > 0 ? [{ ...item, children }] : [];
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
 }

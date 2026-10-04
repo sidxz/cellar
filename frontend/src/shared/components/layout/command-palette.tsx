@@ -8,7 +8,8 @@ import {
   CommandItem,
   CommandList,
 } from "@/shared/components/ui/command";
-import { navigation } from "@/shared/lib/navigation";
+import { useAllowsRole } from "@/shared/hooks/use-allows-role";
+import { navigation, visibleNavigation } from "@/shared/lib/navigation";
 import { useCommandPaletteStore } from "@/shared/lib/stores/command-palette-store";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect } from "react";
@@ -18,6 +19,7 @@ export function CommandPalette() {
   const setOpen = useCommandPaletteStore((s) => s.setOpen);
   const toggle = useCommandPaletteStore((s) => s.toggle);
   const router = useRouter();
+  const groups = visibleNavigation(navigation, useAllowsRole());
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -44,7 +46,7 @@ export function CommandPalette() {
       <CommandInput placeholder="Type to search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
-        {navigation.map((group) => (
+        {groups.map((group) => (
           <CommandGroup key={group.label} heading={group.label}>
             {group.items.map((item) => (
               <CommandItem key={item.href} onSelect={() => handleSelect(item.href)}>
