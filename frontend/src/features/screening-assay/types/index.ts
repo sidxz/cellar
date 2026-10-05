@@ -38,19 +38,23 @@ export type EffectiveCollectionCoverage = EffectiveCollectionCoverageResponse;
 
 export type ProtocolType =
   | "biochemical"
+  | "whole_cell"
   | "cell_based"
   | "admet"
   | "in_vivo"
   | "analytical"
-  | "physicochemical";
+  | "physicochemical"
+  | "in_silico";
 
 export const PROTOCOL_TYPE_LABELS: Record<ProtocolType, string> = {
   biochemical: "Biochemical",
+  whole_cell: "Whole-cell",
   cell_based: "Cell-Based",
   admet: "ADMET",
   in_vivo: "In Vivo",
   analytical: "Analytical",
   physicochemical: "Physicochemical",
+  in_silico: "In silico",
 };
 
 export type ProtocolStatus = "draft" | "active" | "retired";
