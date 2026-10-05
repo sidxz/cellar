@@ -4,6 +4,7 @@ import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { ProtocolSummaryResponse } from "@/shared/lib/api/model";
 import { showSuccess } from "@/shared/lib/toast";
+import type { PaginatedResponse } from "@/shared/types/pagination";
 import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateProtocolInput, Protocol } from "../types";
@@ -23,6 +24,26 @@ const protocolHooks = createCrudHooks<
   baseUrl: `${API_V1}/protocols`,
   queryKey: PROTOCOLS_KEY,
 });
+
+/** Every protocol matching `params`. The library view filters, groups and counts
+ *  its facets in the browser, so it has to hold the whole list: taking the
+ *  server's default page silently showed the first 50 and under-counted every
+ *  facet. Same shape as `fetchAllTargets`. */
+async function fetchAllProtocols(params: Record<string, unknown>): Promise<Protocol[]> {
+  const items: Protocol[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 50; page++) {
+    const result: PaginatedResponse<Protocol> = await customInstance({
+      url: `${API_V1}/protocols`,
+      method: "GET",
+      params: { limit: 200, ...params, ...(cursor ? { cursor } : {}) },
+    });
+    items.push(...unwrapList(result));
+    cursor = result.next_cursor;
+    if (!cursor) return items;
+  }
+  throw new Error("protocols: cursor pagination did not terminate after 50 pages");
+}
 
 /**
  * Custom list — supports optional projectId filter and tag filtering.
@@ -49,12 +70,7 @@ export function useProtocols(
         params.tags = tags;
         params.tag_logic = options?.tagLogic ?? "any";
       }
-      const resp = await customInstance<Protocol[] | { items: Protocol[] }>({
-        url: `${API_V1}/protocols`,
-        method: "GET",
-        ...(Object.keys(params).length ? { params } : {}),
-      });
-      return unwrapList(resp);
+      return fetchAllProtocols(params);
     },
   });
 }
