@@ -134,6 +134,9 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_identity import (
+    SQLAlchemyCampaignIdentityReader,
+)
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (  # noqa: E501
     SQLAlchemyCampaignRepository,
 )
@@ -698,7 +701,11 @@ def register_research_organization(container: Container) -> None:
 
     def _list_campaign_results(c: Container) -> ListCampaignResults:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return ListCampaignResults(uow=uow, campaign_repo=SQLAlchemyCampaignRepository(uow))
+        return ListCampaignResults(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            identity_reader=SQLAlchemyCampaignIdentityReader(uow),
+        )
 
     def _campaign_collection_cmd(cls):
         def factory(c: Container):

@@ -17,6 +17,7 @@ import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Response
+from pydantic import BaseModel, ConfigDict, Field
 
 from cellar.application.research_organization.add_result_row import (
     AddResultRowCommand,
@@ -33,6 +34,7 @@ from cellar.application.research_organization.remove_result_row import (
 from cellar.application.research_organization.set_result_notes import (
     SetResultNotesCommand,
 )
+from cellar.domain.research_organization.campaign_result_filters import CampaignResultFilters
 from cellar.domain.research_organization.enums import StageOutcome, ValueQualifier
 from cellar.interface.dependencies import (
     AddResultRowDep,
@@ -59,6 +61,59 @@ from cellar.interface.routes._campaign_dtos import (
 )
 
 router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
+
+
+class SearchCampaignResultsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage_id: uuid.UUID | None = None
+    outcome: list[StageOutcome] = Field(default_factory=list)
+    order_by: uuid.UUID | None = None
+    direction: Literal["asc", "desc"] = "asc"
+    cursor: str | None = Field(default=None, max_length=64)
+    limit: int = Field(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
+    filters: CampaignResultFilters = Field(default_factory=CampaignResultFilters)
+
+
+@router.post(
+    "/{campaign_id}/results/search", response_model=PaginatedResponse[CampaignResultResponse]
+)
+async def search_campaign_results(
+    campaign_id: uuid.UUID,
+    body: SearchCampaignResultsRequest,
+    auth: AuthDep,
+    uc: ListCampaignResultsDep,
+) -> PaginatedResponse[CampaignResultResponse]:
+    """Search the complete stage before ordering and pagination, without changing hit calls.
+
+    Identity search is literal, case-insensitive substring matching on registration number or
+    name. All measurement filters are ANDed. Bounds are inclusive, use the exact stored unit,
+    and match only unqualified numeric values; QC unknown means an existing cell without a QC
+    flag. ``overridden`` refers to the selected stage's outcome override.
+    """
+    out = result_to_response(
+        await uc(
+            ListCampaignResultsQuery(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign_id,
+                stage_id=body.stage_id,
+                outcome=tuple(body.outcome),
+                order_by_channel_id=body.order_by,
+                descending=body.direction == "desc",
+                cursor_id=parse_cursor(body.cursor),
+                limit=body.limit,
+                filters=body.filters,
+            ),
+            auth=auth,
+        )
+    )
+    return PaginatedResponse(
+        items=[
+            CampaignResultResponse.from_domain(r, out.outcomes.get(r.id)) for r in out.page.items
+        ],
+        next_cursor=out.page.next_cursor,
+        total_count=out.page.total_count,
+    )
 
 
 @router.get("/{campaign_id}/results", response_model=PaginatedResponse[CampaignResultResponse])
