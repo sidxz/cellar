@@ -761,15 +761,6 @@ class TestProtocolLocking:
 
 
 class TestProtocolUpdate:
-    def test_update_draft_name(
-        self, workspace_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        protocol = _make_protocol(workspace_id, user_id)
-        old_updated = protocol.updated_at
-        protocol.update(name="Updated Name")
-        assert protocol.name == "Updated Name"
-        assert protocol.updated_at >= old_updated
-
     def test_update_draft_description(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
@@ -790,7 +781,7 @@ class TestProtocolUpdate:
         protocol = _make_protocol(
             workspace_id, user_id, description="Keep me", category="kinase"
         )
-        protocol.update(name="New Name")
+        protocol.update(pos_control_signal=protocol.pos_control_signal)
         assert protocol.description == "Keep me"
         assert protocol.category == "kinase"
 
@@ -800,14 +791,15 @@ class TestProtocolUpdate:
         protocol = _make_protocol(workspace_id, user_id)
         protocol.publish()
         with pytest.raises(ConflictError, match="only DRAFT"):
-            protocol.update(name="Nope")
+            protocol.update(description="Nope")
 
-    def test_update_empty_name_raises(
+    def test_update_takes_no_name(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
+        # The name is generated (apply_derived_name), never set through update.
         protocol = _make_protocol(workspace_id, user_id)
-        with pytest.raises(ValidationError, match="name must not be empty"):
-            protocol.update(name="")
+        with pytest.raises(TypeError):
+            protocol.update(name="Hand-typed")  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------------------

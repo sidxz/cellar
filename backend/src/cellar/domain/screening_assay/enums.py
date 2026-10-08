@@ -23,6 +23,14 @@ class AliasKind(StrEnum):
     NICKNAME = "nickname"  # what people call it (MABA, LORA, HLM CLint)
 
 
+class NameFlag(StrEnum):
+    """Why a protocol's generated name needs attention."""
+
+    NEEDS_FACTS = "needs_facts"  # a field the category's pattern needs is empty; cannot publish
+    NEEDS_DISCRIMINATOR = "needs_discriminator"  # another protocol shares the base name
+    NAME_CONFLICT = "name_conflict"  # a registry rename made two names identical; cannot publish
+
+
 class ProtocolStatus(StrEnum):
     """Lifecycle status of a protocol."""
 

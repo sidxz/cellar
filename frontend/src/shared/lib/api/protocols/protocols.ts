@@ -42,6 +42,7 @@ import type {
   ProtocolResponse,
   ProtocolSummaryResponse,
   ProtocolTargetRefResponse,
+  RemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteParams,
   RemoveProtocolNicknameApiV1ProtocolsProtocolIdNicknamesDeleteParams,
   RetireRequest,
   SetControlLayoutRequest,
@@ -1726,17 +1727,19 @@ export const useSetOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotations
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Remove all ontology terms for a slot from a DRAFT protocol.
+ * Remove all ontology terms for a slot (a published protocol needs a reason).
  * @summary Remove Ontology Annotation
  */
 export const removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete = (
     protocolId: string,
     slot: string,
+    params?: RemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteParams,
  ) => {
       
       
       return customInstance<ProtocolResponse>(
-      {url: `/api/v1/protocols/${protocolId}/ontology-annotations/${slot}`, method: 'DELETE'
+      {url: `/api/v1/protocols/${protocolId}/ontology-annotations/${slot}`, method: 'DELETE',
+        params
     },
       );
     }
@@ -1744,8 +1747,8 @@ export const removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotations
 
 
 export const getRemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete>>, TError,{protocolId: string;slot: string}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete>>, TError,{protocolId: string;slot: string}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete>>, TError,{protocolId: string;slot: string;params?: RemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteParams}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete>>, TError,{protocolId: string;slot: string;params?: RemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteParams}, TContext> => {
 
 const mutationKey = ['removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete'];
 const {mutation: mutationOptions} = options ?
@@ -1757,10 +1760,10 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete>>, {protocolId: string;slot: string}> = (props) => {
-          const {protocolId,slot} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete>>, {protocolId: string;slot: string;params?: RemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteParams}> = (props) => {
+          const {protocolId,slot,params} = props ?? {};
 
-          return  removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete(protocolId,slot,)
+          return  removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete(protocolId,slot,params,)
         }
 
         
@@ -1776,11 +1779,11 @@ const {mutation: mutationOptions} = options ?
  * @summary Remove Ontology Annotation
  */
 export const useRemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete>>, TError,{protocolId: string;slot: string}, TContext>, }
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete>>, TError,{protocolId: string;slot: string;params?: RemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteParams}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof removeOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDelete>>,
         TError,
-        {protocolId: string;slot: string},
+        {protocolId: string;slot: string;params?: RemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteParams},
         TContext
       > => {
 

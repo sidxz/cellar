@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -168,7 +167,6 @@ class VersionProtocol:
 class UpdateProtocolCommand(Command):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
-    name: str | None = None
     description: str | object | None = UNSET
     category: str | object | None = UNSET
     recommended_hit_criteria: list[dict] | object | None = UNSET
@@ -200,16 +198,10 @@ class UpdateProtocol:
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
 
-            fields: dict[str, Any] = {}
-            if input.name is not None:
-                fields["name"] = input.name
             if input.description is not UNSET:
-                fields["description"] = input.description
+                protocol.update(description=input.description)  # Guards: only DRAFT allowed
             if input.category is not UNSET:
-                fields["category"] = input.category
-
-            if fields:
-                protocol.update(**fields)  # Guards: only DRAFT allowed
+                protocol.set_category(input.category)  # type: ignore[arg-type]
 
             if input.recommended_hit_criteria is not UNSET:
                 criteria = None

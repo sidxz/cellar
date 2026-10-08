@@ -423,6 +423,10 @@ export interface Protocol {
   code: ProtocolResponse["code"];
   /** Former names (recorded on rename) and nicknames. Searchable; never the name. */
   aliases: ProtocolResponse["aliases"];
+  /** The free part of the generated name (method or fixed condition), e.g. `FP`. */
+  discriminator: ProtocolResponse["discriminator"];
+  /** Why the generated name needs attention (`needs_facts` | `needs_discriminator` | `name_conflict`). */
+  name_flag: ProtocolResponse["name_flag"];
 }
 
 /** Read-only mirror of a prot-cellar target. Aliases the orval DTO — never

@@ -181,8 +181,11 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
 
     __tablename__ = "protocols"
 
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    name: Mapped[str] = mapped_column(String(400), nullable=False)
     code: Mapped[str | None] = mapped_column(String(20))
+    discriminator: Mapped[str | None] = mapped_column(String(40))
+    name_base: Mapped[str] = mapped_column(String(400), nullable=False)
+    name_flag: Mapped[str | None] = mapped_column(String(30))
     description: Mapped[str | None] = mapped_column(Text)
     protocol_type: Mapped[str] = mapped_column(String(30), nullable=False)
     category: Mapped[str | None] = mapped_column(String(100))

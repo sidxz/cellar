@@ -205,6 +205,9 @@ class ProtocolResponse(BaseModel):
     workspace_id: uuid.UUID
     name: str
     code: str | None = None
+    discriminator: str | None = None
+    # needs_facts | needs_discriminator | name_conflict
+    name_flag: str | None = None
     description: str | None = None
     protocol_type: str
     # Effective targets (direct union run-derived), lightweight for display.
@@ -268,6 +271,8 @@ class ProtocolResponse(BaseModel):
             workspace_id=p.workspace_id,
             name=p.name,
             code=p.code,
+            discriminator=p.discriminator,
+            name_flag=p.name_flag.value if p.name_flag else None,
             description=p.description,
             protocol_type=p.protocol_type.value,
             targets=targets or [],
@@ -763,7 +768,6 @@ async def version_protocol(
 
 
 class UpdateProtocolRequest(BaseModel):
-    name: str | None = None
     description: str | None = None
     category: str | None = None
     recommended_hit_criteria: list[dict] | None = None
@@ -793,7 +797,6 @@ async def update_protocol(
     cmd = UpdateProtocolCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
-        name=body.name,
         description=body.description if "description" in body.model_fields_set else UNSET,
         category=body.category if "category" in body.model_fields_set else UNSET,
         recommended_hit_criteria=body.recommended_hit_criteria
@@ -1129,6 +1132,7 @@ async def remove_control_layout(
 class SetOntologyAnnotationRequest(BaseModel):
     slot: str
     terms: list[OntologyTermRequest]
+    reason: str | None = None  # required to correct a published protocol
 
 
 @router.put(
@@ -1149,6 +1153,7 @@ async def set_ontology_annotation(
         protocol_id=protocol_id,
         slot=body.slot,
         terms=[t.model_dump() for t in body.terms],
+        reason=body.reason,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1165,12 +1170,14 @@ async def remove_ontology_annotation(
     auth: AuthDep,
     targets_uc: ResolveProtocolTargetsDep,
     uc: RemoveOntologyAnnotationDep,
+    reason: str | None = Query(None),
 ) -> ProtocolResponse:
-    """Remove all ontology terms for a slot from a DRAFT protocol."""
+    """Remove all ontology terms for a slot (a published protocol needs a reason)."""
     cmd = RemoveOntologyAnnotationCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
         slot=slot,
+        reason=reason,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)

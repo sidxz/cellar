@@ -518,11 +518,13 @@ class TestProtocolOntologyAnnotations:
         with pytest.raises(ValidationError, match="slot name must not be empty"):
             protocol.set_ontology_annotation("   ", [])
 
-    def test_set_ontology_annotation_on_active_raises(self):
+    def test_set_ontology_annotation_on_active_needs_a_reason(self):
         protocol = _make_protocol()
         protocol.publish()
-        with pytest.raises(ConflictError, match="DRAFT"):
+        with pytest.raises(ValidationError, match="reason"):
             protocol.set_ontology_annotation("bioassay_type", [])
+        protocol.set_ontology_annotation("bioassay_type", [], reason="Wrong assay type")
+        assert protocol.ontology_annotations["bioassay_type"] == []
 
     def test_remove_ontology_annotation(self):
         protocol = _make_protocol()
@@ -537,11 +539,11 @@ class TestProtocolOntologyAnnotations:
         protocol = _make_protocol()
         protocol.remove_ontology_annotation("nonexistent")  # no error
 
-    def test_remove_ontology_annotation_on_active_raises(self):
+    def test_remove_ontology_annotation_on_active_needs_a_reason(self):
         protocol = _make_protocol()
         protocol.set_ontology_annotation("bioassay_type", [])
         protocol.publish()
-        with pytest.raises(ConflictError, match="DRAFT"):
+        with pytest.raises(ValidationError, match="reason"):
             protocol.remove_ontology_annotation("bioassay_type")
 
 

@@ -322,9 +322,9 @@ async def _seed_protocol_run_curve(
         await uow.session.execute(
             sa.text(
                 "INSERT INTO protocols "
-                "(id, workspace_id, name, protocol_type, status, "
+                "(id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, protocol_version, created_by) "
-                "VALUES (:id, :ws, :name, 'biochemical', 'active', "
+                "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', "
                 "false, 'uM', 'high', 1, 1, :user) ON CONFLICT DO NOTHING"
             ),
             {"id": protocol_id, "ws": workspace_id, "name": f"Proto-{str(protocol_id)[:8]}", "user": _SEED_USER},

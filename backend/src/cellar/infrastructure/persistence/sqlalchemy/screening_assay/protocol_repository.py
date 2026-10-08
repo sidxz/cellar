@@ -17,6 +17,7 @@ from cellar.domain.screening_assay.dose_response_config import DoseResponseConfi
 from cellar.domain.screening_assay.enums import (
     AliasKind,
     ConditionDataType,
+    NameFlag,
     PosControlSignal,
     ProtocolStatus,
     ProtocolType,
@@ -864,6 +865,9 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 )
                 for a in model.aliases
             ],
+            discriminator=model.discriminator,
+            name_base=model.name_base,
+            name_flag=NameFlag(model.name_flag) if model.name_flag else None,
             recommended_hit_criteria=[
                 HitCriterion.from_dict(c) for c in (model.recommended_hit_criteria or [])
             ]
@@ -911,6 +915,9 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             workspace_id=aggregate.workspace_id,
             name=aggregate.name,
             code=aggregate.code,
+            discriminator=aggregate.discriminator,
+            name_base=aggregate.name_base,
+            name_flag=aggregate.name_flag.value if aggregate.name_flag else None,
             description=aggregate.description,
             protocol_type=aggregate.protocol_type.value,
             category=aggregate.category,
@@ -946,6 +953,9 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
     def _update_model(self, model: ProtocolModel, aggregate: Protocol) -> None:
         model.name = aggregate.name
         model.code = aggregate.code
+        model.discriminator = aggregate.discriminator
+        model.name_base = aggregate.name_base
+        model.name_flag = aggregate.name_flag.value if aggregate.name_flag else None
         model.description = aggregate.description
         model.protocol_type = aggregate.protocol_type.value
         model.category = aggregate.category

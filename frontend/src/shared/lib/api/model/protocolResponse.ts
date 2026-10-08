@@ -5,6 +5,8 @@
  * OpenAPI spec version: 1.3.0-17-gd9da37bb-dirty
  */
 import type { ProtocolResponseCode } from './protocolResponseCode';
+import type { ProtocolResponseDiscriminator } from './protocolResponseDiscriminator';
+import type { ProtocolResponseNameFlag } from './protocolResponseNameFlag';
 import type { ProtocolResponseDescription } from './protocolResponseDescription';
 import type { TargetRefResponse } from './targetRefResponse';
 import type { ProtocolResponseCategory } from './protocolResponseCategory';
@@ -25,6 +27,8 @@ export interface ProtocolResponse {
   workspace_id: string;
   name: string;
   code?: ProtocolResponseCode;
+  discriminator?: ProtocolResponseDiscriminator;
+  name_flag?: ProtocolResponseNameFlag;
   description?: ProtocolResponseDescription;
   protocol_type: string;
   targets?: TargetRefResponse[];

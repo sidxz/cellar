@@ -36,6 +36,23 @@ class ProtocolRetired(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ProtocolRenamed(DomainEvent):
+    """The generated name changed. Audited with the old name, the new one and why."""
+
+    old_name: str
+    new_name: str
+    reason: str
+    user_id: uuid.UUID | None = None
+
+    @property
+    def audit_reason(self) -> str:
+        return self.reason
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return [("name", self.old_name, self.new_name)]
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProtocolLocked(DomainEvent):
     locked_by: uuid.UUID
     lock_reason: str

@@ -23,6 +23,7 @@ class SetOntologyAnnotationCommand(Command):
     protocol_id: uuid.UUID
     slot: str
     terms: list[dict] = field(default_factory=list)  # [{term_id, label, ontology_source, uri?}]
+    reason: str | None = None  # required to correct a published protocol
 
 
 class SetOntologyAnnotation:
@@ -60,7 +61,7 @@ class SetOntologyAnnotation:
                 )
                 for t in input.terms
             ]
-            protocol.set_ontology_annotation(input.slot, terms)
+            protocol.set_ontology_annotation(input.slot, terms, reason=input.reason)
 
             await self._protocol_repo.save(protocol)
             events = await self._uow.commit()
@@ -74,6 +75,7 @@ class RemoveOntologyAnnotationCommand(Command):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
     slot: str
+    reason: str | None = None  # required to correct a published protocol
 
 
 class RemoveOntologyAnnotation:
@@ -102,7 +104,7 @@ class RemoveOntologyAnnotation:
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
 
-            protocol.remove_ontology_annotation(input.slot)
+            protocol.remove_ontology_annotation(input.slot, reason=input.reason)
 
             await self._protocol_repo.save(protocol)
             events = await self._uow.commit()

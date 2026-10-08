@@ -58,6 +58,7 @@ async def _seed_campaign_with_targets(session, ws, project_id):
             id=protocol_id,
             workspace_id=ws,
             name="P",
+            name_base="P",
             protocol_type="biochemical",
             created_by=uuid.uuid4(),
         )

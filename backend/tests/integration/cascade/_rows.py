@@ -49,9 +49,9 @@ async def protocol(
 ) -> uuid.UUID:
     return await _insert(
         session,
-        "INSERT INTO protocols (id, workspace_id, name, protocol_type, status, is_locked, "
+        "INSERT INTO protocols (id, workspace_id, name, name_base, protocol_type, status, is_locked, "
         "dose_unit, pos_control_signal, version, protocol_version, created_by, "
-        "parent_protocol_id) VALUES (:id, :ws, :name, 'biochemical', 'active', false, "
+        "parent_protocol_id) VALUES (:id, :ws, :name, :name, 'biochemical', 'active', false, "
         "'uM', 'high', 1, 1, :user, :parent)",
         ws=ws,
         name=name,

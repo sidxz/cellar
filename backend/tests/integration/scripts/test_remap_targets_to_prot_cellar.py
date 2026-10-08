@@ -28,9 +28,9 @@ async def _seed(session: AsyncSession, ws: uuid.UUID) -> dict[str, uuid.UUID]:
     )
     await session.execute(
         sa.text(
-            "INSERT INTO protocols (id, workspace_id, name, protocol_type, status, is_locked, "
+            "INSERT INTO protocols (id, workspace_id, name, name_base, protocol_type, status, is_locked, "
             "dose_unit, pos_control_signal, version, protocol_version, created_by) VALUES "
-            "(:p, :ws, 'P', 'biochemical', 'active', false, 'uM', 'high', 1, 1, :u)"
+            "(:p, :ws, 'P', 'P', 'biochemical', 'active', false, 'uM', 'high', 1, 1, :u)"
         ),
         {"p": ids["proto"], "ws": ws, "u": _USER},
     )

@@ -19,7 +19,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
-import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
@@ -86,7 +85,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const [createRunOpen, setCreateRunOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [lockOpen, setLockOpen] = useState(false);
@@ -141,7 +139,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               <DropdownMenuItem
                 key="edit"
                 onClick={() => {
-                  setEditName(p.name);
                   setEditDescription(p.description ?? "");
                   setEditCategory(p.category ?? "");
                   setEditOpen(true);
@@ -390,10 +387,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Name</Label>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
               <Label>Description</Label>
               <Textarea
                 value={editDescription}
@@ -412,14 +405,13 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               onClick={() => {
                 updateMutation.mutate(
                   {
-                    name: editName || undefined,
                     description: editDescription || null,
                     category: editCategory || null,
                   },
                   { onSuccess: () => setEditOpen(false) },
                 );
               }}
-              disabled={!editName.trim() || updateMutation.isPending}
+              disabled={updateMutation.isPending}
             >
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>

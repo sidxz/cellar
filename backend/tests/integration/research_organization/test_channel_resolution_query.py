@@ -96,10 +96,10 @@ async def test_multi_dr_protocol_disambiguates_by_readout_def(session_factory):
         await session.execute(
             sa.text(
                 "INSERT INTO protocols "
-                "(id, workspace_id, name, protocol_type, status, "
+                "(id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, "
                 "protocol_version, created_by) "
-                "VALUES (:id, :ws, 'Multi-DR', 'biochemical', 'active', "
+                "VALUES (:id, :ws, 'Multi-DR', 'Multi-DR', 'biochemical', 'active', "
                 "false, 'uM', 'high', 1, 1, :user)"
             ),
             {"id": protocol_id, "ws": ws_id, "user": user_id},
@@ -303,10 +303,10 @@ async def test_curve_candidate_carries_chart_fields_into_snapshot(session_factor
         await session.execute(
             sa.text(
                 "INSERT INTO protocols "
-                "(id, workspace_id, name, protocol_type, status, "
+                "(id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, "
                 "protocol_version, created_by) "
-                "VALUES (:id, :ws, 'Resz', 'cell_based', 'active', "
+                "VALUES (:id, :ws, 'Resz', 'Resz', 'cell_based', 'active', "
                 "false, 'uM', 'high', 1, 1, :user)"
             ),
             {"id": protocol_id, "ws": ws_id, "user": user_id},
@@ -447,10 +447,10 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
         await session.execute(
             sa.text(
                 "INSERT INTO protocols "
-                "(id, workspace_id, name, protocol_type, status, "
+                "(id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, "
                 "protocol_version, created_by) "
-                "VALUES (:id, :ws, 'Reported IC50', 'biochemical', 'active', "
+                "VALUES (:id, :ws, 'Reported IC50', 'Reported IC50', 'biochemical', 'active', "
                 "false, 'uM', 'high', 1, 1, :user)"
             ),
             {"id": protocol_id, "ws": ws_id, "user": user_id},
@@ -680,10 +680,10 @@ async def test_run_scope_excludes_other_runs_on_both_branches(session_factory):
         await session.execute(
             sa.text(
                 "INSERT INTO protocols "
-                "(id, workspace_id, name, protocol_type, status, "
+                "(id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, "
                 "protocol_version, created_by) "
-                "VALUES (:id, :ws, 'Run Scope', 'biochemical', 'active', "
+                "VALUES (:id, :ws, 'Run Scope', 'Run Scope', 'biochemical', 'active', "
                 "false, 'uM', 'high', 1, 1, :user)"
             ),
             {"id": protocol_id, "ws": ws_id, "user": user_id},

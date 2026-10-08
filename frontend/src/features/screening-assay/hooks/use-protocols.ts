@@ -14,7 +14,6 @@ const protocolHooks = createCrudHooks<
   Protocol,
   CreateProtocolInput,
   {
-    name?: string;
     description?: string | null;
     category?: string | null;
     pos_control_signal?: "high" | "low";

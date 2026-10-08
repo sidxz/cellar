@@ -400,10 +400,10 @@ async def _seed_multi_run_dr(
         await uow.session.execute(
             sa.text(
                 "INSERT INTO protocols "
-                "(id, workspace_id, name, protocol_type, status, "
+                "(id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, "
                 "protocol_version, created_by) "
-                "VALUES (:id, :ws, :name, 'biochemical', 'active', "
+                "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', "
                 "false, :dose_unit, 'high', 1, 1, :user)"
             ),
             {
@@ -510,10 +510,10 @@ async def _seed_numeric_readout(
     async with uow:
         await uow.session.execute(
             sa.text(
-                "INSERT INTO protocols (id, workspace_id, name, protocol_type, status, "
+                "INSERT INTO protocols (id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, protocol_version, "
                 "created_by) "
-                "VALUES (:id, :ws, :name, 'biochemical', 'active', false, 'uM', 'high', 1, 1, "
+                "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', false, 'uM', 'high', 1, 1, "
                 ":user)"
             ),
             {
@@ -988,10 +988,10 @@ class TestActivityAnyProtocol:
         async with uow:
             await uow.session.execute(
                 sa.text(
-                    "INSERT INTO protocols (id, workspace_id, name, protocol_type, status, "
+                    "INSERT INTO protocols (id, workspace_id, name, name_base, protocol_type, status, "
                     "is_locked, dose_unit, pos_control_signal, version, protocol_version, "
                     "created_by) "
-                    "VALUES (:id, :ws, :name, 'biochemical', 'active', false, 'uM', 'high', 1, "
+                    "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', false, 'uM', 'high', 1, "
                     "1, :user)"
                 ),
                 {
