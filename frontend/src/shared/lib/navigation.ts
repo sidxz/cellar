@@ -176,6 +176,12 @@ export const navigation: NavGroup[] = [
             icon: BookOpen,
             requires: "admin",
           },
+          {
+            title: "Protocol Names",
+            href: "/admin/protocol-names",
+            icon: BookOpen,
+            requires: "admin",
+          },
           { title: "Tags", href: "/admin/tags", icon: Tag, requires: "admin" },
         ],
       },

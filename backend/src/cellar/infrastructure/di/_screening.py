@@ -157,7 +157,11 @@ from cellar.application.screening.protocol_naming_service import ProtocolNameSer
 from cellar.application.screening.protocol_stats_reader import ProtocolStatsReader
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.readout_data_enriched_reader import ReadoutDataEnrichedReader
-from cellar.application.screening.rederive_protocol_names import RederiveProtocolNames
+from cellar.application.screening.rederive_protocol_names import (
+    ListNameFlags,
+    RederiveAllProtocolNames,
+    RederiveProtocolNames,
+)
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
@@ -386,6 +390,16 @@ def register_screening(container: Container) -> None:
             dispatcher=c[EventDispatcher],
         ),
     )
+    container.define(
+        RederiveAllProtocolNames,
+        lambda c: RederiveAllProtocolNames(
+            uow_factory=lambda: AsyncUnitOfWork(c[async_sessionmaker]),
+            names_factory=_name_service,
+            repo_factory=SQLAlchemyProtocolRepository,
+            rederive=c[RederiveProtocolNames],
+        ),
+    )
+    container.define(ListNameFlags, _protocol_query(ListNameFlags))
     container.define(AddProtocolNickname, _protocol_cmd(AddProtocolNickname))
     container.define(RemoveProtocolNickname, _protocol_cmd(RemoveProtocolNickname))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))

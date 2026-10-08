@@ -8,11 +8,20 @@ from typing import Literal
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from cellar.application.screening.rederive_protocol_names import (
+    ListNameFlagsQuery,
+    RederiveAllProtocolNamesCommand,
+)
 from cellar.application.workspace_config.naming_changes import (
     NamingChangePreview,
     PreviewNamingChangeQuery,
 )
-from cellar.interface.dependencies import AuthDep, PreviewNamingChangeDep
+from cellar.interface.dependencies import (
+    AuthDep,
+    ListNameFlagsDep,
+    PreviewNamingChangeDep,
+    RederiveAllProtocolNamesDep,
+)
 from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1/protocol-names", tags=["protocol-names"])
@@ -87,4 +96,69 @@ async def preview_naming_change(
     )
     return NamingChangePreviewResponse.from_domain(
         result_to_response(await use_case(query, auth=auth))
+    )
+
+
+class FlaggedProtocolResponse(BaseModel):
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str
+    flag: str
+
+
+@router.get("/flags", response_model=list[FlaggedProtocolResponse])
+async def list_name_flags(
+    auth: AuthDep, use_case: ListNameFlagsDep
+) -> list[FlaggedProtocolResponse]:
+    """Protocols whose generated name needs attention (one row per code)."""
+    rows = result_to_response(
+        await use_case(ListNameFlagsQuery(workspace_id=auth.workspace_id), auth=auth)
+    )
+    return [
+        FlaggedProtocolResponse(protocol_id=r.protocol_id, code=r.code, name=r.name, flag=r.flag)
+        for r in rows
+    ]
+
+
+class RederiveRequest(BaseModel):
+    dry_run: bool
+    reason: str = "Names generated from fields"
+    model_config = {"extra": "forbid"}
+
+
+class NameCheckResponse(BaseModel):
+    protocol_id: uuid.UUID
+    code: str | None
+    before: str
+    after: str
+    flag: str | None
+
+
+class RederiveReportResponse(BaseModel):
+    renamed: int
+    flagged: int
+    failed: list[str]
+
+
+class RederiveResponse(BaseModel):
+    changes: list[NameCheckResponse]
+    report: RederiveReportResponse | None
+
+
+@router.post("/rederive", response_model=RederiveResponse)
+async def rederive_protocol_names(
+    body: RederiveRequest, auth: AuthDep, use_case: RederiveAllProtocolNamesDep
+) -> RederiveResponse:
+    """Check every protocol name against its facts (dry run), or apply the generated names."""
+    result = result_to_response(
+        await use_case(
+            RederiveAllProtocolNamesCommand(
+                workspace_id=auth.workspace_id, dry_run=body.dry_run, reason=body.reason
+            ),
+            auth=auth,
+        )
+    )
+    return RederiveResponse(
+        changes=[NameCheckResponse(**c.__dict__) for c in result.changes],
+        report=RederiveReportResponse(**result.report.__dict__) if result.report else None,
     )

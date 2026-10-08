@@ -38,6 +38,7 @@ from cellar.domain.screening_assay.protocol_fingerprint import (
 from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
 from cellar.domain.screening_assay.repository import (
     AnnotationTermUse,
+    FlaggedProtocol,
     NameSibling,
     TargetLinkResult,
 )
@@ -190,6 +191,35 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         if q:
             stmt = stmt.where(ProtocolModel.discriminator.ilike(f"%{q.strip()}%"))
         stmt = stmt.distinct().order_by(ProtocolModel.discriminator).limit(limit)
+        return list((await self._session.execute(stmt)).scalars())
+
+    def _latest_per_code(self, workspace_id: uuid.UUID) -> sa.Select:
+        lineage = func.coalesce(ProtocolModel.code, sa.cast(ProtocolModel.id, sa.String))
+        return (
+            select(ProtocolModel)
+            .where(ProtocolModel.workspace_id == workspace_id)
+            .distinct(lineage)
+            .order_by(lineage, ProtocolModel.protocol_version.desc())
+        )
+
+    async def find_flagged(self, workspace_id: uuid.UUID) -> list[FlaggedProtocol]:
+        latest = self._latest_per_code(workspace_id).subquery()
+        rows = await self._session.execute(
+            select(latest.c.id, latest.c.code, latest.c.name, latest.c.name_flag)
+            .where(latest.c.name_flag.is_not(None))
+            .order_by(latest.c.code)
+        )
+        return [
+            FlaggedProtocol(protocol_id=r.id, code=r.code, name=r.name, flag=r.name_flag)
+            for r in rows.all()
+        ]
+
+    async def list_lineage_ids(self, workspace_id: uuid.UUID) -> list[uuid.UUID]:
+        latest = self._latest_per_code(workspace_id).subquery()
+        return list((await self._session.execute(select(latest.c.id))).scalars())
+
+    async def list_ids(self, workspace_id: uuid.UUID) -> list[uuid.UUID]:
+        stmt = select(ProtocolModel.id).where(ProtocolModel.workspace_id == workspace_id)
         return list((await self._session.execute(stmt)).scalars())
 
     async def count_by_category(self, workspace_id: uuid.UUID, label: str) -> int:

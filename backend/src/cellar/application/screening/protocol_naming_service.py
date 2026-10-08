@@ -234,8 +234,15 @@ class ProtocolNameService:
         await self.flag_siblings(
             protocol.workspace_id, derivation, clash_flag=flag == NameFlag.NAME_CONFLICT
         )
-        name = derivation.rendered.name
+        if not derivation.rendered.complete:
+            # A name with a gap never replaces a real one: keep it and flag what is missing.
+            protocol.flag_name(flag)
+            return Success(derivation)
         protocol.apply_derived_name(
-            name=name, base=derivation.rendered.base, flag=flag, reason=reason, user_id=user_id
+            name=derivation.rendered.name,
+            base=derivation.rendered.base,
+            flag=flag,
+            reason=reason,
+            user_id=user_id,
         )
         return Success(derivation)

@@ -181,3 +181,24 @@ async def test_targets_come_from_the_registry_in_name_order():
         discriminator=None,
     )
     assert d.rendered.name == "PanC/PanD inhibition"
+
+
+async def test_an_incomplete_name_never_overwrites_an_existing_one():
+    from cellar.domain.screening_assay.enums import ProtocolType, ReadoutDataType
+    from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+
+    pid = uuid.uuid4()
+    legacy = Protocol.create(
+        workspace_id=WS,
+        name="Legacy hand-typed name",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=uuid.uuid4(),
+        code="PRT-00009",
+        readout_definitions=[
+            ReadoutDefinition(protocol_id=pid, name="Signal", data_type=ReadoutDataType.NUMERIC)
+        ],
+    )
+    result = await _service().apply(legacy, reason="Names generated", person=False, allow_incomplete=True)
+    assert result.unwrap().rendered.missing == ("category",)
+    assert legacy.name == "Legacy hand-typed name" and legacy.aliases == []
+    assert legacy.name_flag == NameFlag.NEEDS_FACTS

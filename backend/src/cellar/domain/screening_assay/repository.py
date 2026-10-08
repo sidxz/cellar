@@ -46,6 +46,16 @@ class NameSibling:
     discriminator: str | None
 
 
+@dataclass(frozen=True)
+class FlaggedProtocol:
+    """A protocol (latest version of its code) whose generated name needs attention."""
+
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str
+    flag: str
+
+
 class TargetLinkResult(Enum):
     """Outcome of an add-target link operation.
 
@@ -106,6 +116,16 @@ class ProtocolRepository(Protocol):
     async def list_discriminators(
         self, workspace_id: uuid.UUID, *, base: str | None, q: str | None, limit: int = 20
     ) -> list[str]: ...
+
+    async def find_flagged(self, workspace_id: uuid.UUID) -> list[FlaggedProtocol]: ...
+
+    async def list_lineage_ids(self, workspace_id: uuid.UUID) -> list[uuid.UUID]:
+        """One id per code: the latest version."""
+        ...
+
+    async def list_ids(self, workspace_id: uuid.UUID) -> list[uuid.UUID]:
+        """Every protocol id, all versions."""
+        ...
 
     async def list_annotation_terms(
         self, workspace_id: uuid.UUID, slots: Sequence[str]

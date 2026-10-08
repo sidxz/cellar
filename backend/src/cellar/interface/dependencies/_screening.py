@@ -107,6 +107,10 @@ from cellar.application.screening.preview_protocol_name import (
 from cellar.application.screening.preview_summary_file import PreviewSummaryFile
 from cellar.application.screening.preview_summary_import import PreviewSummaryImport
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+from cellar.application.screening.rederive_protocol_names import (
+    ListNameFlags,
+    RederiveAllProtocolNames,
+)
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
@@ -183,6 +187,7 @@ __all__ = [
     "ListDiscriminatorsDep",
     "ListDoseResponseByRunDep",
     "ListDoseResponseEnrichedDep",
+    "ListNameFlagsDep",
     "ListPlateTemplatesDep",
     "ListProtocolSummariesDep",
     "ListProtocolVocabularyDep",
@@ -203,6 +208,7 @@ __all__ = [
     "PreviewSummaryImportDep",
     "PublishProtocolDep",
     "ReadoutCalculationEngineDep",
+    "RederiveAllProtocolNamesDep",
     "RefitDoseResponseCurveDep",
     "RefitDoseResponseCurvePreviewDep",
     "RejectRunDep",
@@ -286,6 +292,10 @@ GetProtocolCollectionGapDep = Annotated[
     GetProtocolCollectionGap, Depends(_get_use_case(GetProtocolCollectionGap))
 ]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
+ListNameFlagsDep = Annotated[ListNameFlags, Depends(_get_use_case(ListNameFlags))]
+RederiveAllProtocolNamesDep = Annotated[
+    RederiveAllProtocolNames, Depends(_get_use_case(RederiveAllProtocolNames))
+]
 CorrectProtocolDep = Annotated[CorrectProtocol, Depends(_get_use_case(CorrectProtocol))]
 PreviewProtocolNameDep = Annotated[
     PreviewProtocolName, Depends(_get_use_case(PreviewProtocolName))
