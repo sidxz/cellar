@@ -7,11 +7,13 @@ class ProtocolType(StrEnum):
     """Classification of experimental protocol."""
 
     BIOCHEMICAL = "biochemical"
-    CELL_BASED = "cell_based"
+    WHOLE_CELL = "whole_cell"  # organism-based: bacteria / parasites grown as the assay system
+    CELL_BASED = "cell_based"  # cell lines (cytotoxicity, reporter, receptor assays)
     ADMET = "admet"
     IN_VIVO = "in_vivo"
     ANALYTICAL = "analytical"
     PHYSICOCHEMICAL = "physicochemical"
+    IN_SILICO = "in_silico"  # predictions (QSAR, docking): never pooled with measurements
 
 
 class ProtocolStatus(StrEnum):

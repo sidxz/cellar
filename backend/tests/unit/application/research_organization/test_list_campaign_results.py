@@ -8,6 +8,7 @@ number is comparable, a censored one only loosely, an ND not at all.
 from __future__ import annotations
 
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 from returns.result import Failure, Success
@@ -112,7 +113,9 @@ def _campaign(workspace_id: uuid.UUID) -> tuple[Campaign, CampaignChannel, Campa
 
 def _use_case(campaign: Campaign) -> ListCampaignResults:
     return ListCampaignResults(
-        uow=FakeUnitOfWork(), campaign_repo=make_campaign_repo(find_in_ws=campaign)
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        identity_reader=AsyncMock(),
     )
 
 
@@ -377,7 +380,9 @@ async def test_unknown_campaign_stage_and_channel_are_not_found():
     campaign, _, _ = _campaign(auth.workspace_id)
 
     missing_campaign = await ListCampaignResults(
-        uow=FakeUnitOfWork(), campaign_repo=make_campaign_repo(find_in_ws=None)
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=None),
+        identity_reader=AsyncMock(),
     )(
         ListCampaignResultsQuery(workspace_id=auth.workspace_id, campaign_id=uuid.uuid4()),
         auth=auth,
@@ -414,3 +419,153 @@ async def test_another_workspace_cannot_read_the_rows():
             ListCampaignResultsQuery(workspace_id=uuid.uuid4(), campaign_id=campaign.id),
             auth=auth,
         )
+
+
+async def test_review_search_filters_all_candidates_before_paging_and_preserves_outcomes():
+    from cellar.domain.research_organization.campaign_result_filters import CampaignResultFilters
+
+    auth = fake_auth(role="viewer")
+    campaign, _, stage = _campaign(auth.workspace_id)
+    reader = AsyncMock()
+    reader.matching_ids.return_value = {
+        campaign.results[1].molecule_id,
+        campaign.results[3].molecule_id,
+    }
+    uc = ListCampaignResults(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        identity_reader=reader,
+    )
+    query = dict(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign.id,
+        stage_id=stage.id,
+        filters=CampaignResultFilters(search=" ref "),
+        limit=1,
+    )
+    first = (await uc(ListCampaignResultsQuery(**query), auth=auth)).unwrap()
+    assert first.page.total_count == 2
+    assert first.page.items == [campaign.results[1]]
+    second = (
+        await uc(ListCampaignResultsQuery(**query, cursor_id=first.page.items[-1].id), auth=auth)
+    ).unwrap()
+    assert second.page.items == [campaign.results[3]]
+    assert second.page.total_count == 2
+    assert second.page.next_cursor is None
+    workspace, ids, text = reader.matching_ids.call_args.args
+    assert workspace == auth.workspace_id
+    assert set(ids) == {r.molecule_id for r in campaign.results}
+    assert text == "ref"
+    assert second.outcomes == {
+        campaign.results[3].id: evaluate_stages(campaign)[campaign.results[3].id]
+    }
+
+
+async def test_measurement_range_qc_and_stage_override_filters_intersect():
+    from cellar.domain.research_organization.campaign_result_filters import (
+        CampaignResultFilters,
+        MeasurementFilter,
+    )
+
+    auth = fake_auth(role="viewer")
+    campaign, channel, stage = _campaign(auth.workspace_id)
+    campaign.results[0].measurements[0].qc_pass = False
+    campaign.results[0].set_stage_override(
+        stage_id=stage.id,
+        forced_outcome=StageOutcome.MISS,
+        reason="Review",
+        overridden_by=auth.user_id,
+    )
+    filtered = (
+        await _run(
+            campaign,
+            auth,
+            stage_id=stage.id,
+            outcome=(StageOutcome.MISS,),
+            filters=CampaignResultFilters(
+                overridden=True,
+                measurements=(
+                    MeasurementFilter(
+                        channel_id=channel.id, minimum=2, maximum=2, unit="uM", qc="failed"
+                    ),
+                ),
+            ),
+        )
+    ).unwrap()
+    assert filtered.page.items == [campaign.results[0]]
+    assert filtered.page.total_count == 1
+    assert filtered.outcomes[campaign.results[0].id][stage.id].overridden
+
+
+async def test_unknown_filter_channel_and_override_without_stage_are_refused():
+    from cellar.domain.research_organization.campaign_result_filters import (
+        CampaignResultFilters,
+        MeasurementFilter,
+    )
+
+    auth = fake_auth(role="viewer")
+    campaign, _, _ = _campaign(auth.workspace_id)
+    bad = await _run(
+        campaign,
+        auth,
+        filters=CampaignResultFilters(
+            measurements=(MeasurementFilter(channel_id=uuid.uuid4(), qc="unknown"),)
+        ),
+    )
+    assert isinstance(bad.failure(), NotFoundError)
+    bad = await _run(campaign, auth, filters=CampaignResultFilters(overridden=False))
+    assert isinstance(bad.failure(), ValidationError)
+
+
+@pytest.mark.parametrize(
+    "qualifier,value,unit,qc,expected",
+    [
+        (ValueQualifier.EQ, 2.0, "uM", None, True),
+        (ValueQualifier.EQ, 2.0, "nM", None, False),
+        (ValueQualifier.LT, 2.0, "uM", None, False),
+        (ValueQualifier.GT, 2.0, "uM", None, False),
+        (ValueQualifier.ND, None, "uM", None, False),
+        (ValueQualifier.EXCLUDED, None, "uM", None, False),
+        (ValueQualifier.EQ, 0.0, "uM", None, False),
+    ],
+)
+def test_ranges_respect_qualifiers_and_units(qualifier, value, unit, qc, expected):
+    from cellar.domain.research_organization.campaign_result_filters import MeasurementFilter
+
+    row = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
+    channel = uuid.uuid4()
+    cell = _measurement(row.id, channel, value, qualifier)
+    cell.unit, cell.qc_pass = unit, qc
+    row.add_measurement(cell)
+    assert (
+        MeasurementFilter(channel_id=channel, minimum=1, maximum=3, unit="uM").matches(row)
+        is expected
+    )
+
+
+def test_qc_unknown_requires_existing_measurement_and_bounds_are_validated():
+    from pydantic import ValidationError as PydanticError
+
+    from cellar.domain.research_organization.campaign_result_filters import (
+        CampaignResultFilters,
+        MeasurementFilter,
+    )
+
+    row = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
+    channel = uuid.uuid4()
+    condition = MeasurementFilter(channel_id=channel, qc="unknown")
+    assert not condition.matches(row)
+    row.add_measurement(_measurement(row.id, channel, None, ValueQualifier.ND))
+    assert condition.matches(row)
+    for bad in [
+        dict(minimum=10, maximum=2),
+        dict(minimum=float("nan")),
+        dict(minimum=float("inf")),
+        {},
+    ]:
+        with pytest.raises(PydanticError):
+            MeasurementFilter(channel_id=channel, **bad)
+    with pytest.raises(PydanticError):
+        CampaignResultFilters(search="x" * 201)
+    with pytest.raises(PydanticError):
+        CampaignResultFilters(measurements=(condition,) * 9)

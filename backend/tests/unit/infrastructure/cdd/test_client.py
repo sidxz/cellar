@@ -1,15 +1,18 @@
 """Tests for CddVaultClient using respx to mock HTTP."""
 
-import pytest
+import json
+
 import httpx
+import pytest
 import respx
 
-from cellar.infrastructure.cdd.client import CddVaultClient
 from cellar.application.cdd_import.errors import (
     CddAuthError,
+    CddClientError,
     CddConnectionError,
     CddNotFoundError,
 )
+from cellar.infrastructure.cdd.client import CddVaultClient
 
 VAULT_ID = "12345"
 API_KEY = "test-api-key"
@@ -116,3 +119,82 @@ async def test_connection_error(client: CddVaultClient):
     ).mock(side_effect=httpx.ConnectError("Connection refused"))
     with pytest.raises(CddConnectionError):
         await client.list_protocols(VAULT_ID, API_KEY)
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_get_molecule_count_reads_count_from_post_query(client: CddVaultClient):
+    route = respx.post(
+        f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/molecules/query"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={"count": 502375, "offset": 0, "page_size": 1, "objects": [{"id": 7}]},
+        )
+    )
+    assert await client.get_molecule_count(VAULT_ID, API_KEY) == 502375
+    assert json.loads(route.calls[0].request.content) == {"page_size": 1}
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_list_molecule_ids_posts_only_ids_query(client: CddVaultClient):
+    route = respx.post(
+        f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/molecules/query"
+    ).mock(return_value=httpx.Response(200, json={"count": 3, "objects": [11, 12, 13]}))
+    assert await client.list_molecule_ids(VAULT_ID, API_KEY) == ([11, 12, 13], 3)
+    assert json.loads(route.calls[0].request.content) == {"only_ids": True}
+
+
+EXPORT_URL = f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/exports/77"
+EXPORT_BODY = b'{"count": 1, "objects": [{"id": 5, "class": "plate"}]}'
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_stream_export_writes_file_served_directly(client: CddVaultClient, tmp_path):
+    respx.get(EXPORT_URL).mock(return_value=httpx.Response(200, content=EXPORT_BODY))
+    dest = tmp_path / "raw_export.json"
+    await client.stream_export_to_file(VAULT_ID, API_KEY, 77, str(dest))
+    assert dest.read_bytes() == EXPORT_BODY
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_stream_export_follows_redirect_without_vault_token(
+    client: CddVaultClient, tmp_path
+):
+    s3_url = "https://exports.s3.amazonaws.com/77.json?X-Amz-Signature=abc"
+    respx.get(EXPORT_URL).mock(return_value=httpx.Response(302, headers={"Location": s3_url}))
+    s3 = respx.get(s3_url).mock(return_value=httpx.Response(200, content=EXPORT_BODY))
+    dest = tmp_path / "raw_export.json"
+    await client.stream_export_to_file(VAULT_ID, API_KEY, 77, str(dest))
+    assert dest.read_bytes() == EXPORT_BODY
+    assert "X-CDD-Token" not in s3.calls[0].request.headers
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_stream_export_not_ready_is_not_reported_as_bad_key(
+    client: CddVaultClient, tmp_path
+):
+    respx.get(EXPORT_URL).mock(
+        return_value=httpx.Response(403, json={"id": 77, "status": "started"})
+    )
+    dest = tmp_path / "raw_export.json"
+    with pytest.raises(CddClientError) as exc_info:
+        await client.stream_export_to_file(VAULT_ID, API_KEY, 77, str(dest))
+    assert exc_info.value.status_code == 403
+    assert not isinstance(exc_info.value, CddAuthError)
+    assert not dest.exists()
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_stream_export_3xx_without_location_is_a_client_error(
+    client: CddVaultClient, tmp_path
+):
+    respx.get(EXPORT_URL).mock(return_value=httpx.Response(304))
+    with pytest.raises(CddClientError) as exc_info:
+        await client.stream_export_to_file(VAULT_ID, API_KEY, 77, str(tmp_path / "raw.json"))
+    assert exc_info.value.status_code == 304

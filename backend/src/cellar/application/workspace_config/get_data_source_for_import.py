@@ -81,7 +81,9 @@ class GetDataSourceForImport:
                 api_key = await self._secret_provider.get_secret(secret_ref)
                 if not api_key:
                     return Failure(
-                        ValidationError(f"API key secret for '{ds.api_key_name}' is empty")
+                        ValidationError(
+                            f"API key secret for '{ds.api_key_name}' is missing or unreadable"
+                        )
                     )
 
             return Success(DataSourceImportConfig(data_source=ds, api_key=api_key))

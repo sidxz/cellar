@@ -19,15 +19,19 @@ the campaign, which is why the load below is the whole aggregate.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
+from cellar.application.research_organization.campaign_identity_reader import (
+    CampaignIdentityReader,
+)
 from cellar.application.shared.pagination import DEFAULT_PAGE_SIZE, PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_result_filters import CampaignResultFilters
 from cellar.domain.research_organization.campaign_result_ordering import channel_sort_key
 from cellar.domain.research_organization.enums import StageOutcome
 from cellar.domain.research_organization.repository import CampaignRepository
@@ -54,6 +58,7 @@ class ListCampaignResultsQuery(Query):
     #: Id of the last row on the previous page.
     cursor_id: uuid.UUID | None = None
     limit: int = DEFAULT_PAGE_SIZE
+    filters: CampaignResultFilters = field(default_factory=CampaignResultFilters)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -64,9 +69,16 @@ class ListCampaignResultsOutput:
 
 
 class ListCampaignResults:
-    def __init__(self, *, uow: UnitOfWork, campaign_repo: CampaignRepository) -> None:
+    def __init__(
+        self,
+        *,
+        uow: UnitOfWork,
+        campaign_repo: CampaignRepository,
+        identity_reader: CampaignIdentityReader,
+    ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
+        self._identity_reader = identity_reader
 
     async def __call__(
         self, input: ListCampaignResultsQuery, auth: AuthContext | None = None
@@ -76,6 +88,8 @@ class ListCampaignResults:
 
         if input.outcome and input.stage_id is None:
             return Failure(ValidationError("outcome requires stage_id"))
+        if input.filters.overridden is not None and input.stage_id is None:
+            return Failure(ValidationError("overridden requires stage_id"))
 
         async with self._uow:
             # ponytail: loads and evaluates the whole campaign to return one
@@ -102,6 +116,10 @@ class ListCampaignResults:
                 return Failure(NotFoundError("CampaignChannel", str(input.order_by_channel_id)))
 
             outcomes = evaluate_stages(campaign)
+            known_channels = {ch.id for ch in campaign.channels}
+            for condition in input.filters.measurements:
+                if condition.channel_id not in known_channels:
+                    return Failure(NotFoundError("CampaignChannel", str(condition.channel_id)))
 
             rows = list(campaign.results)
             if input.stage_id is not None and input.outcome:
@@ -113,6 +131,21 @@ class ListCampaignResults:
                     if (o := outcomes.get(r.id, {}).get(stage_id)) is not None
                     and o.outcome in wanted
                 ]
+            if input.filters.overridden is not None:
+                assert input.stage_id is not None
+                rows = [
+                    r
+                    for r in rows
+                    if (o := outcomes.get(r.id, {}).get(input.stage_id)) is not None
+                    and o.overridden == input.filters.overridden
+                ]
+            for condition in input.filters.measurements:
+                rows = [r for r in rows if condition.matches(r)]
+            if input.filters.search and rows:
+                matches = await self._identity_reader.matching_ids(
+                    input.workspace_id, list({r.molecule_id for r in rows}), input.filters.search
+                )
+                rows = [r for r in rows if r.molecule_id in matches]
             total = len(rows)
 
             if input.order_by_channel_id is not None:
